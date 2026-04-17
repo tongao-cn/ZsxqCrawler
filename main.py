@@ -37,6 +37,24 @@ from accounts_sql_manager import get_accounts_sql_manager
 from account_info_db import get_account_info_db
 from zsxq_columns_database import ZSXQColumnsDatabase
 from logger_config import log_info, log_warning, log_error, log_exception, log_debug, ensure_configured
+from a_share_analysis_service import (
+    DEFAULT_API_BASE as A_SHARE_DEFAULT_API_BASE,
+    DEFAULT_CONCURRENCY as A_SHARE_DEFAULT_CONCURRENCY,
+    DEFAULT_MODEL as A_SHARE_DEFAULT_MODEL,
+    DEFAULT_REASONING_EFFORT as A_SHARE_DEFAULT_REASONING_EFFORT,
+    DEFAULT_RANKING_WINDOWS as A_SHARE_DEFAULT_RANKING_WINDOWS,
+    DEFAULT_RETENTION_DAYS as A_SHARE_DEFAULT_RETENTION_DAYS,
+    DEFAULT_WIRE_API as A_SHARE_DEFAULT_WIRE_API,
+    build_chart_payload,
+    get_analysis_summary,
+    normalize_group_id,
+    reset_analysis_range,
+    run_analysis,
+)
+from ai_provider_config import has_openai_api_key
+from a_share_analysis_db_storage import get_storage_health
+from file_ai_analysis_service import analyze_group_file, get_group_file_analysis
+from tdx_a_share_export_service import export_a_share_rankings_to_tdx, get_latest_tdx_export
 
 # 初始化日志系统
 ensure_configured()
@@ -210,6 +228,9 @@ class CrawlSettingsRequest(BaseModel):
 class FileDownloadRequest(BaseModel):
     max_files: Optional[int] = Field(default=None, description="最大下载文件数")
     sort_by: str = Field(default="download_count", description="排序方式: download_count 或 time")
+    start_time: Optional[str] = Field(default=None, description="下载时间范围开始日期 YYYY-MM-DD")
+    end_time: Optional[str] = Field(default=None, description="下载时间范围结束日期 YYYY-MM-DD")
+    last_days: Optional[int] = Field(default=None, ge=1, le=3650, description="下载最近多少天的文件")
     download_interval: float = Field(default=1.0, ge=0.1, le=300.0, description="单次下载间隔（秒）")
     long_sleep_interval: float = Field(default=60.0, ge=10.0, le=3600.0, description="长休眠间隔（秒）")
     files_per_batch: int = Field(default=10, ge=1, le=100, description="下载多少文件后触发长休眠")
@@ -218,6 +239,12 @@ class FileDownloadRequest(BaseModel):
     download_interval_max: Optional[float] = Field(default=None, ge=1.0, le=300.0, description="随机下载间隔最大值（秒）")
     long_sleep_interval_min: Optional[float] = Field(default=None, ge=10.0, le=3600.0, description="随机长休眠间隔最小值（秒）")
     long_sleep_interval_max: Optional[float] = Field(default=None, ge=10.0, le=3600.0, description="随机长休眠间隔最大值（秒）")
+
+
+class FileCollectRequest(BaseModel):
+    start_time: Optional[str] = Field(default=None, description="收集时间范围开始日期 YYYY-MM-DD")
+    end_time: Optional[str] = Field(default=None, description="收集时间范围结束日期 YYYY-MM-DD")
+    last_days: Optional[int] = Field(default=None, ge=1, le=3650, description="收集最近多少天的文件")
 
 class ColumnsSettingsRequest(BaseModel):
     """专栏采集设置请求"""
@@ -237,6 +264,45 @@ class AccountCreateRequest(BaseModel):
 
 class AssignGroupAccountRequest(BaseModel):
     account_id: str = Field(..., description="账号ID")
+
+
+class AShareAnalysisRunRequest(BaseModel):
+    group_id: Optional[str] = Field(default=None, description="指定群组ID；为空时使用全局聚合")
+    days: int = Field(default=21, ge=1, le=365, description="分析最近多少天的话题")
+    retention_days: int = Field(
+        default=A_SHARE_DEFAULT_RETENTION_DAYS,
+        ge=1,
+        le=3650,
+        description="保留最近多少天的分析数据",
+    )
+    concurrency: int = Field(
+        default=A_SHARE_DEFAULT_CONCURRENCY,
+        ge=1,
+        le=128,
+        description="并发调用模型的线程数",
+    )
+    model: str = Field(default=A_SHARE_DEFAULT_MODEL, description="OpenAI兼容模型名称")
+    api_base: str = Field(default=A_SHARE_DEFAULT_API_BASE, description="OpenAI兼容API地址")
+    wire_api: str = Field(default=A_SHARE_DEFAULT_WIRE_API, description="OpenAI接口类型：responses 或 chat_completions")
+    reasoning_effort: str = Field(default=A_SHARE_DEFAULT_REASONING_EFFORT, description="Responses API 的 reasoning effort")
+    reset_start_date: Optional[str] = Field(default=None, description="删除并重跑的开始日期 YYYY-MM-DD")
+    reset_end_date: Optional[str] = Field(default=None, description="删除并重跑的结束日期 YYYY-MM-DD")
+
+
+class AShareAnalysisResetRangeRequest(BaseModel):
+    group_id: Optional[str] = Field(default=None, description="指定群组ID；为空时删除全局聚合结果")
+    start_date: str = Field(..., description="开始日期 YYYY-MM-DD")
+    end_date: str = Field(..., description="结束日期 YYYY-MM-DD")
+
+
+class AShareAnalysisExportTdxRequest(BaseModel):
+    group_id: Optional[str] = Field(default=None, description="指定群组ID；为空时导出全局聚合结果")
+    start_date: Optional[str] = Field(default=None, description="图表筛选开始日期 YYYY-MM-DD")
+    end_date: Optional[str] = Field(default=None, description="图表筛选结束日期 YYYY-MM-DD")
+
+
+class FileAIAnalysisRequest(BaseModel):
+    force: bool = Field(default=False, description="是否强制重新分析")
 
 class GroupInfo(BaseModel):
     group_id: int
@@ -340,7 +406,21 @@ def is_configured() -> bool:
     """检查是否已配置至少一个可用的认证Cookie（账号管理或config.toml 均可）"""
     return get_primary_cookie() is not None
 
-def create_task(task_type: str, description: str) -> str:
+def am_get_account_for_group(group_id: str) -> Optional[Dict[str, Any]]:
+    try:
+        sql_mgr = get_accounts_sql_manager()
+        return sql_mgr.get_account_for_group(group_id, mask_cookie=False)
+    except Exception:
+        return None
+
+def am_get_account_summary_for_group(group_id: str) -> Optional[Dict[str, Any]]:
+    try:
+        sql_mgr = get_accounts_sql_manager()
+        return sql_mgr.get_account_summary_for_group(group_id)
+    except Exception:
+        return get_account_summary_for_group_auto(group_id)
+
+def create_task(task_type: str, description: str, metadata: Optional[Dict[str, Any]] = None) -> str:
     """创建新任务"""
     global task_counter
     task_counter += 1
@@ -355,6 +435,8 @@ def create_task(task_type: str, description: str) -> str:
         "created_at": datetime.now(),
         "updated_at": datetime.now()
     }
+    if metadata:
+        current_tasks[task_id].update(metadata)
 
     # 初始化任务日志和停止标志
     task_logs[task_id] = []
@@ -460,6 +542,77 @@ def is_task_stopped(task_id: str) -> bool:
     """检查任务是否被停止"""
     stopped = task_stop_flags.get(task_id, False)
     return stopped
+
+
+def get_latest_task_by_type(
+    task_type: str,
+    status: Optional[str] = None,
+    group_id: Optional[str] = None,
+) -> Optional[Dict[str, Any]]:
+    """按任务类型获取最新任务，可选按状态过滤"""
+    normalized_group_id = normalize_group_id(group_id)
+    candidates = []
+    for task in current_tasks.values():
+        if task.get("type") != task_type:
+            continue
+        if status and task.get("status") != status:
+            continue
+        if normalized_group_id is not None and normalize_group_id(task.get("group_id")) != normalized_group_id:
+            continue
+        candidates.append(task)
+    if not candidates:
+        return None
+    candidates.sort(key=lambda item: item.get("created_at") or datetime.min, reverse=True)
+    return candidates[0]
+
+
+def run_a_share_analysis_task(task_id: str, request: AShareAnalysisRunRequest):
+    """后台执行A股公司提及分析任务"""
+    try:
+        if is_task_stopped(task_id):
+            return
+
+        normalized_group_id = normalize_group_id(request.group_id)
+
+        scope_text = f"群组 {normalized_group_id}" if normalized_group_id else "全局聚合"
+        description = f"开始A股公司分析（{scope_text}），扫描最近 {request.days} 天数据"
+        update_task(task_id, "running", description)
+        add_task_log(task_id, f"🚀 {description}")
+        add_task_log(
+            task_id,
+            f"⚙️ 参数: group_id={normalized_group_id or 'GLOBAL'}, retention_days={request.retention_days}, concurrency={request.concurrency}, "
+            f"model={request.model}, api_base={request.api_base}, wire_api={request.wire_api}, "
+            f"reasoning_effort={request.reasoning_effort}",
+        )
+
+        if request.reset_start_date or request.reset_end_date:
+            add_task_log(
+                task_id,
+                f"🧹 删除并重跑区间: {request.reset_start_date or '-'} ~ {request.reset_end_date or '-'}",
+            )
+
+        def log_callback(message: str):
+            add_task_log(task_id, message)
+
+        result = run_analysis(
+            days=request.days,
+            group_id=normalized_group_id,
+            model=request.model,
+            api_base=request.api_base,
+            wire_api=request.wire_api,
+            reasoning_effort=request.reasoning_effort,
+            concurrency=request.concurrency,
+            retention_days=request.retention_days,
+            reset_start_date=request.reset_start_date,
+            reset_end_date=request.reset_end_date,
+            log_callback=log_callback,
+        )
+
+        update_task(task_id, "completed", "A股公司分析完成", result)
+        add_task_log(task_id, "✅ A股公司分析完成")
+    except Exception as e:
+        add_task_log(task_id, f"❌ A股公司分析失败: {str(e)}")
+        update_task(task_id, "failed", f"A股公司分析失败: {str(e)}")
 
 # API路由定义
 @app.get("/")
@@ -875,6 +1028,141 @@ async def get_database_stats():
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"获取数据库统计失败: {str(e)}")
 
+
+@app.get("/api/analytics/a-share/status")
+async def get_a_share_analysis_status(group_id: Optional[str] = None):
+    """获取A股分析状态和文件摘要"""
+    try:
+        normalized_group_id = normalize_group_id(group_id)
+        summary = await asyncio.to_thread(get_analysis_summary, group_id=normalized_group_id)
+        latest_task = get_latest_task_by_type("a_share_analysis", group_id=normalized_group_id)
+        running_task = get_latest_task_by_type("a_share_analysis", status="running", group_id=normalized_group_id)
+        if normalized_group_id:
+            storage = {
+                "enabled": False,
+                "mode": "file_per_group",
+                "label": f"群组 {normalized_group_id} 本地分析文件",
+                "daily_rows": summary.get("rows_count") or 0,
+                "processed_rows": summary.get("processed_items") or 0,
+            }
+        else:
+            try:
+                storage = await asyncio.to_thread(get_storage_health)
+            except Exception as storage_error:
+                storage = {
+                    "enabled": False,
+                    "mode": "file_only",
+                    "label": f"本地文件镜像（PostgreSQL 不可用: {storage_error}）",
+                }
+
+        try:
+            latest_tdx_export = await asyncio.to_thread(get_latest_tdx_export, normalized_group_id)
+        except Exception:
+            latest_tdx_export = None
+
+        return {
+            "summary": summary,
+            "group_id": normalized_group_id,
+            "defaults": {
+                "days": 21,
+                "retention_days": A_SHARE_DEFAULT_RETENTION_DAYS,
+                "concurrency": A_SHARE_DEFAULT_CONCURRENCY,
+                "model": A_SHARE_DEFAULT_MODEL,
+                "api_base": A_SHARE_DEFAULT_API_BASE,
+                "wire_api": A_SHARE_DEFAULT_WIRE_API,
+                "reasoning_effort": A_SHARE_DEFAULT_REASONING_EFFORT,
+                "ranking_windows": list(A_SHARE_DEFAULT_RANKING_WINDOWS),
+            },
+            "api_key_configured": has_openai_api_key(),
+            "latest_task": latest_task,
+            "running_task": running_task,
+            "storage": storage,
+            "latest_tdx_export": latest_tdx_export,
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"获取A股分析状态失败: {str(e)}")
+
+
+@app.get("/api/analytics/a-share/chart")
+async def get_a_share_analysis_chart(
+    group_id: Optional[str] = None,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    top_n: int = 20,
+):
+    """获取A股分析图表和榜单数据"""
+    try:
+        normalized_group_id = normalize_group_id(group_id)
+        payload = await asyncio.to_thread(
+            build_chart_payload,
+            start_date=start_date,
+            end_date=end_date,
+            top_n=max(1, min(top_n, 100)),
+            ranking_windows=A_SHARE_DEFAULT_RANKING_WINDOWS,
+            group_id=normalized_group_id,
+        )
+        return payload
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"获取A股分析图表失败: {str(e)}")
+
+
+@app.post("/api/analytics/a-share/run")
+async def start_a_share_analysis(request: AShareAnalysisRunRequest, background_tasks: BackgroundTasks):
+    """启动A股公司提及分析后台任务"""
+    try:
+        normalized_group_id = normalize_group_id(request.group_id)
+        scope_text = f"群组 {normalized_group_id}" if normalized_group_id else "全局聚合"
+        task_id = create_task(
+            "a_share_analysis",
+            f"A股公司分析（{scope_text}，最近 {request.days} 天）",
+            metadata={"group_id": normalized_group_id},
+        )
+        background_tasks.add_task(run_a_share_analysis_task, task_id, request)
+        return {"task_id": task_id, "message": "任务已创建，正在后台执行"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"创建A股分析任务失败: {str(e)}")
+
+
+@app.post("/api/analytics/a-share/reset-range")
+async def reset_a_share_analysis_date_range(request: AShareAnalysisResetRangeRequest):
+    """删除A股分析结果中的指定日期区间"""
+    try:
+        result = await asyncio.to_thread(
+            reset_analysis_range,
+            request.start_date,
+            request.end_date,
+            group_id=normalize_group_id(request.group_id),
+        )
+        return {"success": True, **result}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"删除A股分析日期区间失败: {str(e)}")
+
+
+@app.post("/api/analytics/a-share/export-tdx")
+async def export_a_share_analysis_to_tdx(request: AShareAnalysisExportTdxRequest):
+    """把当前A股推荐池覆盖导入到通达信现有板块"""
+    try:
+        result = await asyncio.to_thread(
+            export_a_share_rankings_to_tdx,
+            request.start_date,
+            request.end_date,
+            group_id=normalize_group_id(request.group_id),
+        )
+        return {"success": True, **result}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except RuntimeError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except requests.RequestException as e:
+        raise HTTPException(status_code=502, detail=f"获取股票主数据失败: {str(e)}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"导入通达信失败: {str(e)}")
+
+
 @app.get("/api/tasks")
 async def get_tasks():
     """获取所有任务状态"""
@@ -972,6 +1260,8 @@ def run_crawl_historical_task(task_id: str, group_id: str, pages: int, per_page:
             update_task(task_id, "failed", f"爬取失败: {str(e)}")
 
 def run_file_download_task(task_id: str, group_id: str, max_files: Optional[int], sort_by: str,
+                          start_time: Optional[str] = None, end_time: Optional[str] = None,
+                          last_days: Optional[int] = None,
                           download_interval: float = 1.0, long_sleep_interval: float = 60.0,
                           files_per_batch: int = 10, download_interval_min: Optional[float] = None,
                           download_interval_max: Optional[float] = None,
@@ -1019,6 +1309,11 @@ def run_file_download_task(task_id: str, group_id: str, max_files: Optional[int]
         add_task_log(task_id, f"   ⏱️ 单次下载间隔: {download_interval}秒")
         add_task_log(task_id, f"   😴 长休眠间隔: {long_sleep_interval}秒")
         add_task_log(task_id, f"   📦 批次大小: {files_per_batch}个文件")
+        if sort_by == "create_time":
+            if start_time or end_time:
+                add_task_log(task_id, f"   📅 下载区间: {start_time or '-'} ~ {end_time or '-'}")
+            elif last_days:
+                add_task_log(task_id, f"   📅 下载最近天数: {last_days}天")
 
         # 将下载器实例存储到全局字典中
         global file_downloader_instances
@@ -1030,23 +1325,49 @@ def run_file_download_task(task_id: str, group_id: str, max_files: Optional[int]
             return
 
         add_task_log(task_id, "📡 连接到知识星球API...")
-        add_task_log(task_id, "🔍 开始收集文件列表...")
+        downloader.file_db.cursor.execute("SELECT COUNT(*) FROM files")
+        existing_files_count = downloader.file_db.cursor.fetchone()[0] or 0
 
-        # 先收集文件列表
-        collect_result = downloader.collect_incremental_files()
+        collect_result = None
+        if existing_files_count == 0:
+            add_task_log(task_id, "📍 阶段一：收集文件列表")
+            add_task_log(task_id, "🔍 文件库为空，开始收集文件列表...")
+            if sort_by == "create_time":
+                collect_result = downloader.collect_files_for_date_range(
+                    start_date=start_time,
+                    end_date=end_time,
+                    last_days=last_days,
+                )
+            else:
+                collect_result = downloader.collect_incremental_files()
+        else:
+            add_task_log(task_id, f"📚 文件库已有 {existing_files_count} 条记录，跳过收集阶段，直接下载")
 
         # 检查任务是否被停止
         if is_task_stopped(task_id):
             return
 
-        add_task_log(task_id, f"📊 文件收集完成: {collect_result}")
+        if collect_result is not None:
+            add_task_log(task_id, f"📊 文件收集完成: {collect_result}")
+        add_task_log(task_id, "📍 阶段二：下载文件本体")
         add_task_log(task_id, "🚀 开始下载文件...")
 
         # 根据排序方式下载文件
         if sort_by == "download_count":
-            result = downloader.download_files_from_database(max_files=max_files, status_filter='pending',order_by='download_count DESC')
+            result = downloader.download_files_from_database(
+                max_files=max_files,
+                status_filter='pending',
+                sort_by='download_count',
+            )
         else:
-            result = downloader.download_files_from_database(max_files=max_files, status_filter='pending',order_by='create_time DESC')
+            result = downloader.download_files_from_database(
+                max_files=max_files,
+                status_filter='pending',
+                sort_by='create_time',
+                start_date=start_time,
+                end_date=end_time,
+                last_days=last_days,
+            )
 
         # 检查任务是否被停止
         if is_task_stopped(task_id):
@@ -1688,12 +2009,12 @@ async def crawl_latest_until_complete(group_id: str, request: CrawlSettingsReque
 
 # 文件相关API路由
 @app.post("/api/files/collect/{group_id}")
-async def collect_files(group_id: str, background_tasks: BackgroundTasks):
+async def collect_files(group_id: str, request: FileCollectRequest, background_tasks: BackgroundTasks):
     """收集文件列表"""
     try:
         task_id = create_task("collect_files", "收集文件列表")
 
-        def run_collect_files_task(task_id: str, group_id: str):
+        def run_collect_files_task(task_id: str, group_id: str, request: FileCollectRequest):
             try:
                 update_task(task_id, "running", "开始收集文件列表...")
 
@@ -1727,7 +2048,21 @@ async def collect_files(group_id: str, background_tasks: BackgroundTasks):
                     return
 
                 add_task_log(task_id, "📡 连接到知识星球API...")
-                result = downloader.collect_incremental_files()
+                add_task_log(task_id, "📍 阶段一：收集文件列表")
+                if request.start_time or request.end_time or request.last_days:
+                    add_task_log(
+                        task_id,
+                        f"📅 收集范围: {request.start_time or '-'} ~ {request.end_time or '-'}"
+                        if (request.start_time or request.end_time)
+                        else f"📅 收集最近天数: {request.last_days}天"
+                    )
+                    result = downloader.collect_files_for_date_range(
+                        start_date=request.start_time,
+                        end_date=request.end_time,
+                        last_days=request.last_days,
+                    )
+                else:
+                    result = downloader.collect_incremental_files()
 
                 # 检查任务是否被停止
                 if is_task_stopped(task_id):
@@ -1745,7 +2080,7 @@ async def collect_files(group_id: str, background_tasks: BackgroundTasks):
                     del file_downloader_instances[task_id]
 
         # 添加后台任务
-        background_tasks.add_task(run_collect_files_task, task_id, group_id)
+        background_tasks.add_task(run_collect_files_task, task_id, group_id, request)
 
         return {"task_id": task_id, "message": "任务已创建，正在后台执行"}
     except Exception as e:
@@ -1764,6 +2099,9 @@ async def download_files(group_id: str, request: FileDownloadRequest, background
             group_id,
             request.max_files,
             request.sort_by,
+            request.start_time,
+            request.end_time,
+            request.last_days,
             request.download_interval,
             request.long_sleep_interval,
             request.files_per_batch,
@@ -1802,25 +2140,20 @@ async def download_single_file(group_id: str, file_id: int, background_tasks: Ba
 async def get_file_status(group_id: str, file_id: int):
     """获取文件下载状态"""
     try:
-        crawler = get_crawler_for_group(group_id)
-        downloader = crawler.get_file_downloader()
+        path_manager = get_db_path_manager()
+        db_path = path_manager.get_files_db_path(group_id)
+        file_db = ZSXQFileDatabase(db_path)
 
         # 查询文件信息
-        downloader.file_db.cursor.execute('''
+        file_db.cursor.execute('''
             SELECT name, size, download_status
             FROM files
             WHERE file_id = ?
         ''', (file_id,))
 
-        result = downloader.file_db.cursor.fetchone()
+        result = file_db.cursor.fetchone()
 
         if not result:
-            # 文件不在数据库中，检查是否有同名文件在下载目录
-            import os
-            download_dir = downloader.download_dir
-
-            # 尝试从话题详情中获取文件名（这里需要额外的逻辑）
-            # 暂时返回文件不存在的状态
             return {
                 "file_id": file_id,
                 "name": f"file_{file_id}",
@@ -1841,7 +2174,7 @@ async def get_file_status(group_id: str, file_id: int):
         if not safe_filename:
             safe_filename = f"file_{file_id}"
 
-        download_dir = downloader.download_dir
+        download_dir = os.path.join(path_manager.get_group_dir(group_id), "downloads")
         file_path = os.path.join(download_dir, safe_filename)
 
         local_exists = os.path.exists(file_path)
@@ -1859,21 +2192,24 @@ async def get_file_status(group_id: str, file_id: int):
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"获取文件状态失败: {str(e)}")
+    finally:
+        try:
+            file_db.close()
+        except Exception:
+            pass
 
 @app.get("/api/files/check-local/{group_id}")
 async def check_local_file_status(group_id: str, file_name: str, file_size: int):
     """检查本地文件状态（不依赖数据库）"""
     try:
-        crawler = get_crawler_for_group(group_id)
-        downloader = crawler.get_file_downloader()
+        path_manager = get_db_path_manager()
 
         # 清理文件名
-        import os
         safe_filename = "".join(c for c in file_name if c.isalnum() or c in '._-（）()[]{}')
         if not safe_filename:
             safe_filename = file_name
 
-        download_dir = downloader.download_dir
+        download_dir = os.path.join(path_manager.get_group_dir(group_id), "downloads")
         file_path = os.path.join(download_dir, safe_filename)
 
         local_exists = os.path.exists(file_path)
@@ -1892,25 +2228,59 @@ async def check_local_file_status(group_id: str, file_name: str, file_size: int)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"检查本地文件失败: {str(e)}")
 
+
+@app.get("/api/files/analysis/{group_id}/{file_id}")
+async def get_file_analysis(group_id: str, file_id: int):
+    """获取文件 AI 分析缓存"""
+    try:
+        result = await asyncio.to_thread(get_group_file_analysis, group_id, file_id)
+        return {"analysis": result}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"获取文件 AI 分析失败: {str(e)}")
+
+
+@app.post("/api/files/analysis/{group_id}/{file_id}")
+async def create_file_analysis(group_id: str, file_id: int, request: FileAIAnalysisRequest):
+    """分析文件内容并生成 AI 摘要"""
+    try:
+        result = await asyncio.to_thread(
+            analyze_group_file,
+            group_id,
+            file_id,
+            force=request.force,
+            model=A_SHARE_DEFAULT_MODEL,
+            api_base=A_SHARE_DEFAULT_API_BASE,
+            wire_api=A_SHARE_DEFAULT_WIRE_API,
+            reasoning_effort=A_SHARE_DEFAULT_REASONING_EFFORT,
+        )
+        return {"analysis": result}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except RuntimeError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"文件 AI 分析失败: {str(e)}")
+
 @app.get("/api/files/stats/{group_id}")
 async def get_file_stats(group_id: str):
     """获取指定群组的文件统计信息"""
-    crawler = None
+    file_db = None
     try:
-        crawler = get_crawler_for_group(group_id)
-        downloader = crawler.get_file_downloader()
+        path_manager = get_db_path_manager()
+        db_path = path_manager.get_files_db_path(group_id)
+        file_db = ZSXQFileDatabase(db_path)
 
         # 获取文件数据库统计
-        stats = downloader.file_db.get_database_stats()
+        stats = file_db.get_database_stats()
 
         # 获取下载状态统计
         # 首先检查是否有download_status列
-        downloader.file_db.cursor.execute("PRAGMA table_info(files)")
-        columns = [col[1] for col in downloader.file_db.cursor.fetchall()]
+        file_db.cursor.execute("PRAGMA table_info(files)")
+        columns = [col[1] for col in file_db.cursor.fetchall()]
 
         if 'download_status' in columns:
             # 新版本数据库，有download_status列
-            downloader.file_db.cursor.execute("""
+            file_db.cursor.execute("""
                 SELECT
                     COUNT(*) as total_files,
                     COUNT(CASE WHEN download_status = 'completed' THEN 1 END) as downloaded,
@@ -1918,11 +2288,11 @@ async def get_file_stats(group_id: str):
                     COUNT(CASE WHEN download_status = 'failed' THEN 1 END) as failed
                 FROM files
             """)
-            download_stats = downloader.file_db.cursor.fetchone()
+            download_stats = file_db.cursor.fetchone()
         else:
             # 旧版本数据库，没有download_status列，只统计总数
-            downloader.file_db.cursor.execute("SELECT COUNT(*) FROM files")
-            total_files = downloader.file_db.cursor.fetchone()[0]
+            file_db.cursor.execute("SELECT COUNT(*) FROM files")
+            total_files = file_db.cursor.fetchone()[0]
             download_stats = (total_files, 0, 0, 0)  # 总数, 已下载, 待下载, 失败
 
         result = {
@@ -1939,17 +2309,11 @@ async def get_file_stats(group_id: str):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"获取文件统计失败: {str(e)}")
     finally:
-        # 确保关闭数据库连接
-        if crawler:
+        if file_db:
             try:
-                if hasattr(crawler, 'file_downloader') and crawler.file_downloader:
-                    if hasattr(crawler.file_downloader, 'file_db') and crawler.file_downloader.file_db:
-                        crawler.file_downloader.file_db.close()
-                if hasattr(crawler, 'db') and crawler.db:
-                    crawler.db.close()
-                print(f"🔒 已关闭群组 {group_id} 的数据库连接")
-            except Exception as e:
-                print(f"⚠️ 关闭数据库连接时出错: {e}")
+                file_db.close()
+            except Exception:
+                pass
 
 @app.post("/api/files/clear/{group_id}")
 async def clear_file_database(group_id: str):
@@ -2146,39 +2510,58 @@ async def get_topics(page: int = 1, per_page: int = 20, search: Optional[str] = 
 async def get_files(group_id: str, page: int = 1, per_page: int = 20, status: Optional[str] = None):
     """获取指定群组的文件列表"""
     try:
-        crawler = get_crawler_for_group(group_id)
-        downloader = crawler.get_file_downloader()
+        path_manager = get_db_path_manager()
+        db_path = path_manager.get_files_db_path(group_id)
+        file_db = ZSXQFileDatabase(db_path)
 
         offset = (page - 1) * per_page
 
         # 构建查询SQL
         if status:
             query = """
-                SELECT file_id, name, size, download_count, create_time, download_status
-                FROM files
-                WHERE download_status = ?
-                ORDER BY create_time DESC
+                SELECT
+                    f.file_id,
+                    f.name,
+                    f.size,
+                    f.download_count,
+                    f.create_time,
+                    f.download_status,
+                    f.local_path,
+                    faa.updated_at
+                FROM files f
+                LEFT JOIN file_ai_analyses faa ON faa.file_id = f.file_id
+                WHERE f.download_status = ?
+                ORDER BY f.create_time DESC
                 LIMIT ? OFFSET ?
             """
             params = (status, per_page, offset)
         else:
             query = """
-                SELECT file_id, name, size, download_count, create_time, download_status
-                FROM files
-                ORDER BY create_time DESC
+                SELECT
+                    f.file_id,
+                    f.name,
+                    f.size,
+                    f.download_count,
+                    f.create_time,
+                    f.download_status,
+                    f.local_path,
+                    faa.updated_at
+                FROM files f
+                LEFT JOIN file_ai_analyses faa ON faa.file_id = f.file_id
+                ORDER BY f.create_time DESC
                 LIMIT ? OFFSET ?
             """
             params = (per_page, offset)
 
-        downloader.file_db.cursor.execute(query, params)
-        files = downloader.file_db.cursor.fetchall()
+        file_db.cursor.execute(query, params)
+        files = file_db.cursor.fetchall()
 
         # 获取总数
         if status:
-            downloader.file_db.cursor.execute("SELECT COUNT(*) FROM files WHERE download_status = ?", (status,))
+            file_db.cursor.execute("SELECT COUNT(*) FROM files WHERE download_status = ?", (status,))
         else:
-            downloader.file_db.cursor.execute("SELECT COUNT(*) FROM files")
-        total = downloader.file_db.cursor.fetchone()[0]
+            file_db.cursor.execute("SELECT COUNT(*) FROM files")
+        total = file_db.cursor.fetchone()[0]
 
         return {
             "files": [
@@ -2188,7 +2571,10 @@ async def get_files(group_id: str, page: int = 1, per_page: int = 20, status: Op
                     "size": file[2],
                     "download_count": file[3],
                     "create_time": file[4],
-                    "download_status": file[5] if len(file) > 5 else "unknown"
+                    "download_status": file[5] if len(file) > 5 else "unknown",
+                    "local_path": file[6] if len(file) > 6 else None,
+                    "has_ai_analysis": bool(file[7]) if len(file) > 7 and file[7] else False,
+                    "analysis_updated_at": file[7] if len(file) > 7 else None,
                 }
                 for file in files
             ],
@@ -2201,6 +2587,11 @@ async def get_files(group_id: str, page: int = 1, per_page: int = 20, status: Op
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"获取文件列表失败: {str(e)}")
+    finally:
+        try:
+            file_db.close()
+        except Exception:
+            pass
 
 # 群组相关API端点
 @app.post("/api/local-groups/refresh")
@@ -5047,10 +5438,10 @@ async def get_column_topic_full_comments(group_id: str, topic_id: int):
 
 if __name__ == "__main__":
     import sys
-    port = 8208  # 默认端口
+    port = 8508  # 默认端口
     if len(sys.argv) > 2 and sys.argv[1] == "--port":
         try:
             port = int(sys.argv[2])
         except ValueError:
-            port = 8208
+            port = 8508
     uvicorn.run(app, host="0.0.0.0", port=port)

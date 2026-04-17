@@ -2,7 +2,7 @@
  * API客户端 - 与后端FastAPI服务通信
  */
 
-const API_BASE_URL = (process.env.NEXT_PUBLIC_API_BASE_URL?.trim() || 'http://localhost:8208').replace(/\/$/, '');
+const API_BASE_URL = (process.env.NEXT_PUBLIC_API_BASE_URL?.trim() || 'http://localhost:8508').replace(/\/$/, '');
 
 // 类型定义
 export interface ApiResponse<T = any> {
@@ -14,11 +14,167 @@ export interface ApiResponse<T = any> {
 export interface Task {
   task_id: string;
   type: string;
-  status: 'pending' | 'running' | 'completed' | 'failed';
+  status: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
   message: string;
   result?: any;
   created_at: string;
   updated_at: string;
+}
+
+export interface AShareAnalysisSummary {
+  group_id?: string | null;
+  output_path: string;
+  state_path: string;
+  output_exists: boolean;
+  state_exists: boolean;
+  available_dates: string[];
+  available_start_date?: string | null;
+  available_end_date?: string | null;
+  date_count: number;
+  rows_count: number;
+  total_mentions: number;
+  unique_companies: number;
+  processed_items: number;
+  updated_at?: string | null;
+  source_topics_db_exists?: boolean | null;
+  source_topics_count?: number | null;
+  source_oldest_topic_time?: string | null;
+  source_latest_topic_time?: string | null;
+}
+
+export interface AShareAnalysisStorageStatus {
+  enabled: boolean;
+  mode: string;
+  label: string;
+  daily_rows?: number;
+  processed_rows?: number;
+}
+
+export interface AShareAnalysisLatestTdxExportBlock {
+  window_days: number;
+  block_name: string;
+  block_code: string;
+  block_path: string;
+  written_count: number;
+  skipped_count: number;
+  skipped_companies: string[];
+}
+
+export interface AShareAnalysisLatestTdxExport {
+  group_id?: string | null;
+  export_id: number;
+  exported_at: string;
+  start_date?: string | null;
+  end_date?: string | null;
+  tdx_root: string;
+  ranking_top_n: number;
+  total_written: number;
+  unresolved_count: number;
+  unresolved_companies: string[];
+  stock_basic_source?: string;
+  source_detail?: string;
+  backup_files: string[];
+  blocks: AShareAnalysisLatestTdxExportBlock[];
+}
+
+export interface AShareAnalysisStatus {
+  group_id?: string | null;
+  summary: AShareAnalysisSummary;
+  defaults: {
+    days: number;
+    retention_days: number;
+    concurrency: number;
+    model: string;
+    api_base: string;
+    wire_api: string;
+    reasoning_effort: string;
+    ranking_windows: number[];
+  };
+  api_key_configured: boolean;
+  latest_task?: Task | null;
+  running_task?: Task | null;
+  storage?: AShareAnalysisStorageStatus;
+  latest_tdx_export?: AShareAnalysisLatestTdxExport | null;
+}
+
+export interface AShareAnalysisSeries {
+  key: string;
+  label: string;
+  total: number;
+  color: string;
+}
+
+export interface AShareAnalysisRankingItem {
+  company: string;
+  count: number;
+}
+
+export interface AShareAnalysisChart {
+  group_id?: string | null;
+  available_dates: string[];
+  selected_start_date?: string | null;
+  selected_end_date?: string | null;
+  chart_data: Array<Record<string, string | number>>;
+  series: AShareAnalysisSeries[];
+  rankings: Record<string, AShareAnalysisRankingItem[]>;
+  date_count: number;
+  company_count: number;
+  total_companies_in_range: number;
+  top_n: number;
+  ranking_top_n: number;
+}
+
+export interface AShareAnalysisRunPayload {
+  group_id?: string | number;
+  days: number;
+  retention_days?: number;
+  concurrency?: number;
+  model?: string;
+  api_base?: string;
+  wire_api?: string;
+  reasoning_effort?: string;
+  reset_start_date?: string;
+  reset_end_date?: string;
+}
+
+export interface AShareAnalysisResetPayload {
+  group_id?: string | number;
+  start_date: string;
+  end_date: string;
+}
+
+export interface AShareAnalysisExportTdxPayload {
+  group_id?: string | number;
+  start_date?: string;
+  end_date?: string;
+}
+
+export interface AShareAnalysisExportTdxBlock {
+  window_days: number;
+  block_name: string;
+  block_code: string;
+  block_path: string;
+  written_count: number;
+  skipped_count: number;
+  skipped_companies: string[];
+}
+
+export interface AShareAnalysisExportTdxResponse {
+  success: boolean;
+  group_id?: string | null;
+  tdx_root: string;
+  selected_start_date?: string | null;
+  selected_end_date?: string | null;
+  ranking_top_n: number;
+  used_stock_cache: boolean;
+  stock_basic_source?: string;
+  stock_cache_path: string;
+  backup_files: string[];
+  blocks: AShareAnalysisExportTdxBlock[];
+  total_written: number;
+  unresolved_companies: string[];
+  ambiguous_companies: Record<string, string[]>;
+  export_id?: number | null;
 }
 
 export interface DatabaseStats {
@@ -55,6 +211,28 @@ export interface FileItem {
   download_count: number;
   create_time: string;
   download_status: string;
+  local_path?: string | null;
+  has_ai_analysis?: boolean;
+  analysis_updated_at?: string | null;
+}
+
+export interface FileAIAnalysis {
+  file_id: number;
+  status: string;
+  summary?: string | null;
+  extracted_text?: string | null;
+  extracted_text_preview?: string | null;
+  content_type?: string | null;
+  source_path?: string | null;
+  source_size?: number | null;
+  model?: string | null;
+  api_base?: string | null;
+  wire_api?: string | null;
+  reasoning_effort?: string | null;
+  error_message?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+  cached?: boolean;
 }
 
 export interface FileStatus {
@@ -154,7 +332,7 @@ class ApiClient {
     this.baseUrl = baseUrl;
   }
 
-  private async request<T>(
+  private async request<T = any>(
     endpoint: string,
     options: RequestInit = {}
   ): Promise<T> {
@@ -210,6 +388,61 @@ class ApiClient {
   async stopTask(taskId: string) {
     return this.request(`/api/tasks/${taskId}/stop`, {
       method: 'POST',
+    });
+  }
+
+  async getAShareAnalysisStatus(groupId?: string | number): Promise<AShareAnalysisStatus> {
+    const search = new URLSearchParams();
+    if (groupId !== undefined && groupId !== null && String(groupId).trim() !== '') {
+      search.set('group_id', String(groupId));
+    }
+    const query = search.toString();
+    return this.request(`/api/analytics/a-share/status${query ? `?${query}` : ''}`);
+  }
+
+  async getAShareAnalysisChart(params?: {
+    groupId?: string | number;
+    startDate?: string;
+    endDate?: string;
+    topN?: number;
+  }): Promise<AShareAnalysisChart> {
+    const search = new URLSearchParams();
+    if (params?.groupId !== undefined && params?.groupId !== null && String(params.groupId).trim() !== '') {
+      search.set('group_id', String(params.groupId));
+    }
+    if (params?.startDate) {
+      search.set('start_date', params.startDate);
+    }
+    if (params?.endDate) {
+      search.set('end_date', params.endDate);
+    }
+    if (params?.topN) {
+      search.set('top_n', params.topN.toString());
+    }
+    const query = search.toString();
+    return this.request(`/api/analytics/a-share/chart${query ? `?${query}` : ''}`);
+  }
+
+  async runAShareAnalysis(payload: AShareAnalysisRunPayload) {
+    return this.request('/api/analytics/a-share/run', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  }
+
+  async resetAShareAnalysisRange(payload: AShareAnalysisResetPayload) {
+    return this.request('/api/analytics/a-share/reset-range', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  }
+
+  async exportAShareRankingsToTdx(
+    payload: AShareAnalysisExportTdxPayload = {}
+  ): Promise<AShareAnalysisExportTdxResponse> {
+    return this.request('/api/analytics/a-share/export-tdx', {
+      method: 'POST',
+      body: JSON.stringify(payload),
     });
   }
 
@@ -304,11 +537,11 @@ class ApiClient {
   }
 
   // 获取代理图片URL，解决防盗链问题
-  getProxyImageUrl(originalUrl: string, groupId?: string): string {
+  getProxyImageUrl(originalUrl: string, groupId?: string | number): string {
     if (!originalUrl) return '';
     const params = new URLSearchParams({ url: originalUrl });
-    if (groupId) {
-      params.append('group_id', groupId);
+    if (groupId !== undefined && groupId !== null && groupId !== '') {
+      params.append('group_id', String(groupId));
     }
     return `${API_BASE_URL}/api/proxy-image?${params.toString()}`;
   }
@@ -337,12 +570,12 @@ class ApiClient {
   }
 
   // 群组相关
-  async getGroupInfo(groupId: number) {
+  async getGroupInfo(groupId: number | string) {
     return this.request(`/api/groups/${groupId}/info`);
   }
 
   // 文件相关
-  async downloadFiles(groupId: number, maxFiles?: number, sortBy: string = 'download_count',
+  async downloadFiles(groupId: number | string, maxFiles?: number, sortBy: string = 'download_count',
                      downloadInterval: number = 1.0, longSleepInterval: number = 60.0,
                      filesPerBatch: number = 10, downloadIntervalMin?: number,
                      downloadIntervalMax?: number, longSleepIntervalMin?: number,
@@ -369,19 +602,75 @@ class ApiClient {
     });
   }
 
-  async clearFileDatabase(groupId: number) {
+  async downloadFilesByTimeRange(groupId: number | string, params: {
+    startTime?: string;
+    endTime?: string;
+    lastDays?: number;
+    downloadInterval?: number;
+    longSleepInterval?: number;
+    filesPerBatch?: number;
+    downloadIntervalMin?: number;
+    downloadIntervalMax?: number;
+    longSleepIntervalMin?: number;
+    longSleepIntervalMax?: number;
+  }) {
+    const requestBody: any = {
+      sort_by: 'create_time',
+      start_time: params.startTime,
+      end_time: params.endTime,
+      last_days: params.lastDays,
+      download_interval: params.downloadInterval ?? 1.0,
+      long_sleep_interval: params.longSleepInterval ?? 60.0,
+      files_per_batch: params.filesPerBatch ?? 10,
+    };
+
+    if (params.downloadIntervalMin !== undefined) {
+      requestBody.download_interval_min = params.downloadIntervalMin;
+      requestBody.download_interval_max = params.downloadIntervalMax;
+      requestBody.long_sleep_interval_min = params.longSleepIntervalMin;
+      requestBody.long_sleep_interval_max = params.longSleepIntervalMax;
+    }
+
+    return this.request(`/api/files/download/${groupId}`, {
+      method: 'POST',
+      body: JSON.stringify(requestBody),
+    });
+  }
+
+  async collectFiles(groupId: number | string) {
+    return this.request(`/api/files/collect/${groupId}`, {
+      method: 'POST',
+    });
+  }
+
+  async collectFilesByTimeRange(groupId: number | string, params: {
+    startTime?: string;
+    endTime?: string;
+    lastDays?: number;
+  }) {
+    return this.request(`/api/files/collect/${groupId}`, {
+      method: 'POST',
+      body: JSON.stringify({
+        start_time: params.startTime,
+        end_time: params.endTime,
+        last_days: params.lastDays,
+      }),
+    });
+  }
+
+  async clearFileDatabase(groupId: number | string) {
     return this.request(`/api/files/clear/${groupId}`, {
       method: 'POST',
     });
   }
 
-  async clearTopicDatabase(groupId: number) {
+  async clearTopicDatabase(groupId: number | string) {
     return this.request(`/api/topics/clear/${groupId}`, {
       method: 'POST',
     });
   }
 
-  async getFileStats(groupId: number) {
+  async getFileStats(groupId: number | string) {
     return this.request(`/api/files/stats/${groupId}`);
   }
 
@@ -441,6 +730,17 @@ class ApiClient {
       data: response.files,
       pagination: response.pagination,
     };
+  }
+
+  async getFileAIAnalysis(groupId: number | string, fileId: number): Promise<{ analysis: FileAIAnalysis | null }> {
+    return this.request(`/api/files/analysis/${groupId}/${fileId}`);
+  }
+
+  async analyzeFile(groupId: number | string, fileId: number, force: boolean = false): Promise<{ analysis: FileAIAnalysis }> {
+    return this.request(`/api/files/analysis/${groupId}/${fileId}`, {
+      method: 'POST',
+      body: JSON.stringify({ force }),
+    });
   }
 
   // 群组相关

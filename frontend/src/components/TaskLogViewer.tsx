@@ -52,7 +52,7 @@ export default function TaskLogViewer({
     if (!taskId) return;
 
     // 建立SSE连接
-    const API_BASE_URL = 'http://localhost:8208';
+    const API_BASE_URL = 'http://localhost:8508';
     const eventSource = new EventSource(`${API_BASE_URL}/api/tasks/${taskId}/stream`);
     eventSourceRef.current = eventSource;
 

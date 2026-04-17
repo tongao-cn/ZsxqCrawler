@@ -91,7 +91,7 @@ NEXT_PUBLIC_API_BASE_URL=http://192.168.x.x:8208
 
 然后访问：
 - **Web 界面**: http://localhost:3060
-- **API 文档**: http://localhost:8208/docs
+- **API 文档**: http://localhost:8508/docs
 
 #### 方式二：命令行工具
 

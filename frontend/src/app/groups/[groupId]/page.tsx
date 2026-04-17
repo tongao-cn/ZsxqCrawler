@@ -21,6 +21,8 @@ import { createSafeHtml, createSafeHtmlWithHighlight, extractPlainText } from '@
 import DownloadSettingsDialog from '@/components/DownloadSettingsDialog';
 import CrawlSettingsDialog from '@/components/CrawlSettingsDialog';
 import ImageGallery from '@/components/ImageGallery';
+import AShareAnalysisPanel from '@/components/AShareAnalysisPanel';
+import GroupFileAnalysisPanel from '@/components/GroupFileAnalysisPanel';
 
 // 话题详情缓存，避免重复请求
 const topicDetailCache: Map<string, any> = new Map();
@@ -151,6 +153,14 @@ const [quickLastDays, setQuickLastDays] = useState<number>(30);
 const [rangeStartDate, setRangeStartDate] = useState<string>('');
 const [rangeEndDate, setRangeEndDate] = useState<string>('');
 const [latestDialogOpen, setLatestDialogOpen] = useState<boolean>(false);
+const [downloadDialogOpen, setDownloadDialogOpen] = useState<boolean>(false);
+const [downloadQuickLastDays, setDownloadQuickLastDays] = useState<number>(30);
+const [downloadRangeStartDate, setDownloadRangeStartDate] = useState<string>('');
+const [downloadRangeEndDate, setDownloadRangeEndDate] = useState<string>('');
+const [collectDialogOpen, setCollectDialogOpen] = useState<boolean>(false);
+const [collectQuickLastDays, setCollectQuickLastDays] = useState<number>(30);
+const [collectRangeStartDate, setCollectRangeStartDate] = useState<string>('');
+const [collectRangeEndDate, setCollectRangeEndDate] = useState<string>('');
 
   // 单个话题采集状态
   const [singleTopicId, setSingleTopicId] = useState<string>('');
@@ -283,7 +293,7 @@ const [latestDialogOpen, setLatestDialogOpen] = useState<boolean>(false);
       let data;
       if (selectedTag) {
         // 如果选择了标签，使用标签过滤API
-        data = await apiClient.getTagTopics(parseInt(groupId), selectedTag, currentPage, 20);
+        data = await apiClient.getTagTopics(groupId, selectedTag, currentPage, 20);
       } else {
         // 否则使用原有的API
         data = await apiClient.getGroupTopics(groupId, currentPage, 20, searchTerm || undefined);
@@ -350,7 +360,7 @@ const [latestDialogOpen, setLatestDialogOpen] = useState<boolean>(false);
 
   const loadGroupInfo = async () => {
     try {
-      const info = await apiClient.getGroupInfo(parseInt(groupId));
+      const info = await apiClient.getGroupInfo(groupId);
       setGroupInfo(info);
     } catch (error) {
       console.error('加载群组信息失败:', error);
@@ -359,7 +369,7 @@ const [latestDialogOpen, setLatestDialogOpen] = useState<boolean>(false);
 
   const loadLocalFileCount = async () => {
     try {
-      const stats = await apiClient.getFileStats(parseInt(groupId));
+      const stats = await apiClient.getFileStats(groupId);
       // 使用特定群组的文件统计数据
       setLocalFileCount(stats.download_stats.total_files || 0);
     } catch (error) {
@@ -372,7 +382,7 @@ const [latestDialogOpen, setLatestDialogOpen] = useState<boolean>(false);
   const loadTags = async () => {
     setTagsLoading(true);
     try {
-      const data = await apiClient.getGroupTags(parseInt(groupId));
+      const data = await apiClient.getGroupTags(groupId);
       setTags(data.tags || []);
     } catch (error) {
       console.error('Failed to load tags:', error);
@@ -619,12 +629,20 @@ const [latestDialogOpen, setLatestDialogOpen] = useState<boolean>(false);
   const handleCollectFiles = async () => {
     try {
       setFileLoading('collect');
-      const response = await apiClient.collectFiles();
+      const params: any = {};
+      if (collectRangeStartDate || collectRangeEndDate) {
+        if (collectRangeStartDate) params.startTime = collectRangeStartDate;
+        if (collectRangeEndDate) params.endTime = collectRangeEndDate;
+      } else {
+        params.lastDays = Math.max(1, collectQuickLastDays || 1);
+      }
+      const response = await apiClient.collectFilesByTimeRange(groupId, params);
       toast.success(`文件收集任务已创建: ${(response as any).task_id}`);
       // 设置当前任务ID以显示日志
       setCurrentTaskId((response as any).task_id);
       // 自动切换到日志标签页
       setActiveTab('logs');
+      setCollectDialogOpen(false);
     } catch (error) {
       toast.error(`文件收集失败: ${error instanceof Error ? error.message : '未知错误'}`);
     } finally {
@@ -635,23 +653,29 @@ const [latestDialogOpen, setLatestDialogOpen] = useState<boolean>(false);
   const handleDownloadByTime = async () => {
     try {
       setFileLoading('download-time');
-      const response = await apiClient.downloadFiles(
-        parseInt(groupId),
-        undefined,
-        'create_time',
+      const params: any = {
         downloadInterval,
         longSleepInterval,
         filesPerBatch,
-        useRandomInterval ? downloadIntervalMin : undefined,
-        useRandomInterval ? downloadIntervalMax : undefined,
-        useRandomInterval ? longSleepIntervalMin : undefined,
-        useRandomInterval ? longSleepIntervalMax : undefined
-      );
+        downloadIntervalMin: useRandomInterval ? downloadIntervalMin : undefined,
+        downloadIntervalMax: useRandomInterval ? downloadIntervalMax : undefined,
+        longSleepIntervalMin: useRandomInterval ? longSleepIntervalMin : undefined,
+        longSleepIntervalMax: useRandomInterval ? longSleepIntervalMax : undefined,
+      };
+      if (downloadRangeStartDate || downloadRangeEndDate) {
+        if (downloadRangeStartDate) params.startTime = downloadRangeStartDate;
+        if (downloadRangeEndDate) params.endTime = downloadRangeEndDate;
+      } else {
+        params.lastDays = Math.max(1, downloadQuickLastDays || 1);
+      }
+
+      const response = await apiClient.downloadFilesByTimeRange(groupId, params);
       toast.success(`文件下载任务已创建: ${(response as any).task_id}`);
       // 设置当前任务ID以显示日志
       setCurrentTaskId((response as any).task_id);
       // 自动切换到日志标签页
       setActiveTab('logs');
+      setDownloadDialogOpen(false);
     } catch (error) {
       toast.error(`文件下载失败: ${error instanceof Error ? error.message : '未知错误'}`);
     } finally {
@@ -663,7 +687,7 @@ const [latestDialogOpen, setLatestDialogOpen] = useState<boolean>(false);
     try {
       setFileLoading('download-count');
       const response = await apiClient.downloadFiles(
-        parseInt(groupId),
+        groupId,
         undefined,
         'download_count',
         downloadInterval,
@@ -689,7 +713,7 @@ const [latestDialogOpen, setLatestDialogOpen] = useState<boolean>(false);
   const handleClearFileDatabase = async () => {
     try {
       setFileLoading('clear');
-      const response = await apiClient.clearFileDatabase(parseInt(groupId));
+      const response = await apiClient.clearFileDatabase(groupId);
       toast.success(`文件数据库已删除`);
       // 重新加载本地文件数量
       loadLocalFileCount();
@@ -772,7 +796,7 @@ const [latestDialogOpen, setLatestDialogOpen] = useState<boolean>(false);
     setRefreshingTopics(prev => new Set(prev).add(topicId));
 
     try {
-      const response = await apiClient.refreshTopic(parseInt(topicId.toString()), parseInt(groupId));
+      const response = await apiClient.refreshTopic(parseInt(topicId.toString()), groupId);
 
       if (response.success) {
         toast.success(`${response.message} - 点赞:${response.updated_data.likes_count} 评论:${response.updated_data.comments_count}`);
@@ -2082,14 +2106,22 @@ const [latestDialogOpen, setLatestDialogOpen] = useState<boolean>(false);
           <Tabs value={activeTab} onValueChange={setActiveTab} className="flex flex-col h-full">
             {/* 固定的标签页头部 */}
             <div className="flex-shrink-0 mb-4">
-              <TabsList className="grid w-full grid-cols-2">
+              <TabsList className="grid w-full grid-cols-4">
                 <TabsTrigger value="topics" className="flex items-center gap-2">
                   <MessageSquare className="h-4 w-4" />
                   话题列表
                 </TabsTrigger>
+                <TabsTrigger value="files" className="flex items-center gap-2">
+                  <File className="h-4 w-4" />
+                  文件
+                </TabsTrigger>
                 <TabsTrigger value="logs" className="flex items-center gap-2">
                   <FileText className="h-4 w-4" />
                   任务日志
+                </TabsTrigger>
+                <TabsTrigger value="analysis" className="flex items-center gap-2">
+                  <BarChart3 className="h-4 w-4" />
+                  A股分析
                 </TabsTrigger>
               </TabsList>
             </div>
@@ -2199,6 +2231,12 @@ const [latestDialogOpen, setLatestDialogOpen] = useState<boolean>(false);
               </div>
             </TabsContent>
 
+            <TabsContent value="files" className="flex-1 flex flex-col min-h-0">
+              <div className="flex-1 min-h-0 overflow-auto">
+                <GroupFileAnalysisPanel groupId={groupId} />
+              </div>
+            </TabsContent>
+
             {/* 任务日志区域 */}
             <TabsContent value="logs" className="flex-1 flex flex-col min-h-0">
               <div className="flex-1 min-h-0">
@@ -2218,6 +2256,21 @@ const [latestDialogOpen, setLatestDialogOpen] = useState<boolean>(false);
                 </div>
               </div>
             </TabsContent>
+
+            <TabsContent value="analysis" className="flex-1 flex flex-col min-h-0">
+              <div className="flex-1 min-h-0 overflow-auto">
+                <AShareAnalysisPanel
+                  selectedGroup={group}
+                  onTaskCreated={(taskId) => {
+                    setCurrentTaskId(taskId);
+                    setActiveTab('logs');
+                    setTimeout(() => {
+                      loadRecentTasks();
+                    }, 300);
+                  }}
+                />
+              </div>
+            </TabsContent>
           </Tabs>
         </div>
 
@@ -2233,11 +2286,11 @@ const [latestDialogOpen, setLatestDialogOpen] = useState<boolean>(false);
                   <TabsList className="grid w-full grid-cols-2">
                     <TabsTrigger value="crawl" className="text-xs">
                       <MessageSquare className="h-3 w-3 mr-1" />
-                      采集
+                      采集话题
                     </TabsTrigger>
                     <TabsTrigger value="download" className="text-xs">
                       <Download className="h-3 w-3 mr-1" />
-                      下载
+                      下载文件
                     </TabsTrigger>
                   </TabsList>
 
@@ -2640,33 +2693,182 @@ const [latestDialogOpen, setLatestDialogOpen] = useState<boolean>(false);
                   {/* 文件下载选项 */}
                   <TabsContent value="download" className="space-y-3 mt-4">
                     <div className="space-y-2">
+                      <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs text-blue-800">
+                        <div className="font-medium mb-1">使用顺序</div>
+                        <div>1. 先收集文件列表</div>
+                        <div>2. 再按时间或热度下载文件本体</div>
+                      </div>
+
+                      {/* 收集文件列表 */}
+                      <div className="border rounded-lg p-3 cursor-pointer transition-all border-sky-200 hover:bg-sky-50">
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="flex items-center gap-2">
+                            <FileText className="h-3 w-3 text-sky-600" />
+                            <span className="text-xs font-medium text-sky-700">
+                              收集文件列表
+                            </span>
+                          </div>
+                          <span className="text-xs text-gray-500">
+                            当前 {localFileCount} 条
+                          </span>
+                        </div>
+                        <AlertDialog open={collectDialogOpen} onOpenChange={setCollectDialogOpen}>
+                          <Button
+                            size="sm"
+                            className="w-full h-7 text-xs bg-sky-600 hover:bg-sky-700"
+                            onClick={() => setCollectDialogOpen(true)}
+                            disabled={!!fileLoading}
+                          >
+                            {fileLoading === 'collect' ? '执行中...' : '开始收集'}
+                          </Button>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>按时间收集文件列表</AlertDialogTitle>
+                              <AlertDialogDescription>
+                                默认收集最近 N 天的文件；也可以指定开始和结束日期。
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <div className="space-y-3">
+                              <div className="text-xs text-gray-600">快速选择：最近N天</div>
+                              <div className="flex items-center gap-2">
+                                <Input
+                                  type="number"
+                                  min={1}
+                                  value={collectQuickLastDays}
+                                  onChange={(e) => setCollectQuickLastDays(parseInt(e.target.value || '1'))}
+                                  className="h-7 text-xs w-24"
+                                />
+                                <span className="text-xs text-gray-500">天</span>
+                                <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setCollectQuickLastDays(3)}>3天</Button>
+                                <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setCollectQuickLastDays(7)}>7天</Button>
+                                <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setCollectQuickLastDays(30)}>30天</Button>
+                              </div>
+                              <div className="text-[10px] text-gray-400">或 自定义日期范围</div>
+                              <div className="flex items-center gap-2">
+                                <Input
+                                  type="date"
+                                  value={collectRangeStartDate}
+                                  onChange={(e) => setCollectRangeStartDate(e.target.value)}
+                                  className="h-7 text-xs"
+                                />
+                                <span className="text-xs text-gray-500">~</span>
+                                <Input
+                                  type="date"
+                                  value={collectRangeEndDate}
+                                  onChange={(e) => setCollectRangeEndDate(e.target.value)}
+                                  className="h-7 text-xs"
+                                />
+                              </div>
+                            </div>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel onClick={(e) => { e.stopPropagation(); setCollectDialogOpen(false); }}>
+                                取消
+                              </AlertDialogCancel>
+                              <AlertDialogAction
+                                onClick={handleCollectFiles}
+                                className="bg-sky-600 hover:bg-sky-700 focus:ring-sky-600"
+                              >
+                                开始收集
+                              </AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
+                        <div className="mt-2 text-[11px] text-gray-500">
+                          仅更新文件列表记录，不会下载文件本体
+                        </div>
+                      </div>
+
                       {/* 按时间下载 */}
                       <div
                         className={`border rounded-lg p-3 cursor-pointer transition-all ${
                           selectedDownloadOption === 'time'
                             ? 'bg-purple-50 border-purple-200'
-                            : 'border-gray-200 hover:bg-gray-50'
+                            : localFileCount === 0
+                              ? 'border-gray-200 bg-gray-50 opacity-60 cursor-not-allowed'
+                              : 'border-gray-200 hover:bg-gray-50'
                         }`}
-                        onClick={() => setSelectedDownloadOption('time')}
+                        onClick={() => {
+                          if (localFileCount === 0) {
+                            toast.error('请先收集文件列表');
+                            return;
+                          }
+                          setSelectedDownloadOption('time');
+                          setDownloadDialogOpen(true);
+                        }}
                       >
                         <div className="flex items-center justify-between mb-2">
                           <div className="flex items-center gap-2">
                             <Calendar className={`h-3 w-3 ${selectedDownloadOption === 'time' ? 'text-purple-600' : 'text-gray-400'}`} />
                             <span className={`text-xs font-medium ${selectedDownloadOption === 'time' ? 'text-purple-700' : 'text-gray-600'}`}>
-                              按时间
+                              按时间下载
                             </span>
                           </div>
+                          {localFileCount === 0 && (
+                            <Badge variant="secondary" className="text-[10px]">先收集</Badge>
+                          )}
                         </div>
                         {selectedDownloadOption === 'time' && (
-                          <Button
-                            size="sm"
-                            className="w-full h-7 text-xs bg-purple-600 hover:bg-purple-700"
-                      
-                            onClick={handleDownloadByTime}
-                            disabled={!!fileLoading}
-                          >
-                            {fileLoading === 'download-time' ? '执行中...' : '开始'}
-                          </Button>
+                          <AlertDialog open={downloadDialogOpen} onOpenChange={setDownloadDialogOpen}>
+                            <Button
+                              size="sm"
+                              className="w-full h-7 text-xs bg-purple-600 hover:bg-purple-700"
+                              onClick={() => setDownloadDialogOpen(true)}
+                              disabled={!!fileLoading || localFileCount === 0}
+                            >
+                              {fileLoading === 'download-time' ? '执行中...' : '开始'}
+                            </Button>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>按时间下载文件</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                  默认下载最近 N 天的文件；也可以指定开始和结束日期。
+                                </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <div className="space-y-3">
+                                <div className="text-xs text-gray-600">快速选择：最近N天</div>
+                                <div className="flex items-center gap-2">
+                                  <Input
+                                    type="number"
+                                    min={1}
+                                    value={downloadQuickLastDays}
+                                    onChange={(e) => setDownloadQuickLastDays(parseInt(e.target.value || '1'))}
+                                    className="h-7 text-xs w-24"
+                                  />
+                                  <span className="text-xs text-gray-500">天</span>
+                                  <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setDownloadQuickLastDays(3)}>3天</Button>
+                                  <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setDownloadQuickLastDays(7)}>7天</Button>
+                                  <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setDownloadQuickLastDays(30)}>30天</Button>
+                                </div>
+                                <div className="text-[10px] text-gray-400">或 自定义日期范围</div>
+                                <div className="flex items-center gap-2">
+                                  <Input
+                                    type="date"
+                                    value={downloadRangeStartDate}
+                                    onChange={(e) => setDownloadRangeStartDate(e.target.value)}
+                                    className="h-7 text-xs"
+                                  />
+                                  <span className="text-xs text-gray-500">~</span>
+                                  <Input
+                                    type="date"
+                                    value={downloadRangeEndDate}
+                                    onChange={(e) => setDownloadRangeEndDate(e.target.value)}
+                                    className="h-7 text-xs"
+                                  />
+                                </div>
+                              </div>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel onClick={(e) => { e.stopPropagation(); setDownloadDialogOpen(false); }}>
+                                  取消
+                                </AlertDialogCancel>
+                                <AlertDialogAction
+                                  onClick={handleDownloadByTime}
+                                  className="bg-purple-600 hover:bg-purple-700 focus:ring-purple-600"
+                                >
+                                  开始下载
+                                </AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
                         )}
                       </div>
 
@@ -2675,24 +2877,35 @@ const [latestDialogOpen, setLatestDialogOpen] = useState<boolean>(false);
                         className={`border rounded-lg p-3 cursor-pointer transition-all ${
                           selectedDownloadOption === 'count'
                             ? 'bg-indigo-50 border-indigo-200'
-                            : 'border-gray-200 hover:bg-gray-50'
+                            : localFileCount === 0
+                              ? 'border-gray-200 bg-gray-50 opacity-60 cursor-not-allowed'
+                              : 'border-gray-200 hover:bg-gray-50'
                         }`}
-                        onClick={() => setSelectedDownloadOption('count')}
+                        onClick={() => {
+                          if (localFileCount === 0) {
+                            toast.error('请先收集文件列表');
+                            return;
+                          }
+                          setSelectedDownloadOption('count');
+                        }}
                       >
                         <div className="flex items-center justify-between mb-2">
                           <div className="flex items-center gap-2">
                             <TrendingUp className={`h-3 w-3 ${selectedDownloadOption === 'count' ? 'text-indigo-600' : 'text-gray-400'}`} />
                             <span className={`text-xs font-medium ${selectedDownloadOption === 'count' ? 'text-indigo-700' : 'text-gray-600'}`}>
-                              按热度
+                              按热度下载
                             </span>
                           </div>
+                          {localFileCount === 0 && (
+                            <Badge variant="secondary" className="text-[10px]">先收集</Badge>
+                          )}
                         </div>
                         {selectedDownloadOption === 'count' && (
                           <Button
                             size="sm"
                             className="w-full h-7 text-xs bg-indigo-600 hover:bg-indigo-700"
                             onClick={handleDownloadByCount}
-                            disabled={!!fileLoading}
+                            disabled={!!fileLoading || localFileCount === 0}
                           >
                             {fileLoading === 'download-count' ? '执行中...' : '开始'}
                           </Button>

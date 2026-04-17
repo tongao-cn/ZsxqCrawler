@@ -45,9 +45,6 @@ class ZSXQFileDatabase:
         )
         ''')
 
-        # 执行数据库迁移
-        self._migrate_database()
-        
         # 3. 群组表 (topic.group对象)
         self.cursor.execute('''
         CREATE TABLE IF NOT EXISTS groups (
@@ -283,9 +280,33 @@ class ZSXQFileDatabase:
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
         ''')
+
+        # 19. 文件 AI 分析表
+        self.cursor.execute('''
+        CREATE TABLE IF NOT EXISTS file_ai_analyses (
+            file_id INTEGER PRIMARY KEY,
+            status TEXT DEFAULT 'completed',
+            summary TEXT,
+            extracted_text TEXT,
+            extracted_text_preview TEXT,
+            content_type TEXT,
+            source_path TEXT,
+            source_size INTEGER,
+            model TEXT,
+            api_base TEXT,
+            wire_api TEXT,
+            reasoning_effort TEXT,
+            error_message TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (file_id) REFERENCES files (file_id)
+        )
+        ''')
+
+        # 执行数据库迁移
+        self._migrate_database()
         
         self.conn.commit()
-        print("✅ 完整数据库表结构创建成功")
     
     def insert_user(self, user_data: Dict[str, Any]) -> Optional[int]:
         """插入或更新用户信息"""
@@ -378,6 +399,25 @@ class ZSXQFileDatabase:
             user_specific.get('subscribed', False)
         ))
         return topic_data.get('topic_id')
+
+    def update_file_download_status(
+        self,
+        file_id: int,
+        status: str,
+        local_path: Optional[str] = None,
+    ):
+        """更新文件下载状态"""
+        self.cursor.execute('''
+        UPDATE files
+        SET download_status = ?,
+            local_path = COALESCE(?, local_path),
+            download_time = CASE
+                WHEN ? = 'completed' THEN CURRENT_TIMESTAMP
+                ELSE download_time
+            END
+        WHERE file_id = ?
+        ''', (status, local_path, status, file_id))
+        self.conn.commit()
     
     def insert_talk(self, topic_id: int, talk_data: Dict[str, Any]):
         """插入话题内容"""
@@ -671,12 +711,12 @@ class ZSXQFileDatabase:
                             stats['solutions'] += 1
             
             self.conn.commit()
-            print(f"✅ 数据导入成功: {stats}")
+            print(f"数据导入成功: {stats}")
             return stats
             
         except Exception as e:
             self.conn.rollback()
-            print(f"❌ 数据导入失败: {e}")
+            print(f"数据导入失败: {e}")
             raise e
     
     def get_database_stats(self) -> Dict[str, Any]:
@@ -687,7 +727,8 @@ class ZSXQFileDatabase:
             'files', 'groups', 'users', 'topics', 'talks', 'images', 
             'topic_files', 'latest_likes', 'comments', 'like_emojis',
             'user_liked_emojis', 'columns', 'topic_columns', 'solutions',
-            'solution_files', 'file_topic_relations', 'api_responses', 'collection_log'
+            'solution_files', 'file_topic_relations', 'api_responses', 'collection_log',
+            'file_ai_analyses'
         ]
         
         for table in tables:
@@ -713,6 +754,11 @@ class ZSXQFileDatabase:
                 'table': 'files',
                 'column': 'download_time',
                 'definition': 'TIMESTAMP'
+            },
+            {
+                'table': 'file_ai_analyses',
+                'column': 'extracted_text',
+                'definition': 'TEXT'
             }
         ]
 
@@ -725,9 +771,9 @@ class ZSXQFileDatabase:
                 if migration['column'] not in columns:
                     sql = f"ALTER TABLE {migration['table']} ADD COLUMN {migration['column']} {migration['definition']}"
                     self.cursor.execute(sql)
-                    print(f"📊 添加列: {migration['table']}.{migration['column']}")
+                    print(f"添加列: {migration['table']}.{migration['column']}")
             except Exception as e:
-                print(f"❌ 迁移失败: {migration['table']}.{migration['column']} - {e}")
+                print(f"迁移失败: {migration['table']}.{migration['column']} - {e}")
 
         self.conn.commit()
 
@@ -736,11 +782,86 @@ class ZSXQFileDatabase:
         if self.conn:
             self.conn.close()
 
+    def upsert_file_ai_analysis(
+        self,
+        file_id: int,
+        *,
+        status: str = 'completed',
+        summary: Optional[str] = None,
+        extracted_text: Optional[str] = None,
+        extracted_text_preview: Optional[str] = None,
+        content_type: Optional[str] = None,
+        source_path: Optional[str] = None,
+        source_size: Optional[int] = None,
+        model: Optional[str] = None,
+        api_base: Optional[str] = None,
+        wire_api: Optional[str] = None,
+        reasoning_effort: Optional[str] = None,
+        error_message: Optional[str] = None,
+    ):
+        self.cursor.execute('''
+        INSERT INTO file_ai_analyses (
+            file_id, status, summary, extracted_text, extracted_text_preview, content_type,
+            source_path, source_size, model, api_base, wire_api, reasoning_effort,
+            error_message, created_at, updated_at
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        ON CONFLICT(file_id) DO UPDATE SET
+            status=excluded.status,
+            summary=excluded.summary,
+            extracted_text=excluded.extracted_text,
+            extracted_text_preview=excluded.extracted_text_preview,
+            content_type=excluded.content_type,
+            source_path=excluded.source_path,
+            source_size=excluded.source_size,
+            model=excluded.model,
+            api_base=excluded.api_base,
+            wire_api=excluded.wire_api,
+            reasoning_effort=excluded.reasoning_effort,
+            error_message=excluded.error_message,
+            updated_at=CURRENT_TIMESTAMP
+        ''', (
+            file_id, status, summary, extracted_text, extracted_text_preview, content_type,
+            source_path, source_size, model, api_base, wire_api, reasoning_effort,
+            error_message
+        ))
+        self.conn.commit()
+
+    def get_file_ai_analysis(self, file_id: int) -> Optional[Dict[str, Any]]:
+        self.cursor.execute('''
+        SELECT
+            file_id, status, summary, extracted_text, extracted_text_preview, content_type,
+            source_path, source_size, model, api_base, wire_api, reasoning_effort,
+            error_message, created_at, updated_at
+        FROM file_ai_analyses
+        WHERE file_id = ?
+        ''', (file_id,))
+        row = self.cursor.fetchone()
+        if not row:
+            return None
+        return {
+            'file_id': row[0],
+            'status': row[1],
+            'summary': row[2],
+            'extracted_text': row[3],
+            'extracted_text_preview': row[4],
+            'content_type': row[5],
+            'source_path': row[6],
+            'source_size': row[7],
+            'model': row[8],
+            'api_base': row[9],
+            'wire_api': row[10],
+            'reasoning_effort': row[11],
+            'error_message': row[12],
+            'created_at': row[13],
+            'updated_at': row[14],
+        }
+
 
 def main():
     """测试数据库功能"""
     db = ZSXQFileDatabase()
-    print("📊 数据库统计:")
+    print("数据库统计:")
     stats = db.get_database_stats()
     for table, count in stats.items():
         print(f"  {table}: {count}")

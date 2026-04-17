@@ -13,7 +13,11 @@ dependencies = [
     "fastapi>=0.104.0",
     "uvicorn>=0.24.0",
     "pydantic>=2.0.0",
+    "faster-whisper>=1.1.1; python_version >= '3.9'",
     "loguru>=0.7.0",
+    "openai>=1.0.0",
+    "pypdf>=5.4.0",
+    "psycopg2-binary>=2.9.10",
 ]
 
 [build-system]

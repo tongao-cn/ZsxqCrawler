@@ -12,7 +12,7 @@ import json
 import os
 import random
 import time
-from typing import Dict, Optional, Any
+from typing import Dict, Optional, Any, Tuple
 
 import requests
 
@@ -277,6 +277,67 @@ class ZSXQFileDownloader:
         if self.debug_mode:
             print(f"   ⏱️ 延迟 {delay:.1f}秒")
         time.sleep(delay)
+
+    @staticmethod
+    def _parse_create_time(value: Optional[str]) -> Optional[datetime.datetime]:
+        if not value:
+            return None
+        text = str(value).strip()
+        formats = (
+            "%Y-%m-%dT%H:%M:%S.%f%z",
+            "%Y-%m-%dT%H:%M:%S%z",
+            "%Y-%m-%d %H:%M:%S",
+            "%Y-%m-%d",
+        )
+        for fmt in formats:
+            try:
+                dt = datetime.datetime.strptime(text, fmt)
+                if dt.tzinfo:
+                    return dt.astimezone().replace(tzinfo=None)
+                return dt
+            except Exception:
+                continue
+        try:
+            if text.endswith("+0800"):
+                return datetime.datetime.strptime(text[:-5], "%Y-%m-%dT%H:%M:%S.%f")
+        except Exception:
+            pass
+        return None
+
+    @staticmethod
+    def _normalize_date_range(
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        last_days: Optional[int] = None,
+    ) -> Tuple[Optional[str], Optional[str], Optional[datetime.datetime]]:
+        if last_days:
+            start_dt = datetime.datetime.now() - datetime.timedelta(days=max(1, int(last_days)))
+            start = start_dt.strftime("%Y-%m-%d")
+            end = datetime.datetime.now().strftime("%Y-%m-%d")
+            return start, end, start_dt
+        start = str(start_date or "").strip() or None
+        end = str(end_date or "").strip() or None
+        stop_before_dt = None
+        if start:
+            stop_before_dt = datetime.datetime.strptime(start, "%Y-%m-%d")
+        if start and end and start > end:
+            start, end = end, start
+        return start, end, stop_before_dt
+
+    def _summarize_page_time_range(self, files: list[Dict[str, Any]]) -> tuple[Optional[str], Optional[str]]:
+        timestamps: list[datetime.datetime] = []
+        for item in files:
+            file_data = item.get('file', {}) or {}
+            file_dt = self._parse_create_time(file_data.get('create_time'))
+            if file_dt:
+                timestamps.append(file_dt)
+
+        if not timestamps:
+            return None, None
+
+        oldest = min(timestamps).strftime("%Y-%m-%d %H:%M:%S")
+        newest = max(timestamps).strftime("%Y-%m-%d %H:%M:%S")
+        return oldest, newest
     
     def download_delay(self):
         """下载间隔延迟"""
@@ -552,6 +613,7 @@ class ZSXQFileDownloader:
             existing_size = os.path.getsize(file_path)
             if existing_size == file_size:
                 self.log(f"   ✅ 文件已存在且大小匹配，跳过下载")
+                self.file_db.update_file_download_status(file_id, 'completed', file_path)
                 return "skipped"  # 返回特殊值表示跳过
             else:
                 self.log(f"   ⚠️ 文件已存在但大小不匹配，重新下载")
@@ -603,6 +665,7 @@ class ZSXQFileDownloader:
                             # 检查是否需要停止
                             if self.check_stop():
                                 self.log("🛑 下载过程中被停止")
+                                self.file_db.update_file_download_status(file_id, 'failed')
                                 return False
 
                             if downloaded_size % (10 * 1024 * 1024) != 0 and downloaded_size != total_size:
@@ -616,6 +679,7 @@ class ZSXQFileDownloader:
 
                 self.log(f"   ✅ 下载完成: {safe_filename}")
                 self.log(f"   💾 保存路径: {file_path}")
+                self.file_db.update_file_download_status(file_id, 'completed', file_path)
 
                 self.download_count += 1
                 self.current_batch_count += 1
@@ -626,6 +690,7 @@ class ZSXQFileDownloader:
                 return True
             else:
                 self.log(f"   ❌ 下载失败: HTTP {response.status_code}")
+                self.file_db.update_file_download_status(file_id, 'failed')
                 return False
 
         except Exception as e:
@@ -633,6 +698,7 @@ class ZSXQFileDownloader:
             if os.path.exists(file_path):
                 os.remove(file_path)
                 self.log(f"   🗑️ 删除不完整文件")
+            self.file_db.update_file_download_status(file_id, 'failed')
             return False
 
     def _apply_download_intervals(self):
@@ -892,18 +958,26 @@ class ZSXQFileDownloader:
             'time_based_count': result[2] if result else 0
         }
     
-    def collect_files_by_time(self, sort: str = "by_create_time", start_time: Optional[str] = None, **kwargs) -> Dict[str, int]:
+    def collect_files_by_time(
+        self,
+        sort: str = "by_create_time",
+        start_time: Optional[str] = None,
+        stop_before_time: Optional[datetime.datetime] = None,
+        **kwargs,
+    ) -> Dict[str, int]:
         """按时间顺序收集文件列表到数据库（使用完整的数据库结构）"""
         self.log(f"📊 开始按时间顺序收集文件列表到完整数据库...")
         self.log(f"   📅 排序方式: {sort}")
         if start_time:
             self.log(f"   ⏰ 起始时间: {start_time}")
-        
-        # 检查是否强制刷新
+        if stop_before_time:
+            self.log(f"   🎯 收集边界: 覆盖到 {stop_before_time.strftime('%Y-%m-%d')} 即停止")
+
         force_refresh = kwargs.get('force_refresh', False)
+        enable_time_dedupe = sort == "by_create_time" and not force_refresh and stop_before_time is None
         if force_refresh:
             self.log(f"   🔄 强制刷新模式: 将收集所有文件（包括已存在的）")
-        elif sort == "by_create_time":
+        elif enable_time_dedupe:
             self.log(f"   ✅ 智能去重模式: 遇到已存在的文件将停止收集")
 
         # 检查是否需要停止
@@ -916,9 +990,8 @@ class ZSXQFileDownloader:
         initial_files = initial_stats.get('files', 0)
         self.log(f"   📊 数据库初始状态: {initial_files} 个文件")
         
-        # 如果是按时间排序且非强制刷新模式，获取数据库中最新文件的时间戳
         db_latest_time = None
-        if sort == "by_create_time" and not force_refresh and initial_files > 0:
+        if enable_time_dedupe and initial_files > 0:
             self.file_db.cursor.execute('''
                 SELECT MAX(create_time) FROM files 
                 WHERE create_time IS NOT NULL AND create_time != ''
@@ -960,11 +1033,12 @@ class ZSXQFileDownloader:
                     break
 
                 self.log(f"   📋 当前页面: {len(files)} 个文件")
-                
-                # 如果是按时间排序且非强制刷新模式，检查本页文件是否有新于数据库的
+                page_oldest, page_newest = self._summarize_page_time_range(files)
+                if page_oldest and page_newest:
+                    self.log(f"   🗓️ 当前页文件时间范围: {page_newest} ~ {page_oldest}")
+
                 should_stop_after_insert = False
-                if sort == "by_create_time" and not force_refresh and db_latest_time:
-                    # 筛选出新于数据库的文件
+                if enable_time_dedupe and db_latest_time:
                     newer_files = [
                         file_info for file_info in files
                         if file_info.get('file', {}).get('create_time', '') > db_latest_time
@@ -975,13 +1049,11 @@ class ZSXQFileDownloader:
                     
                     self.log(f"   📊 时间分析: 新于数据库{newer_count}个, 旧于或等于数据库{older_count}个")
                     
-                    # 如果整页文件都不新于数据库最新时间，说明后面的都是旧数据，停止收集
                     if newer_count == 0:
                         self.log(f"   ✅ 本页全部文件均已存在于数据库（时间不晚于数据库最新），停止收集")
                         self.log(f"   💡 提示: 如需强制重新收集，请传入 force_refresh=True 参数")
                         break
                     
-                    # 如果有旧数据，只保留新数据，并标记插入后停止
                     if older_count > 0:
                         self.log(f"   🔄 过滤掉{older_count}个旧数据，只插入{newer_count}个新数据")
                         data['resp_data']['files'] = newer_files
@@ -1006,6 +1078,20 @@ class ZSXQFileDownloader:
                 except Exception as e:
                     self.log(f"   ❌ 第{page_count}页存储失败: {e}")
                     continue
+
+                if stop_before_time:
+                    page_times = []
+                    for item in files:
+                        file_data = item.get('file', {}) or {}
+                        file_dt = self._parse_create_time(file_data.get('create_time'))
+                        if file_dt:
+                            page_times.append(file_dt)
+                    if page_times and min(page_times) < stop_before_time:
+                        self.log(
+                            f"🛑 当前页最老文件时间 {min(page_times).strftime('%Y-%m-%d %H:%M:%S')} "
+                            f"早于目标起始时间 {stop_before_time.strftime('%Y-%m-%d')}，停止继续收集更早文件"
+                        )
+                        break
                 
                 # 准备下一页
                 if next_index:
@@ -1034,11 +1120,11 @@ class ZSXQFileDownloader:
         for key, value in total_imported_stats.items():
             if value > 0:
                 self.log(f"      {key}: +{value}")
-        
-        print(f"\n📊 当前数据库状态:")
+
+        self.log("   📚 当前数据库状态:")
         for table, count in final_stats.items():
             if count > 0:
-                print(f"   {table}: {count}")
+                self.log(f"      {table}: {count}")
         
         return {
             'total_files': final_files,
@@ -1100,61 +1186,105 @@ class ZSXQFileDownloader:
             self.log("🔄 改为全量收集")
             return self.collect_files_by_time()
     
-    def download_files_from_database(self, max_files: Optional[int] = None, status_filter: str = 'pending', **kwargs) -> Dict[str, int]:
+    def collect_files_for_date_range(
+        self,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        last_days: Optional[int] = None,
+    ) -> Dict[str, int]:
+        normalized_start, normalized_end, stop_before_dt = self._normalize_date_range(
+            start_date=start_date,
+            end_date=end_date,
+            last_days=last_days,
+        )
+        self.log("📅 启动按时间范围收集文件列表...")
+        if normalized_start or normalized_end:
+            self.log(f"   范围: {normalized_start or '-'} ~ {normalized_end or '-'}")
+        return self.collect_files_by_time(
+            sort="by_create_time",
+            start_time=None,
+            stop_before_time=stop_before_dt,
+        )
+
+    def download_files_from_database(
+        self,
+        max_files: Optional[int] = None,
+        status_filter: str = 'pending',
+        sort_by: str = 'download_count',
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        last_days: Optional[int] = None,
+        **kwargs,
+    ) -> Dict[str, int]:
         """从完整数据库下载文件（使用file_id字段）"""
         self.log(f"📥 开始从完整数据库下载文件...")
         if max_files:
             self.log(f"   🎯 下载限制: {max_files}个文件")
         self.log(f"   🔍 状态筛选: {status_filter}")
-        recent_days = kwargs.get('recent_days')
-        if recent_days:
-            self.log(f"   📅 时间筛选: 最近{recent_days}天")
-        order_by = kwargs.get('order_by', 'create_time DESC')
-        self.log(f"   🔃 排序方式: {order_by}")
+        legacy_recent_days = kwargs.get('recent_days')
+        if last_days is None and legacy_recent_days is not None:
+            last_days = legacy_recent_days
+
+        normalized_start, normalized_end, _ = self._normalize_date_range(
+            start_date=start_date,
+            end_date=end_date,
+            last_days=last_days,
+        )
+        legacy_order_by = str(kwargs.get('order_by') or '').strip().lower()
+        if legacy_order_by.startswith('create_time'):
+            sort_by = 'create_time'
+        elif legacy_order_by.startswith('download_count'):
+            sort_by = 'download_count'
+
+        order_by = "create_time DESC, download_count DESC" if sort_by == 'create_time' else "download_count DESC, size ASC"
+
+        if normalized_start or normalized_end:
+            self.log(f"   📅 下载区间: {normalized_start or '-'} ~ {normalized_end or '-'}")
+        elif last_days:
+            self.log(f"   📅 时间筛选: 最近{last_days}天")
+        self.log(f"   📌 下载排序: {'按时间倒序' if sort_by == 'create_time' else '按热度倒序'}")
 
         # 检查是否需要停止
         if self.check_stop():
             self.log("🛑 任务被停止")
             return {'total_files': 0, 'downloaded': 0, 'skipped': 0, 'failed': 0}
-        
-        # 构建查询条件
-        query_conditions = "download_status = ?"
-        query_params = [status_filter]
-        
-        # 如果指定了recent_days，添加时间筛选条件
-        if recent_days:
-            from datetime import datetime, timedelta
-            cutoff_date = (datetime.now() - timedelta(days=recent_days)).strftime('%Y-%m-%dT%H:%M:%S')
-            query_conditions += " AND create_time >= ?"
-            query_params.append(cutoff_date)
-        
-        # 从完整数据库获取文件列表（使用状态筛选和时间筛选）
+        conditions = []
+        params: list[Any] = []
+        if status_filter:
+            conditions.append("download_status = ?")
+            params.append(status_filter)
+        if normalized_start:
+            conditions.append("substr(create_time, 1, 10) >= ?")
+            params.append(normalized_start)
+        if normalized_end:
+            conditions.append("substr(create_time, 1, 10) <= ?")
+            params.append(normalized_end)
+
+        where_clause = f"WHERE {' AND '.join(conditions)}" if conditions else ""
+        order_clause = "ORDER BY create_time DESC, download_count DESC" if sort_by == 'create_time' else "ORDER BY download_count DESC, size ASC"
+        limit_clause = "LIMIT ?" if max_files else ""
         if max_files:
-            query = f'''
-                SELECT file_id, name, size, download_count, create_time 
-                FROM files 
-                WHERE {query_conditions}
-                ORDER BY {order_by}
-                LIMIT ?
-            '''
-            query_params.append(max_files)
-            self.file_db.cursor.execute(query, tuple(query_params))
-        else:
-            query = f'''
-                SELECT file_id, name, size, download_count, create_time 
-                FROM files 
-                WHERE {query_conditions}
-                ORDER BY {order_by}
-            '''
-            self.file_db.cursor.execute(query, tuple(query_params))
-        
+            params.append(max_files)
+
+        query = f'''
+            SELECT file_id, name, size, download_count, create_time
+            FROM files
+            {where_clause}
+            {order_clause}
+            {limit_clause}
+        '''
+        self.file_db.cursor.execute(query, tuple(params))
         files_to_download = self.file_db.cursor.fetchall()
         
         if not files_to_download:
-            self.log(f"📭 数据库中没有状态为 '{status_filter}' 的文件可下载")
+            self.log(f"📭 数据库中没有符合条件的文件可下载")
             return {'total_files': 0, 'downloaded': 0, 'skipped': 0, 'failed': 0}
 
         self.log(f"📋 找到 {len(files_to_download)} 个待下载文件")
+        if sort_by == 'create_time' and files_to_download:
+            newest = files_to_download[0][4]
+            oldest = files_to_download[-1][4]
+            self.log(f"   🗓️ 本次待下载文件时间范围: {newest} ~ {oldest}")
 
         stats = {'total_files': len(files_to_download), 'downloaded': 0, 'skipped': 0, 'failed': 0}
 
@@ -1184,31 +1314,8 @@ class ZSXQFileDownloader:
                 if result == "skipped":
                     stats['skipped'] += 1
                     self.log(f"   ⚠️ 文件已跳过")
-                    # 更新数据库状态为已跳过
-                    self.file_db.cursor.execute('''
-                        UPDATE files 
-                        SET download_status = 'skipped',
-                            download_time = CURRENT_TIMESTAMP
-                        WHERE file_id = ?
-                    ''', (file_id,))
-                    self.file_db.conn.commit()
                 elif result:
                     stats['downloaded'] += 1
-                    # 更新数据库状态为已完成
-                    safe_filename = "".join(c for c in file_name if c.isalnum() or c in '._-（）()[]{}')
-                    if not safe_filename:
-                        safe_filename = f"file_{file_id}"
-                    file_path = os.path.join(self.download_dir, safe_filename)
-                    
-                    self.file_db.cursor.execute('''
-                        UPDATE files 
-                        SET download_status = 'completed',
-                            local_path = ?,
-                            download_time = CURRENT_TIMESTAMP
-                        WHERE file_id = ?
-                    ''', (file_path, file_id))
-                    self.file_db.conn.commit()
-                    self.log(f"   ✅ 数据库状态已更新为: completed")
 
                     # 检查长休眠
                     self.check_long_delay()
@@ -1219,14 +1326,6 @@ class ZSXQFileDownloader:
                 else:
                     stats['failed'] += 1
                     self.log(f"   ❌ 下载失败")
-                    # 更新数据库状态为失败
-                    self.file_db.cursor.execute('''
-                        UPDATE files 
-                        SET download_status = 'failed',
-                            download_time = CURRENT_TIMESTAMP
-                        WHERE file_id = ?
-                    ''', (file_id,))
-                    self.file_db.conn.commit()
                 
             except KeyboardInterrupt:
                 self.log(f"⏹️ 用户中断下载")
@@ -1349,4 +1448,4 @@ class ZSXQFileDownloader:
         """关闭资源"""
         if hasattr(self, 'file_db') and self.file_db:
             self.file_db.close()
-            print("🔒 文件数据库连接已关闭") 
+            print("🔒 文件数据库连接已关闭")

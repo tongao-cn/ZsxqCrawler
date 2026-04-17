@@ -7,17 +7,17 @@ import Fullscreen from 'yet-another-react-lightbox/plugins/fullscreen';
 import { apiClient } from '@/lib/api';
 
 interface ImageData {
-  image_id: string;
-  original?: { url: string };
-  large?: { url: string };
-  thumbnail?: { url: string };
+  image_id?: string | number;
+  original?: { url?: string };
+  large?: { url?: string };
+  thumbnail?: { url?: string };
 }
 
 interface ImageGalleryProps {
   images: ImageData[];
   className?: string;
   size?: 'small' | 'medium' | 'large';
-  groupId?: string;
+  groupId?: string | number;
 }
 
 const ImageGallery: React.FC<ImageGalleryProps> = ({ images, className = '', size = 'medium', groupId }) => {
@@ -75,7 +75,7 @@ const ImageGallery: React.FC<ImageGalleryProps> = ({ images, className = '', siz
       {/* 缩略图网格 */}
       <div className="flex gap-2 overflow-x-auto pb-2 w-full">
         {images.map((image, index) => (
-          <div key={image.image_id} className={`relative flex-shrink-0 ${getSizeClasses()}`}>
+          <div key={String(image.image_id ?? index)} className={`relative flex-shrink-0 ${getSizeClasses()}`}>
             <img
               src={getThumbnailUrl(image)}
               alt={`话题图片 ${index + 1}`}

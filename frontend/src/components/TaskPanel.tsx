@@ -49,6 +49,8 @@ export default function TaskPanel() {
         return <Badge className="bg-green-100 text-green-800">✅ 已完成</Badge>;
       case 'failed':
         return <Badge className="bg-red-100 text-red-800">❌ 失败</Badge>;
+      case 'cancelled':
+        return <Badge className="bg-gray-100 text-gray-800">🛑 已停止</Badge>;
       default:
         return <Badge variant="secondary">{status}</Badge>;
     }
@@ -68,6 +70,8 @@ export default function TaskPanel() {
         return '⬇️ 下载文件';
       case 'crawl_time_range':
         return '🗓️ 按时间区间爬取';
+      case 'a_share_analysis':
+        return '📈 A股公司分析';
       default:
         return type;
     }
@@ -222,6 +226,12 @@ export default function TaskPanel() {
                           )}
                           {task.result.downloaded_files && (
                             <div>下载: {task.result.downloaded_files}</div>
+                          )}
+                          {task.result.items_processed && (
+                            <div>处理: {task.result.items_processed}</div>
+                          )}
+                          {task.result.added_mentions && (
+                            <div>提及: {task.result.added_mentions}</div>
                           )}
                         </div>
                       ) : (
