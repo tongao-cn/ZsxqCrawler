@@ -53,7 +53,7 @@ from a_share_analysis_service import (
 )
 from ai_provider_config import has_openai_api_key
 from a_share_analysis_db_storage import get_storage_health
-from file_ai_analysis_service import analyze_group_file, get_group_file_analysis
+from file_ai_analysis_service import analyze_group_file, get_group_file_analysis, resolve_local_file_path
 from tdx_a_share_export_service import export_a_share_rankings_to_tdx, get_latest_tdx_export
 
 # 初始化日志系统
@@ -267,7 +267,7 @@ class AssignGroupAccountRequest(BaseModel):
 
 
 class AShareAnalysisRunRequest(BaseModel):
-    group_id: Optional[str] = Field(default=None, description="指定群组ID；为空时使用全局聚合")
+    group_id: Optional[str | int] = Field(default=None, description="指定群组ID；为空时使用全局聚合")
     days: int = Field(default=21, ge=1, le=365, description="分析最近多少天的话题")
     retention_days: int = Field(
         default=A_SHARE_DEFAULT_RETENTION_DAYS,
@@ -290,13 +290,13 @@ class AShareAnalysisRunRequest(BaseModel):
 
 
 class AShareAnalysisResetRangeRequest(BaseModel):
-    group_id: Optional[str] = Field(default=None, description="指定群组ID；为空时删除全局聚合结果")
+    group_id: Optional[str | int] = Field(default=None, description="指定群组ID；为空时删除全局聚合结果")
     start_date: str = Field(..., description="开始日期 YYYY-MM-DD")
     end_date: str = Field(..., description="结束日期 YYYY-MM-DD")
 
 
 class AShareAnalysisExportTdxRequest(BaseModel):
-    group_id: Optional[str] = Field(default=None, description="指定群组ID；为空时导出全局聚合结果")
+    group_id: Optional[str | int] = Field(default=None, description="指定群组ID；为空时导出全局聚合结果")
     start_date: Optional[str] = Field(default=None, description="图表筛选开始日期 YYYY-MM-DD")
     end_date: Optional[str] = Field(default=None, description="图表筛选结束日期 YYYY-MM-DD")
 
@@ -2563,21 +2563,42 @@ async def get_files(group_id: str, page: int = 1, per_page: int = 20, status: Op
             file_db.cursor.execute("SELECT COUNT(*) FROM files")
         total = file_db.cursor.fetchone()[0]
 
-        return {
-            "files": [
+        normalized_files = []
+        for file in files:
+            file_id = file[0]
+            file_name = file[1]
+            file_size = file[2]
+            stored_status = file[5] if len(file) > 5 else "unknown"
+            stored_local_path = file[6] if len(file) > 6 else None
+
+            resolved_local_path = resolve_local_file_path(group_id, file_id, file_name, stored_local_path)
+            local_exists = resolved_local_path is not None
+            effective_local_path = str(resolved_local_path) if resolved_local_path else None
+            effective_status = "completed" if local_exists else (stored_status or "unknown")
+
+            if local_exists and (
+                stored_status != "completed"
+                or str(stored_local_path or "").strip() != effective_local_path
+            ):
+                file_db.update_file_download_status(file_id, "completed", effective_local_path)
+
+            normalized_files.append(
                 {
-                    "file_id": file[0],
-                    "name": file[1],
-                    "size": file[2],
+                    "file_id": file_id,
+                    "name": file_name,
+                    "size": file_size,
                     "download_count": file[3],
                     "create_time": file[4],
-                    "download_status": file[5] if len(file) > 5 else "unknown",
-                    "local_path": file[6] if len(file) > 6 else None,
+                    "download_status": effective_status,
+                    "local_exists": local_exists,
+                    "local_path": effective_local_path,
                     "has_ai_analysis": bool(file[7]) if len(file) > 7 and file[7] else False,
                     "analysis_updated_at": file[7] if len(file) > 7 else None,
                 }
-                for file in files
-            ],
+            )
+
+        return {
+            "files": normalized_files,
             "pagination": {
                 "page": page,
                 "per_page": per_page,

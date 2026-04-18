@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   CartesianGrid,
   Line,
@@ -99,7 +99,7 @@ export default function AShareAnalysisPanel({
   const [selectedEndDate, setSelectedEndDate] = useState('');
   const [runDays, setRunDays] = useState(21);
   const [retentionDays, setRetentionDays] = useState(30);
-  const [concurrency, setConcurrency] = useState(8);
+  const [concurrency, setConcurrency] = useState(4);
   const [resetStartDate, setResetStartDate] = useState('');
   const [resetEndDate, setResetEndDate] = useState('');
   const [initialized, setInitialized] = useState(false);
@@ -180,6 +180,82 @@ export default function AShareAnalysisPanel({
     };
   }, [selectedGroupId]);
 
+  const loadStatus = useCallback(
+    async (bootstrap: boolean = false, groupId?: number) => {
+      if (!groupId) {
+        return;
+      }
+      try {
+        setLoadingStatus(true);
+        const data = await apiClient.getAShareAnalysisStatus(groupId);
+        setStatus(data);
+
+        if (!initialized || bootstrap) {
+          setRunDays(data.defaults.days);
+          setRetentionDays(data.defaults.retention_days);
+          setConcurrency(data.defaults.concurrency);
+          setSelectedStartDate(data.summary.available_start_date || '');
+          setSelectedEndDate(data.summary.available_end_date || '');
+          setResetStartDate('');
+          setResetEndDate('');
+          setInitialized(true);
+        }
+      } catch (error) {
+        toast.error(`加载A股分析状态失败: ${error instanceof Error ? error.message : '未知错误'}`);
+      } finally {
+        setLoadingStatus(false);
+      }
+    },
+    [initialized]
+  );
+
+  const loadChart = useCallback(
+    async (options?: {
+      groupId?: number;
+      startDate?: string;
+      endDate?: string;
+      topN?: number;
+      bootstrap?: boolean;
+    }) => {
+      if (!options?.groupId) {
+        return;
+      }
+      try {
+        setLoadingChart(true);
+        const data = await apiClient.getAShareAnalysisChart({
+          groupId: options.groupId,
+          startDate: options?.startDate,
+          endDate: options?.endDate,
+          topN: options?.topN ?? topN,
+        });
+        setChart(data);
+      } catch (error) {
+        toast.error(`加载A股分析图表失败: ${error instanceof Error ? error.message : '未知错误'}`);
+      } finally {
+        setLoadingChart(false);
+      }
+    },
+    [topN]
+  );
+
+  const refreshAll = useCallback(
+    async (bootstrap: boolean = false, groupId?: number) => {
+      const activeGroupId = groupId ?? selectedGroupId;
+      if (!activeGroupId) {
+        return;
+      }
+      await loadStatus(bootstrap, activeGroupId);
+      await loadChart({
+        groupId: activeGroupId,
+        startDate: bootstrap ? undefined : selectedStartDate || undefined,
+        endDate: bootstrap ? undefined : selectedEndDate || undefined,
+        topN,
+        bootstrap,
+      });
+    },
+    [loadChart, loadStatus, selectedEndDate, selectedGroupId, selectedStartDate, topN]
+  );
+
   useEffect(() => {
     if (!selectedGroupId) {
       return;
@@ -197,82 +273,7 @@ export default function AShareAnalysisPanel({
     return () => {
       window.clearInterval(timer);
     };
-  }, [
-    refreshAll,
-    selectedEndDate,
-    selectedGroupId,
-    selectedStartDate,
-    status?.latest_task?.status,
-    status?.running_task?.status,
-    topN,
-  ]);
-
-  const loadStatus = async (bootstrap: boolean = false, groupId?: number) => {
-    if (!groupId) {
-      return;
-    }
-    try {
-      setLoadingStatus(true);
-      const data = await apiClient.getAShareAnalysisStatus(groupId);
-      setStatus(data);
-
-      if (!initialized || bootstrap) {
-        setRunDays(data.defaults.days);
-        setRetentionDays(data.defaults.retention_days);
-        setConcurrency(data.defaults.concurrency);
-        setSelectedStartDate(data.summary.available_start_date || '');
-        setSelectedEndDate(data.summary.available_end_date || '');
-        setResetStartDate('');
-        setResetEndDate('');
-        setInitialized(true);
-      }
-    } catch (error) {
-      toast.error(`加载A股分析状态失败: ${error instanceof Error ? error.message : '未知错误'}`);
-    } finally {
-      setLoadingStatus(false);
-    }
-  };
-
-  const loadChart = async (options?: {
-    groupId?: number;
-    startDate?: string;
-    endDate?: string;
-    topN?: number;
-    bootstrap?: boolean;
-  }) => {
-    if (!options?.groupId) {
-      return;
-    }
-    try {
-      setLoadingChart(true);
-      const data = await apiClient.getAShareAnalysisChart({
-        groupId: options.groupId,
-        startDate: options?.startDate,
-        endDate: options?.endDate,
-        topN: options?.topN ?? topN,
-      });
-      setChart(data);
-    } catch (error) {
-      toast.error(`加载A股分析图表失败: ${error instanceof Error ? error.message : '未知错误'}`);
-    } finally {
-      setLoadingChart(false);
-    }
-  };
-
-  const refreshAll = async (bootstrap: boolean = false, groupId?: number) => {
-    const activeGroupId = groupId ?? selectedGroup?.group_id;
-    if (!activeGroupId) {
-      return;
-    }
-    await loadStatus(bootstrap, activeGroupId);
-    await loadChart({
-      groupId: activeGroupId,
-      startDate: bootstrap ? undefined : selectedStartDate || undefined,
-      endDate: bootstrap ? undefined : selectedEndDate || undefined,
-      topN,
-      bootstrap,
-    });
-  };
+  }, [refreshAll, selectedGroupId, status?.latest_task?.status, status?.running_task?.status]);
 
   const handleApplyFilters = async () => {
     if (!selectedGroup) {
@@ -407,6 +408,9 @@ export default function AShareAnalysisPanel({
     }
     if (latestTask?.status === 'failed') {
       return latestTask.message || '最近一次分析失败，请到任务状态查看日志';
+    }
+    if (!summary?.output_exists && (summary?.source_topics_count ?? 0) > 0) {
+      return '当前群已有源话题数据，但还没有生成推荐池结果';
     }
     if ((summary?.source_topics_count ?? 0) === 0) {
       return '当前群话题库为空，请先到“话题采集”抓取或同步话题数据';

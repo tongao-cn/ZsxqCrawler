@@ -50,7 +50,7 @@ export default function GroupFileAnalysisPanel({ groupId }: GroupFileAnalysisPan
   const [analysis, setAnalysis] = useState<FileAIAnalysis | null>(null);
 
   const isFileDownloaded = (file: FileItem) =>
-    file.download_status === 'completed' || Boolean(file.local_path);
+    Boolean(file.local_exists || file.local_path);
 
   const loadFiles = async (targetPage: number = page) => {
     try {

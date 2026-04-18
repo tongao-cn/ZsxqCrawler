@@ -149,6 +149,14 @@ export interface AShareAnalysisExportTdxPayload {
   end_date?: string;
 }
 
+function normalizeOptionalId(value?: string | number) {
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+  const normalized = String(value).trim();
+  return normalized || undefined;
+}
+
 export interface AShareAnalysisExportTdxBlock {
   window_days: number;
   block_name: string;
@@ -211,6 +219,7 @@ export interface FileItem {
   download_count: number;
   create_time: string;
   download_status: string;
+  local_exists?: boolean;
   local_path?: string | null;
   has_ai_analysis?: boolean;
   analysis_updated_at?: string | null;
@@ -424,25 +433,37 @@ class ApiClient {
   }
 
   async runAShareAnalysis(payload: AShareAnalysisRunPayload) {
+    const groupId = normalizeOptionalId(payload.group_id);
     return this.request('/api/analytics/a-share/run', {
       method: 'POST',
-      body: JSON.stringify(payload),
+      body: JSON.stringify({
+        ...payload,
+        ...(groupId ? { group_id: groupId } : {}),
+      }),
     });
   }
 
   async resetAShareAnalysisRange(payload: AShareAnalysisResetPayload) {
+    const groupId = normalizeOptionalId(payload.group_id);
     return this.request('/api/analytics/a-share/reset-range', {
       method: 'POST',
-      body: JSON.stringify(payload),
+      body: JSON.stringify({
+        ...payload,
+        ...(groupId ? { group_id: groupId } : {}),
+      }),
     });
   }
 
   async exportAShareRankingsToTdx(
     payload: AShareAnalysisExportTdxPayload = {}
   ): Promise<AShareAnalysisExportTdxResponse> {
+    const groupId = normalizeOptionalId(payload.group_id);
     return this.request('/api/analytics/a-share/export-tdx', {
       method: 'POST',
-      body: JSON.stringify(payload),
+      body: JSON.stringify({
+        ...payload,
+        ...(groupId ? { group_id: groupId } : {}),
+      }),
     });
   }
 

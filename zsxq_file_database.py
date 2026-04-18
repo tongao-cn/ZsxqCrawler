@@ -351,9 +351,16 @@ class ZSXQFileDatabase:
             return None
             
         self.cursor.execute('''
-        INSERT OR REPLACE INTO files 
+        INSERT INTO files
         (file_id, name, hash, size, duration, download_count, create_time)
         VALUES (?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(file_id) DO UPDATE SET
+            name = excluded.name,
+            hash = excluded.hash,
+            size = excluded.size,
+            duration = excluded.duration,
+            download_count = excluded.download_count,
+            create_time = excluded.create_time
         ''', (
             file_data.get('file_id'),
             file_data.get('name', ''),
