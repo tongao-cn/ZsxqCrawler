@@ -17,6 +17,14 @@ group_id = "your_group_id_here"
 # 下载目录
 dir = "downloads"
 
+[ai]
+# OpenAI 兼容模型配置（仅从项目内 config.toml 读取）
+model = "gpt-5.4-mini"
+api_base = "https://api.openai.com/v1"
+wire_api = "responses"
+reasoning_effort = "high"
+api_key = ""
+
 [database]
 # 可选：自定义数据库路径；留空则由路径管理器自动管理
 # path = ""

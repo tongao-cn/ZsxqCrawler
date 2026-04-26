@@ -651,6 +651,14 @@ async def get_config():
 async def update_config(config: ConfigModel):
     """更新配置"""
     try:
+        existing_config = load_config() or {}
+        ai_config = existing_config.get("ai", {}) if isinstance(existing_config.get("ai"), dict) else {}
+        ai_model = str(ai_config.get("model") or A_SHARE_DEFAULT_MODEL)
+        ai_api_base = str(ai_config.get("api_base") or A_SHARE_DEFAULT_API_BASE)
+        ai_wire_api = str(ai_config.get("wire_api") or A_SHARE_DEFAULT_WIRE_API)
+        ai_reasoning_effort = str(ai_config.get("reasoning_effort") or A_SHARE_DEFAULT_REASONING_EFFORT)
+        ai_api_key = str(ai_config.get("api_key") or "")
+
         # 创建配置内容
         config_content = f"""# 知识星球数据采集器配置文件
 # 通过Web界面自动生成
@@ -662,6 +670,14 @@ cookie = "{config.cookie}"
 [download]
 # 下载目录
 dir = "downloads"
+
+[ai]
+# OpenAI 兼容模型配置（仅从项目内 config.toml 读取）
+model = "{ai_model}"
+api_base = "{ai_api_base}"
+wire_api = "{ai_wire_api}"
+reasoning_effort = "{ai_reasoning_effort}"
+api_key = "{ai_api_key}"
 """
 
         # 保存配置文件

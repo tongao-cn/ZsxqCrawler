@@ -165,7 +165,7 @@ def _summarize_text_with_ai(
     runtime_ai_config = get_openai_compatible_config()
     api_key = str(runtime_ai_config.get("api_key") or "").strip()
     if not api_key:
-        raise RuntimeError("OPENAI_API_KEY not set and Codex auth.json has no usable key")
+        raise RuntimeError("OPENAI_API_KEY not set and config.toml [ai].api_key is empty")
 
     clipped_text = text[:MAX_TEXT_CHARS]
     messages = [

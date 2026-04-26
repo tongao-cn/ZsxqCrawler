@@ -1000,8 +1000,8 @@ def run_analysis(
     if not api_key:
         write_csv(existing_daily, resolved_output_path, group_id=normalized_group_id)
         save_state(resolved_state_path, processed_keys, group_id=normalized_group_id)
-        _emit_log("OPENAI_API_KEY not set and Codex auth.json has no usable key", log_callback, level="error")
-        raise RuntimeError("OPENAI_API_KEY not set and Codex auth.json has no usable key")
+        _emit_log("OPENAI_API_KEY not set and config.toml [ai].api_key is empty", log_callback, level="error")
+        raise RuntimeError("OPENAI_API_KEY not set and config.toml [ai].api_key is empty")
 
     if normalized_group_id:
         groups = [normalized_group_id]
