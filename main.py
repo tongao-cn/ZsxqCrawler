@@ -3071,6 +3071,21 @@ async def fetch_single_topic(group_id: str, topic_id: int, fetch_comments: bool 
         # 使用该群的自动匹配账号
         crawler = get_crawler_for_group(str(group_id))
 
+        # 如果本地已经存在该话题，直接跳过，避免重复请求远程详情和重复导入
+        crawler.db.cursor.execute(
+            'SELECT 1 FROM topics WHERE topic_id = ? AND group_id = ? LIMIT 1',
+            (topic_id, group_id)
+        )
+        if crawler.db.cursor.fetchone():
+            return {
+                "success": True,
+                "topic_id": topic_id,
+                "group_id": int(group_id),
+                "imported": "skipped",
+                "message": "话题已存在，跳过采集",
+                "comments_fetched": 0
+            }
+
         # 拉取话题详细信息
         url = f"https://api.zsxq.com/v2/topics/{topic_id}/info"
         headers = crawler.get_stealth_headers()
@@ -3092,10 +3107,6 @@ async def fetch_single_topic(group_id: str, topic_id: int, fetch_comments: bool 
         topic_group_id = str((topic.get("group") or {}).get("group_id", ""))
         if topic_group_id and topic_group_id != str(group_id):
             raise HTTPException(status_code=400, detail="该话题不属于当前群组")
-
-        # 判断话题是否已存在
-        crawler.db.cursor.execute('SELECT topic_id FROM topics WHERE topic_id = ?', (topic_id,))
-        existed = crawler.db.cursor.fetchone() is not None
 
         # 导入话题完整数据
         crawler.db.import_topic_data(topic)
@@ -3120,7 +3131,7 @@ async def fetch_single_topic(group_id: str, topic_id: int, fetch_comments: bool 
             "success": True,
             "topic_id": topic_id,
             "group_id": int(group_id),
-            "imported": "updated" if existed else "created",
+            "imported": "created",
             "comments_fetched": comments_fetched
         }
     except HTTPException:

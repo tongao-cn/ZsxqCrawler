@@ -263,6 +263,12 @@ class ZSXQDatabase:
             
             if not topic_id:
                 return False
+
+            # 如果话题已存在，直接跳过，避免重复写入或更新
+            self.cursor.execute('SELECT 1 FROM topics WHERE topic_id = ? LIMIT 1', (topic_id,))
+            if self.cursor.fetchone():
+                print(f"话题 {topic_id} 已存在，跳过导入")
+                return True
             
 
             
@@ -317,7 +323,7 @@ class ZSXQDatabase:
             return True
             
         except Exception as e:
-            print(f"❌ 导入话题数据失败: {e}")
+            print(f"导入话题数据失败: {e}")
             import traceback
             traceback.print_exc()
             return False
