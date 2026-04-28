@@ -561,29 +561,61 @@ const [collectRangeEndDate, setCollectRangeEndDate] = useState<string>('');
       setCrawlLoading(null);
     }
   };
-  const handleCrawlRange = async () => {
+
+  const buildCrawlRangeParams = (useCustomRange: boolean) => {
+    const params: any = {};
+
+    if (useCustomRange) {
+      if (rangeStartDate) params.startTime = rangeStartDate; // YYYY-MM-DD
+      if (rangeEndDate) params.endTime = rangeEndDate; // YYYY-MM-DD
+    } else {
+      params.lastDays = Math.max(1, quickLastDays || 1);
+    }
+
+    params.crawlIntervalMin = crawlIntervalMin;
+    params.crawlIntervalMax = crawlIntervalMax;
+    params.longSleepIntervalMin = crawlLongSleepIntervalMin;
+    params.longSleepIntervalMax = crawlLongSleepIntervalMax;
+    params.pagesPerBatch = Math.max(crawlPagesPerBatch, 5);
+
+    return params;
+  };
+
+  const handleCrawlLastDays = async () => {
     try {
       setLatestDialogOpen(false);
       setCrawlLoading('range');
 
-      const params: any = {};
+      const response = await apiClient.crawlByTimeRange(groupId, buildCrawlRangeParams(false));
+      toast.success(`任务已创建: ${(response as any).task_id}`);
 
-      // 优先使用自定义日期范围；否则使用最近N天
-      if (rangeStartDate || rangeEndDate) {
-        if (rangeStartDate) params.startTime = rangeStartDate; // YYYY-MM-DD
-        if (rangeEndDate) params.endTime = rangeEndDate;       // YYYY-MM-DD
-      } else {
-        params.lastDays = Math.max(1, quickLastDays || 1);
-      }
+      // 日志联动
+      setCurrentTaskId((response as any).task_id);
+      setActiveTab('logs');
 
-      // 传递当前的爬取间隔设置
-      params.crawlIntervalMin = crawlIntervalMin;
-      params.crawlIntervalMax = crawlIntervalMax;
-      params.longSleepIntervalMin = crawlLongSleepIntervalMin;
-      params.longSleepIntervalMax = crawlLongSleepIntervalMax;
-      params.pagesPerBatch = Math.max(crawlPagesPerBatch, 5);
+      setTimeout(() => {
+        loadGroupStats();
+        loadTopics();
+        loadRecentTasks();
+      }, 2000);
+    } catch (error) {
+      toast.error(`创建任务失败: ${error instanceof Error ? error.message : '未知错误'}`);
+    } finally {
+      setCrawlLoading(null);
+    }
+  };
 
-      const response = await apiClient.crawlByTimeRange(groupId, params);
+  const handleCrawlCustomRange = async () => {
+    if (!rangeStartDate && !rangeEndDate) {
+      toast.error('请输入开始日期或结束日期');
+      return;
+    }
+
+    try {
+      setLatestDialogOpen(false);
+      setCrawlLoading('range');
+
+      const response = await apiClient.crawlByTimeRange(groupId, buildCrawlRangeParams(true));
       toast.success(`任务已创建: ${(response as any).task_id}`);
 
       // 日志联动
@@ -2481,7 +2513,13 @@ const [collectRangeEndDate, setCollectRangeEndDate] = useState<string>('');
                                   从最新开始
                                 </AlertDialogAction>
                                 <AlertDialogAction
-                                  onClick={handleCrawlRange}
+                                  onClick={handleCrawlLastDays}
+                                  className="bg-teal-600 hover:bg-teal-700 focus:ring-teal-600"
+                                >
+                                  最近N天开始
+                                </AlertDialogAction>
+                                <AlertDialogAction
+                                  onClick={handleCrawlCustomRange}
                                   className="bg-teal-600 hover:bg-teal-700 focus:ring-teal-600"
                                 >
                                   按时间区间开始
@@ -2571,7 +2609,7 @@ const [collectRangeEndDate, setCollectRangeEndDate] = useState<string>('');
                             <Button
                               size="sm"
                               className="w-full h-7 text-xs bg-teal-600 hover:bg-teal-700"
-                              onClick={(e) => { e.stopPropagation(); handleCrawlRange(); }}
+                              onClick={(e) => { e.stopPropagation(); handleCrawlCustomRange(); }}
                               disabled={!!crawlLoading}
                             >
                               {crawlLoading === 'range' ? '执行中...' : '开始'}

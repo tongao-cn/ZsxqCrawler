@@ -13,13 +13,11 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 
-type Mode = 'latest' | 'range';
-
 interface CrawlLatestDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onConfirm: (params: {
-    mode: Mode;
+    mode: 'latest' | 'range';
     startTime?: string;
     endTime?: string;
     lastDays?: number;
@@ -38,7 +36,7 @@ export default function CrawlLatestDialog({
   defaultLastDays = 7,
   defaultPerPage = 20,
 }: CrawlLatestDialogProps) {
-  const [mode, setMode] = useState<Mode>('latest');
+  const [mode, setMode] = useState<'latest' | 'range'>('latest');
   const [lastDays, setLastDays] = useState<number | ''>(defaultLastDays);
   const [startTime, setStartTime] = useState('');
   const [endTime, setEndTime] = useState('');
@@ -54,31 +52,36 @@ export default function CrawlLatestDialog({
     }
   }, [open, defaultLastDays, defaultPerPage]);
 
-  const handleConfirm = () => {
+  const buildRangePayload = (useCustomRange: boolean) => {
     const payload: {
-      mode: Mode;
+      mode: 'latest' | 'range';
       startTime?: string;
       endTime?: string;
       lastDays?: number;
       perPage?: number;
-    } = { mode };
+    } = { mode: 'range' };
 
-    if (mode === 'range') {
+    if (useCustomRange) {
       if (startTime) payload.startTime = new Date(startTime).toISOString();
       if (endTime) payload.endTime = new Date(endTime).toISOString();
-      if (lastDays !== '' && !Number.isNaN(Number(lastDays))) {
-        payload.lastDays = Number(lastDays);
-      }
       if (perPage !== '' && !Number.isNaN(Number(perPage))) {
         payload.perPage = Number(perPage);
       }
+    } else if (lastDays !== '' && !Number.isNaN(Number(lastDays))) {
+      payload.lastDays = Number(lastDays);
     }
 
-    onConfirm(payload);
+    return payload;
   };
 
-  const isConfirmDisabled =
-    submitting || (mode === 'range' && lastDays === '' && !startTime && !endTime);
+  const handleLatest = () => onConfirm({ mode: 'latest' });
+  const handleLastDays = () => onConfirm(buildRangePayload(false));
+  const handleCustomRange = () => {
+    if (!startTime && !endTime) {
+      return;
+    }
+    onConfirm(buildRangePayload(true));
+  };
 
   return (
     <Dialog open={open} onOpenChange={(v) => !submitting && onOpenChange(v)}>
@@ -86,7 +89,7 @@ export default function CrawlLatestDialog({
         <DialogHeader>
           <DialogTitle>获取最新话题</DialogTitle>
           <DialogDescription>
-            默认从最新开始抓取；也可以按时间区间采集，首次数据库为空也可使用。
+            默认从最新开始抓取；也可以按最近N天或自定义时间范围采集，首次数据库为空也可使用。
           </DialogDescription>
         </DialogHeader>
 
@@ -201,8 +204,14 @@ export default function CrawlLatestDialog({
           >
             取消
           </Button>
-          <Button type="button" onClick={handleConfirm} disabled={isConfirmDisabled}>
-            {submitting ? '创建任务中...' : '确认开始'}
+          <Button type="button" variant="default" onClick={handleLatest} disabled={submitting}>
+            {submitting ? '创建任务中...' : '从最新开始'}
+          </Button>
+          <Button type="button" variant="secondary" onClick={handleLastDays} disabled={submitting || (mode === 'range' && lastDays === '')}>
+            最近N天开始
+          </Button>
+          <Button type="button" variant="secondary" onClick={handleCustomRange} disabled={submitting || (!startTime && !endTime)}>
+            按时间区间开始
           </Button>
         </DialogFooter>
       </DialogContent>

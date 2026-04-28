@@ -140,7 +140,7 @@ def resolve_analysis_paths(
 
 
 def should_use_db_storage(group_id: Optional[str] = None) -> bool:
-    return normalize_group_id(group_id) is None and _db_storage_enabled()
+    return _db_storage_enabled()
 
 
 def parse_time(value: Optional[str]) -> Optional[datetime]:
@@ -533,7 +533,9 @@ def read_existing_csv(
     resolved_output_path, _resolved_state_path = resolve_analysis_paths(output_path, DEFAULT_STATE_PATH, group_id)
     if should_use_db_storage(group_id):
         try:
-            return load_daily_mentions_from_db()
+            daily = load_daily_mentions_from_db(group_id=group_id)
+            if daily or not resolved_output_path or not os.path.exists(resolved_output_path):
+                return daily
         except Exception as exc:
             raise RuntimeError(f"read daily mentions from PostgreSQL failed: {exc}") from exc
     return _read_existing_csv_file(resolved_output_path)
@@ -560,8 +562,9 @@ def write_csv(
     resolved_output_path, _resolved_state_path = resolve_analysis_paths(output_path, DEFAULT_STATE_PATH, group_id)
     if should_use_db_storage(group_id):
         try:
-            save_daily_mentions_to_db(daily)
-            return
+            save_daily_mentions_to_db(daily, group_id=group_id)
+            if group_id is None:
+                return
         except Exception as exc:
             raise RuntimeError(f"save daily mentions to PostgreSQL failed: {exc}") from exc
     _write_csv_file(daily, resolved_output_path)
@@ -588,7 +591,9 @@ def load_state(
     _resolved_output_path, resolved_state_path = resolve_analysis_paths(DEFAULT_OUTPUT_PATH, state_path, group_id)
     if should_use_db_storage(group_id):
         try:
-            return load_processed_state_from_db()
+            processed = load_processed_state_from_db(group_id=group_id)
+            if processed or not resolved_state_path or not os.path.exists(resolved_state_path):
+                return processed
         except Exception as exc:
             raise RuntimeError(f"read processed state from PostgreSQL failed: {exc}") from exc
     return _load_state_file(resolved_state_path)
@@ -613,8 +618,9 @@ def save_state(
     _resolved_output_path, resolved_state_path = resolve_analysis_paths(DEFAULT_OUTPUT_PATH, state_path, group_id)
     if should_use_db_storage(group_id):
         try:
-            save_processed_state_to_db(normalized_keys)
-            return
+            save_processed_state_to_db(normalized_keys, group_id=group_id)
+            if group_id is None:
+                return
         except Exception as exc:
             raise RuntimeError(f"save processed state to PostgreSQL failed: {exc}") from exc
     _save_state_file(resolved_state_path, normalized_keys)
@@ -764,7 +770,10 @@ def get_analysis_summary(
     resolved_output_path, resolved_state_path = resolve_analysis_paths(output_path, state_path, normalized_group_id)
     daily = read_existing_csv(resolved_output_path, group_id=normalized_group_id)
     processed_keys = load_state(resolved_state_path, group_id=normalized_group_id)
-    storage_health = get_storage_health() if should_use_db_storage(normalized_group_id) else None
+    storage_health = get_storage_health(group_id=normalized_group_id) if should_use_db_storage(normalized_group_id) else None
+    has_db_data = bool(storage_health and (
+        int(storage_health.get("daily_rows") or 0) > 0 or int(storage_health.get("processed_rows") or 0) > 0
+    ))
     source_topics_summary = get_source_topics_summary(normalized_group_id)
     available_dates = sorted(daily.keys())
 
@@ -776,7 +785,7 @@ def get_analysis_summary(
         total_mentions += sum(company_counts.values())
         unique_companies.update(company_counts.keys())
 
-    if storage_health:
+    if storage_health and (normalized_group_id is None or has_db_data):
         output_exists = True
         state_exists = True
         updated_at = storage_health.get("latest_updated_at")
