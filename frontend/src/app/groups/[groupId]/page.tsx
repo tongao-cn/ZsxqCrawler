@@ -1,8 +1,8 @@
 'use client';
 
-import React from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { useState, useEffect, useRef, memo, useCallback } from 'react';
+import dynamic from 'next/dynamic';
+import { useState, useEffect, useRef, useCallback, useDeferredValue } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -10,22 +10,125 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
-import { ArrowLeft, MessageSquare, Clock, Search, Download, BarChart3, X, FileText, RefreshCw, Heart, MessageCircle, TrendingUp, Calendar, Trash2, Settings, Edit, File, FileImage, FileVideo, FileAudio, Archive, ExternalLink, RotateCcw, BookOpen } from 'lucide-react';
+import { ArrowLeft, MessageSquare, Clock, Search, Download, BarChart3, File, FileText, RefreshCw, Heart, MessageCircle, TrendingUp, Calendar, Trash2, Settings, Edit, Archive, ExternalLink, RotateCcw, BookOpen, Sparkles } from 'lucide-react';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { apiClient, Group, GroupStats, Topic, FileStatus, Account, AccountSelf } from '@/lib/api';
 import { toast } from 'sonner';
 import SafeImage from '@/components/SafeImage';
-import TaskLogViewer from '@/components/TaskLogViewer';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { createSafeHtml, createSafeHtmlWithHighlight, extractPlainText } from '@/lib/zsxq-content-renderer';
+import { createSafeHtmlWithHighlight, extractPlainText } from '@/lib/zsxq-content-renderer';
 import DownloadSettingsDialog from '@/components/DownloadSettingsDialog';
 import CrawlSettingsDialog from '@/components/CrawlSettingsDialog';
 import ImageGallery from '@/components/ImageGallery';
-import AShareAnalysisPanel from '@/components/AShareAnalysisPanel';
-import GroupFileAnalysisPanel from '@/components/GroupFileAnalysisPanel';
+import TopicFileList from '@/components/TopicFileList';
 
-// 话题详情缓存，避免重复请求
-const topicDetailCache: Map<string, any> = new Map();
+const LazyPanelFallback = () => (
+  <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+    加载中...
+  </div>
+);
+
+const TaskLogViewer = dynamic(() => import('@/components/TaskLogViewer'), {
+  loading: LazyPanelFallback,
+  ssr: false,
+});
+const GroupFileAnalysisPanel = dynamic(() => import('@/components/GroupFileAnalysisPanel'), {
+  loading: LazyPanelFallback,
+  ssr: false,
+});
+const AShareAnalysisPanel = dynamic(() => import('@/components/AShareAnalysisPanel'), {
+  loading: LazyPanelFallback,
+  ssr: false,
+});
+const DailyTopicAnalysisPanel = dynamic(() => import('@/components/DailyTopicAnalysisPanel'), {
+  loading: LazyPanelFallback,
+  ssr: false,
+});
+
+const shouldShowContentToggle = (text: string) => (
+  text.split('\n').length > 4 || text.length > 300
+);
+
+const getTypeBadge = (type: string) => {
+  switch (type) {
+    case 'private':
+      return <Badge variant="secondary" className="text-xs px-1.5 py-0.5">私密</Badge>;
+    case 'public':
+      return <Badge variant="secondary" className="text-xs px-1.5 py-0.5">公开</Badge>;
+    case 'pay':
+      return <Badge className="bg-orange-100 text-orange-800 text-xs px-1.5 py-0.5">付费</Badge>;
+    default:
+      return <Badge variant="secondary" className="text-xs px-1.5 py-0.5">未知</Badge>;
+  }
+};
+
+const getStatusBadge = (status?: string) => {
+  switch (status) {
+    case 'active':
+      return <Badge className="bg-green-100 text-green-800 text-xs">活跃</Badge>;
+    case 'expiring_soon':
+      return <Badge className="bg-yellow-100 text-yellow-800 text-xs">即将到期</Badge>;
+    case 'expired':
+      return <Badge className="bg-red-100 text-red-800 text-xs">已过期</Badge>;
+    default:
+      return null;
+  }
+};
+
+const formatDate = (dateString?: string) => {
+  if (!dateString) return '';
+  try {
+    return new Date(dateString).toLocaleDateString('zh-CN');
+  } catch {
+    return '';
+  }
+};
+
+const formatDateTime = (dateString: string) => {
+  if (!dateString) return '未知时间';
+  try {
+    const date = new Date(dateString);
+    return date.toLocaleString('zh-CN', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  } catch {
+    return '时间格式错误';
+  }
+};
+
+const formatImportedTime = (importedAt: string) => {
+  if (!importedAt) return '';
+  try {
+    const date = new Date(importedAt);
+    return date.toLocaleString('zh-CN', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit'
+    });
+  } catch {
+    return importedAt;
+  }
+};
+
+const getGradientByType = (type: string) => {
+  switch (type) {
+    case 'private':
+      return 'from-purple-400 to-pink-500';
+    case 'public':
+      return 'from-blue-400 to-cyan-500';
+    case 'pay':
+      return 'from-orange-400 to-red-500';
+    default:
+      return 'from-gray-400 to-gray-600';
+  }
+};
 
 export default function GroupDetailPage() {
   const params = useParams();
@@ -39,11 +142,12 @@ export default function GroupDetailPage() {
   const [topicsLoading, setTopicsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
+  const deferredSearchTerm = useDeferredValue(searchTerm);
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [crawlLoading, setCrawlLoading] = useState<string | null>(null);
   const [fileLoading, setFileLoading] = useState<string | null>(null);
-  const [recentTasks, setRecentTasks] = useState<any[]>([]);
   const [currentTaskId, setCurrentTaskId] = useState<string | null>(null);
   const [activeMode, setActiveMode] = useState<'crawl' | 'download'>('crawl');
   const [activeTab, setActiveTab] = useState('topics');
@@ -56,6 +160,12 @@ export default function GroupDetailPage() {
   const [expandedContent, setExpandedContent] = useState<Set<string>>(new Set());
   const [groupInfo, setGroupInfo] = useState<any>(null);
   const [localFileCount, setLocalFileCount] = useState<number>(0);
+  const [localFileStats, setLocalFileStats] = useState({
+    total: 0,
+    downloaded: 0,
+    pending: 0,
+    failed: 0,
+  });
   const [tags, setTags] = useState<any[]>([]);
   const [selectedTag, setSelectedTag] = useState<number | null>(null);
   const [tagsLoading, setTagsLoading] = useState(false);
@@ -66,6 +176,9 @@ export default function GroupDetailPage() {
   const [clearingCache, setClearingCache] = useState(false);
   const [fileStatuses, setFileStatuses] = useState<Map<number, FileStatus>>(new Map());
   const [downloadingFiles, setDownloadingFiles] = useState<Set<number>>(new Set());
+  const fetchingCommentsRef = useRef<Set<number>>(new Set());
+  const refreshingTopicsRef = useRef<Set<number>>(new Set());
+  const downloadingFilesRef = useRef<Set<number>>(new Set());
 
   // 账号相关
   const [accounts, setAccounts] = useState<Account[]>([]);
@@ -73,8 +186,6 @@ export default function GroupDetailPage() {
   const [selectedAccountId, setSelectedAccountId] = useState<string>('');
   const [assigningAccount, setAssigningAccount] = useState<boolean>(false);
   const [accountSelf, setAccountSelf] = useState<AccountSelf | null>(null);
-  const [loadingAccountSelf, setLoadingAccountSelf] = useState<boolean>(false);
-  const [refreshingAccountSelf, setRefreshingAccountSelf] = useState<boolean>(false);
 
   // 专栏相关
   const [hasColumns, setHasColumns] = useState<boolean>(false);
@@ -87,6 +198,7 @@ export default function GroupDetailPage() {
 
   // 话题详情缓存：key 使用字符串形式的 topic_id，避免大整数精度问题
   const [topicDetails, setTopicDetails] = useState<Map<string, any>>(new Map());
+  const topicDetailsRef = useRef<Map<string, any>>(new Map());
   const inFlightRef = useRef<Map<string, Promise<any>>>(new Map());
   const scrollAreaRef = useRef<HTMLDivElement>(null);
 
@@ -157,69 +269,115 @@ const [downloadDialogOpen, setDownloadDialogOpen] = useState<boolean>(false);
 const [downloadQuickLastDays, setDownloadQuickLastDays] = useState<number>(30);
 const [downloadRangeStartDate, setDownloadRangeStartDate] = useState<string>('');
 const [downloadRangeEndDate, setDownloadRangeEndDate] = useState<string>('');
-const [collectDialogOpen, setCollectDialogOpen] = useState<boolean>(false);
-const [collectQuickLastDays, setCollectQuickLastDays] = useState<number>(30);
-const [collectRangeStartDate, setCollectRangeStartDate] = useState<string>('');
-const [collectRangeEndDate, setCollectRangeEndDate] = useState<string>('');
 
   // 单个话题采集状态
   const [singleTopicId, setSingleTopicId] = useState<string>('');
   const [fetchingSingle, setFetchingSingle] = useState<boolean>(false);
 
   useEffect(() => {
-    loadGroupDetail();
-    loadGroupStats();
-    loadTopics();
-    loadRecentTasks();
-    loadGroupInfo();
-    loadLocalFileCount();
-    loadTags();
-    loadCacheInfo();
-    loadGroupAccount();
-    loadAccounts();
-    loadGroupAccountSelf();
-    loadColumnsSummary();
-  }, [groupId]);
+    const timer = window.setTimeout(() => {
+      setDebouncedSearchTerm(searchTerm.trim());
+      setCurrentPage(1);
+    }, 300);
+
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [searchTerm]);
 
   useEffect(() => {
-    loadTopics();
-  }, [currentPage, searchTerm, selectedTag]);
+    topicDetailsRef.current = topicDetails;
+  }, [topicDetails]);
+
+  useEffect(() => {
+    fetchingCommentsRef.current = fetchingComments;
+  }, [fetchingComments]);
+
+  useEffect(() => {
+    refreshingTopicsRef.current = refreshingTopics;
+  }, [refreshingTopics]);
+
+  useEffect(() => {
+    downloadingFilesRef.current = downloadingFiles;
+  }, [downloadingFiles]);
 
   // 批量预取当前页话题详情，带去重
   useEffect(() => {
     if (!topics || topics.length === 0) return;
-    topics.forEach((t: any) => {
-      // 直接使用后端返回的 topic_id 字符串，避免 Number 精度丢失
-      const tid = String((t as any)?.topic_id || '');
-      if (!tid) return;
-      if (topicDetails.has(tid)) return;
-      const key = `${groupId}-${tid}`;
-      if (inFlightRef.current.get(key)) return;
+    let cancelled = false;
 
-      const p = apiClient.getTopicDetail(tid, groupId)
-        .then((detail) => {
-          setTopicDetails(prev => {
-            const next = new Map(prev);
-            next.set(tid, detail);
-            return next;
-          });
-        })
-        .catch((err) => {
-          console.error('预取话题详情失败:', err);
-        })
-        .finally(() => {
-          inFlightRef.current.delete(key);
+    const topicIds = topics
+      .map((t: any) => String((t as any)?.topic_id || ''))
+      .filter((tid) => {
+        if (!tid) return false;
+        if (topicDetailsRef.current.has(tid)) return false;
+        return !inFlightRef.current.has(`${groupId}-${tid}`);
+      });
+
+    const prefetchDetails = async () => {
+      const concurrency = 4;
+
+      for (let index = 0; index < topicIds.length && !cancelled; index += concurrency) {
+        const batch = topicIds.slice(index, index + concurrency);
+        const updates = await Promise.all(batch.map(async (tid) => {
+          const key = `${groupId}-${tid}`;
+          if (cancelled || topicDetailsRef.current.has(tid) || inFlightRef.current.has(key)) {
+            return null;
+          }
+
+          const request = apiClient.getTopicDetail(tid, groupId);
+          inFlightRef.current.set(key, request);
+
+          try {
+            const detail = await request;
+            if (cancelled) return null;
+            return [tid, detail] as const;
+          } catch (err) {
+            console.error('预取话题详情失败:', err);
+            return null;
+          } finally {
+            inFlightRef.current.delete(key);
+          }
+        }));
+
+        const successfulUpdates = updates.filter((item): item is readonly [string, any] => Boolean(item));
+        if (cancelled || successfulUpdates.length === 0) {
+          continue;
+        }
+
+        setTopicDetails(prev => {
+          const next = new Map(prev);
+          let changed = false;
+
+          for (const [tid, detail] of successfulUpdates) {
+            if (!next.has(tid)) {
+              next.set(tid, detail);
+              changed = true;
+            }
+          }
+
+          if (!changed) {
+            return prev;
+          }
+
+          topicDetailsRef.current = next;
+          return next;
         });
+      }
+    };
 
-      inFlightRef.current.set(key, p);
-    });
+    void prefetchDetails();
+
+    return () => {
+      cancelled = true;
+    };
   }, [topics, groupId]);
 
 
 
 
 
-  const loadGroupDetail = async (currentRetryCount = 0) => {
+  const loadGroupDetail = useCallback(async (currentRetryCount = 0) => {
     try {
       if (currentRetryCount === 0) {
         setLoading(true);
@@ -273,18 +431,18 @@ const [collectRangeEndDate, setCollectRangeEndDate] = useState<string>('');
       setIsRetrying(false);
       setLoading(false);
     }
-  };
+  }, [groupId]);
 
-  const loadGroupStats = async () => {
+  const loadGroupStats = useCallback(async () => {
     try {
       const stats = await apiClient.getGroupStats(groupId);
       setGroupStats(stats);
     } catch (err) {
       console.error('加载群组统计失败:', err);
     }
-  };
+  }, [groupId]);
 
-  const loadTopics = async (currentRetryCount = 0) => {
+  const loadTopics = useCallback(async (currentRetryCount = 0) => {
     try {
       if (currentRetryCount === 0) {
         setTopicsLoading(true);
@@ -296,29 +454,12 @@ const [collectRangeEndDate, setCollectRangeEndDate] = useState<string>('');
         data = await apiClient.getTagTopics(groupId, selectedTag, currentPage, 20);
       } else {
         // 否则使用原有的API
-        data = await apiClient.getGroupTopics(groupId, currentPage, 20, searchTerm || undefined);
+        data = await apiClient.getGroupTopics(groupId, currentPage, 20, debouncedSearchTerm || undefined);
       }
 
        // 检查是否获取到有效数据
       if (!data || !data.data) {
         throw new Error('API返回空数据，可能是反爬虫机制');
-      }
-
-      // 🧪 调试输出：loadTopics 收到的数据
-      try {
-        const offerTopic = (data.data || []).find((t: any) =>
-          typeof t.title === 'string' && t.title.startsWith('Offer选择')
-        );
-        if (offerTopic) {
-          console.log('[GroupDetailPage.loadTopics] Offer topic from API client:', {
-            topic_id: (offerTopic as any).topic_id,
-            title: offerTopic.title,
-          });
-        } else {
-          console.log('[GroupDetailPage.loadTopics] Offer topic not found in API client data');
-        }
-      } catch (e) {
-        console.warn('[GroupDetailPage.loadTopics] debug Offer topic failed:', e);
       }
 
       setTopics(data.data);
@@ -344,42 +485,48 @@ const [collectRangeEndDate, setCollectRangeEndDate] = useState<string>('');
       console.error('加载话题列表失败:', err);
       setTopicsLoading(false);
     }
-  };
+  }, [currentPage, debouncedSearchTerm, groupId, selectedTag]);
 
+  useEffect(() => {
+    loadTopics();
+  }, [loadTopics]);
 
-
-  const loadRecentTasks = async () => {
-    try {
-      const tasks = await apiClient.getTasks();
-      // 只显示最近的5个任务
-      setRecentTasks(tasks.slice(0, 5));
-    } catch (err) {
-      console.error('加载任务列表失败:', err);
-    }
-  };
-
-  const loadGroupInfo = async () => {
+  const loadGroupInfo = useCallback(async () => {
     try {
       const info = await apiClient.getGroupInfo(groupId);
       setGroupInfo(info);
     } catch (error) {
       console.error('加载群组信息失败:', error);
     }
-  };
+  }, [groupId]);
 
-  const loadLocalFileCount = async () => {
+  const loadLocalFileCount = useCallback(async () => {
     try {
       const stats = await apiClient.getFileStats(groupId);
       // 使用特定群组的文件统计数据
-      setLocalFileCount(stats.download_stats.total_files || 0);
+      const downloadStats = stats.download_stats || {};
+      const total = downloadStats.total_files || 0;
+      setLocalFileCount(total);
+      setLocalFileStats({
+        total,
+        downloaded: downloadStats.downloaded || 0,
+        pending: downloadStats.pending || 0,
+        failed: downloadStats.failed || 0,
+      });
     } catch (error) {
       console.error('加载本地文件数量失败:', error);
       // 如果API调用失败，设置为0
       setLocalFileCount(0);
+      setLocalFileStats({
+        total: 0,
+        downloaded: 0,
+        pending: 0,
+        failed: 0,
+      });
     }
-  };
+  }, [groupId]);
 
-  const loadTags = async () => {
+  const loadTags = useCallback(async () => {
     setTagsLoading(true);
     try {
       const data = await apiClient.getGroupTags(groupId);
@@ -389,20 +536,20 @@ const [collectRangeEndDate, setCollectRangeEndDate] = useState<string>('');
     } finally {
       setTagsLoading(false);
     }
-  };
+  }, [groupId]);
 
   // 加载账号列表
-  const loadAccounts = async () => {
+  const loadAccounts = useCallback(async () => {
     try {
       const res = await apiClient.listAccounts();
       setAccounts(res.accounts || []);
     } catch (err) {
       console.error('加载账号列表失败:', err);
     }
-  };
+  }, []);
 
   // 加载群组绑定账号
-  const loadGroupAccount = async () => {
+  const loadGroupAccount = useCallback(async () => {
     try {
       const res = await apiClient.getGroupAccount(groupId);
       const acc = (res as any)?.account || null;
@@ -411,35 +558,17 @@ const [collectRangeEndDate, setCollectRangeEndDate] = useState<string>('');
     } catch (err) {
       console.error('加载群组账号失败:', err);
     }
-  };
+  }, [groupId]);
 
   // 加载群组所属账号的自我信息（持久化）
-  const loadGroupAccountSelf = async () => {
+  const loadGroupAccountSelf = useCallback(async () => {
     try {
-      setLoadingAccountSelf(true);
       const res = await apiClient.getGroupAccountSelf(groupId);
       setAccountSelf((res as any)?.self || null);
     } catch (err) {
       console.error('加载账号用户信息失败:', err);
-    } finally {
-      setLoadingAccountSelf(false);
     }
-  };
-
-  // 刷新群组所属账号的自我信息（强制抓取）
-  const refreshGroupAccountSelf = async () => {
-    try {
-      setRefreshingAccountSelf(true);
-      const res = await apiClient.refreshGroupAccountSelf(groupId);
-      setAccountSelf((res as any)?.self || null);
-      toast.success('已刷新账号用户信息');
-    } catch (err) {
-      toast.error('刷新账号信息失败');
-      console.error('刷新账号用户信息失败:', err);
-    } finally {
-      setRefreshingAccountSelf(false);
-    }
-  };
+  }, [groupId]);
 
   // 绑定账号到当前群组
   const handleAssignAccount = async () => {
@@ -487,7 +616,6 @@ const [collectRangeEndDate, setCollectRangeEndDate] = useState<string>('');
       setTimeout(() => {
         loadGroupStats();
         loadTopics();
-        loadRecentTasks();
       }, 2000);
     } catch (error) {
       toast.error(`创建任务失败: ${error instanceof Error ? error.message : '未知错误'}`);
@@ -520,7 +648,6 @@ const [collectRangeEndDate, setCollectRangeEndDate] = useState<string>('');
       setTimeout(() => {
         loadGroupStats();
         loadTopics();
-        loadRecentTasks();
       }, 2000);
     } catch (error) {
       toast.error(`创建任务失败: ${error instanceof Error ? error.message : '未知错误'}`);
@@ -553,7 +680,6 @@ const [collectRangeEndDate, setCollectRangeEndDate] = useState<string>('');
       setTimeout(() => {
         loadGroupStats();
         loadTopics();
-        loadRecentTasks();
       }, 2000);
     } catch (error) {
       toast.error(`增量爬取失败: ${error instanceof Error ? error.message : '未知错误'}`);
@@ -596,7 +722,6 @@ const [collectRangeEndDate, setCollectRangeEndDate] = useState<string>('');
       setTimeout(() => {
         loadGroupStats();
         loadTopics();
-        loadRecentTasks();
       }, 2000);
     } catch (error) {
       toast.error(`创建任务失败: ${error instanceof Error ? error.message : '未知错误'}`);
@@ -625,7 +750,6 @@ const [collectRangeEndDate, setCollectRangeEndDate] = useState<string>('');
       setTimeout(() => {
         loadGroupStats();
         loadTopics();
-        loadRecentTasks();
       }, 2000);
     } catch (error) {
       toast.error(`创建任务失败: ${error instanceof Error ? error.message : '未知错误'}`);
@@ -658,31 +782,12 @@ const [collectRangeEndDate, setCollectRangeEndDate] = useState<string>('');
   };
 
   // 文件操作函数
-  const handleCollectFiles = async () => {
-    try {
-      setFileLoading('collect');
-      const params: any = {};
-      if (collectRangeStartDate || collectRangeEndDate) {
-        if (collectRangeStartDate) params.startTime = collectRangeStartDate;
-        if (collectRangeEndDate) params.endTime = collectRangeEndDate;
-      } else {
-        params.lastDays = Math.max(1, collectQuickLastDays || 1);
-      }
-      const response = await apiClient.collectFilesByTimeRange(groupId, params);
-      toast.success(`文件收集任务已创建: ${(response as any).task_id}`);
-      // 设置当前任务ID以显示日志
-      setCurrentTaskId((response as any).task_id);
-      // 自动切换到日志标签页
-      setActiveTab('logs');
-      setCollectDialogOpen(false);
-    } catch (error) {
-      toast.error(`文件收集失败: ${error instanceof Error ? error.message : '未知错误'}`);
-    } finally {
-      setFileLoading(null);
-    }
-  };
-
   const handleDownloadByTime = async () => {
+    if (localFileCount === 0) {
+      toast.error('当前没有可下载的文件记录，请先采集包含附件的话题');
+      return;
+    }
+
     try {
       setFileLoading('download-time');
       const params: any = {
@@ -716,6 +821,11 @@ const [collectRangeEndDate, setCollectRangeEndDate] = useState<string>('');
   };
 
   const handleDownloadByCount = async () => {
+    if (localFileCount === 0) {
+      toast.error('当前没有可下载的文件记录，请先采集包含附件的话题');
+      return;
+    }
+
     try {
       setFileLoading('download-count');
       const response = await apiClient.downloadFiles(
@@ -745,7 +855,7 @@ const [collectRangeEndDate, setCollectRangeEndDate] = useState<string>('');
   const handleClearFileDatabase = async () => {
     try {
       setFileLoading('clear');
-      const response = await apiClient.clearFileDatabase(groupId);
+      await apiClient.clearFileDatabase(groupId);
       toast.success(`文件数据库已删除`);
       // 重新加载本地文件数量
       loadLocalFileCount();
@@ -805,27 +915,29 @@ const [collectRangeEndDate, setCollectRangeEndDate] = useState<string>('');
   };
 
   // 切换评论展开状态
-  const toggleComments = (topicId: number) => {
+  const toggleComments = useCallback((topicId: number | string) => {
+    const key = String(topicId);
     setExpandedComments(prev => {
       const newSet = new Set(prev);
-      if (newSet.has(topicId)) {
-        newSet.delete(topicId);
+      if (newSet.has(key)) {
+        newSet.delete(key);
       } else {
-        newSet.add(topicId);
+        newSet.add(key);
       }
       return newSet;
     });
-  };
+  }, []);
 
 
 
   // 刷新单个话题
-  const refreshSingleTopic = async (topicId: number) => {
-    if (refreshingTopics.has(topicId)) {
-      return; // 防止重复请求
+  const refreshSingleTopic = useCallback(async (topicId: number) => {
+    if (refreshingTopicsRef.current.has(topicId)) {
+      return;
     }
 
-    setRefreshingTopics(prev => new Set(prev).add(topicId));
+    refreshingTopicsRef.current = new Set(refreshingTopicsRef.current).add(topicId);
+    setRefreshingTopics(new Set(refreshingTopicsRef.current));
 
     try {
       const response = await apiClient.refreshTopic(parseInt(topicId.toString()), groupId);
@@ -855,21 +967,15 @@ const [collectRangeEndDate, setCollectRangeEndDate] = useState<string>('');
       toast.error('刷新话题失败');
       console.error('刷新话题失败:', error);
     } finally {
-      setRefreshingTopics(prev => {
-        const newSet = new Set(prev);
-        newSet.delete(topicId);
-        return newSet;
-      });
+      const next = new Set(refreshingTopicsRef.current);
+      next.delete(topicId);
+      refreshingTopicsRef.current = next;
+      setRefreshingTopics(next);
     }
-  };
-
-  // 删除单个话题（改用自定义弹窗，保留方法以兼容可能的调用）
-  const handleDeleteSingleTopic = async (topicId: number) => {
-    await deleteSingleTopicConfirmed(topicId);
-  };
+  }, [groupId]);
 
   // 删除单个话题（自定义弹窗调用，无浏览器确认）
-  const deleteSingleTopicConfirmed = async (topicId: number) => {
+  const deleteSingleTopicConfirmed = useCallback(async (topicId: number) => {
     setDeletingTopics(prev => new Set(prev).add(topicId));
     try {
       const res = await apiClient.deleteSingleTopic(groupId, topicId) as any;
@@ -895,20 +1001,20 @@ const [collectRangeEndDate, setCollectRangeEndDate] = useState<string>('');
         return s;
       });
     }
-  };
+  }, [groupId, loadGroupStats, loadTags]);
 
   // 加载缓存信息
-  const loadCacheInfo = async () => {
+  const loadCacheInfo = useCallback(async () => {
     try {
       const info = await apiClient.getImageCacheInfo(groupId.toString());
       setCacheInfo(info);
     } catch (error) {
       console.error('加载缓存信息失败:', error);
     }
-  };
+  }, [groupId]);
 
   // 加载专栏摘要信息
-  const loadColumnsSummary = async () => {
+  const loadColumnsSummary = useCallback(async () => {
     try {
       const summary = await apiClient.getGroupColumnsSummary(groupId);
       setHasColumns(summary.has_columns);
@@ -918,7 +1024,31 @@ const [collectRangeEndDate, setCollectRangeEndDate] = useState<string>('');
       setHasColumns(false);
       setColumnsTitle(null);
     }
-  };
+  }, [groupId]);
+
+  useEffect(() => {
+    loadGroupDetail();
+    loadGroupStats();
+    loadGroupInfo();
+    loadLocalFileCount();
+    loadTags();
+    loadCacheInfo();
+    loadGroupAccount();
+    loadAccounts();
+    loadGroupAccountSelf();
+    loadColumnsSummary();
+  }, [
+    loadAccounts,
+    loadCacheInfo,
+    loadColumnsSummary,
+    loadGroupAccount,
+    loadGroupAccountSelf,
+    loadGroupDetail,
+    loadGroupInfo,
+    loadGroupStats,
+    loadLocalFileCount,
+    loadTags,
+  ]);
 
   // 清空图片缓存（使用自定义弹窗，不再重复浏览器确认）
   const clearImageCache = async () => {
@@ -963,12 +1093,13 @@ const [collectRangeEndDate, setCollectRangeEndDate] = useState<string>('');
   };
 
   // 获取更多评论
-  const fetchMoreComments = async (topicId: number) => {
-    if (fetchingComments.has(topicId)) {
-      return; // 防止重复请求
+  const fetchMoreComments = useCallback(async (topicId: number) => {
+    if (fetchingCommentsRef.current.has(topicId)) {
+      return;
     }
 
-    setFetchingComments(prev => new Set(prev).add(topicId));
+    fetchingCommentsRef.current = new Set(fetchingCommentsRef.current).add(topicId);
+    setFetchingComments(new Set(fetchingCommentsRef.current));
 
     try {
       const response = await fetch(`/api/topics/${topicId}/${groupId}/fetch-comments`, {
@@ -991,19 +1122,18 @@ const [collectRangeEndDate, setCollectRangeEndDate] = useState<string>('');
       toast.error('获取评论失败');
       console.error('获取评论失败:', error);
     } finally {
-      setFetchingComments(prev => {
-        const newSet = new Set(prev);
-        newSet.delete(topicId);
-        return newSet;
-      });
+      const next = new Set(fetchingCommentsRef.current);
+      next.delete(topicId);
+      fetchingCommentsRef.current = next;
+      setFetchingComments(next);
     }
-  };
+  }, [groupId, loadTopics]);
 
   // 获取文件状态
   const getFileStatus = useCallback(async (fileId: number, fileName?: string, fileSize?: number) => {
     try {
       // 首先尝试从数据库获取文件状态
-      const status = await apiClient.getFileStatus(groupId, fileId) as FileStatus;
+      const status = await apiClient.getFileStatus(String(groupId), fileId) as FileStatus;
       setFileStatuses(prev => new Map(prev).set(fileId, status));
       return status;
     } catch (error) {
@@ -1012,7 +1142,7 @@ const [collectRangeEndDate, setCollectRangeEndDate] = useState<string>('');
       // 如果数据库中没有文件，但有文件名和大小，检查本地文件
       if (fileName && fileSize !== undefined) {
         try {
-          const localStatus = await apiClient.checkLocalFileStatus(groupId, fileName, fileSize) as any;
+          const localStatus = await apiClient.checkLocalFileStatus(String(groupId), fileName, fileSize) as any;
           const status: FileStatus = {
             file_id: fileId,
             name: fileName,
@@ -1046,15 +1176,16 @@ const [collectRangeEndDate, setCollectRangeEndDate] = useState<string>('');
   }, [groupId]);
 
   // 下载单个文件
-  const downloadSingleFile = async (fileId: number, fileName: string, fileSize?: number) => {
-    if (downloadingFiles.has(fileId)) {
-      return; // 防止重复下载
+  const downloadSingleFile = useCallback(async (fileId: number, fileName: string, fileSize?: number) => {
+    if (downloadingFilesRef.current.has(fileId)) {
+      return;
     }
 
-    setDownloadingFiles(prev => new Set(prev).add(fileId));
+    downloadingFilesRef.current = new Set(downloadingFilesRef.current).add(fileId);
+    setDownloadingFiles(new Set(downloadingFilesRef.current));
 
     try {
-      const response = await apiClient.downloadSingleFile(groupId, fileId, fileName, fileSize) as any;
+      const response = await apiClient.downloadSingleFile(String(groupId), fileId, fileName, fileSize) as any;
       toast.success(`文件下载任务已创建: ${response.task_id}`);
 
       // 设置当前任务ID以显示日志
@@ -1087,107 +1218,41 @@ const [collectRangeEndDate, setCollectRangeEndDate] = useState<string>('');
     } catch (error) {
       toast.error(`文件下载失败: ${error instanceof Error ? error.message : '未知错误'}`);
     } finally {
-      setDownloadingFiles(prev => {
-        const newSet = new Set(prev);
-        newSet.delete(fileId);
-        return newSet;
-      });
+      const next = new Set(downloadingFilesRef.current);
+      next.delete(fileId);
+      downloadingFilesRef.current = next;
+      setDownloadingFiles(next);
     }
-  };
+  }, [getFileStatus, groupId]);
 
   // 切换内容展开状态
-  const toggleContent = (topicId: number) => {
+  const toggleContent = useCallback((topicId: number | string) => {
+    const key = String(topicId);
     setExpandedContent(prev => {
       const newSet = new Set(prev);
-      if (newSet.has(topicId)) {
-        newSet.delete(topicId);
+      if (newSet.has(key)) {
+        newSet.delete(key);
       } else {
-        newSet.add(topicId);
+        newSet.add(key);
       }
       return newSet;
     });
-  };
-
-
-
-  const getTypeBadge = (type: string) => {
-    switch (type) {
-      case 'private':
-        return <Badge variant="secondary" className="text-xs px-1.5 py-0.5">私密</Badge>;
-      case 'public':
-        return <Badge variant="secondary" className="text-xs px-1.5 py-0.5">公开</Badge>;
-      case 'pay':
-        return <Badge className="bg-orange-100 text-orange-800 text-xs px-1.5 py-0.5">付费</Badge>;
-      default:
-        return <Badge variant="secondary" className="text-xs px-1.5 py-0.5">未知</Badge>;
-    }
-  };
-
-  const getStatusBadge = (status?: string) => {
-    switch (status) {
-      case 'active':
-        return <Badge className="bg-green-100 text-green-800 text-xs">活跃</Badge>;
-      case 'expiring_soon':
-        return <Badge className="bg-yellow-100 text-yellow-800 text-xs">即将到期</Badge>;
-      case 'expired':
-        return <Badge className="bg-red-100 text-red-800 text-xs">已过期</Badge>;
-      default:
-        return null;
-    }
-  };
-
-  const formatDate = (dateString?: string) => {
-    if (!dateString) return '';
-    try {
-      return new Date(dateString).toLocaleDateString('zh-CN');
-    } catch {
-      return '';
-    }
-  };
-
-  const formatDateTime = (dateString: string) => {
-    if (!dateString) return '未知时间';
-    try {
-      const date = new Date(dateString);
-      return date.toLocaleString('zh-CN', {
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit'
-      });
-    } catch {
-      return '时间格式错误';
-    }
-  };
-
-  // 格式化获取时间
-  const formatImportedTime = (importedAt: string) => {
-    if (!importedAt) return '';
-    try {
-      const date = new Date(importedAt);
-      return date.toLocaleString('zh-CN', {
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit'
-      });
-    } catch (error) {
-      return importedAt;
-    }
-  };
+  }, []);
 
   // 话题卡片组件
   const TopicCard = ({ topic, searchTerm, topicDetail }: { topic: any; searchTerm?: string; topicDetail?: any }) => {
-    const cardRef = useRef<HTMLDivElement>(null);
-    const contentRef = useRef<HTMLDivElement>(null);
+    const topicId = String(topic.topic_id);
+    const answerText = topic.answer_text || topicDetail?.answer?.text || '';
+    const talkText = topic.talk_text || '';
+    const titleText = topic.title || '';
+    const shouldShowAnswerToggle = shouldShowContentToggle(extractPlainText(answerText));
+    const shouldShowTalkToggle = shouldShowContentToggle(extractPlainText(talkText));
+    const shouldShowTitleToggle = shouldShowContentToggle(extractPlainText(titleText));
 
     // 详情由父组件预取并通过 props 提供
 
     return (
-      <div ref={cardRef} className="border border-gray-200 shadow-none w-full max-w-full bg-white rounded-lg" style={{width: '100%', maxWidth: '100%', boxSizing: 'border-box'}}>
+      <div className="border border-gray-200 shadow-none w-full max-w-full bg-white rounded-lg" style={{width: '100%', maxWidth: '100%', boxSizing: 'border-box'}}>
         <div className="p-4 w-full max-w-full" style={{width: '100%', maxWidth: '100%', boxSizing: 'border-box'}}>
           <div className="space-y-3 w-full">
             {/* 作者信息和徽章 */}
@@ -1198,15 +1263,12 @@ const [collectRangeEndDate, setCollectRangeEndDate] = useState<string>('');
                   // 问答类型显示回答者信息
                   topicDetail?.answer?.owner && (
                     <>
-                      <img
+                      <SafeImage
                         src={apiClient.getProxyImageUrl(topicDetail.answer.owner.avatar_url, groupId.toString())}
                         alt={topicDetail.answer.owner.name}
-                        loading="lazy"
-                        decoding="async"
                         className="w-8 h-8 rounded-full object-cover block"
-                        onError={(e) => {
-                          e.currentTarget.src = '/default-avatar.png';
-                        }}
+                        fallbackClassName="w-8 h-8 rounded-full"
+                        fallbackText={topicDetail.answer.owner.name.slice(0, 1)}
                       />
                       <div className="flex-1">
                         <div className="flex items-center gap-2">
@@ -1230,15 +1292,12 @@ const [collectRangeEndDate, setCollectRangeEndDate] = useState<string>('');
                   // 其他类型显示原作者信息
                   topic.author && (
                     <>
-                      <img
+                      <SafeImage
                         src={apiClient.getProxyImageUrl(topic.author.avatar_url, groupId.toString())}
                         alt={topic.author.name}
-                        loading="lazy"
-                        decoding="async"
                         className="w-8 h-8 rounded-full object-cover block"
-                        onError={(e) => {
-                          e.currentTarget.src = '/default-avatar.png';
-                        }}
+                        fallbackClassName="w-8 h-8 rounded-full"
+                        fallbackText={topic.author.name.slice(0, 1)}
                       />
                       <div className="flex-1">
                         <div className="flex items-center gap-2">
@@ -1370,22 +1429,22 @@ const [collectRangeEndDate, setCollectRangeEndDate] = useState<string>('');
                       <div className="w-full max-w-full overflow-hidden" style={{minWidth: 0}}>
                         <div
                           className={`text-sm text-gray-800 whitespace-pre-wrap break-words break-all leading-relaxed prose prose-sm max-w-none prose-p:my-1 prose-strong:text-gray-900 prose-a:text-blue-600 ${
-                            !expandedContent.has(topic.topic_id) ? 'line-clamp-8' : ''
+                            !expandedContent.has(topicId) ? 'line-clamp-8' : ''
                           }`}
                           style={{
                             wordBreak: 'break-all',
                             overflowWrap: 'anywhere'
                           }}
-                          dangerouslySetInnerHTML={createSafeHtmlWithHighlight(topic.answer_text || topicDetail?.answer?.text || '', searchTerm)}
+                          dangerouslySetInnerHTML={createSafeHtmlWithHighlight(answerText, searchTerm)}
                         />
                       </div>
-                      {(extractPlainText(topic.answer_text || topicDetail?.answer?.text || '').split('\n').length > 4 || extractPlainText(topic.answer_text || topicDetail?.answer?.text || '').length > 300) && (
+                      {shouldShowAnswerToggle && (
                         <div className="text-center mt-2">
                           <button type="button"
                             onClick={() => toggleContent(topic.topic_id)}
                             className="text-xs text-blue-600 hover:text-blue-800 font-medium transition-colors"
                           >
-                            {expandedContent.has(topic.topic_id) ? '收起' : '展开全部'}
+                            {expandedContent.has(topicId) ? '收起' : '展开全部'}
                           </button>
                         </div>
                       )}
@@ -1395,45 +1454,45 @@ const [collectRangeEndDate, setCollectRangeEndDate] = useState<string>('');
               ) : (
                 // 其他类型话题
                 <div className="w-full">
-                  {topic.talk_text ? (
+                  {talkText ? (
                     <div className="w-full">
-                      <div ref={contentRef} className="bg-gray-50 rounded-lg p-3 w-full max-w-full overflow-hidden" style={{minWidth: 0}}>
+                      <div className="bg-gray-50 rounded-lg p-3 w-full max-w-full overflow-hidden" style={{minWidth: 0}}>
                         <div
                           className={`text-sm text-gray-800 whitespace-pre-wrap break-words break-all prose prose-sm max-w-none prose-p:my-1 prose-strong:text-gray-900 prose-a:text-blue-600 ${
-                            !expandedContent.has(topic.topic_id) ? 'line-clamp-8' : ''
+                            !expandedContent.has(topicId) ? 'line-clamp-8' : ''
                           }`}
                           style={{wordBreak: 'break-all', overflowWrap: 'anywhere'}}
-                          dangerouslySetInnerHTML={createSafeHtmlWithHighlight(topic.talk_text, searchTerm)}
+                          dangerouslySetInnerHTML={createSafeHtmlWithHighlight(talkText, searchTerm)}
                         />
                       </div>
-                      {(extractPlainText(topic.talk_text).split('\n').length > 4 || extractPlainText(topic.talk_text).length > 300) && (
+                      {shouldShowTalkToggle && (
                         <div className="text-center mt-2">
                           <button type="button"
                             onClick={() => toggleContent(topic.topic_id)}
                             className="text-xs text-blue-600 hover:text-blue-800 font-medium transition-colors"
                           >
-                            {expandedContent.has(topic.topic_id) ? '收起' : '展开全部'}
+                            {expandedContent.has(topicId) ? '收起' : '展开全部'}
                           </button>
                         </div>
                       )}
                     </div>
-                  ) : topic.title ? (
+                  ) : titleText ? (
                     <div className="w-full">
                       <div className="bg-gray-50 rounded-lg p-3 w-full max-w-full overflow-hidden">
                         <div
                           className={`text-sm text-gray-800 break-words prose prose-sm max-w-none prose-p:my-1 prose-strong:text-gray-900 prose-a:text-blue-600 ${
-                            !expandedContent.has(topic.topic_id) ? 'line-clamp-8' : ''
+                            !expandedContent.has(topicId) ? 'line-clamp-8' : ''
                           }`}
-                          dangerouslySetInnerHTML={createSafeHtmlWithHighlight(topic.title, searchTerm)}
+                          dangerouslySetInnerHTML={createSafeHtmlWithHighlight(titleText, searchTerm)}
                         />
                       </div>
-                      {topic.title && (extractPlainText(topic.title).split('\n').length > 4 || extractPlainText(topic.title).length > 300) && (
+                      {shouldShowTitleToggle && (
                         <div className="text-center mt-2">
                           <button type="button"
                             onClick={() => toggleContent(topic.topic_id)}
                             className="text-xs text-blue-600 hover:text-blue-800 font-medium transition-colors"
                           >
-                            {expandedContent.has(topic.topic_id) ? '收起' : '展开全部'}
+                            {expandedContent.has(topicId) ? '收起' : '展开全部'}
                           </button>
                         </div>
                       )}
@@ -1470,143 +1529,13 @@ const [collectRangeEndDate, setCollectRangeEndDate] = useState<string>('');
 
             {/* 话题文件 */}
             {topicDetail?.talk?.files && topicDetail.talk.files.length > 0 && (
-              <div className="space-y-2 w-full max-w-full overflow-hidden" style={{width: '100%', maxWidth: '100%', boxSizing: 'border-box'}}>
-                <div className="space-y-2">
-                  {topicDetail.talk.files.map((file: any) => {
-                    // 根据文件扩展名获取图标组件
-                    const getFileIcon = (fileName: string) => {
-                      const ext = fileName.split('.').pop()?.toLowerCase();
-                      const iconProps = { className: "w-6 h-6 text-gray-600" };
-
-                      switch (ext) {
-                        case 'pdf':
-                          return <FileText {...iconProps} className="w-6 h-6 text-red-600" />;
-                        case 'doc':
-                        case 'docx':
-                          return <FileText {...iconProps} className="w-6 h-6 text-blue-600" />;
-                        case 'xls':
-                        case 'xlsx':
-                          return <FileText {...iconProps} className="w-6 h-6 text-green-600" />;
-                        case 'ppt':
-                        case 'pptx':
-                          return <FileText {...iconProps} className="w-6 h-6 text-orange-600" />;
-                        case 'zip':
-                        case 'rar':
-                        case '7z':
-                          return <Archive {...iconProps} className="w-6 h-6 text-purple-600" />;
-                        case 'jpg':
-                        case 'jpeg':
-                        case 'png':
-                        case 'gif':
-                          return <FileImage {...iconProps} className="w-6 h-6 text-pink-600" />;
-                        case 'mp4':
-                        case 'avi':
-                        case 'mov':
-                          return <FileVideo {...iconProps} className="w-6 h-6 text-indigo-600" />;
-                        case 'mp3':
-                        case 'wav':
-                        case 'flac':
-                          return <FileAudio {...iconProps} className="w-6 h-6 text-yellow-600" />;
-                        case 'txt':
-                          return <FileText {...iconProps} />;
-                        default:
-                          return <File {...iconProps} />;
-                      }
-                    };
-
-                    const formatFileSize = (bytes: number) => {
-                      if (bytes === 0) return '0 B';
-                      const k = 1024;
-                      const sizes = ['B', 'KB', 'MB', 'GB'];
-                      const i = Math.floor(Math.log(bytes) / Math.log(k));
-                      return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-                    };
-
-                    const fileStatus = fileStatuses.get(file.file_id);
-                    const isDownloading = downloadingFiles.has(file.file_id);
-                    const isDownloaded = fileStatus?.is_complete || false;
-
-                    return (
-                      <div key={file.file_id} className={`flex items-center gap-3 p-3 rounded-lg border ${
-                        isDownloaded
-                          ? 'bg-green-50 border-green-200'
-                          : 'bg-gray-50 border-gray-200'
-                      }`}>
-                        <div className="flex-shrink-0">
-                          {getFileIcon(file.name)}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="text-sm font-medium text-gray-900 truncate" title={file.name}>
-                            {file.name}
-                          </div>
-                          <div className="text-xs text-gray-500 flex items-center gap-2">
-                            <span>{formatFileSize(file.size)}</span>
-                            {file.download_count > 0 && (
-                              <span>• 下载 {file.download_count} 次</span>
-                            )}
-                            {file.create_time && (
-                              <span>• {formatDateTime(file.create_time)}</span>
-                            )}
-                            {/* 文件状态显示 */}
-                            {fileStatus && (
-                              <span className={`• ${
-                                fileStatus.download_status === 'not_collected' ? 'text-gray-500' :
-                                fileStatus.is_complete ? 'text-green-600' : 'text-orange-600'
-                              }`}>
-                                {fileStatus.download_status === 'not_collected' ? '未收集' :
-                                 fileStatus.is_complete ? '已下载' : '未下载'}
-                              </span>
-                            )}
-                          </div>
-                          {/* 文件路径显示 */}
-                          {fileStatus?.local_path && (
-                            <div className="text-xs text-green-600 mt-1 truncate" title={fileStatus.local_path}>
-                              📁 {fileStatus.local_path}
-                            </div>
-                          )}
-                        </div>
-                        <div className="flex-shrink-0">
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={async () => {
-                              // 点击时检查文件状态
-                              const latestStatus = await getFileStatus(file.file_id, file.name, file.size);
-
-                              if (latestStatus?.download_status === 'not_collected') {
-                                toast.error('文件未收集，请先运行文件收集任务');
-                                return;
-                              }
-
-                              // 如果文件已经下载完成，显示提示
-                              if (latestStatus?.is_complete) {
-                                toast.info(`文件已存在: ${latestStatus.local_path}`);
-                                return;
-                              }
-
-                              downloadSingleFile(file.file_id, file.name, file.size);
-                            }}
-                            disabled={isDownloading}
-                            className="flex items-center gap-1"
-                          >
-                            {isDownloading ? (
-                              <>
-                                <RefreshCw className="w-3 h-3 animate-spin" />
-                                下载中
-                              </>
-                            ) : (
-                              <>
-                                <Download className="w-3 h-3" />
-                                下载
-                              </>
-                            )}
-                          </Button>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
+              <TopicFileList
+                files={topicDetail.talk.files}
+                fileStatuses={fileStatuses}
+                downloadingFiles={downloadingFiles}
+                onGetFileStatus={getFileStatus}
+                onDownloadFile={downloadSingleFile}
+              />
             )}
 
             {/* 评论 */}
@@ -1648,15 +1577,12 @@ const [collectRangeEndDate, setCollectRangeEndDate] = useState<string>('');
                     {commentsToShow.map((comment: any) => (
                     <div key={comment.comment_id} className="bg-gray-50 rounded-lg p-2">
                       <div className="flex items-center gap-2 mb-1">
-                        <img
+                        <SafeImage
                           src={apiClient.getProxyImageUrl(comment.owner.avatar_url, groupId.toString())}
                           alt={comment.owner.name}
-                          loading="lazy"
-                          decoding="async"
                           className="w-4 h-4 rounded-full object-cover block"
-                          onError={(e) => {
-                            e.currentTarget.src = '/default-avatar.png';
-                          }}
+                          fallbackClassName="w-4 h-4 rounded-full"
+                          fallbackText={comment.owner.name.slice(0, 1)}
                         />
                         <span className="text-xs font-medium text-gray-700">
                           {comment.owner.name}
@@ -1698,15 +1624,12 @@ const [collectRangeEndDate, setCollectRangeEndDate] = useState<string>('');
                             <div key={reply.comment_id} className="bg-white rounded p-2">
                               <div className="flex items-center gap-2 mb-1">
                                 {reply.owner && (
-                                  <img
+                                  <SafeImage
                                     src={apiClient.getProxyImageUrl(reply.owner.avatar_url || '', groupId.toString())}
                                     alt={reply.owner.name}
-                                    loading="lazy"
-                                    decoding="async"
                                     className="w-3 h-3 rounded-full object-cover block"
-                                    onError={(e) => {
-                                      (e.currentTarget as HTMLImageElement).style.display = 'none';
-                                    }}
+                                    fallbackClassName="w-3 h-3 rounded-full"
+                                    fallbackText={reply.owner.name.slice(0, 1)}
                                   />
                                 )}
                                 <span className="text-xs font-medium text-gray-600">
@@ -1800,21 +1723,6 @@ const [collectRangeEndDate, setCollectRangeEndDate] = useState<string>('');
     );
   };
 
-
-
-  const getGradientByType = (type: string) => {
-    switch (type) {
-      case 'private':
-        return 'from-purple-400 to-pink-500';
-      case 'public':
-        return 'from-blue-400 to-cyan-500';
-      case 'pay':
-        return 'from-orange-400 to-red-500';
-      default:
-        return 'from-gray-400 to-gray-600';
-    }
-  };
-
   if (loading || isRetrying) {
     return (
       <div className="min-h-screen bg-gray-50 p-4">
@@ -1853,7 +1761,7 @@ const [collectRangeEndDate, setCollectRangeEndDate] = useState<string>('');
             <CardContent className="pt-6">
               <div className="text-center">
                 <p className="text-red-600 mb-4">{error}</p>
-                <Button onClick={loadGroupDetail}>重试</Button>
+                <Button onClick={() => loadGroupDetail()}>重试</Button>
               </div>
             </CardContent>
           </Card>
@@ -1922,7 +1830,6 @@ const [collectRangeEndDate, setCollectRangeEndDate] = useState<string>('');
                 value={searchTerm}
                 onChange={(e) => {
                   setSearchTerm(e.target.value);
-                  setCurrentPage(1);
                 }}
                 className="pl-10"
               />
@@ -2041,11 +1948,12 @@ const [collectRangeEndDate, setCollectRangeEndDate] = useState<string>('');
                   <div className="text-sm text-gray-700 mb-3">
                     <div className="flex items-center gap-2">
                       {accountSelf?.avatar_url ? (
-                        <img
+                        <SafeImage
                           src={apiClient.getProxyImageUrl(accountSelf.avatar_url, groupId.toString())}
                           alt={accountSelf?.name || ''}
                           className="w-5 h-5 rounded-full"
-                          onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
+                          fallbackClassName="w-5 h-5 rounded-full"
+                          fallbackText={(accountSelf?.name || groupAccount?.name || groupAccount?.id || '账').slice(0, 1)}
                         />
                       ) : (
                         <div className="w-5 h-5 rounded-full bg-gray-200" />
@@ -2138,7 +2046,7 @@ const [collectRangeEndDate, setCollectRangeEndDate] = useState<string>('');
           <Tabs value={activeTab} onValueChange={setActiveTab} className="flex flex-col h-full">
             {/* 固定的标签页头部 */}
             <div className="flex-shrink-0 mb-4">
-              <TabsList className="grid w-full grid-cols-4">
+              <TabsList className="grid w-full grid-cols-5">
                 <TabsTrigger value="topics" className="flex items-center gap-2">
                   <MessageSquare className="h-4 w-4" />
                   话题列表
@@ -2154,6 +2062,10 @@ const [collectRangeEndDate, setCollectRangeEndDate] = useState<string>('');
                 <TabsTrigger value="analysis" className="flex items-center gap-2">
                   <BarChart3 className="h-4 w-4" />
                   A股分析
+                </TabsTrigger>
+                <TabsTrigger value="daily-analysis" className="flex items-center gap-2">
+                  <Sparkles className="h-4 w-4" />
+                  每日总结
                 </TabsTrigger>
               </TabsList>
             </div>
@@ -2181,7 +2093,7 @@ const [collectRangeEndDate, setCollectRangeEndDate] = useState<string>('');
                           <div key={topic.topic_id} style={{width: '100%', maxWidth: '100%', boxSizing: 'border-box'}}>
                             <TopicCard
                               topic={topic}
-                              searchTerm={searchTerm}
+                              searchTerm={deferredSearchTerm}
                               // 这里同样使用字符串形式的 topic_id 作为索引
                               topicDetail={topicDetails.get(String((topic as any).topic_id || ''))}
                             />
@@ -2210,7 +2122,7 @@ const [collectRangeEndDate, setCollectRangeEndDate] = useState<string>('');
                             max={totalPages}
                             defaultValue={currentPage}
                             key={currentPage} // 强制重新渲染以更新defaultValue
-                            onChange={(e) => {
+                            onChange={() => {
                               // 允许用户自由输入，不进行页面跳转
                               // 页面跳转只在Enter键或失焦时触发
                             }}
@@ -2281,7 +2193,6 @@ const [collectRangeEndDate, setCollectRangeEndDate] = useState<string>('');
                       setTimeout(() => {
                         loadGroupStats();
                         loadTopics();
-                        loadRecentTasks();
                       }, 1000);
                     }}
                   />
@@ -2296,9 +2207,18 @@ const [collectRangeEndDate, setCollectRangeEndDate] = useState<string>('');
                   onTaskCreated={(taskId) => {
                     setCurrentTaskId(taskId);
                     setActiveTab('logs');
-                    setTimeout(() => {
-                      loadRecentTasks();
-                    }, 300);
+                  }}
+                />
+              </div>
+            </TabsContent>
+
+            <TabsContent value="daily-analysis" className="flex-1 flex flex-col min-h-0">
+              <div className="flex-1 min-h-0 overflow-auto">
+                <DailyTopicAnalysisPanel
+                  groupId={groupId}
+                  onTaskCreated={(taskId) => {
+                    setCurrentTaskId(taskId);
+                    setActiveTab('logs');
                   }}
                 />
               </div>
@@ -2314,7 +2234,11 @@ const [collectRangeEndDate, setCollectRangeEndDate] = useState<string>('');
             <ScrollArea className="h-full">
               <CardContent className="p-4">
                 {/* 模式切换 */}
-                <Tabs value={activeMode} onValueChange={setActiveMode} className="space-y-4">
+                <Tabs
+                  value={activeMode}
+                  onValueChange={(value) => setActiveMode(value as 'crawl' | 'download')}
+                  className="space-y-4"
+                >
                   <TabsList className="grid w-full grid-cols-2">
                     <TabsTrigger value="crawl" className="text-xs">
                       <MessageSquare className="h-3 w-3 mr-1" />
@@ -2731,89 +2655,35 @@ const [collectRangeEndDate, setCollectRangeEndDate] = useState<string>('');
                   {/* 文件下载选项 */}
                   <TabsContent value="download" className="space-y-3 mt-4">
                     <div className="space-y-2">
-                      <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs text-blue-800">
-                        <div className="font-medium mb-1">使用顺序</div>
-                        <div>1. 先收集文件列表</div>
-                        <div>2. 再按时间或热度下载文件本体</div>
-                      </div>
-
-                      {/* 收集文件列表 */}
-                      <div className="border rounded-lg p-3 cursor-pointer transition-all border-sky-200 hover:bg-sky-50">
-                        <div className="flex items-center justify-between mb-2">
-                          <div className="flex items-center gap-2">
-                            <FileText className="h-3 w-3 text-sky-600" />
-                            <span className="text-xs font-medium text-sky-700">
-                              收集文件列表
-                            </span>
-                          </div>
-                          <span className="text-xs text-gray-500">
-                            当前 {localFileCount} 条
-                          </span>
+                      <div className={`rounded-lg border p-3 text-xs ${
+                        localFileCount === 0
+                          ? 'border-amber-200 bg-amber-50 text-amber-800'
+                          : 'border-blue-200 bg-blue-50 text-blue-800'
+                      }`}>
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="font-medium">文件记录</div>
+                          <Badge variant="secondary" className="text-[10px]">
+                            {localFileStats.total} 条
+                          </Badge>
                         </div>
-                        <AlertDialog open={collectDialogOpen} onOpenChange={setCollectDialogOpen}>
-                          <Button
-                            size="sm"
-                            className="w-full h-7 text-xs bg-sky-600 hover:bg-sky-700"
-                            onClick={() => setCollectDialogOpen(true)}
-                            disabled={!!fileLoading}
-                          >
-                            {fileLoading === 'collect' ? '执行中...' : '开始收集'}
-                          </Button>
-                          <AlertDialogContent>
-                            <AlertDialogHeader>
-                              <AlertDialogTitle>按时间收集文件列表</AlertDialogTitle>
-                              <AlertDialogDescription>
-                                默认收集最近 N 天的文件；也可以指定开始和结束日期。
-                              </AlertDialogDescription>
-                            </AlertDialogHeader>
-                            <div className="space-y-3">
-                              <div className="text-xs text-gray-600">快速选择：最近N天</div>
-                              <div className="flex items-center gap-2">
-                                <Input
-                                  type="number"
-                                  min={1}
-                                  value={collectQuickLastDays}
-                                  onChange={(e) => setCollectQuickLastDays(parseInt(e.target.value || '1'))}
-                                  className="h-7 text-xs w-24"
-                                />
-                                <span className="text-xs text-gray-500">天</span>
-                                <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setCollectQuickLastDays(3)}>3天</Button>
-                                <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setCollectQuickLastDays(7)}>7天</Button>
-                                <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setCollectQuickLastDays(30)}>30天</Button>
-                              </div>
-                              <div className="text-[10px] text-gray-400">或 自定义日期范围</div>
-                              <div className="flex items-center gap-2">
-                                <Input
-                                  type="date"
-                                  value={collectRangeStartDate}
-                                  onChange={(e) => setCollectRangeStartDate(e.target.value)}
-                                  className="h-7 text-xs"
-                                />
-                                <span className="text-xs text-gray-500">~</span>
-                                <Input
-                                  type="date"
-                                  value={collectRangeEndDate}
-                                  onChange={(e) => setCollectRangeEndDate(e.target.value)}
-                                  className="h-7 text-xs"
-                                />
-                              </div>
+                        {localFileCount === 0 ? (
+                          <div className="mt-2">当前还没有文件记录。采集包含附件的话题后，文件会自动同步到这里。</div>
+                        ) : (
+                          <div className="mt-2 grid grid-cols-3 gap-2">
+                            <div className="rounded border border-blue-100 bg-white/70 p-2">
+                              <div className="text-[10px] text-blue-500">已下载</div>
+                              <div className="font-semibold text-blue-900">{localFileStats.downloaded}</div>
                             </div>
-                            <AlertDialogFooter>
-                              <AlertDialogCancel onClick={(e) => { e.stopPropagation(); setCollectDialogOpen(false); }}>
-                                取消
-                              </AlertDialogCancel>
-                              <AlertDialogAction
-                                onClick={handleCollectFiles}
-                                className="bg-sky-600 hover:bg-sky-700 focus:ring-sky-600"
-                              >
-                                开始收集
-                              </AlertDialogAction>
-                            </AlertDialogFooter>
-                          </AlertDialogContent>
-                        </AlertDialog>
-                        <div className="mt-2 text-[11px] text-gray-500">
-                          仅更新文件列表记录，不会下载文件本体
-                        </div>
+                            <div className="rounded border border-blue-100 bg-white/70 p-2">
+                              <div className="text-[10px] text-blue-500">未下载</div>
+                              <div className="font-semibold text-blue-900">{localFileStats.pending}</div>
+                            </div>
+                            <div className="rounded border border-blue-100 bg-white/70 p-2">
+                              <div className="text-[10px] text-blue-500">失败</div>
+                              <div className="font-semibold text-blue-900">{localFileStats.failed}</div>
+                            </div>
+                          </div>
+                        )}
                       </div>
 
                       {/* 按时间下载 */}
@@ -2822,12 +2692,12 @@ const [collectRangeEndDate, setCollectRangeEndDate] = useState<string>('');
                           selectedDownloadOption === 'time'
                             ? 'bg-purple-50 border-purple-200'
                             : localFileCount === 0
-                              ? 'border-gray-200 bg-gray-50 opacity-60 cursor-not-allowed'
+                              ? 'border-gray-200 bg-gray-50 opacity-70 cursor-not-allowed'
                               : 'border-gray-200 hover:bg-gray-50'
                         }`}
                         onClick={() => {
                           if (localFileCount === 0) {
-                            toast.error('请先收集文件列表');
+                            toast.error('当前没有可下载的文件记录，请先采集包含附件的话题');
                             return;
                           }
                           setSelectedDownloadOption('time');
@@ -2842,7 +2712,7 @@ const [collectRangeEndDate, setCollectRangeEndDate] = useState<string>('');
                             </span>
                           </div>
                           {localFileCount === 0 && (
-                            <Badge variant="secondary" className="text-[10px]">先收集</Badge>
+                            <Badge variant="secondary" className="text-[10px]">无记录</Badge>
                           )}
                         </div>
                         {selectedDownloadOption === 'time' && (
@@ -2916,12 +2786,12 @@ const [collectRangeEndDate, setCollectRangeEndDate] = useState<string>('');
                           selectedDownloadOption === 'count'
                             ? 'bg-indigo-50 border-indigo-200'
                             : localFileCount === 0
-                              ? 'border-gray-200 bg-gray-50 opacity-60 cursor-not-allowed'
+                              ? 'border-gray-200 bg-gray-50 opacity-70 cursor-not-allowed'
                               : 'border-gray-200 hover:bg-gray-50'
                         }`}
                         onClick={() => {
                           if (localFileCount === 0) {
-                            toast.error('请先收集文件列表');
+                            toast.error('当前没有可下载的文件记录，请先采集包含附件的话题');
                             return;
                           }
                           setSelectedDownloadOption('count');
@@ -2935,7 +2805,7 @@ const [collectRangeEndDate, setCollectRangeEndDate] = useState<string>('');
                             </span>
                           </div>
                           {localFileCount === 0 && (
-                            <Badge variant="secondary" className="text-[10px]">先收集</Badge>
+                            <Badge variant="secondary" className="text-[10px]">无记录</Badge>
                           )}
                         </div>
                         {selectedDownloadOption === 'count' && (

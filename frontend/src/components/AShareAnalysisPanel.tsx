@@ -99,7 +99,7 @@ export default function AShareAnalysisPanel({
   const [selectedEndDate, setSelectedEndDate] = useState('');
   const [runDays, setRunDays] = useState(21);
   const [retentionDays, setRetentionDays] = useState(30);
-  const [concurrency, setConcurrency] = useState(4);
+  const [concurrency, setConcurrency] = useState(10);
   const [resetStartDate, setResetStartDate] = useState('');
   const [resetEndDate, setResetEndDate] = useState('');
   const [initialized, setInitialized] = useState(false);

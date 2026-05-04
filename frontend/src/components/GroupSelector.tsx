@@ -1,24 +1,20 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useCallback, useState, useEffect, type KeyboardEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Users, MessageSquare, Crown, UserCog, RefreshCw, Trash2 } from 'lucide-react';
-import { apiClient, Group, GroupStats, AccountSelf } from '@/lib/api';
+import { MessageSquare, Crown, UserCog, RefreshCw, Trash2 } from 'lucide-react';
+import { apiClient, Group, GroupStats } from '@/lib/api';
 import { toast } from 'sonner';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import SafeImage from './SafeImage';
 import '../styles/group-selector.css';
 
-interface GroupSelectorProps {
-  onGroupSelected: (group: Group) => void;
-}
-
-export default function GroupSelector({ onGroupSelected }: GroupSelectorProps) {
+export default function GroupSelector() {
   const router = useRouter();
   const [groups, setGroups] = useState<Group[]>([]);
   const [groupStats, setGroupStats] = useState<Record<number, GroupStats>>({});
@@ -26,44 +22,9 @@ export default function GroupSelector({ onGroupSelected }: GroupSelectorProps) {
   const [error, setError] = useState<string | null>(null);
   const [retryCount, setRetryCount] = useState(0);
   const [isRetrying, setIsRetrying] = useState(false);
-  const [accountSelfMap, setAccountSelfMap] = useState<Record<number, AccountSelf | null>>({});
   const [deletingGroups, setDeletingGroups] = useState<Set<number>>(new Set());
 
-  useEffect(() => {
-    loadGroups();
-  }, []);
-
-  // 监听页面可见性变化和窗口焦点，返回页面时自动刷新群组列表
-  // 使用节流避免频繁刷新
-  useEffect(() => {
-    let lastRefresh = 0;
-    const REFRESH_INTERVAL = 5000; // 最少间隔 5 秒
-
-    const maybeRefresh = () => {
-      const now = Date.now();
-      if (now - lastRefresh > REFRESH_INTERVAL) {
-        lastRefresh = now;
-        loadGroups(0);
-      }
-    };
-
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible') {
-        maybeRefresh();
-      }
-    };
-    const handleFocus = () => {
-      maybeRefresh();
-    };
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    window.addEventListener('focus', handleFocus);
-    return () => {
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-      window.removeEventListener('focus', handleFocus);
-    };
-  }, []);
-
-  const loadGroups = async (currentRetryCount = 0) => {
+  const loadGroups = useCallback(async (currentRetryCount = 0) => {
     try {
       if (currentRetryCount === 0) {
         setLoading(true);
@@ -80,27 +41,6 @@ export default function GroupSelector({ onGroupSelected }: GroupSelectorProps) {
       // 检查返回数据（允许为空，显示空态，不再抛错）
 
       setGroups(data.groups);
-
-      // 并发拉取每个群组的所属账号用户信息（头像/昵称等）
-      try {
-        const selfPromises = data.groups.map(async (group: Group) => {
-          try {
-            const res = await apiClient.getGroupAccountSelf(group.group_id);
-            return { groupId: group.group_id, self: (res as any)?.self || null };
-          } catch {
-            return { groupId: group.group_id, self: null };
-          }
-        });
-        const selfResults = await Promise.all(selfPromises);
-        const selfMap: Record<number, AccountSelf | null> = {};
-        selfResults.forEach(({ groupId, self }) => {
-          selfMap[groupId] = self;
-        });
-        setAccountSelfMap(selfMap);
-      } catch (e) {
-        // 忽略单独失败
-        console.warn('加载群组账号用户信息失败:', e);
-      }
 
       // 加载每个群组的统计信息
       const statsPromises = data.groups.map(async (group: Group) => {
@@ -136,10 +76,8 @@ export default function GroupSelector({ onGroupSelected }: GroupSelectorProps) {
         const nextRetryCount = currentRetryCount + 1;
         const delay = Math.min(1000 + (nextRetryCount * 500), 5000); // 递增延迟，最大5秒
 
-        console.log(`群组列表加载失败，正在重试 (第${nextRetryCount}次)...`);
-
         setTimeout(() => {
-          loadGroups(nextRetryCount);
+          void loadGroups(nextRetryCount);
         }, delay);
         return;
       }
@@ -149,7 +87,41 @@ export default function GroupSelector({ onGroupSelected }: GroupSelectorProps) {
       setIsRetrying(false);
       setLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    void loadGroups();
+  }, [loadGroups]);
+
+  // 监听页面可见性变化和窗口焦点，返回页面时自动刷新群组列表
+  // 使用节流避免频繁刷新
+  useEffect(() => {
+    let lastRefresh = 0;
+    const REFRESH_INTERVAL = 5000; // 最少间隔 5 秒
+
+    const maybeRefresh = () => {
+      const now = Date.now();
+      if (now - lastRefresh > REFRESH_INTERVAL) {
+        lastRefresh = now;
+        void loadGroups(0);
+      }
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        maybeRefresh();
+      }
+    };
+    const handleFocus = () => {
+      maybeRefresh();
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('focus', handleFocus);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('focus', handleFocus);
+    };
+  }, [loadGroups]);
 
 
 
@@ -184,12 +156,14 @@ export default function GroupSelector({ onGroupSelected }: GroupSelectorProps) {
     }
   };
 
-  const formatDate = (dateString?: string) => {
-    if (!dateString) return '';
-    try {
-      return new Date(dateString).toLocaleDateString('zh-CN');
-    } catch {
-      return '';
+  const openGroup = (groupId: number) => {
+    router.push(`/groups/${groupId}`);
+  };
+
+  const handleGroupCardKeyDown = (event: KeyboardEvent<HTMLDivElement>, groupId: number) => {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      openGroup(groupId);
     }
   };
 
@@ -260,7 +234,7 @@ export default function GroupSelector({ onGroupSelected }: GroupSelectorProps) {
             </CardHeader>
             <CardContent>
               <p className="text-sm text-muted-foreground mb-4">{error}</p>
-              <Button onClick={loadGroups} className="w-full">
+              <Button onClick={() => loadGroups()} className="w-full">
                 重试
               </Button>
             </CardContent>
@@ -336,17 +310,21 @@ export default function GroupSelector({ onGroupSelected }: GroupSelectorProps) {
                 </CardContent>
               </Card>
             ) : (
-              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 xl:grid-cols-6 gap-4">
+              <div className="grid grid-cols-[repeat(auto-fill,minmax(160px,1fr))] gap-4 sm:grid-cols-[repeat(auto-fill,minmax(180px,1fr))]">
                 {accountGroups.map((group) => {
               const stats = groupStats[group.group_id];
               return (
                 <div
                   key={group.group_id}
-                  className="group-card cursor-pointer bg-white border border-gray-200 rounded-lg hover:border-gray-300 transition-all duration-200 hover:shadow-md overflow-hidden w-[200px]"
-                  onClick={() => router.push(`/groups/${group.group_id}`)}
+                  role="button"
+                  tabIndex={0}
+                  aria-label={`打开群组 ${group.name}`}
+                  className="group-card w-full cursor-pointer overflow-hidden rounded-lg border border-gray-200 bg-white transition-all duration-200 hover:border-gray-300 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  onClick={() => openGroup(group.group_id)}
+                  onKeyDown={(event) => handleGroupCardKeyDown(event, group.group_id)}
                 >
-                  {/* 群组封面：固定200x200 */}
-                  <div className="w-[200px] h-[200px]">
+                  {/* 群组封面 */}
+                  <div className="aspect-square w-full">
                     <SafeImage
                       src={group.background_url}
                       alt={group.name}
@@ -370,7 +348,7 @@ export default function GroupSelector({ onGroupSelected }: GroupSelectorProps) {
                       {group.owner && (
                         <div className="flex items-center gap-1">
                           <Crown className="h-3 w-3" />
-                          <span className="truncate max-w-[60px]">{group.owner.name}</span>
+                          <span className="truncate max-w-[80px]">{group.owner.name}</span>
                         </div>
                       )}
 
@@ -462,17 +440,21 @@ export default function GroupSelector({ onGroupSelected }: GroupSelectorProps) {
                 </CardContent>
               </Card>
             ) : (
-              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 xl:grid-cols-6 gap-4">
+              <div className="grid grid-cols-[repeat(auto-fill,minmax(160px,1fr))] gap-4 sm:grid-cols-[repeat(auto-fill,minmax(180px,1fr))]">
                 {localGroups.map((group) => {
                   const stats = groupStats[group.group_id];
                   return (
                     <div
                       key={group.group_id}
-                      className="group-card cursor-pointer bg-white border border-gray-200 rounded-lg hover:border-gray-300 transition-all duration-200 hover:shadow-md overflow-hidden w-[200px]"
-                      onClick={() => router.push(`/groups/${group.group_id}`)}
+                      role="button"
+                      tabIndex={0}
+                      aria-label={`打开群组 ${group.name}`}
+                      className="group-card w-full cursor-pointer overflow-hidden rounded-lg border border-gray-200 bg-white transition-all duration-200 hover:border-gray-300 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      onClick={() => openGroup(group.group_id)}
+                      onKeyDown={(event) => handleGroupCardKeyDown(event, group.group_id)}
                     >
-                      {/* 群组封面：固定200x200 */}
-                      <div className="w-[200px] h-[200px]">
+                      {/* 群组封面 */}
+                      <div className="aspect-square w-full">
                         <SafeImage
                           src={group.background_url}
                           alt={group.name}
@@ -496,7 +478,7 @@ export default function GroupSelector({ onGroupSelected }: GroupSelectorProps) {
                           {group.owner && (
                             <div className="flex items-center gap-1">
                               <Crown className="h-3 w-3" />
-                              <span className="truncate max-w-[60px]">{group.owner.name}</span>
+                              <span className="truncate max-w-[80px]">{group.owner.name}</span>
                             </div>
                           )}
 

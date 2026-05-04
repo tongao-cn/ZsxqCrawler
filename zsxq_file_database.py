@@ -475,7 +475,12 @@ class ZSXQFileDatabase:
         for file in files_data:
             if not file.get('file_id'):
                 continue
-                
+
+            self.cursor.execute('''
+            DELETE FROM topic_files
+            WHERE topic_id = ? AND file_id = ?
+            ''', (topic_id, file.get('file_id')))
+
             self.cursor.execute('''
             INSERT OR REPLACE INTO topic_files 
             (topic_id, file_id, name, hash, size, duration, download_count, create_time)
@@ -660,6 +665,11 @@ class ZSXQFileDatabase:
                     stats['topics'] += 1
                     
                     # 插入文件-话题关联
+                    self.cursor.execute('''
+                    DELETE FROM file_topic_relations
+                    WHERE file_id = ? AND topic_id = ?
+                    ''', (file_id, topic_id))
+
                     self.cursor.execute('''
                     INSERT OR IGNORE INTO file_topic_relations (file_id, topic_id)
                     VALUES (?, ?)

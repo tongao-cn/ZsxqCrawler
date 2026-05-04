@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { FileText, Loader2, RefreshCw, Sparkles } from 'lucide-react';
 import { apiClient, FileAIAnalysis, FileItem, PaginatedResponse } from '@/lib/api';
 import { Badge } from '@/components/ui/badge';
@@ -52,7 +52,7 @@ export default function GroupFileAnalysisPanel({ groupId }: GroupFileAnalysisPan
   const isFileDownloaded = (file: FileItem) =>
     Boolean(file.local_exists || file.local_path);
 
-  const loadFiles = async (targetPage: number = page) => {
+  const loadFiles = useCallback(async (targetPage: number) => {
     try {
       setLoading(true);
       const data: PaginatedResponse<FileItem> = await apiClient.getFiles(groupId, targetPage, 20);
@@ -65,11 +65,11 @@ export default function GroupFileAnalysisPanel({ groupId }: GroupFileAnalysisPan
     } finally {
       setLoading(false);
     }
-  };
+  }, [groupId]);
 
   useEffect(() => {
     void loadFiles(1);
-  }, [groupId]);
+  }, [loadFiles]);
 
   const openAnalysisDialog = async (file: FileItem, force: boolean = false) => {
     try {
@@ -124,7 +124,7 @@ export default function GroupFileAnalysisPanel({ groupId }: GroupFileAnalysisPan
         <div className="rounded-lg border border-dashed p-10 text-center text-muted-foreground">文件列表加载中...</div>
       ) : files.length === 0 ? (
         <div className="rounded-lg border border-dashed p-10 text-center text-muted-foreground">
-          当前群还没有文件记录，请先收集或下载文件
+          当前群还没有文件记录，请先采集包含附件的话题
         </div>
       ) : (
         <div className="space-y-3">

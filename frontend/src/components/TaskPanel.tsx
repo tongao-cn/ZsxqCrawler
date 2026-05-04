@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -12,6 +12,7 @@ export default function TaskPanel() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(false);
   const [autoRefresh, setAutoRefresh] = useState(true);
+  const loadingRef = useRef(false);
 
   useEffect(() => {
     loadTasks();
@@ -28,13 +29,17 @@ export default function TaskPanel() {
   }, [autoRefresh]);
 
   const loadTasks = async () => {
+    if (loadingRef.current) {
+      return;
+    }
+
     try {
+      loadingRef.current = true;
       setLoading(true);
       const data = await apiClient.getTasks();
       setTasks(data.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()));
-    } catch (error) {
-      console.error('加载任务列表失败:', error);
-    } finally {
+    } catch {} finally {
+      loadingRef.current = false;
       setLoading(false);
     }
   };

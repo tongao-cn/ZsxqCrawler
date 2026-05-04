@@ -18,10 +18,12 @@ DEFAULT_PROJECT_CONFIG_PATH = Path(
 # 兼容旧常量名，统一指向项目内 config.toml
 DEFAULT_CODEX_CONFIG_PATH = DEFAULT_PROJECT_CONFIG_PATH
 DEFAULT_CODEX_AUTH_PATH = DEFAULT_PROJECT_CONFIG_PATH
-DEFAULT_FALLBACK_MODEL = "gpt-5.4-mini"
+DEFAULT_FALLBACK_MODEL = "gpt-5.5"
 DEFAULT_FALLBACK_BASE_URL = "https://api.openai.com/v1"
 DEFAULT_FALLBACK_WIRE_API = "responses"
-DEFAULT_FALLBACK_REASONING_EFFORT = "high"
+DEFAULT_FALLBACK_REASONING_EFFORT = "low"
+DEFAULT_EXTRACTION_REASONING_EFFORT = "low"
+DEFAULT_SUMMARY_REASONING_EFFORT = "medium"
 
 
 def _load_toml_file(path: Path) -> Dict[str, Any]:
@@ -85,6 +87,30 @@ def get_default_reasoning_effort() -> str:
     return str(get_openai_compatible_config().get("reasoning_effort") or DEFAULT_FALLBACK_REASONING_EFFORT)
 
 
+def get_extraction_reasoning_effort() -> str:
+    env_value = (
+        os.getenv("OPENAI_EXTRACTION_REASONING_EFFORT")
+        or os.getenv("AI_EXTRACTION_REASONING_EFFORT")
+        or ""
+    ).strip()
+    project_config = _load_toml_file(DEFAULT_PROJECT_CONFIG_PATH)
+    ai_config = project_config.get("ai") if isinstance(project_config.get("ai"), dict) else {}
+    config_value = str(ai_config.get("extraction_reasoning_effort") or "").strip()
+    return env_value or config_value or DEFAULT_EXTRACTION_REASONING_EFFORT
+
+
+def get_summary_reasoning_effort() -> str:
+    env_value = (
+        os.getenv("OPENAI_SUMMARY_REASONING_EFFORT")
+        or os.getenv("AI_SUMMARY_REASONING_EFFORT")
+        or ""
+    ).strip()
+    project_config = _load_toml_file(DEFAULT_PROJECT_CONFIG_PATH)
+    ai_config = project_config.get("ai") if isinstance(project_config.get("ai"), dict) else {}
+    config_value = str(ai_config.get("summary_reasoning_effort") or "").strip()
+    return env_value or config_value or DEFAULT_SUMMARY_REASONING_EFFORT
+
+
 def has_openai_api_key() -> bool:
     return bool(str(get_openai_compatible_config().get("api_key") or "").strip())
 
@@ -97,6 +123,8 @@ __all__ = [
     "get_default_model",
     "get_default_reasoning_effort",
     "get_default_wire_api",
+    "get_extraction_reasoning_effort",
     "get_openai_compatible_config",
+    "get_summary_reasoning_effort",
     "has_openai_api_key",
 ]

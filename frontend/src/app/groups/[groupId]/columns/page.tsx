@@ -1,9 +1,9 @@
 'use client';
 
+import Image from 'next/image';
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Input } from '@/components/ui/input';
@@ -11,7 +11,7 @@ import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { 
   ArrowLeft, BookOpen, FileText, Download, RefreshCw, 
-  ChevronRight, File, FileImage, Clock, Heart, MessageCircle,
+  File, FileImage, Clock, Heart, MessageCircle,
   Users, FolderOpen, Play, Settings, Trash2
 } from 'lucide-react';
 import { apiClient, ColumnInfo, ColumnTopic, ColumnTopicDetail, ColumnsStats, ColumnsFetchSettings } from '@/lib/api';
@@ -97,8 +97,42 @@ export default function ColumnsPage() {
     };
   }, [isResizing]);
 
+  // 加载文章详情
+  const loadTopicDetail = useCallback(async (topicId: number) => {
+    try {
+      setDetailLoading(true);
+      const detail = await apiClient.getColumnTopicDetail(groupId, topicId);
+      setSelectedTopic(detail);
+    } catch (error) {
+      console.error('加载文章详情失败:', error);
+      toast.error('加载文章详情失败');
+    } finally {
+      setDetailLoading(false);
+    }
+  }, [groupId]);
+
+  // 加载专栏文章列表
+  const loadColumnTopics = useCallback(async (columnId: number) => {
+    try {
+      setTopicsLoading(true);
+      setSelectedTopic(null);
+      const data = await apiClient.getColumnTopics(groupId, columnId);
+      setColumnTopics(data.topics || []);
+      
+      // 如果有文章，自动选择第一个
+      if (data.topics && data.topics.length > 0 && data.topics[0].has_detail) {
+        await loadTopicDetail(data.topics[0].topic_id);
+      }
+    } catch (error) {
+      console.error('加载专栏文章列表失败:', error);
+      toast.error('加载文章列表失败');
+    } finally {
+      setTopicsLoading(false);
+    }
+  }, [groupId, loadTopicDetail]);
+
   // 加载专栏目录
-  const loadColumns = async () => {
+  const loadColumns = useCallback(async () => {
     try {
       setLoading(true);
       const data = await apiClient.getGroupColumns(groupId);
@@ -116,41 +150,7 @@ export default function ColumnsPage() {
     } finally {
       setLoading(false);
     }
-  };
-
-  // 加载专栏文章列表
-  const loadColumnTopics = async (columnId: number) => {
-    try {
-      setTopicsLoading(true);
-      setSelectedTopic(null);
-      const data = await apiClient.getColumnTopics(groupId, columnId);
-      setColumnTopics(data.topics || []);
-      
-      // 如果有文章，自动选择第一个
-      if (data.topics && data.topics.length > 0 && data.topics[0].has_detail) {
-        await loadTopicDetail(data.topics[0].topic_id);
-      }
-    } catch (error) {
-      console.error('加载专栏文章列表失败:', error);
-      toast.error('加载文章列表失败');
-    } finally {
-      setTopicsLoading(false);
-    }
-  };
-
-  // 加载文章详情
-  const loadTopicDetail = async (topicId: number) => {
-    try {
-      setDetailLoading(true);
-      const detail = await apiClient.getColumnTopicDetail(groupId, topicId);
-      setSelectedTopic(detail);
-    } catch (error) {
-      console.error('加载文章详情失败:', error);
-      toast.error('加载文章详情失败');
-    } finally {
-      setDetailLoading(false);
-    }
-  };
+  }, [groupId, loadColumnTopics]);
 
   // 获取完整评论
   const handleFetchMoreComments = async () => {
@@ -282,7 +282,7 @@ export default function ColumnsPage() {
 
   useEffect(() => {
     loadColumns();
-  }, [groupId]);
+  }, [loadColumns]);
 
   // 渲染导航栏内的紧凑统计信息
   const renderNavStats = () => {
@@ -417,13 +417,12 @@ export default function ColumnsPage() {
           <div className="flex items-center gap-4 mb-6 pb-4 border-b border-gray-200">
             {selectedTopic.owner && (
               <div className="flex items-center gap-2">
-                <img
+                <SafeImage
                   src={apiClient.getProxyImageUrl(selectedTopic.owner.avatar_url || '', groupId)}
                   alt={selectedTopic.owner.name}
                   className="w-8 h-8 rounded-full object-cover"
-                  onError={(e) => {
-                    e.currentTarget.src = '/default-avatar.png';
-                  }}
+                  fallbackClassName="w-8 h-8 rounded-full"
+                  fallbackText={selectedTopic.owner.name.slice(0, 1)}
                 />
                 <span className="text-sm font-medium text-gray-700">
                   {selectedTopic.owner.name}
@@ -529,9 +528,13 @@ export default function ColumnsPage() {
                     rel="noopener noreferrer"
                     className="block aspect-video rounded-lg overflow-hidden bg-gray-100 hover:opacity-80 transition-opacity"
                   >
-                    <img
+                    <Image
                       src={apiClient.getProxyImageUrl(image.large?.url || image.thumbnail?.url || '', groupId)}
                       alt=""
+                      width={320}
+                      height={180}
+                      sizes="(min-width: 768px) 33vw, 50vw"
+                      unoptimized
                       className="w-full h-full object-cover"
                       loading="lazy"
                     />
@@ -617,12 +620,16 @@ export default function ColumnsPage() {
                         // 未下载：显示封面和状态
                         <>
                           {video.cover?.url && (
-                            <img
+                            <Image
                               src={video.cover.local_path 
                                 ? apiClient.getLocalImageUrl(groupId, video.cover.local_path)
                                 : apiClient.getProxyImageUrl(video.cover.url, groupId)
                               }
                               alt="视频封面"
+                              width={640}
+                              height={360}
+                              sizes="100vw"
+                              unoptimized
                               className="w-full h-full object-contain"
                             />
                           )}
@@ -713,15 +720,12 @@ export default function ColumnsPage() {
                   <div key={comment.comment_id} className="bg-gray-50 rounded-lg p-2">
                     <div className="flex items-center gap-2 mb-1">
                       {comment.owner && (
-                        <img
+                        <SafeImage
                           src={apiClient.getProxyImageUrl(comment.owner.avatar_url || '', groupId)}
                           alt={comment.owner.name}
-                          loading="lazy"
-                          decoding="async"
                           className="w-4 h-4 rounded-full object-cover block"
-                          onError={(e) => {
-                            (e.currentTarget as HTMLImageElement).style.display = 'none';
-                          }}
+                          fallbackClassName="w-4 h-4 rounded-full"
+                          fallbackText={comment.owner.name.slice(0, 1)}
                         />
                       )}
                       <span className="text-xs font-medium text-gray-700">
@@ -764,15 +768,12 @@ export default function ColumnsPage() {
                           <div key={reply.comment_id} className="bg-white rounded p-2">
                             <div className="flex items-center gap-2 mb-1">
                               {reply.owner && (
-                                <img
+                                <SafeImage
                                   src={apiClient.getProxyImageUrl(reply.owner.avatar_url || '', groupId)}
                                   alt={reply.owner.name}
-                                  loading="lazy"
-                                  decoding="async"
                                   className="w-3 h-3 rounded-full object-cover block"
-                                  onError={(e) => {
-                                    (e.currentTarget as HTMLImageElement).style.display = 'none';
-                                  }}
+                                  fallbackClassName="w-3 h-3 rounded-full"
+                                  fallbackText={reply.owner.name.slice(0, 1)}
                                 />
                               )}
                               <span className="text-xs font-medium text-gray-600">

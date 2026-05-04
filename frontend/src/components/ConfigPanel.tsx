@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
+import { AlertDialog, AlertDialogAction, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { apiClient } from '@/lib/api';
 import { toast } from 'sonner';
 
@@ -27,7 +27,7 @@ export default function ConfigPanel({ onConfigSaved }: ConfigPanelProps) {
 
     try {
       setLoading(true);
-      const response = await apiClient.updateConfig({
+      await apiClient.updateConfig({
         cookie: cookie.trim(),
       });
       

@@ -19,10 +19,10 @@ dir = "downloads"
 
 [ai]
 # OpenAI 兼容模型配置（仅从项目内 config.toml 读取）
-model = "gpt-5.4-mini"
+model = "gpt-5.5"
 api_base = "https://api.openai.com/v1"
 wire_api = "responses"
-reasoning_effort = "high"
+reasoning_effort = "low"
 api_key = ""
 
 [database]

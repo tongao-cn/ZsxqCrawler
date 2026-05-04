@@ -1,3 +1,8 @@
+> [!IMPORTANT]
+> 本项目已归档为只读历史源，不再作为知识星球采集、下载、分析或 Web 工作台的运行入口。
+> 后续请使用 `C:\Dev\KnowActionSystem` 中的 ZSXQ 模块：`python main.py zsxq ...`、`/api/zsxq/*` 和 Web `/zsxq` 页面。
+> 旧目录仅用于追溯迁移前实现和历史输出数据。
+
 <div align="center">
   <img src="images/_Image.png" alt="知识星球数据采集器" width="200">
   <h1>知识星球数据采集器</h1>
@@ -69,6 +74,7 @@ uv sync
 2. **首次使用**：
    - 启动 Web 界面后，在“配置认证信息/账号管理”中粘贴 Cookie 完成登录
    - 后端会根据该账号自动获取您加入的全部星球，前端选择不同星球时会将对应的群组ID动态传入后端进行抓取
+   - 如果需要使用 AI 分析，请通过环境变量 `OPENAI_API_KEY` 提供密钥，不要把明文密钥写入 `config.toml`
 
 ### 3. 运行应用
 
@@ -88,6 +94,8 @@ npm run dev
 ```bash
 NEXT_PUBLIC_API_BASE_URL=http://192.168.x.x:8208
 ```
+
+后端 CORS 默认只允许来自 `http://localhost:3060` 和 `http://127.0.0.1:3060` 的浏览器请求；如果前端运行在其他地址，请在启动后端前设置 `CORS_ALLOW_ORIGINS`，多个来源用逗号分隔。
 
 然后访问：
 - **Web 界面**: http://localhost:3060

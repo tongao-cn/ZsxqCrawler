@@ -2,7 +2,7 @@
  * API客户端 - 与后端FastAPI服务通信
  */
 
-const API_BASE_URL = (process.env.NEXT_PUBLIC_API_BASE_URL?.trim() || 'http://localhost:8508').replace(/\/$/, '');
+export const API_BASE_URL = (process.env.NEXT_PUBLIC_API_BASE_URL?.trim() || 'http://localhost:8508').replace(/\/$/, '');
 
 // 类型定义
 export interface ApiResponse<T = any> {
@@ -19,6 +19,35 @@ export interface Task {
   result?: any;
   created_at: string;
   updated_at: string;
+}
+
+export interface DailyTopicReport {
+  group_id: string;
+  report_date: string;
+  topic_count: number;
+  model?: string | null;
+  prompt_version?: string | null;
+  summary_markdown?: string | null;
+  raw_json?: {
+    report_path?: string;
+    topic_ids?: Array<string | number>;
+    [key: string]: unknown;
+  };
+  status: string;
+  error?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+}
+
+export interface DailyTopicAnalysisPayload {
+  date?: string;
+  commentsPerTopic?: number;
+  crawlLatestFirst?: boolean;
+}
+
+export interface TaskCreateResponse {
+  task_id: string;
+  message: string;
 }
 
 export interface AShareAnalysisSummary {
@@ -319,6 +348,7 @@ export interface Account {
   name?: string;
   cookie?: string; // 已掩码
   created_at?: string;
+  is_default?: boolean;
 }
 
 export interface AccountSelf {
@@ -695,6 +725,21 @@ class ApiClient {
     return this.request(`/api/files/stats/${groupId}`);
   }
 
+  async syncFilesFromTopics(groupId: number | string): Promise<{
+    success: boolean;
+    group_id: string;
+    stats: {
+      scanned: number;
+      new_files: number;
+      relations: number;
+      topic_files: number;
+    };
+  }> {
+    return this.request(`/api/files/sync-from-topics/${groupId}`, {
+      method: 'POST',
+    });
+  }
+
   async downloadSingleFile(groupId: string, fileId: number, fileName?: string, fileSize?: number) {
     const params = new URLSearchParams();
     if (fileName) params.append('file_name', fileName);
@@ -736,7 +781,7 @@ class ApiClient {
     };
   }
 
-  async getFiles(groupId: number, page: number = 1, perPage: number = 20, status?: string): Promise<PaginatedResponse<FileItem>> {
+  async getFiles(groupId: number, page: number = 1, perPage: number = 20, status?: string, search?: string): Promise<PaginatedResponse<FileItem>> {
     const params = new URLSearchParams({
       page: page.toString(),
       per_page: perPage.toString(),
@@ -744,6 +789,10 @@ class ApiClient {
 
     if (status) {
       params.append('status', status);
+    }
+
+    if (search) {
+      params.append('search', search);
     }
 
     const response = await this.request<{files: FileItem[], pagination: any}>(`/api/files/${groupId}?${params}`);
@@ -776,9 +825,6 @@ class ApiClient {
   }
 
   async getGroupTopics(groupId: number, page: number = 1, perPage: number = 20, search?: string): Promise<PaginatedResponse<Topic>> {
-    // 🧪 调试输出：请求参数
-    console.log('[apiClient.getGroupTopics] request params:', { groupId, page, perPage, search });
-
     const params = new URLSearchParams({
       page: page.toString(),
       per_page: perPage.toString(),
@@ -791,38 +837,10 @@ class ApiClient {
     const url = `/api/groups/${groupId}/topics?${params}`;
     const response = await this.request<{topics: Topic[], pagination: any}>(url);
 
-    // 🧪 调试输出：原始返回中的 topic_id（前 10 条）
-    try {
-      const debugTopics = (response.topics || []).slice(0, 10).map((t: any) => ({
-        topic_id: t.topic_id,
-        title: t.title,
-      }));
-      console.log('[apiClient.getGroupTopics] raw response topics (first 10):', debugTopics);
-    } catch (e) {
-      console.warn('[apiClient.getGroupTopics] debug log failed:', e);
-    }
-
     const result: PaginatedResponse<Topic> = {
       data: response.topics,
       pagination: response.pagination,
     };
-
-    // 🧪 调试输出：返回给调用方的数据结构
-    try {
-      const offerTopic = (result.data || []).find((t: any) =>
-        typeof t.title === 'string' && t.title.startsWith('Offer选择')
-      );
-      if (offerTopic) {
-        console.log('[apiClient.getGroupTopics] Offer topic in result:', {
-          topic_id: (offerTopic as any).topic_id,
-          title: offerTopic.title,
-        });
-      } else {
-        console.log('[apiClient.getGroupTopics] Offer topic not found in result');
-      }
-    } catch (e) {
-      console.warn('[apiClient.getGroupTopics] debug Offer topic failed:', e);
-    }
 
     return result;
   }
@@ -980,6 +998,43 @@ class ApiClient {
       body: JSON.stringify(params || {}),
     });
   }
+
+  async runDailyTopicAnalysisToday(
+    groupId: number | string,
+    payload: DailyTopicAnalysisPayload = {}
+  ): Promise<TaskCreateResponse> {
+    return this.request(`/api/analysis/daily/run-today/${groupId}`, {
+      method: 'POST',
+      body: JSON.stringify({
+        commentsPerTopic: payload.commentsPerTopic ?? 8,
+        crawlLatestFirst: payload.crawlLatestFirst ?? true,
+        ...(payload.date ? { date: payload.date } : {}),
+      }),
+    });
+  }
+
+  async createDailyTopicAnalysis(
+    groupId: number | string,
+    payload: DailyTopicAnalysisPayload = {}
+  ): Promise<TaskCreateResponse> {
+    return this.request(`/api/analysis/daily/${groupId}`, {
+      method: 'POST',
+      body: JSON.stringify({
+        commentsPerTopic: payload.commentsPerTopic ?? 8,
+        ...(payload.date ? { date: payload.date } : {}),
+      }),
+    });
+  }
+
+  async getDailyTopicReport(groupId: number | string, date?: string): Promise<DailyTopicReport> {
+    const search = new URLSearchParams();
+    if (date) {
+      search.set('date', date);
+    }
+    const query = search.toString();
+    return this.request(`/api/analysis/daily/${groupId}${query ? `?${query}` : ''}`);
+  }
+
   // 删除社群本地数据
   async deleteGroup(groupId: number | string) {
     return this.request(`/api/groups/${groupId}`, {

@@ -12,8 +12,8 @@ from db_path_manager import get_db_path_manager
 from ai_provider_config import (
     get_default_base_url,
     get_default_model,
-    get_default_reasoning_effort,
     get_default_wire_api,
+    get_extraction_reasoning_effort,
     get_openai_compatible_config,
 )
 from a_share_analysis_db_storage import (
@@ -60,8 +60,8 @@ DEFAULT_STATE_PATH = "output/company_mentions_state.json"
 DEFAULT_MODEL = get_default_model()
 DEFAULT_API_BASE = get_default_base_url()
 DEFAULT_WIRE_API = get_default_wire_api()
-DEFAULT_REASONING_EFFORT = get_default_reasoning_effort()
-DEFAULT_CONCURRENCY = 4
+DEFAULT_REASONING_EFFORT = get_extraction_reasoning_effort()
+DEFAULT_CONCURRENCY = 10
 DEFAULT_RETENTION_DAYS = 30
 DEFAULT_RANKING_WINDOWS = (3, 7, 14, 21)
 DEFAULT_RANKING_TOP_N = 35
@@ -69,6 +69,17 @@ DEFAULT_OPENAI_MAX_RETRIES = max(1, int(os.environ.get("OPENAI_MAX_RETRIES", "4"
 GROUP_ANALYSIS_DIRNAME = "a_share_analysis"
 GROUP_OUTPUT_FILENAME = "company_mentions.csv"
 GROUP_STATE_FILENAME = "company_mentions_state.json"
+A_SHARE_COMPANY_EXTRACTION_SCHEMA: Dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "companies": {
+            "type": "array",
+            "items": {"type": "string"},
+        },
+    },
+    "required": ["companies"],
+    "additionalProperties": False,
+}
 
 LogCallback = Optional[Callable[[str], None]]
 _db_storage_available: Optional[bool] = None
@@ -307,6 +318,90 @@ def _format_company_log(companies: Sequence[str], max_chars: int = 160) -> str:
     return ", ".join(visible) + suffix
 
 
+def _extract_json_object(text: str) -> Dict[str, Any]:
+    content = str(text or "").strip()
+    if not content:
+        return {}
+
+    if content.startswith("```"):
+        lines = content.splitlines()
+        if lines and lines[0].strip().startswith("```"):
+            lines = lines[1:]
+        if lines and lines[-1].strip() == "```":
+            lines = lines[:-1]
+        content = "\n".join(lines).strip()
+
+    try:
+        payload = json.loads(content)
+    except json.JSONDecodeError:
+        start = content.find("{")
+        end = content.rfind("}")
+        if start < 0 or end <= start:
+            return {}
+        payload = json.loads(content[start : end + 1])
+
+    return payload if isinstance(payload, dict) else {}
+
+
+def _parse_company_extraction_output(message: str) -> List[str]:
+    payload = _extract_json_object(message)
+    raw_companies = payload.get("companies")
+    if raw_companies is None:
+        raw_companies = payload.get("a_share_companies")
+    if not isinstance(raw_companies, list):
+        return []
+
+    cleaned: List[str] = []
+    seen: Set[str] = set()
+    for raw in raw_companies:
+        company = str(raw or "").strip()
+        if not company:
+            continue
+        company = (
+            company.replace("•", "")
+            .replace("-", "")
+            .replace("1.", "")
+            .replace("2.", "")
+            .replace("3.", "")
+            .strip()
+        )
+        if "、" in company and company.split("、", 1)[0].isdigit():
+            company = company.split("、", 1)[1].strip()
+        if (
+            company
+            and company not in seen
+            and 2 <= len(company) <= 12
+            and "证券" not in company
+            and "指数" not in company
+            and "ETF" not in company.upper()
+        ):
+            cleaned.append(company)
+            seen.add(company)
+    return cleaned
+
+
+def _get_chat_json_schema_response_format() -> Dict[str, Any]:
+    return {
+        "type": "json_schema",
+        "json_schema": {
+            "name": "a_share_company_extraction",
+            "strict": True,
+            "schema": A_SHARE_COMPANY_EXTRACTION_SCHEMA,
+        },
+    }
+
+
+def _get_responses_json_schema_text_format() -> Dict[str, Any]:
+    return {
+        "format": {
+            "type": "json_schema",
+            "name": "a_share_company_extraction",
+            "strict": True,
+            "schema": A_SHARE_COMPANY_EXTRACTION_SCHEMA,
+        },
+    }
+
+
 def _is_retryable_openai_error(exc: Exception) -> bool:
     try:
         from openai import APIConnectionError, APIStatusError, APITimeoutError, InternalServerError, RateLimitError
@@ -351,8 +446,7 @@ def call_openai_extract_companies(
         "2. 港股、美股、ETF、指数、板块、行业、产品、基金、机构、人物都不要输出。\n"
         "3. 如果只是业务、产品、子公司、老板姓名，且无法唯一映射到A股上市公司，不要猜。\n"
         "4. 同一家公司如果同时出现全称和简称，只输出一个更常见的A股证券简称。\n"
-        "5. 去掉股票代码、交易所后缀、括号说明、序号、项目符号和多余标点。\n"
-        "6. 严格按每行一个公司名输出；如果没有可确认的A股公司，返回空内容。"
+        "5. 去掉股票代码、交易所后缀、括号说明、序号、项目符号和多余标点。"
     )
     content = text if len(text) <= 8000 else text[:8000]
     messages = [
@@ -361,7 +455,6 @@ def call_openai_extract_companies(
             "content": (
                 "你是A股上市公司名称抽取助手。"
                 "你的任务是从中文投资内容中抽取明确提及的中国A股上市公司名称。"
-                "只输出公司名本身，每行一个，不要解释，不要补充任何额外文字。"
                 "如果无法确认是A股上市公司，就不要输出。"
             ),
         },
@@ -381,10 +474,16 @@ def call_openai_extract_companies(
                     model=model,
                     input=messages,
                     reasoning={"effort": str(reasoning_effort or DEFAULT_REASONING_EFFORT).strip() or DEFAULT_REASONING_EFFORT},
+                    text=_get_responses_json_schema_text_format(),
                 )
                 message = _extract_response_text(response)
             else:
-                response = client.chat.completions.create(model=model, messages=messages, stream=False)
+                response = client.chat.completions.create(
+                    model=model,
+                    messages=messages,
+                    stream=False,
+                    response_format=_get_chat_json_schema_response_format(),
+                )
                 message = response.choices[0].message.content or ""
             last_error = None
             break
@@ -406,29 +505,10 @@ def call_openai_extract_companies(
     if last_error is not None:
         raise last_error
 
-    cleaned: List[str] = []
-    for raw in message.splitlines():
-        company = raw.strip()
-        if not company:
-            continue
-        company = (
-            company.replace("•", "")
-            .replace("-", "")
-            .replace("1.", "")
-            .replace("2.", "")
-            .replace("3.", "")
-            .strip()
-        )
-        if "、" in company and company.split("、", 1)[0].isdigit():
-            company = company.split("、", 1)[1].strip()
-        if (
-            company
-            and 2 <= len(company) <= 12
-            and "证券" not in company
-            and "指数" not in company
-            and "ETF" not in company.upper()
-        ):
-            cleaned.append(company)
+    try:
+        cleaned = _parse_company_extraction_output(message)
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(f"AI 公司抽取结果不是合法 JSON: {message[:200]}") from exc
 
     log_debug(f"openai-compatible model extracted companies: {len(cleaned)}")
     return cleaned

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import dynamic from 'next/dynamic';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -8,14 +9,46 @@ import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 
 import { apiClient, DatabaseStats, Group } from '@/lib/api';
-import CrawlPanel from '@/components/CrawlPanel';
-import FilePanel from '@/components/FilePanel';
-import DataPanel from '@/components/DataPanel';
-import TaskPanel from '@/components/TaskPanel';
-import ConfigPanel from '@/components/ConfigPanel';
-import GroupSelector from '@/components/GroupSelector';
-import AccountPanel from '@/components/AccountPanel';
-import AShareAnalysisPanel from '@/components/AShareAnalysisPanel';
+import SafeImage from '@/components/SafeImage';
+
+const LazyPanelFallback = () => (
+  <div className="flex min-h-48 items-center justify-center text-sm text-muted-foreground">
+    加载中...
+  </div>
+);
+
+const CrawlPanel = dynamic(() => import('@/components/CrawlPanel'), {
+  loading: LazyPanelFallback,
+  ssr: false,
+});
+const FilePanel = dynamic(() => import('@/components/FilePanel'), {
+  loading: LazyPanelFallback,
+  ssr: false,
+});
+const DataPanel = dynamic(() => import('@/components/DataPanel'), {
+  loading: LazyPanelFallback,
+  ssr: false,
+});
+const TaskPanel = dynamic(() => import('@/components/TaskPanel'), {
+  loading: LazyPanelFallback,
+  ssr: false,
+});
+const ConfigPanel = dynamic(() => import('@/components/ConfigPanel'), {
+  loading: LazyPanelFallback,
+  ssr: false,
+});
+const GroupSelector = dynamic(() => import('@/components/GroupSelector'), {
+  loading: LazyPanelFallback,
+  ssr: false,
+});
+const AccountPanel = dynamic(() => import('@/components/AccountPanel'), {
+  loading: LazyPanelFallback,
+  ssr: false,
+});
+const AShareAnalysisPanel = dynamic(() => import('@/components/AShareAnalysisPanel'), {
+  loading: LazyPanelFallback,
+  ssr: false,
+});
 
 export default function Home() {
   const [stats, setStats] = useState<DatabaseStats | null>(null);
@@ -85,7 +118,7 @@ export default function Home() {
 
   // 如果已配置但未选择群组，显示群组选择界面
   if (stats && stats.configured !== false && !selectedGroup) {
-    return <GroupSelector onGroupSelected={setSelectedGroup} />;
+    return <GroupSelector />;
   }
 
   return (
@@ -117,10 +150,12 @@ export default function Home() {
               <CardContent className="py-3">
                 <div className="flex items-center gap-4">
                   {selectedGroup.background_url && (
-                    <img
+                    <SafeImage
                       src={selectedGroup.background_url}
                       alt={selectedGroup.name}
                       className="w-12 h-12 rounded-lg object-cover"
+                      fallbackClassName="w-12 h-12 rounded-lg"
+                      fallbackText={selectedGroup.name.slice(0, 2)}
                     />
                   )}
                   <div className="flex-1">
@@ -139,13 +174,13 @@ export default function Home() {
                     <div className="flex gap-6 text-center">
                       <div>
                         <div className="text-base font-semibold">
-                          {selectedGroup.statistics.members_count || 0}
+                          {selectedGroup.statistics.members?.count || 0}
                         </div>
                         <div className="text-xs text-muted-foreground">成员</div>
                       </div>
                       <div>
                         <div className="text-base font-semibold">
-                          {selectedGroup.statistics.topics_count || 0}
+                          {selectedGroup.statistics.topics?.topics_count || 0}
                         </div>
                         <div className="text-xs text-muted-foreground">话题</div>
                       </div>
@@ -184,7 +219,7 @@ export default function Home() {
                 {stats?.file_database.stats.files || 0}
               </div>
               <p className="text-xs text-muted-foreground">
-                已收集文件信息
+                已同步文件信息
               </p>
             </CardContent>
           </Card>

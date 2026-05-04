@@ -39,9 +39,10 @@ class ZSXQInteractiveCrawler:
         path_manager = get_db_path_manager()
         if db_path is None:
             db_path = path_manager.get_topics_db_path(group_id)
+        files_db_path = path_manager.get_files_db_path(group_id)
 
         self.db_path = db_path  # 保存数据库路径
-        self.db = ZSXQDatabase(db_path)
+        self.db = ZSXQDatabase(db_path, files_db_path=files_db_path)
         self.session = requests.Session()
 
         # 文件下载器（懒加载）

@@ -1,5 +1,6 @@
 'use client';
 
+import Image from 'next/image';
 import React, { useState } from 'react';
 import Lightbox from 'yet-another-react-lightbox';
 import Zoom from 'yet-another-react-lightbox/plugins/zoom';
@@ -49,14 +50,6 @@ const ImageGallery: React.FC<ImageGalleryProps> = ({ images, className = '', siz
     );
   };
 
-  // 获取预览图URL，优先使用original，然后large
-  const getPreviewUrl = (image: ImageData) => {
-    return apiClient.getProxyImageUrl(
-      image.original?.url || image.large?.url || image.thumbnail?.url || '',
-      groupId
-    );
-  };
-
   // 根据size属性获取对应的样式类（固定缩略图盒子尺寸，避免加载时宽度抖动）
   const getSizeClasses = () => {
     switch (size) {
@@ -76,9 +69,13 @@ const ImageGallery: React.FC<ImageGalleryProps> = ({ images, className = '', siz
       <div className="flex gap-2 overflow-x-auto pb-2 w-full">
         {images.map((image, index) => (
           <div key={String(image.image_id ?? index)} className={`relative flex-shrink-0 ${getSizeClasses()}`}>
-            <img
+            <Image
               src={getThumbnailUrl(image)}
               alt={`话题图片 ${index + 1}`}
+              width={160}
+              height={160}
+              sizes="160px"
+              unoptimized
               className={`w-full h-full rounded-lg border border-gray-200 cursor-pointer hover:opacity-90 transition-opacity object-cover`}
               loading="lazy"
               decoding="async"

@@ -23,10 +23,6 @@ export default function CrawlPanel({ onStatsUpdate, selectedGroup }: CrawlPanelP
   const [historicalPages, setHistoricalPages] = useState(10);
   const [historicalPerPage, setHistoricalPerPage] = useState(20);
 
-  // 添加组件实例标识
-  const instanceId = Math.random().toString(36).substr(2, 9);
-  console.log(`🏷️ CrawlPanel实例 ${instanceId} 已创建`);
-
   // 爬取设置状态
   const [crawlSettingsOpen, setCrawlSettingsOpen] = useState(false);
   const [crawlLatestOpen, setCrawlLatestOpen] = useState(false);
@@ -65,14 +61,6 @@ export default function CrawlPanel({ onStatsUpdate, selectedGroup }: CrawlPanelP
     try {
       setLoading('all');
 
-      // 构建爬取设置
-      console.log(`🚀 CrawlPanel实例 ${instanceId} 构建爬取设置前的状态值:`);
-      console.log('  crawlIntervalMin:', crawlIntervalMin);
-      console.log('  crawlIntervalMax:', crawlIntervalMax);
-      console.log('  longSleepIntervalMin:', longSleepIntervalMin);
-      console.log('  longSleepIntervalMax:', longSleepIntervalMax);
-      console.log('  pagesPerBatch:', pagesPerBatch);
-
       const crawlSettings = {
         crawlIntervalMin,
         crawlIntervalMax,
@@ -80,8 +68,6 @@ export default function CrawlPanel({ onStatsUpdate, selectedGroup }: CrawlPanelP
         longSleepIntervalMax,
         pagesPerBatch: Math.max(pagesPerBatch, 5)
       };
-
-      console.log(`🚀 CrawlPanel实例 ${instanceId} 最终发送的爬取设置:`, crawlSettings);
 
       const response = await apiClient.crawlAll(selectedGroup.group_id, crawlSettings);
       toast.success(`任务已创建: ${response.task_id}`);
@@ -155,7 +141,6 @@ export default function CrawlPanel({ onStatsUpdate, selectedGroup }: CrawlPanelP
     longSleepIntervalMin?: number;
     longSleepIntervalMax?: number;
   }) => {
-    console.log(`🔧 CrawlPanel实例 ${instanceId} 收到爬取设置变更:`, settings);
     setCrawlInterval(settings.crawlInterval);
     setLongSleepInterval(settings.longSleepInterval);
     setPagesPerBatch(settings.pagesPerBatch);
@@ -163,13 +148,6 @@ export default function CrawlPanel({ onStatsUpdate, selectedGroup }: CrawlPanelP
     setCrawlIntervalMax(settings.crawlIntervalMax || 5);
     setLongSleepIntervalMin(settings.longSleepIntervalMin || 180);
     setLongSleepIntervalMax(settings.longSleepIntervalMax || 300);
-
-    console.log('🔧 设置后的状态值:');
-    console.log('  crawlIntervalMin:', settings.crawlIntervalMin || 2);
-    console.log('  crawlIntervalMax:', settings.crawlIntervalMax || 5);
-    console.log('  longSleepIntervalMin:', settings.longSleepIntervalMin || 180);
-    console.log('  longSleepIntervalMax:', settings.longSleepIntervalMax || 300);
-    console.log('  pagesPerBatch:', settings.pagesPerBatch);
   };
 
   const handleClearTopicDatabase = async () => {
@@ -180,7 +158,7 @@ export default function CrawlPanel({ onStatsUpdate, selectedGroup }: CrawlPanelP
 
     try {
       setLoading('clear');
-      const response = await apiClient.clearTopicDatabase(selectedGroup.group_id);
+      await apiClient.clearTopicDatabase(selectedGroup.group_id);
       toast.success('话题数据库已清除');
       onStatsUpdate();
     } catch (error) {

@@ -10,6 +10,7 @@ import { Label } from '@/components/ui/label';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { toast } from 'sonner';
+import SafeImage from './SafeImage';
 
 interface AccountWithInfo extends Account {
   selfInfo?: AccountSelf | null;
@@ -50,7 +51,7 @@ export default function AccountPanel() {
         const result = results.find(r => r.id === acc.id);
         return { ...acc, selfInfo: result?.selfInfo || null, loadingSelf: false };
       }));
-    } catch (e) {
+    } catch {
       toast.error('加载账号列表失败');
     } finally {
       setLoading(false);
@@ -153,11 +154,12 @@ export default function AccountPanel() {
                         ) : acc.selfInfo ? (
                           <div className="flex items-center gap-2">
                             {acc.selfInfo.avatar_url && (
-                              <img
+                              <SafeImage
                                 src={apiClient.getProxyImageUrl(acc.selfInfo.avatar_url)}
                                 alt={acc.selfInfo.name || ''}
                                 className="w-6 h-6 rounded-full"
-                                onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
+                                fallbackClassName="w-6 h-6 rounded-full"
+                                fallbackText={(acc.selfInfo.name || acc.name || acc.id).slice(0, 1)}
                               />
                             )}
                             <div className="text-sm">

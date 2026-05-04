@@ -1,5 +1,6 @@
 'use client';
 
+import Image from 'next/image';
 import { useState } from 'react';
 
 interface SafeImageProps {
@@ -46,9 +47,13 @@ export default function SafeImage({
           <div className="w-6 h-6 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
         </div>
       )}
-      <img
+      <Image
         src={src}
         alt={alt}
+        width={1}
+        height={1}
+        sizes="100vw"
+        unoptimized
         className={`${className} ${imageLoading ? 'opacity-0' : 'opacity-100'} transition-opacity duration-300`}
         onLoad={() => setImageLoading(false)}
         onError={() => {

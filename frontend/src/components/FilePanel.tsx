@@ -92,7 +92,7 @@ export default function FilePanel({ onStatsUpdate, selectedGroup }: FilePanelPro
     <div className="space-y-4">
       {!selectedGroup && (
         <div className="text-sm text-muted-foreground">
-          请先选择一个群组再进行文件收集与下载
+          请先选择一个群组再下载文件
         </div>
       )}
       {/* 文件统计概览 */}
@@ -105,7 +105,7 @@ export default function FilePanel({ onStatsUpdate, selectedGroup }: FilePanelPro
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">{fileStats.download_stats.total_files}</div>
-              <p className="text-xs text-muted-foreground">已收集文件信息</p>
+              <p className="text-xs text-muted-foreground">已同步文件信息</p>
             </CardContent>
           </Card>
 
@@ -122,12 +122,12 @@ export default function FilePanel({ onStatsUpdate, selectedGroup }: FilePanelPro
 
           <Card className="border border-gray-200 shadow-none">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">待下载</CardTitle>
+              <CardTitle className="text-sm font-medium">未下载</CardTitle>
               <Badge variant="secondary" className="bg-yellow-100 text-yellow-800">⏳</Badge>
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold text-yellow-600">{fileStats.download_stats.pending}</div>
-              <p className="text-xs text-muted-foreground">等待下载</p>
+              <p className="text-xs text-muted-foreground">尚未下载</p>
             </CardContent>
           </Card>
 
@@ -154,7 +154,7 @@ export default function FilePanel({ onStatsUpdate, selectedGroup }: FilePanelPro
               下载文件
             </CardTitle>
             <CardDescription>
-              自动收集文件列表并根据设置的条件批量下载
+              根据已同步的文件记录批量下载
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -192,7 +192,7 @@ export default function FilePanel({ onStatsUpdate, selectedGroup }: FilePanelPro
             </Button>
 
             <div className="text-xs text-muted-foreground space-y-1">
-              <p>🔍 自动收集文件列表</p>
+              <p>📋 使用话题采集同步的文件记录</p>
               <p>📁 文件将保存到 downloads 目录</p>
               <p>🔄 支持断点续传和重复检测</p>
             </div>

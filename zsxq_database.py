@@ -8,8 +8,10 @@ from typing import Dict, Any, Optional, List
 class ZSXQDatabase:
     """知识星球数据库管理器"""
     
-    def __init__(self, db_path: str = "zsxq_interactive.db"):
+    def __init__(self, db_path: str = "zsxq_interactive.db", files_db_path: Optional[str] = None):
         self.db_path = db_path
+        self.files_db_path = files_db_path
+        self.file_db = None
         self.conn = sqlite3.connect(db_path, check_same_thread=False)
         self.cursor = self.conn.cursor()
         self._init_database()
@@ -253,6 +255,27 @@ class ZSXQDatabase:
             )
         ''')
 
+        # 索引 - 覆盖当前高频查询和排序路径
+        index_sqls = [
+            'CREATE INDEX IF NOT EXISTS idx_topics_group_create_time ON topics (group_id, create_time DESC)',
+            'CREATE INDEX IF NOT EXISTS idx_topics_create_time ON topics (create_time)',
+            'CREATE INDEX IF NOT EXISTS idx_talks_topic_id ON talks (topic_id)',
+            'CREATE INDEX IF NOT EXISTS idx_articles_topic_id ON articles (topic_id)',
+            'CREATE INDEX IF NOT EXISTS idx_images_topic_comment_image_id ON images (topic_id, comment_id, image_id)',
+            'CREATE INDEX IF NOT EXISTS idx_images_comment_image_id ON images (comment_id, image_id)',
+            'CREATE INDEX IF NOT EXISTS idx_likes_topic_create_time ON likes (topic_id, create_time DESC)',
+            'CREATE INDEX IF NOT EXISTS idx_like_emojis_topic_id ON like_emojis (topic_id)',
+            'CREATE INDEX IF NOT EXISTS idx_user_liked_emojis_topic_id ON user_liked_emojis (topic_id)',
+            'CREATE INDEX IF NOT EXISTS idx_comments_topic_create_time ON comments (topic_id, create_time ASC)',
+            'CREATE INDEX IF NOT EXISTS idx_questions_topic_id ON questions (topic_id)',
+            'CREATE INDEX IF NOT EXISTS idx_answers_topic_id ON answers (topic_id)',
+            'CREATE INDEX IF NOT EXISTS idx_topic_files_topic_file_id ON topic_files (topic_id, file_id)',
+            'CREATE INDEX IF NOT EXISTS idx_topic_tags_tag_topic ON topic_tags (tag_id, topic_id)',
+            'CREATE INDEX IF NOT EXISTS idx_tags_group_topic_count_name ON tags (group_id, topic_count DESC, tag_name ASC)',
+        ]
+        for sql in index_sqls:
+            self.cursor.execute(sql)
+
         self.conn.commit()
     
     def import_topic_data(self, topic_data: Dict[str, Any]) -> bool:
@@ -267,6 +290,8 @@ class ZSXQDatabase:
             # 如果话题已存在，直接跳过，避免重复写入或更新
             self.cursor.execute('SELECT 1 FROM topics WHERE topic_id = ? LIMIT 1', (topic_id,))
             if self.cursor.fetchone():
+                if 'talk' in topic_data and topic_data['talk'] and 'files' in topic_data['talk']:
+                    self._sync_files_to_file_database(topic_data, topic_data['talk']['files'])
                 print(f"话题 {topic_id} 已存在，跳过导入")
                 return True
             
@@ -319,6 +344,7 @@ class ZSXQDatabase:
             # 导入文件信息
             if 'talk' in topic_data and topic_data['talk'] and 'files' in topic_data['talk']:
                 self._import_files(topic_id, topic_data['talk']['files'])
+                self._sync_files_to_file_database(topic_data, topic_data['talk']['files'])
 
             return True
             
@@ -1004,6 +1030,160 @@ class ZSXQDatabase:
                 current_time
             ))
 
+    def _get_file_db(self):
+        """获取同组文件库连接，用于同步话题里的文件元数据。"""
+        if not self.files_db_path:
+            return None
+
+        if self.file_db is None:
+            from zsxq_file_database import ZSXQFileDatabase
+            self.file_db = ZSXQFileDatabase(self.files_db_path)
+
+        return self.file_db
+
+    def _sync_files_to_file_database(self, topic_data: Dict[str, Any], files_data: List[Dict[str, Any]]):
+        """把话题采集到的 talk.files 同步到文件库 files 表。"""
+        if not files_data:
+            return
+
+        file_db = self._get_file_db()
+        if file_db is None:
+            return
+
+        try:
+            group_data = topic_data.get('group', {})
+            if group_data:
+                file_db.insert_group(group_data)
+
+            topic_id = file_db.insert_topic(topic_data)
+            synced_files = 0
+            for file_data in files_data:
+                file_id = file_db.insert_file(file_data)
+                if not file_id:
+                    continue
+
+                synced_files += 1
+                if topic_id:
+                    file_db.cursor.execute('''
+                    DELETE FROM file_topic_relations
+                    WHERE file_id = ? AND topic_id = ?
+                    ''', (file_id, topic_id))
+                    file_db.cursor.execute('''
+                    INSERT OR IGNORE INTO file_topic_relations (file_id, topic_id)
+                    VALUES (?, ?)
+                    ''', (file_id, topic_id))
+
+            if topic_id:
+                file_db.insert_topic_files(topic_id, files_data)
+
+            file_db.conn.commit()
+            if synced_files:
+                print(f"同步话题文件到文件库: topic_id={topic_data.get('topic_id')}, files={synced_files}")
+        except Exception as e:
+            file_db.conn.rollback()
+            print(f"同步话题文件到文件库失败: {e}")
+
+    def backfill_topic_files_to_file_database(self) -> Dict[str, int]:
+        """把当前话题库已有的 topic_files 回填到文件库。"""
+        file_db = self._get_file_db()
+        if file_db is None:
+            return {'scanned': 0, 'new_files': 0, 'relations': 0, 'topic_files': 0}
+
+        stats = {'scanned': 0, 'new_files': 0, 'relations': 0, 'topic_files': 0}
+
+        try:
+            self.cursor.execute('''
+                SELECT
+                    tf.topic_id, tf.file_id, tf.name, tf.hash, tf.size, tf.duration,
+                    tf.download_count, tf.create_time,
+                    t.group_id, t.type, t.title, t.annotation, t.create_time,
+                    t.likes_count, t.tourist_likes_count, t.rewards_count,
+                    t.comments_count, t.reading_count, t.readers_count,
+                    t.digested, t.sticky, t.user_liked, t.user_subscribed,
+                    g.name, g.type, g.background_url
+                FROM topic_files tf
+                LEFT JOIN topics t ON t.topic_id = tf.topic_id
+                LEFT JOIN groups g ON g.group_id = t.group_id
+                WHERE tf.file_id IS NOT NULL
+                ORDER BY tf.topic_id ASC, tf.file_id ASC
+            ''')
+            rows = self.cursor.fetchall()
+
+            for row in rows:
+                stats['scanned'] += 1
+                (
+                    topic_id, file_id, name, file_hash, size, duration, download_count, file_create_time,
+                    group_id, topic_type, title, annotation, topic_create_time,
+                    likes_count, tourist_likes_count, rewards_count, comments_count,
+                    reading_count, readers_count, digested, sticky, user_liked, user_subscribed,
+                    group_name, group_type, background_url,
+                ) = row
+
+                file_db.cursor.execute('SELECT 1 FROM files WHERE file_id = ? LIMIT 1', (file_id,))
+                is_new_file = file_db.cursor.fetchone() is None
+
+                file_data = {
+                    'file_id': file_id,
+                    'name': name or '',
+                    'hash': file_hash,
+                    'size': size,
+                    'duration': duration,
+                    'download_count': download_count,
+                    'create_time': file_create_time,
+                }
+                if file_db.insert_file(file_data):
+                    stats['new_files'] += 1 if is_new_file else 0
+
+                if group_id:
+                    file_db.insert_group({
+                        'group_id': group_id,
+                        'name': group_name or '',
+                        'type': group_type,
+                        'background_url': background_url,
+                    })
+
+                if topic_id and group_id and topic_type:
+                    file_db.insert_topic({
+                        'topic_id': topic_id,
+                        'group': {'group_id': group_id},
+                        'type': topic_type,
+                        'title': title,
+                        'annotation': annotation,
+                        'create_time': topic_create_time,
+                        'likes_count': likes_count or 0,
+                        'tourist_likes_count': tourist_likes_count or 0,
+                        'rewards_count': rewards_count or 0,
+                        'comments_count': comments_count or 0,
+                        'reading_count': reading_count or 0,
+                        'readers_count': readers_count or 0,
+                        'digested': bool(digested),
+                        'sticky': bool(sticky),
+                        'user_specific': {
+                            'liked': bool(user_liked),
+                            'subscribed': bool(user_subscribed),
+                        },
+                    })
+
+                    file_db.cursor.execute('''
+                    DELETE FROM file_topic_relations
+                    WHERE file_id = ? AND topic_id = ?
+                    ''', (file_id, topic_id))
+
+                    file_db.cursor.execute('''
+                    INSERT OR IGNORE INTO file_topic_relations (file_id, topic_id)
+                    VALUES (?, ?)
+                    ''', (file_id, topic_id))
+                    stats['relations'] += file_db.cursor.rowcount
+
+                    file_db.insert_topic_files(topic_id, [file_data])
+                    stats['topic_files'] += 1
+
+            file_db.conn.commit()
+            return stats
+        except Exception:
+            file_db.conn.rollback()
+            raise
+
 
     def get_topic_detail(self, topic_id: int):
         """获取完整的话题详情"""
@@ -1197,12 +1377,54 @@ class ZSXQDatabase:
                 ORDER BY c.create_time ASC
             ''', (topic_id,))
 
+            comment_rows = self.cursor.fetchall()
+            comment_ids = [row[0] for row in comment_rows]
+            comment_images_map = {}
+
+            # 批量获取评论图片，避免按评论逐条查询造成 N+1
+            if comment_ids:
+                chunk_size = 500
+                for start in range(0, len(comment_ids), chunk_size):
+                    chunk_ids = comment_ids[start:start + chunk_size]
+                    placeholders = ','.join('?' for _ in chunk_ids)
+                    self.cursor.execute(f'''
+                        SELECT
+                            comment_id, image_id, type, thumbnail_url, thumbnail_width, thumbnail_height,
+                            large_url, large_width, large_height,
+                            original_url, original_width, original_height, original_size
+                        FROM images
+                        WHERE comment_id IN ({placeholders})
+                        ORDER BY comment_id ASC, image_id ASC
+                    ''', chunk_ids)
+
+                    for img_row in self.cursor.fetchall():
+                        comment_images_map.setdefault(img_row[0], []).append({
+                            "image_id": img_row[1],
+                            "type": img_row[2],
+                            "thumbnail": {
+                                "url": img_row[3],
+                                "width": img_row[4],
+                                "height": img_row[5]
+                            },
+                            "large": {
+                                "url": img_row[6],
+                                "width": img_row[7],
+                                "height": img_row[8]
+                            },
+                            "original": {
+                                "url": img_row[9],
+                                "width": img_row[10],
+                                "height": img_row[11],
+                                "size": img_row[12]
+                            }
+                        })
+
             # 先收集所有评论，然后构建嵌套结构
             all_comments = {}  # comment_id -> comment_data
             parent_comments = []  # 顶级评论
             child_comments = []   # 子评论（有parent_comment_id的）
 
-            for comment_row in self.cursor.fetchall():
+            for comment_row in comment_rows:
                 comment_id = comment_row[0]
                 parent_comment_id = comment_row[6]
 
@@ -1233,40 +1455,7 @@ class ZSXQDatabase:
                         "avatar_url": comment_row[16]
                     }
 
-                # 获取评论的图片
-                self.cursor.execute('''
-                    SELECT
-                        image_id, type, thumbnail_url, thumbnail_width, thumbnail_height,
-                        large_url, large_width, large_height,
-                        original_url, original_width, original_height, original_size
-                    FROM images
-                    WHERE comment_id = ?
-                    ORDER BY image_id
-                ''', (comment_id,))
-
-                images = []
-                for img_row in self.cursor.fetchall():
-                    images.append({
-                        "image_id": img_row[0],
-                        "type": img_row[1],
-                        "thumbnail": {
-                            "url": img_row[2],
-                            "width": img_row[3],
-                            "height": img_row[4]
-                        },
-                        "large": {
-                            "url": img_row[5],
-                            "width": img_row[6],
-                            "height": img_row[7]
-                        },
-                        "original": {
-                            "url": img_row[8],
-                            "width": img_row[9],
-                            "height": img_row[10],
-                            "size": img_row[11]
-                        }
-                    })
-
+                images = comment_images_map.get(comment_id, [])
                 if images:
                     comment_data["images"] = images
 
@@ -1609,6 +1798,9 @@ class ZSXQDatabase:
 
     def close(self):
         """关闭数据库连接"""
+        if hasattr(self, 'file_db') and self.file_db:
+            self.file_db.close()
+            self.file_db = None
         if hasattr(self, 'conn') and self.conn:
             self.conn.close()
 

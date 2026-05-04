@@ -7,6 +7,7 @@ import io
 import json
 import os
 import re
+import sysconfig
 import threading
 import time
 import zipfile
@@ -19,21 +20,64 @@ from pypdf import PdfReader
 from ai_provider_config import (
     get_default_base_url,
     get_default_model,
-    get_default_reasoning_effort,
     get_default_wire_api,
     get_openai_compatible_config,
+    get_summary_reasoning_effort,
 )
 from db_path_manager import get_db_path_manager
 from zsxq_file_database import ZSXQFileDatabase
 
 
+_CUDA_DLL_DIRECTORY_HANDLES: list[Any] = []
+_CUDA_DLL_DIRECTORIES_ADDED: set[str] = set()
+
+
+def _add_cuda_dll_directories() -> None:
+    if os.name != "nt":
+        return
+
+    site_packages = Path(sysconfig.get_paths().get("purelib") or "")
+    for directory in (
+        site_packages / "nvidia" / "cublas" / "bin",
+        site_packages / "nvidia" / "cuda_nvrtc" / "bin",
+        site_packages / "ctranslate2",
+    ):
+        if directory.exists():
+            directory_text = str(directory)
+            if directory_text not in os.environ.get("PATH", ""):
+                os.environ["PATH"] = f"{directory_text}{os.pathsep}{os.environ.get('PATH', '')}"
+            if directory_text not in _CUDA_DLL_DIRECTORIES_ADDED:
+                _CUDA_DLL_DIRECTORY_HANDLES.append(os.add_dll_directory(directory_text))
+                _CUDA_DLL_DIRECTORIES_ADDED.add(directory_text)
+
+
+def _detect_faster_whisper_device() -> str:
+    configured_device = os.environ.get("FASTER_WHISPER_DEVICE", "").strip()
+    if configured_device:
+        return configured_device
+
+    _add_cuda_dll_directories()
+    try:
+        import ctranslate2
+
+        if ctranslate2.get_cuda_device_count() > 0:
+            return "cuda"
+    except Exception:
+        pass
+    return "cpu"
+
+
 DEFAULT_FILE_ANALYSIS_MODEL = get_default_model()
 DEFAULT_FILE_ANALYSIS_API_BASE = get_default_base_url()
 DEFAULT_FILE_ANALYSIS_WIRE_API = get_default_wire_api()
-DEFAULT_FILE_ANALYSIS_REASONING_EFFORT = get_default_reasoning_effort()
+DEFAULT_FILE_ANALYSIS_REASONING_EFFORT = get_summary_reasoning_effort()
 DEFAULT_FASTER_WHISPER_MODEL = os.environ.get("FASTER_WHISPER_MODEL", "medium")
-DEFAULT_FASTER_WHISPER_DEVICE = os.environ.get("FASTER_WHISPER_DEVICE", "cpu")
-DEFAULT_FASTER_WHISPER_COMPUTE_TYPE = os.environ.get("FASTER_WHISPER_COMPUTE_TYPE", "int8")
+FASTER_WHISPER_DEVICE_CONFIGURED = bool(os.environ.get("FASTER_WHISPER_DEVICE", "").strip())
+DEFAULT_FASTER_WHISPER_DEVICE = _detect_faster_whisper_device()
+DEFAULT_FASTER_WHISPER_COMPUTE_TYPE = os.environ.get(
+    "FASTER_WHISPER_COMPUTE_TYPE",
+    "float16" if DEFAULT_FASTER_WHISPER_DEVICE == "cuda" else "int8",
+)
 DEFAULT_FASTER_WHISPER_RETRIES = max(1, int(os.environ.get("FASTER_WHISPER_RETRIES", "3")))
 TEXT_EXTENSIONS = {
     ".txt", ".md", ".csv", ".json", ".log", ".py", ".js", ".ts", ".tsx", ".jsx",
@@ -203,6 +247,7 @@ def _summarize_text_with_ai(
 
 
 def _get_faster_whisper_model():
+    _add_cuda_dll_directories()
     try:
         from faster_whisper import WhisperModel
     except ImportError as exc:
@@ -229,6 +274,14 @@ def _get_faster_whisper_model():
                 compute_type=DEFAULT_FASTER_WHISPER_COMPUTE_TYPE,
             )
         except Exception as exc:
+            if DEFAULT_FASTER_WHISPER_DEVICE == "cuda" and not FASTER_WHISPER_DEVICE_CONFIGURED:
+                try:
+                    fallback_key = (DEFAULT_FASTER_WHISPER_MODEL, "cpu", "int8")
+                    model = WhisperModel(DEFAULT_FASTER_WHISPER_MODEL, device="cpu", compute_type="int8")
+                    _WHISPER_MODEL_CACHE[fallback_key] = model
+                    return model
+                except Exception:
+                    pass
             raise RuntimeError(
                 f"faster-whisper 模型加载失败（model={DEFAULT_FASTER_WHISPER_MODEL}）。"
                 f" 如果是首次运行，通常表示本机无法从 HuggingFace 拉取模型；"
