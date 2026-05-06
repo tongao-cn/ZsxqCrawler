@@ -50,3 +50,5 @@ cache
 
 # local config
 config.toml
+.env
+.env.*

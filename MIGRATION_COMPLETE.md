@@ -3,7 +3,7 @@
 ## 完成的工作
 
 ### 1. 创建了SQL账号管理器
-- 文件：`accounts_sql_manager.py`
+- 当前文件：`backend/storage/accounts_sql_manager.py`
 - 功能：
   - 使用SQLite存储账号信息
   - 支持多账号管理
@@ -12,7 +12,7 @@
   - 自动迁移现有数据库表结构
 
 ### 2. 更新了后端API
-- 文件：`main.py`
+- 当前入口：`backend/main.py`
 - 修改内容：
   - 移除了对`accounts_manager`的依赖，改用`accounts_sql_manager`
   - 移除了虚拟"default"账号的逻辑
@@ -26,7 +26,7 @@
   - 现在所有账号都可以正常删除（包括默认账号）
 
 ### 4. 创建了迁移脚本
-- 文件：`migrate_accounts_to_sql.py`
+- 当前文件：`scripts/migrate_accounts_to_sql.py`
 - 功能：
   - 将`accounts.json`中的账号数据迁移到SQL数据库
   - 迁移群组账号映射关系
@@ -49,8 +49,8 @@
 ### 首次启动
 1. 启动后端服务：
    ```bash
-   cd D:\abc\PycharmProjects\ZsxqCrawler
-   uv run main.py
+   cd C:\Dev\ZsxqCrawler
+   uv run python -m backend.main
    ```
 
 2. 访问账号管理页面：
@@ -70,9 +70,11 @@
 如果你的`accounts.json`中有账号数据需要迁移到SQL，运行迁移脚本：
 
 ```bash
-cd D:\abc\PycharmProjects\ZsxqCrawler
-python migrate_accounts_to_sql.py
+cd C:\Dev\ZsxqCrawler
+uv run migrate-accounts
 ```
+
+根目录仅保留 `main.py` 作为旧后端启动命令兼容 wrapper；迁移脚本请使用 `uv run migrate-accounts`。
 
 迁移脚本会：
 1. 读取`accounts.json`中的账号数据

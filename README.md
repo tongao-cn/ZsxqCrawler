@@ -8,7 +8,7 @@
   <h1>知识星球数据采集器</h1>
   <p>知识星球内容爬取与文件下载工具，支持话题采集、文件批量下载等功能</p>
   
-  [![Python](https://img.shields.io/badge/Python-3.8+-blue.svg)](https://www.python.org/downloads/) [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE) [![Platform](https://img.shields.io/badge/Platform-Windows | Linux | macOS-lightgrey.svg)]()
+  [![Python](https://img.shields.io/badge/Python-3.10+-blue.svg)](https://www.python.org/downloads/) [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE) [![Platform](https://img.shields.io/badge/Platform-Windows | Linux | macOS-lightgrey.svg)]()
   
   <img src="images/info.png" alt="群组详情页面" height="400">
 </div>
@@ -82,7 +82,7 @@ uv sync
 
 ```bash
 # 1. 启动后端API服务
-uv run main.py
+uv run python -m backend.main
 
 # 2. 启动前端服务（新开终端窗口）
 cd frontend
@@ -105,13 +105,41 @@ NEXT_PUBLIC_API_BASE_URL=http://192.168.x.x:8208
 
 ```bash
 # 运行交互式命令行工具
-uv run zsxq_interactive_crawler.py
+uv run python -m backend.crawlers.zsxq_interactive_crawler
 ```
 
 <div align="center">
   <img src="images/QQ20250703-170055.png" alt="命令行界面" height="400">
   <p><em>命令行界面 - 交互式操作控制台</em></p>
 </div>
+
+## 历史实现代码结构
+
+当前目录保留为历史实现与迁移参考。后端真实代码已经按职责整理到 `backend/`：
+
+- `backend/main.py`: FastAPI 应用真实入口。
+- `backend/routes/`: API 路由模块。
+- `backend/services/`: AI 分析、A 股分析、导出等业务服务。
+- `backend/storage/`: SQLite/PostgreSQL 访问、任务持久化、账号存储。
+- `backend/core/`: 配置、日志、路径、账号上下文、爬虫运行时、本地群运行时等核心能力。
+- `backend/crawlers/`: 知识星球话题采集和文件下载器。
+- `scripts/`: 一次性或辅助命令行脚本。
+
+推荐使用新目录入口：
+
+```bash
+uv run python -m backend.main
+uv run python -m backend.crawlers.zsxq_interactive_crawler
+```
+
+安装后也可以使用 `pyproject.toml` 中定义的命令入口：
+
+```bash
+uv run zsxq-api
+uv run zsxq-crawler
+```
+
+为兼容旧后端启动命令，项目根目录暂时仅保留 `main.py`；其它命令请使用 `pyproject.toml` 中的入口或 `python -m ...` 新目录入口。新增后端代码时优先放入 `backend/` 对应子目录。
 
 ## 数据存储与下载路径
 
