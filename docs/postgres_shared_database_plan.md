@@ -89,6 +89,12 @@ $env:ZSXQ_POSTGRES_DSN = "postgresql://postgres:admin-password@host:5432/zsxq"
 uv run audit-postgres-migration --root output\databases
 ```
 
+Generate a Markdown migration status snapshot:
+
+```powershell
+uv run generate-postgres-migration-report --root output --output docs\postgres_real_migration_report.md
+```
+
 Run the repeatable Docker smoke after changing migration or public view code:
 
 ```powershell

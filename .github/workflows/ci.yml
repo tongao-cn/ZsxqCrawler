@@ -39,3 +39,6 @@ jobs:
 
       - name: Check migration audit CLI help
         run: uv run audit-postgres-migration --help
+
+      - name: Check migration report CLI help
+        run: uv run generate-postgres-migration-report --help
