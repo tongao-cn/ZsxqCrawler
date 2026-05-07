@@ -64,6 +64,25 @@ Apply or refresh `zsxq_public` views and grants:
 uv run manage-postgres-public-schema --apply
 ```
 
+Run the repeatable Docker smoke after changing migration or public view code:
+
+```powershell
+.\scripts\run_postgres_shared_smoke.ps1
+```
+
+The smoke creates two temporary SQLite fixtures:
+
+- `shared-full.db`, with all first-stage public view tables and optional time
+  fields.
+- `legacy-minimal.db`, with only required `groups`, `topics`, and `files`
+  fields to verify old databases still build public views with `NULL` optional
+  columns.
+
+It then starts a disposable PostgreSQL container, migrates both fixtures,
+refreshes `zsxq_public`, checks repeated refresh behavior, validates reader
+`SELECT`, and confirms the reader cannot access internal schemas or create
+objects in the public schema.
+
 ## Public Views
 
 Initial shared views:
@@ -80,6 +99,33 @@ Initial shared views:
 Each view includes `source_schema` so downstream consumers can trace records
 back to the compatibility schema that produced them.
 
+Minimum Python read example for other projects:
+
+```python
+import psycopg2
+
+dsn = "postgresql://zsxq_reader:password@host:5432/zsxq"
+with psycopg2.connect(dsn) as conn:
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT group_id, topic_id, title, create_time, source_schema
+            FROM zsxq_public.topics
+            ORDER BY create_time DESC NULLS LAST
+            LIMIT 20
+            """
+        )
+        rows = cur.fetchall()
+```
+
+Minimum SQL read example:
+
+```sql
+SELECT file_id, name, download_status, local_path, source_schema
+FROM zsxq_public.files
+WHERE download_status = 'downloaded';
+```
+
 ## Current Boundaries
 
 - SQLite remains supported for local, zero-config usage.
@@ -87,3 +133,5 @@ back to the compatibility schema that produced them.
 - The public schema is read-oriented. ZsxqCrawler remains the writer.
 - The migration script does not delete PostgreSQL schemas unless
   `--replace-schema` is explicitly provided.
+- Other projects should treat `zsxq_public` as the stable contract and should
+  not depend on internal `zsxq_*` compatibility schemas.

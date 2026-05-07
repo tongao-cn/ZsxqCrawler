@@ -192,6 +192,12 @@ uv run migrate-sqlite-to-postgres --replace-schema --build-public-views
 
 公共视图会写入 `zsxq_public` schema，并面向只读分析场景。详细说明见 `docs/postgres_shared_database_plan.md`。
 
+修改迁移或公共视图逻辑后，可运行 Docker smoke 验证多 SQLite fixture 迁移、`zsxq_public` 查询、只读账号权限和重复刷新：
+
+```bash
+.\scripts\run_postgres_shared_smoke.ps1
+```
+
 ## 赞助与支持
 
 如果本项目对你有帮助，欢迎通过以下方式赞助。付款时请在备注中填写“希望公开展示的链接”（如个人主页、GitHub 仓库等），我们会在 README 的“赞助鸣谢”表格中展示。
