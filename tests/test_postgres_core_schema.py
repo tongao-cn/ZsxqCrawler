@@ -1,0 +1,25 @@
+import unittest
+
+from backend.storage.postgres_core_schema import CORE_SCHEMA, build_core_schema_sql
+from scripts.manage_postgres_public_schema import PUBLIC_VIEW_SPECS
+
+
+class PostgresCoreSchemaTests(unittest.TestCase):
+    def test_core_schema_sql_contains_schema_tables_and_indexes(self):
+        sql = "\n".join(build_core_schema_sql())
+
+        self.assertIn(f'CREATE SCHEMA IF NOT EXISTS "{CORE_SCHEMA}"', sql)
+        self.assertIn(f'CREATE TABLE IF NOT EXISTS "{CORE_SCHEMA}"."topics"', sql)
+        self.assertIn(f'CREATE TABLE IF NOT EXISTS "{CORE_SCHEMA}"."files"', sql)
+        self.assertIn("source_schema TEXT", sql)
+        self.assertIn("CREATE INDEX IF NOT EXISTS", sql)
+
+    def test_public_view_required_tables_exist_in_core_schema_sql(self):
+        sql = "\n".join(build_core_schema_sql())
+
+        for spec in PUBLIC_VIEW_SPECS:
+            self.assertIn(f'CREATE TABLE IF NOT EXISTS "{CORE_SCHEMA}"."{spec.table}"', sql)
+
+
+if __name__ == "__main__":
+    unittest.main()

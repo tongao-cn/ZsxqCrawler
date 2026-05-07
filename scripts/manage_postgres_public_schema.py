@@ -9,6 +9,7 @@ from typing import Iterable, Sequence
 import psycopg2
 
 from backend.storage.db_compat import get_postgres_dsn
+from backend.storage.postgres_core_schema import CORE_SCHEMA, ensure_core_schema
 
 
 PUBLIC_SCHEMA = "zsxq_public"
@@ -277,7 +278,10 @@ def build_public_view_sql(
             f"{_public_schema_expr(expr, available_columns, schema_name, table_columns)} AS {quote_identifier(alias)}"
             for alias, expr in spec.columns
         ]
-        column_sql.append(f"{schema_name!r}::text AS source_schema")
+        if "source_schema" in available_columns:
+            column_sql.append(f"COALESCE({_source_column('source_schema')}, {schema_name!r})::text AS source_schema")
+        else:
+            column_sql.append(f"{schema_name!r}::text AS source_schema")
         selects.append(
             "SELECT "
             + ", ".join(column_sql)
@@ -297,7 +301,8 @@ def build_all_public_view_sql(
     conn,
     public_schema: str = PUBLIC_SCHEMA,
 ) -> list[str]:
-    schemas = discover_internal_schemas(conn)
+    ensure_core_schema(conn)
+    schemas = [CORE_SCHEMA]
     table_names = {spec.table for spec in PUBLIC_VIEW_SPECS} | {"groups", "topics"}
     schema_table_columns = [
         (schema_name, get_schema_table_columns(conn, schema_name, table_names))
@@ -305,6 +310,7 @@ def build_all_public_view_sql(
     ]
     statements = [f"CREATE SCHEMA IF NOT EXISTS {quote_identifier(public_schema)}"]
     for spec in PUBLIC_VIEW_SPECS:
+        statements.append(f"DROP VIEW IF EXISTS {quote_identifier(public_schema)}.{quote_identifier(spec.name)}")
         schema_columns = [
             (schema_name, table_columns.get(spec.table, set()))
             for schema_name, table_columns in schema_table_columns
@@ -364,19 +370,14 @@ def build_role_sql(
 
 def build_internal_writer_grant_sql(conn, writer_role: str = DEFAULT_WRITER_ROLE) -> list[str]:
     writer = quote_identifier(writer_role)
-    statements: list[str] = []
-    for schema_name in discover_internal_schemas(conn):
-        schema = quote_identifier(schema_name)
-        statements.extend(
-            [
-                f"GRANT USAGE, CREATE ON SCHEMA {schema} TO {writer}",
-                f"GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA {schema} TO {writer}",
-                f"GRANT USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA {schema} TO {writer}",
-                f"ALTER DEFAULT PRIVILEGES IN SCHEMA {schema} GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO {writer}",
-                f"ALTER DEFAULT PRIVILEGES IN SCHEMA {schema} GRANT USAGE, SELECT, UPDATE ON SEQUENCES TO {writer}",
-            ]
-        )
-    return statements
+    schema = quote_identifier(CORE_SCHEMA)
+    return [
+        f"GRANT USAGE, CREATE ON SCHEMA {schema} TO {writer}",
+        f"GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA {schema} TO {writer}",
+        f"GRANT USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA {schema} TO {writer}",
+        f"ALTER DEFAULT PRIVILEGES IN SCHEMA {schema} GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO {writer}",
+        f"ALTER DEFAULT PRIVILEGES IN SCHEMA {schema} GRANT USAGE, SELECT, UPDATE ON SEQUENCES TO {writer}",
+    ]
 
 
 def _index_name(table_name: str, columns: tuple[str, ...]) -> str:
@@ -387,7 +388,7 @@ def _index_name(table_name: str, columns: tuple[str, ...]) -> str:
 
 def build_internal_index_sql(conn) -> list[str]:
     statements: list[str] = []
-    for schema_name in discover_internal_schemas(conn):
+    for schema_name in [CORE_SCHEMA]:
         for table_name, index_columns in INTERNAL_INDEX_SPECS.items():
             available_columns = get_table_columns(conn, schema_name, table_name)
             if not available_columns:

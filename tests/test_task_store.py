@@ -1,12 +1,16 @@
 import tempfile
 import unittest
+import os
 from pathlib import Path
 
 from backend.storage.db_compat import get_postgres_dsn
 from backend.storage.task_store import TaskStore
 
 
-@unittest.skipUnless(get_postgres_dsn(), "PostgreSQL DSN is not configured")
+@unittest.skipUnless(
+    get_postgres_dsn() and os.getenv("ZSXQ_RUN_PG_INTEGRATION_TESTS") == "1",
+    "PostgreSQL integration tests are disabled",
+)
 class TaskStoreTests(unittest.TestCase):
     def setUp(self):
         self.temp_dir = tempfile.TemporaryDirectory()

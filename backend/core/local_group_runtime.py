@@ -9,6 +9,7 @@ from fastapi import HTTPException
 from backend.core.crawler_runtime import get_crawler_for_group
 from backend.core.db_path_manager import get_db_path_manager
 from backend.core.image_cache_manager import clear_group_cache_manager, get_image_cache_manager
+from backend.storage.db_compat import connect
 
 
 LOCAL_OUTPUT_DIR = os.environ.get("OUTPUT_DIR", "output")
@@ -70,15 +71,36 @@ def _collect_numeric_dirs(base: str, limit: int) -> set:
     return ids
 
 
+def _collect_postgres_group_ids(limit: int) -> set:
+    try:
+        conn = connect("zsxq_core_groups")
+        try:
+            rows = conn.execute("SELECT group_id FROM groups LIMIT ?", (limit,)).fetchall()
+        finally:
+            conn.close()
+        ids = set()
+        for row in rows:
+            try:
+                gid = int(row[0])
+                if gid > 0:
+                    ids.add(gid)
+            except Exception:
+                continue
+        return ids
+    except Exception:
+        return set()
+
+
 def scan_local_groups(output_dir: Optional[str] = None, limit: Optional[int] = None) -> set:
     """扫描本地 output 的一级子目录，获取群ID集合。"""
     try:
         odir = output_dir or LOCAL_OUTPUT_DIR
         lim = int(limit or LOCAL_SCAN_LIMIT)
 
+        ids_pg = _collect_postgres_group_ids(lim)
         ids_primary = _collect_numeric_dirs(odir, lim)
         ids_secondary = _collect_numeric_dirs(os.path.join(odir, "databases"), lim)
-        ids = set(ids_primary) | set(ids_secondary)
+        ids = set(ids_pg) | set(ids_primary) | set(ids_secondary)
 
         _local_groups_cache["ids"] = ids
         _local_groups_cache["scanned_at"] = time.time()

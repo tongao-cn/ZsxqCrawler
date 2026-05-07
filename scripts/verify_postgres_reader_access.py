@@ -6,6 +6,7 @@ from dataclasses import dataclass
 
 import psycopg2
 
+from backend.storage.postgres_core_schema import CORE_SCHEMA
 from scripts.manage_postgres_public_schema import PUBLIC_SCHEMA, PUBLIC_VIEW_SPECS, quote_identifier
 
 
@@ -28,12 +29,12 @@ def _first_internal_schema(conn) -> str | None:
             """
             SELECT schema_name
             FROM information_schema.schemata
-            WHERE schema_name LIKE %s
+            WHERE (schema_name = %s OR schema_name LIKE %s)
               AND schema_name <> %s
             ORDER BY schema_name
             LIMIT 1
             """,
-            ("zsxq_%", PUBLIC_SCHEMA),
+            (CORE_SCHEMA, "zsxq_%", PUBLIC_SCHEMA),
         )
         row = cur.fetchone()
         return str(row[0]) if row else None

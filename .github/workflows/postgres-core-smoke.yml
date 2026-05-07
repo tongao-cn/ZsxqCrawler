@@ -1,4 +1,4 @@
-name: PostgreSQL Shared Smoke
+name: PostgreSQL Core Smoke
 
 on:
   workflow_dispatch:
@@ -25,6 +25,6 @@ jobs:
       - name: Install project
         run: uv sync
 
-      - name: Run PostgreSQL shared smoke
+      - name: Run PostgreSQL core smoke
         shell: pwsh
-        run: .\scripts\run_postgres_shared_smoke.ps1
+        run: .\scripts\run_postgres_core_smoke.ps1

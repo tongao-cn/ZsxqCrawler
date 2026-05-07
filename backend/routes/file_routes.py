@@ -36,6 +36,7 @@ from backend.services.task_runtime import (
 )
 from backend.storage.zsxq_database import ZSXQDatabase
 from backend.storage.zsxq_file_database import ZSXQFileDatabase
+from backend.storage.db_compat import connect
 
 router = APIRouter(prefix="/api/files", tags=["files"])
 
@@ -76,6 +77,45 @@ def _get_files_db_path(group_id: str) -> str:
 
 def _open_file_db(group_id: str) -> ZSXQFileDatabase:
     return ZSXQFileDatabase(_get_files_db_path(group_id))
+
+
+def _clear_group_file_data(group_id: str) -> dict:
+    conn = connect("zsxq_core_files")
+    try:
+        cursor = conn.cursor()
+        deleted_counts = {}
+        topic_ids_sql = "SELECT topic_id FROM topics WHERE group_id = ?"
+        file_ids_sql = f"""
+            SELECT file_id FROM files WHERE group_id = ?
+            UNION
+            SELECT file_id FROM file_topic_relations WHERE topic_id IN ({topic_ids_sql})
+            UNION
+            SELECT file_id FROM topic_files WHERE topic_id IN ({topic_ids_sql})
+        """
+        cursor.execute(
+            f"DELETE FROM file_ai_analyses WHERE file_id IN ({file_ids_sql})",
+            (group_id, group_id, group_id),
+        )
+        deleted_counts["file_ai_analyses"] = cursor.rowcount
+        cursor.execute(
+            f"DELETE FROM files WHERE file_id IN ({file_ids_sql})",
+            (group_id, group_id, group_id),
+        )
+        deleted_counts["files"] = cursor.rowcount
+        cursor.execute(
+            f"DELETE FROM file_topic_relations WHERE topic_id IN ({topic_ids_sql})",
+            (group_id,),
+        )
+        deleted_counts["file_topic_relations"] = cursor.rowcount
+        cursor.execute(
+            f"DELETE FROM topic_files WHERE topic_id IN ({topic_ids_sql})",
+            (group_id,),
+        )
+        deleted_counts["topic_files"] = cursor.rowcount
+        conn.commit()
+        return deleted_counts
+    finally:
+        conn.close()
 
 
 @contextmanager
@@ -683,47 +723,33 @@ async def get_file_stats(group_id: str):
 
 @router.post("/clear/{group_id}")
 async def clear_file_database(group_id: str):
-    """删除指定群组的文件数据库文件"""
+    """删除指定群组的 PostgreSQL 文件数据"""
     try:
-        db_path = _get_files_db_path(group_id)
+        try:
+            crawler = get_crawler_for_group(group_id)
+            _close_crawler_file_databases(crawler)
+            _log_file_route_event("INFO", "已关闭爬虫实例的数据库连接")
+        except Exception as e:
+            _log_file_route_event("WARN", f"关闭爬虫数据库连接时出错: {e}")
 
-        _log_file_route_event("INFO", f"尝试删除文件数据库: {db_path}")
+        gc.collect()
+        time.sleep(0.1)
+        deleted_counts = _clear_group_file_data(group_id)
 
-        if os.path.exists(db_path):
-            try:
-                crawler = get_crawler_for_group(group_id)
-                _close_crawler_file_databases(crawler)
-                _log_file_route_event("INFO", "已关闭爬虫实例的数据库连接")
-            except Exception as e:
-                _log_file_route_event("WARN", f"关闭爬虫数据库连接时出错: {e}")
+        try:
+            from backend.core.image_cache_manager import clear_group_cache_manager, get_image_cache_manager
 
-            gc.collect()
-            time.sleep(0.5)
+            cache_manager = get_image_cache_manager(group_id)
+            success, message = cache_manager.clear_cache()
+            if success:
+                _log_file_route_event("INFO", f"图片缓存已清空: {message}")
+            else:
+                _log_file_route_event("WARN", f"清空图片缓存失败: {message}")
+            clear_group_cache_manager(group_id)
+        except Exception as cache_error:
+            _log_file_route_event("WARN", f"清空图片缓存时出错: {cache_error}")
 
-            try:
-                os.remove(db_path)
-                _log_file_route_event("INFO", f"文件数据库已删除: {db_path}")
-
-                try:
-                    from backend.core.image_cache_manager import clear_group_cache_manager, get_image_cache_manager
-
-                    cache_manager = get_image_cache_manager(group_id)
-                    success, message = cache_manager.clear_cache()
-                    if success:
-                        _log_file_route_event("INFO", f"图片缓存已清空: {message}")
-                    else:
-                        _log_file_route_event("WARN", f"清空图片缓存失败: {message}")
-                    clear_group_cache_manager(group_id)
-                except Exception as cache_error:
-                    _log_file_route_event("WARN", f"清空图片缓存时出错: {cache_error}")
-
-                return {"message": f"群组 {group_id} 的文件数据库和图片缓存已删除"}
-            except PermissionError as pe:
-                _log_file_route_event("ERROR", f"文件被占用，无法删除: {pe}")
-                raise HTTPException(status_code=500, detail="文件被占用，无法删除数据库文件。请稍后重试。")
-        else:
-            _log_file_route_event("INFO", f"文件数据库不存在: {db_path}")
-            return {"message": f"群组 {group_id} 的文件数据库不存在"}
+        return {"message": f"群组 {group_id} 的文件数据和图片缓存已删除", "deleted": deleted_counts}
     except HTTPException:
         raise
     except Exception as e:

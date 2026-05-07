@@ -54,7 +54,7 @@ class VerifyPostgresReaderAccessTests(unittest.TestCase):
         conn = FakeConn()
 
         self.assertEqual("zsxq_topics_123", _first_internal_schema(conn))
-        self.assertEqual(("zsxq_%", "zsxq_public"), conn.cursor_obj.params)
+        self.assertEqual(("zsxq_core", "zsxq_%", "zsxq_public"), conn.cursor_obj.params)
 
 
 if __name__ == "__main__":

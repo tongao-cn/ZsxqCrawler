@@ -68,13 +68,16 @@ class ApiSmokeTests(unittest.TestCase):
 
         with (
             patch("backend.routes.topic_routes.get_db_path_manager", return_value=FakePathManager()),
-            patch("backend.routes.topic_routes.os.path.exists", return_value=False),
+            patch("backend.routes.topic_routes._clear_group_topic_data", return_value={"topics": 0}),
             patch("builtins.print", side_effect=gbk_print),
         ):
             response = TestClient(create_app()).post("/api/topics/clear/group-1")
 
         self.assertEqual(200, response.status_code)
-        self.assertEqual({"message": "群组 group-1 的话题数据库不存在"}, response.json())
+        self.assertEqual(
+            {"message": "群组 group-1 的话题数据和图片缓存已删除", "deleted": {"topics": 0}},
+            response.json(),
+        )
 
     @unittest.skipUnless(HAS_API_TEST_DEPS, "FastAPI test dependencies are not installed")
     def test_clear_file_database_logging_is_gbk_safe(self):
@@ -87,13 +90,16 @@ class ApiSmokeTests(unittest.TestCase):
 
         with (
             patch("backend.routes.file_routes._get_files_db_path", return_value=r"C:\tmp\missing-files-db.sqlite"),
-            patch("backend.routes.file_routes.os.path.exists", return_value=False),
+            patch("backend.routes.file_routes._clear_group_file_data", return_value={"files": 0}),
             patch("builtins.print", side_effect=gbk_print),
         ):
             response = TestClient(create_app()).post("/api/files/clear/group-1")
 
         self.assertEqual(200, response.status_code)
-        self.assertEqual({"message": "群组 group-1 的文件数据库不存在"}, response.json())
+        self.assertEqual(
+            {"message": "群组 group-1 的文件数据和图片缓存已删除", "deleted": {"files": 0}},
+            response.json(),
+        )
 
 
 if __name__ == "__main__":

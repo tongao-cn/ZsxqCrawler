@@ -7,6 +7,7 @@ from pathlib import Path
 import psycopg2
 
 from backend.storage.db_compat import get_database_backend, get_postgres_dsn
+from backend.storage.postgres_core_schema import CORE_SCHEMA
 from scripts.manage_postgres_public_schema import PUBLIC_SCHEMA, PUBLIC_VIEW_SPECS, discover_internal_schemas, quote_identifier
 
 
@@ -35,9 +36,9 @@ def _view_count(conn, view_name: str) -> int | None:
     return _table_count(conn, PUBLIC_SCHEMA, view_name)
 
 
-def _internal_schema_summary(conn) -> list[tuple[str, int, int]]:
+def _schema_summary(conn, schema_names: list[str]) -> list[tuple[str, int, int]]:
     rows: list[tuple[str, int, int]] = []
-    for schema_name in discover_internal_schemas(conn):
+    for schema_name in schema_names:
         with conn.cursor() as cur:
             cur.execute(
                 """
@@ -58,22 +59,27 @@ def _internal_schema_summary(conn) -> list[tuple[str, int, int]]:
     return rows
 
 
+def _legacy_schema_count(conn) -> int:
+    return len([schema for schema in discover_internal_schemas(conn) if schema != CORE_SCHEMA])
+
+
 def build_report(conn) -> str:
-    internal_rows = _internal_schema_summary(conn)
+    core_rows = _schema_summary(conn, [CORE_SCHEMA])
+    legacy_count = _legacy_schema_count(conn)
 
     lines = [
         "# PostgreSQL Status Report",
         "",
         f"Generated at: {datetime.now(timezone.utc).isoformat()}",
         "",
-        "## PostgreSQL Internal Schemas",
+        "## PostgreSQL Core Schema",
         "",
     ]
-    if internal_rows:
+    if core_rows:
         lines.extend(["| Schema | Tables | Rows |", "| --- | ---: | ---: |"])
-        lines.extend(f"| `{schema}` | {table_count} | {row_count} |" for schema, table_count, row_count in internal_rows)
+        lines.extend(f"| `{schema}` | {table_count} | {row_count} |" for schema, table_count, row_count in core_rows)
     else:
-        lines.append("- No internal `zsxq_*` schemas found.")
+        lines.append("- `zsxq_core` has not been created.")
 
     lines.extend(["", "## Public Views", "", "| View | Rows |", "| --- | ---: |"])
     for spec in PUBLIC_VIEW_SPECS:
@@ -87,6 +93,7 @@ def build_report(conn) -> str:
             "## Notes",
             "",
             "- Other projects should read from `zsxq_public` with the reader DSN.",
+            f"- Legacy archived `zsxq_*` schema count: {legacy_count}.",
             "- `files.group_id` and `file_ai_analyses.group_id` may remain `NULL` when no reliable group relation exists.",
             "- Re-run this report after any PostgreSQL public view or data refresh.",
             "",

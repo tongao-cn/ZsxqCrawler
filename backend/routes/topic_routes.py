@@ -11,6 +11,7 @@ from fastapi import APIRouter, HTTPException
 
 from backend.core.db_path_manager import get_db_path_manager
 from backend.core.crawler_runtime import get_crawler, get_crawler_for_group
+from backend.storage.db_compat import connect
 
 router = APIRouter(prefix="/api", tags=["topics"])
 
@@ -79,6 +80,18 @@ def _delete_group_topic_rows(db, group_id: int) -> dict:
         deleted_counts[table] = db.cursor.rowcount
 
     return deleted_counts
+
+
+def _clear_group_topic_data(group_id: str) -> dict:
+    conn = connect("zsxq_core_topics")
+    try:
+        db = type("_TopicClearDb", (), {})()
+        db.cursor = conn.cursor()
+        deleted_counts = _delete_group_topic_rows(db, int(group_id))
+        conn.commit()
+        return deleted_counts
+    finally:
+        conn.close()
 
 
 def _build_single_topic_response(topic_id: int, group_id: str, imported: str, comments_fetched: int, message: Optional[str] = None) -> dict:
@@ -343,48 +356,33 @@ async def get_group_topics(group_id: int, page: int = 1, per_page: int = 20, sea
 
 @router.post("/topics/clear/{group_id}")
 async def clear_topic_database(group_id: str):
-    """删除指定群组的话题数据库文件"""
+    """删除指定群组的 PostgreSQL 话题数据"""
     try:
-        path_manager = get_db_path_manager()
-        db_path = path_manager.get_topics_db_path(group_id)
+        try:
+            crawler = get_crawler_for_group(group_id)
+            _close_crawler_databases(crawler)
+            _log_topic_event("INFO", "已关闭爬虫实例的数据库连接")
+        except Exception as e:
+            _log_topic_event("WARN", f"关闭爬虫数据库连接时出错: {e}")
 
-        _log_topic_event("INFO", f"尝试删除话题数据库: {db_path}")
+        gc.collect()
+        time.sleep(0.1)
 
-        if os.path.exists(db_path):
-            try:
-                crawler = get_crawler_for_group(group_id)
-                _close_crawler_databases(crawler)
-                _log_topic_event("INFO", "已关闭爬虫实例的数据库连接")
-            except Exception as e:
-                _log_topic_event("WARN", f"关闭爬虫数据库连接时出错: {e}")
+        deleted_counts = _clear_group_topic_data(group_id)
+        try:
+            from backend.core.image_cache_manager import clear_group_cache_manager, get_image_cache_manager
 
-            gc.collect()
-            time.sleep(0.5)
+            cache_manager = get_image_cache_manager(group_id)
+            success, message = cache_manager.clear_cache()
+            if success:
+                _log_topic_event("INFO", f"图片缓存已清空: {message}")
+            else:
+                _log_topic_event("WARN", f"清空图片缓存失败: {message}")
+            clear_group_cache_manager(group_id)
+        except Exception as cache_error:
+            _log_topic_event("WARN", f"清空图片缓存时出错: {cache_error}")
 
-            try:
-                os.remove(db_path)
-                _log_topic_event("INFO", f"话题数据库已删除: {db_path}")
-
-                try:
-                    from backend.core.image_cache_manager import clear_group_cache_manager, get_image_cache_manager
-
-                    cache_manager = get_image_cache_manager(group_id)
-                    success, message = cache_manager.clear_cache()
-                    if success:
-                        _log_topic_event("INFO", f"图片缓存已清空: {message}")
-                    else:
-                        _log_topic_event("WARN", f"清空图片缓存失败: {message}")
-                    clear_group_cache_manager(group_id)
-                except Exception as cache_error:
-                    _log_topic_event("WARN", f"清空图片缓存时出错: {cache_error}")
-
-                return {"message": f"群组 {group_id} 的话题数据库和图片缓存已删除"}
-            except PermissionError as pe:
-                _log_topic_event("ERROR", f"文件被占用，无法删除: {pe}")
-                raise HTTPException(status_code=500, detail="文件被占用，无法删除数据库文件。请稍后重试。")
-        else:
-            _log_topic_event("INFO", f"话题数据库不存在: {db_path}")
-            return {"message": f"群组 {group_id} 的话题数据库不存在"}
+        return {"message": f"群组 {group_id} 的话题数据和图片缓存已删除", "deleted": deleted_counts}
     except HTTPException:
         raise
     except Exception as e:

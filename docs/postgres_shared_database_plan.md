@@ -5,9 +5,12 @@ projects should read only from the stable `zsxq_public` schema.
 
 ## Recommended Layout
 
-- Internal schemas: `zsxq_*`
+- Core internal schema: `zsxq_core`
   - Used by ZsxqCrawler internals.
-  - Names may still be derived from compatibility path identifiers.
+  - Receives all new structured writes.
+- Legacy schemas: old `zsxq_*`
+  - Retained as read-only archive after migration.
+  - Not used for new writes.
 - Public read schema: `zsxq_public`
   - Stable interface for other projects.
   - Exposes views instead of internal tables.
@@ -33,7 +36,7 @@ The reader role is intended to have only:
 - `USAGE` on schema `zsxq_public`
 - `SELECT` on public views
 
-It should not write to internal `zsxq_*` schemas.
+It should not write to `zsxq_core` or legacy `zsxq_*` schemas.
 
 ## PostgreSQL Operations
 
@@ -42,6 +45,7 @@ Refresh public views and indexes:
 ```powershell
 $env:ZSXQ_DATABASE_BACKEND = "postgres"
 $env:ZSXQ_POSTGRES_DSN = "postgresql://zsxq_writer:password@host:5432/zsxq"
+uv run migrate-postgres-schemas-to-core --apply
 uv run manage-postgres-public-schema --apply --build-indexes
 ```
 
@@ -73,13 +77,13 @@ uv run verify-postgres-reader-access --dsn "postgresql://zsxq_reader:password@ho
 Run the repeatable Docker smoke after changing public view or permission code:
 
 ```powershell
-.\scripts\run_postgres_shared_smoke.ps1
+.\scripts\run_postgres_core_smoke.ps1
 ```
 
 The smoke starts a disposable PostgreSQL container, creates representative
-internal schemas directly in PostgreSQL, refreshes `zsxq_public`, checks
-repeated refresh behavior, validates reader `SELECT`, and confirms the reader
-cannot access internal schemas or create objects in the public schema.
+legacy schemas directly in PostgreSQL, migrates them into `zsxq_core`,
+refreshes `zsxq_public`, checks repeated refresh behavior, validates reader
+`SELECT`, and confirms the reader cannot access core or legacy schemas.
 
 ## Public Views
 
@@ -106,7 +110,7 @@ Initial shared views:
   `source_schema`.
 
 Each view includes `source_schema` so downstream consumers can trace records
-back to the internal schema that produced them.
+back to the legacy source schema when available, or `zsxq_core` for new rows.
 
 `comments.group_id` is derived from the same schema's `topics` table when the
 comment table itself does not carry `group_id`. `files.group_id` and
@@ -147,14 +151,13 @@ Recommended onboarding checklist for another project:
 - Run `uv run verify-postgres-reader-access --dsn "<reader-dsn>"` from this repo
   before sharing the DSN onward.
 - Query only `zsxq_public.*` views.
-- Do not depend on internal `zsxq_*` schema names; they are compatibility
-  details.
+- Do not depend on `zsxq_core` or legacy `zsxq_*` schema names.
 
 ## Current Boundaries
 
 - PostgreSQL is the only structured data source.
 - The public schema is read-oriented. ZsxqCrawler remains the writer.
 - Other projects should treat `zsxq_public` as the stable contract and should
-  not depend on internal `zsxq_*` schemas.
+  not depend on `zsxq_core` or legacy `zsxq_*` schemas.
 - `--build-indexes` creates best-effort indexes on common internal query
   columns. It is safe to repeat and skips missing columns.

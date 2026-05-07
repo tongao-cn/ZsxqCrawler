@@ -31,6 +31,12 @@ jobs:
       - name: Run unit tests
         run: uv run python -m unittest discover -s tests
 
+      - name: Check core schema CLI help
+        run: uv run manage-postgres-core-schema --help
+
+      - name: Check core migration CLI help
+        run: uv run migrate-postgres-schemas-to-core --help
+
       - name: Check public schema CLI help
         run: uv run manage-postgres-public-schema --help
 

@@ -8,17 +8,13 @@ from backend.storage.db_compat import (
     _should_return_id,
     _strip_env_value,
     _translate_sql,
-    schema_name_for_path,
 )
+from backend.storage.postgres_core_schema import CORE_SCHEMA
 
 
 class DbCompatTests(unittest.TestCase):
-    def test_schema_name_is_stable_and_namespaced_by_path(self):
-        first = schema_name_for_path("output/databases/1/zsxq_topics_1.db")
-        second = schema_name_for_path("output/databases/2/zsxq_topics_1.db")
-
-        self.assertTrue(first.startswith("zsxq_zsxq_topics_1_"))
-        self.assertNotEqual(first, second)
+    def test_runtime_schema_is_fixed_core_schema(self):
+        self.assertEqual("zsxq_core", CORE_SCHEMA)
 
     def test_translates_sqlite_upsert_for_known_primary_key_table(self):
         sql = _translate_sql(

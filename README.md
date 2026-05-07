@@ -148,9 +148,9 @@ uv run verify-postgres-reader-access --dsn "postgresql://zsxq_reader:password@ho
 
 ## 数据存储与下载路径
 
-结构化数据统一存储在 PostgreSQL。`output/databases` 目录只保留为下载文件、图片缓存和兼容 schema 命名的本地目录，不再作为真实数据库文件存储位置。
+结构化数据统一存储在 PostgreSQL 的 `zsxq_core` schema。`output/databases` 目录只保留为下载文件和图片缓存的本地目录，不再作为真实数据库文件存储位置。
 
-- **话题 / 文章内容 / 文件元数据**: PostgreSQL 内部 `zsxq_*` schema；其他项目通过 `zsxq_public` 只读视图读取。
+- **话题 / 文章内容 / 文件元数据**: PostgreSQL 内部 `zsxq_core` schema；其他项目通过 `zsxq_public` 只读视图读取。
 - **已下载附件 / 文件**: `output/databases/{group_id}/downloads/`  
   - 通过 Web 界面或命令行触发的文件下载，实际都会保存在这里。  
   - 例如当前示例配置中，群组 `88851415151812` 的文件路径为：`output/databases/88851415151812/downloads/`。
@@ -179,6 +179,7 @@ $env:ZSXQ_POSTGRES_DSN = "postgresql://user:password@localhost:5432/zsxq"
 其它项目共享读取同一份 PostgreSQL 数据时，使用稳定的只读公共视图：
 
 ```bash
+uv run migrate-postgres-schemas-to-core --apply
 uv run manage-postgres-public-schema --apply --build-indexes
 ```
 
@@ -202,10 +203,10 @@ uv run generate-postgres-status-report --output docs\postgres_status_report.md
 uv run verify-postgres-reader-access --dsn "postgresql://zsxq_reader:password@host:5432/zsxq"
 ```
 
-修改公共视图或权限逻辑后，可运行 Docker smoke 验证 PostgreSQL fixture、`zsxq_public` 查询、只读账号权限和重复刷新：
+修改 core 迁移、公共视图或权限逻辑后，可运行 Docker smoke 验证 PostgreSQL fixture、`zsxq_core` 回填、`zsxq_public` 查询、只读账号权限和重复刷新：
 
 ```bash
-.\scripts\run_postgres_shared_smoke.ps1
+.\scripts\run_postgres_core_smoke.ps1
 ```
 
 ## 赞助与支持

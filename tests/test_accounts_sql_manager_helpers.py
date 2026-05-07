@@ -37,7 +37,10 @@ class AccountsSqlManagerHelperTests(unittest.TestCase):
 
         _close_quietly(BrokenClose())
 
-    @unittest.skipUnless(get_postgres_dsn(), "PostgreSQL DSN is not configured")
+    @unittest.skipUnless(
+        get_postgres_dsn() and os.getenv("ZSXQ_RUN_PG_INTEGRATION_TESTS") == "1",
+        "PostgreSQL integration tests are disabled",
+    )
     def test_manager_get_account_uses_same_account_shape(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             db_path = os.path.join(tmpdir, "accounts.db")

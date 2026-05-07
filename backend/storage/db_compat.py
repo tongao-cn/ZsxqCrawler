@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import os
 import re
-import hashlib
 from pathlib import Path
 from typing import Any, Iterable, Optional
+
+from backend.storage.postgres_core_schema import CORE_SCHEMA, ensure_core_schema, quote_identifier
 
 try:
     import tomllib
@@ -85,15 +86,7 @@ def connect(db_path: str | Path, *, row_factory: Any = None):
             "PostgreSQL backend is enabled but no DSN is configured. "
             "Set ZSXQ_POSTGRES_DSN or config.toml [database].postgres_dsn."
         )
-    return PostgresCompatConnection(dsn, schema_name=schema_name_for_path(db_path))
-
-
-def schema_name_for_path(db_path: str | Path) -> str:
-    path = str(db_path).replace("\\", "/")
-    stem = Path(path).stem or "default"
-    slug = re.sub(r"[^a-zA-Z0-9_]+", "_", stem).strip("_").lower() or "default"
-    digest = hashlib.sha1(path.encode("utf-8")).hexdigest()[:8]
-    return f"zsxq_{slug}_{digest}"
+    return PostgresCompatConnection(dsn, storage_key=str(db_path))
 
 
 class CompatRow(tuple):
@@ -113,14 +106,15 @@ class CompatRow(tuple):
 
 
 class PostgresCompatConnection:
-    def __init__(self, dsn: str, schema_name: str):
+    def __init__(self, dsn: str, storage_key: str | None = None):
         import psycopg2
 
         self._conn = psycopg2.connect(dsn)
-        self.schema_name = schema_name
+        self.schema_name = CORE_SCHEMA
+        self.storage_key = storage_key
+        ensure_core_schema(self._conn)
         with self._conn.cursor() as cursor:
-            cursor.execute(f'CREATE SCHEMA IF NOT EXISTS "{schema_name}"')
-            cursor.execute(f'SET search_path TO "{schema_name}"')
+            cursor.execute(f"SET search_path TO {quote_identifier(CORE_SCHEMA)}")
         self._conn.commit()
 
     def cursor(self):

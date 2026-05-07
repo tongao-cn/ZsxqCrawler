@@ -1,5 +1,6 @@
 import unittest
 
+from backend.storage.postgres_core_schema import CORE_SCHEMA
 from scripts.manage_postgres_public_schema import (
     PUBLIC_SCHEMA,
     PUBLIC_VIEW_SPECS,
@@ -15,27 +16,23 @@ class ManagePostgresPublicSchemaTests(unittest.TestCase):
         self.assertEqual('"plain"', quote_identifier("plain"))
         self.assertEqual('"has""quote"', quote_identifier('has"quote'))
 
-    def test_build_public_view_sql_unions_matching_schemas(self):
+    def test_build_public_view_sql_reads_core_schema(self):
         topic_spec = next(spec for spec in PUBLIC_VIEW_SPECS if spec.name == "topics")
 
         sql = build_public_view_sql(
             topic_spec,
-            [
-                ("zsxq_topics_a", {"group_id", "topic_id", "title", "type", "create_time", "updated_at"}),
-                ("zsxq_files_b", {"file_id", "name"}),
-            ],
+            [(CORE_SCHEMA, {"group_id", "topic_id", "title", "type", "create_time", "updated_at", "source_schema"})],
         )
 
         self.assertIn(f'CREATE OR REPLACE VIEW "{PUBLIC_SCHEMA}"."topics"', sql)
-        self.assertIn('"zsxq_topics_a"."topics" AS "src"', sql)
-        self.assertNotIn('"zsxq_files_b"."topics"', sql)
-        self.assertIn("'zsxq_topics_a'::text AS source_schema", sql)
+        self.assertIn(f'"{CORE_SCHEMA}"."topics" AS "src"', sql)
+        self.assertIn('COALESCE("src"."source_schema"', sql)
         self.assertIn('"src"."group_id"::text AS "group_id"', sql)
 
-    def test_build_public_view_sql_returns_empty_view_when_no_schema_matches(self):
+    def test_build_public_view_sql_returns_empty_view_when_core_table_missing_columns(self):
         files_spec = next(spec for spec in PUBLIC_VIEW_SPECS if spec.name == "files")
 
-        sql = build_public_view_sql(files_spec, [("zsxq_topics_a", {"topic_id", "title"})])
+        sql = build_public_view_sql(files_spec, [(CORE_SCHEMA, {"topic_id", "title"})])
 
         self.assertIn(f'CREATE OR REPLACE VIEW "{PUBLIC_SCHEMA}"."files"', sql)
         self.assertIn("WHERE false", sql)
@@ -46,7 +43,7 @@ class ManagePostgresPublicSchemaTests(unittest.TestCase):
 
         sql = build_public_view_sql(
             topic_spec,
-            [("zsxq_legacy", {"group_id", "topic_id", "title"})],
+            [(CORE_SCHEMA, {"group_id", "topic_id", "title"})],
         )
 
         self.assertIn("NULL::text AS \"topic_type\"", sql)
@@ -59,10 +56,10 @@ class ManagePostgresPublicSchemaTests(unittest.TestCase):
 
         sql = build_public_view_sql(
             comment_spec,
-            [("zsxq_topics_db", {"comment_id", "topic_id", "text"})],
+            [(CORE_SCHEMA, {"comment_id", "topic_id", "text"})],
             schema_table_columns=[
                 (
-                    "zsxq_topics_db",
+                    CORE_SCHEMA,
                     {
                         "comments": {"comment_id", "topic_id", "text"},
                         "topics": {"topic_id", "group_id"},
@@ -71,7 +68,7 @@ class ManagePostgresPublicSchemaTests(unittest.TestCase):
             ],
         )
 
-        self.assertIn('FROM "zsxq_topics_db"."topics" AS "t"', sql)
+        self.assertIn(f'FROM "{CORE_SCHEMA}"."topics" AS "t"', sql)
         self.assertIn('"t"."topic_id"::text = "src"."topic_id"::text', sql)
         self.assertIn('AS "group_id"', sql)
 
@@ -100,7 +97,7 @@ class ManagePostgresPublicSchemaTests(unittest.TestCase):
         self.assertIn('ALTER ROLE "reader" LOGIN PASSWORD \'reader\'\'pw\'', sql)
         self.assertIn('ALTER ROLE "writer" LOGIN PASSWORD \'writer-pw\'', sql)
 
-    def test_build_internal_index_sql_uses_existing_columns_only(self):
+    def test_build_internal_index_sql_uses_core_schema(self):
         class FakeCursor:
             def __init__(self):
                 self.rows = []
@@ -112,9 +109,7 @@ class ManagePostgresPublicSchemaTests(unittest.TestCase):
                 return False
 
             def execute(self, sql, params=None):
-                if "information_schema.schemata" in sql:
-                    self.rows = [("zsxq_a",)]
-                elif "information_schema.columns" in sql:
+                if "information_schema.columns" in sql:
                     columns = {
                         "topics": [("group_id",), ("topic_id",), ("create_time",)],
                         "files": [("file_id",)],
@@ -132,9 +127,9 @@ class ManagePostgresPublicSchemaTests(unittest.TestCase):
 
         sql = "\n".join(build_internal_index_sql(FakeConn()))
 
-        self.assertIn('ON "zsxq_a"."topics" ("group_id")', sql)
-        self.assertIn('ON "zsxq_a"."topics" ("topic_id")', sql)
-        self.assertIn('ON "zsxq_a"."files" ("file_id")', sql)
+        self.assertIn(f'ON "{CORE_SCHEMA}"."topics" ("group_id")', sql)
+        self.assertIn(f'ON "{CORE_SCHEMA}"."topics" ("topic_id")', sql)
+        self.assertIn(f'ON "{CORE_SCHEMA}"."files" ("file_id")', sql)
         self.assertNotIn('"updated_at"', sql)
 
 
