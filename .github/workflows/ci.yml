@@ -1,0 +1,41 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+env:
+  PYTHONUTF8: "1"
+  PYTHONIOENCODING: "utf-8"
+
+jobs:
+  tests:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Install project
+        run: uv sync
+
+      - name: Run unit tests
+        run: uv run python -m unittest discover -s tests
+
+      - name: Check migration CLI help
+        run: uv run migrate-sqlite-to-postgres --help
+
+      - name: Check public schema CLI help
+        run: uv run manage-postgres-public-schema --help
+
+      - name: Check migration audit CLI help
+        run: uv run audit-postgres-migration --help
