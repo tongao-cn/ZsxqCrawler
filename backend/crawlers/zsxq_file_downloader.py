@@ -16,6 +16,7 @@ from typing import Dict, Optional, Any, Tuple
 
 import requests
 
+from backend.storage.postgres_core_schema import CORE_SCHEMA
 from backend.storage.zsxq_file_database import ZSXQFileDatabase
 
 
@@ -111,7 +112,8 @@ class ZSXQFileDownloader:
 
         # 使用完整的文件数据库
         self.file_db = ZSXQFileDatabase(self.db_path)
-        self.log(f"📊 完整文件存储初始化完成: {self.db_path}")
+        self.log(f"📊 完整文件存储初始化完成: PostgreSQL schema={CORE_SCHEMA}")
+        self.log(f"🔑 文件存储兼容 key: {self.db_path}")
 
     def log(self, message: str):
         """统一的日志输出方法"""
@@ -1347,7 +1349,8 @@ class ZSXQFileDownloader:
         """显示完整数据库统计信息"""
         print(f"\n📊 完整数据库统计信息:")
         print("="*60)
-        print(f"📁 存储兼容 key: {self.db_path}")
+        print(f"📁 PostgreSQL schema: {CORE_SCHEMA}")
+        print(f"🔑 存储兼容 key: {self.db_path}")
         
         # 使用新数据库的统计方法
         stats = self.file_db.get_database_stats()

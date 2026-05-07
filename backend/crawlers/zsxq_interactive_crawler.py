@@ -10,6 +10,7 @@ import random
 import json
 from typing import Dict, Any, Optional, List
 from backend.storage.zsxq_database import ZSXQDatabase
+from backend.storage.postgres_core_schema import CORE_SCHEMA
 from backend.crawlers.zsxq_file_downloader import ZSXQFileDownloader
 from backend.core.db_path_manager import get_db_path_manager
 import os
@@ -72,7 +73,8 @@ class ZSXQInteractiveCrawler:
 
         self.log(f"🚀 知识星球交互式采集器初始化完成")
         self.log(f"📊 目标群组: {group_id}")
-        self.log(f"💾 PostgreSQL 存储: {db_path}")
+        self.log(f"💾 PostgreSQL schema: {CORE_SCHEMA}")
+        self.log(f"🔑 存储兼容 key: {db_path}")
 
         # 显示当前数据库状态
         self.show_database_status()
