@@ -2,9 +2,7 @@
 
 import Image from 'next/image';
 import React, { useState } from 'react';
-import Lightbox from 'yet-another-react-lightbox';
-import Zoom from 'yet-another-react-lightbox/plugins/zoom';
-import Fullscreen from 'yet-another-react-lightbox/plugins/fullscreen';
+import type { LightboxExternalProps, Plugin } from 'yet-another-react-lightbox';
 import { apiClient } from '@/lib/api';
 
 interface ImageData {
@@ -21,9 +19,34 @@ interface ImageGalleryProps {
   groupId?: string | number;
 }
 
+type LightboxComponent = React.ComponentType<LightboxExternalProps>;
+
+interface LightboxBundle {
+  Lightbox: LightboxComponent;
+  plugins: Plugin[];
+}
+
+let lightboxBundlePromise: Promise<LightboxBundle> | null = null;
+
+const loadLightboxBundle = () => {
+  if (!lightboxBundlePromise) {
+    lightboxBundlePromise = Promise.all([
+      import('yet-another-react-lightbox'),
+      import('yet-another-react-lightbox/plugins/zoom'),
+      import('yet-another-react-lightbox/plugins/fullscreen'),
+    ]).then(([lightbox, zoom, fullscreen]) => ({
+      Lightbox: lightbox.default,
+      plugins: [zoom.default, fullscreen.default],
+    }));
+  }
+
+  return lightboxBundlePromise;
+};
+
 const ImageGallery: React.FC<ImageGalleryProps> = ({ images, className = '', size = 'medium', groupId }) => {
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
+  const [lightboxBundle, setLightboxBundle] = useState<LightboxBundle | null>(null);
 
   // 如果没有图片，不渲染组件
   if (!images || images.length === 0) {
@@ -37,8 +60,10 @@ const ImageGallery: React.FC<ImageGalleryProps> = ({ images, className = '', siz
   }));
 
   // 处理缩略图点击
-  const handleThumbnailClick = (index: number) => {
+  const handleThumbnailClick = async (index: number) => {
     setCurrentImageIndex(index);
+    const bundle = lightboxBundle ?? await loadLightboxBundle();
+    setLightboxBundle(bundle);
     setLightboxOpen(true);
   };
 
@@ -105,52 +130,54 @@ const ImageGallery: React.FC<ImageGalleryProps> = ({ images, className = '', siz
       </div>
 
       {/* Lightbox 组件 */}
-      <Lightbox
-        open={lightboxOpen}
-        close={() => setLightboxOpen(false)}
-        slides={lightboxSlides}
-        index={currentImageIndex}
-        // 启用插件
-        plugins={[Zoom, Fullscreen]}
-        // 配置选项
-        carousel={{
-          finite: images.length <= 1, // 单图时不循环
-        }}
-        // 缩放配置
-        zoom={{
-          maxZoomPixelRatio: 3, // 最大缩放比例
-          zoomInMultiplier: 2, // 缩放倍数
-          doubleTapDelay: 300, // 双击延迟
-          doubleClickDelay: 300, // 双击延迟
-          doubleClickMaxStops: 2, // 双击最大停止次数
-          keyboardMoveDistance: 300, // 键盘移动距离（最大化）
-          wheelZoomDistanceFactor: 10, // 滚轮缩放距离因子（最小化以提高灵敏度）
-          pinchZoomDistanceFactor: 10, // 捏合缩放距离因子（最小化以提高灵敏度）
-          scrollToZoom: true, // 滚轮缩放
-        }}
-        render={{
-          buttonPrev: images.length <= 1 ? () => null : undefined,
-          buttonNext: images.length <= 1 ? () => null : undefined,
-        }}
-        // 样式配置
-        styles={{
-          container: {
-            backgroundColor: 'rgba(0, 0, 0, 0.9)',
-            zIndex: 9999,
-            position: 'fixed',
-            top: 0,
-            left: 0,
-            width: '100vw',
-            height: '100vh'
-          },
-        }}
-        // 动画配置
-        animation={{
-          fade: 300,
-          swipe: 500,
-          zoom: 200, // 缩放动画时间，减少以提高响应速度
-        }}
-      />
+      {lightboxBundle && (
+        <lightboxBundle.Lightbox
+          open={lightboxOpen}
+          close={() => setLightboxOpen(false)}
+          slides={lightboxSlides}
+          index={currentImageIndex}
+          // 启用插件
+          plugins={lightboxBundle.plugins}
+          // 配置选项
+          carousel={{
+            finite: images.length <= 1, // 单图时不循环
+          }}
+          // 缩放配置
+          zoom={{
+            maxZoomPixelRatio: 3, // 最大缩放比例
+            zoomInMultiplier: 2, // 缩放倍数
+            doubleTapDelay: 300, // 双击延迟
+            doubleClickDelay: 300, // 双击延迟
+            doubleClickMaxStops: 2, // 双击最大停止次数
+            keyboardMoveDistance: 300, // 键盘移动距离（最大化）
+            wheelZoomDistanceFactor: 10, // 滚轮缩放距离因子（最小化以提高灵敏度）
+            pinchZoomDistanceFactor: 10, // 捏合缩放距离因子（最小化以提高灵敏度）
+            scrollToZoom: true, // 滚轮缩放
+          }}
+          render={{
+            buttonPrev: images.length <= 1 ? () => null : undefined,
+            buttonNext: images.length <= 1 ? () => null : undefined,
+          }}
+          // 样式配置
+          styles={{
+            container: {
+              backgroundColor: 'rgba(0, 0, 0, 0.9)',
+              zIndex: 9999,
+              position: 'fixed',
+              top: 0,
+              left: 0,
+              width: '100vw',
+              height: '100vh'
+            },
+          }}
+          // 动画配置
+          animation={{
+            fade: 300,
+            swipe: 500,
+            zoom: 200, // 缩放动画时间，减少以提高响应速度
+          }}
+        />
+      )}
     </div>
   );
 };
