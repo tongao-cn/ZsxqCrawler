@@ -211,6 +211,12 @@ uv run verify-postgres-reader-access --dsn "postgresql://zsxq_reader:password@ho
 .\scripts\run_postgres_core_smoke.ps1
 ```
 
+修改运行时存储入口后，可运行 cutover smoke 验证业务 storage 类的新写入只进入 `zsxq_core`，且不会新建旧 `zsxq_*` schema：
+
+```bash
+.\scripts\run_postgres_runtime_cutover_smoke.ps1
+```
+
 ## 赞助与支持
 
 如果本项目对你有帮助，欢迎通过以下方式赞助。付款时请在备注中填写“希望公开展示的链接”（如个人主页、GitHub 仓库等），我们会在 README 的“赞助鸣谢”表格中展示。

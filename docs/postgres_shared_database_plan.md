@@ -89,6 +89,16 @@ legacy schemas directly in PostgreSQL, migrates them into `zsxq_core`,
 refreshes `zsxq_public`, checks repeated refresh behavior, validates reader
 `SELECT`, and confirms the reader cannot access core or legacy schemas.
 
+Run the runtime cutover smoke after changing storage classes or `db_compat`:
+
+```powershell
+.\scripts\run_postgres_runtime_cutover_smoke.ps1
+```
+
+This smoke writes through `ZSXQDatabase`, `ZSXQFileDatabase`, `TaskStore`,
+`AccountsSQLManager`, and `AccountInfoDB`, then checks that rows landed in
+`zsxq_core` and no path-derived legacy schema was created.
+
 ## Public Views
 
 Initial shared views:
@@ -116,11 +126,10 @@ Initial shared views:
 Each view includes `source_schema` so downstream consumers can trace records
 back to the legacy source schema when available, or `zsxq_core` for new rows.
 
-`comments.group_id` is derived from the same schema's `topics` table when the
-comment table itself does not carry `group_id`. `files.group_id` and
-`file_ai_analyses.group_id` use a single-group fallback from the same schema's
-`groups` table when present; otherwise they remain `NULL` until a stronger
-file-to-topic/group relation is available.
+`comments.group_id`, `files.group_id`, and `file_ai_analyses.group_id` are
+backfilled into `zsxq_core` from topic/file relations by
+`backfill-postgres-core-group-ids`. Re-run that command after historical
+imports before refreshing public views.
 
 Minimum Python read example for other projects:
 

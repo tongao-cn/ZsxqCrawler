@@ -28,3 +28,7 @@ jobs:
       - name: Run PostgreSQL core smoke
         shell: pwsh
         run: .\scripts\run_postgres_core_smoke.ps1
+
+      - name: Run PostgreSQL runtime cutover smoke
+        shell: pwsh
+        run: .\scripts\run_postgres_runtime_cutover_smoke.ps1
