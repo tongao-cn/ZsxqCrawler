@@ -1,69 +1,193 @@
 # PostgreSQL Legacy Schema Archive Report
 
-Generated at: 2026-05-07T11:12:20.304634+00:00
+Generated at: 2026-05-07T12:00:58.561951+00:00
 
 - Legacy schema count: 594
 - Legacy row count: 132450
+- `record_sources` tracked row count: 132450
+- Untracked legacy row count: 0
+- Ready-to-drop schema count: 594
+- Held schema count: 0
 - This report does not delete data.
+- `ready_to_drop_*` means this report can generate future drop SQL; it still does not execute deletion.
+
+## Drop Readiness
+
+| Status | Schemas | Rows | Untracked Rows |
+| --- | ---: | ---: | ---: |
+| `ready_to_drop_empty` | 112 | 0 | 0 |
+| `ready_to_drop_tracked` | 482 | 132450 | 0 |
+| `hold_untracked_rows` | 0 | 0 | 0 |
 
 ## Largest Schemas
 
-| Schema | Tables | Rows |
-| --- | ---: | ---: |
-| `zsxq_zsxq_files_51111112855254_29c88cfe` | 19 | 84413 |
-| `zsxq_zsxq_topics_51111112855254_4a7a649e` | 16 | 28188 |
-| `zsxq_zsxq_topics_15552822451452_2c751086` | 16 | 11841 |
-| `zsxq_zsxq_files_15552822451452_fb2115bf` | 19 | 5943 |
-| `zsxq_zsxq_config_990948ae` | 5 | 604 |
-| `zsxq_tasks_0f39875c` | 2 | 12 |
-| `zsxq_tasks_17df926c` | 2 | 12 |
-| `zsxq_tasks_1b054b0e` | 2 | 12 |
-| `zsxq_tasks_25594ca2` | 2 | 12 |
-| `zsxq_tasks_2ac346d8` | 2 | 12 |
-| `zsxq_tasks_2eb17791` | 2 | 12 |
-| `zsxq_tasks_3296fcd4` | 2 | 12 |
-| `zsxq_tasks_3b84f2ba` | 2 | 12 |
-| `zsxq_tasks_3b980104` | 2 | 12 |
-| `zsxq_tasks_40ecaa46` | 2 | 12 |
-| `zsxq_tasks_40f1adfb` | 2 | 12 |
-| `zsxq_tasks_46b51328` | 2 | 12 |
-| `zsxq_tasks_48ddafbf` | 2 | 12 |
-| `zsxq_tasks_57ac2d1f` | 2 | 12 |
-| `zsxq_tasks_57b257b8` | 2 | 12 |
-| `zsxq_tasks_59c07509` | 2 | 12 |
-| `zsxq_tasks_673bbcae` | 2 | 12 |
-| `zsxq_tasks_6d3c9d29` | 2 | 12 |
-| `zsxq_tasks_6f8aea6d` | 2 | 12 |
-| `zsxq_tasks_71d01b75` | 2 | 12 |
-| `zsxq_tasks_722227b8` | 2 | 12 |
-| `zsxq_tasks_752c1478` | 2 | 12 |
-| `zsxq_tasks_7c4a8bf5` | 2 | 12 |
-| `zsxq_tasks_8c6dfbfc` | 2 | 12 |
-| `zsxq_tasks_a416e566` | 2 | 12 |
-| `zsxq_tasks_b40dfb60` | 2 | 12 |
-| `zsxq_tasks_b629551d` | 2 | 12 |
-| `zsxq_tasks_be367938` | 2 | 12 |
-| `zsxq_tasks_bf106685` | 2 | 12 |
-| `zsxq_tasks_bf33dfe4` | 2 | 12 |
-| `zsxq_tasks_c3a020c9` | 2 | 12 |
-| `zsxq_tasks_c7e883eb` | 2 | 12 |
-| `zsxq_tasks_cc83f674` | 2 | 12 |
-| `zsxq_tasks_cf6d1dce` | 2 | 12 |
-| `zsxq_tasks_dc35704d` | 2 | 12 |
-| `zsxq_tasks_e4de1f0b` | 2 | 12 |
-| `zsxq_tasks_eaf775d0` | 2 | 12 |
-| `zsxq_tasks_f528cc16` | 2 | 12 |
-| `zsxq_tasks_fa7c62ed` | 2 | 12 |
-| `zsxq_tasks_fa8856c0` | 2 | 12 |
-| `zsxq_tasks_fbcee9f0` | 2 | 12 |
-| `zsxq_tasks_01ad53d5` | 2 | 4 |
-| `zsxq_tasks_0231ba9e` | 2 | 4 |
-| `zsxq_tasks_03728439` | 2 | 4 |
-| `zsxq_tasks_053cf8bb` | 2 | 4 |
+| Schema | Tables | Rows | Tracked Rows | Untracked Rows | Status |
+| --- | ---: | ---: | ---: | ---: | --- |
+| `zsxq_zsxq_files_51111112855254_29c88cfe` | 19 | 84413 | 84413 | 0 | `ready_to_drop_tracked` |
+| `zsxq_zsxq_topics_51111112855254_4a7a649e` | 16 | 28188 | 28188 | 0 | `ready_to_drop_tracked` |
+| `zsxq_zsxq_topics_15552822451452_2c751086` | 16 | 11841 | 11841 | 0 | `ready_to_drop_tracked` |
+| `zsxq_zsxq_files_15552822451452_fb2115bf` | 19 | 5943 | 5943 | 0 | `ready_to_drop_tracked` |
+| `zsxq_zsxq_config_990948ae` | 5 | 604 | 604 | 0 | `ready_to_drop_tracked` |
+| `zsxq_tasks_0f39875c` | 2 | 12 | 12 | 0 | `ready_to_drop_tracked` |
+| `zsxq_tasks_17df926c` | 2 | 12 | 12 | 0 | `ready_to_drop_tracked` |
+| `zsxq_tasks_1b054b0e` | 2 | 12 | 12 | 0 | `ready_to_drop_tracked` |
+| `zsxq_tasks_25594ca2` | 2 | 12 | 12 | 0 | `ready_to_drop_tracked` |
+| `zsxq_tasks_2ac346d8` | 2 | 12 | 12 | 0 | `ready_to_drop_tracked` |
+| `zsxq_tasks_2eb17791` | 2 | 12 | 12 | 0 | `ready_to_drop_tracked` |
+| `zsxq_tasks_3296fcd4` | 2 | 12 | 12 | 0 | `ready_to_drop_tracked` |
+| `zsxq_tasks_3b84f2ba` | 2 | 12 | 12 | 0 | `ready_to_drop_tracked` |
+| `zsxq_tasks_3b980104` | 2 | 12 | 12 | 0 | `ready_to_drop_tracked` |
+| `zsxq_tasks_40ecaa46` | 2 | 12 | 12 | 0 | `ready_to_drop_tracked` |
+| `zsxq_tasks_40f1adfb` | 2 | 12 | 12 | 0 | `ready_to_drop_tracked` |
+| `zsxq_tasks_46b51328` | 2 | 12 | 12 | 0 | `ready_to_drop_tracked` |
+| `zsxq_tasks_48ddafbf` | 2 | 12 | 12 | 0 | `ready_to_drop_tracked` |
+| `zsxq_tasks_57ac2d1f` | 2 | 12 | 12 | 0 | `ready_to_drop_tracked` |
+| `zsxq_tasks_57b257b8` | 2 | 12 | 12 | 0 | `ready_to_drop_tracked` |
+| `zsxq_tasks_59c07509` | 2 | 12 | 12 | 0 | `ready_to_drop_tracked` |
+| `zsxq_tasks_673bbcae` | 2 | 12 | 12 | 0 | `ready_to_drop_tracked` |
+| `zsxq_tasks_6d3c9d29` | 2 | 12 | 12 | 0 | `ready_to_drop_tracked` |
+| `zsxq_tasks_6f8aea6d` | 2 | 12 | 12 | 0 | `ready_to_drop_tracked` |
+| `zsxq_tasks_71d01b75` | 2 | 12 | 12 | 0 | `ready_to_drop_tracked` |
+| `zsxq_tasks_722227b8` | 2 | 12 | 12 | 0 | `ready_to_drop_tracked` |
+| `zsxq_tasks_752c1478` | 2 | 12 | 12 | 0 | `ready_to_drop_tracked` |
+| `zsxq_tasks_7c4a8bf5` | 2 | 12 | 12 | 0 | `ready_to_drop_tracked` |
+| `zsxq_tasks_8c6dfbfc` | 2 | 12 | 12 | 0 | `ready_to_drop_tracked` |
+| `zsxq_tasks_a416e566` | 2 | 12 | 12 | 0 | `ready_to_drop_tracked` |
+| `zsxq_tasks_b40dfb60` | 2 | 12 | 12 | 0 | `ready_to_drop_tracked` |
+| `zsxq_tasks_b629551d` | 2 | 12 | 12 | 0 | `ready_to_drop_tracked` |
+| `zsxq_tasks_be367938` | 2 | 12 | 12 | 0 | `ready_to_drop_tracked` |
+| `zsxq_tasks_bf106685` | 2 | 12 | 12 | 0 | `ready_to_drop_tracked` |
+| `zsxq_tasks_bf33dfe4` | 2 | 12 | 12 | 0 | `ready_to_drop_tracked` |
+| `zsxq_tasks_c3a020c9` | 2 | 12 | 12 | 0 | `ready_to_drop_tracked` |
+| `zsxq_tasks_c7e883eb` | 2 | 12 | 12 | 0 | `ready_to_drop_tracked` |
+| `zsxq_tasks_cc83f674` | 2 | 12 | 12 | 0 | `ready_to_drop_tracked` |
+| `zsxq_tasks_cf6d1dce` | 2 | 12 | 12 | 0 | `ready_to_drop_tracked` |
+| `zsxq_tasks_dc35704d` | 2 | 12 | 12 | 0 | `ready_to_drop_tracked` |
+| `zsxq_tasks_e4de1f0b` | 2 | 12 | 12 | 0 | `ready_to_drop_tracked` |
+| `zsxq_tasks_eaf775d0` | 2 | 12 | 12 | 0 | `ready_to_drop_tracked` |
+| `zsxq_tasks_f528cc16` | 2 | 12 | 12 | 0 | `ready_to_drop_tracked` |
+| `zsxq_tasks_fa7c62ed` | 2 | 12 | 12 | 0 | `ready_to_drop_tracked` |
+| `zsxq_tasks_fa8856c0` | 2 | 12 | 12 | 0 | `ready_to_drop_tracked` |
+| `zsxq_tasks_fbcee9f0` | 2 | 12 | 12 | 0 | `ready_to_drop_tracked` |
+| `zsxq_tasks_01ad53d5` | 2 | 4 | 4 | 0 | `ready_to_drop_tracked` |
+| `zsxq_tasks_0231ba9e` | 2 | 4 | 4 | 0 | `ready_to_drop_tracked` |
+| `zsxq_tasks_03728439` | 2 | 4 | 4 | 0 | `ready_to_drop_tracked` |
+| `zsxq_tasks_053cf8bb` | 2 | 4 | 4 | 0 | `ready_to_drop_tracked` |
+
+## Held Schemas
+
+| Schema | Tables | Rows | Tracked Rows | Untracked Rows |
+| --- | ---: | ---: | ---: | ---: |
+| none | 0 | 0 | 0 | 0 |
+
+## Ready-To-Drop Schemas
+
+| Schema | Tables | Rows | Status |
+| --- | ---: | ---: | --- |
+| `zsxq_accounts_0bd91692` | 2 | 1 | `ready_to_drop_tracked` |
+| `zsxq_accounts_0f687725` | 2 | 1 | `ready_to_drop_tracked` |
+| `zsxq_accounts_15bb96a8` | 2 | 1 | `ready_to_drop_tracked` |
+| `zsxq_accounts_1c5dc7ac` | 2 | 1 | `ready_to_drop_tracked` |
+| `zsxq_accounts_3b66cdb7` | 2 | 1 | `ready_to_drop_tracked` |
+| `zsxq_accounts_4bb3fd39` | 2 | 1 | `ready_to_drop_tracked` |
+| `zsxq_accounts_51591dcb` | 2 | 1 | `ready_to_drop_tracked` |
+| `zsxq_accounts_517e8b26` | 2 | 1 | `ready_to_drop_tracked` |
+| `zsxq_accounts_543356cd` | 2 | 1 | `ready_to_drop_tracked` |
+| `zsxq_accounts_59c2a9e3` | 2 | 1 | `ready_to_drop_tracked` |
+| `zsxq_accounts_5b76eda7` | 2 | 1 | `ready_to_drop_tracked` |
+| `zsxq_accounts_67fe7559` | 2 | 1 | `ready_to_drop_tracked` |
+| `zsxq_accounts_6c4abf0c` | 2 | 1 | `ready_to_drop_tracked` |
+| `zsxq_accounts_6e8688ee` | 2 | 1 | `ready_to_drop_tracked` |
+| `zsxq_accounts_71ec21b9` | 2 | 1 | `ready_to_drop_tracked` |
+| `zsxq_accounts_7dbb4fd1` | 2 | 1 | `ready_to_drop_tracked` |
+| `zsxq_accounts_7f8b7946` | 2 | 1 | `ready_to_drop_tracked` |
+| `zsxq_accounts_894c3df0` | 2 | 1 | `ready_to_drop_tracked` |
+| `zsxq_accounts_963145d7` | 2 | 1 | `ready_to_drop_tracked` |
+| `zsxq_accounts_ab94b29d` | 2 | 1 | `ready_to_drop_tracked` |
+| `zsxq_accounts_be578102` | 2 | 1 | `ready_to_drop_tracked` |
+| `zsxq_accounts_cea04d7c` | 2 | 1 | `ready_to_drop_tracked` |
+| `zsxq_accounts_f1863476` | 2 | 1 | `ready_to_drop_tracked` |
+| `zsxq_accounts_f4201da4` | 2 | 1 | `ready_to_drop_tracked` |
+| `zsxq_accounts_f8a3b8c5` | 2 | 1 | `ready_to_drop_tracked` |
+| `zsxq_accounts_fab2738f` | 2 | 1 | `ready_to_drop_tracked` |
+| `zsxq_tasks_00824d92` | 2 | 0 | `ready_to_drop_empty` |
+| `zsxq_tasks_01ad53d5` | 2 | 4 | `ready_to_drop_tracked` |
+| `zsxq_tasks_0228da13` | 2 | 0 | `ready_to_drop_empty` |
+| `zsxq_tasks_0231ba9e` | 2 | 4 | `ready_to_drop_tracked` |
+| `zsxq_tasks_0238c0b0` | 2 | 3 | `ready_to_drop_tracked` |
+| `zsxq_tasks_03331fa7` | 2 | 2 | `ready_to_drop_tracked` |
+| `zsxq_tasks_03728439` | 2 | 4 | `ready_to_drop_tracked` |
+| `zsxq_tasks_0388efd1` | 2 | 1 | `ready_to_drop_tracked` |
+| `zsxq_tasks_039377d3` | 2 | 0 | `ready_to_drop_empty` |
+| `zsxq_tasks_044dc9c4` | 2 | 1 | `ready_to_drop_tracked` |
+| `zsxq_tasks_0462d935` | 2 | 2 | `ready_to_drop_tracked` |
+| `zsxq_tasks_047b6b9f` | 2 | 2 | `ready_to_drop_tracked` |
+| `zsxq_tasks_04d0a00f` | 2 | 0 | `ready_to_drop_empty` |
+| `zsxq_tasks_053cf8bb` | 2 | 4 | `ready_to_drop_tracked` |
+| `zsxq_tasks_0551251d` | 2 | 0 | `ready_to_drop_empty` |
+| `zsxq_tasks_0659d56f` | 2 | 4 | `ready_to_drop_tracked` |
+| `zsxq_tasks_07470121` | 2 | 2 | `ready_to_drop_tracked` |
+| `zsxq_tasks_07e9f292` | 2 | 1 | `ready_to_drop_tracked` |
+| `zsxq_tasks_0893e61c` | 2 | 0 | `ready_to_drop_empty` |
+| `zsxq_tasks_0a9b4a05` | 2 | 2 | `ready_to_drop_tracked` |
+| `zsxq_tasks_0c75640f` | 2 | 0 | `ready_to_drop_empty` |
+| `zsxq_tasks_0d64a0f1` | 2 | 3 | `ready_to_drop_tracked` |
+| `zsxq_tasks_0d888301` | 2 | 0 | `ready_to_drop_empty` |
+| `zsxq_tasks_0e60aaa8` | 2 | 3 | `ready_to_drop_tracked` |
+| `zsxq_tasks_0f39875c` | 2 | 12 | `ready_to_drop_tracked` |
+| `zsxq_tasks_0f3b18a8` | 2 | 1 | `ready_to_drop_tracked` |
+| `zsxq_tasks_0fa8d48f` | 2 | 2 | `ready_to_drop_tracked` |
+| `zsxq_tasks_1061985c` | 2 | 1 | `ready_to_drop_tracked` |
+| `zsxq_tasks_10f5dc3e` | 2 | 3 | `ready_to_drop_tracked` |
+| `zsxq_tasks_111aeb10` | 2 | 1 | `ready_to_drop_tracked` |
+| `zsxq_tasks_1137f4a0` | 2 | 0 | `ready_to_drop_empty` |
+| `zsxq_tasks_127f7e33` | 2 | 3 | `ready_to_drop_tracked` |
+| `zsxq_tasks_129024e4` | 2 | 3 | `ready_to_drop_tracked` |
+| `zsxq_tasks_12c29661` | 2 | 1 | `ready_to_drop_tracked` |
+| `zsxq_tasks_130132b2` | 2 | 3 | `ready_to_drop_tracked` |
+| `zsxq_tasks_152b47a0` | 2 | 1 | `ready_to_drop_tracked` |
+| `zsxq_tasks_1709a2ff` | 2 | 3 | `ready_to_drop_tracked` |
+| `zsxq_tasks_17ab9920` | 2 | 1 | `ready_to_drop_tracked` |
+| `zsxq_tasks_17df926c` | 2 | 12 | `ready_to_drop_tracked` |
+| `zsxq_tasks_196fc86b` | 2 | 0 | `ready_to_drop_empty` |
+| `zsxq_tasks_198248fd` | 2 | 2 | `ready_to_drop_tracked` |
+| `zsxq_tasks_19fc3858` | 2 | 1 | `ready_to_drop_tracked` |
+| `zsxq_tasks_1a1fd403` | 2 | 4 | `ready_to_drop_tracked` |
+| `zsxq_tasks_1ab5f5ea` | 2 | 1 | `ready_to_drop_tracked` |
+| `zsxq_tasks_1b054b0e` | 2 | 12 | `ready_to_drop_tracked` |
+| `zsxq_tasks_1bdd4df4` | 2 | 0 | `ready_to_drop_empty` |
+| `zsxq_tasks_1ccc38b0` | 2 | 0 | `ready_to_drop_empty` |
+| `zsxq_tasks_1d4db4be` | 2 | 1 | `ready_to_drop_tracked` |
+| `zsxq_tasks_1e8d51a3` | 2 | 4 | `ready_to_drop_tracked` |
+| `zsxq_tasks_1e9a9ebd` | 2 | 1 | `ready_to_drop_tracked` |
+| `zsxq_tasks_1fe5fd2a` | 2 | 4 | `ready_to_drop_tracked` |
+| `zsxq_tasks_2036357c` | 2 | 2 | `ready_to_drop_tracked` |
+| `zsxq_tasks_2072ee69` | 2 | 3 | `ready_to_drop_tracked` |
+| `zsxq_tasks_21edc611` | 2 | 2 | `ready_to_drop_tracked` |
+| `zsxq_tasks_2276e2f3` | 2 | 2 | `ready_to_drop_tracked` |
+| `zsxq_tasks_2308c21f` | 2 | 1 | `ready_to_drop_tracked` |
+| `zsxq_tasks_239cf3d8` | 2 | 4 | `ready_to_drop_tracked` |
+| `zsxq_tasks_23dc6f45` | 2 | 2 | `ready_to_drop_tracked` |
+| `zsxq_tasks_24ccffbc` | 2 | 2 | `ready_to_drop_tracked` |
+| `zsxq_tasks_250ecfc1` | 2 | 2 | `ready_to_drop_tracked` |
+| `zsxq_tasks_25594ca2` | 2 | 12 | `ready_to_drop_tracked` |
+| `zsxq_tasks_25716d0f` | 2 | 2 | `ready_to_drop_tracked` |
+| `zsxq_tasks_258696a3` | 2 | 4 | `ready_to_drop_tracked` |
+| `zsxq_tasks_25d39ef9` | 2 | 3 | `ready_to_drop_tracked` |
+| `zsxq_tasks_25fa5607` | 2 | 3 | `ready_to_drop_tracked` |
+| `zsxq_tasks_2643f5ef` | 2 | 0 | `ready_to_drop_empty` |
+| `zsxq_tasks_265fd878` | 2 | 2 | `ready_to_drop_tracked` |
+| `zsxq_tasks_26e528be` | 2 | 2 | `ready_to_drop_tracked` |
+| `zsxq_tasks_273c6461` | 2 | 4 | `ready_to_drop_tracked` |
+| `zsxq_tasks_278b94cc` | 2 | 4 | `ready_to_drop_tracked` |
+| `zsxq_tasks_280540ab` | 2 | 1 | `ready_to_drop_tracked` |
+| `zsxq_tasks_28624374` | 2 | 3 | `ready_to_drop_tracked` |
+| `zsxq_tasks_286595c2` | 2 | 1 | `ready_to_drop_tracked` |
+| `zsxq_tasks_28cfeb33` | 2 | 0 | `ready_to_drop_empty` |
 
 ## Generated Drop SQL
 
-The SQL below is for a future archive/delete task. Do not run it until core migration has been independently accepted.
+The SQL below includes only `ready_to_drop_*` schemas and is for a future archive/delete task. Do not run it until core migration has been independently accepted and backed up.
 
 ```sql
 DROP SCHEMA IF EXISTS "zsxq_accounts_0bd91692" CASCADE;

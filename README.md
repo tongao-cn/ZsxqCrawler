@@ -184,7 +184,12 @@ uv run backfill-postgres-core-group-ids --apply
 uv run manage-postgres-public-schema --apply --build-indexes
 ```
 
+旧的 path-derived `zsxq_*` schema 只作为迁移归档保留。删除前必须先刷新
+`docs/postgres_legacy_archive_report.md` 并按
+`docs/postgres_legacy_schema_drop_plan.md` 的人工检查流程执行。
+
 公共视图会写入 `zsxq_public` schema，并面向只读分析场景。详细说明见 `docs/postgres_shared_database_plan.md`。
+`zsxq_public` 暴露的是按业务主键去重后的稳定记录；旧 schema 的来源行数可在 `zsxq_core.record_sources` 和迁移报告中追踪。
 
 生产部署时，可用管理员 DSN 初始化登录角色和内部表索引：
 

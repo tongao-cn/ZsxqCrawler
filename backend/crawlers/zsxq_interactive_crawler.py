@@ -35,13 +35,13 @@ class ZSXQInteractiveCrawler:
         self.stop_flag = False  # 停止标志
         self.stop_check_func = None  # 停止检查函数
 
-        # 使用路径管理器获取数据库路径
+        # 使用路径管理器获取存储兼容 key
         path_manager = get_db_path_manager()
         if db_path is None:
             db_path = path_manager.get_topics_db_path(group_id)
         files_db_path = path_manager.get_files_db_path(group_id)
 
-        self.db_path = db_path  # 保存数据库路径
+        self.db_path = db_path  # 保存存储兼容 key
         self.db = ZSXQDatabase(db_path, files_db_path=files_db_path)
         self.session = requests.Session()
 
@@ -72,7 +72,7 @@ class ZSXQInteractiveCrawler:
 
         self.log(f"🚀 知识星球交互式采集器初始化完成")
         self.log(f"📊 目标群组: {group_id}")
-        self.log(f"💾 数据库: {db_path}")
+        self.log(f"💾 PostgreSQL 存储: {db_path}")
 
         # 显示当前数据库状态
         self.show_database_status()
@@ -181,7 +181,7 @@ class ZSXQInteractiveCrawler:
     def get_file_downloader(self):
         """获取文件下载器（懒加载）"""
         if self.file_downloader is None:
-            # 使用路径管理器获取文件数据库路径
+            # 使用路径管理器获取文件存储兼容 key
             path_manager = get_db_path_manager()
             files_db_path = path_manager.get_files_db_path(self.group_id)
             self.file_downloader = ZSXQFileDownloader(self.cookie, self.group_id, files_db_path)
@@ -1685,7 +1685,7 @@ def main():
     
     COOKIE = auth_config.get('cookie', 'your_cookie_here')
     GROUP_ID = auth_config.get('group_id', 'your_group_id_here')
-    # 数据库路径改为可选；如未配置则由路径管理器自动管理
+    # 存储兼容 key 改为可选；如未配置则由路径管理器自动管理
     DB_PATH = db_config.get('path') if isinstance(db_config, dict) else None
     
     # 检查配置是否已修改

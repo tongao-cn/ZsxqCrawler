@@ -13,6 +13,9 @@ except ModuleNotFoundError:  # pragma: no cover
     tomllib = None  # type: ignore[assignment]
 
 
+_CORE_SCHEMA_BOOTSTRAPPED_DSNS: set[str] = set()
+
+
 def _project_root() -> Path:
     return Path(__file__).resolve().parents[2]
 
@@ -74,6 +77,12 @@ def get_postgres_dsn() -> Optional[str]:
 
 
 def connect(db_path: str | Path, *, row_factory: Any = None):
+    """Open the PostgreSQL compatibility connection.
+
+    ``db_path`` is retained as a legacy storage key/local resource hint; it no
+    longer selects or derives a PostgreSQL schema. Runtime data is stored in the
+    fixed ``zsxq_core`` schema.
+    """
     if get_database_backend() != "postgres":
         raise RuntimeError(
             "SQLite backend has been removed. Configure PostgreSQL with "
@@ -112,7 +121,9 @@ class PostgresCompatConnection:
         self._conn = psycopg2.connect(dsn)
         self.schema_name = CORE_SCHEMA
         self.storage_key = storage_key
-        ensure_core_schema(self._conn)
+        if dsn not in _CORE_SCHEMA_BOOTSTRAPPED_DSNS:
+            ensure_core_schema(self._conn)
+            _CORE_SCHEMA_BOOTSTRAPPED_DSNS.add(dsn)
         with self._conn.cursor() as cursor:
             cursor.execute(f"SET search_path TO {quote_identifier(CORE_SCHEMA)}")
         self._conn.commit()

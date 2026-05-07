@@ -72,7 +72,7 @@ def _close_quietly(obj) -> None:
 class AccountInfoDB:
     """
     账号信息数据库：持久化 /v3/users/self 的用户信息
-    数据库存放路径：DatabasePathManager.get_config_db_path()
+    存储兼容 key：DatabasePathManager.get_config_db_path()
     表：accounts_self
     """
     def __init__(self, db_path: Optional[str] = None):

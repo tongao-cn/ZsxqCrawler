@@ -61,7 +61,7 @@ def _close_quietly(resource) -> None:
 class AccountsSQLManager:
     """
     账号SQL管理器
-    数据库存放路径：DatabasePathManager.get_config_db_path()
+    存储兼容 key：DatabasePathManager.get_config_db_path()
     表：accounts, group_account_map
     """
 

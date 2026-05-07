@@ -54,3 +54,6 @@ jobs:
 
       - name: Check writer access CLI help
         run: uv run verify-postgres-writer-access --help
+
+      - name: Check real cutover probe CLI help
+        run: uv run run-postgres-real-cutover-probe --help

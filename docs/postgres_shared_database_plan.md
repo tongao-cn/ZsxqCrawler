@@ -71,6 +71,8 @@ uv run generate-postgres-legacy-archive-report --output docs\postgres_legacy_arc
 ```
 
 `generate-postgres-legacy-archive-report` only writes a report and future `DROP SCHEMA` SQL. It does not delete legacy schemas.
+See `docs/postgres_legacy_schema_drop_plan.md` for the separate manual physical
+deletion checklist.
 
 Verify a reader DSN before giving it to another project:
 
@@ -101,6 +103,22 @@ This smoke writes through `ZSXQDatabase`, `ZSXQFileDatabase`, `TaskStore`,
 `zsxq_core` and no path-derived legacy schema was created.
 
 ## Public Views
+
+`zsxq_public` is the stable downstream contract and exposes deduplicated
+business records from `zsxq_core`, not raw legacy rows. Natural keys such as
+`topic_id`, `file_id`, `comment_id`, and `(group_id, report_date)` define the
+public row identity. Legacy row provenance is retained in
+`zsxq_core.record_sources`, so migration reports may show a larger scanned
+source-row count than the public view row count.
+
+Current real database example:
+
+- `migrate-postgres-schemas-to-core` scanned 13751 legacy `topics` source rows.
+- After the real runtime cutover probe, `zsxq_public.topics` exposes 12961
+  deduplicated topic records.
+- This difference is expected when the same business record appeared in
+  multiple path-derived legacy schemas and when new runtime writes now land
+  directly in `zsxq_core`.
 
 Initial shared views:
 

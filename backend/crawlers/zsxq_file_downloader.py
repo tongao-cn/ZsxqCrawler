@@ -33,7 +33,7 @@ class ZSXQFileDownloader:
         Args:
             cookie: 登录凭证
             group_id: 星球ID
-            db_path: 数据库文件路径（如果为None，使用默认路径）
+            db_path: 存储兼容 key（如果为 None，使用路径管理器默认 key）
             download_dir: 下载目录
             download_interval: 单次下载间隔（秒），默认1秒
             long_sleep_interval: 长休眠间隔（秒），默认60秒
@@ -66,7 +66,7 @@ class ZSXQFileDownloader:
             self.long_sleep_interval_min = 180  # 长休眠最小值（3分钟）
             self.long_sleep_interval_max = 300  # 长休眠最大值（5分钟）
 
-        # 如果没有指定数据库路径，使用默认路径
+        # 如果没有指定存储兼容 key，使用路径管理器默认 key
         if db_path is None:
             from backend.core.db_path_manager import get_db_path_manager
             path_manager = get_db_path_manager()
@@ -111,7 +111,7 @@ class ZSXQFileDownloader:
 
         # 使用完整的文件数据库
         self.file_db = ZSXQFileDatabase(self.db_path)
-        self.log(f"📊 完整文件数据库初始化完成: {self.db_path}")
+        self.log(f"📊 完整文件存储初始化完成: {self.db_path}")
 
     def log(self, message: str):
         """统一的日志输出方法"""
@@ -1347,7 +1347,7 @@ class ZSXQFileDownloader:
         """显示完整数据库统计信息"""
         print(f"\n📊 完整数据库统计信息:")
         print("="*60)
-        print(f"📁 数据库文件: {self.db_path}")
+        print(f"📁 存储兼容 key: {self.db_path}")
         
         # 使用新数据库的统计方法
         stats = self.file_db.get_database_stats()
