@@ -5,9 +5,75 @@
 用于存储专栏目录、文章和相关信息
 """
 
-import sqlite3
 from typing import Dict, List, Any, Optional
 from datetime import datetime
+
+from backend.storage.db_compat import connect
+
+
+def _column_row_to_dict(row) -> Dict[str, Any]:
+    return {
+        'column_id': row[0],
+        'group_id': row[1],
+        'name': row[2],
+        'cover_url': row[3],
+        'topics_count': row[4],
+        'create_time': row[5],
+        'last_topic_attach_time': row[6],
+        'imported_at': row[7]
+    }
+
+
+def _column_topic_row_to_dict(row) -> Dict[str, Any]:
+    return {
+        'topic_id': row[0],
+        'column_id': row[1],
+        'group_id': row[2],
+        'title': row[3],
+        'text': row[4],
+        'create_time': row[5],
+        'attached_to_column_time': row[6],
+        'imported_at': row[7],
+        'has_detail': bool(row[8])
+    }
+
+
+def _topic_image_row_to_dict(row) -> Dict[str, Any]:
+    return {
+        'image_id': row[0],
+        'type': row[1],
+        'thumbnail': {
+            'url': row[2],
+            'width': row[3],
+            'height': row[4]
+        },
+        'large': {
+            'url': row[5],
+            'width': row[6],
+            'height': row[7]
+        },
+        'original': {
+            'url': row[8],
+            'width': row[9],
+            'height': row[10],
+            'size': row[11]
+        },
+        'local_path': row[12]
+    }
+
+
+def _empty_stats() -> Dict[str, int]:
+    return {
+        'columns_count': 0,
+        'topics_count': 0,
+        'details_count': 0,
+        'images_count': 0,
+        'files_count': 0,
+        'files_downloaded': 0,
+        'videos_count': 0,
+        'videos_downloaded': 0,
+        'comments_count': 0
+    }
 
 
 class ZSXQColumnsDatabase:
@@ -16,7 +82,7 @@ class ZSXQColumnsDatabase:
     def __init__(self, db_path: str = "zsxq_columns.db"):
         """初始化数据库连接"""
         self.db_path = db_path
-        self.conn = sqlite3.connect(db_path, check_same_thread=False)
+        self.conn = connect(db_path)
         self.cursor = self.conn.cursor()
         self._init_database()
     
@@ -255,19 +321,7 @@ class ZSXQColumnsDatabase:
             ORDER BY create_time DESC
         ''', (group_id,))
         
-        columns = []
-        for row in self.cursor.fetchall():
-            columns.append({
-                'column_id': row[0],
-                'group_id': row[1],
-                'name': row[2],
-                'cover_url': row[3],
-                'topics_count': row[4],
-                'create_time': row[5],
-                'last_topic_attach_time': row[6],
-                'imported_at': row[7]
-            })
-        return columns
+        return [_column_row_to_dict(row) for row in self.cursor.fetchall()]
     
     def get_column(self, column_id: int) -> Optional[Dict[str, Any]]:
         """获取单个专栏目录"""
@@ -278,18 +332,7 @@ class ZSXQColumnsDatabase:
         ''', (column_id,))
         
         row = self.cursor.fetchone()
-        if row:
-            return {
-                'column_id': row[0],
-                'group_id': row[1],
-                'name': row[2],
-                'cover_url': row[3],
-                'topics_count': row[4],
-                'create_time': row[5],
-                'last_topic_attach_time': row[6],
-                'imported_at': row[7]
-            }
-        return None
+        return _column_row_to_dict(row) if row else None
     
     # ==================== 专栏文章操作 ====================
     
@@ -326,20 +369,7 @@ class ZSXQColumnsDatabase:
             ORDER BY ct.attached_to_column_time DESC
         ''', (column_id,))
         
-        topics = []
-        for row in self.cursor.fetchall():
-            topics.append({
-                'topic_id': row[0],
-                'column_id': row[1],
-                'group_id': row[2],
-                'title': row[3],
-                'text': row[4],
-                'create_time': row[5],
-                'attached_to_column_time': row[6],
-                'imported_at': row[7],
-                'has_detail': bool(row[8])
-            })
-        return topics
+        return [_column_topic_row_to_dict(row) for row in self.cursor.fetchall()]
     
     # ==================== 文章详情操作 ====================
     
@@ -633,30 +663,7 @@ class ZSXQColumnsDatabase:
             FROM images WHERE topic_id = ?
         ''', (topic_id,))
         
-        images = []
-        for row in self.cursor.fetchall():
-            images.append({
-                'image_id': row[0],
-                'type': row[1],
-                'thumbnail': {
-                    'url': row[2],
-                    'width': row[3],
-                    'height': row[4]
-                },
-                'large': {
-                    'url': row[5],
-                    'width': row[6],
-                    'height': row[7]
-                },
-                'original': {
-                    'url': row[8],
-                    'width': row[9],
-                    'height': row[10],
-                    'size': row[11]
-                },
-                'local_path': row[12]
-            })
-        return images
+        return [_topic_image_row_to_dict(row) for row in self.cursor.fetchall()]
     
     def get_topic_files(self, topic_id: int) -> List[Dict[str, Any]]:
         """获取文章的所有文件"""
@@ -955,17 +962,7 @@ class ZSXQColumnsDatabase:
     
     def get_stats(self, group_id: int) -> Dict[str, Any]:
         """获取专栏数据库统计信息"""
-        stats = {
-            'columns_count': 0,
-            'topics_count': 0,
-            'details_count': 0,
-            'images_count': 0,
-            'files_count': 0,
-            'files_downloaded': 0,
-            'videos_count': 0,
-            'videos_downloaded': 0,
-            'comments_count': 0
-        }
+        stats = _empty_stats()
         
         self.cursor.execute('SELECT COUNT(*) FROM columns WHERE group_id = ?', (group_id,))
         stats['columns_count'] = self.cursor.fetchone()[0]

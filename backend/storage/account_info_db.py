@@ -3,12 +3,12 @@
 
 import os
 import json
-import sqlite3
 import threading
 from datetime import datetime
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, Tuple
 
 from backend.core.db_path_manager import get_db_path_manager
+from backend.storage.db_compat import connect
 
 _lock = threading.Lock()
 
@@ -17,6 +17,56 @@ def _ensure_dir(path: str):
     d = os.path.dirname(path)
     if d and not os.path.exists(d):
         os.makedirs(d, exist_ok=True)
+
+
+def _safe_load_json(s: Optional[str]) -> Any:
+    if not s:
+        return None
+    try:
+        return json.loads(s)
+    except Exception:
+        return None
+
+
+def _build_self_info_upsert_params(
+    account_id: str,
+    self_info: Dict[str, Any],
+    raw_json: Optional[Dict[str, Any]],
+    fetched_at: str,
+) -> Tuple[Any, ...]:
+    raw_json_str = json.dumps(raw_json or {}, ensure_ascii=False)
+    return (
+        account_id,
+        self_info.get("uid"),
+        self_info.get("name"),
+        self_info.get("avatar_url"),
+        self_info.get("location"),
+        self_info.get("user_sid"),
+        self_info.get("grade"),
+        raw_json_str,
+        fetched_at,
+    )
+
+
+def _self_info_row_to_dict(row) -> Dict[str, Any]:
+    return {
+        "account_id": row[0],
+        "uid": row[1],
+        "name": row[2],
+        "avatar_url": row[3],
+        "location": row[4],
+        "user_sid": row[5],
+        "grade": row[6],
+        "raw_json": _safe_load_json(row[7]),
+        "fetched_at": row[8],
+    }
+
+
+def _close_quietly(obj) -> None:
+    try:
+        obj.close()
+    except Exception:
+        pass
 
 
 class AccountInfoDB:
@@ -29,7 +79,7 @@ class AccountInfoDB:
         pm = get_db_path_manager()
         self.db_path = db_path or pm.get_config_db_path()
         _ensure_dir(self.db_path)
-        self.conn = sqlite3.connect(self.db_path, check_same_thread=False)
+        self.conn = connect(self.db_path)
         self.conn.execute("PRAGMA journal_mode=WAL;")
         self.conn.execute("PRAGMA foreign_keys=ON;")
         self.cursor = self.conn.cursor()
@@ -68,7 +118,7 @@ class AccountInfoDB:
             raise ValueError("account_id 不能为空")
 
         now = datetime.now().isoformat(timespec="seconds")
-        raw_json_str = json.dumps(raw_json or {}, ensure_ascii=False)
+        params = _build_self_info_upsert_params(account_id, self_info, raw_json, now)
 
         with _lock:
             self.cursor.execute(
@@ -85,17 +135,7 @@ class AccountInfoDB:
                     raw_json=excluded.raw_json,
                     fetched_at=excluded.fetched_at
                 """,
-                (
-                    account_id,
-                    self_info.get("uid"),
-                    self_info.get("name"),
-                    self_info.get("avatar_url"),
-                    self_info.get("location"),
-                    self_info.get("user_sid"),
-                    self_info.get("grade"),
-                    raw_json_str,
-                    now,
-                ),
+                params,
             )
             self.conn.commit()
 
@@ -114,36 +154,12 @@ class AccountInfoDB:
             row = self.cursor.fetchone()
             if not row:
                 return None
-            return {
-                "account_id": row[0],
-                "uid": row[1],
-                "name": row[2],
-                "avatar_url": row[3],
-                "location": row[4],
-                "user_sid": row[5],
-                "grade": row[6],
-                "raw_json": self._safe_load_json(row[7]),
-                "fetched_at": row[8],
-            }
-
-    def _safe_load_json(self, s: Optional[str]) -> Any:
-        if not s:
-            return None
-        try:
-            return json.loads(s)
-        except Exception:
-            return None
+            return _self_info_row_to_dict(row)
 
     def close(self):
         with _lock:
-            try:
-                self.cursor.close()
-            except Exception:
-                pass
-            try:
-                self.conn.close()
-            except Exception:
-                pass
+            _close_quietly(self.cursor)
+            _close_quietly(self.conn)
 
 
 _db_singleton: Optional[AccountInfoDB] = None

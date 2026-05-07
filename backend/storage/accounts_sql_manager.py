@@ -7,13 +7,13 @@
 """
 
 import os
-import sqlite3
 import threading
 import time
 from typing import Dict, Any, List, Optional, Tuple
 from datetime import datetime
 
 from backend.core.db_path_manager import get_db_path_manager
+from backend.storage.db_compat import connect
 
 _lock = threading.RLock()  # 使用可重入锁，避免同一线程重复获取锁导致死锁
 
@@ -38,6 +38,26 @@ def _mask_cookie(cookie: str) -> str:
     return f"***{tail}"
 
 
+def _account_row_to_dict(row, mask_cookie: bool = False) -> Dict[str, Any]:
+    """Convert an accounts query row to the public account dict shape."""
+    cookie = _mask_cookie(row[2]) if mask_cookie else row[2]
+    return {
+        "id": row[0],
+        "name": row[1],
+        "cookie": cookie,
+        "created_at": row[3],
+        "updated_at": row[4],
+    }
+
+
+def _close_quietly(resource) -> None:
+    """Close a DB resource while preserving existing best-effort behavior."""
+    try:
+        resource.close()
+    except Exception:
+        pass
+
+
 class AccountsSQLManager:
     """
     账号SQL管理器
@@ -49,7 +69,7 @@ class AccountsSQLManager:
         pm = get_db_path_manager()
         self.db_path = db_path or pm.get_config_db_path()
         _ensure_dir(self.db_path)
-        self.conn = sqlite3.connect(self.db_path, check_same_thread=False)
+        self.conn = connect(self.db_path)
         self.conn.execute("PRAGMA journal_mode=WAL;")
         self.conn.execute("PRAGMA foreign_keys=ON;")
         self.cursor = self.conn.cursor()
@@ -115,14 +135,7 @@ class AccountsSQLManager:
             rows = self.cursor.fetchall()
             accounts = []
             for row in rows:
-                acc = {
-                    "id": row[0],
-                    "name": row[1],
-                    "cookie": _mask_cookie(row[2]) if mask_cookie else row[2],
-                    "created_at": row[3],
-                    "updated_at": row[4],
-                }
-                accounts.append(acc)
+                accounts.append(_account_row_to_dict(row, mask_cookie=mask_cookie))
             return accounts
 
     def get_account_by_id(self, account_id: str, mask_cookie: bool = False) -> Optional[Dict[str, Any]]:
@@ -139,13 +152,7 @@ class AccountsSQLManager:
             row = self.cursor.fetchone()
             if not row:
                 return None
-            return {
-                "id": row[0],
-                "name": row[1],
-                "cookie": _mask_cookie(row[2]) if mask_cookie else row[2],
-                "created_at": row[3],
-                "updated_at": row[4],
-            }
+            return _account_row_to_dict(row, mask_cookie=mask_cookie)
 
     def add_account(self, cookie: str, name: Optional[str] = None) -> Dict[str, Any]:
         """新增账号"""
@@ -202,13 +209,7 @@ class AccountsSQLManager:
             if not row:
                 return None
 
-            return {
-                "id": row[0],
-                "name": row[1],
-                "cookie": _mask_cookie(row[2]) if mask_cookie else row[2],
-                "created_at": row[3],
-                "updated_at": row[4],
-            }
+            return _account_row_to_dict(row, mask_cookie=mask_cookie)
 
     def assign_group_account(self, group_id: str, account_id: str) -> Tuple[bool, str]:
         """将群组分配到指定账号"""
@@ -279,14 +280,8 @@ class AccountsSQLManager:
     def close(self):
         """关闭数据库连接"""
         with _lock:
-            try:
-                self.cursor.close()
-            except Exception:
-                pass
-            try:
-                self.conn.close()
-            except Exception:
-                pass
+            _close_quietly(self.cursor)
+            _close_quietly(self.conn)
 
 
 # 单例模式

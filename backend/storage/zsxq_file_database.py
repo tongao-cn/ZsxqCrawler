@@ -1,5 +1,68 @@
-import sqlite3
 from typing import Dict, List, Any, Optional
+
+from backend.storage.db_compat import connect
+
+
+_IMPORT_STAT_KEYS = (
+    'files',
+    'topics',
+    'users',
+    'groups',
+    'images',
+    'comments',
+    'likes',
+    'columns',
+    'solutions',
+)
+
+_STATS_TABLES = (
+    'files', 'groups', 'users', 'topics', 'talks', 'images',
+    'topic_files', 'latest_likes', 'comments', 'like_emojis',
+    'user_liked_emojis', 'columns', 'topic_columns', 'solutions',
+    'solution_files', 'file_topic_relations', 'api_responses', 'collection_log',
+    'file_ai_analyses'
+)
+
+_FILE_AI_ANALYSIS_FIELDS = (
+    'file_id',
+    'status',
+    'summary',
+    'extracted_text',
+    'extracted_text_preview',
+    'content_type',
+    'source_path',
+    'source_size',
+    'model',
+    'api_base',
+    'wire_api',
+    'reasoning_effort',
+    'error_message',
+    'created_at',
+    'updated_at',
+)
+
+
+def _new_import_stats() -> Dict[str, int]:
+    return dict.fromkeys(_IMPORT_STAT_KEYS, 0)
+
+
+def _row_to_file_ai_analysis(row: Any) -> Optional[Dict[str, Any]]:
+    if not row:
+        return None
+    return dict(zip(_FILE_AI_ANALYSIS_FIELDS, row))
+
+
+def _count_tables(cursor: Any, tables: Any = _STATS_TABLES) -> Dict[str, Any]:
+    stats = {}
+    for table in tables:
+        cursor.execute(f"SELECT COUNT(*) FROM {table}")
+        stats[table] = cursor.fetchone()[0]
+    return stats
+
+
+def _close_connection(conn: Any) -> None:
+    if conn:
+        conn.close()
 
 
 class ZSXQFileDatabase:
@@ -8,7 +71,7 @@ class ZSXQFileDatabase:
     def __init__(self, db_path: str = "zsxq_files_complete.db"):
         """初始化数据库连接"""
         self.db_path = db_path
-        self.conn = sqlite3.connect(db_path, check_same_thread=False)
+        self.conn = connect(db_path)
         self.cursor = self.conn.cursor()
         self.create_tables()
     
@@ -615,17 +678,7 @@ class ZSXQFileDatabase:
     
     def import_file_response(self, response_data: Dict[str, Any]) -> Dict[str, int]:
         """导入文件API响应数据"""
-        stats = {
-            'files': 0,
-            'topics': 0,
-            'users': 0,
-            'groups': 0,
-            'images': 0,
-            'comments': 0,
-            'likes': 0,
-            'columns': 0,
-            'solutions': 0
-        }
+        stats = _new_import_stats()
         
         try:
             # 记录API响应
@@ -738,21 +791,7 @@ class ZSXQFileDatabase:
     
     def get_database_stats(self) -> Dict[str, Any]:
         """获取数据库统计信息"""
-        stats = {}
-        
-        tables = [
-            'files', 'groups', 'users', 'topics', 'talks', 'images', 
-            'topic_files', 'latest_likes', 'comments', 'like_emojis',
-            'user_liked_emojis', 'columns', 'topic_columns', 'solutions',
-            'solution_files', 'file_topic_relations', 'api_responses', 'collection_log',
-            'file_ai_analyses'
-        ]
-        
-        for table in tables:
-            self.cursor.execute(f"SELECT COUNT(*) FROM {table}")
-            stats[table] = self.cursor.fetchone()[0]
-        
-        return stats
+        return _count_tables(self.cursor)
 
     def _migrate_database(self):
         """执行数据库迁移，添加新列"""
@@ -796,8 +835,7 @@ class ZSXQFileDatabase:
 
     def close(self):
         """关闭数据库连接"""
-        if self.conn:
-            self.conn.close()
+        _close_connection(self.conn)
 
     def upsert_file_ai_analysis(
         self,
@@ -854,25 +892,7 @@ class ZSXQFileDatabase:
         WHERE file_id = ?
         ''', (file_id,))
         row = self.cursor.fetchone()
-        if not row:
-            return None
-        return {
-            'file_id': row[0],
-            'status': row[1],
-            'summary': row[2],
-            'extracted_text': row[3],
-            'extracted_text_preview': row[4],
-            'content_type': row[5],
-            'source_path': row[6],
-            'source_size': row[7],
-            'model': row[8],
-            'api_base': row[9],
-            'wire_api': row[10],
-            'reasoning_effort': row[11],
-            'error_message': row[12],
-            'created_at': row[13],
-            'updated_at': row[14],
-        }
+        return _row_to_file_ai_analysis(row)
 
 
 def main():
