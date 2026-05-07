@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
-from typing import Optional
+from typing import Any, Callable, Optional
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException
 from pydantic import BaseModel, Field
@@ -44,6 +44,118 @@ class CrawlTimeRangeRequest(BaseModel):
     pagesPerBatch: Optional[int] = Field(default=None, ge=5, le=50, description="每批次页面数")
 
 
+TASK_CREATED_MESSAGE = "任务已创建，正在后台执行"
+INIT_STOPPED_MESSAGE = "🛑 任务在初始化过程中被停止"
+CRAWLER_STARTUP_LOGS = ("📡 连接到知识星球API...", "🔍 检查数据库状态...")
+
+
+def _should_stop_task(task_id: str) -> bool:
+    return is_task_stopped(task_id)
+
+
+def _build_task_callbacks(task_id: str) -> tuple[Callable[[str], None], Callable[[], bool]]:
+    def log_callback(message: str) -> None:
+        add_task_log(task_id, message)
+
+    def stop_check() -> bool:
+        return _should_stop_task(task_id)
+
+    return log_callback, stop_check
+
+
+def _log_crawler_startup(task_id: str) -> None:
+    for message in CRAWLER_STARTUP_LOGS:
+        add_task_log(task_id, message)
+
+
+def _log_init_stopped(task_id: str) -> None:
+    add_task_log(task_id, INIT_STOPPED_MESSAGE)
+
+
+def _crawl_interval_kwargs(crawl_settings: Any) -> dict[str, Any]:
+    return {
+        "crawl_interval_min": crawl_settings.crawlIntervalMin,
+        "crawl_interval_max": crawl_settings.crawlIntervalMax,
+        "long_sleep_interval_min": crawl_settings.longSleepIntervalMin,
+        "long_sleep_interval_max": crawl_settings.longSleepIntervalMax,
+        "pages_per_batch": crawl_settings.pagesPerBatch,
+    }
+
+
+def _has_crawl_interval_overrides(crawl_settings: Any) -> bool:
+    return any(_crawl_interval_kwargs(crawl_settings).values())
+
+
+def _apply_crawl_settings(crawler: Any, crawl_settings: Any, require_overrides: bool = False) -> bool:
+    if not crawl_settings:
+        return False
+    if require_overrides and not _has_crawl_interval_overrides(crawl_settings):
+        return False
+
+    crawler.set_custom_intervals(**_crawl_interval_kwargs(crawl_settings))
+    return True
+
+
+def _mark_expired_task(task_id: str, result: dict[str, Any], default_message: str = "成员体验已到期") -> None:
+    message = result.get("message", default_message)
+    add_task_log(task_id, f"❌ 会员已过期: {message}")
+    update_task(task_id, "failed", "会员已过期", {"expired": True, "code": result.get("code"), "message": result.get("message")})
+
+
+def _create_crawl_task_response(
+    background_tasks: BackgroundTasks,
+    task_type: str,
+    description: str,
+    task_func: Callable[..., Any],
+    *task_args: Any,
+) -> dict[str, str]:
+    task_id = create_task(task_type, description)
+    background_tasks.add_task(task_func, task_id, *task_args)
+    return {"task_id": task_id, "message": TASK_CREATED_MESSAGE}
+
+
+def _parse_user_time(value: Optional[str]) -> Optional[datetime]:
+    if not value:
+        return None
+    text = value.strip()
+    try:
+        if len(text) == 10 and text[4] == "-" and text[7] == "-":
+            dt = datetime.strptime(text, "%Y-%m-%d")
+            return dt.replace(tzinfo=timezone(timedelta(hours=8)))
+        if "T" in text and len(text) == 16:
+            text = text + ":00"
+        if text.endswith("Z"):
+            text = text.replace("Z", "+00:00")
+        if len(text) >= 24 and (text[-5] in ["+", "-"]) and text[-3] != ":":
+            text = text[:-2] + ":" + text[-2:]
+        dt = datetime.fromisoformat(text)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone(timedelta(hours=8)))
+        return dt
+    except Exception:
+        return None
+
+
+def _resolve_time_range(request: CrawlTimeRangeRequest, now_bj: datetime) -> tuple[datetime, datetime]:
+    start_dt = _parse_user_time(request.startTime)
+    end_dt = _parse_user_time(request.endTime) if request.endTime else None
+
+    if request.lastDays and request.lastDays > 0:
+        if end_dt is None:
+            end_dt = now_bj
+        start_dt = end_dt - timedelta(days=request.lastDays)
+
+    if end_dt is None:
+        end_dt = now_bj
+    if start_dt is None:
+        start_dt = end_dt - timedelta(days=30)
+
+    if start_dt > end_dt:
+        start_dt, end_dt = end_dt, start_dt
+
+    return start_dt, end_dt
+
+
 def run_crawl_historical_task(
     task_id: str,
     group_id: str,
@@ -63,11 +175,7 @@ def run_crawl_historical_task(
         if is_task_stopped(task_id):
             return
 
-        def log_callback(message: str):
-            add_task_log(task_id, message)
-
-        def stop_check():
-            return is_task_stopped(task_id)
+        log_callback, stop_check = _build_task_callbacks(task_id)
 
         cookie = get_cookie_for_group(group_id)
         path_manager = get_db_path_manager()
@@ -76,21 +184,13 @@ def run_crawl_historical_task(
         crawler = ZSXQInteractiveCrawler(cookie, group_id, db_path, log_callback)
         crawler.stop_check_func = stop_check
 
-        if crawl_settings:
-            crawler.set_custom_intervals(
-                crawl_interval_min=crawl_settings.crawlIntervalMin,
-                crawl_interval_max=crawl_settings.crawlIntervalMax,
-                long_sleep_interval_min=crawl_settings.longSleepIntervalMin,
-                long_sleep_interval_max=crawl_settings.longSleepIntervalMax,
-                pages_per_batch=crawl_settings.pagesPerBatch,
-            )
+        _apply_crawl_settings(crawler, crawl_settings)
 
         if is_task_stopped(task_id):
-            add_task_log(task_id, "🛑 任务在初始化过程中被停止")
+            _log_init_stopped(task_id)
             return
 
-        add_task_log(task_id, "📡 连接到知识星球API...")
-        add_task_log(task_id, "🔍 检查数据库状态...")
+        _log_crawler_startup(task_id)
 
         if is_task_stopped(task_id):
             return
@@ -101,8 +201,7 @@ def run_crawl_historical_task(
             return
 
         if result and result.get("expired"):
-            add_task_log(task_id, f"❌ 会员已过期: {result.get('message', '成员体验已到期')}")
-            update_task(task_id, "failed", "会员已过期", {"expired": True, "code": result.get("code"), "message": result.get("message")})
+            _mark_expired_task(task_id, result)
             return
 
         add_task_log(task_id, f"✅ 获取完成！新增话题: {result.get('new_topics', 0)}, 更新话题: {result.get('updated_topics', 0)}")
@@ -120,11 +219,7 @@ def run_crawl_all_task(task_id: str, group_id: str, crawl_settings: CrawlSetting
         add_task_log(task_id, "🚀 开始全量爬取...")
         add_task_log(task_id, "⚠️ 警告：此模式将持续爬取直到没有数据，可能需要很长时间")
 
-        def log_callback(message):
-            add_task_log(task_id, message)
-
-        def stop_check():
-            return is_task_stopped(task_id)
+        log_callback, stop_check = _build_task_callbacks(task_id)
 
         cookie = get_cookie_for_group(group_id)
         path_manager = get_db_path_manager()
@@ -133,21 +228,13 @@ def run_crawl_all_task(task_id: str, group_id: str, crawl_settings: CrawlSetting
         crawler = ZSXQInteractiveCrawler(cookie, group_id, db_path, log_callback)
         crawler.stop_check_func = stop_check
 
-        if crawl_settings:
-            crawler.set_custom_intervals(
-                crawl_interval_min=crawl_settings.crawlIntervalMin,
-                crawl_interval_max=crawl_settings.crawlIntervalMax,
-                long_sleep_interval_min=crawl_settings.longSleepIntervalMin,
-                long_sleep_interval_max=crawl_settings.longSleepIntervalMax,
-                pages_per_batch=crawl_settings.pagesPerBatch,
-            )
+        _apply_crawl_settings(crawler, crawl_settings)
 
         if is_task_stopped(task_id):
-            add_task_log(task_id, "🛑 任务在初始化过程中被停止")
+            _log_init_stopped(task_id)
             return
 
-        add_task_log(task_id, "📡 连接到知识星球API...")
-        add_task_log(task_id, "🔍 检查数据库状态...")
+        _log_crawler_startup(task_id)
 
         if is_task_stopped(task_id):
             return
@@ -165,8 +252,7 @@ def run_crawl_all_task(task_id: str, group_id: str, crawl_settings: CrawlSetting
             return
 
         if result and result.get("expired"):
-            add_task_log(task_id, f"❌ 会员已过期: {result.get('message', '成员体验已到期')}")
-            update_task(task_id, "failed", "会员已过期", {"expired": True, "code": result.get("code"), "message": result.get("message")})
+            _mark_expired_task(task_id, result)
             return
 
         add_task_log(task_id, "🎉 全量爬取完成！")
@@ -188,11 +274,7 @@ def run_crawl_incremental_task(
 
         update_task(task_id, "running", "开始增量爬取...")
 
-        def log_callback(message: str):
-            add_task_log(task_id, message)
-
-        def stop_check():
-            return is_task_stopped(task_id)
+        log_callback, stop_check = _build_task_callbacks(task_id)
 
         cookie = get_cookie_for_group(group_id)
         path_manager = get_db_path_manager()
@@ -201,21 +283,13 @@ def run_crawl_incremental_task(
         crawler = ZSXQInteractiveCrawler(cookie, group_id, db_path, log_callback)
         crawler.stop_check_func = stop_check
 
-        if crawl_settings:
-            crawler.set_custom_intervals(
-                crawl_interval_min=crawl_settings.crawlIntervalMin,
-                crawl_interval_max=crawl_settings.crawlIntervalMax,
-                long_sleep_interval_min=crawl_settings.longSleepIntervalMin,
-                long_sleep_interval_max=crawl_settings.longSleepIntervalMax,
-                pages_per_batch=crawl_settings.pagesPerBatch,
-            )
+        _apply_crawl_settings(crawler, crawl_settings)
 
         if is_task_stopped(task_id):
-            add_task_log(task_id, "🛑 任务在初始化过程中被停止")
+            _log_init_stopped(task_id)
             return
 
-        add_task_log(task_id, "📡 连接到知识星球API...")
-        add_task_log(task_id, "🔍 检查数据库状态...")
+        _log_crawler_startup(task_id)
 
         result = crawler.crawl_incremental(pages, per_page)
 
@@ -235,11 +309,7 @@ def run_crawl_latest_task(task_id: str, group_id: str, crawl_settings: CrawlSett
 
         update_task(task_id, "running", "开始获取最新记录...")
 
-        def log_callback(message: str):
-            add_task_log(task_id, message)
-
-        def stop_check():
-            return is_task_stopped(task_id)
+        log_callback, stop_check = _build_task_callbacks(task_id)
 
         cookie = get_cookie_for_group(group_id)
         path_manager = get_db_path_manager()
@@ -248,21 +318,13 @@ def run_crawl_latest_task(task_id: str, group_id: str, crawl_settings: CrawlSett
         crawler = ZSXQInteractiveCrawler(cookie, group_id, db_path, log_callback)
         crawler.stop_check_func = stop_check
 
-        if crawl_settings:
-            crawler.set_custom_intervals(
-                crawl_interval_min=crawl_settings.crawlIntervalMin,
-                crawl_interval_max=crawl_settings.crawlIntervalMax,
-                long_sleep_interval_min=crawl_settings.longSleepIntervalMin,
-                long_sleep_interval_max=crawl_settings.longSleepIntervalMax,
-                pages_per_batch=crawl_settings.pagesPerBatch,
-            )
+        _apply_crawl_settings(crawler, crawl_settings)
 
         if is_task_stopped(task_id):
-            add_task_log(task_id, "🛑 任务在初始化过程中被停止")
+            _log_init_stopped(task_id)
             return
 
-        add_task_log(task_id, "📡 连接到知识星球API...")
-        add_task_log(task_id, "🔍 检查数据库状态...")
+        _log_crawler_startup(task_id)
 
         result = crawler.crawl_latest_until_complete()
 
@@ -270,8 +332,7 @@ def run_crawl_latest_task(task_id: str, group_id: str, crawl_settings: CrawlSett
             return
 
         if result and result.get("expired"):
-            add_task_log(task_id, f"❌ 会员已过期: {result.get('message', '成员体验已到期')}")
-            update_task(task_id, "failed", "会员已过期", {"expired": True, "code": result.get("code"), "message": result.get("message")})
+            _mark_expired_task(task_id, result)
             return
 
         add_task_log(task_id, f"✅ 获取最新记录完成！新增话题: {result.get('new_topics', 0)}, 更新话题: {result.get('updated_topics', 0)}")
@@ -285,55 +346,14 @@ def run_crawl_latest_task(task_id: str, group_id: str, crawl_settings: CrawlSett
 def run_crawl_time_range_task(task_id: str, group_id: str, request: "CrawlTimeRangeRequest"):
     """后台执行“按时间区间爬取”任务：仅导入位于区间 [startTime, endTime] 内的话题"""
     try:
-
-        def parse_user_time(s: Optional[str]) -> Optional[datetime]:
-            if not s:
-                return None
-            t = s.strip()
-            try:
-                if len(t) == 10 and t[4] == "-" and t[7] == "-":
-                    dt = datetime.strptime(t, "%Y-%m-%d")
-                    return dt.replace(tzinfo=timezone(timedelta(hours=8)))
-                if "T" in t and len(t) == 16:
-                    t = t + ":00"
-                if t.endswith("Z"):
-                    t = t.replace("Z", "+00:00")
-                if len(t) >= 24 and (t[-5] in ["+", "-"]) and t[-3] != ":":
-                    t = t[:-2] + ":" + t[-2:]
-                dt = datetime.fromisoformat(t)
-                if dt.tzinfo is None:
-                    dt = dt.replace(tzinfo=timezone(timedelta(hours=8)))
-                return dt
-            except Exception:
-                return None
-
         bj_tz = timezone(timedelta(hours=8))
         now_bj = datetime.now(bj_tz)
-
-        start_dt = parse_user_time(request.startTime)
-        end_dt = parse_user_time(request.endTime) if request.endTime else None
-
-        if request.lastDays and request.lastDays > 0:
-            if end_dt is None:
-                end_dt = now_bj
-            start_dt = end_dt - timedelta(days=request.lastDays)
-
-        if end_dt is None:
-            end_dt = now_bj
-        if start_dt is None:
-            start_dt = end_dt - timedelta(days=30)
-
-        if start_dt > end_dt:
-            start_dt, end_dt = end_dt, start_dt
+        start_dt, end_dt = _resolve_time_range(request, now_bj)
 
         update_task(task_id, "running", "开始按时间区间爬取...")
         add_task_log(task_id, f"🗓️ 时间范围: {start_dt.isoformat()} ~ {end_dt.isoformat()}")
 
-        def stop_check():
-            return is_task_stopped(task_id)
-
-        def log_callback(message: str):
-            add_task_log(task_id, message)
+        log_callback, stop_check = _build_task_callbacks(task_id)
 
         cookie = get_cookie_for_group(group_id)
         path_manager = get_db_path_manager()
@@ -342,22 +362,7 @@ def run_crawl_time_range_task(task_id: str, group_id: str, request: "CrawlTimeRa
         crawler = ZSXQInteractiveCrawler(cookie, group_id, db_path, log_callback)
         crawler.stop_check_func = stop_check
 
-        if any(
-            [
-                request.crawlIntervalMin,
-                request.crawlIntervalMax,
-                request.longSleepIntervalMin,
-                request.longSleepIntervalMax,
-                request.pagesPerBatch,
-            ]
-        ):
-            crawler.set_custom_intervals(
-                crawl_interval_min=request.crawlIntervalMin,
-                crawl_interval_max=request.crawlIntervalMax,
-                long_sleep_interval_min=request.longSleepIntervalMin,
-                long_sleep_interval_max=request.longSleepIntervalMax,
-                pages_per_batch=request.pagesPerBatch,
-            )
+        _apply_crawl_settings(crawler, request, require_overrides=True)
 
         per_page = request.perPage or 20
         total_stats = {"new_topics": 0, "updated_topics": 0, "errors": 0, "pages": 0}
@@ -460,9 +465,16 @@ def run_crawl_time_range_task(task_id: str, group_id: str, request: "CrawlTimeRa
 async def crawl_historical(group_id: str, request: CrawlHistoricalRequest, background_tasks: BackgroundTasks):
     """爬取历史数据"""
     try:
-        task_id = create_task("crawl_historical", f"爬取历史数据 {request.pages} 页 (群组: {group_id})")
-        background_tasks.add_task(run_crawl_historical_task, task_id, group_id, request.pages, request.per_page, request)
-        return {"task_id": task_id, "message": "任务已创建，正在后台执行"}
+        return _create_crawl_task_response(
+            background_tasks,
+            "crawl_historical",
+            f"爬取历史数据 {request.pages} 页 (群组: {group_id})",
+            run_crawl_historical_task,
+            group_id,
+            request.pages,
+            request.per_page,
+            request,
+        )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"创建爬取任务失败: {str(e)}")
 
@@ -471,9 +483,14 @@ async def crawl_historical(group_id: str, request: CrawlHistoricalRequest, backg
 async def crawl_all(group_id: str, request: CrawlSettingsRequest, background_tasks: BackgroundTasks):
     """全量爬取所有历史数据"""
     try:
-        task_id = create_task("crawl_all", f"全量爬取所有历史数据 (群组: {group_id})")
-        background_tasks.add_task(run_crawl_all_task, task_id, group_id, request)
-        return {"task_id": task_id, "message": "任务已创建，正在后台执行"}
+        return _create_crawl_task_response(
+            background_tasks,
+            "crawl_all",
+            f"全量爬取所有历史数据 (群组: {group_id})",
+            run_crawl_all_task,
+            group_id,
+            request,
+        )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"创建全量爬取任务失败: {str(e)}")
 
@@ -482,9 +499,16 @@ async def crawl_all(group_id: str, request: CrawlSettingsRequest, background_tas
 async def crawl_incremental(group_id: str, request: CrawlHistoricalRequest, background_tasks: BackgroundTasks):
     """增量爬取历史数据"""
     try:
-        task_id = create_task("crawl_incremental", f"增量爬取历史数据 {request.pages} 页 (群组: {group_id})")
-        background_tasks.add_task(run_crawl_incremental_task, task_id, group_id, request.pages, request.per_page, request)
-        return {"task_id": task_id, "message": "任务已创建，正在后台执行"}
+        return _create_crawl_task_response(
+            background_tasks,
+            "crawl_incremental",
+            f"增量爬取历史数据 {request.pages} 页 (群组: {group_id})",
+            run_crawl_incremental_task,
+            group_id,
+            request.pages,
+            request.per_page,
+            request,
+        )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"创建增量爬取任务失败: {str(e)}")
 
@@ -493,9 +517,14 @@ async def crawl_incremental(group_id: str, request: CrawlHistoricalRequest, back
 async def crawl_latest_until_complete(group_id: str, request: CrawlSettingsRequest, background_tasks: BackgroundTasks):
     """获取最新记录：智能增量更新"""
     try:
-        task_id = create_task("crawl_latest_until_complete", f"获取最新记录 (群组: {group_id})")
-        background_tasks.add_task(run_crawl_latest_task, task_id, group_id, request)
-        return {"task_id": task_id, "message": "任务已创建，正在后台执行"}
+        return _create_crawl_task_response(
+            background_tasks,
+            "crawl_latest_until_complete",
+            f"获取最新记录 (群组: {group_id})",
+            run_crawl_latest_task,
+            group_id,
+            request,
+        )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"创建获取最新记录任务失败: {str(e)}")
 
@@ -504,8 +533,13 @@ async def crawl_latest_until_complete(group_id: str, request: CrawlSettingsReque
 async def crawl_by_time_range(group_id: str, request: CrawlTimeRangeRequest, background_tasks: BackgroundTasks):
     """按时间区间爬取话题（支持最近N天或自定义开始/结束时间）"""
     try:
-        task_id = create_task("crawl_time_range", f"按时间区间爬取 (群组: {group_id})")
-        background_tasks.add_task(run_crawl_time_range_task, task_id, group_id, request)
-        return {"task_id": task_id, "message": "任务已创建，正在后台执行"}
+        return _create_crawl_task_response(
+            background_tasks,
+            "crawl_time_range",
+            f"按时间区间爬取 (群组: {group_id})",
+            run_crawl_time_range_task,
+            group_id,
+            request,
+        )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"创建时间区间爬取任务失败: {str(e)}")

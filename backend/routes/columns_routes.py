@@ -4,6 +4,7 @@ import asyncio
 import json
 import random
 from contextlib import contextmanager
+from dataclasses import dataclass
 from typing import Any, Dict, Iterator, List, Optional
 
 import requests
@@ -32,6 +33,39 @@ class ColumnsSettingsRequest(BaseModel):
     downloadVideos: Optional[bool] = Field(default=True, description="是否下载视频(需要ffmpeg)")
     cacheImages: Optional[bool] = Field(default=True, description="是否缓存图片")
     incrementalMode: Optional[bool] = Field(default=False, description="增量模式：跳过已存在的文章详情")
+
+
+@dataclass
+class ColumnFetchStats:
+    columns_count: int = 0
+    topics_count: int = 0
+    details_count: int = 0
+    files_count: int = 0
+    images_count: int = 0
+    videos_count: int = 0
+    skipped_count: int = 0
+    files_skipped: int = 0
+    videos_skipped: int = 0
+    request_count: int = 0
+
+    def add(self, other: "ColumnFetchStats") -> None:
+        self.columns_count += other.columns_count
+        self.topics_count += other.topics_count
+        self.details_count += other.details_count
+        self.files_count += other.files_count
+        self.images_count += other.images_count
+        self.videos_count += other.videos_count
+        self.skipped_count += other.skipped_count
+        self.files_skipped += other.files_skipped
+        self.videos_skipped += other.videos_skipped
+        self.request_count += other.request_count
+
+
+def _combined_column_stats(first: ColumnFetchStats, second: ColumnFetchStats) -> ColumnFetchStats:
+    combined = ColumnFetchStats()
+    combined.add(first)
+    combined.add(second)
+    return combined
 
 
 def _resolve_columns_fetch_config(settings: ColumnsSettingsRequest) -> Dict[str, Any]:
@@ -154,14 +188,9 @@ async def _process_topic_resources(
     headers: Dict[str, str],
     current_request_count: int,
     config: Dict[str, Any],
-) -> tuple[int, int, int, int, int, int]:
-    files_count = 0
-    files_skipped = 0
-    images_count = 0
-    videos_count = 0
-    videos_skipped = 0
+) -> ColumnFetchStats:
+    stats = ColumnFetchStats()
     request_count = current_request_count
-    requests_made = 0
 
     if config["download_files"]:
         downloaded_files, skipped_files, file_request_count = await _download_topic_files(
@@ -178,17 +207,17 @@ async def _process_topic_resources(
             config["crawl_interval_min"],
             config["crawl_interval_max"],
         )
-        files_count += downloaded_files
-        files_skipped += skipped_files
+        stats.files_count += downloaded_files
+        stats.files_skipped += skipped_files
         request_count += file_request_count
-        requests_made += file_request_count
+        stats.request_count += file_request_count
 
     if config["cache_images"]:
-        images_count += _cache_topic_images(task_id, group_id, topic_detail, db)
+        stats.images_count += _cache_topic_images(task_id, group_id, topic_detail, db)
 
     video = _get_topic_video(topic_detail)
     if not video:
-        return files_count, files_skipped, images_count, videos_count, videos_skipped, requests_made
+        return stats
 
     video_id = video.get("video_id")
     video_size = video.get("size", 0)
@@ -216,13 +245,13 @@ async def _process_topic_resources(
             config["crawl_interval_min"],
             config["crawl_interval_max"],
         )
-        videos_count += downloaded_videos
-        videos_skipped += skipped_videos
-        requests_made += video_request_count
+        stats.videos_count += downloaded_videos
+        stats.videos_skipped += skipped_videos
+        stats.request_count += video_request_count
     else:
         add_task_log(task_id, f"      ⏭️ 跳过视频下载（已禁用）")
 
-    return files_count, files_skipped, images_count, videos_count, videos_skipped, requests_made
+    return stats
 
 
 async def _process_column_topic(
@@ -236,7 +265,7 @@ async def _process_column_topic(
     headers: Dict[str, str],
     current_request_count: int,
     config: Dict[str, Any],
-) -> tuple[int, int, int, int, int, int, int, int, int]:
+) -> ColumnFetchStats:
     topic_id, _topic_title, topic_skipped = _prepare_column_topic(
         task_id,
         db,
@@ -248,7 +277,7 @@ async def _process_column_topic(
         config["incremental_mode"],
     )
     if topic_skipped:
-        return 1, 0, 1, 0, 0, 0, 0, 0, 0
+        return ColumnFetchStats(topics_count=1, skipped_count=1)
 
     topic_detail, detail_request_count = await _fetch_topic_detail(
         task_id,
@@ -263,19 +292,13 @@ async def _process_column_topic(
     )
 
     if not topic_detail or not topic_detail.get("succeeded"):
-        return 1, 0, 0, 0, 0, 0, 0, 0, detail_request_count
+        return ColumnFetchStats(topics_count=1, request_count=detail_request_count)
 
     if not _save_topic_detail(db, group_id, topic_detail):
-        return 1, 0, 0, 0, 0, 0, 0, 0, detail_request_count
+        return ColumnFetchStats(topics_count=1, request_count=detail_request_count)
 
-    (
-        resource_files_count,
-        resource_files_skipped,
-        resource_images_count,
-        resource_videos_count,
-        resource_videos_skipped,
-        resource_request_count,
-    ) = await _process_topic_resources(
+    stats = ColumnFetchStats(topics_count=1, details_count=1, request_count=detail_request_count)
+    stats.add(await _process_topic_resources(
         task_id,
         group_id,
         topic_id,
@@ -284,19 +307,84 @@ async def _process_column_topic(
         headers,
         current_request_count + detail_request_count,
         config,
-    )
+    ))
 
-    return (
-        1,
-        1,
-        0,
-        resource_files_count,
-        resource_images_count,
-        resource_videos_count,
-        resource_files_skipped,
-        resource_videos_skipped,
-        detail_request_count + resource_request_count,
-    )
+    return stats
+
+
+async def _process_column(
+    task_id: str,
+    group_id: str,
+    column: Dict[str, Any],
+    col_idx: int,
+    total_columns: int,
+    db: ZSXQColumnsDatabase,
+    headers: Dict[str, str],
+    current_request_count: int,
+    config: Dict[str, Any],
+    base_stats: ColumnFetchStats | None = None,
+) -> ColumnFetchStats:
+    request_count = current_request_count
+    stats = ColumnFetchStats(columns_count=1)
+
+    column_id = column.get("column_id")
+    column_name = column.get("name", "未命名")
+    column_topics_count = column.get("statistics", {}).get("topics_count", 0)
+    db.insert_column(int(group_id), column)
+
+    add_task_log(task_id, "")
+    add_task_log(task_id, f"📁 [{col_idx}/{total_columns}] 专栏: {column_name}")
+    add_task_log(task_id, f"   📊 预计文章数: {column_topics_count}")
+
+    if request_count > 0 and request_count % config["items_per_batch"] == 0:
+        sleep_time = random.uniform(config["long_sleep_min"], config["long_sleep_max"])
+        add_task_log(task_id, f"   😴 已完成 {request_count} 次请求，休眠 {sleep_time:.1f} 秒...")
+        await asyncio.sleep(sleep_time)
+
+    delay = random.uniform(config["crawl_interval_min"], config["crawl_interval_max"])
+    add_task_log(task_id, f"   ⏳ 等待 {delay:.1f} 秒后获取文章列表...")
+    await asyncio.sleep(delay)
+
+    topics_url = f"https://api.zsxq.com/v2/groups/{group_id}/columns/{column_id}/topics?count=100&sort=default&direction=desc"
+    topics_list, topics_request_count = _fetch_column_topics(task_id, column_id, topics_url, headers)
+    request_count += topics_request_count
+    stats.request_count += topics_request_count
+    if topics_list is None:
+        return stats
+
+    for topic_idx, topic in enumerate(topics_list, 1):
+        if is_task_stopped(task_id):
+            break
+
+        topic_stats = await _process_column_topic(
+            task_id,
+            group_id,
+            column_id,
+            topic,
+            topic_idx,
+            len(topics_list),
+            db,
+            headers,
+            request_count,
+            config,
+        )
+        stats.add(topic_stats)
+        request_count += topic_stats.request_count
+
+        if topic_stats.details_count:
+            progress_stats = _combined_column_stats(base_stats or ColumnFetchStats(), stats)
+            update_task(
+                task_id,
+                "running",
+                _build_columns_progress_message(
+                    progress_stats.details_count,
+                    progress_stats.files_count,
+                    progress_stats.videos_count,
+                    progress_stats.images_count,
+                ),
+            )
+
+    return stats
 
 
 def get_columns_db(group_id: str) -> ZSXQColumnsDatabase:
@@ -1126,11 +1214,6 @@ async def _fetch_columns_task(task_id: str, group_id: str, settings: ColumnsSett
 
     try:
         config = _resolve_columns_fetch_config(settings)
-        crawl_interval_min = config["crawl_interval_min"]
-        crawl_interval_max = config["crawl_interval_max"]
-        long_sleep_min = config["long_sleep_min"]
-        long_sleep_max = config["long_sleep_max"]
-        items_per_batch = config["items_per_batch"]
 
         _log_columns_fetch_config(task_id, group_id, config)
 
@@ -1142,15 +1225,7 @@ async def _fetch_columns_task(task_id: str, group_id: str, settings: ColumnsSett
         db = get_columns_db(group_id)
         log_id = db.start_crawl_log(int(group_id), "full_fetch")
 
-        columns_count = 0
-        topics_count = 0
-        details_count = 0
-        files_count = 0
-        images_count = 0
-        videos_count = 0
-        skipped_count = 0
-        files_skipped = 0
-        videos_skipped = 0
+        stats = ColumnFetchStats()
         request_count = 0
 
         add_task_log(task_id, "📂 获取专栏目录列表...")
@@ -1168,69 +1243,20 @@ async def _fetch_columns_task(task_id: str, group_id: str, settings: ColumnsSett
                 add_task_log(task_id, "🛑 任务已被用户停止")
                 break
 
-            column_id = column.get("column_id")
-            column_name = column.get("name", "未命名")
-            column_topics_count = column.get("statistics", {}).get("topics_count", 0)
-            db.insert_column(int(group_id), column)
-            columns_count += 1
-
-            add_task_log(task_id, "")
-            add_task_log(task_id, f"📁 [{col_idx}/{len(columns)}] 专栏: {column_name}")
-            add_task_log(task_id, f"   📊 预计文章数: {column_topics_count}")
-
-            if request_count > 0 and request_count % items_per_batch == 0:
-                sleep_time = random.uniform(long_sleep_min, long_sleep_max)
-                add_task_log(task_id, f"   😴 已完成 {request_count} 次请求，休眠 {sleep_time:.1f} 秒...")
-                await asyncio.sleep(sleep_time)
-
-            delay = random.uniform(crawl_interval_min, crawl_interval_max)
-            add_task_log(task_id, f"   ⏳ 等待 {delay:.1f} 秒后获取文章列表...")
-            await asyncio.sleep(delay)
-
-            topics_url = f"https://api.zsxq.com/v2/groups/{group_id}/columns/{column_id}/topics?count=100&sort=default&direction=desc"
-            topics_list, topics_request_count = _fetch_column_topics(task_id, column_id, topics_url, headers)
-            request_count += topics_request_count
-            if topics_list is None:
-                continue
-
-            for topic_idx, topic in enumerate(topics_list, 1):
-                if is_task_stopped(task_id):
-                    break
-
-                (
-                    topic_count,
-                    topic_details_count,
-                    topic_skipped_count,
-                    topic_files_count,
-                    topic_images_count,
-                    topic_videos_count,
-                    topic_files_skipped,
-                    topic_videos_skipped,
-                    topic_request_count,
-                ) = await _process_column_topic(
-                    task_id,
-                    group_id,
-                    column_id,
-                    topic,
-                    topic_idx,
-                    len(topics_list),
-                    db,
-                    headers,
-                    request_count,
-                    config,
-                )
-                topics_count += topic_count
-                details_count += topic_details_count
-                skipped_count += topic_skipped_count
-                files_count += topic_files_count
-                images_count += topic_images_count
-                videos_count += topic_videos_count
-                files_skipped += topic_files_skipped
-                videos_skipped += topic_videos_skipped
-                request_count += topic_request_count
-
-                if topic_details_count:
-                    update_task(task_id, "running", _build_columns_progress_message(details_count, files_count, videos_count, images_count))
+            column_stats = await _process_column(
+                task_id,
+                group_id,
+                column,
+                col_idx,
+                len(columns),
+                db,
+                headers,
+                request_count,
+                config,
+                stats,
+            )
+            stats.add(column_stats)
+            request_count += column_stats.request_count
 
         if is_task_stopped(task_id):
             update_task(task_id, "stopped", "任务已被用户停止")
@@ -1239,23 +1265,23 @@ async def _fetch_columns_task(task_id: str, group_id: str, settings: ColumnsSett
         if log_id:
             db.update_crawl_log(
                 log_id,
-                columns_count=columns_count,
-                topics_count=topics_count,
-                details_count=details_count,
-                files_count=files_count,
+                columns_count=stats.columns_count,
+                topics_count=stats.topics_count,
+                details_count=stats.details_count,
+                files_count=stats.files_count,
                 status="completed",
             )
 
         result_msg, result_payload = _build_columns_fetch_result(
-            columns_count,
-            topics_count,
-            details_count,
-            files_count,
-            images_count,
-            videos_count,
-            skipped_count,
-            files_skipped,
-            videos_skipped,
+            stats.columns_count,
+            stats.topics_count,
+            stats.details_count,
+            stats.files_count,
+            stats.images_count,
+            stats.videos_count,
+            stats.skipped_count,
+            stats.files_skipped,
+            stats.videos_skipped,
         )
 
         update_task(

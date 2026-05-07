@@ -70,6 +70,33 @@ class AShareAnalysisExportTdxRequest(BaseModel):
     end_date: Optional[str] = Field(default=None, description="图表筛选结束日期 YYYY-MM-DD")
 
 
+def _normalize_group_scope(group_id: Optional[str | int]) -> tuple[Optional[str], str]:
+    normalized_group_id = normalize_group_id(group_id)
+    scope_text = f"群组 {normalized_group_id}" if normalized_group_id else "全局聚合"
+    return normalized_group_id, scope_text
+
+
+def _analysis_defaults_payload() -> dict:
+    return {
+        "days": 21,
+        "retention_days": A_SHARE_DEFAULT_RETENTION_DAYS,
+        "concurrency": A_SHARE_DEFAULT_CONCURRENCY,
+        "model": A_SHARE_DEFAULT_MODEL,
+        "api_base": A_SHARE_DEFAULT_API_BASE,
+        "wire_api": A_SHARE_DEFAULT_WIRE_API,
+        "reasoning_effort": A_SHARE_DEFAULT_REASONING_EFFORT,
+        "ranking_windows": list(A_SHARE_DEFAULT_RANKING_WINDOWS),
+    }
+
+
+def _bounded_chart_top_n(top_n: int) -> int:
+    return max(1, min(top_n, 100))
+
+
+def _success_payload(result: dict) -> dict:
+    return {"success": True, **result}
+
+
 def run_a_share_analysis_task(task_id: str, request: AShareAnalysisRunRequest):
     """后台执行A股公司提及分析任务"""
     try:
@@ -82,8 +109,7 @@ def run_a_share_analysis_task(task_id: str, request: AShareAnalysisRunRequest):
         if is_task_stopped(task_id):
             return
 
-        normalized_group_id = normalize_group_id(request.group_id)
-        scope_text = f"群组 {normalized_group_id}" if normalized_group_id else "全局聚合"
+        normalized_group_id, scope_text = _normalize_group_scope(request.group_id)
         description = f"开始A股公司分析（{scope_text}），扫描最近 {request.days} 天数据"
         update_task(task_id, "running", description)
         add_task_log(task_id, f"🚀 {description}")
@@ -168,16 +194,7 @@ async def get_a_share_analysis_status(group_id: Optional[str] = None):
         return {
             "summary": summary,
             "group_id": normalized_group_id,
-            "defaults": {
-                "days": 21,
-                "retention_days": A_SHARE_DEFAULT_RETENTION_DAYS,
-                "concurrency": A_SHARE_DEFAULT_CONCURRENCY,
-                "model": A_SHARE_DEFAULT_MODEL,
-                "api_base": A_SHARE_DEFAULT_API_BASE,
-                "wire_api": A_SHARE_DEFAULT_WIRE_API,
-                "reasoning_effort": A_SHARE_DEFAULT_REASONING_EFFORT,
-                "ranking_windows": list(A_SHARE_DEFAULT_RANKING_WINDOWS),
-            },
+            "defaults": _analysis_defaults_payload(),
             "api_key_configured": has_openai_api_key(),
             "latest_task": latest_task,
             "running_task": running_task,
@@ -202,7 +219,7 @@ async def get_a_share_analysis_chart(
             build_chart_payload,
             start_date=start_date,
             end_date=end_date,
-            top_n=max(1, min(top_n, 100)),
+            top_n=_bounded_chart_top_n(top_n),
             ranking_windows=A_SHARE_DEFAULT_RANKING_WINDOWS,
             group_id=normalized_group_id,
         )
@@ -223,8 +240,7 @@ async def start_a_share_analysis(request: AShareAnalysisRunRequest, background_t
                 detail="未配置 OpenAI API Key，请设置环境变量 OPENAI_API_KEY 或 config.toml [ai].api_key",
             )
 
-        normalized_group_id = normalize_group_id(request.group_id)
-        scope_text = f"群组 {normalized_group_id}" if normalized_group_id else "全局聚合"
+        normalized_group_id, scope_text = _normalize_group_scope(request.group_id)
         task_id = create_task(
             "a_share_analysis",
             f"A股公司分析（{scope_text}，最近 {request.days} 天）",
@@ -246,7 +262,7 @@ async def reset_a_share_analysis_date_range(request: AShareAnalysisResetRangeReq
             request.end_date,
             group_id=normalize_group_id(request.group_id),
         )
-        return {"success": True, **result}
+        return _success_payload(result)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
@@ -263,7 +279,7 @@ async def export_a_share_analysis_to_tdx(request: AShareAnalysisExportTdxRequest
             request.end_date,
             group_id=normalize_group_id(request.group_id),
         )
-        return {"success": True, **result}
+        return _success_payload(result)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except RuntimeError as e:

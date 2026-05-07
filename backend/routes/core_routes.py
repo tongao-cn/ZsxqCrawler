@@ -24,6 +24,43 @@ from backend.crawlers.zsxq_interactive_crawler import load_config
 router = APIRouter(tags=["core"])
 
 
+def _empty_database_stats_response(configured: bool) -> Dict[str, Any]:
+    return {
+        "configured": configured,
+        "topic_database": {
+            "stats": {},
+            "timestamp_info": {
+                "total_topics": 0,
+                "oldest_timestamp": "",
+                "newest_timestamp": "",
+                "has_data": False,
+            },
+        },
+        "file_database": {
+            "stats": {},
+        },
+    }
+
+
+def _add_table_counts(target: Dict[str, int], stats: Optional[Dict[str, Any]]) -> None:
+    for table, count in (stats or {}).items():
+        target[table] = target.get(table, 0) + int(count or 0)
+
+
+def _merge_timestamp_info(target: Dict[str, Any], ts_info: Dict[str, Any]) -> None:
+    if not ts_info.get("has_data"):
+        return
+
+    target["has_data"] = True
+    oldest_ts = ts_info.get("oldest_timestamp")
+    newest_ts = ts_info.get("newest_timestamp")
+    if oldest_ts and (not target["oldest_timestamp"] or oldest_ts < target["oldest_timestamp"]):
+        target["oldest_timestamp"] = oldest_ts
+    if newest_ts and (not target["newest_timestamp"] or newest_ts > target["newest_timestamp"]):
+        target["newest_timestamp"] = newest_ts
+    target["total_topics"] += int(ts_info.get("total_topics") or 0)
+
+
 class ConfigModel(BaseModel):
     cookie: str = Field(..., description="知识星球Cookie")
 
@@ -111,48 +148,22 @@ async def get_database_stats():
     try:
         configured = is_configured()
         if not configured:
-            return {
-                "configured": False,
-                "topic_database": {
-                    "stats": {},
-                    "timestamp_info": {
-                        "total_topics": 0,
-                        "oldest_timestamp": "",
-                        "newest_timestamp": "",
-                        "has_data": False,
-                    },
-                },
-                "file_database": {
-                    "stats": {},
-                },
-            }
+            return _empty_database_stats_response(False)
 
         path_manager = get_db_path_manager()
         groups_info = path_manager.list_all_groups()
 
         if not groups_info:
-            return {
-                "configured": True,
-                "topic_database": {
-                    "stats": {},
-                    "timestamp_info": {
-                        "total_topics": 0,
-                        "oldest_timestamp": "",
-                        "newest_timestamp": "",
-                        "has_data": False,
-                    },
-                },
-                "file_database": {
-                    "stats": {},
-                },
-            }
+            return _empty_database_stats_response(True)
 
         aggregated_topic_stats: Dict[str, int] = {}
         aggregated_file_stats: Dict[str, int] = {}
-        oldest_ts: Optional[str] = None
-        newest_ts: Optional[str] = None
-        total_topics = 0
-        has_data = False
+        aggregated_timestamp_info: Dict[str, Any] = {
+            "total_topics": 0,
+            "oldest_timestamp": "",
+            "newest_timestamp": "",
+            "has_data": False,
+        }
 
         for gi in groups_info:
             group_id = gi.get("group_id")
@@ -164,20 +175,8 @@ async def get_database_stats():
                 topic_stats = db.get_database_stats()
                 ts_info = db.get_timestamp_range_info()
 
-            for table, count in (topic_stats or {}).items():
-                aggregated_topic_stats[table] = aggregated_topic_stats.get(table, 0) + int(count or 0)
-
-            if ts_info.get("has_data"):
-                has_data = True
-                ot = ts_info.get("oldest_timestamp")
-                nt = ts_info.get("newest_timestamp")
-                if ot:
-                    if oldest_ts is None or ot < oldest_ts:
-                        oldest_ts = ot
-                if nt:
-                    if newest_ts is None or nt > newest_ts:
-                        newest_ts = nt
-                total_topics += int(ts_info.get("total_topics") or 0)
+            _add_table_counts(aggregated_topic_stats, topic_stats)
+            _merge_timestamp_info(aggregated_timestamp_info, ts_info)
 
             db_paths = path_manager.list_group_databases(str(group_id))
             files_db_path = db_paths.get("files")
@@ -185,19 +184,13 @@ async def get_database_stats():
                 with closing(ZSXQFileDatabase(files_db_path)) as fdb:
                     file_stats = fdb.get_database_stats()
 
-                for table, count in (file_stats or {}).items():
-                    aggregated_file_stats[table] = aggregated_file_stats.get(table, 0) + int(count or 0)
+                _add_table_counts(aggregated_file_stats, file_stats)
 
         return {
             "configured": True,
             "topic_database": {
                 "stats": aggregated_topic_stats,
-                "timestamp_info": {
-                    "total_topics": total_topics,
-                    "oldest_timestamp": oldest_ts or "",
-                    "newest_timestamp": newest_ts or "",
-                    "has_data": has_data,
-                },
+                "timestamp_info": aggregated_timestamp_info,
             },
             "file_database": {
                 "stats": aggregated_file_stats,

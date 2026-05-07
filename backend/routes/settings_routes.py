@@ -7,6 +7,22 @@ from backend.core.crawler_runtime import get_crawler_safe
 
 router = APIRouter(prefix="/api", tags=["settings"])
 
+_CRAWLER_SETTING_FIELDS = (
+    "min_delay",
+    "max_delay",
+    "long_delay_interval",
+    "timestamp_offset_ms",
+    "debug_mode",
+)
+
+_DOWNLOADER_SETTING_FIELDS = (
+    "download_interval_min",
+    "download_interval_max",
+    "long_delay_interval",
+    "long_delay_min",
+    "long_delay_max",
+)
+
 
 def _default_crawl_settings() -> dict:
     return {
@@ -15,6 +31,42 @@ def _default_crawl_settings() -> dict:
         "long_sleep_interval_min": 180.0,
         "long_sleep_interval_max": 300.0,
         "pages_per_batch": 15,
+    }
+
+
+def _default_crawler_settings() -> dict:
+    return {
+        "min_delay": 2.0,
+        "max_delay": 5.0,
+        "long_delay_interval": 15,
+        "timestamp_offset_ms": 1,
+        "debug_mode": False,
+    }
+
+
+def _default_downloader_settings() -> dict:
+    return {
+        "download_interval_min": 30,
+        "download_interval_max": 60,
+        "long_delay_interval": 10,
+        "long_delay_min": 300,
+        "long_delay_max": 600,
+    }
+
+
+def _settings_from_attrs(source, fields: tuple[str, ...]) -> dict:
+    return {field: getattr(source, field) for field in fields}
+
+
+def _apply_settings(target, request, fields: tuple[str, ...]) -> None:
+    for field in fields:
+        setattr(target, field, getattr(request, field))
+
+
+def _settings_update_response(message: str, settings: dict) -> dict:
+    return {
+        "message": message,
+        "settings": settings,
     }
 
 
@@ -58,21 +110,9 @@ async def get_crawler_settings():
     try:
         crawler = get_crawler_safe()
         if not crawler:
-            return {
-                "min_delay": 2.0,
-                "max_delay": 5.0,
-                "long_delay_interval": 15,
-                "timestamp_offset_ms": 1,
-                "debug_mode": False,
-            }
+            return _default_crawler_settings()
 
-        return {
-            "min_delay": crawler.min_delay,
-            "max_delay": crawler.max_delay,
-            "long_delay_interval": crawler.long_delay_interval,
-            "timestamp_offset_ms": crawler.timestamp_offset_ms,
-            "debug_mode": crawler.debug_mode,
-        }
+        return _settings_from_attrs(crawler, _CRAWLER_SETTING_FIELDS)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"获取爬虫设置失败: {str(e)}")
 
@@ -88,22 +128,12 @@ async def update_crawler_settings(request: CrawlerSettingsRequest):
         if request.min_delay >= request.max_delay:
             raise HTTPException(status_code=400, detail="最小延迟必须小于最大延迟")
 
-        crawler.min_delay = request.min_delay
-        crawler.max_delay = request.max_delay
-        crawler.long_delay_interval = request.long_delay_interval
-        crawler.timestamp_offset_ms = request.timestamp_offset_ms
-        crawler.debug_mode = request.debug_mode
+        _apply_settings(crawler, request, _CRAWLER_SETTING_FIELDS)
 
-        return {
-            "message": "爬虫设置已更新",
-            "settings": {
-                "min_delay": crawler.min_delay,
-                "max_delay": crawler.max_delay,
-                "long_delay_interval": crawler.long_delay_interval,
-                "timestamp_offset_ms": crawler.timestamp_offset_ms,
-                "debug_mode": crawler.debug_mode,
-            },
-        }
+        return _settings_update_response(
+            "爬虫设置已更新",
+            _settings_from_attrs(crawler, _CRAWLER_SETTING_FIELDS),
+        )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"更新爬虫设置失败: {str(e)}")
 
@@ -114,22 +144,10 @@ async def get_downloader_settings():
     try:
         crawler = get_crawler_safe()
         if not crawler:
-            return {
-                "download_interval_min": 30,
-                "download_interval_max": 60,
-                "long_delay_interval": 10,
-                "long_delay_min": 300,
-                "long_delay_max": 600,
-            }
+            return _default_downloader_settings()
 
         downloader = crawler.get_file_downloader()
-        return {
-            "download_interval_min": downloader.download_interval_min,
-            "download_interval_max": downloader.download_interval_max,
-            "long_delay_interval": downloader.long_delay_interval,
-            "long_delay_min": downloader.long_delay_min,
-            "long_delay_max": downloader.long_delay_max,
-        }
+        return _settings_from_attrs(downloader, _DOWNLOADER_SETTING_FIELDS)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"获取下载器设置失败: {str(e)}")
 
@@ -150,21 +168,11 @@ async def update_downloader_settings(request: DownloaderSettingsRequest):
 
         downloader = crawler.get_file_downloader()
 
-        downloader.download_interval_min = request.download_interval_min
-        downloader.download_interval_max = request.download_interval_max
-        downloader.long_delay_interval = request.long_delay_interval
-        downloader.long_delay_min = request.long_delay_min
-        downloader.long_delay_max = request.long_delay_max
+        _apply_settings(downloader, request, _DOWNLOADER_SETTING_FIELDS)
 
-        return {
-            "message": "下载器设置已更新",
-            "settings": {
-                "download_interval_min": downloader.download_interval_min,
-                "download_interval_max": downloader.download_interval_max,
-                "long_delay_interval": downloader.long_delay_interval,
-                "long_delay_min": downloader.long_delay_min,
-                "long_delay_max": downloader.long_delay_max,
-            },
-        }
+        return _settings_update_response(
+            "下载器设置已更新",
+            _settings_from_attrs(downloader, _DOWNLOADER_SETTING_FIELDS),
+        )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"更新下载器设置失败: {str(e)}")

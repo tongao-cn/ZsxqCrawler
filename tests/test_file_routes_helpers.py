@@ -2,11 +2,14 @@ import unittest
 from unittest.mock import patch
 
 from backend.routes.file_routes import (
+    _build_check_local_file_status_response,
+    _build_file_status_response,
+    _build_sync_files_response,
+    _close_crawler_file_databases,
     _enqueue_file_task,
     _get_download_file_status,
     _resolve_download_record_status,
 )
-from backend.services.task_runtime import get_task_state
 
 
 class FakeBackgroundTasks:
@@ -21,24 +24,46 @@ def fake_task(*args):
     return args
 
 
+class FakeClosable:
+    def __init__(self):
+        self.closed = False
+
+    def close(self):
+        self.closed = True
+
+
+class FakeDownloader:
+    def __init__(self):
+        self.file_db = FakeClosable()
+
+
+class FakeCrawler:
+    def __init__(self):
+        self.downloader = FakeDownloader()
+        self.db = FakeClosable()
+
+    def get_file_downloader(self):
+        return self.downloader
+
+
 class FileRoutesHelperTests(unittest.TestCase):
     def test_enqueue_file_task_creates_task_and_schedules_callback(self):
         background_tasks = FakeBackgroundTasks()
 
-        response = _enqueue_file_task(
-            background_tasks,
-            "unit_file_task",
-            "测试文件任务",
-            fake_task,
-            "group-1",
-            123,
-            message="已创建",
-        )
+        with patch("backend.routes.file_routes.create_task", return_value="task-1") as create_task:
+            response = _enqueue_file_task(
+                background_tasks,
+                "unit_file_task",
+                "测试文件任务",
+                fake_task,
+                "group-1",
+                123,
+                message="已创建",
+            )
 
-        task_id = response["task_id"]
-        self.assertEqual({"task_id": task_id, "message": "已创建"}, response)
-        self.assertEqual([(fake_task, (task_id, "group-1", 123))], background_tasks.calls)
-        self.assertEqual("unit_file_task", get_task_state(task_id)["type"])
+        create_task.assert_called_once_with("unit_file_task", "测试文件任务")
+        self.assertEqual({"task_id": "task-1", "message": "已创建"}, response)
+        self.assertEqual([(fake_task, ("task-1", "group-1", 123))], background_tasks.calls)
 
     def test_get_download_file_status_handles_missing_file(self):
         with patch("backend.routes.file_routes.get_db_path_manager") as mocked_manager:
@@ -67,6 +92,89 @@ class FileRoutesHelperTests(unittest.TestCase):
         self.assertEqual("completed", status["download_status"])
         self.assertTrue(status["local_exists"])
         self.assertEqual(r"C:\tmp\group-1\downloads\file.pdf", status["local_path"])
+
+    def test_build_file_status_response_handles_missing_file(self):
+        response = _build_file_status_response(123, None)
+
+        self.assertEqual(
+            {
+                "file_id": 123,
+                "name": "file_123",
+                "size": 0,
+                "download_status": "not_collected",
+                "local_exists": False,
+                "local_size": 0,
+                "local_path": None,
+                "is_complete": False,
+                "message": "文件信息未收集，请先运行文件收集任务",
+            },
+            response,
+        )
+
+    def test_build_file_status_response_defaults_pending_status(self):
+        local_status = {
+            "local_exists": True,
+            "local_size": 456,
+            "local_path": r"C:\tmp\group-1\downloads\file.pdf",
+            "is_complete": True,
+        }
+
+        response = _build_file_status_response(123, ("file.pdf", 456, None), local_status)
+
+        self.assertEqual(
+            {
+                "file_id": 123,
+                "name": "file.pdf",
+                "size": 456,
+                "download_status": "pending",
+                "local_exists": True,
+                "local_size": 456,
+                "local_path": r"C:\tmp\group-1\downloads\file.pdf",
+                "is_complete": True,
+            },
+            response,
+        )
+
+    def test_build_check_local_file_status_response_keeps_shape(self):
+        local_status = {
+            "safe_filename": "file.pdf",
+            "local_exists": False,
+            "local_size": 0,
+            "local_path": None,
+            "is_complete": False,
+            "download_dir": r"C:\tmp\group-1\downloads",
+        }
+
+        response = _build_check_local_file_status_response("file.pdf", 456, local_status)
+
+        self.assertEqual(
+            {
+                "file_name": "file.pdf",
+                "safe_filename": "file.pdf",
+                "expected_size": 456,
+                "local_exists": False,
+                "local_size": 0,
+                "local_path": None,
+                "is_complete": False,
+                "download_dir": r"C:\tmp\group-1\downloads",
+            },
+            response,
+        )
+
+    def test_build_sync_files_response_keeps_shape(self):
+        stats = {"inserted": 2, "updated": 1}
+
+        response = _build_sync_files_response("group-1", stats)
+
+        self.assertEqual({"success": True, "group_id": "group-1", "stats": stats}, response)
+
+    def test_close_crawler_file_databases_closes_file_and_topic_dbs(self):
+        crawler = FakeCrawler()
+
+        _close_crawler_file_databases(crawler)
+
+        self.assertTrue(crawler.downloader.file_db.closed)
+        self.assertTrue(crawler.db.closed)
 
 
 if __name__ == "__main__":

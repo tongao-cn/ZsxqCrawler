@@ -120,6 +120,75 @@ def _resolve_download_record_status(
     }
 
 
+def _build_file_status_response(
+    file_id: int,
+    result: Optional[tuple],
+    local_status: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    if not result:
+        return {
+            "file_id": file_id,
+            "name": f"file_{file_id}",
+            "size": 0,
+            "download_status": "not_collected",
+            "local_exists": False,
+            "local_size": 0,
+            "local_path": None,
+            "is_complete": False,
+            "message": "文件信息未收集，请先运行文件收集任务",
+        }
+
+    file_name, file_size, download_status = result
+    local_status = local_status or {}
+    return {
+        "file_id": file_id,
+        "name": file_name,
+        "size": file_size,
+        "download_status": download_status or "pending",
+        "local_exists": local_status["local_exists"],
+        "local_size": local_status["local_size"],
+        "local_path": local_status["local_path"],
+        "is_complete": local_status["is_complete"],
+    }
+
+
+def _build_check_local_file_status_response(
+    file_name: str,
+    file_size: int,
+    local_status: Dict[str, Any],
+) -> Dict[str, Any]:
+    return {
+        "file_name": file_name,
+        "safe_filename": local_status["safe_filename"],
+        "expected_size": file_size,
+        "local_exists": local_status["local_exists"],
+        "local_size": local_status["local_size"],
+        "local_path": local_status["local_path"],
+        "is_complete": local_status["is_complete"],
+        "download_dir": local_status["download_dir"],
+    }
+
+
+def _build_sync_files_response(group_id: str, stats: Dict[str, Any]) -> Dict[str, Any]:
+    return {
+        "success": True,
+        "group_id": group_id,
+        "stats": stats,
+    }
+
+
+def _log_file_route_event(level: str, message: str) -> None:
+    print(f"[{level}] {message}")
+
+
+def _close_crawler_file_databases(crawler) -> None:
+    downloader = crawler.get_file_downloader()
+    if hasattr(downloader, "file_db") and downloader.file_db:
+        downloader.file_db.close()
+    if hasattr(crawler, "db") and crawler.db:
+        crawler.db.close()
+
+
 def _create_file_downloader(
     task_id: str,
     group_id: str,
@@ -513,32 +582,12 @@ async def get_file_status(group_id: str, file_id: int):
             result = file_db.cursor.fetchone()
 
             if not result:
-                return {
-                    "file_id": file_id,
-                    "name": f"file_{file_id}",
-                    "size": 0,
-                    "download_status": "not_collected",
-                    "local_exists": False,
-                    "local_size": 0,
-                    "local_path": None,
-                    "is_complete": False,
-                    "message": "文件信息未收集，请先运行文件收集任务",
-                }
+                return _build_file_status_response(file_id, result)
 
             file_name, file_size, download_status = result
 
             local_status = _get_download_file_status(group_id, file_name, file_size, f"file_{file_id}")
-
-            return {
-                "file_id": file_id,
-                "name": file_name,
-                "size": file_size,
-                "download_status": download_status or "pending",
-                "local_exists": local_status["local_exists"],
-                "local_size": local_status["local_size"],
-                "local_path": local_status["local_path"],
-                "is_complete": local_status["is_complete"],
-            }
+            return _build_file_status_response(file_id, result, local_status)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"获取文件状态失败: {str(e)}")
 
@@ -548,17 +597,7 @@ async def check_local_file_status(group_id: str, file_name: str, file_size: int)
     """检查本地文件状态（不依赖数据库）"""
     try:
         local_status = _get_download_file_status(group_id, file_name, file_size, file_name)
-
-        return {
-            "file_name": file_name,
-            "safe_filename": local_status["safe_filename"],
-            "expected_size": file_size,
-            "local_exists": local_status["local_exists"],
-            "local_size": local_status["local_size"],
-            "local_path": local_status["local_path"],
-            "is_complete": local_status["is_complete"],
-            "download_dir": local_status["download_dir"],
-        }
+        return _build_check_local_file_status_response(file_name, file_size, local_status)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"检查本地文件失败: {str(e)}")
 
@@ -648,26 +687,22 @@ async def clear_file_database(group_id: str):
     try:
         db_path = _get_files_db_path(group_id)
 
-        print(f"🗑️ 尝试删除文件数据库: {db_path}")
+        _log_file_route_event("INFO", f"尝试删除文件数据库: {db_path}")
 
         if os.path.exists(db_path):
             try:
                 crawler = get_crawler_for_group(group_id)
-                downloader = crawler.get_file_downloader()
-                if hasattr(downloader, "file_db") and downloader.file_db:
-                    downloader.file_db.close()
-                if hasattr(crawler, "db") and crawler.db:
-                    crawler.db.close()
-                print("✅ 已关闭爬虫实例的数据库连接")
+                _close_crawler_file_databases(crawler)
+                _log_file_route_event("INFO", "已关闭爬虫实例的数据库连接")
             except Exception as e:
-                print(f"⚠️ 关闭爬虫数据库连接时出错: {e}")
+                _log_file_route_event("WARN", f"关闭爬虫数据库连接时出错: {e}")
 
             gc.collect()
             time.sleep(0.5)
 
             try:
                 os.remove(db_path)
-                print(f"✅ 文件数据库已删除: {db_path}")
+                _log_file_route_event("INFO", f"文件数据库已删除: {db_path}")
 
                 try:
                     from backend.core.image_cache_manager import clear_group_cache_manager, get_image_cache_manager
@@ -675,24 +710,24 @@ async def clear_file_database(group_id: str):
                     cache_manager = get_image_cache_manager(group_id)
                     success, message = cache_manager.clear_cache()
                     if success:
-                        print(f"✅ 图片缓存已清空: {message}")
+                        _log_file_route_event("INFO", f"图片缓存已清空: {message}")
                     else:
-                        print(f"⚠️ 清空图片缓存失败: {message}")
+                        _log_file_route_event("WARN", f"清空图片缓存失败: {message}")
                     clear_group_cache_manager(group_id)
                 except Exception as cache_error:
-                    print(f"⚠️ 清空图片缓存时出错: {cache_error}")
+                    _log_file_route_event("WARN", f"清空图片缓存时出错: {cache_error}")
 
                 return {"message": f"群组 {group_id} 的文件数据库和图片缓存已删除"}
             except PermissionError as pe:
-                print(f"❌ 文件被占用，无法删除: {pe}")
+                _log_file_route_event("ERROR", f"文件被占用，无法删除: {pe}")
                 raise HTTPException(status_code=500, detail="文件被占用，无法删除数据库文件。请稍后重试。")
         else:
-            print(f"ℹ️ 文件数据库不存在: {db_path}")
+            _log_file_route_event("INFO", f"文件数据库不存在: {db_path}")
             return {"message": f"群组 {group_id} 的文件数据库不存在"}
     except HTTPException:
         raise
     except Exception as e:
-        print(f"❌ 删除文件数据库失败: {str(e)}")
+        _log_file_route_event("ERROR", f"删除文件数据库失败: {str(e)}")
         raise HTTPException(status_code=500, detail=f"删除文件数据库失败: {str(e)}")
 
 
@@ -710,12 +745,7 @@ async def sync_files_from_topics(group_id: str):
 
         topics_db = ZSXQDatabase(topics_db_path, files_db_path=files_db_path)
         stats = topics_db.backfill_topic_files_to_file_database()
-
-        return {
-            "success": True,
-            "group_id": group_id,
-            "stats": stats,
-        }
+        return _build_sync_files_response(group_id, stats)
     except HTTPException:
         raise
     except Exception as e:
