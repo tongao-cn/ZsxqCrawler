@@ -7,6 +7,7 @@ from backend.storage.accounts_sql_manager import (
     _account_row_to_dict,
     _close_quietly,
 )
+from backend.storage.db_compat import get_postgres_dsn
 
 
 class AccountsSqlManagerHelperTests(unittest.TestCase):
@@ -36,6 +37,7 @@ class AccountsSqlManagerHelperTests(unittest.TestCase):
 
         _close_quietly(BrokenClose())
 
+    @unittest.skipUnless(get_postgres_dsn(), "PostgreSQL DSN is not configured")
     def test_manager_get_account_uses_same_account_shape(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             db_path = os.path.join(tmpdir, "accounts.db")

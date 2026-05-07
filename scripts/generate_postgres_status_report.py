@@ -7,9 +7,7 @@ from pathlib import Path
 import psycopg2
 
 from backend.storage.db_compat import get_database_backend, get_postgres_dsn
-from scripts.audit_postgres_migration import AuditIssue, audit_migration
 from scripts.manage_postgres_public_schema import PUBLIC_SCHEMA, PUBLIC_VIEW_SPECS, discover_internal_schemas, quote_identifier
-from scripts.migrate_sqlite_to_postgres import _iter_sqlite_files, _sqlite_tables
 
 
 def _project_root() -> Path:
@@ -60,54 +58,17 @@ def _internal_schema_summary(conn) -> list[tuple[str, int, int]]:
     return rows
 
 
-def _sqlite_summary(root: Path) -> list[tuple[str, int, int]]:
-    rows: list[tuple[str, int, int]] = []
-    for db_path in _iter_sqlite_files(root):
-        import sqlite3
-
-        conn = sqlite3.connect(db_path)
-        try:
-            tables = _sqlite_tables(conn)
-            total_rows = 0
-            for table_name, _sql in tables:
-                count = conn.execute(f"SELECT count(*) FROM {quote_identifier(table_name)}").fetchone()[0]
-                total_rows += int(count)
-            rows.append((str(db_path), len(tables), total_rows))
-        finally:
-            conn.close()
-    return rows
-
-
-def _issues_to_markdown(issues: list[AuditIssue]) -> list[str]:
-    if not issues:
-        return ["- PostgreSQL migration audit passed."]
-    return [f"- [{issue.level}] {issue.message}" for issue in issues]
-
-
-def build_report(root: Path, conn) -> str:
-    sqlite_rows = _sqlite_summary(root) if root.exists() else []
+def build_report(conn) -> str:
     internal_rows = _internal_schema_summary(conn)
-    audit_issues = audit_migration(root, conn) if root.exists() else [AuditIssue("warn", f"SQLite root not found: {root}")]
-    if sqlite_rows and len(audit_issues) == 1 and audit_issues[0].level == "warn":
-        audit_issues = []
 
     lines = [
         "# PostgreSQL Status Report",
         "",
         f"Generated at: {datetime.now(timezone.utc).isoformat()}",
         "",
-        f"SQLite root: `{root}`",
-        "",
-        "## SQLite Sources",
+        "## PostgreSQL Internal Schemas",
         "",
     ]
-    if sqlite_rows:
-        lines.extend(["| Database | Tables | Rows |", "| --- | ---: | ---: |"])
-        lines.extend(f"| `{path}` | {table_count} | {row_count} |" for path, table_count, row_count in sqlite_rows)
-    else:
-        lines.append("- No SQLite `.db` files found under the configured root.")
-
-    lines.extend(["", "## PostgreSQL Internal Schemas", ""])
     if internal_rows:
         lines.extend(["| Schema | Tables | Rows |", "| --- | ---: | ---: |"])
         lines.extend(f"| `{schema}` | {table_count} | {row_count} |" for schema, table_count, row_count in internal_rows)
@@ -119,9 +80,6 @@ def build_report(root: Path, conn) -> str:
         count = _view_count(conn, spec.name)
         count_text = "missing" if count is None else str(count)
         lines.append(f"| `{PUBLIC_SCHEMA}.{spec.name}` | {count_text} |")
-
-    lines.extend(["", "## Audit", ""])
-    lines.extend(_issues_to_markdown(audit_issues))
 
     lines.extend(
         [
@@ -139,10 +97,9 @@ def build_report(root: Path, conn) -> str:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Generate a PostgreSQL status report")
-    parser.add_argument("--root", default=None, help="Directory containing .db files. Defaults to output/databases.")
     parser.add_argument(
         "--output",
-        default="docs/postgres_real_migration_report.md",
+        default="docs/postgres_status_report.md",
         help="Markdown report path.",
     )
     args = parser.parse_args()
@@ -153,7 +110,6 @@ def main() -> None:
     if not dsn:
         raise RuntimeError("PostgreSQL DSN is not configured")
 
-    root = Path(args.root) if args.root else _project_root() / "output" / "databases"
     output_path = Path(args.output)
     if not output_path.is_absolute():
         output_path = _project_root() / output_path
@@ -161,7 +117,7 @@ def main() -> None:
 
     conn = psycopg2.connect(dsn)
     try:
-        report = build_report(root, conn)
+        report = build_report(conn)
     finally:
         conn.close()
 

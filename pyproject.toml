@@ -26,10 +26,8 @@ zsxq-crawler = "backend.crawlers.zsxq_interactive_crawler:main"
 a-share-analysis = "scripts.analyze_a_share_companies:main"
 csv-chart-server = "scripts.csv_chart_server:main"
 migrate-accounts = "scripts.migrate_accounts_to_sql:migrate_accounts"
-migrate-sqlite-to-postgres = "scripts.migrate_sqlite_to_postgres:main"
 manage-postgres-public-schema = "scripts.manage_postgres_public_schema:main"
-audit-postgres-migration = "scripts.audit_postgres_migration:main"
-generate-postgres-migration-report = "scripts.generate_postgres_migration_report:main"
+generate-postgres-status-report = "scripts.generate_postgres_status_report:main"
 verify-postgres-reader-access = "scripts.verify_postgres_reader_access:main"
 
 [build-system]

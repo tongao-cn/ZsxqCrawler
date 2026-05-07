@@ -31,17 +31,11 @@ jobs:
       - name: Run unit tests
         run: uv run python -m unittest discover -s tests
 
-      - name: Check migration CLI help
-        run: uv run migrate-sqlite-to-postgres --help
-
       - name: Check public schema CLI help
         run: uv run manage-postgres-public-schema --help
 
-      - name: Check migration audit CLI help
-        run: uv run audit-postgres-migration --help
-
-      - name: Check migration report CLI help
-        run: uv run generate-postgres-migration-report --help
+      - name: Check PostgreSQL status report CLI help
+        run: uv run generate-postgres-status-report --help
 
       - name: Check reader access CLI help
         run: uv run verify-postgres-reader-access --help

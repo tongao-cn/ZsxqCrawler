@@ -119,7 +119,7 @@ uv run python -m backend.crawlers.zsxq_interactive_crawler
 - `backend/main.py`: FastAPI 应用真实入口。
 - `backend/routes/`: API 路由模块。
 - `backend/services/`: AI 分析、A 股分析、导出等业务服务。
-- `backend/storage/`: SQLite/PostgreSQL 访问、任务持久化、账号存储。
+- `backend/storage/`: PostgreSQL 访问、任务持久化、账号存储。
 - `backend/core/`: 配置、日志、路径、账号上下文、爬虫运行时、本地群运行时等核心能力。
 - `backend/crawlers/`: 知识星球话题采集和文件下载器。
 - `scripts/`: 一次性或辅助命令行脚本。
@@ -139,10 +139,8 @@ uv run zsxq-crawler
 uv run a-share-analysis
 uv run csv-chart-server
 uv run migrate-accounts
-uv run migrate-sqlite-to-postgres --replace-schema
 uv run manage-postgres-public-schema --apply
-uv run audit-postgres-migration --root output\databases
-uv run generate-postgres-migration-report --root output --output docs\postgres_real_migration_report.md
+uv run generate-postgres-status-report --output docs\postgres_status_report.md
 uv run verify-postgres-reader-access --dsn "postgresql://zsxq_reader:password@host:5432/zsxq"
 ```
 
@@ -150,23 +148,20 @@ uv run verify-postgres-reader-access --dsn "postgresql://zsxq_reader:password@ho
 
 ## 数据存储与下载路径
 
-SQLite 模式下，数据会保存到**项目根目录**下的 `output/databases` 目录中（项目根目录即与 `config.toml` 同级的目录），不同群组会按照 `group_id` 分目录存放。当前共享部署推荐使用 PostgreSQL，`output/databases` 主要作为本地轻量模式或历史兼容路径。
+结构化数据统一存储在 PostgreSQL。`output/databases` 目录只保留为下载文件、图片缓存和兼容 schema 命名的本地目录，不再作为真实数据库文件存储位置。
 
-- **话题 / 文章内容数据库**: `output/databases/{group_id}/zsxq_topics_{group_id}.db`  
-  - 保存所有话题、文章正文、评论等结构化数据（Web 界面展示内容都来自这里）。
-- **文件列表数据库**: `output/databases/{group_id}/zsxq_files_{group_id}.db`  
-  - 保存文件元数据（文件名、大小、下载次数等），用于文件面板和下载任务管理。
+- **话题 / 文章内容 / 文件元数据**: PostgreSQL 内部 `zsxq_*` schema；其他项目通过 `zsxq_public` 只读视图读取。
 - **已下载附件 / 文件**: `output/databases/{group_id}/downloads/`  
   - 通过 Web 界面或命令行触发的文件下载，实际都会保存在这里。  
   - 例如当前示例配置中，群组 `88851415151812` 的文件路径为：`output/databases/88851415151812/downloads/`。
 - **图片缓存（可安全删除）**: `output/databases/{group_id}/images/`  
   - 用于话题图片预览的本地缓存，如被删除，后续访问时会自动重新生成。
 
-> 提示：当前版本不会将文章导出为 Markdown/HTML 文件，**文章内容都存储在话题数据库中**；若需要再导出为文件，可以后续通过数据库二次处理实现。
+> 提示：当前版本不会将文章导出为 Markdown/HTML 文件，**文章内容都存储在 PostgreSQL 中**；若需要再导出为文件，可以后续通过数据库二次处理实现。
 
 ### PostgreSQL 存储
 
-当前共享部署以 PostgreSQL 为主数据源；SQLite 只作为本地轻量模式或历史兼容 fallback。要使用 PostgreSQL，可在 `config.toml` 中配置：
+当前部署以 PostgreSQL 为唯一结构化数据源。请在 `config.toml` 中配置：
 
 ```toml
 [database]
@@ -181,16 +176,10 @@ $env:ZSXQ_DATABASE_BACKEND = "postgres"
 $env:ZSXQ_POSTGRES_DSN = "postgresql://user:password@localhost:5432/zsxq"
 ```
 
-历史 SQLite `.db` 文件可迁移到 PostgreSQL 中独立的 `zsxq_*` 兼容 schema，避免话题库、文件库、配置库之间的同名表冲突。该命令只用于历史数据导入或恢复，不是当前主流程：
-
-```bash
-uv run migrate-sqlite-to-postgres --replace-schema
-```
-
 其它项目共享读取同一份 PostgreSQL 数据时，使用稳定的只读公共视图：
 
 ```bash
-uv run migrate-sqlite-to-postgres --replace-schema --build-public-views --build-indexes
+uv run manage-postgres-public-schema --apply --build-indexes
 ```
 
 公共视图会写入 `zsxq_public` schema，并面向只读分析场景。详细说明见 `docs/postgres_shared_database_plan.md`。
@@ -201,16 +190,10 @@ uv run migrate-sqlite-to-postgres --replace-schema --build-public-views --build-
 uv run manage-postgres-public-schema --apply --build-indexes --login-roles --reader-password "<reader-password>" --writer-password "<writer-password>"
 ```
 
-如确实从 SQLite 源文件导入历史数据，可做行数对账：
-
-```bash
-uv run audit-postgres-migration --root output\databases
-```
-
 日常 PG 状态巡检可产出 Markdown 快照报告：
 
 ```bash
-uv run generate-postgres-migration-report --root output --output docs\postgres_real_migration_report.md
+uv run generate-postgres-status-report --output docs\postgres_status_report.md
 ```
 
 给其它项目发 reader DSN 前，可验证它只能读取 `zsxq_public`：
@@ -219,7 +202,7 @@ uv run generate-postgres-migration-report --root output --output docs\postgres_r
 uv run verify-postgres-reader-access --dsn "postgresql://zsxq_reader:password@host:5432/zsxq"
 ```
 
-修改迁移或公共视图逻辑后，可运行 Docker smoke 验证多 SQLite fixture 迁移、`zsxq_public` 查询、只读账号权限和重复刷新：
+修改公共视图或权限逻辑后，可运行 Docker smoke 验证 PostgreSQL fixture、`zsxq_public` 查询、只读账号权限和重复刷新：
 
 ```bash
 .\scripts\run_postgres_shared_smoke.ps1

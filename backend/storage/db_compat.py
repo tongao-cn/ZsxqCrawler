@@ -3,7 +3,6 @@ from __future__ import annotations
 import os
 import re
 import hashlib
-import sqlite3
 from pathlib import Path
 from typing import Any, Iterable, Optional
 
@@ -60,7 +59,7 @@ def _load_project_env_file() -> None:
 def get_database_backend() -> str:
     _load_project_env_file()
     backend = os.getenv("ZSXQ_DATABASE_BACKEND") or _load_database_config().get("backend")
-    return str(backend or "sqlite").strip().lower()
+    return str(backend or "postgres").strip().lower()
 
 
 def get_postgres_dsn() -> Optional[str]:
@@ -75,10 +74,10 @@ def get_postgres_dsn() -> Optional[str]:
 
 def connect(db_path: str | Path, *, row_factory: Any = None):
     if get_database_backend() != "postgres":
-        conn = sqlite3.connect(db_path, check_same_thread=False)
-        if row_factory is not None:
-            conn.row_factory = sqlite3.Row if row_factory is True else row_factory
-        return conn
+        raise RuntimeError(
+            "SQLite backend has been removed. Configure PostgreSQL with "
+            "ZSXQ_DATABASE_BACKEND=postgres and ZSXQ_POSTGRES_DSN."
+        )
 
     dsn = get_postgres_dsn()
     if not dsn:

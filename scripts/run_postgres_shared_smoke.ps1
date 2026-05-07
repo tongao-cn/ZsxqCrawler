@@ -11,8 +11,6 @@ param(
 $ErrorActionPreference = "Stop"
 
 $repoRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
-$fixtureRoot = Join-Path $repoRoot "tmp\pg_shared_smoke"
-$fixtureRootArg = "tmp/pg_shared_smoke"
 $oldBackend = $env:ZSXQ_DATABASE_BACKEND
 $oldDsn = $env:ZSXQ_POSTGRES_DSN
 
@@ -66,122 +64,6 @@ function Assert-AtLeast {
 try {
     Set-Location $repoRoot
 
-    if (Test-Path $fixtureRoot) {
-        Remove-Item -Recurse -Force $fixtureRoot
-    }
-    New-Item -ItemType Directory -Force -Path $fixtureRoot | Out-Null
-
-    @'
-import sqlite3
-from pathlib import Path
-
-root = Path("tmp/pg_shared_smoke")
-root.mkdir(parents=True, exist_ok=True)
-
-full = sqlite3.connect(root / "shared-full.db")
-full.executescript(
-    """
-    CREATE TABLE groups (
-        group_id TEXT PRIMARY KEY,
-        name TEXT,
-        type TEXT,
-        background_url TEXT
-    );
-    CREATE TABLE topics (
-        group_id TEXT,
-        topic_id TEXT PRIMARY KEY,
-        title TEXT,
-        type TEXT,
-        create_time TEXT,
-        updated_at TEXT,
-        imported_at TEXT
-    );
-    CREATE TABLE comments (
-        comment_id TEXT PRIMARY KEY,
-        topic_id TEXT,
-        owner_user_id TEXT,
-        text TEXT,
-        create_time TEXT
-    );
-    CREATE TABLE files (
-        file_id TEXT PRIMARY KEY,
-        name TEXT,
-        size INTEGER,
-        download_status TEXT,
-        local_path TEXT,
-        create_time TEXT,
-        updated_at TEXT
-    );
-    CREATE TABLE columns (
-        group_id TEXT,
-        column_id TEXT PRIMARY KEY,
-        name TEXT,
-        description TEXT,
-        topics_count INTEGER,
-        updated_at TEXT
-    );
-    CREATE TABLE column_topics (
-        group_id TEXT,
-        column_id TEXT,
-        topic_id TEXT,
-        title TEXT,
-        create_time TEXT,
-        updated_at TEXT
-    );
-    CREATE TABLE daily_ai_reports (
-        group_id TEXT,
-        report_date TEXT,
-        topic_count INTEGER,
-        summary TEXT,
-        created_at TEXT,
-        updated_at TEXT
-    );
-    CREATE TABLE file_ai_analyses (
-        file_id TEXT PRIMARY KEY,
-        status TEXT,
-        summary TEXT,
-        content_type TEXT,
-        source_path TEXT,
-        updated_at TEXT
-    );
-    INSERT INTO groups VALUES ('g-full', 'Full Group', 'paid', 'https://example.test/bg.png');
-    INSERT INTO topics VALUES ('g-full', 't-full', 'Full Topic', 'talk', '2026-05-07T10:00:00', '2026-05-07T11:00:00', '2026-05-07T11:01:00');
-    INSERT INTO comments VALUES ('c-full', 't-full', 'u-1', 'useful comment', '2026-05-07T10:05:00');
-    INSERT INTO files VALUES ('f-full', 'report.pdf', 12345, 'downloaded', 'files/report.pdf', '2026-05-07T09:00:00', '2026-05-07T09:30:00');
-    INSERT INTO columns VALUES ('g-full', 'col-full', 'Research', 'curated topics', 1, '2026-05-07T12:00:00');
-    INSERT INTO column_topics VALUES ('g-full', 'col-full', 't-full', 'Full Topic', '2026-05-07T10:00:00', '2026-05-07T12:01:00');
-    INSERT INTO daily_ai_reports VALUES ('g-full', '2026-05-07', 1, 'daily summary', '2026-05-07T20:00:00', '2026-05-07T20:01:00');
-    INSERT INTO file_ai_analyses VALUES ('f-full', 'done', 'file summary', 'application/pdf', 'files/report.pdf', '2026-05-07T21:00:00');
-    """
-)
-full.commit()
-full.close()
-
-legacy = sqlite3.connect(root / "legacy-minimal.db")
-legacy.executescript(
-    """
-    CREATE TABLE groups (
-        group_id TEXT PRIMARY KEY,
-        name TEXT
-    );
-    CREATE TABLE topics (
-        group_id TEXT,
-        topic_id TEXT PRIMARY KEY,
-        title TEXT
-    );
-    CREATE TABLE files (
-        file_id TEXT PRIMARY KEY,
-        name TEXT
-    );
-    INSERT INTO groups VALUES ('g-legacy', 'Legacy Group');
-    INSERT INTO topics VALUES ('g-legacy', 't-legacy', 'Legacy Topic');
-    INSERT INTO files VALUES ('f-legacy', 'legacy.txt');
-    """
-)
-legacy.commit()
-legacy.close()
-'@ | uv run python -
-
     $existing = docker ps -a --filter "name=^/$ContainerName$" --format "{{.Names}}"
     if ($existing -eq $ContainerName) {
         docker rm -f $ContainerName | Out-Null
@@ -212,17 +94,143 @@ legacy.close()
     $env:ZSXQ_DATABASE_BACKEND = "postgres"
     $env:ZSXQ_POSTGRES_DSN = "postgresql://postgres:$PostgresPassword@127.0.0.1:$Port/$Database"
 
-    Invoke-Checked {
-        uv run migrate-sqlite-to-postgres --root $fixtureRootArg --replace-schema --build-public-views
-    }
+    @'
+import os
+import psycopg2
+
+dsn = os.environ["ZSXQ_POSTGRES_DSN"]
+conn = psycopg2.connect(dsn)
+try:
+    with conn.cursor() as cur:
+        cur.execute("CREATE SCHEMA zsxq_smoke_full")
+        cur.execute("CREATE SCHEMA zsxq_smoke_legacy")
+        cur.execute("""
+            CREATE TABLE zsxq_smoke_full.groups (
+                group_id TEXT PRIMARY KEY,
+                name TEXT,
+                type TEXT,
+                background_url TEXT
+            )
+        """)
+        cur.execute("""
+            CREATE TABLE zsxq_smoke_full.topics (
+                group_id TEXT,
+                topic_id TEXT PRIMARY KEY,
+                title TEXT,
+                type TEXT,
+                create_time TEXT,
+                updated_at TEXT,
+                imported_at TEXT
+            )
+        """)
+        cur.execute("""
+            CREATE TABLE zsxq_smoke_full.comments (
+                comment_id TEXT PRIMARY KEY,
+                topic_id TEXT,
+                owner_user_id TEXT,
+                text TEXT,
+                create_time TEXT
+            )
+        """)
+        cur.execute("""
+            CREATE TABLE zsxq_smoke_full.files (
+                file_id TEXT PRIMARY KEY,
+                name TEXT,
+                size BIGINT,
+                download_status TEXT,
+                local_path TEXT,
+                create_time TEXT,
+                updated_at TEXT
+            )
+        """)
+        cur.execute("""
+            CREATE TABLE zsxq_smoke_full.columns (
+                group_id TEXT,
+                column_id TEXT PRIMARY KEY,
+                name TEXT,
+                description TEXT,
+                topics_count BIGINT,
+                updated_at TEXT
+            )
+        """)
+        cur.execute("""
+            CREATE TABLE zsxq_smoke_full.column_topics (
+                group_id TEXT,
+                column_id TEXT,
+                topic_id TEXT,
+                title TEXT,
+                create_time TEXT,
+                updated_at TEXT
+            )
+        """)
+        cur.execute("""
+            CREATE TABLE zsxq_smoke_full.daily_ai_reports (
+                group_id TEXT,
+                report_date TEXT,
+                topic_count BIGINT,
+                summary TEXT,
+                created_at TEXT,
+                updated_at TEXT
+            )
+        """)
+        cur.execute("""
+            CREATE TABLE zsxq_smoke_full.file_ai_analyses (
+                file_id TEXT PRIMARY KEY,
+                status TEXT,
+                summary TEXT,
+                content_type TEXT,
+                source_path TEXT,
+                updated_at TEXT
+            )
+        """)
+        cur.execute("""
+            INSERT INTO zsxq_smoke_full.groups VALUES
+            ('g-full', 'Full Group', 'paid', 'https://example.test/bg.png')
+        """)
+        cur.execute("""
+            INSERT INTO zsxq_smoke_full.topics VALUES
+            ('g-full', 't-full', 'Full Topic', 'talk', '2026-05-07T10:00:00', '2026-05-07T11:00:00', '2026-05-07T11:01:00')
+        """)
+        cur.execute("""
+            INSERT INTO zsxq_smoke_full.comments VALUES
+            ('c-full', 't-full', 'u-1', 'useful comment', '2026-05-07T10:05:00')
+        """)
+        cur.execute("""
+            INSERT INTO zsxq_smoke_full.files VALUES
+            ('f-full', 'report.pdf', 12345, 'downloaded', 'files/report.pdf', '2026-05-07T09:00:00', '2026-05-07T09:30:00')
+        """)
+        cur.execute("""
+            INSERT INTO zsxq_smoke_full.columns VALUES
+            ('g-full', 'col-full', 'Research', 'curated topics', 1, '2026-05-07T12:00:00')
+        """)
+        cur.execute("""
+            INSERT INTO zsxq_smoke_full.column_topics VALUES
+            ('g-full', 'col-full', 't-full', 'Full Topic', '2026-05-07T10:00:00', '2026-05-07T12:01:00')
+        """)
+        cur.execute("""
+            INSERT INTO zsxq_smoke_full.daily_ai_reports VALUES
+            ('g-full', '2026-05-07', 1, 'daily summary', '2026-05-07T20:00:00', '2026-05-07T20:01:00')
+        """)
+        cur.execute("""
+            INSERT INTO zsxq_smoke_full.file_ai_analyses VALUES
+            ('f-full', 'done', 'file summary', 'application/pdf', 'files/report.pdf', '2026-05-07T21:00:00')
+        """)
+        cur.execute("CREATE TABLE zsxq_smoke_legacy.groups (group_id TEXT PRIMARY KEY, name TEXT)")
+        cur.execute("CREATE TABLE zsxq_smoke_legacy.topics (group_id TEXT, topic_id TEXT PRIMARY KEY, title TEXT)")
+        cur.execute("CREATE TABLE zsxq_smoke_legacy.files (file_id TEXT PRIMARY KEY, name TEXT)")
+        cur.execute("INSERT INTO zsxq_smoke_legacy.groups VALUES ('g-legacy', 'Legacy Group')")
+        cur.execute("INSERT INTO zsxq_smoke_legacy.topics VALUES ('g-legacy', 't-legacy', 'Legacy Topic')")
+        cur.execute("INSERT INTO zsxq_smoke_legacy.files VALUES ('f-legacy', 'legacy.txt')")
+    conn.commit()
+finally:
+    conn.close()
+'@ | uv run python -
+
     Invoke-Checked {
         uv run manage-postgres-public-schema --apply --build-indexes
     }
     Invoke-Checked {
-        uv run migrate-sqlite-to-postgres --build-public-views
-    }
-    Invoke-Checked {
-        uv run audit-postgres-migration --root $fixtureRootArg
+        uv run manage-postgres-public-schema --apply --build-indexes
     }
 
     Invoke-PgSql -User "postgres" -Password $PostgresPassword -Sql "ALTER ROLE zsxq_reader LOGIN PASSWORD '$ReaderPassword';" | Out-Null
@@ -278,8 +286,5 @@ finally {
 
     if (-not $KeepContainer) {
         docker rm -f $ContainerName *> $null
-    }
-    if (Test-Path $fixtureRoot) {
-        Remove-Item -Recurse -Force $fixtureRoot
     }
 }

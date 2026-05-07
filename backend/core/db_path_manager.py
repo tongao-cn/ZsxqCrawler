@@ -27,15 +27,13 @@ reasoning_effort = "low"
 api_key = ""
 
 [database]
-# backend = "sqlite"  # 可选：sqlite 或 postgres
+# backend = "postgres"
 # postgres_dsn = "postgresql://user:password@localhost:5432/zsxq"
-# 可选：SQLite 自定义数据库路径；留空则由路径管理器自动管理
-# path = ""
 """
 
 
 class DatabasePathManager:
-    """数据库路径管理器 - 统一管理所有数据库文件的存储位置"""
+    """数据库路径管理器 - 统一管理本地缓存目录和 PostgreSQL schema 标识路径"""
     
     def __init__(self, base_dir: str = "output/databases"):
         # 以仓库根目录作为项目根目录，避免模块移动后把数据写入 backend/core。
@@ -75,13 +73,13 @@ class DatabasePathManager:
             print(f"📁 创建{label}: {path}")
 
     def _get_group_db_path(self, group_id: str, db_name: str) -> str:
-        """构造指定群组的数据库路径。"""
+        """构造指定群组的兼容路径；PostgreSQL 用它派生内部 schema 名。"""
         normalized_group_id = self._normalize_group_id(group_id)
         group_dir = self.get_group_dir(normalized_group_id)
         return os.path.join(group_dir, f"zsxq_{db_name}_{normalized_group_id}.db")
 
     def _get_config_db_path(self) -> str:
-        """构造全局配置数据库路径。"""
+        """构造全局配置兼容路径；PostgreSQL 用它派生内部 schema 名。"""
         return os.path.join(self.base_dir, "zsxq_config.db")
     
     def get_group_dir(self, group_id: str) -> str:
@@ -115,7 +113,7 @@ class DatabasePathManager:
         return self.get_topics_db_path(group_id)
     
     def list_group_databases(self, group_id: str) -> Dict[str, str]:
-        """列出指定群组的所有数据库文件"""
+        """列出指定群组目录中仍存在的历史数据库文件。"""
         group_dir = self.get_group_dir(group_id)
         databases = {}
         
@@ -132,7 +130,7 @@ class DatabasePathManager:
         return databases
     
     def get_database_info(self, group_id: str) -> Dict[str, Any]:
-        """获取数据库信息"""
+        """获取历史本地数据库文件信息。"""
         databases = self.list_group_databases(group_id)
         info = {
             'group_id': group_id,
@@ -152,7 +150,7 @@ class DatabasePathManager:
         return info
     
     def migrate_old_databases(self, group_id: str, old_paths: Dict[str, str]) -> Dict[str, str]:
-        """迁移旧的数据库文件到新的目录结构"""
+        """迁移旧的本地数据库文件到新的目录结构。"""
         migration_results = {}
         
         for db_type, old_path in old_paths.items():

@@ -1,18 +1,16 @@
 # PostgreSQL Shared Database
 
-ZsxqCrawler now uses PostgreSQL as the shared deployment data source. SQLite
-remains a local lightweight mode and a historical import/recovery source, but
-the operational shared interface is PostgreSQL plus the `zsxq_public` read
-schema.
+ZsxqCrawler now uses PostgreSQL as the shared structured data source. Other
+projects should read only from the stable `zsxq_public` schema.
 
 ## Recommended Layout
 
-- Internal compatibility schemas: `zsxq_*`
-  - Created from each original SQLite `.db` path.
-  - Used by ZsxqCrawler internals and migration compatibility.
+- Internal schemas: `zsxq_*`
+  - Used by ZsxqCrawler internals.
+  - Names may still be derived from compatibility path identifiers.
 - Public read schema: `zsxq_public`
   - Stable interface for other projects.
-  - Exposes views instead of internal compatibility tables.
+  - Exposes views instead of internal tables.
 
 ## Connection Roles
 
@@ -39,19 +37,11 @@ It should not write to internal `zsxq_*` schemas.
 
 ## PostgreSQL Operations
 
-Historical SQLite data can still be imported into PostgreSQL compatibility
-schemas when a `.db` source exists:
+Refresh public views and indexes:
 
 ```powershell
 $env:ZSXQ_DATABASE_BACKEND = "postgres"
 $env:ZSXQ_POSTGRES_DSN = "postgresql://zsxq_writer:password@host:5432/zsxq"
-uv run migrate-sqlite-to-postgres --root output\databases --replace-schema
-```
-
-For the current PostgreSQL dataset, refresh public views and indexes without
-re-importing SQLite:
-
-```powershell
 uv run manage-postgres-public-schema --apply --build-indexes
 ```
 
@@ -61,42 +51,17 @@ Inspect public schema SQL without applying it:
 uv run manage-postgres-public-schema
 ```
 
-Apply or refresh `zsxq_public` views and grants:
-
-```powershell
-uv run manage-postgres-public-schema --apply
-```
-
-Production role initialization can be done after the first migration with a
-privileged DSN:
+Production role initialization can be done with a privileged DSN:
 
 ```powershell
 $env:ZSXQ_POSTGRES_DSN = "postgresql://postgres:admin-password@host:5432/zsxq"
 uv run manage-postgres-public-schema --apply --build-indexes --login-roles --reader-password "<reader-password>" --writer-password "<writer-password>"
 ```
 
-After that, configure ZsxqCrawler with the writer DSN and share only the reader
-DSN with other projects:
-
-```toml
-[database]
-backend = "postgres"
-postgres_dsn = "postgresql://zsxq_writer:<writer-password>@host:5432/zsxq"
-```
-
-If a historical SQLite import was performed, audit source `.db` row counts
-against PostgreSQL:
-
-```powershell
-$env:ZSXQ_DATABASE_BACKEND = "postgres"
-$env:ZSXQ_POSTGRES_DSN = "postgresql://postgres:admin-password@host:5432/zsxq"
-uv run audit-postgres-migration --root output\databases
-```
-
 Generate a Markdown PostgreSQL status snapshot:
 
 ```powershell
-uv run generate-postgres-migration-report --root output --output docs\postgres_real_migration_report.md
+uv run generate-postgres-status-report --output docs\postgres_status_report.md
 ```
 
 Verify a reader DSN before giving it to another project:
@@ -105,24 +70,16 @@ Verify a reader DSN before giving it to another project:
 uv run verify-postgres-reader-access --dsn "postgresql://zsxq_reader:password@host:5432/zsxq"
 ```
 
-Run the repeatable Docker smoke after changing migration or public view code:
+Run the repeatable Docker smoke after changing public view or permission code:
 
 ```powershell
 .\scripts\run_postgres_shared_smoke.ps1
 ```
 
-The smoke creates two temporary SQLite fixtures:
-
-- `shared-full.db`, with all first-stage public view tables and optional time
-  fields.
-- `legacy-minimal.db`, with only required `groups`, `topics`, and `files`
-  fields to verify old databases still build public views with `NULL` optional
-  columns.
-
-It then starts a disposable PostgreSQL container, migrates both fixtures,
-refreshes `zsxq_public`, checks repeated refresh behavior, validates reader
-`SELECT`, and confirms the reader cannot access internal schemas or create
-objects in the public schema.
+The smoke starts a disposable PostgreSQL container, creates representative
+internal schemas directly in PostgreSQL, refreshes `zsxq_public`, checks
+repeated refresh behavior, validates reader `SELECT`, and confirms the reader
+cannot access internal schemas or create objects in the public schema.
 
 ## Public Views
 
@@ -149,7 +106,7 @@ Initial shared views:
   `source_schema`.
 
 Each view includes `source_schema` so downstream consumers can trace records
-back to the compatibility schema that produced them.
+back to the internal schema that produced them.
 
 `comments.group_id` is derived from the same schema's `topics` table when the
 comment table itself does not carry `group_id`. `files.group_id` and
@@ -191,16 +148,13 @@ Recommended onboarding checklist for another project:
   before sharing the DSN onward.
 - Query only `zsxq_public.*` views.
 - Do not depend on internal `zsxq_*` schema names; they are compatibility
-  details derived from SQLite paths.
+  details.
 
 ## Current Boundaries
 
-- SQLite remains supported for local, zero-config usage and historical imports.
-- PostgreSQL is the shared analysis/service data source.
+- PostgreSQL is the only structured data source.
 - The public schema is read-oriented. ZsxqCrawler remains the writer.
-- The migration script does not delete PostgreSQL schemas unless
-  `--replace-schema` is explicitly provided.
 - Other projects should treat `zsxq_public` as the stable contract and should
-  not depend on internal `zsxq_*` compatibility schemas.
+  not depend on internal `zsxq_*` schemas.
 - `--build-indexes` creates best-effort indexes on common internal query
-  columns. It is safe to repeat and skips missing legacy columns.
+  columns. It is safe to repeat and skips missing columns.

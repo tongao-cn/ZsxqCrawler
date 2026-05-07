@@ -1,7 +1,9 @@
 import unittest
+from unittest.mock import patch
 
 from backend.storage.db_compat import (
     CompatRow,
+    connect,
     _parse_pragma_table_info,
     _should_return_id,
     _strip_env_value,
@@ -65,6 +67,11 @@ class DbCompatTests(unittest.TestCase):
         self.assertEqual("postgres", _strip_env_value('"postgres"'))
         self.assertEqual("sqlite", _strip_env_value("'sqlite'"))
         self.assertEqual('"mixed', _strip_env_value('"mixed'))
+
+    def test_connect_rejects_removed_sqlite_backend(self):
+        with patch("backend.storage.db_compat.get_database_backend", return_value="sqlite"):
+            with self.assertRaisesRegex(RuntimeError, "SQLite backend has been removed"):
+                connect("removed.db")
 
     def test_compat_row_supports_index_and_column_access(self):
         row = CompatRow(("task-1", "running"), ("task_id", "status"))

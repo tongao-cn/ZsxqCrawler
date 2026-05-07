@@ -9,12 +9,17 @@ from backend.services.a_share_analysis_service import normalize_group_id
 from backend.storage.task_store import TaskStore
 
 
-task_store = TaskStore(get_db_path_manager().get_config_db_path())
+task_store: Optional[TaskStore] = None
 
-current_tasks: Dict[str, Dict[str, Any]] = {
-    task["task_id"]: task for task in task_store.list_tasks()
-}
-task_counter = task_store.max_task_sequence()
+
+def get_task_store() -> TaskStore:
+    global task_store
+    if task_store is None:
+        task_store = TaskStore(get_db_path_manager().get_config_db_path())
+    return task_store
+
+current_tasks: Dict[str, Dict[str, Any]] = {}
+task_counter = 0
 task_logs: Dict[str, List[str]] = {}
 sse_connections: Dict[str, List[Any]] = {}
 task_stop_flags: Dict[str, bool] = {}
@@ -36,20 +41,20 @@ def _normalize_task(task: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
 def list_tasks(limit: Optional[int] = None) -> List[Dict[str, Any]]:
     return [
         normalized
-        for normalized in (_normalize_task(task) for task in task_store.list_tasks(limit=limit))
+        for normalized in (_normalize_task(task) for task in get_task_store().list_tasks(limit=limit))
         if normalized is not None
     ]
 
 
 def get_task_state(task_id: str) -> Optional[Dict[str, Any]]:
-    return _normalize_task(task_store.get_task(task_id) or current_tasks.get(task_id))
+    return _normalize_task(get_task_store().get_task(task_id) or current_tasks.get(task_id))
 
 
 def get_task_logs_state(task_id: str) -> Optional[List[str]]:
     task = get_task_state(task_id)
     if not task and task_id not in task_logs:
         return None
-    persisted_logs = task_store.get_logs(task_id)
+    persisted_logs = get_task_store().get_logs(task_id)
     if persisted_logs:
         return persisted_logs
     return task_logs.get(task_id, [])
@@ -57,9 +62,10 @@ def get_task_logs_state(task_id: str) -> Optional[List[str]]:
 
 def cleanup_tasks(keep_latest: int = 100) -> Dict[str, int]:
     keep_latest = max(0, keep_latest)
-    tasks_before = task_store.list_tasks()
-    result = task_store.cleanup_completed(keep_latest=keep_latest)
-    remaining_ids = {task["task_id"] for task in task_store.list_tasks()}
+    store = get_task_store()
+    tasks_before = store.list_tasks()
+    result = store.cleanup_completed(keep_latest=keep_latest)
+    remaining_ids = {task["task_id"] for task in store.list_tasks()}
 
     for task in tasks_before:
         task_id = task.get("task_id")
@@ -74,6 +80,8 @@ def cleanup_tasks(keep_latest: int = 100) -> Dict[str, int]:
 
 def create_task(task_type: str, description: str, metadata: Optional[Dict[str, Any]] = None) -> str:
     global task_counter
+    if task_counter == 0:
+        task_counter = get_task_store().max_task_sequence()
     task_counter += 1
     task_id = f"task_{task_counter}_{int(datetime.now().timestamp())}"
     now = datetime.now()
@@ -90,7 +98,8 @@ def create_task(task_type: str, description: str, metadata: Optional[Dict[str, A
     if metadata:
         current_tasks[task_id].update(metadata)
 
-    task_store.create_task(
+    store = get_task_store()
+    store.create_task(
         task_id,
         task_type,
         "pending",
@@ -103,7 +112,7 @@ def create_task(task_type: str, description: str, metadata: Optional[Dict[str, A
 
     task_logs[task_id] = []
     task_stop_flags[task_id] = False
-    task_store.set_stop_flag(task_id, False)
+    store.set_stop_flag(task_id, False)
     add_task_log(task_id, f"任务创建: {description}")
 
     return task_id
@@ -113,7 +122,7 @@ def add_task_log(task_id: str, log_message: str) -> None:
     if task_id not in task_logs:
         task_logs[task_id] = []
 
-    formatted_log = task_store.add_log(task_id, log_message)
+    formatted_log = get_task_store().add_log(task_id, log_message)
     task_logs[task_id].append(formatted_log)
     broadcast_log(task_id, formatted_log)
 
@@ -129,7 +138,8 @@ def update_task(
     result: Optional[Dict[str, Any]] = None,
 ) -> None:
     status = _normalize_task_status(status)
-    if task_id not in current_tasks and task_store.get_task(task_id) is None:
+    store = get_task_store()
+    if task_id not in current_tasks and store.get_task(task_id) is None:
         return
 
     now = datetime.now()
@@ -143,7 +153,7 @@ def update_task(
             }
         )
 
-    task_store.update_task(task_id, status, message, result=result, updated_at=now)
+    store.update_task(task_id, status, message, result=result, updated_at=now)
     add_task_log(task_id, f"状态更新: {message}")
 
 
@@ -156,7 +166,7 @@ def stop_task(task_id: str) -> bool:
         return False
 
     task_stop_flags[task_id] = True
-    task_store.set_stop_flag(task_id, True)
+    get_task_store().set_stop_flag(task_id, True)
     add_task_log(task_id, "🛑 收到停止请求，正在停止任务...")
 
     if crawler_runtime.crawler_instance:
@@ -171,7 +181,7 @@ def stop_task(task_id: str) -> bool:
 
 
 def is_task_stopped(task_id: str) -> bool:
-    return task_stop_flags.get(task_id, False) or task_store.is_stopped(task_id)
+    return task_stop_flags.get(task_id, False) or get_task_store().is_stopped(task_id)
 
 
 def get_latest_task_by_type(
