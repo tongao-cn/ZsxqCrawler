@@ -17,7 +17,6 @@ interface UseGroupDataLoadersOptions {
   currentPage: number;
   debouncedSearchTerm: string;
   selectedTag: number | null;
-  onSelectedAccountIdChange: (accountId: string) => void;
 }
 
 export function useGroupDataLoaders({
@@ -25,7 +24,6 @@ export function useGroupDataLoaders({
   currentPage,
   debouncedSearchTerm,
   selectedTag,
-  onSelectedAccountIdChange,
 }: UseGroupDataLoadersOptions) {
   const [group, setGroup] = useState<Group | null>(null);
   const [groupStats, setGroupStats] = useState<GroupStats | null>(null);
@@ -49,6 +47,7 @@ export function useGroupDataLoaders({
   const [cacheInfo, setCacheInfo] = useState<any>(null);
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [groupAccount, setGroupAccount] = useState<Account | null>(null);
+  const [selectedAccountId, setSelectedAccountId] = useState<string>('');
   const [accountSelf, setAccountSelf] = useState<AccountSelf | null>(null);
   const [hasColumns, setHasColumns] = useState<boolean>(false);
   const [columnsTitle, setColumnsTitle] = useState<string | null>(null);
@@ -210,11 +209,11 @@ export function useGroupDataLoaders({
       const response = await apiClient.getGroupAccount(groupId);
       const account = (response as any)?.account || null;
       setGroupAccount(account);
-      onSelectedAccountIdChange(account?.id || '');
+      setSelectedAccountId(account?.id || '');
     } catch (err) {
       console.error('加载群组账号失败:', err);
     }
-  }, [groupId, onSelectedAccountIdChange]);
+  }, [groupId]);
 
   const loadGroupAccountSelf = useCallback(async () => {
     try {
@@ -291,6 +290,8 @@ export function useGroupDataLoaders({
     cacheInfo,
     accounts,
     groupAccount,
+    selectedAccountId,
+    setSelectedAccountId,
     accountSelf,
     hasColumns,
     columnsTitle,

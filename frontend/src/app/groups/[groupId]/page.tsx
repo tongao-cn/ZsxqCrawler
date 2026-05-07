@@ -22,6 +22,9 @@ import { useTopicFileActions } from '@/hooks/useTopicFileActions';
 import { useTopicActions } from '@/hooks/useTopicActions';
 import { useGroupDataLoaders } from '@/hooks/useGroupDataLoaders';
 import { useCrawlActions } from '@/hooks/useCrawlActions';
+import { useDownloadActions } from '@/hooks/useDownloadActions';
+import { useGroupTaskBridge } from '@/hooks/useGroupTaskBridge';
+import { useGroupAccountAssignment } from '@/hooks/useGroupAccountAssignment';
 
 const LazyPanelFallback = () => (
   <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
@@ -92,18 +95,17 @@ export default function GroupDetailPage() {
     onDebouncedChange: handleDebouncedSearchChange,
   });
   const deferredSearchTerm = useDeferredValue(searchTerm);
-  const [fileLoading, setFileLoading] = useState<string | null>(null);
-  const [currentTaskId, setCurrentTaskId] = useState<string | null>(null);
   const [activeMode, setActiveMode] = useState<'crawl' | 'download'>('crawl');
-  const [activeTab, setActiveTab] = useState('topics');
-  const [selectedDownloadOption, setSelectedDownloadOption] = useState<'time' | 'count' | null>('time');
   // 注意：topic_id 可能超过 JS 安全整数范围，这里统一按字符串处理 ID
   const [selectedTag, setSelectedTag] = useState<number | null>(null);
   const [clearingCache, setClearingCache] = useState(false);
-  const handleTaskCreated = useCallback((taskId: string) => {
-    setCurrentTaskId(taskId);
-    setActiveTab('logs');
-  }, []);
+  const {
+    activeTab,
+    setActiveTab,
+    currentTaskId,
+    handleTaskCreated,
+    closeTaskLog,
+  } = useGroupTaskBridge();
   const {
     fileStatuses,
     downloadingFiles,
@@ -114,8 +116,6 @@ export default function GroupDetailPage() {
     onTaskCreated: handleTaskCreated,
   });
 
-  const [selectedAccountId, setSelectedAccountId] = useState<string>('');
-  const [assigningAccount, setAssigningAccount] = useState<boolean>(false);
   const {
     group,
     groupStats,
@@ -135,6 +135,8 @@ export default function GroupDetailPage() {
     cacheInfo,
     accounts,
     groupAccount,
+    selectedAccountId,
+    setSelectedAccountId,
     accountSelf,
     hasColumns,
     columnsTitle,
@@ -151,7 +153,15 @@ export default function GroupDetailPage() {
     currentPage,
     debouncedSearchTerm,
     selectedTag,
-    onSelectedAccountIdChange: setSelectedAccountId,
+  });
+  const {
+    assigningAccount,
+    handleAssignAccount,
+  } = useGroupAccountAssignment({
+    groupId,
+    selectedAccountId,
+    loadGroupAccount,
+    loadGroupAccountSelf,
   });
 
   // 话题详情缓存：key 使用字符串形式的 topic_id，避免大整数精度问题
@@ -162,23 +172,38 @@ export default function GroupDetailPage() {
   });
   const scrollAreaRef = useRef<HTMLDivElement>(null);
 
-  // 下载间隔控制配置
-  const [downloadInterval, setDownloadInterval] = useState<number>(1.0);
-  const [longSleepInterval, setLongSleepInterval] = useState<number>(60.0);
-  const [filesPerBatch, setFilesPerBatch] = useState<number>(10);
-  const [showSettingsDialog, setShowSettingsDialog] = useState<boolean>(false);
-
-  // 随机间隔范围设置
-  const [downloadIntervalMin, setDownloadIntervalMin] = useState<number>(15);
-  const [downloadIntervalMax, setDownloadIntervalMax] = useState<number>(30);
-  const [longSleepIntervalMin, setLongSleepIntervalMin] = useState<number>(30);
-  const [longSleepIntervalMax, setLongSleepIntervalMax] = useState<number>(60);
-  const [useRandomInterval, setUseRandomInterval] = useState<boolean>(true);
-
-const [downloadDialogOpen, setDownloadDialogOpen] = useState<boolean>(false);
-const [downloadQuickLastDays, setDownloadQuickLastDays] = useState<number>(30);
-const [downloadRangeStartDate, setDownloadRangeStartDate] = useState<string>('');
-const [downloadRangeEndDate, setDownloadRangeEndDate] = useState<string>('');
+  const {
+    fileLoading,
+    selectedDownloadOption,
+    setSelectedDownloadOption,
+    downloadInterval,
+    longSleepInterval,
+    filesPerBatch,
+    showSettingsDialog,
+    setShowSettingsDialog,
+    downloadIntervalMin,
+    downloadIntervalMax,
+    longSleepIntervalMin,
+    longSleepIntervalMax,
+    useRandomInterval,
+    downloadDialogOpen,
+    setDownloadDialogOpen,
+    downloadQuickLastDays,
+    setDownloadQuickLastDays,
+    downloadRangeStartDate,
+    setDownloadRangeStartDate,
+    downloadRangeEndDate,
+    setDownloadRangeEndDate,
+    handleDownloadByTime,
+    handleDownloadByCount,
+    handleClearFileDatabase,
+    handleSettingsChange,
+  } = useDownloadActions({
+    groupId,
+    localFileCount,
+    onTaskCreated: handleTaskCreated,
+    loadLocalFileCount,
+  });
   const {
     selectedCrawlOption,
     setSelectedCrawlOption,
@@ -215,138 +240,6 @@ const [downloadRangeEndDate, setDownloadRangeEndDate] = useState<string>('');
     loadTags,
     onSelectedTagChange: setSelectedTag,
   });
-
-  // 绑定账号到当前群组
-  const handleAssignAccount = async () => {
-    if (!selectedAccountId) {
-      toast.error('请选择要绑定的账号');
-      return;
-    }
-    setAssigningAccount(true);
-    try {
-      await apiClient.assignGroupAccount(groupId, selectedAccountId);
-      toast.success('已绑定账号到该群组');
-      await loadGroupAccount();
-      await loadGroupAccountSelf();
-    } catch (err) {
-      toast.error('绑定失败');
-      console.error('绑定账号失败:', err);
-    } finally {
-      setAssigningAccount(false);
-    }
-  };
-
-  // 文件操作函数
-  const handleDownloadByTime = async () => {
-    if (localFileCount === 0) {
-      toast.error('当前没有可下载的文件记录，请先采集包含附件的话题');
-      return;
-    }
-
-    try {
-      setFileLoading('download-time');
-      const params: any = {
-        downloadInterval,
-        longSleepInterval,
-        filesPerBatch,
-        downloadIntervalMin: useRandomInterval ? downloadIntervalMin : undefined,
-        downloadIntervalMax: useRandomInterval ? downloadIntervalMax : undefined,
-        longSleepIntervalMin: useRandomInterval ? longSleepIntervalMin : undefined,
-        longSleepIntervalMax: useRandomInterval ? longSleepIntervalMax : undefined,
-      };
-      if (downloadRangeStartDate || downloadRangeEndDate) {
-        if (downloadRangeStartDate) params.startTime = downloadRangeStartDate;
-        if (downloadRangeEndDate) params.endTime = downloadRangeEndDate;
-      } else {
-        params.lastDays = Math.max(1, downloadQuickLastDays || 1);
-      }
-
-      const response = await apiClient.downloadFilesByTimeRange(groupId, params);
-      toast.success(`文件下载任务已创建: ${(response as any).task_id}`);
-      // 设置当前任务ID以显示日志
-      setCurrentTaskId((response as any).task_id);
-      // 自动切换到日志标签页
-      setActiveTab('logs');
-      setDownloadDialogOpen(false);
-    } catch (error) {
-      toast.error(`文件下载失败: ${error instanceof Error ? error.message : '未知错误'}`);
-    } finally {
-      setFileLoading(null);
-    }
-  };
-
-  const handleDownloadByCount = async () => {
-    if (localFileCount === 0) {
-      toast.error('当前没有可下载的文件记录，请先采集包含附件的话题');
-      return;
-    }
-
-    try {
-      setFileLoading('download-count');
-      const response = await apiClient.downloadFiles(
-        groupId,
-        undefined,
-        'download_count',
-        downloadInterval,
-        longSleepInterval,
-        filesPerBatch,
-        useRandomInterval ? downloadIntervalMin : undefined,
-        useRandomInterval ? downloadIntervalMax : undefined,
-        useRandomInterval ? longSleepIntervalMin : undefined,
-        useRandomInterval ? longSleepIntervalMax : undefined
-      );
-      toast.success(`文件下载任务已创建: ${(response as any).task_id}`);
-      // 设置当前任务ID以显示日志
-      setCurrentTaskId((response as any).task_id);
-      // 自动切换到日志标签页
-      setActiveTab('logs');
-    } catch (error) {
-      toast.error(`文件下载失败: ${error instanceof Error ? error.message : '未知错误'}`);
-    } finally {
-      setFileLoading(null);
-    }
-  };
-
-  const handleClearFileDatabase = async () => {
-    try {
-      setFileLoading('clear');
-      await apiClient.clearFileDatabase(groupId);
-      toast.success(`文件数据库已删除`);
-      // 重新加载本地文件数量
-      loadLocalFileCount();
-    } catch (error) {
-      toast.error(`删除文件数据库失败: ${error instanceof Error ? error.message : '未知错误'}`);
-    } finally {
-      setFileLoading(null);
-    }
-  };
-
-  const handleSettingsChange = (settings: {
-    downloadInterval: number;
-    longSleepInterval: number;
-    filesPerBatch: number;
-    downloadIntervalMin?: number;
-    downloadIntervalMax?: number;
-    longSleepIntervalMin?: number;
-    longSleepIntervalMax?: number;
-  }) => {
-    setDownloadInterval(settings.downloadInterval);
-    setLongSleepInterval(settings.longSleepInterval);
-    setFilesPerBatch(settings.filesPerBatch);
-
-    // 更新随机间隔设置
-    if (settings.downloadIntervalMin !== undefined) {
-      setDownloadIntervalMin(settings.downloadIntervalMin);
-      setDownloadIntervalMax(settings.downloadIntervalMax || 30);
-      setLongSleepIntervalMin(settings.longSleepIntervalMin || 30);
-      setLongSleepIntervalMax(settings.longSleepIntervalMax || 60);
-      setUseRandomInterval(true);
-    } else {
-      setUseRandomInterval(false);
-    }
-
-    toast.success('下载设置已更新');
-  };
 
   const {
     expandedComments,
@@ -678,7 +571,7 @@ const [downloadRangeEndDate, setDownloadRangeEndDate] = useState<string>('');
                 <div className="h-full bg-gradient-to-br from-slate-50 to-gray-100 rounded-lg border border-gray-200 overflow-hidden">
                   <TaskLogViewer
                     taskId={currentTaskId}
-                    onClose={() => setCurrentTaskId(null)}
+                    onClose={closeTaskLog}
                     inline={true}
                     onTaskStop={() => {
                       setTimeout(() => {
@@ -695,10 +588,7 @@ const [downloadRangeEndDate, setDownloadRangeEndDate] = useState<string>('');
               <div className="flex-1 min-h-0 overflow-auto">
                 <AShareAnalysisPanel
                   selectedGroup={group}
-                  onTaskCreated={(taskId) => {
-                    setCurrentTaskId(taskId);
-                    setActiveTab('logs');
-                  }}
+                  onTaskCreated={handleTaskCreated}
                 />
               </div>
             </TabsContent>
@@ -707,10 +597,7 @@ const [downloadRangeEndDate, setDownloadRangeEndDate] = useState<string>('');
               <div className="flex-1 min-h-0 overflow-auto">
                 <DailyTopicAnalysisPanel
                   groupId={groupId}
-                  onTaskCreated={(taskId) => {
-                    setCurrentTaskId(taskId);
-                    setActiveTab('logs');
-                  }}
+                  onTaskCreated={handleTaskCreated}
                 />
               </div>
             </TabsContent>
