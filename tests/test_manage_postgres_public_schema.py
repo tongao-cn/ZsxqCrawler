@@ -40,6 +40,19 @@ class ManagePostgresPublicSchemaTests(unittest.TestCase):
         self.assertIn("WHERE false", sql)
         self.assertIn('NULL::text AS "group_id"', sql)
 
+    def test_build_public_view_sql_uses_null_for_missing_optional_columns(self):
+        topic_spec = next(spec for spec in PUBLIC_VIEW_SPECS if spec.name == "topics")
+
+        sql = build_public_view_sql(
+            topic_spec,
+            [("zsxq_legacy", {"group_id", "topic_id", "title"})],
+        )
+
+        self.assertIn("NULL::text AS \"topic_type\"", sql)
+        self.assertIn("COALESCE(NULL::text, NULL::text) AS \"source_updated_at\"", sql)
+        self.assertNotIn("updated_at::text", sql)
+        self.assertNotIn("imported_at::text", sql)
+
     def test_build_role_sql_grants_reader_select_only_shape(self):
         sql = build_role_sql(reader_role="reader", writer_role="writer", public_schema="public_read")
 

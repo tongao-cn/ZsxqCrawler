@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import re
 from dataclasses import dataclass
 from typing import Iterable, Sequence
 
@@ -13,6 +14,8 @@ PUBLIC_SCHEMA = "zsxq_public"
 DEFAULT_READER_ROLE = "zsxq_reader"
 DEFAULT_WRITER_ROLE = "zsxq_writer"
 INTERNAL_SCHEMA_PREFIX = "zsxq_"
+_BARE_COLUMN_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+_CASTED_COLUMN_RE = re.compile(r"\b([A-Za-z_][A-Za-z0-9_]*)::")
 
 
 @dataclass(frozen=True)
@@ -142,9 +145,18 @@ def quote_identifier(value: str) -> str:
 
 
 def _public_schema_expr(expr: str, available_columns: set[str]) -> str:
-    for column in available_columns:
-        expr = expr.replace(f"{column}::", f"{quote_identifier(column)}::")
-    return expr
+    if _BARE_COLUMN_RE.fullmatch(expr):
+        return quote_identifier(expr) if expr in available_columns else "NULL"
+
+    def replace_cast(match: re.Match[str]) -> str:
+        column = match.group(1)
+        if column.upper() == "NULL":
+            return match.group(0)
+        if column in available_columns:
+            return f"{quote_identifier(column)}::"
+        return "NULL::"
+
+    return _CASTED_COLUMN_RE.sub(replace_cast, expr)
 
 
 def _schema_table_ref(schema_name: str, table_name: str) -> str:
