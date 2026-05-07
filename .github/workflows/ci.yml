@@ -45,3 +45,6 @@ jobs:
 
       - name: Check reader access CLI help
         run: uv run verify-postgres-reader-access --help
+
+      - name: Check real migration drill CLI help
+        run: uv run run-postgres-real-migration-drill --help

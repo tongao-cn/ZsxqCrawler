@@ -144,6 +144,7 @@ uv run manage-postgres-public-schema --apply
 uv run audit-postgres-migration --root output\databases
 uv run generate-postgres-migration-report --root output --output docs\postgres_real_migration_report.md
 uv run verify-postgres-reader-access --dsn "postgresql://zsxq_reader:password@host:5432/zsxq"
+uv run run-postgres-real-migration-drill --root output\databases --replace-schema
 ```
 
 为兼容旧后端启动命令，项目根目录暂时仅保留 `main.py`；其它命令请使用 `pyproject.toml` 中的入口或 `python -m ...` 新目录入口。新增后端代码时优先放入 `backend/` 对应子目录。
@@ -211,6 +212,12 @@ uv run audit-postgres-migration --root output\databases
 
 ```bash
 uv run generate-postgres-migration-report --root output --output docs\postgres_real_migration_report.md
+```
+
+完整真实迁移演练可使用：
+
+```bash
+uv run run-postgres-real-migration-drill --root output\databases --replace-schema
 ```
 
 给其它项目发 reader DSN 前，可验证它只能读取 `zsxq_public`：

@@ -95,6 +95,16 @@ Generate a Markdown migration status snapshot:
 uv run generate-postgres-migration-report --root output --output docs\postgres_real_migration_report.md
 ```
 
+Run a complete real migration drill:
+
+```powershell
+uv run run-postgres-real-migration-drill --root output\databases --replace-schema
+```
+
+The drill stops before touching PostgreSQL if no `.db` files are found under
+the root. Omit `--replace-schema` for a non-destructive import attempt, or pass
+`--dry-run` to print the commands without executing them.
+
 Verify a reader DSN before giving it to another project:
 
 ```powershell
