@@ -226,6 +226,9 @@ legacy.close()
     }
 
     Invoke-PgSql -User "postgres" -Password $PostgresPassword -Sql "ALTER ROLE zsxq_reader LOGIN PASSWORD '$ReaderPassword';" | Out-Null
+    Invoke-Checked {
+        uv run verify-postgres-reader-access --dsn "postgresql://zsxq_reader:$ReaderPassword@127.0.0.1:$Port/$Database"
+    }
 
     Assert-Equal "public view count" `
         (Invoke-PgSql -User "postgres" -Password $PostgresPassword -Sql "SELECT count(*) FROM information_schema.views WHERE table_schema = 'zsxq_public';") `

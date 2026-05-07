@@ -30,6 +30,7 @@ migrate-sqlite-to-postgres = "scripts.migrate_sqlite_to_postgres:main"
 manage-postgres-public-schema = "scripts.manage_postgres_public_schema:main"
 audit-postgres-migration = "scripts.audit_postgres_migration:main"
 generate-postgres-migration-report = "scripts.generate_postgres_migration_report:main"
+verify-postgres-reader-access = "scripts.verify_postgres_reader_access:main"
 
 [build-system]
 requires = ["hatchling"]

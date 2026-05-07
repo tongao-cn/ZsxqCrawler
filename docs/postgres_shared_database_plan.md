@@ -95,6 +95,12 @@ Generate a Markdown migration status snapshot:
 uv run generate-postgres-migration-report --root output --output docs\postgres_real_migration_report.md
 ```
 
+Verify a reader DSN before giving it to another project:
+
+```powershell
+uv run verify-postgres-reader-access --dsn "postgresql://zsxq_reader:password@host:5432/zsxq"
+```
+
 Run the repeatable Docker smoke after changing migration or public view code:
 
 ```powershell
@@ -173,6 +179,15 @@ SELECT file_id, name, download_status, local_path, source_schema
 FROM zsxq_public.files
 WHERE download_status = 'downloaded';
 ```
+
+Recommended onboarding checklist for another project:
+
+- Receive only the `zsxq_reader` DSN.
+- Run `uv run verify-postgres-reader-access --dsn "<reader-dsn>"` from this repo
+  before sharing the DSN onward.
+- Query only `zsxq_public.*` views.
+- Do not depend on internal `zsxq_*` schema names; they are compatibility
+  details derived from SQLite paths.
 
 ## Current Boundaries
 
