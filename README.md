@@ -144,14 +144,13 @@ uv run manage-postgres-public-schema --apply
 uv run audit-postgres-migration --root output\databases
 uv run generate-postgres-migration-report --root output --output docs\postgres_real_migration_report.md
 uv run verify-postgres-reader-access --dsn "postgresql://zsxq_reader:password@host:5432/zsxq"
-uv run run-postgres-real-migration-drill --root output\databases --replace-schema
 ```
 
 为兼容旧后端启动命令，项目根目录暂时仅保留 `main.py`；其它命令请使用 `pyproject.toml` 中的入口或 `python -m ...` 新目录入口。新增后端代码时优先放入 `backend/` 对应子目录。
 
 ## 数据存储与下载路径
 
-默认情况下，所有数据都会保存到**项目根目录**下的 `output/databases` 目录中（项目根目录即与 `config.toml` 同级的目录），不同群组会按照 `group_id` 分目录存放。
+SQLite 模式下，数据会保存到**项目根目录**下的 `output/databases` 目录中（项目根目录即与 `config.toml` 同级的目录），不同群组会按照 `group_id` 分目录存放。当前共享部署推荐使用 PostgreSQL，`output/databases` 主要作为本地轻量模式或历史兼容路径。
 
 - **话题 / 文章内容数据库**: `output/databases/{group_id}/zsxq_topics_{group_id}.db`  
   - 保存所有话题、文章正文、评论等结构化数据（Web 界面展示内容都来自这里）。
@@ -167,7 +166,7 @@ uv run run-postgres-real-migration-drill --root output\databases --replace-schem
 
 ### PostgreSQL 存储
 
-默认仍使用 SQLite。要切换到 PostgreSQL，可在 `config.toml` 中配置：
+当前共享部署以 PostgreSQL 为主数据源；SQLite 只作为本地轻量模式或历史兼容 fallback。要使用 PostgreSQL，可在 `config.toml` 中配置：
 
 ```toml
 [database]
@@ -182,13 +181,13 @@ $env:ZSXQ_DATABASE_BACKEND = "postgres"
 $env:ZSXQ_POSTGRES_DSN = "postgresql://user:password@localhost:5432/zsxq"
 ```
 
-每个原 SQLite `.db` 文件会映射到 PostgreSQL 中独立的 `zsxq_*` schema，避免话题库、文件库、配置库之间的同名表冲突。迁移现有本地数据：
+历史 SQLite `.db` 文件可迁移到 PostgreSQL 中独立的 `zsxq_*` 兼容 schema，避免话题库、文件库、配置库之间的同名表冲突。该命令只用于历史数据导入或恢复，不是当前主流程：
 
 ```bash
 uv run migrate-sqlite-to-postgres --replace-schema
 ```
 
-如果要让其它项目共享读取同一份 PostgreSQL 数据，可创建稳定的只读公共视图：
+其它项目共享读取同一份 PostgreSQL 数据时，使用稳定的只读公共视图：
 
 ```bash
 uv run migrate-sqlite-to-postgres --replace-schema --build-public-views --build-indexes
@@ -202,22 +201,16 @@ uv run migrate-sqlite-to-postgres --replace-schema --build-public-views --build-
 uv run manage-postgres-public-schema --apply --build-indexes --login-roles --reader-password "<reader-password>" --writer-password "<writer-password>"
 ```
 
-迁移后可做行数对账：
+如确实从 SQLite 源文件导入历史数据，可做行数对账：
 
 ```bash
 uv run audit-postgres-migration --root output\databases
 ```
 
-如果需要产出 Markdown 快照报告：
+日常 PG 状态巡检可产出 Markdown 快照报告：
 
 ```bash
 uv run generate-postgres-migration-report --root output --output docs\postgres_real_migration_report.md
-```
-
-完整真实迁移演练可使用：
-
-```bash
-uv run run-postgres-real-migration-drill --root output\databases --replace-schema
 ```
 
 给其它项目发 reader DSN 前，可验证它只能读取 `zsxq_public`：

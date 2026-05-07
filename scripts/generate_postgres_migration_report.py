@@ -92,7 +92,7 @@ def build_report(root: Path, conn) -> str:
         audit_issues = []
 
     lines = [
-        "# PostgreSQL Real Migration Report",
+        "# PostgreSQL Status Report",
         "",
         f"Generated at: {datetime.now(timezone.utc).isoformat()}",
         "",
@@ -130,7 +130,7 @@ def build_report(root: Path, conn) -> str:
             "",
             "- Other projects should read from `zsxq_public` with the reader DSN.",
             "- `files.group_id` and `file_ai_analyses.group_id` may remain `NULL` when no reliable group relation exists.",
-            "- Re-run this report after any production migration or public view change.",
+            "- Re-run this report after any PostgreSQL public view or data refresh.",
             "",
         ]
     )
@@ -138,7 +138,7 @@ def build_report(root: Path, conn) -> str:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Generate a PostgreSQL migration status report")
+    parser = argparse.ArgumentParser(description="Generate a PostgreSQL status report")
     parser.add_argument("--root", default=None, help="Directory containing .db files. Defaults to output/databases.")
     parser.add_argument(
         "--output",

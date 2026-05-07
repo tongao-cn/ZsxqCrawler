@@ -1,6 +1,6 @@
-# PostgreSQL Real Migration Report
+# PostgreSQL Status Report
 
-Generated at: 2026-05-07T08:45:56.317703+00:00
+Generated at: 2026-05-07T09:04:56.578909+00:00
 
 SQLite root: `output`
 
@@ -20,6 +20,7 @@ SQLite root: `output`
 | `zsxq_accounts_51591dcb` | 2 | 1 |
 | `zsxq_accounts_517e8b26` | 2 | 1 |
 | `zsxq_accounts_543356cd` | 2 | 1 |
+| `zsxq_accounts_59c2a9e3` | 2 | 1 |
 | `zsxq_accounts_5b76eda7` | 2 | 1 |
 | `zsxq_accounts_6c4abf0c` | 2 | 1 |
 | `zsxq_accounts_6e8688ee` | 2 | 1 |
@@ -71,6 +72,7 @@ SQLite root: `output`
 | `zsxq_tasks_1ab5f5ea` | 2 | 1 |
 | `zsxq_tasks_1ccc38b0` | 2 | 0 |
 | `zsxq_tasks_1e8d51a3` | 2 | 4 |
+| `zsxq_tasks_1fe5fd2a` | 2 | 4 |
 | `zsxq_tasks_2036357c` | 2 | 2 |
 | `zsxq_tasks_2072ee69` | 2 | 3 |
 | `zsxq_tasks_2276e2f3` | 2 | 2 |
@@ -88,6 +90,7 @@ SQLite root: `output`
 | `zsxq_tasks_278b94cc` | 2 | 4 |
 | `zsxq_tasks_28624374` | 2 | 3 |
 | `zsxq_tasks_286595c2` | 2 | 1 |
+| `zsxq_tasks_28cfeb33` | 2 | 0 |
 | `zsxq_tasks_28dd2a53` | 2 | 3 |
 | `zsxq_tasks_290096dc` | 2 | 0 |
 | `zsxq_tasks_2a25f8e7` | 2 | 2 |
@@ -113,6 +116,7 @@ SQLite root: `output`
 | `zsxq_tasks_32130160` | 2 | 4 |
 | `zsxq_tasks_3219d1e9` | 2 | 0 |
 | `zsxq_tasks_3296fcd4` | 2 | 12 |
+| `zsxq_tasks_329f2ff4` | 2 | 2 |
 | `zsxq_tasks_33007336` | 2 | 1 |
 | `zsxq_tasks_330a3e79` | 2 | 1 |
 | `zsxq_tasks_336f30d5` | 2 | 1 |
@@ -124,6 +128,7 @@ SQLite root: `output`
 | `zsxq_tasks_369580df` | 2 | 4 |
 | `zsxq_tasks_36d3e3c5` | 2 | 1 |
 | `zsxq_tasks_37a323f1` | 2 | 0 |
+| `zsxq_tasks_394401cf` | 2 | 3 |
 | `zsxq_tasks_396ffd7e` | 2 | 2 |
 | `zsxq_tasks_399a403d` | 2 | 2 |
 | `zsxq_tasks_3a131fd2` | 2 | 4 |
@@ -149,6 +154,7 @@ SQLite root: `output`
 | `zsxq_tasks_42668e06` | 2 | 2 |
 | `zsxq_tasks_427b53b2` | 2 | 1 |
 | `zsxq_tasks_42989613` | 2 | 2 |
+| `zsxq_tasks_438b02fc` | 2 | 1 |
 | `zsxq_tasks_44b509a6` | 2 | 0 |
 | `zsxq_tasks_468cf35a` | 2 | 1 |
 | `zsxq_tasks_46b51328` | 2 | 12 |
@@ -174,6 +180,7 @@ SQLite root: `output`
 | `zsxq_tasks_4fe245ff` | 2 | 2 |
 | `zsxq_tasks_4fe568fc` | 2 | 0 |
 | `zsxq_tasks_524bede3` | 2 | 4 |
+| `zsxq_tasks_526c0596` | 2 | 1 |
 | `zsxq_tasks_5278b339` | 2 | 1 |
 | `zsxq_tasks_53d1eb24` | 2 | 3 |
 | `zsxq_tasks_53fe7baa` | 2 | 0 |
@@ -193,6 +200,7 @@ SQLite root: `output`
 | `zsxq_tasks_57b257b8` | 2 | 12 |
 | `zsxq_tasks_57dabd52` | 2 | 2 |
 | `zsxq_tasks_57de0c06` | 2 | 2 |
+| `zsxq_tasks_57f50cd7` | 2 | 4 |
 | `zsxq_tasks_58630387` | 2 | 2 |
 | `zsxq_tasks_587ddd60` | 2 | 3 |
 | `zsxq_tasks_58ac445d` | 2 | 3 |
@@ -226,6 +234,7 @@ SQLite root: `output`
 | `zsxq_tasks_660e042c` | 2 | 3 |
 | `zsxq_tasks_6641b3ce` | 2 | 4 |
 | `zsxq_tasks_66d2fd34` | 2 | 3 |
+| `zsxq_tasks_673bbcae` | 2 | 12 |
 | `zsxq_tasks_6786a41e` | 2 | 4 |
 | `zsxq_tasks_683397e5` | 2 | 3 |
 | `zsxq_tasks_68786a20` | 2 | 2 |
@@ -309,6 +318,7 @@ SQLite root: `output`
 | `zsxq_tasks_911083d5` | 2 | 1 |
 | `zsxq_tasks_92ec51be` | 2 | 4 |
 | `zsxq_tasks_92fe2b42` | 2 | 4 |
+| `zsxq_tasks_932b0681` | 2 | 2 |
 | `zsxq_tasks_936d1120` | 2 | 3 |
 | `zsxq_tasks_940db866` | 2 | 0 |
 | `zsxq_tasks_94d542e6` | 2 | 2 |
@@ -346,6 +356,7 @@ SQLite root: `output`
 | `zsxq_tasks_a9d0cf43` | 2 | 3 |
 | `zsxq_tasks_aa6aed39` | 2 | 4 |
 | `zsxq_tasks_aa7baf68` | 2 | 4 |
+| `zsxq_tasks_abc5cfec` | 2 | 0 |
 | `zsxq_tasks_ac1ff74f` | 2 | 4 |
 | `zsxq_tasks_acc7ba8c` | 2 | 0 |
 | `zsxq_tasks_ad367787` | 2 | 1 |
@@ -395,6 +406,7 @@ SQLite root: `output`
 | `zsxq_tasks_c739e206` | 2 | 1 |
 | `zsxq_tasks_c79895c0` | 2 | 1 |
 | `zsxq_tasks_c7e883eb` | 2 | 12 |
+| `zsxq_tasks_c864a164` | 2 | 2 |
 | `zsxq_tasks_c8dafa22` | 2 | 1 |
 | `zsxq_tasks_c972da82` | 2 | 3 |
 | `zsxq_tasks_ca6d0990` | 2 | 2 |
@@ -426,6 +438,8 @@ SQLite root: `output`
 | `zsxq_tasks_d6729d87` | 2 | 3 |
 | `zsxq_tasks_d71ae223` | 2 | 4 |
 | `zsxq_tasks_d7d5ffcc` | 2 | 4 |
+| `zsxq_tasks_d88fafa4` | 2 | 3 |
+| `zsxq_tasks_d974feed` | 2 | 0 |
 | `zsxq_tasks_dbde3c00` | 2 | 1 |
 | `zsxq_tasks_dbf0ded6` | 2 | 2 |
 | `zsxq_tasks_dbf8c5ec` | 2 | 4 |
@@ -491,6 +505,7 @@ SQLite root: `output`
 | `zsxq_tasks_fc06f5fc` | 2 | 2 |
 | `zsxq_tasks_fc9da6a4` | 2 | 1 |
 | `zsxq_tasks_fe0420cc` | 2 | 2 |
+| `zsxq_tasks_fe79594f` | 2 | 1 |
 | `zsxq_tasks_fec355e6` | 2 | 0 |
 | `zsxq_tasks_fec655d8` | 2 | 2 |
 | `zsxq_tasks_fff5efa6` | 2 | 2 |
@@ -538,4 +553,4 @@ SQLite root: `output`
 
 - Other projects should read from `zsxq_public` with the reader DSN.
 - `files.group_id` and `file_ai_analyses.group_id` may remain `NULL` when no reliable group relation exists.
-- Re-run this report after any production migration or public view change.
+- Re-run this report after any PostgreSQL public view or data refresh.

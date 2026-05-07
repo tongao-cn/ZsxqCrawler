@@ -1,8 +1,9 @@
 # PostgreSQL Shared Database
 
-ZsxqCrawler supports a gradual PostgreSQL migration. SQLite remains the default
-local mode, while PostgreSQL is the recommended mode for shared analysis and
-service-style deployments.
+ZsxqCrawler now uses PostgreSQL as the shared deployment data source. SQLite
+remains a local lightweight mode and a historical import/recovery source, but
+the operational shared interface is PostgreSQL plus the `zsxq_public` read
+schema.
 
 ## Recommended Layout
 
@@ -36,9 +37,10 @@ The reader role is intended to have only:
 
 It should not write to internal `zsxq_*` schemas.
 
-## Migration Commands
+## PostgreSQL Operations
 
-Migrate existing SQLite data into PostgreSQL compatibility schemas:
+Historical SQLite data can still be imported into PostgreSQL compatibility
+schemas when a `.db` source exists:
 
 ```powershell
 $env:ZSXQ_DATABASE_BACKEND = "postgres"
@@ -46,10 +48,11 @@ $env:ZSXQ_POSTGRES_DSN = "postgresql://zsxq_writer:password@host:5432/zsxq"
 uv run migrate-sqlite-to-postgres --root output\databases --replace-schema
 ```
 
-Refresh public views in the same step:
+For the current PostgreSQL dataset, refresh public views and indexes without
+re-importing SQLite:
 
 ```powershell
-uv run migrate-sqlite-to-postgres --root output\databases --replace-schema --build-public-views --build-indexes
+uv run manage-postgres-public-schema --apply --build-indexes
 ```
 
 Inspect public schema SQL without applying it:
@@ -81,7 +84,8 @@ backend = "postgres"
 postgres_dsn = "postgresql://zsxq_writer:<writer-password>@host:5432/zsxq"
 ```
 
-Audit a real migration after loading data:
+If a historical SQLite import was performed, audit source `.db` row counts
+against PostgreSQL:
 
 ```powershell
 $env:ZSXQ_DATABASE_BACKEND = "postgres"
@@ -89,21 +93,11 @@ $env:ZSXQ_POSTGRES_DSN = "postgresql://postgres:admin-password@host:5432/zsxq"
 uv run audit-postgres-migration --root output\databases
 ```
 
-Generate a Markdown migration status snapshot:
+Generate a Markdown PostgreSQL status snapshot:
 
 ```powershell
 uv run generate-postgres-migration-report --root output --output docs\postgres_real_migration_report.md
 ```
-
-Run a complete real migration drill:
-
-```powershell
-uv run run-postgres-real-migration-drill --root output\databases --replace-schema
-```
-
-The drill stops before touching PostgreSQL if no `.db` files are found under
-the root. Omit `--replace-schema` for a non-destructive import attempt, or pass
-`--dry-run` to print the commands without executing them.
 
 Verify a reader DSN before giving it to another project:
 
@@ -201,8 +195,8 @@ Recommended onboarding checklist for another project:
 
 ## Current Boundaries
 
-- SQLite remains supported for local, zero-config usage.
-- PostgreSQL is opt-in and recommended for shared analysis.
+- SQLite remains supported for local, zero-config usage and historical imports.
+- PostgreSQL is the shared analysis/service data source.
 - The public schema is read-oriented. ZsxqCrawler remains the writer.
 - The migration script does not delete PostgreSQL schemas unless
   `--replace-schema` is explicitly provided.

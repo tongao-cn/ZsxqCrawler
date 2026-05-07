@@ -31,7 +31,6 @@ manage-postgres-public-schema = "scripts.manage_postgres_public_schema:main"
 audit-postgres-migration = "scripts.audit_postgres_migration:main"
 generate-postgres-migration-report = "scripts.generate_postgres_migration_report:main"
 verify-postgres-reader-access = "scripts.verify_postgres_reader_access:main"
-run-postgres-real-migration-drill = "scripts.run_postgres_real_migration_drill:main"
 
 [build-system]
 requires = ["hatchling"]
