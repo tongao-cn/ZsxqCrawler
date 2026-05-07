@@ -1,25 +1,12 @@
 # PostgreSQL Status Report
 
-Generated at: 2026-05-07T13:30:51.675741+00:00
+Generated at: manual template after zsxq_core cleanup
 
 ## PostgreSQL Core Schema
 
 | Schema | Tables | Rows |
 | --- | ---: | ---: |
 | `zsxq_core` | 37 | 258121 |
-
-## Public Views
-
-| View | Rows |
-| --- | ---: |
-| `zsxq_public.groups` | 2 |
-| `zsxq_public.topics` | 12962 |
-| `zsxq_public.comments` | 121 |
-| `zsxq_public.files` | 20877 |
-| `zsxq_public.columns` | 0 |
-| `zsxq_public.column_topics` | 0 |
-| `zsxq_public.daily_ai_reports` | 5 |
-| `zsxq_public.file_ai_analyses` | 7 |
 
 ## Group ID Quality
 
@@ -32,6 +19,6 @@ Generated at: 2026-05-07T13:30:51.675741+00:00
 
 ## Notes
 
-- Other projects should read from `zsxq_public` with the reader DSN.
-- Legacy archived `zsxq_*` schema count: 594.
-- Re-run this report after any PostgreSQL public view or data refresh.
+- Applications read and write `zsxq_core` directly.
+- Other projects should use a read-only role with SELECT on `zsxq_core`.
+- Re-run this report after PostgreSQL data refresh or cleanup.

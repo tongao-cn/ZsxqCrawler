@@ -73,7 +73,7 @@ def _collect_numeric_dirs(base: str, limit: int) -> set:
 
 def _collect_postgres_group_ids(limit: int) -> set:
     try:
-        conn = connect("zsxq_core_groups")
+        conn = connect()
         try:
             rows = conn.execute("SELECT group_id FROM groups LIMIT ?", (limit,)).fetchall()
         finally:
@@ -119,12 +119,10 @@ def get_cached_local_group_ids(force_refresh: bool = False) -> set:
 
 async def delete_group_local(group_id: str):
     """
-    删除指定社群的本地数据（数据库、下载文件、图片缓存），不影响账号对该社群的访问权限
+    删除指定社群的本地资源（下载文件、图片缓存），不影响 PostgreSQL 结构化数据。
     """
     try:
         details = {
-            "topics_db_removed": False,
-            "files_db_removed": False,
             "downloads_dir_removed": False,
             "images_cache_removed": False,
             "group_dir_removed": False,
@@ -156,28 +154,6 @@ async def delete_group_local(group_id: str):
 
         path_manager = get_db_path_manager()
         group_dir = path_manager.get_group_dir(group_id)
-        topics_db = path_manager.get_topics_db_path(group_id)
-        files_db = path_manager.get_files_db_path(group_id)
-
-        try:
-            if os.path.exists(topics_db):
-                os.remove(topics_db)
-                details["topics_db_removed"] = True
-                print(f"🗑️ 已删除话题数据库: {topics_db}")
-        except PermissionError as pe:
-            raise HTTPException(status_code=500, detail=f"话题数据库被占用，无法删除: {pe}")
-        except Exception as e:
-            print(f"⚠️ 删除话题数据库失败: {e}")
-
-        try:
-            if os.path.exists(files_db):
-                os.remove(files_db)
-                details["files_db_removed"] = True
-                print(f"🗑️ 已删除文件数据库: {files_db}")
-        except PermissionError as pe:
-            raise HTTPException(status_code=500, detail=f"文件数据库被占用，无法删除: {pe}")
-        except Exception as e:
-            print(f"⚠️ 删除文件数据库失败: {e}")
 
         downloads_dir = os.path.join(group_dir, "downloads")
         if os.path.exists(downloads_dir):

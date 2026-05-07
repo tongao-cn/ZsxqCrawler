@@ -58,7 +58,6 @@ try {
     @'
 import os
 import tempfile
-from pathlib import Path
 
 import psycopg2
 
@@ -70,7 +69,7 @@ from backend.storage.zsxq_file_database import ZSXQFileDatabase
 
 dsn = os.environ["ZSXQ_POSTGRES_DSN"]
 
-topic_db = ZSXQDatabase("runtime_topics.db")
+topic_db = ZSXQDatabase("7001")
 ok = topic_db.import_topic_data({
     "topic_id": 9001,
     "group": {"group_id": 7001, "name": "Runtime Group", "type": "paid", "background_url": "https://example.test/bg.png"},
@@ -89,7 +88,7 @@ topic_db.close()
 if not ok:
     raise RuntimeError("topic import failed")
 
-file_db = ZSXQFileDatabase("runtime_files.db")
+file_db = ZSXQFileDatabase("7001")
 file_db.import_file_response({
     "succeeded": True,
     "resp_data": {
@@ -111,18 +110,18 @@ file_db.upsert_file_ai_analysis(9301, status="completed", summary="summary", con
 file_db.close()
 
 with tempfile.TemporaryDirectory() as tmp:
-    task_store = TaskStore(Path(tmp) / "runtime_tasks.db")
+    task_store = TaskStore()
     task_store.create_task("runtime_task_1", "runtime_smoke", "running", "started", metadata={"group_id": "7001"})
     task_store.add_log("runtime_task_1", "log line")
 
-    account_db = AccountsSQLManager(str(Path(tmp) / "runtime_accounts.db"))
+    account_db = AccountsSQLManager()
     account = account_db.add_account("cookie=value", name="Runtime Account")
     assigned, message = account_db.assign_group_account("7001", account["id"])
     account_db.close()
     if not assigned:
         raise RuntimeError(message)
 
-    info_db = AccountInfoDB(str(Path(tmp) / "runtime_account_info.db"))
+    info_db = AccountInfoDB()
     info_db.upsert_self_info(account["id"], {"uid": "u-runtime", "name": "Runtime User"})
     info_db.close()
 
@@ -155,10 +154,13 @@ with psycopg2.connect(dsn) as conn:
         if legacy_count != 0:
             raise RuntimeError(f"runtime created legacy schemas: {legacy_count}")
         print("[ok] no legacy schemas created")
+        cur.execute("SELECT COUNT(*) FROM information_schema.schemata WHERE schema_name = 'zsxq_public'")
+        if int(cur.fetchone()[0]) != 0:
+            raise RuntimeError("runtime created zsxq_public")
+        print("[ok] no public schema created")
 '@ | uv run python -
 
     Invoke-Checked { uv run backfill-postgres-core-group-ids --apply }
-    Invoke-Checked { uv run manage-postgres-public-schema --apply --build-indexes }
 
     Write-Host "PostgreSQL runtime cutover smoke passed."
 }

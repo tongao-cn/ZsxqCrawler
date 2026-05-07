@@ -139,7 +139,8 @@ uv run zsxq-crawler
 uv run a-share-analysis
 uv run csv-chart-server
 uv run migrate-accounts
-uv run manage-postgres-public-schema --apply
+uv run manage-postgres-core-schema --apply
+uv run manage-postgres-core-access --apply
 uv run generate-postgres-status-report --output docs\postgres_status_report.md
 uv run verify-postgres-reader-access --dsn "postgresql://zsxq_reader:password@host:5432/zsxq"
 ```
@@ -150,7 +151,7 @@ uv run verify-postgres-reader-access --dsn "postgresql://zsxq_reader:password@ho
 
 结构化数据统一存储在 PostgreSQL 的 `zsxq_core` schema。`output/databases` 目录只保留为下载文件和图片缓存的本地目录，不再作为真实数据库文件存储位置。
 
-- **话题 / 文章内容 / 文件元数据**: PostgreSQL 内部 `zsxq_core` schema；其他项目通过 `zsxq_public` 只读视图读取。
+- **话题 / 文章内容 / 文件元数据**: PostgreSQL `zsxq_core` schema；其他项目通过只读账号直接读取 `zsxq_core`。
 - **已下载附件 / 文件**: `output/databases/{group_id}/downloads/`  
   - 通过 Web 界面或命令行触发的文件下载，实际都会保存在这里。  
   - 例如当前示例配置中，群组 `88851415151812` 的文件路径为：`output/databases/88851415151812/downloads/`。
@@ -176,42 +177,40 @@ $env:ZSXQ_DATABASE_BACKEND = "postgres"
 $env:ZSXQ_POSTGRES_DSN = "postgresql://user:password@localhost:5432/zsxq"
 ```
 
-其它项目共享读取同一份 PostgreSQL 数据时，使用稳定的只读公共视图：
+其它项目共享读取同一份 PostgreSQL 数据时，使用 `zsxq_reader` 只读账号直接读取 `zsxq_core`：
 
 ```bash
-uv run migrate-postgres-schemas-to-core --apply
 uv run backfill-postgres-core-group-ids --apply
-uv run manage-postgres-public-schema --apply --build-indexes
+uv run manage-postgres-core-access --apply --login-roles --reader-password "<reader-password>" --writer-password "<writer-password>"
 ```
 
-旧的 path-derived `zsxq_*` schema 只作为迁移归档保留。删除前必须先刷新
-`docs/postgres_legacy_archive_report.md` 并按
-`docs/postgres_legacy_schema_drop_plan.md` 的人工检查流程执行。
+旧的 path-derived `zsxq_*` schema、`zsxq_public` 和迁移追踪列属于迁移残留。真实库清理前必须先暂停任务、完成 PostgreSQL 备份，并用 dry-run 检查删除清单：
 
-公共视图会写入 `zsxq_public` schema，并面向只读分析场景。详细说明见 `docs/postgres_shared_database_plan.md`。
-`zsxq_public` 暴露的是按业务主键去重后的稳定记录；旧 schema 的来源行数可在 `zsxq_core.record_sources` 和迁移报告中追踪。
+```bash
+uv run cleanup-postgres-legacy-artifacts --dry-run
+```
 
 生产部署时，可用管理员 DSN 初始化登录角色和内部表索引：
 
 ```bash
-uv run manage-postgres-public-schema --apply --build-indexes --login-roles --reader-password "<reader-password>" --writer-password "<writer-password>"
+uv run manage-postgres-core-schema --apply
+uv run manage-postgres-core-access --apply --login-roles --reader-password "<reader-password>" --writer-password "<writer-password>"
 ```
 
 日常 PG 状态巡检可产出 Markdown 快照报告：
 
 ```bash
 uv run generate-postgres-status-report --output docs\postgres_status_report.md
-uv run generate-postgres-legacy-archive-report --output docs\postgres_legacy_archive_report.md
 ```
 
-给其它项目发 reader DSN 前，可验证它只能读取 `zsxq_public`：
+给其它项目发 reader DSN 前，可验证它只能读取 `zsxq_core`，不能写入或访问旧 schema：
 
 ```bash
 uv run verify-postgres-reader-access --dsn "postgresql://zsxq_reader:password@host:5432/zsxq"
 uv run verify-postgres-writer-access --dsn "postgresql://zsxq_writer:password@host:5432/zsxq"
 ```
 
-修改 core 迁移、公共视图或权限逻辑后，可运行 Docker smoke 验证 PostgreSQL fixture、`zsxq_core` 回填、`zsxq_public` 查询、writer/reader 权限和重复刷新：
+修改 core schema、权限或清理逻辑后，可运行 Docker smoke 验证 `zsxq_core`、reader/writer 权限和 legacy cleanup dry-run：
 
 ```bash
 .\scripts\run_postgres_core_smoke.ps1

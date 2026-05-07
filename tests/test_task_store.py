@@ -1,7 +1,5 @@
-import tempfile
 import unittest
 import os
-from pathlib import Path
 
 from backend.storage.db_compat import get_postgres_dsn
 from backend.storage.task_store import TaskStore
@@ -13,10 +11,7 @@ from backend.storage.task_store import TaskStore
 )
 class TaskStoreTests(unittest.TestCase):
     def setUp(self):
-        self.temp_dir = tempfile.TemporaryDirectory()
-        self.addCleanup(self.temp_dir.cleanup)
-        self.db_path = Path(self.temp_dir.name) / "tasks.db"
-        self.store = TaskStore(self.db_path)
+        self.store = TaskStore()
 
     def create_task_with_logs(self, task_id, status, created_at, log_count=1):
         self.store.create_task(
@@ -122,7 +117,7 @@ class TaskStoreTests(unittest.TestCase):
         log = self.store.add_log("task-1", "persisted log")
         self.store.set_stop_flag("task-1")
 
-        reopened = TaskStore(self.db_path)
+        reopened = TaskStore()
 
         task = reopened.get_task("task-1")
         self.assertEqual("completed", task["status"])

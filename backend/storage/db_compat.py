@@ -76,13 +76,8 @@ def get_postgres_dsn() -> Optional[str]:
     return str(dsn).strip() if dsn else None
 
 
-def connect(db_path: str | Path, *, row_factory: Any = None):
-    """Open the PostgreSQL compatibility connection.
-
-    ``db_path`` is retained as a legacy storage key/local resource hint; it no
-    longer selects or derives a PostgreSQL schema. Runtime data is stored in the
-    fixed ``zsxq_core`` schema.
-    """
+def connect(*, row_factory: Any = None):
+    """Open a PostgreSQL connection scoped to the fixed zsxq_core schema."""
     if get_database_backend() != "postgres":
         raise RuntimeError(
             "SQLite backend has been removed. Configure PostgreSQL with "
@@ -95,7 +90,7 @@ def connect(db_path: str | Path, *, row_factory: Any = None):
             "PostgreSQL backend is enabled but no DSN is configured. "
             "Set ZSXQ_POSTGRES_DSN or config.toml [database].postgres_dsn."
         )
-    return PostgresCompatConnection(dsn, storage_key=str(db_path))
+    return PostgresCompatConnection(dsn)
 
 
 class CompatRow(tuple):
@@ -115,12 +110,11 @@ class CompatRow(tuple):
 
 
 class PostgresCompatConnection:
-    def __init__(self, dsn: str, storage_key: str | None = None):
+    def __init__(self, dsn: str):
         import psycopg2
 
         self._conn = psycopg2.connect(dsn)
         self.schema_name = CORE_SCHEMA
-        self.storage_key = storage_key
         if dsn not in _CORE_SCHEMA_BOOTSTRAPPED_DSNS:
             ensure_core_schema(self._conn)
             _CORE_SCHEMA_BOOTSTRAPPED_DSNS.add(dsn)

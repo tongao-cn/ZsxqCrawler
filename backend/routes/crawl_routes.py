@@ -6,7 +6,6 @@ from typing import Any, Callable, Optional
 from fastapi import APIRouter, BackgroundTasks, HTTPException
 from pydantic import BaseModel, Field
 
-from backend.core.db_path_manager import get_db_path_manager
 from backend.core.account_context import get_cookie_for_group
 from backend.crawlers.zsxq_interactive_crawler import ZSXQInteractiveCrawler
 from backend.services.task_runtime import add_task_log, create_task, is_task_stopped, update_task
@@ -178,10 +177,7 @@ def run_crawl_historical_task(
         log_callback, stop_check = _build_task_callbacks(task_id)
 
         cookie = get_cookie_for_group(group_id)
-        path_manager = get_db_path_manager()
-        db_path = path_manager.get_topics_db_path(group_id)
-
-        crawler = ZSXQInteractiveCrawler(cookie, group_id, db_path, log_callback)
+        crawler = ZSXQInteractiveCrawler(cookie, group_id, log_callback)
         crawler.stop_check_func = stop_check
 
         _apply_crawl_settings(crawler, crawl_settings)
@@ -222,10 +218,7 @@ def run_crawl_all_task(task_id: str, group_id: str, crawl_settings: CrawlSetting
         log_callback, stop_check = _build_task_callbacks(task_id)
 
         cookie = get_cookie_for_group(group_id)
-        path_manager = get_db_path_manager()
-        db_path = path_manager.get_topics_db_path(group_id)
-
-        crawler = ZSXQInteractiveCrawler(cookie, group_id, db_path, log_callback)
+        crawler = ZSXQInteractiveCrawler(cookie, group_id, log_callback)
         crawler.stop_check_func = stop_check
 
         _apply_crawl_settings(crawler, crawl_settings)
@@ -277,10 +270,7 @@ def run_crawl_incremental_task(
         log_callback, stop_check = _build_task_callbacks(task_id)
 
         cookie = get_cookie_for_group(group_id)
-        path_manager = get_db_path_manager()
-        db_path = path_manager.get_topics_db_path(group_id)
-
-        crawler = ZSXQInteractiveCrawler(cookie, group_id, db_path, log_callback)
+        crawler = ZSXQInteractiveCrawler(cookie, group_id, log_callback)
         crawler.stop_check_func = stop_check
 
         _apply_crawl_settings(crawler, crawl_settings)
@@ -312,10 +302,7 @@ def run_crawl_latest_task(task_id: str, group_id: str, crawl_settings: CrawlSett
         log_callback, stop_check = _build_task_callbacks(task_id)
 
         cookie = get_cookie_for_group(group_id)
-        path_manager = get_db_path_manager()
-        db_path = path_manager.get_topics_db_path(group_id)
-
-        crawler = ZSXQInteractiveCrawler(cookie, group_id, db_path, log_callback)
+        crawler = ZSXQInteractiveCrawler(cookie, group_id, log_callback)
         crawler.stop_check_func = stop_check
 
         _apply_crawl_settings(crawler, crawl_settings)
@@ -356,10 +343,7 @@ def run_crawl_time_range_task(task_id: str, group_id: str, request: "CrawlTimeRa
         log_callback, stop_check = _build_task_callbacks(task_id)
 
         cookie = get_cookie_for_group(group_id)
-        path_manager = get_db_path_manager()
-        db_path = path_manager.get_topics_db_path(group_id)
-
-        crawler = ZSXQInteractiveCrawler(cookie, group_id, db_path, log_callback)
+        crawler = ZSXQInteractiveCrawler(cookie, group_id, log_callback)
         crawler.stop_check_func = stop_check
 
         _apply_crawl_settings(crawler, request, require_overrides=True)

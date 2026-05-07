@@ -4,7 +4,6 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 from backend.core import crawler_runtime
-from backend.core.db_path_manager import get_db_path_manager
 from backend.services.a_share_analysis_service import normalize_group_id
 from backend.storage.task_store import TaskStore
 
@@ -15,7 +14,7 @@ task_store: Optional[TaskStore] = None
 def get_task_store() -> TaskStore:
     global task_store
     if task_store is None:
-        task_store = TaskStore(get_db_path_manager().get_config_db_path())
+        task_store = TaskStore()
     return task_store
 
 current_tasks: Dict[str, Dict[str, Any]] = {}

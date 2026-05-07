@@ -59,15 +59,10 @@ class ApiSmokeTests(unittest.TestCase):
 
         from backend.main import create_app
 
-        class FakePathManager:
-            def get_topics_db_path(self, group_id):
-                return r"C:\tmp\missing-topic-db.sqlite"
-
         def gbk_print(*args, **kwargs):
             " ".join(str(arg) for arg in args).encode("gbk")
 
         with (
-            patch("backend.routes.topic_routes.get_db_path_manager", return_value=FakePathManager()),
             patch("backend.routes.topic_routes._clear_group_topic_data", return_value={"topics": 0}),
             patch("builtins.print", side_effect=gbk_print),
         ):
@@ -89,7 +84,6 @@ class ApiSmokeTests(unittest.TestCase):
             " ".join(str(arg) for arg in args).encode("gbk")
 
         with (
-            patch("backend.routes.file_routes._get_files_db_path", return_value=r"C:\tmp\missing-files-db.sqlite"),
             patch("backend.routes.file_routes._clear_group_file_data", return_value={"files": 0}),
             patch("builtins.print", side_effect=gbk_print),
         ):

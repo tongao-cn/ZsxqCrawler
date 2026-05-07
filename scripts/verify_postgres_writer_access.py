@@ -6,8 +6,7 @@ from dataclasses import dataclass
 
 import psycopg2
 
-from backend.storage.postgres_core_schema import CORE_SCHEMA
-from scripts.manage_postgres_public_schema import PUBLIC_SCHEMA, quote_identifier
+from backend.storage.postgres_core_schema import CORE_SCHEMA, quote_identifier
 
 
 @dataclass(frozen=True)
@@ -15,24 +14,6 @@ class WriterCheck:
     name: str
     passed: bool
     detail: str
-
-
-def _first_legacy_schema_table(conn) -> tuple[str, str] | None:
-    with conn.cursor() as cur:
-        cur.execute(
-            """
-            SELECT table_schema, table_name
-            FROM information_schema.tables
-            WHERE table_schema LIKE %s
-              AND table_schema NOT IN (%s, %s)
-              AND table_type = 'BASE TABLE'
-            ORDER BY table_schema, table_name
-            LIMIT 1
-            """,
-            ("zsxq_%", CORE_SCHEMA, PUBLIC_SCHEMA),
-        )
-        row = cur.fetchone()
-        return (str(row[0]), str(row[1])) if row else None
 
 
 def _core_write_allowed(conn) -> WriterCheck:
@@ -52,47 +33,10 @@ def _core_write_allowed(conn) -> WriterCheck:
         return WriterCheck("core write allowed", False, exc.__class__.__name__)
 
 
-def _public_maintenance_allowed(conn) -> WriterCheck:
-    view_name = "writer_access_probe_view"
-    view_ref = f"{quote_identifier(PUBLIC_SCHEMA)}.{quote_identifier(view_name)}"
-    try:
-        with conn.cursor() as cur:
-            cur.execute(f"CREATE OR REPLACE VIEW {view_ref} AS SELECT 1 AS id")
-            cur.execute(f"SELECT count(*) FROM {view_ref}")
-            cur.execute(f"DROP VIEW {view_ref}")
-        conn.commit()
-        return WriterCheck("public maintenance allowed", True, f"{PUBLIC_SCHEMA}.{view_name}")
-    except Exception as exc:
-        conn.rollback()
-        return WriterCheck("public maintenance allowed", False, exc.__class__.__name__)
-
-
-def _legacy_read_blocked(conn) -> WriterCheck:
-    legacy = _first_legacy_schema_table(conn)
-    if not legacy:
-        return WriterCheck("legacy schema read blocked", True, "no legacy table found")
-    schema_name, table_name = legacy
-    try:
-        with conn.cursor() as cur:
-            cur.execute(f"SELECT count(*) FROM {quote_identifier(schema_name)}.{quote_identifier(table_name)}")
-        return WriterCheck(
-            "legacy schema read blocked",
-            False,
-            f"writer unexpectedly selected from {schema_name}.{table_name}",
-        )
-    except Exception as exc:
-        conn.rollback()
-        return WriterCheck("legacy schema read blocked", True, exc.__class__.__name__)
-
-
 def verify_writer_access(dsn: str) -> list[WriterCheck]:
     conn = psycopg2.connect(dsn)
     try:
-        return [
-            _core_write_allowed(conn),
-            _public_maintenance_allowed(conn),
-            _legacy_read_blocked(conn),
-        ]
+        return [_core_write_allowed(conn)]
     finally:
         conn.close()
 
@@ -105,7 +49,7 @@ def print_checks(checks: list[WriterCheck]) -> int:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Verify a PostgreSQL writer DSN can write core and maintain public views")
+    parser = argparse.ArgumentParser(description="Verify a PostgreSQL writer DSN can write zsxq_core")
     parser.add_argument("--dsn", default=None, help="Writer DSN. Defaults to ZSXQ_WRITER_POSTGRES_DSN.")
     args = parser.parse_args()
 

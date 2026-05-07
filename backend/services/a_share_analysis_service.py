@@ -8,7 +8,8 @@ from datetime import datetime, timedelta
 from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Set, Tuple
 
 from backend.core.db_path_manager import get_db_path_manager
-from backend.storage.db_compat import connect, get_database_backend
+from backend.core.local_group_runtime import get_cached_local_group_ids
+from backend.storage.db_compat import connect
 from backend.core.ai_provider_config import (
     get_default_base_url,
     get_default_model,
@@ -238,18 +239,13 @@ def _extract_day_from_state_key(key: str) -> Optional[str]:
 
 
 def read_topics_last_days(group_id: str, days: int, log_callback: LogCallback = None) -> List[Dict[str, Any]]:
-    path_manager = get_db_path_manager()
-    topics_db = path_manager.get_topics_db_path(group_id)
     items: List[Dict[str, Any]] = []
-    if get_database_backend() != "postgres" and not os.path.exists(topics_db):
-        _emit_log(f"topics db not found: {topics_db}", log_callback, level="warning")
-        return items
 
-    conn = connect(topics_db)
+    conn = connect()
     cur = conn.cursor()
     cur.execute("SELECT t.topic_id, t.title, t.create_time FROM topics t")
     rows = cur.fetchall()
-    log_debug(f"loaded topics rows: {len(rows)} from {topics_db}")
+    log_debug(f"loaded topics rows: {len(rows)} from zsxq_core")
 
     talk_texts: Dict[Any, str] = {}
     try:
@@ -827,17 +823,7 @@ def get_source_topics_summary(group_id: Optional[str] = None) -> Dict[str, Any]:
             "latest_topic_time": None,
         }
 
-    path_manager = get_db_path_manager()
-    topics_db = path_manager.get_topics_db_path(normalized_group_id)
-    if get_database_backend() != "postgres" and not os.path.exists(topics_db):
-        return {
-            "topics_db_exists": False,
-            "topics_count": 0,
-            "oldest_topic_time": None,
-            "latest_topic_time": None,
-        }
-
-    conn = connect(topics_db)
+    conn = connect()
     try:
         cur = conn.cursor()
         cur.execute("SELECT COUNT(*), MIN(create_time), MAX(create_time) FROM topics")
@@ -1129,9 +1115,7 @@ def run_analysis(
     if normalized_group_id:
         groups = [normalized_group_id]
     else:
-        path_manager = get_db_path_manager()
-        all_groups = path_manager.list_all_groups()
-        groups = [str(group["group_id"]) for group in all_groups]
+        groups = [str(group_id) for group_id in sorted(get_cached_local_group_ids(force_refresh=True))]
     _emit_log(f"discovered groups: {len(groups)}", log_callback)
 
     all_items: List[Dict[str, Any]] = []

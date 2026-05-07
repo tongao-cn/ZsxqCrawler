@@ -5,7 +5,6 @@ from typing import Optional
 from fastapi import HTTPException
 
 from backend.core.account_context import get_cookie_for_group
-from backend.core.db_path_manager import get_db_path_manager
 from backend.crawlers.zsxq_interactive_crawler import ZSXQInteractiveCrawler, load_config
 
 
@@ -26,9 +25,7 @@ def get_crawler(log_callback=None) -> ZSXQInteractiveCrawler:
         if cookie == "your_cookie_here" or group_id == "your_group_id_here" or not cookie or not group_id:
             raise HTTPException(status_code=400, detail="请先在config.toml中配置Cookie和群组ID")
 
-        path_manager = get_db_path_manager()
-        db_path = path_manager.get_topics_db_path(group_id)
-        crawler_instance = ZSXQInteractiveCrawler(cookie, group_id, db_path, log_callback)
+        crawler_instance = ZSXQInteractiveCrawler(cookie, group_id, log_callback)
 
     return crawler_instance
 
@@ -42,9 +39,7 @@ def get_crawler_for_group(group_id: str, log_callback=None) -> ZSXQInteractiveCr
     if not cookie or cookie == "your_cookie_here":
         raise HTTPException(status_code=400, detail="未找到可用Cookie，请先在账号管理或config.toml中配置")
 
-    path_manager = get_db_path_manager()
-    db_path = path_manager.get_topics_db_path(group_id)
-    return ZSXQInteractiveCrawler(cookie, group_id, db_path, log_callback)
+    return ZSXQInteractiveCrawler(cookie, group_id, log_callback)
 
 
 def get_crawler_safe() -> Optional[ZSXQInteractiveCrawler]:

@@ -67,7 +67,7 @@ class DbCompatTests(unittest.TestCase):
     def test_connect_rejects_removed_sqlite_backend(self):
         with patch("backend.storage.db_compat.get_database_backend", return_value="sqlite"):
             with self.assertRaisesRegex(RuntimeError, "SQLite backend has been removed"):
-                connect("removed.db")
+                connect()
 
     def test_compat_row_supports_index_and_column_access(self):
         row = CompatRow(("task-1", "running"), ("task_id", "status"))

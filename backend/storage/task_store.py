@@ -3,8 +3,7 @@ from __future__ import annotations
 import json
 import threading
 from datetime import datetime
-from pathlib import Path
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional
 
 from backend.storage.db_compat import connect
 
@@ -25,9 +24,7 @@ def _cleanup_result(tasks_deleted: int, logs_deleted: int, kept_latest: int) -> 
 
 
 class TaskStore:
-    def __init__(self, db_path: Union[str, Path]):
-        self.db_path = Path(db_path)
-        self.db_path.parent.mkdir(parents=True, exist_ok=True)
+    def __init__(self):
         self._lock = threading.Lock()
         self._init_db()
 
@@ -283,7 +280,7 @@ class TaskStore:
                 conn.close()
 
     def _connect(self):
-        return connect(self.db_path, row_factory=True)
+        return connect(row_factory=True)
 
     def _task_from_row(self, row: Any) -> Dict[str, Any]:
         task = {

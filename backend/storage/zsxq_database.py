@@ -65,14 +65,45 @@ def _replace_file_topic_relation(file_db, file_id: int, topic_id: int) -> int:
     return file_db.cursor.rowcount
 
 
+def _upsert_synced_file(cursor, group_id: Optional[int], topic_id: int, file_data: Dict[str, Any]) -> Optional[int]:
+    file_id = file_data.get('file_id')
+    if not file_id:
+        return None
+
+    cursor.execute('''
+    INSERT INTO files
+    (file_id, group_id, topic_id, name, hash, size, duration, download_count, create_time)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(file_id) DO UPDATE SET
+        group_id = COALESCE(excluded.group_id, files.group_id),
+        topic_id = COALESCE(excluded.topic_id, files.topic_id),
+        name = excluded.name,
+        hash = excluded.hash,
+        size = excluded.size,
+        duration = excluded.duration,
+        download_count = excluded.download_count,
+        create_time = excluded.create_time
+    ''', (
+        file_id,
+        group_id,
+        topic_id,
+        file_data.get('name', ''),
+        file_data.get('hash'),
+        file_data.get('size'),
+        file_data.get('duration'),
+        file_data.get('download_count'),
+        file_data.get('create_time'),
+    ))
+    return file_id
+
+
 class ZSXQDatabase:
     """知识星球数据库管理器"""
     
-    def __init__(self, db_path: str = "zsxq_interactive.db", files_db_path: Optional[str] = None):
-        self.db_path = db_path
-        self.files_db_path = files_db_path
+    def __init__(self, group_id: Optional[str] = None):
+        self.group_id = str(group_id) if group_id is not None else None
         self.file_db = None
-        self.conn = connect(db_path)
+        self.conn = connect()
         self.cursor = self.conn.cursor()
         self._init_database()
     
@@ -1093,12 +1124,9 @@ class ZSXQDatabase:
 
     def _get_file_db(self):
         """获取同组文件库连接，用于同步话题里的文件元数据。"""
-        if not self.files_db_path:
-            return None
-
         if self.file_db is None:
             from backend.storage.zsxq_file_database import ZSXQFileDatabase
-            self.file_db = ZSXQFileDatabase(self.files_db_path)
+            self.file_db = ZSXQFileDatabase(self.group_id)
 
         return self.file_db
 
@@ -1107,35 +1135,31 @@ class ZSXQDatabase:
         if not files_data:
             return
 
-        file_db = self._get_file_db()
-        if file_db is None:
-            return
-
         try:
             group_data = topic_data.get('group', {})
-            if group_data:
-                file_db.insert_group(group_data)
+            topic_id = topic_data.get('topic_id')
+            if not topic_id:
+                return
 
-            topic_id = file_db.insert_topic(topic_data)
             synced_files = 0
             for file_data in files_data:
-                file_id = file_db.insert_file(file_data)
+                file_id = _upsert_synced_file(
+                    self.cursor,
+                    group_data.get('group_id') if group_data else None,
+                    topic_id,
+                    file_data,
+                )
                 if not file_id:
                     continue
 
                 synced_files += 1
-                if topic_id:
-                    _replace_file_topic_relation(file_db, file_id, topic_id)
+                _replace_file_topic_relation(self, file_id, topic_id)
 
-            if topic_id:
-                file_db.insert_topic_files(topic_id, files_data)
-
-            file_db.conn.commit()
             if synced_files:
                 print(f"同步话题文件到文件库: topic_id={topic_data.get('topic_id')}, files={synced_files}")
         except Exception as e:
-            file_db.conn.rollback()
             print(f"同步话题文件到文件库失败: {e}")
+            raise
 
     def backfill_topic_files_to_file_database(self) -> Dict[str, int]:
         """把当前话题库已有的 topic_files 回填到文件库。"""

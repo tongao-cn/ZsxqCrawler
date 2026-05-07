@@ -79,10 +79,10 @@ def _empty_stats() -> Dict[str, int]:
 class ZSXQColumnsDatabase:
     """知识星球专栏数据库管理器"""
     
-    def __init__(self, db_path: str = "zsxq_columns.db"):
+    def __init__(self, group_id: Optional[str] = None):
         """初始化数据库连接"""
-        self.db_path = db_path
-        self.conn = connect(db_path)
+        self.group_id = str(group_id) if group_id is not None else None
+        self.conn = connect()
         self.cursor = self.conn.cursor()
         self._init_database()
     
@@ -284,7 +284,7 @@ class ZSXQColumnsDatabase:
         self.cursor.execute('CREATE INDEX IF NOT EXISTS idx_images_comment_id ON images (comment_id)')
 
         self.conn.commit()
-        print(f"✅ 专栏数据库初始化完成: {self.db_path}")
+        print("✅ 专栏存储初始化完成: PostgreSQL schema=zsxq_core")
     
     # ==================== 专栏目录操作 ====================
     
@@ -1150,7 +1150,7 @@ class ZSXQColumnsDatabase:
 
 def main():
     """测试专栏数据库"""
-    db = ZSXQColumnsDatabase('test_columns.db')
+    db = ZSXQColumnsDatabase()
     print("📊 专栏数据库测试完成")
     db.close()
 

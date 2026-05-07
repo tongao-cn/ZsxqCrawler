@@ -389,9 +389,7 @@ async def _process_column(
 
 def get_columns_db(group_id: str) -> ZSXQColumnsDatabase:
     """获取指定群组的专栏数据库实例"""
-    path_manager = get_db_path_manager()
-    db_path = path_manager.get_columns_db_path(group_id)
-    return ZSXQColumnsDatabase(db_path)
+    return ZSXQColumnsDatabase(group_id)
 
 
 @contextmanager

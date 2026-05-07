@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-import os
 from contextlib import closing
 from pathlib import Path
 from typing import Any, Dict, List
@@ -25,6 +24,7 @@ from backend.core.local_group_runtime import (
     scan_local_groups,
 )
 from backend.storage.zsxq_database import ZSXQDatabase
+from backend.storage.zsxq_file_database import ZSXQFileDatabase
 
 router = APIRouter(prefix="/api", tags=["groups"])
 
@@ -125,57 +125,53 @@ def _apply_local_group_meta(fields: Dict[str, Any], meta: Dict[str, Any]) -> Dic
 def _load_local_group_db_fields(group_id: int, fields: Dict[str, Any]) -> Dict[str, Any]:
     result = dict(fields)
     try:
-        path_manager = get_db_path_manager()
-        db_paths = path_manager.list_group_databases(str(group_id))
-        topics_db = db_paths.get("topics")
-        if topics_db and os.path.exists(topics_db):
-            with closing(ZSXQDatabase(topics_db)) as db:
-                cur = db.cursor
-                if not result["local_bg"] or result["local_name"].startswith("本地群（"):
-                    cur.execute(
-                        "SELECT name, type, background_url FROM groups WHERE group_id = ? LIMIT 1",
-                        (group_id,),
-                    )
-                    row = cur.fetchone()
-                    if row:
-                        if row[0]:
-                            result["local_name"] = row[0]
-                        if row[1]:
-                            result["local_type"] = row[1]
-                        if row[2]:
-                            result["local_bg"] = row[2]
+        with closing(ZSXQDatabase(str(group_id))) as db:
+            cur = db.cursor
+            if not result["local_bg"] or result["local_name"].startswith("本地群（"):
+                cur.execute(
+                    "SELECT name, type, background_url FROM groups WHERE group_id = ? LIMIT 1",
+                    (group_id,),
+                )
+                row = cur.fetchone()
+                if row:
+                    if row[0]:
+                        result["local_name"] = row[0]
+                    if row[1]:
+                        result["local_type"] = row[1]
+                    if row[2]:
+                        result["local_bg"] = row[2]
 
-                if not result["join_time"] or not result["expiry_time"]:
-                    cur.execute(
-                        """
-                        SELECT MIN(create_time), MAX(create_time)
-                        FROM topics
-                        WHERE group_id = ? AND create_time IS NOT NULL AND create_time != ''
-                        """,
-                        (group_id,),
-                    )
-                    trow = cur.fetchone()
-                    if trow:
-                        if not result["join_time"]:
-                            result["join_time"] = trow[0]
-                        if not result["expiry_time"]:
-                            result["expiry_time"] = trow[1]
-                        if not result["last_active_time"]:
-                            result["last_active_time"] = trow[1]
+            if not result["join_time"] or not result["expiry_time"]:
+                cur.execute(
+                    """
+                    SELECT MIN(create_time), MAX(create_time)
+                    FROM topics
+                    WHERE group_id = ? AND create_time IS NOT NULL AND create_time != ''
+                    """,
+                    (group_id,),
+                )
+                trow = cur.fetchone()
+                if trow:
+                    if not result["join_time"]:
+                        result["join_time"] = trow[0]
+                    if not result["expiry_time"]:
+                        result["expiry_time"] = trow[1]
+                    if not result["last_active_time"]:
+                        result["last_active_time"] = trow[1]
 
-                if not result["statistics"]:
-                    cur.execute(
-                        "SELECT COUNT(*) FROM topics WHERE group_id = ?",
-                        (group_id,),
-                    )
-                    topics_count = cur.fetchone()[0] or 0
-                    result["statistics"] = {
-                        "topics": {
-                            "topics_count": topics_count,
-                            "answers_count": 0,
-                            "digests_count": 0,
-                        }
+            if not result["statistics"]:
+                cur.execute(
+                    "SELECT COUNT(*) FROM topics WHERE group_id = ?",
+                    (group_id,),
+                )
+                topics_count = cur.fetchone()[0] or 0
+                result["statistics"] = {
+                    "topics": {
+                        "topics_count": topics_count,
+                        "answers_count": 0,
+                        "digests_count": 0,
                     }
+                }
     except Exception as e:
         _warn(f"读取本地群组 {group_id} 元数据失败: {e}")
     return result
@@ -472,8 +468,14 @@ async def get_group_stats(group_id: int):
 async def get_group_database_info(group_id: int):
     """获取指定群组的数据库信息"""
     try:
-        path_manager = get_db_path_manager()
-        db_info = path_manager.get_database_info(str(group_id))
+        with closing(ZSXQDatabase(str(group_id))) as topics_db, closing(ZSXQFileDatabase(str(group_id))) as files_db:
+            db_info = {
+                "group_id": str(group_id),
+                "schema": "zsxq_core",
+                "group_dir": get_db_path_manager().get_group_dir(str(group_id)),
+                "topics": topics_db.get_database_stats(),
+                "files": files_db.get_database_stats(),
+            }
 
         return {
             "group_id": group_id,

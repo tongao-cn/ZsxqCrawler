@@ -1,5 +1,4 @@
 import os
-import tempfile
 import unittest
 
 from backend.storage.accounts_sql_manager import (
@@ -42,24 +41,22 @@ class AccountsSqlManagerHelperTests(unittest.TestCase):
         "PostgreSQL integration tests are disabled",
     )
     def test_manager_get_account_uses_same_account_shape(self):
-        with tempfile.TemporaryDirectory() as tmpdir:
-            db_path = os.path.join(tmpdir, "accounts.db")
-            manager = AccountsSQLManager(db_path=db_path)
-            try:
-                account = manager.add_account("cookie-value-12345678", name="Account A")
+        manager = AccountsSQLManager()
+        try:
+            account = manager.add_account("cookie-value-12345678", name="Account A")
 
-                self.assertEqual(
-                    set(account.keys()),
-                    {"id", "name", "cookie", "created_at", "updated_at"},
-                )
-                self.assertEqual(account["name"], "Account A")
-                self.assertEqual(account["cookie"], "cookie-value-12345678")
-                self.assertIsNone(account["updated_at"])
+            self.assertEqual(
+                set(account.keys()),
+                {"id", "name", "cookie", "created_at", "updated_at"},
+            )
+            self.assertEqual(account["name"], "Account A")
+            self.assertEqual(account["cookie"], "cookie-value-12345678")
+            self.assertIsNone(account["updated_at"])
 
-                masked = manager.get_account_by_id(account["id"], mask_cookie=True)
-                self.assertEqual(masked["cookie"], "***12345678")
-            finally:
-                manager.close()
+            masked = manager.get_account_by_id(account["id"], mask_cookie=True)
+            self.assertEqual(masked["cookie"], "***12345678")
+        finally:
+            manager.close()
 
 
 if __name__ == "__main__":

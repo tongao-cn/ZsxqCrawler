@@ -10,9 +10,8 @@ import psycopg2
 import requests
 
 from backend.core.account_context import build_stealth_headers, get_cookie_for_group
-from backend.core.db_path_manager import get_db_path_manager
 from backend.storage.db_compat import get_postgres_dsn
-from backend.storage.postgres_core_schema import CORE_SCHEMA, PUBLIC_SCHEMA, quote_identifier
+from backend.storage.postgres_core_schema import CORE_SCHEMA, quote_identifier
 from backend.storage.zsxq_database import ZSXQDatabase
 
 
@@ -23,9 +22,6 @@ class ProbeCounts:
     core_files: int
     core_comments: int
     core_tasks: int
-    public_topics: int
-    public_files: int
-    public_comments: int
 
 
 def _project_root() -> Path:
@@ -48,15 +44,12 @@ def capture_counts(conn) -> ProbeCounts:
             WHERE schema_name LIKE %s
               AND schema_name NOT IN (%s, %s)
             """,
-            ("zsxq_%", CORE_SCHEMA, PUBLIC_SCHEMA),
+            ("zsxq_%", CORE_SCHEMA, "zsxq_public"),
         ),
         core_topics=_count(conn, f"SELECT COUNT(*) FROM {quote_identifier(CORE_SCHEMA)}.{quote_identifier('topics')}"),
         core_files=_count(conn, f"SELECT COUNT(*) FROM {quote_identifier(CORE_SCHEMA)}.{quote_identifier('files')}"),
         core_comments=_count(conn, f"SELECT COUNT(*) FROM {quote_identifier(CORE_SCHEMA)}.{quote_identifier('comments')}"),
         core_tasks=_count(conn, f"SELECT COUNT(*) FROM {quote_identifier(CORE_SCHEMA)}.{quote_identifier('task_runs')}"),
-        public_topics=_count(conn, f"SELECT COUNT(*) FROM {quote_identifier(PUBLIC_SCHEMA)}.{quote_identifier('topics')}"),
-        public_files=_count(conn, f"SELECT COUNT(*) FROM {quote_identifier(PUBLIC_SCHEMA)}.{quote_identifier('files')}"),
-        public_comments=_count(conn, f"SELECT COUNT(*) FROM {quote_identifier(PUBLIC_SCHEMA)}.{quote_identifier('comments')}"),
     )
 
 
@@ -104,9 +97,8 @@ def run_real_probe(group_id: str, *, count: int, apply: bool, verbose: bool = Fa
                 "errors": 1,
             }
         else:
-            db_path = get_db_path_manager().get_topics_db_path(group_id)
             _log(verbose, "opening topic storage")
-            topic_db = ZSXQDatabase(db_path)
+            topic_db = ZSXQDatabase(group_id)
             try:
                 _log(verbose, "storing topic payload")
                 stats = {"api_succeeded": True, "new_topics": 0, "updated_topics": 0, "errors": 0}
@@ -154,9 +146,6 @@ def write_report(probe: dict[str, Any]) -> Path:
         "core_files",
         "core_comments",
         "core_tasks",
-        "public_topics",
-        "public_files",
-        "public_comments",
     ]
     lines = [
         "# PostgreSQL Real Cutover Probe Report",

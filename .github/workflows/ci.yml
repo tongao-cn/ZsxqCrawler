@@ -34,20 +34,17 @@ jobs:
       - name: Check core schema CLI help
         run: uv run manage-postgres-core-schema --help
 
-      - name: Check core migration CLI help
-        run: uv run migrate-postgres-schemas-to-core --help
-
       - name: Check core group id backfill CLI help
         run: uv run backfill-postgres-core-group-ids --help
 
-      - name: Check public schema CLI help
-        run: uv run manage-postgres-public-schema --help
+      - name: Check core access CLI help
+        run: uv run manage-postgres-core-access --help
+
+      - name: Check legacy cleanup CLI help
+        run: uv run cleanup-postgres-legacy-artifacts --help
 
       - name: Check PostgreSQL status report CLI help
         run: uv run generate-postgres-status-report --help
-
-      - name: Check PostgreSQL legacy archive report CLI help
-        run: uv run generate-postgres-legacy-archive-report --help
 
       - name: Check reader access CLI help
         run: uv run verify-postgres-reader-access --help

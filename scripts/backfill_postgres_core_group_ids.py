@@ -75,8 +75,7 @@ def build_group_id_backfill_steps() -> list[BackfillStep]:
             """,
             update_sql=f"""
                 UPDATE {comments} c
-                SET group_id = t.group_id,
-                    migrated_at = COALESCE(c.migrated_at, CURRENT_TIMESTAMP)
+                SET group_id = t.group_id
                 FROM {topics} t
                 WHERE t.topic_id = c.topic_id
                   AND t.group_id IS NOT NULL
@@ -95,8 +94,7 @@ def build_group_id_backfill_steps() -> list[BackfillStep]:
             update_sql=file_group_cte
             + f"""
                 UPDATE {files} f
-                SET group_id = r.group_id,
-                    migrated_at = COALESCE(f.migrated_at, CURRENT_TIMESTAMP)
+                SET group_id = r.group_id
                 FROM resolved r
                 WHERE r.file_id = f.file_id
                   AND (f.group_id IS NULL OR f.group_id <> r.group_id)
@@ -113,8 +111,7 @@ def build_group_id_backfill_steps() -> list[BackfillStep]:
             """,
             update_sql=f"""
                 UPDATE {file_ai_analyses} a
-                SET group_id = f.group_id,
-                    migrated_at = COALESCE(a.migrated_at, CURRENT_TIMESTAMP)
+                SET group_id = f.group_id
                 FROM {files} f
                 WHERE f.file_id = a.file_id
                   AND f.group_id IS NOT NULL

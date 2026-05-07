@@ -7,9 +7,8 @@ from pathlib import Path
 import psycopg2
 
 from backend.storage.db_compat import get_database_backend, get_postgres_dsn
-from backend.storage.postgres_core_schema import CORE_SCHEMA
+from backend.storage.postgres_core_schema import CORE_SCHEMA, quote_identifier
 from scripts.backfill_postgres_core_group_ids import group_id_quality_counts
-from scripts.manage_postgres_public_schema import PUBLIC_SCHEMA, PUBLIC_VIEW_SPECS, discover_internal_schemas, quote_identifier
 
 
 def _project_root() -> Path:
@@ -31,10 +30,6 @@ def _table_count(conn, schema_name: str, table_name: str) -> int | None:
             return None
         cur.execute(f"SELECT count(*) FROM {quote_identifier(schema_name)}.{quote_identifier(table_name)}")
         return int(cur.fetchone()[0])
-
-
-def _view_count(conn, view_name: str) -> int | None:
-    return _table_count(conn, PUBLIC_SCHEMA, view_name)
 
 
 def _schema_summary(conn, schema_names: list[str]) -> list[tuple[str, int, int]]:
@@ -60,10 +55,6 @@ def _schema_summary(conn, schema_names: list[str]) -> list[tuple[str, int, int]]
     return rows
 
 
-def _legacy_schema_count(conn) -> int:
-    return len([schema for schema in discover_internal_schemas(conn) if schema != CORE_SCHEMA])
-
-
 def _group_id_quality_summary(conn) -> dict[str, int]:
     try:
         return group_id_quality_counts(conn)
@@ -73,7 +64,6 @@ def _group_id_quality_summary(conn) -> dict[str, int]:
 
 def build_report(conn) -> str:
     core_rows = _schema_summary(conn, [CORE_SCHEMA])
-    legacy_count = _legacy_schema_count(conn)
     group_id_quality = _group_id_quality_summary(conn)
 
     lines = [
@@ -90,12 +80,6 @@ def build_report(conn) -> str:
     else:
         lines.append("- `zsxq_core` has not been created.")
 
-    lines.extend(["", "## Public Views", "", "| View | Rows |", "| --- | ---: |"])
-    for spec in PUBLIC_VIEW_SPECS:
-        count = _view_count(conn, spec.name)
-        count_text = "missing" if count is None else str(count)
-        lines.append(f"| `{PUBLIC_SCHEMA}.{spec.name}` | {count_text} |")
-
     if group_id_quality:
         lines.extend(["", "## Group ID Quality", "", "| Metric | Rows |", "| --- | ---: |"])
         lines.extend(f"| `{name}` | {count} |" for name, count in group_id_quality.items())
@@ -105,9 +89,9 @@ def build_report(conn) -> str:
             "",
             "## Notes",
             "",
-            "- Other projects should read from `zsxq_public` with the reader DSN.",
-            f"- Legacy archived `zsxq_*` schema count: {legacy_count}.",
-            "- Re-run this report after any PostgreSQL public view or data refresh.",
+            "- Applications read and write `zsxq_core` directly.",
+            "- Other projects should use a read-only role with SELECT on `zsxq_core`.",
+            "- Re-run this report after PostgreSQL data refresh or cleanup.",
             "",
         ]
     )

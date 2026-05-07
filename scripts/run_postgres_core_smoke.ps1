@@ -79,6 +79,16 @@ try {
     $env:ZSXQ_DATABASE_BACKEND = "postgres"
     $env:ZSXQ_POSTGRES_DSN = "postgresql://postgres:$PostgresPassword@127.0.0.1:$Port/$Database"
 
+    Invoke-Checked { uv run manage-postgres-core-schema --apply }
+    Invoke-Checked { uv run manage-postgres-core-schema --apply }
+
+    Assert-Equal "core schema exists" `
+        (Invoke-PgSql -User "postgres" -Password $PostgresPassword -Sql "SELECT count(*) FROM information_schema.schemata WHERE schema_name = 'zsxq_core';") `
+        "1"
+    Assert-Equal "public schema absent" `
+        (Invoke-PgSql -User "postgres" -Password $PostgresPassword -Sql "SELECT count(*) FROM information_schema.schemata WHERE schema_name = 'zsxq_public';") `
+        "0"
+
     @'
 import os
 import psycopg2
@@ -86,78 +96,48 @@ import psycopg2
 conn = psycopg2.connect(os.environ["ZSXQ_POSTGRES_DSN"])
 try:
     with conn.cursor() as cur:
+        cur.execute("INSERT INTO zsxq_core.groups (group_id, name, type) VALUES (1, 'Smoke Group', 'paid')")
+        cur.execute("INSERT INTO zsxq_core.topics (group_id, topic_id, title, type, create_time) VALUES (1, 100, 'Smoke Topic', 'talk', '2026-05-07T10:00:00')")
+        cur.execute("CREATE SCHEMA zsxq_public")
+        cur.execute("CREATE VIEW zsxq_public.topics AS SELECT topic_id FROM zsxq_core.topics")
         cur.execute("CREATE SCHEMA zsxq_legacy_topics")
-        cur.execute("CREATE SCHEMA zsxq_legacy_files")
-        cur.execute("CREATE SCHEMA zsxq_legacy_tasks")
-        cur.execute("CREATE SCHEMA zsxq_legacy_accounts")
-        cur.execute("CREATE TABLE zsxq_legacy_topics.groups (group_id BIGINT PRIMARY KEY, name TEXT, type TEXT, background_url TEXT)")
-        cur.execute("CREATE TABLE zsxq_legacy_topics.topics (group_id BIGINT, topic_id BIGINT PRIMARY KEY, title TEXT, type TEXT, create_time TEXT, updated_at TEXT, imported_at TEXT)")
-        cur.execute("CREATE TABLE zsxq_legacy_topics.comments (comment_id BIGINT PRIMARY KEY, topic_id BIGINT, owner_user_id BIGINT, text TEXT, create_time TEXT)")
-        cur.execute("INSERT INTO zsxq_legacy_topics.groups VALUES (1, 'Core Group', 'paid', 'https://example.test/bg.png')")
-        cur.execute("INSERT INTO zsxq_legacy_topics.topics VALUES (1, 100, 'Core Topic', 'talk', '2026-05-07T10:00:00', '2026-05-07T11:00:00', '2026-05-07T11:01:00')")
-        cur.execute("INSERT INTO zsxq_legacy_topics.comments VALUES (200, 100, 300, 'useful comment', '2026-05-07T10:05:00')")
-        cur.execute("CREATE TABLE zsxq_legacy_files.files (file_id BIGINT PRIMARY KEY, name TEXT, size BIGINT, download_status TEXT, local_path TEXT, create_time TEXT, updated_at TEXT)")
-        cur.execute("CREATE TABLE zsxq_legacy_files.file_ai_analyses (file_id BIGINT PRIMARY KEY, status TEXT, summary TEXT, content_type TEXT, source_path TEXT, updated_at TEXT)")
-        cur.execute("INSERT INTO zsxq_legacy_files.files VALUES (400, 'report.pdf', 12345, 'downloaded', 'files/report.pdf', '2026-05-07T09:00:00', '2026-05-07T09:30:00')")
-        cur.execute("INSERT INTO zsxq_legacy_files.file_ai_analyses VALUES (400, 'done', 'file summary', 'application/pdf', 'files/report.pdf', '2026-05-07T21:00:00')")
-        cur.execute("CREATE TABLE zsxq_legacy_tasks.task_runs (task_id TEXT PRIMARY KEY, type TEXT, status TEXT, message TEXT, created_at TEXT, updated_at TEXT)")
-        cur.execute("CREATE TABLE zsxq_legacy_tasks.task_logs (id BIGINT PRIMARY KEY, task_id TEXT, message TEXT, created_at TEXT)")
-        cur.execute("INSERT INTO zsxq_legacy_tasks.task_runs VALUES ('task_1_1', 'crawl_latest', 'completed', 'done', '2026-05-07T08:00:00', '2026-05-07T08:01:00')")
-        cur.execute("INSERT INTO zsxq_legacy_tasks.task_logs VALUES (1, 'task_1_1', 'log line', '2026-05-07T08:00:10')")
-        cur.execute("CREATE TABLE zsxq_legacy_accounts.accounts (id TEXT PRIMARY KEY, name TEXT, cookie TEXT, created_at TEXT, updated_at TEXT)")
-        cur.execute("INSERT INTO zsxq_legacy_accounts.accounts VALUES ('acc-1', 'Account', 'cookie', '2026-05-07T07:00:00', NULL)")
+        cur.execute("CREATE TABLE zsxq_legacy_topics.topics (topic_id bigint primary key)")
+        cur.execute("INSERT INTO zsxq_legacy_topics.topics VALUES (100)")
+        cur.execute("CREATE TABLE zsxq_core.record_sources (record_table text, record_key text, source_schema text, source_row_id text, migrated_at timestamptz)")
+        cur.execute("INSERT INTO zsxq_core.record_sources VALUES ('topics', '100', 'zsxq_legacy_topics', '100', CURRENT_TIMESTAMP)")
+        cur.execute("ALTER TABLE zsxq_core.topics ADD COLUMN source_schema text")
+        cur.execute("ALTER TABLE zsxq_core.topics ADD COLUMN source_row_id text")
+        cur.execute("ALTER TABLE zsxq_core.topics ADD COLUMN migrated_at timestamptz")
     conn.commit()
 finally:
     conn.close()
 '@ | uv run python -
 
-    Invoke-Checked { uv run migrate-postgres-schemas-to-core --dry-run }
-    Invoke-Checked { uv run migrate-postgres-schemas-to-core --apply }
-    Invoke-Checked { uv run migrate-postgres-schemas-to-core --apply }
-    Invoke-Checked { uv run migrate-postgres-schemas-to-core --verify-only }
-    Invoke-Checked { uv run manage-postgres-public-schema --apply --build-indexes }
-    Invoke-Checked { uv run manage-postgres-public-schema --apply --build-indexes }
-
-    Assert-Equal "core topics rows" `
-        (Invoke-PgSql -User "postgres" -Password $PostgresPassword -Sql "SELECT count(*) FROM zsxq_core.topics;") `
-        "1"
-    Assert-Equal "core files rows" `
-        (Invoke-PgSql -User "postgres" -Password $PostgresPassword -Sql "SELECT count(*) FROM zsxq_core.files;") `
-        "1"
-    Assert-Equal "core task rows" `
-        (Invoke-PgSql -User "postgres" -Password $PostgresPassword -Sql "SELECT count(*) FROM zsxq_core.task_runs;") `
-        "1"
-    Assert-Equal "public topics rows" `
-        (Invoke-PgSql -User "postgres" -Password $PostgresPassword -Sql "SELECT count(*) FROM zsxq_public.topics;") `
-        "1"
-    Assert-Equal "public files rows" `
-        (Invoke-PgSql -User "postgres" -Password $PostgresPassword -Sql "SELECT count(*) FROM zsxq_public.files;") `
-        "1"
-    Assert-Equal "legacy schemas retained" `
-        (Invoke-PgSql -User "postgres" -Password $PostgresPassword -Sql "SELECT count(*) FROM information_schema.schemata WHERE schema_name LIKE 'zsxq_legacy_%';") `
-        "4"
-
-    Invoke-PgSql -User "postgres" -Password $PostgresPassword -Sql "ALTER ROLE zsxq_reader LOGIN PASSWORD '$ReaderPassword'; ALTER ROLE zsxq_writer LOGIN PASSWORD '$WriterPassword';" | Out-Null
-    Invoke-Checked {
-        uv run verify-postgres-reader-access --dsn "postgresql://zsxq_reader:$ReaderPassword@127.0.0.1:$Port/$Database"
+    $cleanupPlan = (uv run cleanup-postgres-legacy-artifacts --dry-run) -join "`n"
+    if ($cleanupPlan -notmatch 'DROP SCHEMA IF EXISTS "zsxq_public" CASCADE;') {
+        throw "cleanup dry-run did not include zsxq_public drop"
     }
-    Invoke-Checked {
-        uv run verify-postgres-writer-access --dsn "postgresql://zsxq_writer:$WriterPassword@127.0.0.1:$Port/$Database"
+    if ($cleanupPlan -notmatch 'DROP SCHEMA IF EXISTS "zsxq_legacy_topics" CASCADE;') {
+        throw "cleanup dry-run did not include legacy schema drop"
     }
+    if ($cleanupPlan -notmatch 'DROP TABLE IF EXISTS "zsxq_core"."record_sources" CASCADE;') {
+        throw "cleanup dry-run did not include record_sources drop"
+    }
+    if ($cleanupPlan -notmatch 'DROP COLUMN IF EXISTS "source_schema"') {
+        throw "cleanup dry-run did not include source_schema drop"
+    }
+    Write-Host "[ok] cleanup dry-run lists public, legacy, record_sources, and tracking columns"
+
+    Invoke-Checked { uv run manage-postgres-core-access --apply --login-roles --reader-password $ReaderPassword --writer-password $WriterPassword }
+    Invoke-Checked { uv run verify-postgres-reader-access --dsn "postgresql://zsxq_reader:$ReaderPassword@127.0.0.1:$Port/$Database" }
+    Invoke-Checked { uv run verify-postgres-writer-access --dsn "postgresql://zsxq_writer:$WriterPassword@127.0.0.1:$Port/$Database" }
 
     docker exec -e "PGPASSWORD=$ReaderPassword" $ContainerName `
-        psql -h 127.0.0.1 -U zsxq_reader -d $Database -v ON_ERROR_STOP=1 -tAc "SELECT count(*) FROM zsxq_core.topics;" *> $null
+        psql -h 127.0.0.1 -U zsxq_reader -d $Database -v ON_ERROR_STOP=1 -tAc "INSERT INTO zsxq_core.groups (group_id) VALUES (2);" *> $null
     if ($LASTEXITCODE -eq 0) {
-        throw "zsxq_reader unexpectedly selected from zsxq_core"
+        throw "zsxq_reader unexpectedly inserted into zsxq_core"
     }
-    Write-Host "[ok] reader cannot select zsxq_core"
-
-    docker exec -e "PGPASSWORD=$ReaderPassword" $ContainerName `
-        psql -h 127.0.0.1 -U zsxq_reader -d $Database -v ON_ERROR_STOP=1 -tAc "SELECT count(*) FROM zsxq_legacy_topics.topics;" *> $null
-    if ($LASTEXITCODE -eq 0) {
-        throw "zsxq_reader unexpectedly selected from legacy schema"
-    }
-    Write-Host "[ok] reader cannot select legacy schema"
+    Write-Host "[ok] reader cannot insert into zsxq_core"
 
     Write-Host "PostgreSQL core smoke passed."
 }

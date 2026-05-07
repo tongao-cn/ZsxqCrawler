@@ -9,7 +9,6 @@ from typing import Optional
 import requests
 from fastapi import APIRouter, HTTPException
 
-from backend.core.db_path_manager import get_db_path_manager
 from backend.core.crawler_runtime import get_crawler, get_crawler_for_group
 from backend.storage.db_compat import connect
 
@@ -83,7 +82,7 @@ def _delete_group_topic_rows(db, group_id: int) -> dict:
 
 
 def _clear_group_topic_data(group_id: str) -> dict:
-    conn = connect("zsxq_core_topics")
+    conn = connect()
     try:
         db = type("_TopicClearDb", (), {})()
         db.cursor = conn.cursor()

@@ -16,7 +16,6 @@ from backend.services.a_share_analysis_service import (
 )
 from backend.core.crawler_runtime import clear_crawler_instance
 from backend.core.account_context import is_configured
-from backend.core.db_path_manager import get_db_path_manager
 from backend.storage.zsxq_database import ZSXQDatabase
 from backend.storage.zsxq_file_database import ZSXQFileDatabase
 from backend.crawlers.zsxq_interactive_crawler import load_config
@@ -150,41 +149,12 @@ async def get_database_stats():
         if not configured:
             return _empty_database_stats_response(False)
 
-        path_manager = get_db_path_manager()
-        groups_info = path_manager.list_all_groups()
+        with closing(ZSXQDatabase()) as db:
+            aggregated_topic_stats = db.get_database_stats()
+            aggregated_timestamp_info = db.get_timestamp_range_info()
 
-        if not groups_info:
-            return _empty_database_stats_response(True)
-
-        aggregated_topic_stats: Dict[str, int] = {}
-        aggregated_file_stats: Dict[str, int] = {}
-        aggregated_timestamp_info: Dict[str, Any] = {
-            "total_topics": 0,
-            "oldest_timestamp": "",
-            "newest_timestamp": "",
-            "has_data": False,
-        }
-
-        for gi in groups_info:
-            group_id = gi.get("group_id")
-            topics_db_path = gi.get("topics_db")
-            if not topics_db_path:
-                continue
-
-            with closing(ZSXQDatabase(topics_db_path)) as db:
-                topic_stats = db.get_database_stats()
-                ts_info = db.get_timestamp_range_info()
-
-            _add_table_counts(aggregated_topic_stats, topic_stats)
-            _merge_timestamp_info(aggregated_timestamp_info, ts_info)
-
-            db_paths = path_manager.list_group_databases(str(group_id))
-            files_db_path = db_paths.get("files")
-            if files_db_path:
-                with closing(ZSXQFileDatabase(files_db_path)) as fdb:
-                    file_stats = fdb.get_database_stats()
-
-                _add_table_counts(aggregated_file_stats, file_stats)
+        with closing(ZSXQFileDatabase()) as fdb:
+            aggregated_file_stats = fdb.get_database_stats()
 
         return {
             "configured": True,

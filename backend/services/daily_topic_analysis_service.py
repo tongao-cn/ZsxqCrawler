@@ -76,8 +76,7 @@ def _image_row_to_payload(row: Any, image_ref: str) -> Dict[str, Any]:
 
 
 def _connect_topics_db(group_id: str):
-    db_path = get_db_path_manager().get_topics_db_path(group_id)
-    return connect(db_path, row_factory=True)
+    return connect(row_factory=True)
 
 
 def _ensure_report_table(conn: Any) -> None:

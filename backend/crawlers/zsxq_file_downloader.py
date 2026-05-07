@@ -23,7 +23,7 @@ from backend.storage.zsxq_file_database import ZSXQFileDatabase
 class ZSXQFileDownloader:
     """知识星球文件下载器"""
     
-    def __init__(self, cookie: str, group_id: str, db_path: str = None, download_dir: str = "downloads",
+    def __init__(self, cookie: str, group_id: str, download_dir: str = "downloads",
                  download_interval: float = 1.0, long_sleep_interval: float = 60.0,
                  files_per_batch: int = 10, download_interval_min: float = None,
                  download_interval_max: float = None, long_sleep_interval_min: float = None,
@@ -34,7 +34,6 @@ class ZSXQFileDownloader:
         Args:
             cookie: 登录凭证
             group_id: 星球ID
-            db_path: 存储兼容 key（如果为 None，使用路径管理器默认 key）
             download_dir: 下载目录
             download_interval: 单次下载间隔（秒），默认1秒
             long_sleep_interval: 长休眠间隔（秒），默认60秒
@@ -66,14 +65,6 @@ class ZSXQFileDownloader:
             self.download_interval_max = 180  # 下载间隔最大值（3分钟）
             self.long_sleep_interval_min = 180  # 长休眠最小值（3分钟）
             self.long_sleep_interval_max = 300  # 长休眠最大值（5分钟）
-
-        # 如果没有指定存储兼容 key，使用路径管理器默认 key
-        if db_path is None:
-            from backend.core.db_path_manager import get_db_path_manager
-            path_manager = get_db_path_manager()
-            self.db_path = path_manager.get_files_db_path(group_id)
-        else:
-            self.db_path = db_path
 
         # 为每个群组创建专属的下载目录
         if download_dir == "downloads":  # 默认目录
@@ -111,9 +102,8 @@ class ZSXQFileDownloader:
         self.log(f"📁 下载目录: {os.path.abspath(self.download_dir)}")
 
         # 使用完整的文件数据库
-        self.file_db = ZSXQFileDatabase(self.db_path)
+        self.file_db = ZSXQFileDatabase(group_id)
         self.log(f"📊 完整文件存储初始化完成: PostgreSQL schema={CORE_SCHEMA}")
-        self.log(f"🔑 文件存储兼容 key: {self.db_path}")
 
     def log(self, message: str):
         """统一的日志输出方法"""
@@ -1350,7 +1340,6 @@ class ZSXQFileDownloader:
         print(f"\n📊 完整数据库统计信息:")
         print("="*60)
         print(f"📁 PostgreSQL schema: {CORE_SCHEMA}")
-        print(f"🔑 存储兼容 key: {self.db_path}")
         
         # 使用新数据库的统计方法
         stats = self.file_db.get_database_stats()

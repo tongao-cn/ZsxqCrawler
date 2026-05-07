@@ -1,22 +1,14 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-import os
 import json
 import threading
 from datetime import datetime
 from typing import Optional, Dict, Any, Tuple
 
-from backend.core.db_path_manager import get_db_path_manager
 from backend.storage.db_compat import connect
 
 _lock = threading.Lock()
-
-
-def _ensure_dir(path: str):
-    d = os.path.dirname(path)
-    if d and not os.path.exists(d):
-        os.makedirs(d, exist_ok=True)
 
 
 def _safe_load_json(s: Optional[str]) -> Any:
@@ -72,14 +64,10 @@ def _close_quietly(obj) -> None:
 class AccountInfoDB:
     """
     账号信息数据库：持久化 /v3/users/self 的用户信息
-    存储兼容 key：DatabasePathManager.get_config_db_path()
     表：accounts_self
     """
-    def __init__(self, db_path: Optional[str] = None):
-        pm = get_db_path_manager()
-        self.db_path = db_path or pm.get_config_db_path()
-        _ensure_dir(self.db_path)
-        self.conn = connect(self.db_path)
+    def __init__(self):
+        self.conn = connect()
         self.conn.execute("PRAGMA journal_mode=WAL;")
         self.conn.execute("PRAGMA foreign_keys=ON;")
         self.cursor = self.conn.cursor()

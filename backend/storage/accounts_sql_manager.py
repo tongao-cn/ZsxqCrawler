@@ -6,23 +6,14 @@
 支持多账号管理、默认账号设置、群组账号分配等功能
 """
 
-import os
 import threading
 import time
 from typing import Dict, Any, List, Optional, Tuple
 from datetime import datetime
 
-from backend.core.db_path_manager import get_db_path_manager
 from backend.storage.db_compat import connect
 
 _lock = threading.RLock()  # 使用可重入锁，避免同一线程重复获取锁导致死锁
-
-
-def _ensure_dir(path: str):
-    """确保目录存在"""
-    d = os.path.dirname(path)
-    if d and not os.path.exists(d):
-        os.makedirs(d, exist_ok=True)
 
 
 def _now_iso() -> str:
@@ -61,15 +52,11 @@ def _close_quietly(resource) -> None:
 class AccountsSQLManager:
     """
     账号SQL管理器
-    存储兼容 key：DatabasePathManager.get_config_db_path()
     表：accounts, group_account_map
     """
 
-    def __init__(self, db_path: Optional[str] = None):
-        pm = get_db_path_manager()
-        self.db_path = db_path or pm.get_config_db_path()
-        _ensure_dir(self.db_path)
-        self.conn = connect(self.db_path)
+    def __init__(self):
+        self.conn = connect()
         self.conn.execute("PRAGMA journal_mode=WAL;")
         self.conn.execute("PRAGMA foreign_keys=ON;")
         self.cursor = self.conn.cursor()

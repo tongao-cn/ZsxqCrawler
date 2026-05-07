@@ -12,7 +12,6 @@ from typing import Dict, Any, Optional, List
 from backend.storage.zsxq_database import ZSXQDatabase
 from backend.storage.postgres_core_schema import CORE_SCHEMA
 from backend.crawlers.zsxq_file_downloader import ZSXQFileDownloader
-from backend.core.db_path_manager import get_db_path_manager
 import os
 import argparse
 try:
@@ -29,21 +28,14 @@ except ImportError:
 class ZSXQInteractiveCrawler:
     """知识星球交互式数据采集器"""
     
-    def __init__(self, cookie: str, group_id: str, db_path: str = None, log_callback=None):
+    def __init__(self, cookie: str, group_id: str, log_callback=None):
         self.cookie = self.clean_cookie(cookie)
         self.group_id = group_id
         self.log_callback = log_callback  # 日志回调函数
         self.stop_flag = False  # 停止标志
         self.stop_check_func = None  # 停止检查函数
 
-        # 使用路径管理器获取存储兼容 key
-        path_manager = get_db_path_manager()
-        if db_path is None:
-            db_path = path_manager.get_topics_db_path(group_id)
-        files_db_path = path_manager.get_files_db_path(group_id)
-
-        self.db_path = db_path  # 保存存储兼容 key
-        self.db = ZSXQDatabase(db_path, files_db_path=files_db_path)
+        self.db = ZSXQDatabase(group_id)
         self.session = requests.Session()
 
         # 文件下载器（懒加载）
@@ -74,7 +66,6 @@ class ZSXQInteractiveCrawler:
         self.log(f"🚀 知识星球交互式采集器初始化完成")
         self.log(f"📊 目标群组: {group_id}")
         self.log(f"💾 PostgreSQL schema: {CORE_SCHEMA}")
-        self.log(f"🔑 存储兼容 key: {db_path}")
 
         # 显示当前数据库状态
         self.show_database_status()
@@ -183,10 +174,7 @@ class ZSXQInteractiveCrawler:
     def get_file_downloader(self):
         """获取文件下载器（懒加载）"""
         if self.file_downloader is None:
-            # 使用路径管理器获取文件存储兼容 key
-            path_manager = get_db_path_manager()
-            files_db_path = path_manager.get_files_db_path(self.group_id)
-            self.file_downloader = ZSXQFileDownloader(self.cookie, self.group_id, files_db_path)
+            self.file_downloader = ZSXQFileDownloader(self.cookie, self.group_id)
         return self.file_downloader
     
     def show_database_status(self):
@@ -1689,12 +1677,8 @@ def main():
     
     # 从TOML配置中获取值
     auth_config = config.get('auth', {})
-    db_config = config.get('database', {})
-    
     COOKIE = auth_config.get('cookie', 'your_cookie_here')
     GROUP_ID = auth_config.get('group_id', 'your_group_id_here')
-    # 存储兼容 key 改为可选；如未配置则由路径管理器自动管理
-    DB_PATH = db_config.get('path') if isinstance(db_config, dict) else None
     
     # 检查配置是否已修改
     if COOKIE == "your_cookie_here" or not COOKIE:
@@ -1705,7 +1689,7 @@ def main():
         return
     
     # 创建交互式爬虫
-    crawler = ZSXQInteractiveCrawler(COOKIE, GROUP_ID, DB_PATH)
+    crawler = ZSXQInteractiveCrawler(COOKIE, GROUP_ID)
     
     # 如果是自动下载模式
     if args.auto_download:

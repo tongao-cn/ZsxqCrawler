@@ -3,7 +3,6 @@
 
 import os
 from pathlib import Path
-from typing import Dict, Any
 
 _DEFAULT_CONFIG_TOML = """# 知识星球数据采集器配置文件
 # 首次启动自动生成；请按需修改
@@ -33,7 +32,7 @@ api_key = ""
 
 
 class DatabasePathManager:
-    """本地资源路径管理器 - 统一管理下载、图片缓存和兼容 storage key。"""
+    """本地资源路径管理器 - 统一管理下载和图片缓存目录。"""
     
     def __init__(self, base_dir: str = "output/databases"):
         # 以仓库根目录作为项目根目录，避免模块移动后把数据写入 backend/core。
@@ -70,18 +69,8 @@ class DatabasePathManager:
         """确保目录存在。"""
         if not os.path.exists(path):
             os.makedirs(path, exist_ok=True)
-            print(f"📁 创建{label}: {path}")
+            print(f"创建{label}: {path}")
 
-    def _get_group_db_path(self, group_id: str, db_name: str) -> str:
-        """构造指定群组的兼容 storage key；PostgreSQL 固定写入 zsxq_core。"""
-        normalized_group_id = self._normalize_group_id(group_id)
-        group_dir = self.get_group_dir(normalized_group_id)
-        return os.path.join(group_dir, f"zsxq_{db_name}_{normalized_group_id}.db")
-
-    def _get_config_db_path(self) -> str:
-        """构造全局配置兼容 storage key；PostgreSQL 固定写入 zsxq_core。"""
-        return os.path.join(self.base_dir, "zsxq_config.db")
-    
     def get_group_dir(self, group_id: str) -> str:
         """获取指定群组的本地资源目录。"""
         group_dir = os.path.join(self.base_dir, self._normalize_group_id(group_id))
@@ -92,105 +81,6 @@ class DatabasePathManager:
         """获取指定群组的数据目录（返回Path对象）"""
         return Path(self.get_group_dir(group_id))
     
-    def get_topics_db_path(self, group_id: str) -> str:
-        """获取话题存储兼容 key。"""
-        return self._get_group_db_path(group_id, "topics")
-    
-    def get_files_db_path(self, group_id: str) -> str:
-        """获取文件存储兼容 key。"""
-        return self._get_group_db_path(group_id, "files")
-    
-    def get_columns_db_path(self, group_id: str) -> str:
-        """获取专栏存储兼容 key。"""
-        return self._get_group_db_path(group_id, "columns")
-    
-    def get_config_db_path(self) -> str:
-        """获取配置存储兼容 key（全局配置，不按群组分）。"""
-        return self._get_config_db_path()
-    
-    def get_main_db_path(self, group_id: str) -> str:
-        """获取主存储兼容 key（兼容旧版本）。"""
-        return self.get_topics_db_path(group_id)
-    
-    def list_group_databases(self, group_id: str) -> Dict[str, str]:
-        """列出指定群组目录中仍存在的历史本地数据库文件。"""
-        group_dir = self.get_group_dir(group_id)
-        databases = {}
-        
-        # 历史话题数据库文件
-        topics_db = self.get_topics_db_path(group_id)
-        if os.path.exists(topics_db):
-            databases['topics'] = topics_db
-        
-        # 历史文件数据库文件
-        files_db = self.get_files_db_path(group_id)
-        if os.path.exists(files_db):
-            databases['files'] = files_db
-        
-        return databases
-    
-    def get_database_info(self, group_id: str) -> Dict[str, Any]:
-        """获取历史本地数据库文件信息。"""
-        databases = self.list_group_databases(group_id)
-        info = {
-            'group_id': group_id,
-            'group_dir': self.get_group_dir(group_id),
-            'databases': {}
-        }
-        
-        for db_type, db_path in databases.items():
-            if os.path.exists(db_path):
-                stat = os.stat(db_path)
-                info['databases'][db_type] = {
-                    'path': db_path,
-                    'size': stat.st_size,
-                    'modified': stat.st_mtime
-                }
-        
-        return info
-    
-    def migrate_old_databases(self, group_id: str, old_paths: Dict[str, str]) -> Dict[str, str]:
-        """迁移旧的本地数据库文件到新的本地资源目录结构。"""
-        migration_results = {}
-        
-        for db_type, old_path in old_paths.items():
-            if not os.path.exists(old_path):
-                continue
-            
-            if db_type == 'topics':
-                new_path = self.get_topics_db_path(group_id)
-            elif db_type == 'files':
-                new_path = self.get_files_db_path(group_id)
-            else:
-                continue
-            
-            try:
-                # 如果新路径已存在，备份
-                if os.path.exists(new_path):
-                    backup_path = f"{new_path}.backup"
-                    os.rename(new_path, backup_path)
-                    print(f"📦 备份现有历史数据库文件: {backup_path}")
-                
-                # 移动文件
-                os.rename(old_path, new_path)
-                migration_results[db_type] = {
-                    'old_path': old_path,
-                    'new_path': new_path,
-                    'status': 'success'
-                }
-                print(f"✅ 迁移历史数据库文件: {old_path} -> {new_path}")
-                
-            except Exception as e:
-                migration_results[db_type] = {
-                    'old_path': old_path,
-                    'new_path': new_path,
-                    'status': 'failed',
-                    'error': str(e)
-                }
-                print(f"❌ 迁移失败: {old_path} -> {new_path}, 错误: {e}")
-        
-        return migration_results
-    
     def list_all_groups(self) -> list:
         """列出所有存在的群组ID"""
         groups = []
@@ -200,14 +90,10 @@ class DatabasePathManager:
         for item in os.listdir(self.base_dir):
             item_path = os.path.join(self.base_dir, item)
             if os.path.isdir(item_path) and item.isdigit():  # 群组ID目录
-                # 仅兼容历史本地数据库文件；PostgreSQL group 列表来自 zsxq_core/zsxq_public。
-                topics_db = self.get_topics_db_path(item)
-                if os.path.exists(topics_db):
-                    groups.append({
-                        'group_id': item,
-                        'group_dir': item_path,
-                        'topics_db': topics_db
-                    })
+                groups.append({
+                    'group_id': item,
+                    'group_dir': item_path,
+                })
         
         return groups
     
@@ -221,7 +107,7 @@ class DatabasePathManager:
             if os.path.isdir(item_path) and item.isdigit():  # 群组ID目录
                 if not os.listdir(item_path):  # 空目录
                     os.rmdir(item_path)
-                    print(f"🗑️ 删除空目录: {item_path}")
+                    print(f"删除空目录: {item_path}")
 
 # 全局实例
 db_path_manager = DatabasePathManager()

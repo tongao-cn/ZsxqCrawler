@@ -68,10 +68,10 @@ def _close_connection(conn: Any) -> None:
 class ZSXQFileDatabase:
     """知识星球文件列表数据库管理工具 - 完全匹配API响应结构"""
     
-    def __init__(self, db_path: str = "zsxq_files_complete.db"):
+    def __init__(self, group_id: Optional[str] = None):
         """初始化数据库连接"""
-        self.db_path = db_path
-        self.conn = connect(db_path)
+        self.group_id = str(group_id) if group_id is not None else None
+        self.conn = connect()
         self.cursor = self.conn.cursor()
         self.create_tables()
     

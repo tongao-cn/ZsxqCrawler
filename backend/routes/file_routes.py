@@ -71,16 +71,12 @@ def _safe_filename(file_name: str, fallback: str) -> str:
     return safe or fallback
 
 
-def _get_files_db_path(group_id: str) -> str:
-    return get_db_path_manager().get_files_db_path(group_id)
-
-
 def _open_file_db(group_id: str) -> ZSXQFileDatabase:
-    return ZSXQFileDatabase(_get_files_db_path(group_id))
+    return ZSXQFileDatabase(group_id)
 
 
 def _clear_group_file_data(group_id: str) -> dict:
-    conn = connect("zsxq_core_files")
+    conn = connect()
     try:
         cursor = conn.cursor()
         deleted_counts = {}
@@ -241,9 +237,7 @@ def _create_file_downloader(
         return is_task_stopped(task_id)
 
     cookie = get_cookie_for_group(group_id)
-    path_manager = get_db_path_manager()
-    db_path = path_manager.get_files_db_path(group_id)
-    downloader = ZSXQFileDownloader(cookie=cookie, group_id=group_id, db_path=db_path, **kwargs)
+    downloader = ZSXQFileDownloader(cookie=cookie, group_id=group_id, **kwargs)
     downloader.log_callback = log_callback
     downloader.stop_check_func = stop_check
     file_downloader_instances[task_id] = downloader
@@ -762,14 +756,7 @@ async def sync_files_from_topics(group_id: str):
     """从话题库 topic_files 回填/重建文件库记录。"""
     topics_db = None
     try:
-        path_manager = get_db_path_manager()
-        topics_db_path = path_manager.get_topics_db_path(group_id)
-        files_db_path = path_manager.get_files_db_path(group_id)
-
-        if not os.path.exists(topics_db_path):
-            raise HTTPException(status_code=404, detail="话题数据库不存在，请先采集话题")
-
-        topics_db = ZSXQDatabase(topics_db_path, files_db_path=files_db_path)
+        topics_db = ZSXQDatabase(group_id)
         stats = topics_db.backfill_topic_files_to_file_database()
         return _build_sync_files_response(group_id, stats)
     except HTTPException:

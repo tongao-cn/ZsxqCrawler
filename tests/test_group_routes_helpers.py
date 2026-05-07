@@ -13,15 +13,11 @@ if HAS_GROUP_ROUTE_DEPS:
 
 
 class FakePathManager:
-    def __init__(self, group_dir=None, topics_db=None):
+    def __init__(self, group_dir=None):
         self.group_dir = group_dir
-        self.topics_db = topics_db
 
     def get_group_data_dir(self, group_id):
         return self.group_dir
-
-    def list_group_databases(self, group_id):
-        return {"topics": self.topics_db}
 
 
 class FakeCursor:
@@ -43,8 +39,8 @@ class FakeCursor:
 class FakeDb:
     last_instance = None
 
-    def __init__(self, path):
-        self.path = path
+    def __init__(self, group_id=None):
+        self.group_id = group_id
         self.cursor = FakeCursor()
         self.closed = False
         FakeDb.last_instance = self
@@ -105,10 +101,6 @@ class GroupRoutesHelperTests(unittest.TestCase):
         fields = group_routes._default_local_group_fields(123)
 
         with patch.object(
-            group_routes,
-            "get_db_path_manager",
-            return_value=FakePathManager(topics_db="topics.sqlite"),
-        ), patch.object(group_routes.os.path, "exists", return_value=True), patch.object(
             group_routes, "ZSXQDatabase", FakeDb
         ):
             updated = group_routes._load_local_group_db_fields(123, fields)
@@ -121,6 +113,7 @@ class GroupRoutesHelperTests(unittest.TestCase):
         self.assertEqual(updated["last_active_time"], "2024-02-01T00:00:00Z")
         self.assertEqual(updated["statistics"]["topics"]["topics_count"], 12)
         self.assertTrue(FakeDb.last_instance.closed)
+        self.assertEqual(FakeDb.last_instance.group_id, "123")
         self.assertEqual(len(FakeDb.last_instance.cursor.calls), 3)
 
     def test_build_group_info_fallback_coerces_numeric_id_and_adds_note(self):

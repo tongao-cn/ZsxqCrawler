@@ -98,9 +98,7 @@ def _safe_filename(file_name: str, fallback_file_id: int) -> str:
 
 
 def _get_file_db(group_id: str) -> ZSXQFileDatabase:
-    path_manager = get_db_path_manager()
-    db_path = path_manager.get_files_db_path(group_id)
-    return ZSXQFileDatabase(db_path)
+    return ZSXQFileDatabase(group_id)
 
 
 def resolve_local_file_path(group_id: str, file_id: int, file_name: str, local_path: Optional[str]) -> Optional[Path]:
