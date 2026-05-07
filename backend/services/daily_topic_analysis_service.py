@@ -5,7 +5,6 @@ from __future__ import annotations
 import base64
 import json
 import mimetypes
-import sqlite3
 from datetime import date, datetime, time, timedelta, timezone
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
@@ -21,6 +20,7 @@ from backend.core.ai_provider_config import (
 )
 from backend.core.db_path_manager import get_db_path_manager
 from backend.core.image_cache_manager import get_image_cache_manager
+from backend.storage.db_compat import connect
 
 
 MAX_TOPIC_CHARS = 5000
@@ -63,7 +63,7 @@ def _clip(text: Any, limit: int) -> str:
     return value[:limit].rstrip() + "\n...[内容过长，已截断]"
 
 
-def _image_row_to_payload(row: sqlite3.Row, image_ref: str) -> Dict[str, Any]:
+def _image_row_to_payload(row: Any, image_ref: str) -> Dict[str, Any]:
     url = row["large_url"] or row["original_url"] or row["thumbnail_url"] or ""
     return {
         "image_ref": image_ref,
@@ -75,14 +75,12 @@ def _image_row_to_payload(row: sqlite3.Row, image_ref: str) -> Dict[str, Any]:
     }
 
 
-def _connect_topics_db(group_id: str) -> sqlite3.Connection:
+def _connect_topics_db(group_id: str):
     db_path = get_db_path_manager().get_topics_db_path(group_id)
-    conn = sqlite3.connect(db_path)
-    conn.row_factory = sqlite3.Row
-    return conn
+    return connect(db_path, row_factory=True)
 
 
-def _ensure_report_table(conn: sqlite3.Connection) -> None:
+def _ensure_report_table(conn: Any) -> None:
     conn.execute(
         """
         CREATE TABLE IF NOT EXISTS daily_ai_reports (
@@ -106,7 +104,7 @@ def _ensure_report_table(conn: sqlite3.Connection) -> None:
 
 
 def _upsert_report(
-    conn: sqlite3.Connection,
+    conn: Any,
     *,
     group_id: str,
     report_date: str,
@@ -150,7 +148,7 @@ def _upsert_report(
 
 
 def _fetch_topics_for_date(
-    conn: sqlite3.Connection,
+    conn: Any,
     *,
     group_id: str,
     report_date: date,
@@ -295,6 +293,41 @@ def _build_prompt_payload(group_id: str, report_date: str, topics: List[Dict[str
     }
     text = json.dumps(payload, ensure_ascii=False, indent=2)
     return _clip(text, MAX_PROMPT_CHARS)
+
+
+def _build_empty_report_summary(report_date: str) -> str:
+    return (
+        "# 每日话题分析报告\n\n"
+        f"日期：{report_date}\n\n"
+        "当天没有采集到话题。建议先确认当天最新数据已完成抓取，或检查群组是否确实无新增内容。\n"
+    )
+
+
+def _build_report_metadata(
+    *,
+    group_id: str,
+    report_date: str,
+    topics: List[Dict[str, Any]],
+    report_path: str,
+) -> Dict[str, Any]:
+    return {
+        "group_id": group_id,
+        "report_date": report_date,
+        "topic_count": len(topics),
+        "topic_ids": [topic["topic_id"] for topic in topics],
+        "image_refs": [image["image_ref"] for image in _collect_report_images(topics)],
+        "report_path": report_path,
+    }
+
+
+def _parse_report_raw_json(value: Any) -> Dict[str, Any]:
+    if not value:
+        return {}
+    try:
+        parsed = json.loads(value)
+    except Exception:
+        return {}
+    return parsed if isinstance(parsed, dict) else {}
 
 
 def _collect_report_images(topics: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -466,11 +499,7 @@ def analyze_daily_topics(
         _log(log_callback, f"📊 当天话题数量: {topic_count}")
 
         if topic_count == 0:
-            summary = (
-                "# 每日话题分析报告\n\n"
-                f"日期：{report_date_text}\n\n"
-                "当天没有采集到话题。建议先确认当天最新数据已完成抓取，或检查群组是否确实无新增内容。\n"
-            )
+            summary = _build_empty_report_summary(report_date_text)
             model = ""
         else:
             prompt_payload = _build_prompt_payload(group_id, report_date_text, topics)
@@ -488,14 +517,12 @@ def analyze_daily_topics(
                 raise RuntimeError("AI 返回内容为空")
 
         report_path = _write_report_file(group_id, report_date_text, summary)
-        raw_json = {
-            "group_id": group_id,
-            "report_date": report_date_text,
-            "topic_count": topic_count,
-            "topic_ids": [topic["topic_id"] for topic in topics],
-            "image_refs": [image["image_ref"] for image in _collect_report_images(topics)],
-            "report_path": report_path,
-        }
+        raw_json = _build_report_metadata(
+            group_id=group_id,
+            report_date=report_date_text,
+            topics=topics,
+            report_path=report_path,
+        )
         _upsert_report(
             conn,
             group_id=group_id,
@@ -549,12 +576,7 @@ def get_daily_report(group_id: str, report_date: Optional[str] = None) -> Option
         ).fetchone()
         if not row:
             return None
-        raw_json = {}
-        if row["raw_json"]:
-            try:
-                raw_json = json.loads(row["raw_json"])
-            except Exception:
-                raw_json = {}
+        raw_json = _parse_report_raw_json(row["raw_json"])
         return {
             "group_id": row["group_id"],
             "report_date": row["report_date"],

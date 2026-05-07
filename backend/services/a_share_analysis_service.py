@@ -3,12 +3,12 @@ import csv
 import json
 import os
 import time
-import sqlite3
 from collections import defaultdict
 from datetime import datetime, timedelta
 from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Set, Tuple
 
 from backend.core.db_path_manager import get_db_path_manager
+from backend.storage.db_compat import connect, get_database_backend
 from backend.core.ai_provider_config import (
     get_default_base_url,
     get_default_model,
@@ -196,6 +196,20 @@ def validate_day(day: Optional[str], field_name: str = "date") -> Optional[str]:
         raise ValueError(f"{field_name} 必须是 YYYY-MM-DD 格式") from exc
 
 
+def _normalize_date_range(
+    start_date: Optional[str],
+    end_date: Optional[str],
+    start_field_name: str = "start_date",
+    end_field_name: str = "end_date",
+    reverse_error: str = "start_date 不能晚于 end_date",
+) -> Tuple[str, str]:
+    start_day = validate_day(start_date, start_field_name) or ""
+    end_day = validate_day(end_date, end_field_name) or ""
+    if start_day > end_day:
+        raise ValueError(reverse_error)
+    return start_day, end_day
+
+
 def get_last_days_range(days: int) -> Tuple[datetime, datetime]:
     now = datetime.now()
     return now - timedelta(days=days), now
@@ -227,11 +241,11 @@ def read_topics_last_days(group_id: str, days: int, log_callback: LogCallback = 
     path_manager = get_db_path_manager()
     topics_db = path_manager.get_topics_db_path(group_id)
     items: List[Dict[str, Any]] = []
-    if not os.path.exists(topics_db):
+    if get_database_backend() != "postgres" and not os.path.exists(topics_db):
         _emit_log(f"topics db not found: {topics_db}", log_callback, level="warning")
         return items
 
-    conn = sqlite3.connect(topics_db, check_same_thread=False)
+    conn = connect(topics_db)
     cur = conn.cursor()
     cur.execute("SELECT t.topic_id, t.title, t.create_time FROM topics t")
     rows = cur.fetchall()
@@ -776,10 +790,7 @@ def reset_analysis_range(
     state_path: str = DEFAULT_STATE_PATH,
     group_id: Optional[str] = None,
 ) -> Dict[str, Any]:
-    start_date = validate_day(start_date, "start_date") or ""
-    end_date = validate_day(end_date, "end_date") or ""
-    if start_date > end_date:
-        raise ValueError("start_date 不能晚于 end_date")
+    start_date, end_date = _normalize_date_range(start_date, end_date)
 
     resolved_output_path, resolved_state_path = resolve_analysis_paths(output_path, state_path, group_id)
     daily = read_existing_csv(resolved_output_path, group_id=group_id)
@@ -818,7 +829,7 @@ def get_source_topics_summary(group_id: Optional[str] = None) -> Dict[str, Any]:
 
     path_manager = get_db_path_manager()
     topics_db = path_manager.get_topics_db_path(normalized_group_id)
-    if not os.path.exists(topics_db):
+    if get_database_backend() != "postgres" and not os.path.exists(topics_db):
         return {
             "topics_db_exists": False,
             "topics_count": 0,
@@ -826,7 +837,7 @@ def get_source_topics_summary(group_id: Optional[str] = None) -> Dict[str, Any]:
             "latest_topic_time": None,
         }
 
-    conn = sqlite3.connect(topics_db, check_same_thread=False)
+    conn = connect(topics_db)
     try:
         cur = conn.cursor()
         cur.execute("SELECT COUNT(*), MIN(create_time), MAX(create_time) FROM topics")
@@ -911,6 +922,43 @@ def _color_for_name(name: str) -> str:
     return f"hsl({hue}, {saturation}%, {lightness}%)"
 
 
+def _select_available_date_range(
+    available_dates: Sequence[str],
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+) -> Tuple[str, str, List[str]]:
+    selected_start = validate_day(start_date, "start_date") or available_dates[0]
+    selected_end = validate_day(end_date, "end_date") or available_dates[-1]
+    if selected_start > selected_end:
+        selected_start, selected_end = selected_end, selected_start
+    range_dates = [day for day in available_dates if selected_start <= day <= selected_end]
+    return selected_start, selected_end, range_dates
+
+
+def _empty_chart_payload(
+    group_id: Optional[str],
+    available_dates: Sequence[str],
+    selected_start_date: Optional[str],
+    selected_end_date: Optional[str],
+    top_n: int,
+    ranking_top_n: int,
+) -> Dict[str, Any]:
+    return {
+        "group_id": normalize_group_id(group_id),
+        "available_dates": list(available_dates),
+        "selected_start_date": selected_start_date,
+        "selected_end_date": selected_end_date,
+        "chart_data": [],
+        "series": [],
+        "rankings": {},
+        "date_count": 0,
+        "company_count": 0,
+        "total_companies_in_range": 0,
+        "top_n": top_n,
+        "ranking_top_n": ranking_top_n,
+    }
+
+
 def build_chart_payload(
     output_path: str = DEFAULT_OUTPUT_PATH,
     start_date: Optional[str] = None,
@@ -924,42 +972,25 @@ def build_chart_payload(
     daily = read_existing_csv(resolved_output_path, group_id=group_id)
     available_dates = sorted(daily.keys())
     if not available_dates:
-        return {
-            "group_id": normalize_group_id(group_id),
-            "available_dates": [],
-            "selected_start_date": None,
-            "selected_end_date": None,
-            "chart_data": [],
-            "series": [],
-            "rankings": {},
-            "date_count": 0,
-            "company_count": 0,
-            "total_companies_in_range": 0,
-            "top_n": top_n,
-            "ranking_top_n": ranking_top_n,
-        }
+        return _empty_chart_payload(
+            normalize_group_id(group_id),
+            [],
+            None,
+            None,
+            top_n,
+            ranking_top_n,
+        )
 
-    selected_start = validate_day(start_date, "start_date") or available_dates[0]
-    selected_end = validate_day(end_date, "end_date") or available_dates[-1]
-    if selected_start > selected_end:
-        selected_start, selected_end = selected_end, selected_start
-
-    range_dates = [day for day in available_dates if selected_start <= day <= selected_end]
+    selected_start, selected_end, range_dates = _select_available_date_range(available_dates, start_date, end_date)
     if not range_dates:
-        return {
-            "group_id": normalize_group_id(group_id),
-            "available_dates": available_dates,
-            "selected_start_date": selected_start,
-            "selected_end_date": selected_end,
-            "chart_data": [],
-            "series": [],
-            "rankings": {},
-            "date_count": 0,
-            "company_count": 0,
-            "total_companies_in_range": 0,
-            "top_n": top_n,
-            "ranking_top_n": ranking_top_n,
-        }
+        return _empty_chart_payload(
+            group_id,
+            available_dates,
+            selected_start,
+            selected_end,
+            top_n,
+            ranking_top_n,
+        )
 
     company_totals: Dict[str, int] = defaultdict(int)
     for day in range_dates:
@@ -1055,10 +1086,13 @@ def run_analysis(
     if reset_start_date or reset_end_date:
         if not reset_start_date or not reset_end_date:
             raise ValueError("reset_start_date 和 reset_end_date 需要同时提供")
-        start_day = validate_day(reset_start_date, "reset_start_date") or ""
-        end_day = validate_day(reset_end_date, "reset_end_date") or ""
-        if start_day > end_day:
-            raise ValueError("reset_start_date 不能晚于 reset_end_date")
+        start_day, end_day = _normalize_date_range(
+            reset_start_date,
+            reset_end_date,
+            "reset_start_date",
+            "reset_end_date",
+            "reset_start_date 不能晚于 reset_end_date",
+        )
 
         existing_daily, removed_daily = remove_daily_range(existing_daily, start_day, end_day)
         processed_keys, removed_state_in_range = remove_state_range(processed_keys, start_day, end_day)

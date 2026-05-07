@@ -394,6 +394,114 @@ def resolve_company_codes(
     return resolved, unresolved, ambiguous
 
 
+def _collect_ranking_companies(rankings: Mapping[str, Any], ranking_windows: Sequence[int]) -> List[str]:
+    all_companies: List[str] = []
+    for window in ranking_windows:
+        window_rows = rankings.get(str(window)) or []
+        all_companies.extend(
+            str(item.get("company") or "").strip()
+            for item in window_rows
+            if str(item.get("company") or "").strip()
+        )
+    return all_companies
+
+
+def _build_pending_block_write(
+    window: int,
+    rankings: Mapping[str, Any],
+    resolved_codes: Mapping[str, str],
+    cfg_by_name: Mapping[str, Mapping[str, str]],
+    block_dir: Path,
+) -> Tuple[int, str, str, Path, List[str], List[str]]:
+    block_name = RANKING_BLOCK_NAMES.get(int(window), f"{int(window)}日推荐池")
+    cfg_record = cfg_by_name[block_name]
+    block_code = str(cfg_record.get("code") or "").strip()
+    if not block_code:
+        raise RuntimeError(f"板块 {block_name} 在 blocknew.cfg 中没有有效代码")
+
+    ranking_rows = rankings.get(str(window)) or []
+    converted_codes: List[str] = []
+    skipped_companies: List[str] = []
+
+    for item in ranking_rows:
+        company = str(item.get("company") or "").strip()
+        if not company:
+            continue
+
+        ts_code = resolved_codes.get(company)
+        if not ts_code:
+            skipped_companies.append(company)
+            continue
+
+        tdx_code = _normalize_tdx_code(ts_code)
+        if not tdx_code:
+            skipped_companies.append(company)
+            continue
+        converted_codes.append(tdx_code)
+
+    return (
+        int(window),
+        block_name,
+        block_code,
+        block_dir / f"{block_code}.blk",
+        _dedupe_keep_order(converted_codes),
+        _dedupe_keep_order(skipped_companies),
+    )
+
+
+def _build_block_export_result(
+    window: int,
+    block_name: str,
+    block_code: str,
+    blk_path: Path,
+    converted_codes: Sequence[str],
+    skipped_companies: Sequence[str],
+) -> Dict[str, Any]:
+    return {
+        "window_days": window,
+        "block_name": block_name,
+        "block_code": block_code,
+        "block_path": str(blk_path),
+        "written_count": len(converted_codes),
+        "skipped_count": len(skipped_companies),
+        "skipped_companies": list(skipped_companies),
+    }
+
+
+def _build_export_result(
+    *,
+    normalized_group_id: Optional[str],
+    resolved_root: Path,
+    chart_payload: Mapping[str, Any],
+    ranking_top_n: int,
+    stock_basic_source: str,
+    source_detail: str,
+    backup_files: List[str],
+    block_results: List[Dict[str, Any]],
+    total_written: int,
+    aggregate_skipped: List[str],
+    ambiguous_companies: Dict[str, List[str]],
+    effective_export_id: Optional[int],
+) -> Dict[str, Any]:
+    return {
+        "group_id": normalized_group_id,
+        "exported_at": datetime.now().isoformat(),
+        "tdx_root": str(resolved_root),
+        "selected_start_date": chart_payload.get("selected_start_date"),
+        "selected_end_date": chart_payload.get("selected_end_date"),
+        "ranking_top_n": ranking_top_n,
+        "used_stock_cache": stock_basic_source == "cache",
+        "stock_basic_source": stock_basic_source,
+        "stock_cache_path": source_detail,
+        "backup_files": backup_files,
+        "blocks": block_results,
+        "total_written": total_written,
+        "unresolved_companies": _dedupe_keep_order(aggregate_skipped),
+        "ambiguous_companies": ambiguous_companies,
+        "export_id": effective_export_id,
+    }
+
+
 def _resolve_tdx_root(
     explicit_root: Optional[str] = None,
     env_path: Path = DEFAULT_KNOW_ACTION_ENV_PATH,
@@ -448,14 +556,7 @@ def export_a_share_rankings_to_tdx(
     )
 
     rankings = chart_payload.get("rankings") or {}
-    all_companies: List[str] = []
-    for window in ranking_windows:
-        window_rows = rankings.get(str(window)) or []
-        all_companies.extend(
-            str(item.get("company") or "").strip()
-            for item in window_rows
-            if str(item.get("company") or "").strip()
-        )
+    all_companies = _collect_ranking_companies(rankings, ranking_windows)
 
     stock_records, stock_basic_source, source_detail = load_stock_basic_records(env_path=env_path)
     resolved_codes, unresolved_companies, ambiguous_companies = resolve_company_codes(all_companies, stock_records)
@@ -480,44 +581,10 @@ def export_a_share_rankings_to_tdx(
             + "、".join(missing_block_names)
         )
 
-    pending_writes: List[Tuple[int, str, str, Path, List[str], List[str]]] = []
-    for window in ranking_windows:
-        block_name = RANKING_BLOCK_NAMES.get(int(window), f"{int(window)}日推荐池")
-        cfg_record = cfg_by_name[block_name]
-        block_code = str(cfg_record.get("code") or "").strip()
-        if not block_code:
-            raise RuntimeError(f"板块 {block_name} 在 blocknew.cfg 中没有有效代码")
-
-        ranking_rows = rankings.get(str(window)) or []
-        converted_codes: List[str] = []
-        skipped_companies: List[str] = []
-
-        for item in ranking_rows:
-            company = str(item.get("company") or "").strip()
-            if not company:
-                continue
-
-            ts_code = resolved_codes.get(company)
-            if not ts_code:
-                skipped_companies.append(company)
-                continue
-
-            tdx_code = _normalize_tdx_code(ts_code)
-            if not tdx_code:
-                skipped_companies.append(company)
-                continue
-            converted_codes.append(tdx_code)
-
-        pending_writes.append(
-            (
-                int(window),
-                block_name,
-                block_code,
-                block_dir / f"{block_code}.blk",
-                _dedupe_keep_order(converted_codes),
-                _dedupe_keep_order(skipped_companies),
-            )
-        )
+    pending_writes = [
+        _build_pending_block_write(int(window), rankings, resolved_codes, cfg_by_name, block_dir)
+        for window in ranking_windows
+    ]
 
     backup_dir = block_dir / f"backup_a_share_export_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
     backup_files = _backup_targets(
@@ -534,15 +601,14 @@ def export_a_share_rankings_to_tdx(
         total_written += len(converted_codes)
         aggregate_skipped.extend(skipped_companies)
         block_results.append(
-            {
-                "window_days": window,
-                "block_name": block_name,
-                "block_code": block_code,
-                "block_path": str(blk_path),
-                "written_count": len(converted_codes),
-                "skipped_count": len(skipped_companies),
-                "skipped_companies": skipped_companies,
-            }
+            _build_block_export_result(
+                window,
+                block_name,
+                block_code,
+                blk_path,
+                converted_codes,
+                skipped_companies,
+            )
         )
 
     export_id: Optional[int] = None
@@ -567,23 +633,20 @@ def export_a_share_rankings_to_tdx(
     if normalized_group_id is not None and effective_export_id is None:
         effective_export_id = int(datetime.now().timestamp())
 
-    result = {
-        "group_id": normalized_group_id,
-        "exported_at": datetime.now().isoformat(),
-        "tdx_root": str(resolved_root),
-        "selected_start_date": chart_payload.get("selected_start_date"),
-        "selected_end_date": chart_payload.get("selected_end_date"),
-        "ranking_top_n": ranking_top_n,
-        "used_stock_cache": stock_basic_source == "cache",
-        "stock_basic_source": stock_basic_source,
-        "stock_cache_path": source_detail,
-        "backup_files": backup_files,
-        "blocks": block_results,
-        "total_written": total_written,
-        "unresolved_companies": _dedupe_keep_order(aggregate_skipped),
-        "ambiguous_companies": ambiguous_companies,
-        "export_id": effective_export_id,
-    }
+    result = _build_export_result(
+        normalized_group_id=normalized_group_id,
+        resolved_root=resolved_root,
+        chart_payload=chart_payload,
+        ranking_top_n=ranking_top_n,
+        stock_basic_source=stock_basic_source,
+        source_detail=source_detail,
+        backup_files=backup_files,
+        block_results=block_results,
+        total_written=total_written,
+        aggregate_skipped=aggregate_skipped,
+        ambiguous_companies=ambiguous_companies,
+        effective_export_id=effective_export_id,
+    )
 
     if normalized_group_id is not None:
         _write_group_latest_export(normalized_group_id, result)

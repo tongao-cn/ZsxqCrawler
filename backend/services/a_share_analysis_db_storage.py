@@ -497,6 +497,67 @@ def _normalize_json_value(value: Any, default: Any):
     return default
 
 
+def _tdx_export_block_payload(row: Sequence[Any]) -> Dict[str, Any]:
+    (
+        window_days,
+        block_name,
+        block_code,
+        block_path,
+        written_count,
+        skipped_count,
+        skipped_companies,
+    ) = row
+    return {
+        "window_days": int(window_days or 0),
+        "block_name": str(block_name or ""),
+        "block_code": str(block_code or ""),
+        "block_path": str(block_path or ""),
+        "written_count": int(written_count or 0),
+        "skipped_count": int(skipped_count or 0),
+        "skipped_companies": _normalize_json_value(skipped_companies, []),
+    }
+
+
+def _dedupe_company_names(values: Iterable[Any]) -> List[str]:
+    return sorted({str(value) for value in values if str(value).strip()})
+
+
+def _latest_tdx_export_payload(row: Sequence[Any], blocks: Sequence[Dict[str, Any]]) -> Dict[str, Any]:
+    (
+        export_id,
+        exported_at,
+        start_date,
+        end_date,
+        tdx_root,
+        ranking_top_n,
+        total_written,
+        unresolved_count,
+        stock_basic_source,
+        source_detail,
+        backup_files,
+    ) = row
+
+    unresolved_companies: List[Any] = []
+    for block in blocks:
+        unresolved_companies.extend(list(block.get("skipped_companies") or []))
+
+    return {
+        "export_id": int(export_id),
+        "exported_at": exported_at.isoformat() if hasattr(exported_at, "isoformat") else str(exported_at),
+        "start_date": start_date,
+        "end_date": end_date,
+        "tdx_root": str(tdx_root or ""),
+        "ranking_top_n": int(ranking_top_n or 0),
+        "total_written": int(total_written or 0),
+        "unresolved_count": int(unresolved_count or 0),
+        "unresolved_companies": _dedupe_company_names(unresolved_companies),
+        "stock_basic_source": str(stock_basic_source or ""),
+        "source_detail": str(source_detail or ""),
+        "backup_files": _normalize_json_value(backup_files, []),
+        "blocks": list(blocks),
+    }
+
+
 def get_latest_tdx_export(env_path: Path = DEFAULT_KNOW_ACTION_ENV_PATH) -> Optional[Dict[str, Any]]:
     ensure_analysis_tables(env_path)
 
@@ -556,47 +617,11 @@ def get_latest_tdx_export(env_path: Path = DEFAULT_KNOW_ACTION_ENV_PATH) -> Opti
                 (export_id,),
             )
             blocks = [
-                {
-                    "window_days": int(window_days or 0),
-                    "block_name": str(block_name or ""),
-                    "block_code": str(block_code or ""),
-                    "block_path": str(block_path or ""),
-                    "written_count": int(written_count or 0),
-                    "skipped_count": int(skipped_count or 0),
-                    "skipped_companies": _normalize_json_value(skipped_companies, []),
-                }
-                for (
-                    window_days,
-                    block_name,
-                    block_code,
-                    block_path,
-                    written_count,
-                    skipped_count,
-                    skipped_companies,
-                ) in cur.fetchall()
+                _tdx_export_block_payload(block_row)
+                for block_row in cur.fetchall()
             ]
 
-    unresolved_companies: List[str] = []
-    for block in blocks:
-        unresolved_companies.extend(list(block.get("skipped_companies") or []))
-
-    dedup_unresolved = sorted({str(company) for company in unresolved_companies if str(company).strip()})
-
-    return {
-        "export_id": int(export_id),
-        "exported_at": exported_at.isoformat() if hasattr(exported_at, "isoformat") else str(exported_at),
-        "start_date": start_date,
-        "end_date": end_date,
-        "tdx_root": str(tdx_root or ""),
-        "ranking_top_n": int(ranking_top_n or 0),
-        "total_written": int(total_written or 0),
-        "unresolved_count": int(unresolved_count or 0),
-        "unresolved_companies": dedup_unresolved,
-        "stock_basic_source": str(stock_basic_source or ""),
-        "source_detail": str(source_detail or ""),
-        "backup_files": _normalize_json_value(backup_files, []),
-        "blocks": blocks,
-    }
+    return _latest_tdx_export_payload(row, blocks)
 
 
 __all__ = [
