@@ -12,6 +12,7 @@ $ErrorActionPreference = "Stop"
 
 $repoRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
 $fixtureRoot = Join-Path $repoRoot "tmp\pg_shared_smoke"
+$fixtureRootArg = "tmp/pg_shared_smoke"
 $oldBackend = $env:ZSXQ_DATABASE_BACKEND
 $oldDsn = $env:ZSXQ_POSTGRES_DSN
 
@@ -212,7 +213,7 @@ legacy.close()
     $env:ZSXQ_POSTGRES_DSN = "postgresql://postgres:$PostgresPassword@127.0.0.1:$Port/$Database"
 
     Invoke-Checked {
-        uv run migrate-sqlite-to-postgres --root tmp\pg_shared_smoke --replace-schema --build-public-views
+        uv run migrate-sqlite-to-postgres --root $fixtureRootArg --replace-schema --build-public-views
     }
     Invoke-Checked {
         uv run manage-postgres-public-schema --apply --build-indexes
@@ -221,7 +222,7 @@ legacy.close()
         uv run migrate-sqlite-to-postgres --build-public-views
     }
     Invoke-Checked {
-        uv run audit-postgres-migration --root tmp\pg_shared_smoke
+        uv run audit-postgres-migration --root $fixtureRootArg
     }
 
     Invoke-PgSql -User "postgres" -Password $PostgresPassword -Sql "ALTER ROLE zsxq_reader LOGIN PASSWORD '$ReaderPassword';" | Out-Null
