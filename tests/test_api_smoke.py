@@ -2,6 +2,8 @@ import unittest
 from importlib.util import find_spec
 from unittest.mock import patch
 
+from backend.storage.db_compat import get_postgres_dsn
+
 
 HAS_API_TEST_DEPS = (
     find_spec("fastapi") is not None
@@ -26,6 +28,9 @@ class ApiSmokeTests(unittest.TestCase):
         health_response = client.get("/api/health")
         self.assertEqual(200, health_response.status_code)
         self.assertEqual("healthy", health_response.json()["status"])
+
+        if not get_postgres_dsn():
+            return
 
         tasks_response = client.get("/api/tasks")
         self.assertEqual(200, tasks_response.status_code)
