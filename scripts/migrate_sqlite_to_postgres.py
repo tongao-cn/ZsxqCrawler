@@ -13,6 +13,7 @@ from backend.storage.db_compat import (
     get_postgres_dsn,
     schema_name_for_path,
 )
+from scripts.manage_postgres_public_schema import build_public_schema
 
 
 def _project_root() -> Path:
@@ -124,7 +125,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Migrate ZsxqCrawler SQLite databases to PostgreSQL")
     parser.add_argument(
         "--root",
-        default=str(_project_root() / "output" / "databases"),
+        default=None,
         help="Directory containing .db files. Defaults to output/databases.",
     )
     parser.add_argument(
@@ -132,12 +133,24 @@ def main() -> None:
         action="store_true",
         help="Drop each destination schema before importing it.",
     )
+    parser.add_argument(
+        "--build-public-views",
+        action="store_true",
+        help="Create or refresh zsxq_public views and read-only grants after migration.",
+    )
     args = parser.parse_args()
 
     if get_database_backend() != "postgres":
         raise RuntimeError("Set ZSXQ_DATABASE_BACKEND=postgres or config.toml [database].backend = 'postgres'")
 
-    root = Path(args.root)
+    migrate_databases = bool(args.root or args.replace_schema or not args.build_public_views)
+
+    if not migrate_databases:
+        build_public_schema(apply=True)
+        print("zsxq_public views refreshed")
+        return
+
+    root = Path(args.root) if args.root else _project_root() / "output" / "databases"
     if not root.exists():
         raise FileNotFoundError(f"SQLite database root not found: {root}")
 
@@ -152,6 +165,10 @@ def main() -> None:
             f"{result['path']} -> schema {result['schema']}: "
             f"{result['tables']} tables, {result['rows']} rows"
         )
+
+    if args.build_public_views:
+        build_public_schema(apply=True)
+        print("zsxq_public views refreshed")
 
 
 if __name__ == "__main__":

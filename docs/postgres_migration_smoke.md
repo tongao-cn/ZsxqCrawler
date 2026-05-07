@@ -39,3 +39,25 @@ PostgreSQL checks confirmed:
 
 The temporary Docker container and `tmp/pg_smoke` fixture were removed after the
 smoke test.
+
+Follow-up shared-schema smoke should use:
+
+```powershell
+uv run migrate-sqlite-to-postgres --root tmp\pg_smoke --replace-schema --build-public-views
+```
+
+Expected additional checks:
+
+- `zsxq_public` schema exists
+- `zsxq_public.topics`, `zsxq_public.files`, and `zsxq_public.groups` are queryable
+- a reader role can `SELECT` from public views but cannot write to them
+
+Shared-schema smoke on 2026-05-07 confirmed:
+
+- `uv run migrate-sqlite-to-postgres --root tmp\pg_shared_smoke --replace-schema --build-public-views`
+  migrated 8 tables and 8 rows into `zsxq_shared_0d48c966`
+- `zsxq_public` exposed 8 views
+- `zsxq_public.topics`, `zsxq_public.files`, and `zsxq_public.groups` returned fixture rows
+- `zsxq_reader` could `SELECT` from public views
+- write attempts through `zsxq_reader` failed
+- repeated `uv run migrate-sqlite-to-postgres --build-public-views` refreshed views without re-importing SQLite files

@@ -140,6 +140,7 @@ uv run a-share-analysis
 uv run csv-chart-server
 uv run migrate-accounts
 uv run migrate-sqlite-to-postgres --replace-schema
+uv run manage-postgres-public-schema --apply
 ```
 
 为兼容旧后端启动命令，项目根目录暂时仅保留 `main.py`；其它命令请使用 `pyproject.toml` 中的入口或 `python -m ...` 新目录入口。新增后端代码时优先放入 `backend/` 对应子目录。
@@ -182,6 +183,14 @@ $env:ZSXQ_POSTGRES_DSN = "postgresql://user:password@localhost:5432/zsxq"
 ```bash
 uv run migrate-sqlite-to-postgres --replace-schema
 ```
+
+如果要让其它项目共享读取同一份 PostgreSQL 数据，可创建稳定的只读公共视图：
+
+```bash
+uv run migrate-sqlite-to-postgres --replace-schema --build-public-views
+```
+
+公共视图会写入 `zsxq_public` schema，并面向只读分析场景。详细说明见 `docs/postgres_shared_database_plan.md`。
 
 ## 赞助与支持
 
