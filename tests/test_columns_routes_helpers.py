@@ -68,6 +68,14 @@ class FakeColumnsDbForTopicPrep:
         return self.exists
 
 
+class FakeColumnsDbForColumn:
+    def __init__(self):
+        self.inserted_columns = []
+
+    def insert_column(self, group_id, column):
+        self.inserted_columns.append((group_id, column))
+
+
 class ColumnsRoutesHelperTests(unittest.TestCase):
     @unittest.skipUnless(HAS_COLUMNS_ROUTE_DEPS, "columns route dependencies are not installed")
     def test_resolve_columns_fetch_config_applies_defaults_and_overrides(self):
@@ -194,9 +202,14 @@ class ColumnsRoutesHelperTests(unittest.TestCase):
             patch("backend.routes.columns_routes._download_topic_video", return_value=(5, 6, 7)),
             patch("backend.routes.columns_routes.add_task_log"),
         ):
-            counts = asyncio.run(_process_topic_resources("task-1", "123", 10, {}, object(), {}, 0, config))
+            stats = asyncio.run(_process_topic_resources("task-1", "123", 10, {}, object(), {}, 0, config))
 
-        self.assertEqual((1, 2, 4, 5, 6, 10), counts)
+        self.assertEqual(1, stats.files_count)
+        self.assertEqual(2, stats.files_skipped)
+        self.assertEqual(4, stats.images_count)
+        self.assertEqual(5, stats.videos_count)
+        self.assertEqual(6, stats.videos_skipped)
+        self.assertEqual(10, stats.request_count)
 
     @unittest.skipUnless(HAS_COLUMNS_ROUTE_DEPS, "columns route dependencies are not installed")
     def test_process_column_topic_returns_skip_counts_for_existing_topic(self):
@@ -205,13 +218,15 @@ class ColumnsRoutesHelperTests(unittest.TestCase):
         config = _resolve_columns_fetch_config(ColumnsSettingsRequest(incrementalMode=True))
 
         with patch("backend.routes.columns_routes._prepare_column_topic", return_value=(10, "title", True)):
-            counts = asyncio.run(_process_column_topic("task-1", "123", 3, {}, 1, 2, object(), {}, 0, config))
+            stats = asyncio.run(_process_column_topic("task-1", "123", 3, {}, 1, 2, object(), {}, 0, config))
 
-        self.assertEqual((1, 0, 1, 0, 0, 0, 0, 0, 0), counts)
+        self.assertEqual(1, stats.topics_count)
+        self.assertEqual(1, stats.skipped_count)
+        self.assertEqual(0, stats.request_count)
 
     @unittest.skipUnless(HAS_COLUMNS_ROUTE_DEPS, "columns route dependencies are not installed")
     def test_process_column_topic_aggregates_detail_and_resource_counts(self):
-        from backend.routes.columns_routes import ColumnsSettingsRequest, _process_column_topic, _resolve_columns_fetch_config
+        from backend.routes.columns_routes import ColumnFetchStats, ColumnsSettingsRequest, _process_column_topic, _resolve_columns_fetch_config
 
         config = _resolve_columns_fetch_config(ColumnsSettingsRequest())
         topic_detail = {"succeeded": True, "resp_data": {"topic": {"topic_id": 10}}}
@@ -220,11 +235,71 @@ class ColumnsRoutesHelperTests(unittest.TestCase):
             patch("backend.routes.columns_routes._prepare_column_topic", return_value=(10, "title", False)),
             patch("backend.routes.columns_routes._fetch_topic_detail", return_value=(topic_detail, 1)),
             patch("backend.routes.columns_routes._save_topic_detail", return_value=True),
-            patch("backend.routes.columns_routes._process_topic_resources", return_value=(2, 3, 4, 5, 6, 7)),
+            patch("backend.routes.columns_routes._process_topic_resources", return_value=ColumnFetchStats(files_count=2, files_skipped=3, images_count=4, videos_count=5, videos_skipped=6, request_count=7)),
         ):
-            counts = asyncio.run(_process_column_topic("task-1", "123", 3, {}, 1, 2, object(), {}, 0, config))
+            stats = asyncio.run(_process_column_topic("task-1", "123", 3, {}, 1, 2, object(), {}, 0, config))
 
-        self.assertEqual((1, 1, 0, 2, 4, 5, 3, 6, 8), counts)
+        self.assertEqual(1, stats.topics_count)
+        self.assertEqual(1, stats.details_count)
+        self.assertEqual(2, stats.files_count)
+        self.assertEqual(4, stats.images_count)
+        self.assertEqual(5, stats.videos_count)
+        self.assertEqual(3, stats.files_skipped)
+        self.assertEqual(6, stats.videos_skipped)
+        self.assertEqual(8, stats.request_count)
+
+    @unittest.skipUnless(HAS_COLUMNS_ROUTE_DEPS, "columns route dependencies are not installed")
+    def test_process_column_aggregates_topics_and_requests(self):
+        from backend.routes.columns_routes import ColumnFetchStats, ColumnsSettingsRequest, _process_column, _resolve_columns_fetch_config
+
+        config = _resolve_columns_fetch_config(ColumnsSettingsRequest())
+        column = {"column_id": 3, "name": "专栏", "statistics": {"topics_count": 2}}
+        topics = [{"topic_id": 10}, {"topic_id": 11}]
+        db = FakeColumnsDbForColumn()
+
+        with (
+            patch("backend.routes.columns_routes.random.uniform", return_value=0),
+            patch("backend.routes.columns_routes.asyncio.sleep", new_callable=AsyncMock),
+            patch("backend.routes.columns_routes.add_task_log"),
+            patch("backend.routes.columns_routes._fetch_column_topics", return_value=(topics, 1)),
+            patch("backend.routes.columns_routes.is_task_stopped", return_value=False),
+            patch("backend.routes.columns_routes._process_column_topic", side_effect=[
+                ColumnFetchStats(topics_count=1, details_count=1, files_count=2, images_count=3, videos_count=4, files_skipped=5, videos_skipped=6, request_count=7),
+                ColumnFetchStats(topics_count=1, skipped_count=1, request_count=2),
+            ]),
+            patch("backend.routes.columns_routes.update_task") as update_task,
+        ):
+            stats = asyncio.run(
+                _process_column(
+                    "task-1",
+                    "123",
+                    column,
+                    1,
+                    1,
+                    db,
+                    {},
+                    0,
+                    config,
+                    base_stats=ColumnFetchStats(details_count=10, files_count=20, images_count=30, videos_count=40),
+                )
+            )
+
+        self.assertEqual([(123, column)], db.inserted_columns)
+        self.assertEqual(1, stats.columns_count)
+        self.assertEqual(2, stats.topics_count)
+        self.assertEqual(1, stats.details_count)
+        self.assertEqual(2, stats.files_count)
+        self.assertEqual(3, stats.images_count)
+        self.assertEqual(4, stats.videos_count)
+        self.assertEqual(1, stats.skipped_count)
+        self.assertEqual(5, stats.files_skipped)
+        self.assertEqual(6, stats.videos_skipped)
+        self.assertEqual(10, stats.request_count)
+        update_task.assert_called_once_with(
+            "task-1",
+            "running",
+            "进度: 11 篇文章, 22 个文件, 44 个视频, 33 张图片",
+        )
 
     @unittest.skipUnless(HAS_COLUMNS_ROUTE_DEPS, "columns route dependencies are not installed")
     def test_columns_db_closes_database(self):

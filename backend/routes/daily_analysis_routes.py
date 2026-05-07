@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Optional
+from typing import Any, Callable, Optional
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Query
 from pydantic import BaseModel, Field
@@ -17,6 +17,7 @@ from backend.services.task_runtime import (
 
 
 router = APIRouter(prefix="/api/analysis/daily", tags=["daily-analysis"])
+TASK_CREATED_MESSAGE = "任务已创建，正在后台执行"
 
 
 class DailyAnalysisRequest(BaseModel):
@@ -27,6 +28,41 @@ class DailyAnalysisRequest(BaseModel):
 class DailyRunTodayRequest(DailyAnalysisRequest):
     crawlLatestFirst: bool = Field(default=True, description="分析前先抓取最新话题")
     crawlSettings: Optional[CrawlSettingsRequest] = Field(default=None, description="抓取最新话题的间隔设置")
+
+
+def _build_daily_log_callback(task_id: str) -> Callable[[str], None]:
+    def log_callback(message: str) -> None:
+        add_task_log(task_id, message)
+
+    return log_callback
+
+
+def _daily_task_stopped_or_failed(task_id: str) -> bool:
+    if is_task_stopped(task_id):
+        return True
+    task = current_tasks.get(task_id, {})
+    return task.get("status") == "failed"
+
+
+def _fail_daily_task_unless_stopped(task_id: str, label: str, error: Exception) -> None:
+    if is_task_stopped(task_id):
+        return
+    message = f"{label}失败: {str(error)}"
+    add_task_log(task_id, f"❌ {message}")
+    update_task(task_id, "failed", message)
+
+
+def _create_daily_task_response(
+    background_tasks: BackgroundTasks,
+    task_type: str,
+    description: str,
+    metadata: dict[str, Any],
+    task_func: Callable[..., Any],
+    *task_args: Any,
+) -> dict[str, str]:
+    task_id = create_task(task_type, description, metadata)
+    background_tasks.add_task(task_func, task_id, *task_args)
+    return {"task_id": task_id, "message": TASK_CREATED_MESSAGE}
 
 
 def run_daily_analysis_task(
@@ -40,14 +76,11 @@ def run_daily_analysis_task(
 
         update_task(task_id, "running", "开始生成每日话题 AI 报告...")
 
-        def log_callback(message: str):
-            add_task_log(task_id, message)
-
         result = analyze_daily_topics(
             group_id,
             request.date,
             comments_per_topic=request.commentsPerTopic,
-            log_callback=log_callback,
+            log_callback=_build_daily_log_callback(task_id),
         )
 
         if is_task_stopped(task_id):
@@ -55,9 +88,7 @@ def run_daily_analysis_task(
 
         update_task(task_id, "completed", "每日话题 AI 报告生成完成", result)
     except Exception as e:
-        if not is_task_stopped(task_id):
-            add_task_log(task_id, f"❌ 每日话题 AI 报告生成失败: {str(e)}")
-            update_task(task_id, "failed", f"每日话题 AI 报告生成失败: {str(e)}")
+        _fail_daily_task_unless_stopped(task_id, "每日话题 AI 报告生成", e)
 
 
 def run_daily_today_task(
@@ -71,21 +102,15 @@ def run_daily_today_task(
         if request.crawlLatestFirst:
             add_task_log(task_id, "🔄 先抓取最新话题...")
             run_crawl_latest_task(task_id, group_id, request.crawlSettings)
-            if is_task_stopped(task_id):
-                return
-            task = current_tasks.get(task_id, {})
-            if task.get("status") == "failed":
+            if _daily_task_stopped_or_failed(task_id):
                 return
             update_task(task_id, "running", "最新话题抓取完成，开始 AI 分析...")
-
-        def log_callback(message: str):
-            add_task_log(task_id, message)
 
         result = analyze_daily_topics(
             group_id,
             request.date,
             comments_per_topic=request.commentsPerTopic,
-            log_callback=log_callback,
+            log_callback=_build_daily_log_callback(task_id),
         )
 
         if is_task_stopped(task_id):
@@ -93,21 +118,21 @@ def run_daily_today_task(
 
         update_task(task_id, "completed", "每日抓取与 AI 分析完成", result)
     except Exception as e:
-        if not is_task_stopped(task_id):
-            add_task_log(task_id, f"❌ 每日抓取与 AI 分析失败: {str(e)}")
-            update_task(task_id, "failed", f"每日抓取与 AI 分析失败: {str(e)}")
+        _fail_daily_task_unless_stopped(task_id, "每日抓取与 AI 分析", e)
 
 
 @router.post("/{group_id}")
 async def create_daily_report(group_id: str, request: DailyAnalysisRequest, background_tasks: BackgroundTasks):
     try:
-        task_id = create_task(
+        return _create_daily_task_response(
+            background_tasks,
             "daily_topic_analysis",
             f"生成每日话题 AI 报告 (群组: {group_id})",
             {"group_id": group_id, "report_date": request.date},
+            run_daily_analysis_task,
+            group_id,
+            request,
         )
-        background_tasks.add_task(run_daily_analysis_task, task_id, group_id, request)
-        return {"task_id": task_id, "message": "任务已创建，正在后台执行"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"创建每日分析任务失败: {str(e)}")
 
@@ -115,13 +140,15 @@ async def create_daily_report(group_id: str, request: DailyAnalysisRequest, back
 @router.post("/run-today/{group_id}")
 async def run_today_report(group_id: str, request: DailyRunTodayRequest, background_tasks: BackgroundTasks):
     try:
-        task_id = create_task(
+        return _create_daily_task_response(
+            background_tasks,
             "daily_topic_crawl_and_analysis",
             f"每日抓取与 AI 分析 (群组: {group_id})",
             {"group_id": group_id, "report_date": request.date},
+            run_daily_today_task,
+            group_id,
+            request,
         )
-        background_tasks.add_task(run_daily_today_task, task_id, group_id, request)
-        return {"task_id": task_id, "message": "任务已创建，正在后台执行"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"创建每日抓取分析任务失败: {str(e)}")
 

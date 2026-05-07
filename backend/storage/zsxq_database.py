@@ -1,8 +1,68 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-import sqlite3
 from typing import Dict, Any, Optional, List
+
+from backend.storage.db_compat import connect
+
+
+def _build_pagination(page: int, per_page: int, total: int) -> Dict[str, int]:
+    return {
+        'page': page,
+        'per_page': per_page,
+        'total': total,
+        'pages': (total + per_page - 1) // per_page
+    }
+
+
+def _format_tag_row(row) -> Dict[str, Any]:
+    return {
+        'tag_id': row[0],
+        'tag_name': row[1],
+        'hid': row[2],
+        'topic_count': row[3],
+        'created_at': row[4]
+    }
+
+
+def _format_tag_topic_row(topic) -> Dict[str, Any]:
+    topic_data = {
+        "topic_id": topic[0],
+        "title": topic[1],
+        "create_time": topic[2],
+        "likes_count": topic[3],
+        "comments_count": topic[4],
+        "reading_count": topic[5],
+        "type": topic[6],
+        "digested": bool(topic[7]) if topic[7] is not None else False,
+        "sticky": bool(topic[8]) if topic[8] is not None else False
+    }
+
+    if topic[6] == 'q&a':
+        topic_data['question_text'] = topic[9] if topic[9] else ''
+        topic_data['answer_text'] = topic[10] if topic[10] else ''
+    else:
+        topic_data['talk_text'] = topic[11] if topic[11] else ''
+        if topic[12]:
+            topic_data['author'] = {
+                'user_id': topic[12],
+                'name': topic[13],
+                'avatar_url': topic[14]
+            }
+
+    return topic_data
+
+
+def _replace_file_topic_relation(file_db, file_id: int, topic_id: int) -> int:
+    file_db.cursor.execute('''
+    DELETE FROM file_topic_relations
+    WHERE file_id = ? AND topic_id = ?
+    ''', (file_id, topic_id))
+    file_db.cursor.execute('''
+    INSERT OR IGNORE INTO file_topic_relations (file_id, topic_id)
+    VALUES (?, ?)
+    ''', (file_id, topic_id))
+    return file_db.cursor.rowcount
 
 
 class ZSXQDatabase:
@@ -12,7 +72,7 @@ class ZSXQDatabase:
         self.db_path = db_path
         self.files_db_path = files_db_path
         self.file_db = None
-        self.conn = sqlite3.connect(db_path, check_same_thread=False)
+        self.conn = connect(db_path)
         self.cursor = self.conn.cursor()
         self._init_database()
     
@@ -1064,14 +1124,7 @@ class ZSXQDatabase:
 
                 synced_files += 1
                 if topic_id:
-                    file_db.cursor.execute('''
-                    DELETE FROM file_topic_relations
-                    WHERE file_id = ? AND topic_id = ?
-                    ''', (file_id, topic_id))
-                    file_db.cursor.execute('''
-                    INSERT OR IGNORE INTO file_topic_relations (file_id, topic_id)
-                    VALUES (?, ?)
-                    ''', (file_id, topic_id))
+                    _replace_file_topic_relation(file_db, file_id, topic_id)
 
             if topic_id:
                 file_db.insert_topic_files(topic_id, files_data)
@@ -1164,16 +1217,7 @@ class ZSXQDatabase:
                         },
                     })
 
-                    file_db.cursor.execute('''
-                    DELETE FROM file_topic_relations
-                    WHERE file_id = ? AND topic_id = ?
-                    ''', (file_id, topic_id))
-
-                    file_db.cursor.execute('''
-                    INSERT OR IGNORE INTO file_topic_relations (file_id, topic_id)
-                    VALUES (?, ?)
-                    ''', (file_id, topic_id))
-                    stats['relations'] += file_db.cursor.rowcount
+                    stats['relations'] += _replace_file_topic_relation(file_db, file_id, topic_id)
 
                     file_db.insert_topic_files(topic_id, [file_data])
                     stats['topic_files'] += 1
@@ -1704,17 +1748,7 @@ class ZSXQDatabase:
                 ORDER BY topic_count DESC, tag_name ASC
             ''', (group_id,))
             
-            tags = []
-            for row in self.cursor.fetchall():
-                tags.append({
-                    'tag_id': row[0],
-                    'tag_name': row[1],
-                    'hid': row[2],
-                    'topic_count': row[3],
-                    'created_at': row[4]
-                })
-            
-            return tags
+            return [_format_tag_row(row) for row in self.cursor.fetchall()]
         except Exception as e:
             print(f"获取标签列表失败: {e}")
             return []
@@ -1744,36 +1778,7 @@ class ZSXQDatabase:
                 LIMIT ? OFFSET ?
             ''', (tag_id, per_page, offset))
             
-            topics = []
-            for topic in self.cursor.fetchall():
-                topic_data = {
-                    "topic_id": topic[0],
-                    "title": topic[1],
-                    "create_time": topic[2],
-                    "likes_count": topic[3],
-                    "comments_count": topic[4],
-                    "reading_count": topic[5],
-                    "type": topic[6],
-                    "digested": bool(topic[7]) if topic[7] is not None else False,
-                    "sticky": bool(topic[8]) if topic[8] is not None else False
-                }
-
-                # 添加内容文本
-                if topic[6] == 'q&a':
-                    # 问答类型话题
-                    topic_data['question_text'] = topic[9] if topic[9] else ''
-                    topic_data['answer_text'] = topic[10] if topic[10] else ''
-                else:
-                    # 其他类型话题（talk、article等）
-                    topic_data['talk_text'] = topic[11] if topic[11] else ''
-                    if topic[12]:  # 有作者信息
-                        topic_data['author'] = {
-                            'user_id': topic[12],
-                            'name': topic[13],
-                            'avatar_url': topic[14]
-                        }
-
-                topics.append(topic_data)
+            topics = [_format_tag_topic_row(topic) for topic in self.cursor.fetchall()]
             
             # 获取总数
             self.cursor.execute('''
@@ -1785,16 +1790,11 @@ class ZSXQDatabase:
             
             return {
                 'topics': topics,
-                'pagination': {
-                    'page': page,
-                    'per_page': per_page,
-                    'total': total,
-                    'pages': (total + per_page - 1) // per_page
-                }
+                'pagination': _build_pagination(page, per_page, total)
             }
         except Exception as e:
             print(f"根据标签获取话题失败: {e}")
-            return {'topics': [], 'pagination': {'page': page, 'per_page': per_page, 'total': 0, 'pages': 0}}
+            return {'topics': [], 'pagination': _build_pagination(page, per_page, 0)}
 
     def close(self):
         """关闭数据库连接"""

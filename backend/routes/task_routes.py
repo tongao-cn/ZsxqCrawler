@@ -24,6 +24,23 @@ class TaskCleanupRequest(BaseModel):
     keep_latest: int = Field(default=100, description="保留最近多少条终态任务")
 
 
+def _sse_event(payload: dict) -> str:
+    return f"data: {json.dumps(payload)}\n\n"
+
+
+def _task_status_payload(task: dict) -> dict:
+    return {"type": "status", "status": task["status"], "message": task["message"]}
+
+
+def _streaming_response_headers() -> dict:
+    return {
+        "Cache-Control": "no-cache",
+        "Connection": "keep-alive",
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Headers": "*",
+    }
+
+
 @router.get("")
 async def get_tasks(limit: Optional[int] = Query(default=None, ge=1, le=1000)):
     """获取所有任务状态"""
@@ -78,12 +95,12 @@ async def stream_task_logs(task_id: str):
         # 发送历史日志
         logs = get_task_logs_state(task_id) or []
         for log in logs:
-            yield f"data: {json.dumps({'type': 'log', 'message': log})}\n\n"
+            yield _sse_event({"type": "log", "message": log})
 
         # 发送任务状态
         task = get_task_state(task_id)
         if task:
-            yield f"data: {json.dumps({'type': 'status', 'status': task['status'], 'message': task['message']})}\n\n"
+            yield _sse_event(_task_status_payload(task))
 
         # 记录当前日志数量，用于检测新日志
         last_log_count = len(logs)
@@ -98,22 +115,22 @@ async def stream_task_logs(task_id: str):
                     # 发送新日志
                     new_logs = logs[last_log_count:]
                     for log in new_logs:
-                        yield f"data: {json.dumps({'type': 'log', 'message': log})}\n\n"
+                        yield _sse_event({"type": "log", "message": log})
                     last_log_count = current_log_count
 
                 # 检查任务状态变化
                 task = get_task_state(task_id)
                 if task:
-                    yield f"data: {json.dumps({'type': 'status', 'status': task['status'], 'message': task['message']})}\n\n"
+                    yield _sse_event(_task_status_payload(task))
 
                     if task["status"] in ["completed", "failed", "cancelled"]:
                         break
                 else:
-                    yield f"data: {json.dumps({'type': 'status', 'status': 'cancelled', 'message': '任务记录已被清理'})}\n\n"
+                    yield _sse_event({"type": "status", "status": "cancelled", "message": "任务记录已被清理"})
                     break
 
                 # 发送心跳
-                yield f"data: {json.dumps({'type': 'heartbeat'})}\n\n"
+                yield _sse_event({"type": "heartbeat"})
                 await asyncio.sleep(0.5)
 
         except asyncio.CancelledError:
@@ -123,10 +140,5 @@ async def stream_task_logs(task_id: str):
     return StreamingResponse(
         event_stream(),
         media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "Connection": "keep-alive",
-            "Access-Control-Allow-Origin": "*",
-            "Access-Control-Allow-Headers": "*",
-        },
+        headers=_streaming_response_headers(),
     )

@@ -1,0 +1,137 @@
+import unittest
+from pathlib import Path
+
+from backend.services.tdx_a_share_export_service import (
+    _build_block_export_result,
+    _build_export_result,
+    _build_pending_block_write,
+    _collect_ranking_companies,
+)
+
+
+class TdxAShareExportServiceHelperTests(unittest.TestCase):
+    def test_collect_ranking_companies_preserves_existing_filtering(self):
+        rankings = {
+            "3": [
+                {"company": " 平安银行 "},
+                {"company": ""},
+                {"company": None},
+                {},
+            ],
+            "7": [
+                {"company": "万科A"},
+            ],
+        }
+
+        self.assertEqual(_collect_ranking_companies(rankings, [3, 7]), ["平安银行", "万科A"])
+
+    def test_build_pending_block_write_converts_and_dedupes_codes_and_skips(self):
+        rankings = {
+            "3": [
+                {"company": "平安银行"},
+                {"company": "招商银行"},
+                {"company": "平安银行"},
+                {"company": "未知公司"},
+                {"company": "坏代码"},
+                {"company": " "},
+            ]
+        }
+        resolved_codes = {
+            "平安银行": "000001.SZ",
+            "招商银行": "600036.SH",
+            "坏代码": "123456.BJ",
+        }
+        cfg_by_name = {
+            "3日推荐池": {
+                "name": "3日推荐池",
+                "code": "ZX001",
+            }
+        }
+
+        pending = _build_pending_block_write(3, rankings, resolved_codes, cfg_by_name, Path("blocknew"))
+
+        self.assertEqual(
+            pending,
+            (
+                3,
+                "3日推荐池",
+                "ZX001",
+                Path("blocknew") / "ZX001.blk",
+                ["0000001", "1600036"],
+                ["未知公司", "坏代码"],
+            ),
+        )
+
+    def test_build_block_export_result_keeps_response_shape(self):
+        result = _build_block_export_result(
+            7,
+            "7日推荐池",
+            "ZX007",
+            Path("blocknew") / "ZX007.blk",
+            ["0000001"],
+            ["未知公司"],
+        )
+
+        self.assertEqual(
+            result,
+            {
+                "window_days": 7,
+                "block_name": "7日推荐池",
+                "block_code": "ZX007",
+                "block_path": str(Path("blocknew") / "ZX007.blk"),
+                "written_count": 1,
+                "skipped_count": 1,
+                "skipped_companies": ["未知公司"],
+            },
+        )
+
+    def test_build_export_result_keeps_response_shape_and_dedupes_unresolved(self):
+        block_results = [
+            {
+                "window_days": 3,
+                "block_name": "3日推荐池",
+                "block_code": "ZX001",
+                "block_path": "blocknew/ZX001.blk",
+                "written_count": 1,
+                "skipped_count": 0,
+                "skipped_companies": [],
+            }
+        ]
+
+        result = _build_export_result(
+            normalized_group_id="group-1",
+            resolved_root=Path("tdx-root"),
+            chart_payload={
+                "selected_start_date": "2026-01-01",
+                "selected_end_date": "2026-01-31",
+            },
+            ranking_top_n=20,
+            stock_basic_source="cache",
+            source_detail="cache.json",
+            backup_files=["backup/ZX001.blk"],
+            block_results=block_results,
+            total_written=1,
+            aggregate_skipped=["未知公司", "未知公司", "另一个未知"],
+            ambiguous_companies={"重名": ["000001.SZ", "000002.SZ"]},
+            effective_export_id=123,
+        )
+
+        self.assertEqual(result["group_id"], "group-1")
+        self.assertEqual(result["tdx_root"], str(Path("tdx-root")))
+        self.assertEqual(result["selected_start_date"], "2026-01-01")
+        self.assertEqual(result["selected_end_date"], "2026-01-31")
+        self.assertEqual(result["ranking_top_n"], 20)
+        self.assertTrue(result["used_stock_cache"])
+        self.assertEqual(result["stock_basic_source"], "cache")
+        self.assertEqual(result["stock_cache_path"], "cache.json")
+        self.assertEqual(result["backup_files"], ["backup/ZX001.blk"])
+        self.assertEqual(result["blocks"], block_results)
+        self.assertEqual(result["total_written"], 1)
+        self.assertEqual(result["unresolved_companies"], ["未知公司", "另一个未知"])
+        self.assertEqual(result["ambiguous_companies"], {"重名": ["000001.SZ", "000002.SZ"]})
+        self.assertEqual(result["export_id"], 123)
+        self.assertIsInstance(result["exported_at"], str)
+
+
+if __name__ == "__main__":
+    unittest.main()

@@ -319,6 +319,19 @@ def _transcribe_audio_with_faster_whisper(path: Path) -> str:
     ) from last_error
 
 
+def _cached_analysis_result(existing: Optional[Dict[str, Any]], force: bool) -> Optional[Dict[str, Any]]:
+    if existing and not force and existing.get("status") == "completed" and existing.get("summary"):
+        return {**existing, "cached": True}
+    return None
+
+
+def _extract_file_content_for_analysis(path: Path) -> Tuple[str, str]:
+    suffix = path.suffix.lower()
+    if suffix in AUDIO_EXTENSIONS:
+        return _transcribe_audio_with_faster_whisper(path), f"audio/{suffix.lstrip('.')}"
+    return extract_file_text(path)
+
+
 def analyze_group_file(
     group_id: str,
     file_id: int,
@@ -333,8 +346,9 @@ def analyze_group_file(
     file_exists = False
     try:
         existing = db.get_file_ai_analysis(file_id)
-        if existing and not force and existing.get("status") == "completed" and existing.get("summary"):
-            return {**existing, "cached": True}
+        cached_result = _cached_analysis_result(existing, force)
+        if cached_result is not None:
+            return cached_result
 
         db.cursor.execute(
             """
@@ -353,12 +367,7 @@ def analyze_group_file(
         if resolved_path is None:
             raise ValueError("本地文件不存在，请先下载该文件后再进行 AI 分析")
 
-        suffix = resolved_path.suffix.lower()
-        if suffix in AUDIO_EXTENSIONS:
-            extracted_text = _transcribe_audio_with_faster_whisper(resolved_path)
-            content_type = f"audio/{suffix.lstrip('.')}"
-        else:
-            extracted_text, content_type = extract_file_text(resolved_path)
+        extracted_text, content_type = _extract_file_content_for_analysis(resolved_path)
         if not extracted_text.strip():
             raise ValueError("文件内容为空，无法进行 AI 分析")
 

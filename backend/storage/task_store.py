@@ -1,11 +1,27 @@
 from __future__ import annotations
 
 import json
-import sqlite3
 import threading
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
+
+from backend.storage.db_compat import connect
+
+
+TERMINAL_TASK_STATUSES = ("completed", "failed", "cancelled", "stopped")
+
+
+def _chunk_values(values: List[Any], chunk_size: int) -> List[List[Any]]:
+    return [values[start : start + chunk_size] for start in range(0, len(values), chunk_size)]
+
+
+def _cleanup_result(tasks_deleted: int, logs_deleted: int, kept_latest: int) -> Dict[str, int]:
+    return {
+        "tasks_deleted": tasks_deleted,
+        "logs_deleted": logs_deleted,
+        "kept_latest": kept_latest,
+    }
 
 
 class TaskStore:
@@ -162,7 +178,6 @@ class TaskStore:
 
     def cleanup_completed(self, keep_latest: int = 500) -> Dict[str, int]:
         kept_latest = max(0, keep_latest)
-        terminal_statuses = ("completed", "failed", "cancelled", "stopped")
 
         with self._lock:
             conn = self._connect()
@@ -175,15 +190,14 @@ class TaskStore:
                     ORDER BY created_at DESC, task_id DESC
                     LIMIT -1 OFFSET ?
                     """,
-                    terminal_statuses + (kept_latest,),
+                    TERMINAL_TASK_STATUSES + (kept_latest,),
                 ).fetchall()
                 task_ids = [row["task_id"] for row in rows]
 
                 logs_deleted = 0
                 tasks_deleted = 0
                 chunk_size = 900
-                for start in range(0, len(task_ids), chunk_size):
-                    chunk = task_ids[start : start + chunk_size]
+                for chunk in _chunk_values(task_ids, chunk_size):
                     placeholders = ",".join("?" for _ in chunk)
                     logs_deleted += conn.execute(
                         f"SELECT COUNT(*) FROM task_logs WHERE task_id IN ({placeholders})",
@@ -203,11 +217,7 @@ class TaskStore:
             finally:
                 conn.close()
 
-        return {
-            "tasks_deleted": tasks_deleted,
-            "logs_deleted": logs_deleted,
-            "kept_latest": kept_latest,
-        }
+        return _cleanup_result(tasks_deleted, logs_deleted, kept_latest)
 
     def set_stop_flag(self, task_id: str, stopped: bool = True) -> None:
         with self._lock:
@@ -272,12 +282,10 @@ class TaskStore:
             finally:
                 conn.close()
 
-    def _connect(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(self.db_path)
-        conn.row_factory = sqlite3.Row
-        return conn
+    def _connect(self):
+        return connect(self.db_path, row_factory=True)
 
-    def _task_from_row(self, row: sqlite3.Row) -> Dict[str, Any]:
+    def _task_from_row(self, row: Any) -> Dict[str, Any]:
         task = {
             "task_id": row["task_id"],
             "type": row["type"],

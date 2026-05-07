@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Tuple
 
 import requests
 from fastapi import APIRouter, HTTPException
@@ -39,6 +39,44 @@ def _build_self_info(data: Dict[str, Any]) -> Dict[str, Any]:
         "user_sid": user.get("user_sid"),
         "grade": user.get("grade"),
     }
+
+
+def _get_account_cookie_or_raise(account_id: str) -> str:
+    sql_mgr = get_accounts_sql_manager()
+    acc = sql_mgr.get_account_by_id(account_id, mask_cookie=False)
+    if not acc:
+        raise HTTPException(status_code=404, detail="Account does not exist")
+
+    cookie = acc.get("cookie", "")
+    if not cookie:
+        raise HTTPException(status_code=400, detail="Account has no configured Cookie")
+    return cookie
+
+
+def _get_group_account_context_or_raise(group_id: str) -> Tuple[str, str]:
+    summary = get_account_summary_for_group_auto(group_id)
+    cookie = get_cookie_for_group(group_id)
+    account_id = (summary or {}).get("id", "default")
+
+    if not cookie:
+        raise HTTPException(status_code=400, detail="未找到可用Cookie，请先配置账号或默认Cookie")
+    return account_id, cookie
+
+
+def _fetch_self_api_data(cookie: str, failure_detail: str) -> Dict[str, Any]:
+    headers = build_stealth_headers(cookie)
+    resp = requests.get("https://api.zsxq.com/v3/users/self", headers=headers, timeout=30)
+    resp.raise_for_status()
+    data = resp.json()
+    if not data.get("succeeded"):
+        raise HTTPException(status_code=400, detail=failure_detail)
+    return data
+
+
+def _save_self_info_response(db: Any, account_id: str, data: Dict[str, Any]) -> Dict[str, Any]:
+    self_info = _build_self_info(data)
+    db.upsert_self_info(account_id, self_info, raw_json=data)
+    return {"self": db.get_self_info(account_id)}
 
 
 @router.get("/accounts")
@@ -114,25 +152,9 @@ async def get_account_self(account_id: str):
         if info:
             return {"self": info}
 
-        sql_mgr = get_accounts_sql_manager()
-        acc = sql_mgr.get_account_by_id(account_id, mask_cookie=False)
-        if not acc:
-            raise HTTPException(status_code=404, detail="Account does not exist")
-
-        cookie = acc.get("cookie", "")
-        if not cookie:
-            raise HTTPException(status_code=400, detail="Account has no configured Cookie")
-
-        headers = build_stealth_headers(cookie)
-        resp = requests.get("https://api.zsxq.com/v3/users/self", headers=headers, timeout=30)
-        resp.raise_for_status()
-        data = resp.json()
-        if not data.get("succeeded"):
-            raise HTTPException(status_code=400, detail="API returned failure")
-
-        self_info = _build_self_info(data)
-        db.upsert_self_info(account_id, self_info, raw_json=data)
-        return {"self": db.get_self_info(account_id)}
+        cookie = _get_account_cookie_or_raise(account_id)
+        data = _fetch_self_api_data(cookie, "API returned failure")
+        return _save_self_info_response(db, account_id, data)
     except HTTPException:
         raise
     except requests.RequestException as e:
@@ -145,26 +167,10 @@ async def get_account_self(account_id: str):
 async def refresh_account_self(account_id: str):
     """强制抓取 /v3/users/self 并更新持久化"""
     try:
-        sql_mgr = get_accounts_sql_manager()
-        acc = sql_mgr.get_account_by_id(account_id, mask_cookie=False)
-        if not acc:
-            raise HTTPException(status_code=404, detail="Account does not exist")
-
-        cookie = acc.get("cookie", "")
-        if not cookie:
-            raise HTTPException(status_code=400, detail="Account has no configured Cookie")
-
-        headers = build_stealth_headers(cookie)
-        resp = requests.get("https://api.zsxq.com/v3/users/self", headers=headers, timeout=30)
-        resp.raise_for_status()
-        data = resp.json()
-        if not data.get("succeeded"):
-            raise HTTPException(status_code=400, detail="API returned failure")
-
-        self_info = _build_self_info(data)
+        cookie = _get_account_cookie_or_raise(account_id)
+        data = _fetch_self_api_data(cookie, "API returned failure")
         db = get_account_info_db()
-        db.upsert_self_info(account_id, self_info, raw_json=data)
-        return {"self": db.get_self_info(account_id)}
+        return _save_self_info_response(db, account_id, data)
     except HTTPException:
         raise
     except requests.RequestException as e:
@@ -177,28 +183,14 @@ async def refresh_account_self(account_id: str):
 async def get_group_account_self(group_id: str):
     """获取群组当前使用账号的自我信息（若无则尝试抓取并保存）"""
     try:
-        summary = get_account_summary_for_group_auto(group_id)
-        cookie = get_cookie_for_group(group_id)
-        account_id = (summary or {}).get("id", "default")
-
-        if not cookie:
-            raise HTTPException(status_code=400, detail="未找到可用Cookie，请先配置账号或默认Cookie")
-
+        account_id, cookie = _get_group_account_context_or_raise(group_id)
         db = get_account_info_db()
         info = db.get_self_info(account_id)
         if info:
             return {"self": info}
 
-        headers = build_stealth_headers(cookie)
-        resp = requests.get("https://api.zsxq.com/v3/users/self", headers=headers, timeout=30)
-        resp.raise_for_status()
-        data = resp.json()
-        if not data.get("succeeded"):
-            raise HTTPException(status_code=400, detail="API返回失败")
-
-        self_info = _build_self_info(data)
-        db.upsert_self_info(account_id, self_info, raw_json=data)
-        return {"self": db.get_self_info(account_id)}
+        data = _fetch_self_api_data(cookie, "API返回失败")
+        return _save_self_info_response(db, account_id, data)
     except HTTPException:
         raise
     except requests.RequestException as e:
@@ -211,24 +203,10 @@ async def get_group_account_self(group_id: str):
 async def refresh_group_account_self(group_id: str):
     """强制抓取群组当前使用账号的自我信息并持久化"""
     try:
-        summary = get_account_summary_for_group_auto(group_id)
-        cookie = get_cookie_for_group(group_id)
-        account_id = (summary or {}).get("id", "default")
-
-        if not cookie:
-            raise HTTPException(status_code=400, detail="未找到可用Cookie，请先配置账号或默认Cookie")
-
-        headers = build_stealth_headers(cookie)
-        resp = requests.get("https://api.zsxq.com/v3/users/self", headers=headers, timeout=30)
-        resp.raise_for_status()
-        data = resp.json()
-        if not data.get("succeeded"):
-            raise HTTPException(status_code=400, detail="API返回失败")
-
-        self_info = _build_self_info(data)
+        account_id, cookie = _get_group_account_context_or_raise(group_id)
+        data = _fetch_self_api_data(cookie, "API返回失败")
         db = get_account_info_db()
-        db.upsert_self_info(account_id, self_info, raw_json=data)
-        return {"self": db.get_self_info(account_id)}
+        return _save_self_info_response(db, account_id, data)
     except HTTPException:
         raise
     except requests.RequestException as e:

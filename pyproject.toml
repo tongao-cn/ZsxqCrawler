@@ -26,6 +26,7 @@ zsxq-crawler = "backend.crawlers.zsxq_interactive_crawler:main"
 a-share-analysis = "scripts.analyze_a_share_companies:main"
 csv-chart-server = "scripts.csv_chart_server:main"
 migrate-accounts = "scripts.migrate_accounts_to_sql:migrate_accounts"
+migrate-sqlite-to-postgres = "scripts.migrate_sqlite_to_postgres:main"
 
 [build-system]
 requires = ["hatchling"]

@@ -15,59 +15,310 @@ from backend.core.crawler_runtime import get_crawler, get_crawler_for_group
 router = APIRouter(prefix="/api", tags=["topics"])
 
 
+def _log_topic_event(level: str, message: str) -> None:
+    print(f"[{level}] {message}")
+
+TOPIC_DETAIL_TABLES = [
+    "user_liked_emojis",
+    "like_emojis",
+    "likes",
+    "images",
+    "comments",
+    "answers",
+    "questions",
+    "articles",
+    "talks",
+    "topic_files",
+    "topic_tags",
+]
+
+GROUP_TOPIC_TABLES = [(table, "topic_id") for table in TOPIC_DETAIL_TABLES] + [("topics", "group_id")]
+
+
+def _close_crawler_databases(crawler) -> None:
+    if hasattr(crawler, "db") and crawler.db:
+        crawler.db.close()
+    if hasattr(crawler, "file_downloader") and crawler.file_downloader:
+        if hasattr(crawler.file_downloader, "file_db") and crawler.file_downloader.file_db:
+            crawler.file_downloader.file_db.close()
+
+
+def _rollback_crawler_db(crawler) -> None:
+    try:
+        if crawler and hasattr(crawler, "db") and crawler.db:
+            crawler.db.conn.rollback()
+    except Exception:
+        pass
+
+
+def _delete_single_topic_rows(db, topic_id: int, group_id: int) -> bool:
+    for table in TOPIC_DETAIL_TABLES:
+        db.cursor.execute(f"DELETE FROM {table} WHERE topic_id = ?", (topic_id,))
+
+    db.cursor.execute("DELETE FROM topics WHERE topic_id = ? AND group_id = ?", (topic_id, group_id))
+    return db.cursor.rowcount > 0
+
+
+def _delete_group_topic_rows(db, group_id: int) -> dict:
+    deleted_counts = {}
+
+    for table, id_column in GROUP_TOPIC_TABLES:
+        if id_column == "group_id":
+            db.cursor.execute(f"DELETE FROM {table} WHERE {id_column} = ?", (group_id,))
+        else:
+            db.cursor.execute(
+                f"""
+                DELETE FROM {table}
+                WHERE {id_column} IN (
+                    SELECT topic_id FROM topics WHERE group_id = ?
+                )
+                """,
+                (group_id,),
+            )
+
+        deleted_counts[table] = db.cursor.rowcount
+
+    return deleted_counts
+
+
+def _build_single_topic_response(topic_id: int, group_id: str, imported: str, comments_fetched: int, message: Optional[str] = None) -> dict:
+    response = {
+        "success": True,
+        "topic_id": topic_id,
+        "group_id": int(group_id),
+        "imported": imported,
+        "comments_fetched": comments_fetched,
+    }
+    if message:
+        response["message"] = message
+    return response
+
+
+def _validate_topic_group(topic: dict, group_id: str) -> None:
+    topic_group_id = str((topic.get("group") or {}).get("group_id", ""))
+    if topic_group_id and topic_group_id != str(group_id):
+        raise HTTPException(status_code=400, detail="该话题不属于当前群组")
+
+
+def _fetch_and_import_topic_comments(crawler, topic_id: int, comments_count: int) -> int:
+    if comments_count <= 0:
+        return 0
+
+    try:
+        additional_comments = crawler.fetch_all_comments(topic_id, comments_count)
+        if additional_comments:
+            crawler.db.import_additional_comments(topic_id, additional_comments)
+            crawler.db.conn.commit()
+            return len(additional_comments)
+    except Exception as e:
+        _log_topic_event("WARN", f"单话题评论获取失败: {e}")
+
+    return 0
+
+
+def _build_refresh_topic_failure(message: str) -> dict:
+    return {"success": False, "message": message}
+
+
+def _parse_refresh_topic_response(response) -> tuple[Optional[dict], Optional[dict]]:
+    if response.status_code != 200:
+        return None, _build_refresh_topic_failure(f"API请求失败: {response.status_code}")
+
+    data = response.json()
+    if data.get("succeeded") and data.get("resp_data"):
+        return data["resp_data"]["topic"], None
+
+    return None, _build_refresh_topic_failure("API返回数据格式错误")
+
+
+def _build_refresh_topic_success(topic_data: dict) -> dict:
+    return {
+        "success": True,
+        "message": "话题信息已更新",
+        "updated_data": {
+            "likes_count": topic_data.get("likes_count", 0),
+            "comments_count": topic_data.get("comments_count", 0),
+            "reading_count": topic_data.get("reading_count", 0),
+            "readers_count": topic_data.get("readers_count", 0),
+        },
+    }
+
+
+def _should_fetch_more_comments(comments_count: int) -> bool:
+    return comments_count > 8
+
+
+def _build_fetch_comments_response(success: bool, message: str, comments_fetched: int) -> dict:
+    return {
+        "success": success,
+        "message": message,
+        "comments_fetched": comments_fetched,
+    }
+
+
+def _build_fetch_comments_skip_response(comments_count: int) -> dict:
+    return _build_fetch_comments_response(
+        True,
+        f"话题只有 {comments_count} 条评论，无需获取更多",
+        0,
+    )
+
+
+def _import_more_comments(crawler, topic_id: int, comments_count: int) -> int:
+    additional_comments = crawler.fetch_all_comments(topic_id, comments_count)
+    if not additional_comments:
+        return 0
+
+    crawler.db.import_additional_comments(topic_id, additional_comments)
+    crawler.db.conn.commit()
+    return len(additional_comments)
+
+
+def _build_pagination(page: int, per_page: int, total: int) -> dict:
+    return {
+        "page": page,
+        "per_page": per_page,
+        "total": total,
+        "pages": (total + per_page - 1) // per_page,
+    }
+
+
+def _format_topic_row(topic) -> dict:
+    return {
+        "topic_id": topic[0],
+        "title": topic[1],
+        "create_time": topic[2],
+        "likes_count": topic[3],
+        "comments_count": topic[4],
+        "reading_count": topic[5],
+    }
+
+
+def _format_group_topic_row(topic) -> dict:
+    topic_data = {
+        "topic_id": str(topic[0]) if topic[0] is not None else None,
+        "title": topic[1],
+        "create_time": topic[2],
+        "likes_count": topic[3],
+        "comments_count": topic[4],
+        "reading_count": topic[5],
+        "type": topic[6],
+        "digested": bool(topic[7]) if topic[7] is not None else False,
+        "sticky": bool(topic[8]) if topic[8] is not None else False,
+        "imported_at": topic[15] if len(topic) > 15 else None,
+    }
+
+    if topic[6] == "q&a":
+        topic_data["question_text"] = topic[9] if topic[9] else ""
+        topic_data["answer_text"] = topic[10] if topic[10] else ""
+    else:
+        topic_data["talk_text"] = topic[11] if topic[11] else ""
+        if topic[12]:
+            topic_data["author"] = {
+                "user_id": topic[12],
+                "name": topic[13],
+                "avatar_url": topic[14],
+            }
+
+    return topic_data
+
+
+def _build_topics_query(page: int, per_page: int, search: Optional[str]) -> tuple[str, tuple, str, tuple]:
+    offset = (page - 1) * per_page
+    if search:
+        search_param = f"%{search}%"
+        return (
+            """
+            SELECT topic_id, title, create_time, likes_count, comments_count, reading_count
+            FROM topics
+            WHERE title LIKE ?
+            ORDER BY create_time DESC
+            LIMIT ? OFFSET ?
+            """,
+            (search_param, per_page, offset),
+            "SELECT COUNT(*) FROM topics WHERE title LIKE ?",
+            (search_param,),
+        )
+
+    return (
+        """
+        SELECT topic_id, title, create_time, likes_count, comments_count, reading_count
+        FROM topics
+        ORDER BY create_time DESC
+        LIMIT ? OFFSET ?
+        """,
+        (per_page, offset),
+        "SELECT COUNT(*) FROM topics",
+        (),
+    )
+
+
+def _build_group_topics_query(group_id: int, page: int, per_page: int, search: Optional[str]) -> tuple[str, tuple, str, tuple]:
+    offset = (page - 1) * per_page
+    base_select = """
+        SELECT
+            t.topic_id, t.title, t.create_time, t.likes_count, t.comments_count,
+            t.reading_count, t.type, t.digested, t.sticky,
+            q.text as question_text,
+            a.text as answer_text,
+            tk.text as talk_text,
+            u.user_id, u.name, u.avatar_url, t.imported_at
+        FROM topics t
+        LEFT JOIN questions q ON t.topic_id = q.topic_id
+        LEFT JOIN answers a ON t.topic_id = a.topic_id
+        LEFT JOIN talks tk ON t.topic_id = tk.topic_id
+        LEFT JOIN users u ON tk.owner_user_id = u.user_id
+    """
+
+    if search:
+        search_param = f"%{search}%"
+        return (
+            f"""
+            {base_select}
+            WHERE t.group_id = ? AND (t.title LIKE ? OR q.text LIKE ? OR tk.text LIKE ?)
+            ORDER BY t.create_time DESC
+            LIMIT ? OFFSET ?
+            """,
+            (group_id, search_param, search_param, search_param, per_page, offset),
+            "SELECT COUNT(*) FROM topics WHERE group_id = ? AND title LIKE ?",
+            (group_id, search_param),
+        )
+
+    return (
+        f"""
+        {base_select}
+        WHERE t.group_id = ?
+        ORDER BY t.create_time DESC
+        LIMIT ? OFFSET ?
+        """,
+        (group_id, per_page, offset),
+        "SELECT COUNT(*) FROM topics WHERE group_id = ?",
+        (group_id,),
+    )
+
+
+def _fetch_rows_and_total(cursor, query: str, params: tuple, count_query: str, count_params: tuple) -> tuple[list, int]:
+    cursor.execute(query, params)
+    rows = cursor.fetchall()
+
+    cursor.execute(count_query, count_params)
+    total = cursor.fetchone()[0]
+
+    return rows, total
+
+
 @router.get("/topics")
 async def get_topics(page: int = 1, per_page: int = 20, search: Optional[str] = None):
     """获取话题列表"""
     try:
         crawler = get_crawler()
 
-        offset = (page - 1) * per_page
-
-        if search:
-            query = """
-                SELECT topic_id, title, create_time, likes_count, comments_count, reading_count
-                FROM topics
-                WHERE title LIKE ?
-                ORDER BY create_time DESC
-                LIMIT ? OFFSET ?
-            """
-            params = (f"%{search}%", per_page, offset)
-        else:
-            query = """
-                SELECT topic_id, title, create_time, likes_count, comments_count, reading_count
-                FROM topics
-                ORDER BY create_time DESC
-                LIMIT ? OFFSET ?
-            """
-            params = (per_page, offset)
-
-        crawler.db.cursor.execute(query, params)
-        topics = crawler.db.cursor.fetchall()
-
-        if search:
-            crawler.db.cursor.execute("SELECT COUNT(*) FROM topics WHERE title LIKE ?", (f"%{search}%",))
-        else:
-            crawler.db.cursor.execute("SELECT COUNT(*) FROM topics")
-        total = crawler.db.cursor.fetchone()[0]
+        query, params, count_query, count_params = _build_topics_query(page, per_page, search)
+        topics, total = _fetch_rows_and_total(crawler.db.cursor, query, params, count_query, count_params)
 
         return {
-            "topics": [
-                {
-                    "topic_id": topic[0],
-                    "title": topic[1],
-                    "create_time": topic[2],
-                    "likes_count": topic[3],
-                    "comments_count": topic[4],
-                    "reading_count": topic[5],
-                }
-                for topic in topics
-            ],
-            "pagination": {
-                "page": page,
-                "per_page": per_page,
-                "total": total,
-                "pages": (total + per_page - 1) // per_page,
-            },
+            "topics": [_format_topic_row(topic) for topic in topics],
+            "pagination": _build_pagination(page, per_page, total),
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"获取话题列表失败: {str(e)}")
@@ -79,111 +330,12 @@ async def get_group_topics(group_id: int, page: int = 1, per_page: int = 20, sea
     try:
         crawler = get_crawler_for_group(str(group_id))
 
-        try:
-            db_path = getattr(getattr(crawler, "db", None), "db_path", None)
-            print(f"[DEBUG get_group_topics] group_id={group_id}, db_path={db_path}, page={page}, per_page={per_page}")
-        except Exception as e:
-            print(f"[DEBUG get_group_topics] failed to print db_path: {e}")
-
-        offset = (page - 1) * per_page
-
-        if search:
-            query = """
-                SELECT
-                    t.topic_id, t.title, t.create_time, t.likes_count, t.comments_count,
-                    t.reading_count, t.type, t.digested, t.sticky,
-                    q.text as question_text,
-                    a.text as answer_text,
-                    tk.text as talk_text,
-                    u.user_id, u.name, u.avatar_url, t.imported_at
-                FROM topics t
-                LEFT JOIN questions q ON t.topic_id = q.topic_id
-                LEFT JOIN answers a ON t.topic_id = a.topic_id
-                LEFT JOIN talks tk ON t.topic_id = tk.topic_id
-                LEFT JOIN users u ON tk.owner_user_id = u.user_id
-                WHERE t.group_id = ? AND (t.title LIKE ? OR q.text LIKE ? OR tk.text LIKE ?)
-                ORDER BY t.create_time DESC
-                LIMIT ? OFFSET ?
-            """
-            params = (group_id, f"%{search}%", f"%{search}%", f"%{search}%", per_page, offset)
-        else:
-            query = """
-                SELECT
-                    t.topic_id, t.title, t.create_time, t.likes_count, t.comments_count,
-                    t.reading_count, t.type, t.digested, t.sticky,
-                    q.text as question_text,
-                    a.text as answer_text,
-                    tk.text as talk_text,
-                    u.user_id, u.name, u.avatar_url, t.imported_at
-                FROM topics t
-                LEFT JOIN questions q ON t.topic_id = q.topic_id
-                LEFT JOIN answers a ON t.topic_id = a.topic_id
-                LEFT JOIN talks tk ON t.topic_id = tk.topic_id
-                LEFT JOIN users u ON tk.owner_user_id = u.user_id
-                WHERE t.group_id = ?
-                ORDER BY t.create_time DESC
-                LIMIT ? OFFSET ?
-            """
-            params = (group_id, per_page, offset)
-
-        crawler.db.cursor.execute(query, params)
-        topics = crawler.db.cursor.fetchall()
-
-        try:
-            debug_rows = topics[:10]
-            debug_list = [(row[0], row[1]) for row in debug_rows]
-            print(f"[DEBUG get_group_topics] first topics from DB (topic_id, title): {debug_list}")
-
-            for row in debug_rows:
-                title = row[1] or ""
-                if isinstance(title, str) and title.startswith("Offer选择"):
-                    print(f"[DEBUG get_group_topics] Offer topic row from DB: topic_id={row[0]}, title={title}")
-        except Exception as e:
-            print(f"[DEBUG get_group_topics] failed to debug topics: {e}")
-
-        if search:
-            crawler.db.cursor.execute("SELECT COUNT(*) FROM topics WHERE group_id = ? AND title LIKE ?", (group_id, f"%{search}%"))
-        else:
-            crawler.db.cursor.execute("SELECT COUNT(*) FROM topics WHERE group_id = ?", (group_id,))
-        total = crawler.db.cursor.fetchone()[0]
-
-        topics_list = []
-        for topic in topics:
-            topic_data = {
-                "topic_id": str(topic[0]) if topic[0] is not None else None,
-                "title": topic[1],
-                "create_time": topic[2],
-                "likes_count": topic[3],
-                "comments_count": topic[4],
-                "reading_count": topic[5],
-                "type": topic[6],
-                "digested": bool(topic[7]) if topic[7] is not None else False,
-                "sticky": bool(topic[8]) if topic[8] is not None else False,
-                "imported_at": topic[15] if len(topic) > 15 else None,
-            }
-
-            if topic[6] == "q&a":
-                topic_data["question_text"] = topic[9] if topic[9] else ""
-                topic_data["answer_text"] = topic[10] if topic[10] else ""
-            else:
-                topic_data["talk_text"] = topic[11] if topic[11] else ""
-                if topic[12]:
-                    topic_data["author"] = {
-                        "user_id": topic[12],
-                        "name": topic[13],
-                        "avatar_url": topic[14],
-                    }
-
-            topics_list.append(topic_data)
+        query, params, count_query, count_params = _build_group_topics_query(group_id, page, per_page, search)
+        topics, total = _fetch_rows_and_total(crawler.db.cursor, query, params, count_query, count_params)
 
         return {
-            "topics": topics_list,
-            "pagination": {
-                "page": page,
-                "per_page": per_page,
-                "total": total,
-                "pages": (total + per_page - 1) // per_page,
-            },
+            "topics": [_format_group_topic_row(topic) for topic in topics],
+            "pagination": _build_pagination(page, per_page, total),
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"获取群组话题失败: {str(e)}")
@@ -196,26 +348,22 @@ async def clear_topic_database(group_id: str):
         path_manager = get_db_path_manager()
         db_path = path_manager.get_topics_db_path(group_id)
 
-        print(f"🗑️ 尝试删除话题数据库: {db_path}")
+        _log_topic_event("INFO", f"尝试删除话题数据库: {db_path}")
 
         if os.path.exists(db_path):
             try:
                 crawler = get_crawler_for_group(group_id)
-                if hasattr(crawler, "db") and crawler.db:
-                    crawler.db.close()
-                if hasattr(crawler, "file_downloader") and crawler.file_downloader:
-                    if hasattr(crawler.file_downloader, "file_db") and crawler.file_downloader.file_db:
-                        crawler.file_downloader.file_db.close()
-                print("✅ 已关闭爬虫实例的数据库连接")
+                _close_crawler_databases(crawler)
+                _log_topic_event("INFO", "已关闭爬虫实例的数据库连接")
             except Exception as e:
-                print(f"⚠️ 关闭爬虫数据库连接时出错: {e}")
+                _log_topic_event("WARN", f"关闭爬虫数据库连接时出错: {e}")
 
             gc.collect()
             time.sleep(0.5)
 
             try:
                 os.remove(db_path)
-                print(f"✅ 话题数据库已删除: {db_path}")
+                _log_topic_event("INFO", f"话题数据库已删除: {db_path}")
 
                 try:
                     from backend.core.image_cache_manager import clear_group_cache_manager, get_image_cache_manager
@@ -223,24 +371,24 @@ async def clear_topic_database(group_id: str):
                     cache_manager = get_image_cache_manager(group_id)
                     success, message = cache_manager.clear_cache()
                     if success:
-                        print(f"✅ 图片缓存已清空: {message}")
+                        _log_topic_event("INFO", f"图片缓存已清空: {message}")
                     else:
-                        print(f"⚠️ 清空图片缓存失败: {message}")
+                        _log_topic_event("WARN", f"清空图片缓存失败: {message}")
                     clear_group_cache_manager(group_id)
                 except Exception as cache_error:
-                    print(f"⚠️ 清空图片缓存时出错: {cache_error}")
+                    _log_topic_event("WARN", f"清空图片缓存时出错: {cache_error}")
 
                 return {"message": f"群组 {group_id} 的话题数据库和图片缓存已删除"}
             except PermissionError as pe:
-                print(f"❌ 文件被占用，无法删除: {pe}")
+                _log_topic_event("ERROR", f"文件被占用，无法删除: {pe}")
                 raise HTTPException(status_code=500, detail="文件被占用，无法删除数据库文件。请稍后重试。")
         else:
-            print(f"ℹ️ 话题数据库不存在: {db_path}")
+            _log_topic_event("INFO", f"话题数据库不存在: {db_path}")
             return {"message": f"群组 {group_id} 的话题数据库不存在"}
     except HTTPException:
         raise
     except Exception as e:
-        print(f"❌ 删除话题数据库失败: {str(e)}")
+        _log_topic_event("ERROR", f"删除话题数据库失败: {str(e)}")
         raise HTTPException(status_code=500, detail=f"删除话题数据库失败: {str(e)}")
 
 
@@ -271,27 +419,16 @@ async def refresh_topic(topic_id: int, group_id: str):
         headers = crawler.get_stealth_headers()
         response = requests.get(url, headers=headers, timeout=30)
 
-        if response.status_code == 200:
-            data = response.json()
-            if data.get("succeeded") and data.get("resp_data"):
-                topic_data = data["resp_data"]["topic"]
-                success = crawler.db.update_topic_stats(topic_data)
-                if not success:
-                    return {"success": False, "message": "话题不存在或更新失败"}
+        topic_data, error_response = _parse_refresh_topic_response(response)
+        if error_response:
+            return error_response
 
-                crawler.db.conn.commit()
-                return {
-                    "success": True,
-                    "message": "话题信息已更新",
-                    "updated_data": {
-                        "likes_count": topic_data.get("likes_count", 0),
-                        "comments_count": topic_data.get("comments_count", 0),
-                        "reading_count": topic_data.get("reading_count", 0),
-                        "readers_count": topic_data.get("readers_count", 0),
-                    },
-                }
-            return {"success": False, "message": "API返回数据格式错误"}
-        return {"success": False, "message": f"API请求失败: {response.status_code}"}
+        success = crawler.db.update_topic_stats(topic_data)
+        if not success:
+            return _build_refresh_topic_failure("话题不存在或更新失败")
+
+        crawler.db.conn.commit()
+        return _build_refresh_topic_success(topic_data)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"更新话题失败: {str(e)}")
 
@@ -306,34 +443,20 @@ async def fetch_more_comments(topic_id: int, group_id: str):
             raise HTTPException(status_code=404, detail="话题不存在")
 
         comments_count = topic_detail.get("comments_count", 0)
-        if comments_count <= 8:
-            return {
-                "success": True,
-                "message": f"话题只有 {comments_count} 条评论，无需获取更多",
-                "comments_fetched": 0,
-            }
+        if not _should_fetch_more_comments(comments_count):
+            return _build_fetch_comments_skip_response(comments_count)
 
         try:
-            additional_comments = crawler.fetch_all_comments(topic_id, comments_count)
-            if additional_comments:
-                crawler.db.import_additional_comments(topic_id, additional_comments)
-                crawler.db.conn.commit()
-                return {
-                    "success": True,
-                    "message": f"成功获取并导入 {len(additional_comments)} 条评论",
-                    "comments_fetched": len(additional_comments),
-                }
-            return {
-                "success": False,
-                "message": "获取评论失败，可能是权限限制或网络问题",
-                "comments_fetched": 0,
-            }
+            comments_fetched = _import_more_comments(crawler, topic_id, comments_count)
+            if comments_fetched:
+                return _build_fetch_comments_response(
+                    True,
+                    f"成功获取并导入 {comments_fetched} 条评论",
+                    comments_fetched,
+                )
+            return _build_fetch_comments_response(False, "获取评论失败，可能是权限限制或网络问题", 0)
         except Exception as e:
-            return {
-                "success": False,
-                "message": f"获取评论时出错: {str(e)}",
-                "comments_fetched": 0,
-            }
+            return _build_fetch_comments_response(False, f"获取评论时出错: {str(e)}", 0)
     except HTTPException:
         raise
     except Exception as e:
@@ -354,35 +477,12 @@ async def delete_single_topic(topic_id: int, group_id: int):
         if not exists:
             return {"success": False, "message": "话题不存在"}
 
-        tables_to_clean = [
-            "user_liked_emojis",
-            "like_emojis",
-            "likes",
-            "images",
-            "comments",
-            "answers",
-            "questions",
-            "articles",
-            "talks",
-            "topic_files",
-            "topic_tags",
-        ]
-
-        for table in tables_to_clean:
-            crawler.db.cursor.execute(f"DELETE FROM {table} WHERE topic_id = ?", (topic_id,))
-
-        crawler.db.cursor.execute("DELETE FROM topics WHERE topic_id = ? AND group_id = ?", (topic_id, group_id))
-
-        deleted = crawler.db.cursor.rowcount
+        deleted = _delete_single_topic_rows(crawler.db, topic_id, group_id)
         crawler.db.conn.commit()
 
-        return {"success": True, "deleted_topic_id": topic_id, "deleted": deleted > 0}
+        return {"success": True, "deleted_topic_id": topic_id, "deleted": deleted}
     except Exception as e:
-        try:
-            if crawler and hasattr(crawler, "db") and crawler.db:
-                crawler.db.conn.rollback()
-        except Exception:
-            pass
+        _rollback_crawler_db(crawler)
         raise HTTPException(status_code=500, detail=f"删除话题失败: {str(e)}")
 
 
@@ -397,14 +497,7 @@ async def fetch_single_topic(group_id: str, topic_id: int, fetch_comments: bool 
             (topic_id, group_id),
         )
         if crawler.db.cursor.fetchone():
-            return {
-                "success": True,
-                "topic_id": topic_id,
-                "group_id": int(group_id),
-                "imported": "skipped",
-                "message": "话题已存在，跳过采集",
-                "comments_fetched": 0,
-            }
+            return _build_single_topic_response(topic_id, group_id, "skipped", 0, "话题已存在，跳过采集")
 
         url = f"https://api.zsxq.com/v2/topics/{topic_id}/info"
         headers = crawler.get_stealth_headers()
@@ -421,9 +514,7 @@ async def fetch_single_topic(group_id: str, topic_id: int, fetch_comments: bool 
         if not topic:
             raise HTTPException(status_code=404, detail="未获取到有效话题数据")
 
-        topic_group_id = str((topic.get("group") or {}).get("group_id", ""))
-        if topic_group_id and topic_group_id != str(group_id):
-            raise HTTPException(status_code=400, detail="该话题不属于当前群组")
+        _validate_topic_group(topic, group_id)
 
         crawler.db.import_topic_data(topic)
         crawler.db.conn.commit()
@@ -431,23 +522,9 @@ async def fetch_single_topic(group_id: str, topic_id: int, fetch_comments: bool 
         comments_fetched = 0
         if fetch_comments:
             comments_count = topic.get("comments_count", 0) or 0
-            if comments_count > 0:
-                try:
-                    additional_comments = crawler.fetch_all_comments(topic_id, comments_count)
-                    if additional_comments:
-                        crawler.db.import_additional_comments(topic_id, additional_comments)
-                        crawler.db.conn.commit()
-                        comments_fetched = len(additional_comments)
-                except Exception as e:
-                    print(f"⚠️ 单话题评论获取失败: {e}")
+            comments_fetched = _fetch_and_import_topic_comments(crawler, topic_id, comments_count)
 
-        return {
-            "success": True,
-            "topic_id": topic_id,
-            "group_id": int(group_id),
-            "imported": "created",
-            "comments_fetched": comments_fetched,
-        }
+        return _build_single_topic_response(topic_id, group_id, "created", comments_fetched)
     except HTTPException:
         raise
     except Exception as e:
@@ -488,6 +565,7 @@ async def get_topics_by_tag(group_id: int, tag_id: int, page: int = 1, per_page:
 @router.delete("/groups/{group_id}/topics")
 async def delete_group_topics(group_id: int):
     """删除指定群组的所有话题数据"""
+    crawler = None
     try:
         crawler = get_crawler_for_group(str(group_id))
         crawler.db.cursor.execute("SELECT COUNT(*) FROM topics WHERE group_id = ?", (group_id,))
@@ -496,39 +574,7 @@ async def delete_group_topics(group_id: int):
         if topics_count == 0:
             return {"message": "该群组没有话题数据", "deleted_count": 0}
 
-        tables_to_clean = [
-            ("user_liked_emojis", "topic_id"),
-            ("like_emojis", "topic_id"),
-            ("likes", "topic_id"),
-            ("images", "topic_id"),
-            ("comments", "topic_id"),
-            ("answers", "topic_id"),
-            ("questions", "topic_id"),
-            ("articles", "topic_id"),
-            ("talks", "topic_id"),
-            ("topic_files", "topic_id"),
-            ("topic_tags", "topic_id"),
-            ("topics", "group_id"),
-        ]
-
-        deleted_counts = {}
-
-        for table, id_column in tables_to_clean:
-            if id_column == "group_id":
-                crawler.db.cursor.execute(f"DELETE FROM {table} WHERE {id_column} = ?", (group_id,))
-            else:
-                crawler.db.cursor.execute(
-                    f"""
-                    DELETE FROM {table}
-                    WHERE {id_column} IN (
-                        SELECT topic_id FROM topics WHERE group_id = ?
-                    )
-                    """,
-                    (group_id,),
-                )
-
-            deleted_counts[table] = crawler.db.cursor.rowcount
-
+        deleted_counts = _delete_group_topic_rows(crawler.db, group_id)
         crawler.db.conn.commit()
 
         return {
@@ -537,6 +583,5 @@ async def delete_group_topics(group_id: int):
             "deleted_details": deleted_counts,
         }
     except Exception as e:
-        crawler = get_crawler_for_group(str(group_id))
-        crawler.db.conn.rollback()
+        _rollback_crawler_db(crawler)
         raise HTTPException(status_code=500, detail=f"删除话题数据失败: {str(e)}")

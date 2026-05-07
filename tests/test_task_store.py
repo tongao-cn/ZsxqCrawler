@@ -273,6 +273,20 @@ class TaskStoreTests(unittest.TestCase):
         )
         self.assertEqual(1, len(self.store.get_logs("task-running")))
 
+    def test_chunk_values_splits_values_without_dropping_tail(self):
+        from backend.storage.task_store import _chunk_values
+
+        self.assertEqual([[1, 2], [3, 4], [5]], _chunk_values([1, 2, 3, 4, 5], 2))
+        self.assertEqual([], _chunk_values([], 2))
+
+    def test_cleanup_result_keeps_existing_shape(self):
+        from backend.storage.task_store import _cleanup_result
+
+        self.assertEqual(
+            {"tasks_deleted": 2, "logs_deleted": 3, "kept_latest": 1},
+            _cleanup_result(tasks_deleted=2, logs_deleted=3, kept_latest=1),
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
