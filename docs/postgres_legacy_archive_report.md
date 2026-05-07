@@ -1,6 +1,6 @@
 # PostgreSQL Legacy Schema Archive Report
 
-Generated at: 2026-05-07T12:00:58.561951+00:00
+Generated at: 2026-05-07T13:31:07.870151+00:00
 
 - Legacy schema count: 594
 - Legacy row count: 132450

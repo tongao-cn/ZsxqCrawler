@@ -409,6 +409,7 @@ class ZSXQDatabase:
             return True
             
         except Exception as e:
+            self.conn.rollback()
             print(f"导入话题数据失败: {e}")
             import traceback
             traceback.print_exc()

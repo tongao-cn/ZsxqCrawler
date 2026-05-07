@@ -90,6 +90,7 @@ class DbCompatTests(unittest.TestCase):
         self.assertTrue(_should_return_id("INSERT INTO crawl_log (message) VALUES (%s)"))
         self.assertTrue(_should_return_id('INSERT INTO "crawl_log" ("message") VALUES (%s)'))
         self.assertTrue(_should_return_id("INSERT INTO solutions (name) VALUES (%s)"))
+        self.assertTrue(_should_return_id("INSERT INTO tags (group_id, tag_name) VALUES (%s, %s)"))
         self.assertFalse(_should_return_id("INSERT INTO topics (topic_id) VALUES (%s)"))
         self.assertFalse(_should_return_id("INSERT INTO crawl_log (message) VALUES (%s) RETURNING id"))
 

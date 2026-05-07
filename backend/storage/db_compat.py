@@ -167,13 +167,13 @@ class PostgresCompatCursor:
             return self
 
         translated = _translate_sql(sql)
-        returning_id = _should_return_id(translated)
-        if returning_id:
-            translated = f"{translated.rstrip().rstrip(';')} RETURNING id"
+        returning_column = _returning_column(translated)
+        if returning_column:
+            translated = f"{translated.rstrip().rstrip(';')} RETURNING {quote_identifier(returning_column)}"
 
         self._cursor.execute(translated, tuple(params or ()))
         self.rowcount = self._cursor.rowcount
-        if returning_id:
+        if returning_column:
             row = self._cursor.fetchone()
             self.lastrowid = row[0] if row else None
         return self
@@ -329,10 +329,18 @@ def _replace_qmark_params(sql: str) -> str:
 
 
 def _should_return_id(sql: str) -> bool:
+    return _returning_column(sql) is not None
+
+
+def _returning_column(sql: str) -> Optional[str]:
     if re.search(r"\bRETURNING\b", sql, flags=re.I):
-        return False
+        return None
     match = re.match(r'\s*INSERT\s+INTO\s+(?:"([^"]+)"|(\w+))\s*\(', sql, flags=re.I)
     if not match:
-        return False
+        return None
     table_name = match.group(1) or match.group(2)
-    return table_name in {"crawl_log", "solutions"}
+    return {
+        "crawl_log": "id",
+        "solutions": "id",
+        "tags": "tag_id",
+    }.get(table_name)

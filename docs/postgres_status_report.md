@@ -1,21 +1,21 @@
 # PostgreSQL Status Report
 
-Generated at: 2026-05-07T12:00:54.462002+00:00
+Generated at: 2026-05-07T13:30:51.675741+00:00
 
 ## PostgreSQL Core Schema
 
 | Schema | Tables | Rows |
 | --- | ---: | ---: |
-| `zsxq_core` | 37 | 258053 |
+| `zsxq_core` | 37 | 258121 |
 
 ## Public Views
 
 | View | Rows |
 | --- | ---: |
 | `zsxq_public.groups` | 2 |
-| `zsxq_public.topics` | 12961 |
+| `zsxq_public.topics` | 12962 |
 | `zsxq_public.comments` | 121 |
-| `zsxq_public.files` | 20875 |
+| `zsxq_public.files` | 20877 |
 | `zsxq_public.columns` | 0 |
 | `zsxq_public.column_topics` | 0 |
 | `zsxq_public.daily_ai_reports` | 5 |

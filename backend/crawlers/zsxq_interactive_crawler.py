@@ -665,7 +665,10 @@ class ZSXQInteractiveCrawler:
                 exists = self.db.cursor.fetchone()
 
                 # 导入数据
-                self.db.import_topic_data(topic_data)
+                if not self.db.import_topic_data(topic_data):
+                    stats['errors'] += 1
+                    self.log(f"⚠️ 话题 {topic_id} 导入失败，已回滚该话题写入")
+                    continue
 
                 # 检查是否需要获取更多评论
                 comments_count = topic_data.get('comments_count', 0)
@@ -1328,7 +1331,10 @@ class ZSXQInteractiveCrawler:
                                 exists = self.db.cursor.fetchone()
                                 
                                 # 导入数据
-                                self.db.import_topic_data(new_topic)
+                                if not self.db.import_topic_data(new_topic):
+                                    total_stats['errors'] += 1
+                                    print(f"   ⚠️ 话题 {topic_id} 导入失败，已回滚该话题写入")
+                                    continue
                                 
                                 if exists:
                                     updated_topics_count += 1
