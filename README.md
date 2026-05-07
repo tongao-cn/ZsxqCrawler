@@ -1,7 +1,6 @@
 > [!IMPORTANT]
-> 本项目已归档为只读历史源，不再作为知识星球采集、下载、分析或 Web 工作台的运行入口。
-> 后续请使用 `C:\Dev\KnowActionSystem` 中的 ZSXQ 模块：`python main.py zsxq ...`、`/api/zsxq/*` 和 Web `/zsxq` 页面。
-> 旧目录仅用于追溯迁移前实现和历史输出数据。
+> 当前后端入口已整理到 `backend/`，根目录仅保留 `main.py` 作为兼容启动入口。
+> 推荐使用 `uv run zsxq-api` 或 `uv run python -m backend.main` 启动后端服务。
 
 <div align="center">
   <img src="images/_Image.png" alt="知识星球数据采集器" width="200">
@@ -113,9 +112,9 @@ uv run python -m backend.crawlers.zsxq_interactive_crawler
   <p><em>命令行界面 - 交互式操作控制台</em></p>
 </div>
 
-## 历史实现代码结构
+## 项目代码结构
 
-当前目录保留为历史实现与迁移参考。后端真实代码已经按职责整理到 `backend/`：
+后端代码已经按职责整理到 `backend/`：
 
 - `backend/main.py`: FastAPI 应用真实入口。
 - `backend/routes/`: API 路由模块。
@@ -137,6 +136,10 @@ uv run python -m backend.crawlers.zsxq_interactive_crawler
 ```bash
 uv run zsxq-api
 uv run zsxq-crawler
+uv run a-share-analysis
+uv run csv-chart-server
+uv run migrate-accounts
+uv run migrate-sqlite-to-postgres --replace-schema
 ```
 
 为兼容旧后端启动命令，项目根目录暂时仅保留 `main.py`；其它命令请使用 `pyproject.toml` 中的入口或 `python -m ...` 新目录入口。新增后端代码时优先放入 `backend/` 对应子目录。
@@ -156,6 +159,29 @@ uv run zsxq-crawler
   - 用于话题图片预览的本地缓存，如被删除，后续访问时会自动重新生成。
 
 > 提示：当前版本不会将文章导出为 Markdown/HTML 文件，**文章内容都存储在话题数据库中**；若需要再导出为文件，可以后续通过数据库二次处理实现。
+
+### PostgreSQL 存储
+
+默认仍使用 SQLite。要切换到 PostgreSQL，可在 `config.toml` 中配置：
+
+```toml
+[database]
+backend = "postgres"
+postgres_dsn = "postgresql://user:password@localhost:5432/zsxq"
+```
+
+也可以用环境变量覆盖：
+
+```bash
+$env:ZSXQ_DATABASE_BACKEND = "postgres"
+$env:ZSXQ_POSTGRES_DSN = "postgresql://user:password@localhost:5432/zsxq"
+```
+
+每个原 SQLite `.db` 文件会映射到 PostgreSQL 中独立的 `zsxq_*` schema，避免话题库、文件库、配置库之间的同名表冲突。迁移现有本地数据：
+
+```bash
+uv run migrate-sqlite-to-postgres --replace-schema
+```
 
 ## 赞助与支持
 

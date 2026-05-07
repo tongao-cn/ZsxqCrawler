@@ -27,7 +27,9 @@ reasoning_effort = "low"
 api_key = ""
 
 [database]
-# 可选：自定义数据库路径；留空则由路径管理器自动管理
+# backend = "sqlite"  # 可选：sqlite 或 postgres
+# postgres_dsn = "postgresql://user:password@localhost:5432/zsxq"
+# 可选：SQLite 自定义数据库路径；留空则由路径管理器自动管理
 # path = ""
 """
 
@@ -60,16 +62,32 @@ class DatabasePathManager:
     
     def _ensure_base_dir(self):
         """确保基础目录存在"""
-        if not os.path.exists(self.base_dir):
-            os.makedirs(self.base_dir, exist_ok=True)
-            print(f"📁 创建数据库目录: {self.base_dir}")
+        self._ensure_dir(self.base_dir, "数据库目录")
+
+    def _normalize_group_id(self, group_id: str) -> str:
+        """归一化群组ID为路径组件使用的字符串。"""
+        return str(group_id)
+
+    def _ensure_dir(self, path: str, label: str) -> None:
+        """确保目录存在。"""
+        if not os.path.exists(path):
+            os.makedirs(path, exist_ok=True)
+            print(f"📁 创建{label}: {path}")
+
+    def _get_group_db_path(self, group_id: str, db_name: str) -> str:
+        """构造指定群组的数据库路径。"""
+        normalized_group_id = self._normalize_group_id(group_id)
+        group_dir = self.get_group_dir(normalized_group_id)
+        return os.path.join(group_dir, f"zsxq_{db_name}_{normalized_group_id}.db")
+
+    def _get_config_db_path(self) -> str:
+        """构造全局配置数据库路径。"""
+        return os.path.join(self.base_dir, "zsxq_config.db")
     
     def get_group_dir(self, group_id: str) -> str:
         """获取指定群组的数据库目录"""
-        group_dir = os.path.join(self.base_dir, str(group_id))
-        if not os.path.exists(group_dir):
-            os.makedirs(group_dir, exist_ok=True)
-            print(f"📁 创建群组目录: {group_dir}")
+        group_dir = os.path.join(self.base_dir, self._normalize_group_id(group_id))
+        self._ensure_dir(group_dir, "群组目录")
         return group_dir
 
     def get_group_data_dir(self, group_id: str):
@@ -78,22 +96,19 @@ class DatabasePathManager:
     
     def get_topics_db_path(self, group_id: str) -> str:
         """获取话题数据库路径"""
-        group_dir = self.get_group_dir(group_id)
-        return os.path.join(group_dir, f"zsxq_topics_{group_id}.db")
+        return self._get_group_db_path(group_id, "topics")
     
     def get_files_db_path(self, group_id: str) -> str:
         """获取文件数据库路径"""
-        group_dir = self.get_group_dir(group_id)
-        return os.path.join(group_dir, f"zsxq_files_{group_id}.db")
+        return self._get_group_db_path(group_id, "files")
     
     def get_columns_db_path(self, group_id: str) -> str:
         """获取专栏数据库路径"""
-        group_dir = self.get_group_dir(group_id)
-        return os.path.join(group_dir, f"zsxq_columns_{group_id}.db")
+        return self._get_group_db_path(group_id, "columns")
     
     def get_config_db_path(self) -> str:
         """获取配置数据库路径（全局配置，不按群组分）"""
-        return os.path.join(self.base_dir, "zsxq_config.db")
+        return self._get_config_db_path()
     
     def get_main_db_path(self, group_id: str) -> str:
         """获取主数据库路径（兼容旧版本）"""
