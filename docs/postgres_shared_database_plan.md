@@ -76,6 +76,7 @@ Verify a reader DSN before giving it to another project:
 
 ```powershell
 uv run verify-postgres-reader-access --dsn "postgresql://zsxq_reader:password@host:5432/zsxq"
+uv run verify-postgres-writer-access --dsn "postgresql://zsxq_writer:password@host:5432/zsxq"
 ```
 
 Run the repeatable Docker smoke after changing public view or permission code:
@@ -86,8 +87,8 @@ Run the repeatable Docker smoke after changing public view or permission code:
 
 The smoke starts a disposable PostgreSQL container, creates representative
 legacy schemas directly in PostgreSQL, migrates them into `zsxq_core`,
-refreshes `zsxq_public`, checks repeated refresh behavior, validates reader
-`SELECT`, and confirms the reader cannot access core or legacy schemas.
+refreshes `zsxq_public`, checks repeated refresh behavior, validates writer
+and reader permissions, and confirms neither role depends on legacy schemas.
 
 Run the runtime cutover smoke after changing storage classes or `db_compat`:
 
@@ -163,6 +164,8 @@ Recommended onboarding checklist for another project:
 - Receive only the `zsxq_reader` DSN.
 - Run `uv run verify-postgres-reader-access --dsn "<reader-dsn>"` from this repo
   before sharing the DSN onward.
+- Keep the `zsxq_writer` DSN limited to ZsxqCrawler deployments and validate it
+  with `uv run verify-postgres-writer-access --dsn "<writer-dsn>"`.
 - Query only `zsxq_public.*` views.
 - Do not depend on `zsxq_core` or legacy `zsxq_*` schema names.
 

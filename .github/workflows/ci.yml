@@ -51,3 +51,6 @@ jobs:
 
       - name: Check reader access CLI help
         run: uv run verify-postgres-reader-access --help
+
+      - name: Check writer access CLI help
+        run: uv run verify-postgres-writer-access --help

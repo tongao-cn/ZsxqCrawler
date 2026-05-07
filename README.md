@@ -203,9 +203,10 @@ uv run generate-postgres-legacy-archive-report --output docs\postgres_legacy_arc
 
 ```bash
 uv run verify-postgres-reader-access --dsn "postgresql://zsxq_reader:password@host:5432/zsxq"
+uv run verify-postgres-writer-access --dsn "postgresql://zsxq_writer:password@host:5432/zsxq"
 ```
 
-修改 core 迁移、公共视图或权限逻辑后，可运行 Docker smoke 验证 PostgreSQL fixture、`zsxq_core` 回填、`zsxq_public` 查询、只读账号权限和重复刷新：
+修改 core 迁移、公共视图或权限逻辑后，可运行 Docker smoke 验证 PostgreSQL fixture、`zsxq_core` 回填、`zsxq_public` 查询、writer/reader 权限和重复刷新：
 
 ```bash
 .\scripts\run_postgres_core_smoke.ps1

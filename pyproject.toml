@@ -33,6 +33,7 @@ manage-postgres-public-schema = "scripts.manage_postgres_public_schema:main"
 generate-postgres-status-report = "scripts.generate_postgres_status_report:main"
 generate-postgres-legacy-archive-report = "scripts.generate_postgres_legacy_archive_report:main"
 verify-postgres-reader-access = "scripts.verify_postgres_reader_access:main"
+verify-postgres-writer-access = "scripts.verify_postgres_writer_access:main"
 
 [build-system]
 requires = ["hatchling"]

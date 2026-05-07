@@ -5,6 +5,7 @@ param(
     [string]$Database = "zsxq_core_smoke",
     [string]$PostgresPassword = "postgres",
     [string]$ReaderPassword = "readerpass",
+    [string]$WriterPassword = "writerpass",
     [switch]$KeepContainer
 )
 
@@ -136,9 +137,12 @@ finally:
         (Invoke-PgSql -User "postgres" -Password $PostgresPassword -Sql "SELECT count(*) FROM information_schema.schemata WHERE schema_name LIKE 'zsxq_legacy_%';") `
         "4"
 
-    Invoke-PgSql -User "postgres" -Password $PostgresPassword -Sql "ALTER ROLE zsxq_reader LOGIN PASSWORD '$ReaderPassword';" | Out-Null
+    Invoke-PgSql -User "postgres" -Password $PostgresPassword -Sql "ALTER ROLE zsxq_reader LOGIN PASSWORD '$ReaderPassword'; ALTER ROLE zsxq_writer LOGIN PASSWORD '$WriterPassword';" | Out-Null
     Invoke-Checked {
         uv run verify-postgres-reader-access --dsn "postgresql://zsxq_reader:$ReaderPassword@127.0.0.1:$Port/$Database"
+    }
+    Invoke-Checked {
+        uv run verify-postgres-writer-access --dsn "postgresql://zsxq_writer:$WriterPassword@127.0.0.1:$Port/$Database"
     }
 
     docker exec -e "PGPASSWORD=$ReaderPassword" $ContainerName `
