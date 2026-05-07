@@ -27,6 +27,8 @@ a-share-analysis = "scripts.analyze_a_share_companies:main"
 csv-chart-server = "scripts.csv_chart_server:main"
 migrate-accounts = "scripts.migrate_accounts_to_sql:migrate_accounts"
 migrate-sqlite-to-postgres = "scripts.migrate_sqlite_to_postgres:main"
+manage-postgres-public-schema = "scripts.manage_postgres_public_schema:main"
+audit-postgres-migration = "scripts.audit_postgres_migration:main"
 
 [build-system]
 requires = ["hatchling"]

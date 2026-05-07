@@ -1,5 +1,6 @@
 import sqlite3
 import unittest
+from unittest.mock import patch
 
 from scripts.migrate_sqlite_to_postgres import (
     _boolean_column_indexes,
@@ -7,6 +8,7 @@ from scripts.migrate_sqlite_to_postgres import (
     _quote_identifier,
     _sqlite_tables,
     _table_columns,
+    main,
 )
 
 
@@ -59,6 +61,30 @@ class MigrateSqliteToPostgresHelperTests(unittest.TestCase):
             self.assertEqual(_boolean_column_indexes(conn, 'topic " flags'), {1, 3})
         finally:
             conn.close()
+
+    def test_build_public_views_only_skips_sqlite_migration(self):
+        with (
+            patch("scripts.migrate_sqlite_to_postgres.get_database_backend", return_value="postgres"),
+            patch("scripts.migrate_sqlite_to_postgres.build_public_schema") as build_public_schema,
+            patch("scripts.migrate_sqlite_to_postgres.migrate_file") as migrate_file,
+            patch("sys.argv", ["migrate-sqlite-to-postgres", "--build-public-views"]),
+        ):
+            main()
+
+        build_public_schema.assert_called_once_with(apply=True, build_indexes=False)
+        migrate_file.assert_not_called()
+
+    def test_build_indexes_only_refreshes_public_schema_without_migration(self):
+        with (
+            patch("scripts.migrate_sqlite_to_postgres.get_database_backend", return_value="postgres"),
+            patch("scripts.migrate_sqlite_to_postgres.build_public_schema") as build_public_schema,
+            patch("scripts.migrate_sqlite_to_postgres.migrate_file") as migrate_file,
+            patch("sys.argv", ["migrate-sqlite-to-postgres", "--build-indexes"]),
+        ):
+            main()
+
+        build_public_schema.assert_called_once_with(apply=True, build_indexes=True)
+        migrate_file.assert_not_called()
 
 
 if __name__ == "__main__":

@@ -140,6 +140,8 @@ uv run a-share-analysis
 uv run csv-chart-server
 uv run migrate-accounts
 uv run migrate-sqlite-to-postgres --replace-schema
+uv run manage-postgres-public-schema --apply
+uv run audit-postgres-migration --root output\databases
 ```
 
 为兼容旧后端启动命令，项目根目录暂时仅保留 `main.py`；其它命令请使用 `pyproject.toml` 中的入口或 `python -m ...` 新目录入口。新增后端代码时优先放入 `backend/` 对应子目录。
@@ -181,6 +183,32 @@ $env:ZSXQ_POSTGRES_DSN = "postgresql://user:password@localhost:5432/zsxq"
 
 ```bash
 uv run migrate-sqlite-to-postgres --replace-schema
+```
+
+如果要让其它项目共享读取同一份 PostgreSQL 数据，可创建稳定的只读公共视图：
+
+```bash
+uv run migrate-sqlite-to-postgres --replace-schema --build-public-views --build-indexes
+```
+
+公共视图会写入 `zsxq_public` schema，并面向只读分析场景。详细说明见 `docs/postgres_shared_database_plan.md`。
+
+生产部署时，可用管理员 DSN 初始化登录角色和内部表索引：
+
+```bash
+uv run manage-postgres-public-schema --apply --build-indexes --login-roles --reader-password "<reader-password>" --writer-password "<writer-password>"
+```
+
+迁移后可做行数对账：
+
+```bash
+uv run audit-postgres-migration --root output\databases
+```
+
+修改迁移或公共视图逻辑后，可运行 Docker smoke 验证多 SQLite fixture 迁移、`zsxq_public` 查询、只读账号权限和重复刷新：
+
+```bash
+.\scripts\run_postgres_shared_smoke.ps1
 ```
 
 ## 赞助与支持
