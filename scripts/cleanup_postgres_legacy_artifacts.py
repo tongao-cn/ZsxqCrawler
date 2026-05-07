@@ -140,10 +140,10 @@ def apply_cleanup_plan(conn, plan: CleanupPlan) -> None:
         raise RuntimeError(f"Refusing cleanup: untracked legacy rows = {plan.untracked_rows}")
     if plan.active_writers != 0:
         raise RuntimeError(f"Refusing cleanup: active writer sessions = {plan.active_writers}")
-    with conn.cursor() as cur:
-        for statement in plan.statements:
+    for statement in plan.statements:
+        with conn.cursor() as cur:
             cur.execute(statement)
-    conn.commit()
+        conn.commit()
 
 
 def main() -> None:

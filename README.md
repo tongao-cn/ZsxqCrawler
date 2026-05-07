@@ -184,6 +184,8 @@ uv run backfill-postgres-core-group-ids --apply
 uv run manage-postgres-core-access --apply --login-roles --reader-password "<reader-password>" --writer-password "<writer-password>"
 ```
 
+只读账号的查询约定和常用 SQL 示例见 `docs/postgres_core_reader_usage.md`。
+
 旧的 path-derived `zsxq_*` schema、`zsxq_public` 和迁移追踪列属于迁移残留。真实库清理前必须先暂停任务、完成 PostgreSQL 备份，并用 dry-run 检查删除清单：
 
 ```bash

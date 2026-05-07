@@ -37,6 +37,45 @@ class CleanupPostgresLegacyArtifactsTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "active writer sessions"):
             apply_cleanup_plan(object(), plan)
 
+    def test_apply_commits_each_statement_to_avoid_large_lock_batches(self):
+        class FakeCursor:
+            def __init__(self, conn):
+                self.conn = conn
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+            def execute(self, statement):
+                self.conn.executed.append(statement)
+
+        class FakeConn:
+            def __init__(self):
+                self.executed = []
+                self.commits = 0
+
+            def cursor(self):
+                return FakeCursor(self)
+
+            def commit(self):
+                self.commits += 1
+
+        conn = FakeConn()
+        plan = CleanupPlan(
+            ["DROP SCHEMA one;", "DROP SCHEMA two;"],
+            legacy_schema_count=2,
+            tracked_rows=2,
+            untracked_rows=0,
+            active_writers=0,
+        )
+
+        apply_cleanup_plan(conn, plan)
+
+        self.assertEqual(["DROP SCHEMA one;", "DROP SCHEMA two;"], conn.executed)
+        self.assertEqual(2, conn.commits)
+
     def test_build_plan_discovers_public_legacy_and_tracking_columns(self):
         class FakeCursor:
             def __init__(self, conn):

@@ -1,12 +1,12 @@
 # PostgreSQL Status Report
 
-Generated at: manual template after zsxq_core cleanup
+Generated at: 2026-05-07T15:35:06.355957+00:00
 
 ## PostgreSQL Core Schema
 
 | Schema | Tables | Rows |
 | --- | ---: | ---: |
-| `zsxq_core` | 37 | 258121 |
+| `zsxq_core` | 36 | 126566 |
 
 ## Group ID Quality
 
