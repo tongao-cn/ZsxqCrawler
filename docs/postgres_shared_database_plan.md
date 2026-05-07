@@ -46,6 +46,7 @@ Refresh public views and indexes:
 $env:ZSXQ_DATABASE_BACKEND = "postgres"
 $env:ZSXQ_POSTGRES_DSN = "postgresql://zsxq_writer:password@host:5432/zsxq"
 uv run migrate-postgres-schemas-to-core --apply
+uv run backfill-postgres-core-group-ids --apply
 uv run manage-postgres-public-schema --apply --build-indexes
 ```
 
@@ -66,7 +67,10 @@ Generate a Markdown PostgreSQL status snapshot:
 
 ```powershell
 uv run generate-postgres-status-report --output docs\postgres_status_report.md
+uv run generate-postgres-legacy-archive-report --output docs\postgres_legacy_archive_report.md
 ```
+
+`generate-postgres-legacy-archive-report` only writes a report and future `DROP SCHEMA` SQL. It does not delete legacy schemas.
 
 Verify a reader DSN before giving it to another project:
 

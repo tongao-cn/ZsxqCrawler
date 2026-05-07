@@ -180,6 +180,7 @@ $env:ZSXQ_POSTGRES_DSN = "postgresql://user:password@localhost:5432/zsxq"
 
 ```bash
 uv run migrate-postgres-schemas-to-core --apply
+uv run backfill-postgres-core-group-ids --apply
 uv run manage-postgres-public-schema --apply --build-indexes
 ```
 
@@ -195,6 +196,7 @@ uv run manage-postgres-public-schema --apply --build-indexes --login-roles --rea
 
 ```bash
 uv run generate-postgres-status-report --output docs\postgres_status_report.md
+uv run generate-postgres-legacy-archive-report --output docs\postgres_legacy_archive_report.md
 ```
 
 给其它项目发 reader DSN 前，可验证它只能读取 `zsxq_public`：

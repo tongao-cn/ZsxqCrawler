@@ -8,6 +8,7 @@ import psycopg2
 
 from backend.storage.db_compat import get_database_backend, get_postgres_dsn
 from backend.storage.postgres_core_schema import CORE_SCHEMA
+from scripts.backfill_postgres_core_group_ids import group_id_quality_counts
 from scripts.manage_postgres_public_schema import PUBLIC_SCHEMA, PUBLIC_VIEW_SPECS, discover_internal_schemas, quote_identifier
 
 
@@ -63,9 +64,17 @@ def _legacy_schema_count(conn) -> int:
     return len([schema for schema in discover_internal_schemas(conn) if schema != CORE_SCHEMA])
 
 
+def _group_id_quality_summary(conn) -> dict[str, int]:
+    try:
+        return group_id_quality_counts(conn)
+    except Exception:
+        return {}
+
+
 def build_report(conn) -> str:
     core_rows = _schema_summary(conn, [CORE_SCHEMA])
     legacy_count = _legacy_schema_count(conn)
+    group_id_quality = _group_id_quality_summary(conn)
 
     lines = [
         "# PostgreSQL Status Report",
@@ -87,6 +96,10 @@ def build_report(conn) -> str:
         count_text = "missing" if count is None else str(count)
         lines.append(f"| `{PUBLIC_SCHEMA}.{spec.name}` | {count_text} |")
 
+    if group_id_quality:
+        lines.extend(["", "## Group ID Quality", "", "| Metric | Rows |", "| --- | ---: |"])
+        lines.extend(f"| `{name}` | {count} |" for name, count in group_id_quality.items())
+
     lines.extend(
         [
             "",
@@ -94,7 +107,6 @@ def build_report(conn) -> str:
             "",
             "- Other projects should read from `zsxq_public` with the reader DSN.",
             f"- Legacy archived `zsxq_*` schema count: {legacy_count}.",
-            "- `files.group_id` and `file_ai_analyses.group_id` may remain `NULL` when no reliable group relation exists.",
             "- Re-run this report after any PostgreSQL public view or data refresh.",
             "",
         ]

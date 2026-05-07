@@ -1,6 +1,6 @@
 # PostgreSQL Status Report
 
-Generated at: 2026-05-07T10:35:45.758241+00:00
+Generated at: 2026-05-07T10:46:29.411918+00:00
 
 ## PostgreSQL Core Schema
 
@@ -21,9 +21,17 @@ Generated at: 2026-05-07T10:35:45.758241+00:00
 | `zsxq_public.daily_ai_reports` | 5 |
 | `zsxq_public.file_ai_analyses` | 7 |
 
+## Group ID Quality
+
+| Metric | Rows |
+| --- | ---: |
+| `comments_null_group_id` | 0 |
+| `files_null_group_id` | 0 |
+| `file_ai_analyses_null_group_id` | 0 |
+| `files_ambiguous_group_id` | 0 |
+
 ## Notes
 
 - Other projects should read from `zsxq_public` with the reader DSN.
 - Legacy archived `zsxq_*` schema count: 594.
-- `files.group_id` and `file_ai_analyses.group_id` may remain `NULL` when no reliable group relation exists.
 - Re-run this report after any PostgreSQL public view or data refresh.
