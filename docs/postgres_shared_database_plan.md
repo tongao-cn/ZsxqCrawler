@@ -49,7 +49,7 @@ uv run migrate-sqlite-to-postgres --root output\databases --replace-schema
 Refresh public views in the same step:
 
 ```powershell
-uv run migrate-sqlite-to-postgres --root output\databases --replace-schema --build-public-views
+uv run migrate-sqlite-to-postgres --root output\databases --replace-schema --build-public-views --build-indexes
 ```
 
 Inspect public schema SQL without applying it:
@@ -62,6 +62,31 @@ Apply or refresh `zsxq_public` views and grants:
 
 ```powershell
 uv run manage-postgres-public-schema --apply
+```
+
+Production role initialization can be done after the first migration with a
+privileged DSN:
+
+```powershell
+$env:ZSXQ_POSTGRES_DSN = "postgresql://postgres:admin-password@host:5432/zsxq"
+uv run manage-postgres-public-schema --apply --build-indexes --login-roles --reader-password "<reader-password>" --writer-password "<writer-password>"
+```
+
+After that, configure ZsxqCrawler with the writer DSN and share only the reader
+DSN with other projects:
+
+```toml
+[database]
+backend = "postgres"
+postgres_dsn = "postgresql://zsxq_writer:<writer-password>@host:5432/zsxq"
+```
+
+Audit a real migration after loading data:
+
+```powershell
+$env:ZSXQ_DATABASE_BACKEND = "postgres"
+$env:ZSXQ_POSTGRES_DSN = "postgresql://postgres:admin-password@host:5432/zsxq"
+uv run audit-postgres-migration --root output\databases
 ```
 
 Run the repeatable Docker smoke after changing migration or public view code:
@@ -87,17 +112,34 @@ objects in the public schema.
 
 Initial shared views:
 
-- `zsxq_public.groups`
-- `zsxq_public.topics`
-- `zsxq_public.comments`
-- `zsxq_public.files`
-- `zsxq_public.columns`
-- `zsxq_public.column_topics`
-- `zsxq_public.daily_ai_reports`
-- `zsxq_public.file_ai_analyses`
+- `zsxq_public.groups`: `group_id`, `group_name`, `group_type`,
+  `background_url`, `created_at`, `source_updated_at`, `source_schema`.
+- `zsxq_public.topics`: `group_id`, `topic_id`, `title`, `topic_type`,
+  `create_time`, `updated_at`, `source_updated_at`, `source_schema`.
+- `zsxq_public.comments`: `group_id`, `comment_id`, `topic_id`,
+  `owner_user_id`, `text`, `create_time`, `source_updated_at`,
+  `source_schema`.
+- `zsxq_public.files`: `group_id`, `file_id`, `name`, `size`,
+  `download_status`, `local_path`, `create_time`, `source_updated_at`,
+  `source_schema`.
+- `zsxq_public.columns`: `group_id`, `column_id`, `name`, `description`,
+  `topics_count`, `created_at`, `source_updated_at`, `source_schema`.
+- `zsxq_public.column_topics`: `group_id`, `column_id`, `topic_id`, `title`,
+  `create_time`, `source_updated_at`, `source_schema`.
+- `zsxq_public.daily_ai_reports`: `group_id`, `report_date`, `topic_count`,
+  `summary`, `created_at`, `source_updated_at`, `source_schema`.
+- `zsxq_public.file_ai_analyses`: `group_id`, `file_id`, `status`,
+  `summary`, `content_type`, `source_path`, `source_updated_at`,
+  `source_schema`.
 
 Each view includes `source_schema` so downstream consumers can trace records
 back to the compatibility schema that produced them.
+
+`comments.group_id` is derived from the same schema's `topics` table when the
+comment table itself does not carry `group_id`. `files.group_id` and
+`file_ai_analyses.group_id` use a single-group fallback from the same schema's
+`groups` table when present; otherwise they remain `NULL` until a stronger
+file-to-topic/group relation is available.
 
 Minimum Python read example for other projects:
 
@@ -135,3 +177,5 @@ WHERE download_status = 'downloaded';
   `--replace-schema` is explicitly provided.
 - Other projects should treat `zsxq_public` as the stable contract and should
   not depend on internal `zsxq_*` compatibility schemas.
+- `--build-indexes` creates best-effort indexes on common internal query
+  columns. It is safe to repeat and skips missing legacy columns.

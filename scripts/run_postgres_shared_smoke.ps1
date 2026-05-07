@@ -49,6 +49,19 @@ function Assert-Equal {
     Write-Host "[ok] $Name = $Actual"
 }
 
+function Assert-AtLeast {
+    param(
+        [string]$Name,
+        [string]$Actual,
+        [int]$Minimum
+    )
+    $actualValue = [int]$Actual
+    if ($actualValue -lt $Minimum) {
+        throw "$Name expected at least $Minimum but got $Actual"
+    }
+    Write-Host "[ok] $Name >= $Minimum"
+}
+
 try {
     Set-Location $repoRoot
 
@@ -202,7 +215,13 @@ legacy.close()
         uv run migrate-sqlite-to-postgres --root tmp\pg_shared_smoke --replace-schema --build-public-views
     }
     Invoke-Checked {
+        uv run manage-postgres-public-schema --apply --build-indexes
+    }
+    Invoke-Checked {
         uv run migrate-sqlite-to-postgres --build-public-views
+    }
+    Invoke-Checked {
+        uv run audit-postgres-migration --root tmp\pg_shared_smoke
     }
 
     Invoke-PgSql -User "postgres" -Password $PostgresPassword -Sql "ALTER ROLE zsxq_reader LOGIN PASSWORD '$ReaderPassword';" | Out-Null
@@ -222,6 +241,12 @@ legacy.close()
     Assert-Equal "legacy optional fields become null" `
         (Invoke-PgSql -User "postgres" -Password $PostgresPassword -Sql "SELECT count(*) FROM zsxq_public.topics WHERE topic_id = 't-legacy' AND source_updated_at IS NULL AND topic_type IS NULL;") `
         "1"
+    Assert-Equal "comment group_id filled from topics" `
+        (Invoke-PgSql -User "postgres" -Password $PostgresPassword -Sql "SELECT count(*) FROM zsxq_public.comments WHERE comment_id = 'c-full' AND group_id = 'g-full';") `
+        "1"
+    Assert-AtLeast "internal indexes created" `
+        (Invoke-PgSql -User "postgres" -Password $PostgresPassword -Sql "SELECT count(*) FROM pg_indexes WHERE schemaname LIKE 'zsxq_%' AND schemaname <> 'zsxq_public' AND indexname LIKE 'idx_topics_group_id_%';") `
+        1
     Assert-Equal "reader can select public topics" `
         (Invoke-PgSql -User "zsxq_reader" -Password $ReaderPassword -Sql "SELECT count(*) FROM zsxq_public.topics;") `
         "2"

@@ -3,6 +3,7 @@ import unittest
 from scripts.manage_postgres_public_schema import (
     PUBLIC_SCHEMA,
     PUBLIC_VIEW_SPECS,
+    build_internal_index_sql,
     build_public_view_sql,
     build_role_sql,
     quote_identifier,
@@ -26,10 +27,10 @@ class ManagePostgresPublicSchemaTests(unittest.TestCase):
         )
 
         self.assertIn(f'CREATE OR REPLACE VIEW "{PUBLIC_SCHEMA}"."topics"', sql)
-        self.assertIn('"zsxq_topics_a"."topics"', sql)
+        self.assertIn('"zsxq_topics_a"."topics" AS "src"', sql)
         self.assertNotIn('"zsxq_files_b"."topics"', sql)
         self.assertIn("'zsxq_topics_a'::text AS source_schema", sql)
-        self.assertIn('"group_id"::text AS "group_id"', sql)
+        self.assertIn('"src"."group_id"::text AS "group_id"', sql)
 
     def test_build_public_view_sql_returns_empty_view_when_no_schema_matches(self):
         files_spec = next(spec for spec in PUBLIC_VIEW_SPECS if spec.name == "files")
@@ -53,6 +54,27 @@ class ManagePostgresPublicSchemaTests(unittest.TestCase):
         self.assertNotIn("updated_at::text", sql)
         self.assertNotIn("imported_at::text", sql)
 
+    def test_build_public_view_sql_fills_comment_group_id_from_topics(self):
+        comment_spec = next(spec for spec in PUBLIC_VIEW_SPECS if spec.name == "comments")
+
+        sql = build_public_view_sql(
+            comment_spec,
+            [("zsxq_topics_db", {"comment_id", "topic_id", "text"})],
+            schema_table_columns=[
+                (
+                    "zsxq_topics_db",
+                    {
+                        "comments": {"comment_id", "topic_id", "text"},
+                        "topics": {"topic_id", "group_id"},
+                    },
+                )
+            ],
+        )
+
+        self.assertIn('FROM "zsxq_topics_db"."topics" AS "t"', sql)
+        self.assertIn('"t"."topic_id"::text = "src"."topic_id"::text', sql)
+        self.assertIn('AS "group_id"', sql)
+
     def test_build_role_sql_grants_reader_select_only_shape(self):
         sql = build_role_sql(reader_role="reader", writer_role="writer", public_schema="public_read")
 
@@ -62,6 +84,58 @@ class ManagePostgresPublicSchemaTests(unittest.TestCase):
         self.assertIn('GRANT USAGE ON SCHEMA "public_read" TO "reader"', sql)
         self.assertIn('GRANT SELECT ON ALL TABLES IN SCHEMA "public_read" TO "reader"', sql)
         self.assertNotIn('GRANT INSERT', "\n".join(sql))
+
+    def test_build_role_sql_can_emit_login_password_setup(self):
+        sql = build_role_sql(
+            reader_role="reader",
+            writer_role="writer",
+            public_schema="public_read",
+            login_roles=True,
+            reader_password="reader'pw",
+            writer_password="writer-pw",
+        )
+
+        self.assertIn('ALTER ROLE "reader" LOGIN', sql)
+        self.assertIn('ALTER ROLE "writer" LOGIN', sql)
+        self.assertIn('ALTER ROLE "reader" LOGIN PASSWORD \'reader\'\'pw\'', sql)
+        self.assertIn('ALTER ROLE "writer" LOGIN PASSWORD \'writer-pw\'', sql)
+
+    def test_build_internal_index_sql_uses_existing_columns_only(self):
+        class FakeCursor:
+            def __init__(self):
+                self.rows = []
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+            def execute(self, sql, params=None):
+                if "information_schema.schemata" in sql:
+                    self.rows = [("zsxq_a",)]
+                elif "information_schema.columns" in sql:
+                    columns = {
+                        "topics": [("group_id",), ("topic_id",), ("create_time",)],
+                        "files": [("file_id",)],
+                    }.get(params[1], [])
+                    self.rows = columns
+                else:
+                    self.rows = []
+
+            def fetchall(self):
+                return self.rows
+
+        class FakeConn:
+            def cursor(self):
+                return FakeCursor()
+
+        sql = "\n".join(build_internal_index_sql(FakeConn()))
+
+        self.assertIn('ON "zsxq_a"."topics" ("group_id")', sql)
+        self.assertIn('ON "zsxq_a"."topics" ("topic_id")', sql)
+        self.assertIn('ON "zsxq_a"."files" ("file_id")', sql)
+        self.assertNotIn('"updated_at"', sql)
 
 
 if __name__ == "__main__":

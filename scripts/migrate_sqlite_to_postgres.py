@@ -138,7 +138,14 @@ def main() -> None:
         action="store_true",
         help="Create or refresh zsxq_public views and read-only grants after migration.",
     )
+    parser.add_argument(
+        "--build-indexes",
+        action="store_true",
+        help="Create best-effort indexes on migrated PostgreSQL tables when refreshing public schema.",
+    )
     args = parser.parse_args()
+    if args.build_indexes:
+        args.build_public_views = True
 
     if get_database_backend() != "postgres":
         raise RuntimeError("Set ZSXQ_DATABASE_BACKEND=postgres or config.toml [database].backend = 'postgres'")
@@ -146,7 +153,7 @@ def main() -> None:
     migrate_databases = bool(args.root or args.replace_schema or not args.build_public_views)
 
     if not migrate_databases:
-        build_public_schema(apply=True)
+        build_public_schema(apply=True, build_indexes=args.build_indexes)
         print("zsxq_public views refreshed")
         return
 
@@ -167,7 +174,7 @@ def main() -> None:
         )
 
     if args.build_public_views:
-        build_public_schema(apply=True)
+        build_public_schema(apply=True, build_indexes=args.build_indexes)
         print("zsxq_public views refreshed")
 
 

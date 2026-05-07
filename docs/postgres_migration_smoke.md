@@ -53,6 +53,9 @@ Expected additional checks:
   fixture rows from multiple migrated SQLite databases
 - legacy/minimal databases produce `NULL` optional public fields instead of
   invalid view SQL
+- `comments.group_id` can be filled from the migrated `topics` table
+- internal table indexes can be created repeatedly
+- migration row counts and public view row counts pass `audit-postgres-migration`
 - a reader role can `SELECT` from public views but cannot write to them
 - a reader role cannot read internal `zsxq_*` compatibility schemas
 - repeated `--build-public-views` runs do not fail
