@@ -25,6 +25,11 @@ except ImportError:
         tomllib = None
 
 
+def _query_group_id(group_id: str):
+    value = str(group_id or "").strip()
+    return int(value) if value.isdigit() else value
+
+
 class ZSXQInteractiveCrawler:
     """知识星球交互式数据采集器"""
     
@@ -651,7 +656,10 @@ class ZSXQInteractiveCrawler:
                 topic_id = topic_data.get('topic_id')
 
                 # 检查是否已存在
-                self.db.cursor.execute('SELECT topic_id FROM topics WHERE topic_id = ?', (topic_id,))
+                self.db.cursor.execute(
+                    'SELECT topic_id FROM topics WHERE topic_id = ? AND group_id = ?',
+                    (topic_id, _query_group_id(self.group_id)),
+                )
                 exists = self.db.cursor.fetchone()
 
                 # 导入数据
@@ -949,7 +957,10 @@ class ZSXQInteractiveCrawler:
                     new_topics_count = 0
                     for topic in topics:
                         topic_id = topic.get('topic_id')
-                        self.db.cursor.execute('SELECT topic_id FROM topics WHERE topic_id = ?', (topic_id,))
+                        self.db.cursor.execute(
+                            'SELECT topic_id FROM topics WHERE topic_id = ? AND group_id = ?',
+                            (topic_id, _query_group_id(self.group_id)),
+                        )
                         if not self.db.cursor.fetchone():
                             new_topics_count += 1
                     
@@ -1115,7 +1126,10 @@ class ZSXQInteractiveCrawler:
                     new_topics_count = 0
                     for topic in topics:
                         topic_id = topic.get('topic_id')
-                        self.db.cursor.execute('SELECT topic_id FROM topics WHERE topic_id = ?', (topic_id,))
+                        self.db.cursor.execute(
+                            'SELECT topic_id FROM topics WHERE topic_id = ? AND group_id = ?',
+                            (topic_id, _query_group_id(self.group_id)),
+                        )
                         if not self.db.cursor.fetchone():
                             new_topics_count += 1
                     
@@ -1276,7 +1290,10 @@ class ZSXQInteractiveCrawler:
                     
                     for topic in topics:
                         topic_id = topic.get('topic_id')
-                        self.db.cursor.execute('SELECT topic_id FROM topics WHERE topic_id = ?', (topic_id,))
+                        self.db.cursor.execute(
+                            'SELECT topic_id FROM topics WHERE topic_id = ? AND group_id = ?',
+                            (topic_id, _query_group_id(self.group_id)),
+                        )
                         if self.db.cursor.fetchone():
                             existing_count += 1
                         else:
@@ -1323,7 +1340,10 @@ class ZSXQInteractiveCrawler:
                             try:
                                 topic_id = new_topic.get('topic_id')
                                 # 检查是否已存在（双重检查）
-                                self.db.cursor.execute('SELECT topic_id FROM topics WHERE topic_id = ?', (topic_id,))
+                                self.db.cursor.execute(
+                                    'SELECT topic_id FROM topics WHERE topic_id = ? AND group_id = ?',
+                                    (topic_id, _query_group_id(self.group_id)),
+                                )
                                 exists = self.db.cursor.fetchone()
                                 
                                 # 导入数据

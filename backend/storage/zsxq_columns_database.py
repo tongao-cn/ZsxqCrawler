@@ -76,6 +76,11 @@ def _empty_stats() -> Dict[str, int]:
     }
 
 
+def _group_id_param(group_id: Optional[str]) -> Any:
+    value = str(group_id or "").strip()
+    return int(value) if value.isdigit() else value
+
+
 class ZSXQColumnsDatabase:
     """知识星球专栏数据库管理器"""
     
@@ -880,16 +885,17 @@ class ZSXQColumnsDatabase:
     
     def update_file_download_status(self, file_id: int, status: str, local_path: str = None):
         """更新文件下载状态"""
+        group_id = _group_id_param(self.group_id)
         if local_path:
             self.cursor.execute('''
                 UPDATE files SET download_status = ?, local_path = ?, download_time = CURRENT_TIMESTAMP
-                WHERE file_id = ?
-            ''', (status, local_path, file_id))
+                WHERE file_id = ? AND (? IS NULL OR group_id = ?)
+            ''', (status, local_path, file_id, group_id, group_id))
         else:
             self.cursor.execute('''
                 UPDATE files SET download_status = ?
-                WHERE file_id = ?
-            ''', (status, file_id))
+                WHERE file_id = ? AND (? IS NULL OR group_id = ?)
+            ''', (status, file_id, group_id, group_id))
         self.conn.commit()
     
     def get_pending_files(self, group_id: int = None) -> List[Dict[str, Any]]:

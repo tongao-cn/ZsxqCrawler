@@ -52,10 +52,73 @@ def _row_to_file_ai_analysis(row: Any) -> Optional[Dict[str, Any]]:
     return dict(zip(_FILE_AI_ANALYSIS_FIELDS, row))
 
 
-def _count_tables(cursor: Any, tables: Any = _STATS_TABLES) -> Dict[str, Any]:
+def _group_id_param(group_id: Optional[str]) -> Any:
+    value = str(group_id or "").strip()
+    return int(value) if value.isdigit() else value
+
+
+def _count_tables(cursor: Any, tables: Any = _STATS_TABLES, group_id: Optional[str] = None) -> Dict[str, Any]:
     stats = {}
+    scoped_topic_ids_sql = "SELECT topic_id FROM topics WHERE group_id = ?"
+    group_param = _group_id_param(group_id)
     for table in tables:
-        cursor.execute(f"SELECT COUNT(*) FROM {table}")
+        if group_id is None:
+            cursor.execute(f"SELECT COUNT(*) FROM {table}")
+        elif table in {"groups", "topics", "files", "columns", "column_topics", "topic_details", "comments", "file_ai_analyses"}:
+            cursor.execute(f"SELECT COUNT(*) FROM {table} WHERE group_id = ?", (group_param,))
+        elif table in {
+            "talks",
+            "articles",
+            "images",
+            "topic_files",
+            "latest_likes",
+            "likes",
+            "like_emojis",
+            "user_liked_emojis",
+            "questions",
+            "answers",
+            "topic_tags",
+            "topic_columns",
+            "solutions",
+        }:
+            cursor.execute(f"SELECT COUNT(*) FROM {table} WHERE topic_id IN ({scoped_topic_ids_sql})", (group_param,))
+        elif table == "file_topic_relations":
+            cursor.execute(f"SELECT COUNT(*) FROM {table} WHERE topic_id IN ({scoped_topic_ids_sql})", (group_param,))
+        elif table == "solution_files":
+            cursor.execute(
+                f"""
+                SELECT COUNT(*)
+                FROM solution_files sf
+                JOIN solutions s ON s.id = sf.solution_id
+                WHERE s.topic_id IN ({scoped_topic_ids_sql})
+                """,
+                (group_param,),
+            )
+        elif table == "users":
+            cursor.execute(
+                f"""
+                SELECT COUNT(DISTINCT user_id)
+                FROM (
+                    SELECT owner_user_id AS user_id FROM talks WHERE topic_id IN ({scoped_topic_ids_sql})
+                    UNION
+                    SELECT owner_user_id AS user_id FROM comments WHERE topic_id IN ({scoped_topic_ids_sql})
+                    UNION
+                    SELECT owner_user_id AS user_id FROM questions WHERE topic_id IN ({scoped_topic_ids_sql})
+                    UNION
+                    SELECT questionee_user_id AS user_id FROM questions WHERE topic_id IN ({scoped_topic_ids_sql})
+                    UNION
+                    SELECT owner_user_id AS user_id FROM answers WHERE topic_id IN ({scoped_topic_ids_sql})
+                ) scoped_users
+                WHERE user_id IS NOT NULL
+                """,
+                (group_param, group_param, group_param, group_param, group_param),
+            )
+        elif table == "api_responses":
+            cursor.execute("SELECT COUNT(*) FROM api_responses")
+        elif table == "collection_log":
+            cursor.execute("SELECT COUNT(*) FROM collection_log")
+        else:
+            cursor.execute(f"SELECT COUNT(*) FROM {table}")
         stats[table] = cursor.fetchone()[0]
     return stats
 
@@ -486,7 +549,8 @@ class ZSXQFileDatabase:
                 ELSE download_time
             END
         WHERE file_id = ?
-        ''', (status, local_path, status, file_id))
+          AND (? IS NULL OR group_id = ?)
+        ''', (status, local_path, status, file_id, _group_id_param(self.group_id), _group_id_param(self.group_id)))
         self.conn.commit()
     
     def insert_talk(self, topic_id: int, talk_data: Dict[str, Any]):
@@ -793,7 +857,7 @@ class ZSXQFileDatabase:
     
     def get_database_stats(self) -> Dict[str, Any]:
         """获取数据库统计信息"""
-        return _count_tables(self.cursor)
+        return _count_tables(self.cursor, group_id=self.group_id)
 
     def _migrate_database(self):
         """执行数据库迁移，添加新列"""
@@ -858,12 +922,13 @@ class ZSXQFileDatabase:
     ):
         self.cursor.execute('''
         INSERT INTO file_ai_analyses (
-            file_id, status, summary, extracted_text, extracted_text_preview, content_type,
+            file_id, group_id, status, summary, extracted_text, extracted_text_preview, content_type,
             source_path, source_size, model, api_base, wire_api, reasoning_effort,
             error_message, created_at, updated_at
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
         ON CONFLICT(file_id) DO UPDATE SET
+            group_id=COALESCE(excluded.group_id, file_ai_analyses.group_id),
             status=excluded.status,
             summary=excluded.summary,
             extracted_text=excluded.extracted_text,
@@ -878,7 +943,7 @@ class ZSXQFileDatabase:
             error_message=excluded.error_message,
             updated_at=CURRENT_TIMESTAMP
         ''', (
-            file_id, status, summary, extracted_text, extracted_text_preview, content_type,
+            file_id, _group_id_param(self.group_id), status, summary, extracted_text, extracted_text_preview, content_type,
             source_path, source_size, model, api_base, wire_api, reasoning_effort,
             error_message
         ))
@@ -892,7 +957,8 @@ class ZSXQFileDatabase:
             error_message, created_at, updated_at
         FROM file_ai_analyses
         WHERE file_id = ?
-        ''', (file_id,))
+          AND (? IS NULL OR group_id = ?)
+        ''', (file_id, _group_id_param(self.group_id), _group_id_param(self.group_id)))
         row = self.cursor.fetchone()
         return _row_to_file_ai_analysis(row)
 

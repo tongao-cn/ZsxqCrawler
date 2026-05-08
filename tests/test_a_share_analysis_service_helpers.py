@@ -23,6 +23,9 @@ class _FakeAShareCursor:
     def fetchall(self):
         return list(self._rows)
 
+    def fetchone(self):
+        return self._rows[0] if self._rows else None
+
 
 class _FakeAShareConnection:
     def __init__(self):
@@ -136,6 +139,27 @@ class AShareAnalysisServiceHelperTests(unittest.TestCase):
             ],
             items,
         )
+
+    def test_get_source_topics_summary_filters_by_group_scope(self):
+        from backend.services import a_share_analysis_service as service
+
+        fake_conn = _FakeAShareConnection()
+        fake_conn.cursor_obj._rows = [(2, "2026-05-01T10:00:00+0800", "2026-05-07T10:00:00+0800")]
+
+        def execute(sql, params=None):
+            fake_conn.cursor_obj.calls.append((sql, params))
+            fake_conn.cursor_obj._rows = [(2, "2026-05-01T10:00:00+0800", "2026-05-07T10:00:00+0800")]
+
+        fake_conn.cursor_obj.execute = execute
+
+        with patch.object(service, "connect", return_value=fake_conn):
+            summary = service.get_source_topics_summary("51111112855254")
+
+        sql, params = fake_conn.cursor_obj.calls[0]
+        self.assertIn("WHERE group_id = ?", sql)
+        self.assertEqual((51111112855254,), params)
+        self.assertTrue(fake_conn.closed)
+        self.assertEqual(2, summary["topics_count"])
 
 
 if __name__ == "__main__":

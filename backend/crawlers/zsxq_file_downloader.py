@@ -20,6 +20,11 @@ from backend.storage.postgres_core_schema import CORE_SCHEMA
 from backend.storage.zsxq_file_database import ZSXQFileDatabase
 
 
+def _query_group_id(group_id: str) -> Any:
+    value = str(group_id or "").strip()
+    return int(value) if value.isdigit() else value
+
+
 class ZSXQFileDownloader:
     """知识星球文件下载器"""
     
@@ -937,8 +942,9 @@ class ZSXQFileDownloader:
                    MAX(create_time) as newest_time,
                    COUNT(*) as total_count
             FROM files 
-            WHERE create_time IS NOT NULL AND create_time != ''
-        ''')
+            WHERE group_id = ?
+              AND create_time IS NOT NULL AND create_time != ''
+        ''', (_query_group_id(self.group_id),))
         
         result = self.file_db.cursor.fetchone()
         
@@ -986,8 +992,9 @@ class ZSXQFileDownloader:
         if enable_time_dedupe and initial_files > 0:
             self.file_db.cursor.execute('''
                 SELECT MAX(create_time) FROM files 
-                WHERE create_time IS NOT NULL AND create_time != ''
-            ''')
+                WHERE group_id = ?
+                  AND create_time IS NOT NULL AND create_time != ''
+            ''', (_query_group_id(self.group_id),))
             result = self.file_db.cursor.fetchone()
             if result and result[0]:
                 db_latest_time = result[0]
@@ -1241,7 +1248,8 @@ class ZSXQFileDownloader:
             self.log("🛑 任务被停止")
             return {'total_files': 0, 'downloaded': 0, 'skipped': 0, 'failed': 0}
         conditions = []
-        params: list[Any] = []
+        params: list[Any] = [_query_group_id(self.group_id)]
+        conditions.append("group_id = ?")
         if status_filter:
             conditions.append("download_status = ?")
             params.append(status_filter)
@@ -1357,7 +1365,10 @@ class ZSXQFileDownloader:
         print(f"   🏠 群组数量: {total_groups:,}")
         
         # 文件大小统计
-        self.file_db.cursor.execute("SELECT SUM(size) FROM files WHERE size IS NOT NULL")
+        self.file_db.cursor.execute(
+            "SELECT SUM(size) FROM files WHERE group_id = ? AND size IS NOT NULL",
+            (_query_group_id(self.group_id),),
+        )
         result = self.file_db.cursor.fetchone()
         total_size = result[0] if result and result[0] else 0
         
@@ -1384,8 +1395,8 @@ class ZSXQFileDownloader:
         self.file_db.cursor.execute('''
             SELECT MIN(create_time), MAX(create_time), COUNT(*) 
             FROM files 
-            WHERE create_time IS NOT NULL
-        ''')
+            WHERE group_id = ? AND create_time IS NOT NULL
+        ''', (_query_group_id(self.group_id),))
         time_result = self.file_db.cursor.fetchone()
         
         if time_result and time_result[2] > 0:

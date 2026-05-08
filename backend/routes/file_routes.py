@@ -76,6 +76,11 @@ def _open_file_db(group_id: str) -> ZSXQFileDatabase:
     return ZSXQFileDatabase(group_id)
 
 
+def _query_group_id(group_id: str) -> Any:
+    value = str(group_id or "").strip()
+    return int(value) if value.isdigit() else value
+
+
 def _clear_group_file_data(group_id: str) -> dict:
     conn = connect()
     try:
@@ -372,7 +377,7 @@ def run_file_download_task(
             return
 
         add_task_log(task_id, "📡 连接到知识星球API...")
-        downloader.file_db.cursor.execute("SELECT COUNT(*) FROM files")
+        downloader.file_db.cursor.execute("SELECT COUNT(*) FROM files WHERE group_id = ?", (_query_group_id(group_id),))
         existing_files_count = downloader.file_db.cursor.fetchone()[0] or 0
 
         collect_result = None
@@ -466,9 +471,9 @@ def run_single_file_download_task_with_info(
                 """
                 SELECT file_id, name, size, download_count
                 FROM files
-                WHERE file_id = ?
+                WHERE file_id = ? AND group_id = ?
             """,
-                (file_id,),
+                (file_id, _query_group_id(group_id)),
             )
 
             result = downloader.file_db.cursor.fetchone()
@@ -515,11 +520,12 @@ def run_single_file_download_task_with_info(
             downloader.file_db.cursor.execute(
                 """
                 INSERT OR REPLACE INTO files
-                (file_id, name, size, download_status, local_path, download_time, download_count)
-                VALUES (?, ?, ?, 'downloaded', ?, CURRENT_TIMESTAMP, ?)
+                (file_id, group_id, name, size, download_status, local_path, download_time, download_count)
+                VALUES (?, ?, ?, ?, 'downloaded', ?, CURRENT_TIMESTAMP, ?)
             """,
                 (
                     file_id,
+                    _query_group_id(group_id),
                     actual_file_name,
                     actual_file_size,
                     local_path,
@@ -629,9 +635,9 @@ async def get_file_status(group_id: str, file_id: int):
                 """
                 SELECT name, size, download_status
                 FROM files
-                WHERE file_id = ?
+                WHERE file_id = ? AND group_id = ?
             """,
-                (file_id,),
+                (file_id, _query_group_id(group_id)),
             )
 
             result = file_db.cursor.fetchone()
@@ -715,11 +721,13 @@ async def get_file_stats(group_id: str):
                         COUNT(CASE WHEN download_status = 'pending' THEN 1 END) as pending,
                         COUNT(CASE WHEN download_status = 'failed' THEN 1 END) as failed
                     FROM files
-                """
+                    WHERE group_id = ?
+                    """,
+                    (_query_group_id(group_id),),
                 )
                 download_stats = file_db.cursor.fetchone()
             else:
-                file_db.cursor.execute("SELECT COUNT(*) FROM files")
+                file_db.cursor.execute("SELECT COUNT(*) FROM files WHERE group_id = ?", (_query_group_id(group_id),))
                 total_files = file_db.cursor.fetchone()[0]
                 download_stats = (total_files, 0, 0, 0)
 
@@ -824,7 +832,8 @@ async def get_files(
             offset = (page - 1) * per_page
 
             conditions = []
-            params_prefix = []
+            params_prefix = [_query_group_id(group_id)]
+            conditions.append("f.group_id = ?")
 
             if status:
                 if status == "completed":

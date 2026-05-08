@@ -15,9 +15,17 @@ class FakeCursor:
         self.executed = []
         self.current_table = None
 
-    def execute(self, sql):
-        self.executed.append(sql)
-        self.current_table = sql.rsplit(" ", 1)[-1]
+    def execute(self, sql, params=()):
+        self.executed.append((sql, params))
+        normalized = " ".join(sql.split())
+        if normalized.startswith("SELECT COUNT(*) FROM files"):
+            self.current_table = "files"
+        elif normalized.startswith("SELECT COUNT(*) FROM topics"):
+            self.current_table = "topics"
+        elif normalized.startswith("SELECT COUNT(*) FROM talks"):
+            self.current_table = "talks"
+        else:
+            self.current_table = normalized.rsplit(" ", 1)[-1]
 
     def fetchone(self):
         return (self.counts[self.current_table],)
@@ -73,6 +81,27 @@ class FakeImportDatabase:
         self.calls.append(("rollback",))
 
 
+class FakeAnalysisCursor:
+    def __init__(self):
+        self.calls = []
+        self.row = None
+
+    def execute(self, sql, params=()):
+        self.calls.append((" ".join(sql.split()), params))
+        return self
+
+    def fetchone(self):
+        return self.row
+
+
+class FakeAnalysisConnection:
+    def __init__(self):
+        self.commits = 0
+
+    def commit(self):
+        self.commits += 1
+
+
 class ZSXQFileDatabaseHelperTests(unittest.TestCase):
     def test_new_import_stats_returns_expected_zero_counts(self):
         stats = _new_import_stats()
@@ -105,7 +134,27 @@ class ZSXQFileDatabaseHelperTests(unittest.TestCase):
         cursor = FakeCursor({"files": 3, "topics": 2})
 
         self.assertEqual({"files": 3, "topics": 2}, _count_tables(cursor, ("files", "topics")))
-        self.assertEqual(["SELECT COUNT(*) FROM files", "SELECT COUNT(*) FROM topics"], cursor.executed)
+        self.assertEqual([("SELECT COUNT(*) FROM files", ()), ("SELECT COUNT(*) FROM topics", ())], cursor.executed)
+
+    def test_count_tables_filters_direct_tables_by_group_scope(self):
+        cursor = FakeCursor({"files": 3, "topics": 2})
+
+        self.assertEqual({"files": 3, "topics": 2}, _count_tables(cursor, ("files", "topics"), group_id="303"))
+        self.assertEqual(
+            [
+                ("SELECT COUNT(*) FROM files WHERE group_id = ?", (303,)),
+                ("SELECT COUNT(*) FROM topics WHERE group_id = ?", (303,)),
+            ],
+            cursor.executed,
+        )
+
+    def test_count_tables_filters_child_tables_through_group_topics(self):
+        cursor = FakeCursor({"talks": 4})
+
+        self.assertEqual({"talks": 4}, _count_tables(cursor, ("talks",), group_id="303"))
+        sql, params = cursor.executed[0]
+        self.assertIn("WHERE topic_id IN (SELECT topic_id FROM topics WHERE group_id = ?)", sql)
+        self.assertEqual((303,), params)
 
     def test_close_connection_ignores_none_and_closes_connection(self):
         _close_connection(None)
@@ -155,6 +204,25 @@ class ZSXQFileDatabaseHelperTests(unittest.TestCase):
         self.assertEqual(1, stats["files"])
         self.assertEqual(1, stats["topics"])
         self.assertEqual(1, stats["groups"])
+
+    def test_file_ai_analysis_queries_are_scoped_by_group(self):
+        from backend.storage.zsxq_file_database import ZSXQFileDatabase
+
+        db = object.__new__(ZSXQFileDatabase)
+        cursor = FakeAnalysisCursor()
+        db.cursor = cursor
+        db.conn = FakeAnalysisConnection()
+        db.group_id = "303"
+
+        db.get_file_ai_analysis(101)
+        select_sql, select_params = cursor.calls[-1]
+        self.assertIn("WHERE file_id = ? AND (? IS NULL OR group_id = ?)", select_sql)
+        self.assertEqual((101, 303, 303), select_params)
+
+        db.upsert_file_ai_analysis(101, status="completed", summary="ok")
+        insert_sql, insert_params = cursor.calls[-1]
+        self.assertIn("file_id, group_id, status", insert_sql)
+        self.assertEqual((101, 303, "completed"), insert_params[:3])
 
 
 if __name__ == "__main__":

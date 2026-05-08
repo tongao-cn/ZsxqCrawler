@@ -352,9 +352,9 @@ def analyze_group_file(
             """
             SELECT file_id, name, size, download_status, local_path
             FROM files
-            WHERE file_id = ?
+            WHERE file_id = ? AND group_id = ?
             """,
-            (file_id,),
+            (file_id, int(str(group_id)) if str(group_id).isdigit() else str(group_id)),
         )
         row = db.cursor.fetchone()
         if not row:

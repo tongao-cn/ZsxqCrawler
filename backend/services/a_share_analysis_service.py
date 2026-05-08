@@ -843,7 +843,10 @@ def get_source_topics_summary(group_id: Optional[str] = None) -> Dict[str, Any]:
     conn = connect()
     try:
         cur = conn.cursor()
-        cur.execute("SELECT COUNT(*), MIN(create_time), MAX(create_time) FROM topics")
+        cur.execute(
+            "SELECT COUNT(*), MIN(create_time), MAX(create_time) FROM topics WHERE group_id = ?",
+            (int(normalized_group_id) if normalized_group_id.isdigit() else normalized_group_id,),
+        )
         topics_count, oldest_topic_time, latest_topic_time = cur.fetchone()
         return {
             "topics_db_exists": True,

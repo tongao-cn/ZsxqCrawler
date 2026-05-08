@@ -4,6 +4,7 @@ from backend.storage.zsxq_database import (
     _build_pagination,
     _format_tag_row,
     _format_tag_topic_row,
+    _group_id_param,
     _replace_file_topic_relation,
     _topic_file_payload_from_row,
     _upsert_core_file,
@@ -162,6 +163,11 @@ class ZSXQDatabaseHelperTests(unittest.TestCase):
             },
             _topic_file_payload_from_row(row),
         )
+
+    def test_group_id_param_casts_numeric_ids_for_scoped_queries(self):
+        self.assertEqual(155, _group_id_param("155"))
+        self.assertEqual("group-x", _group_id_param("group-x"))
+        self.assertEqual("", _group_id_param(None))
 
 
 if __name__ == "__main__":

@@ -65,6 +65,11 @@ def _replace_file_topic_relation(file_db, file_id: int, topic_id: int) -> int:
     return file_db.cursor.rowcount
 
 
+def _group_id_param(group_id: Optional[str]) -> Any:
+    value = str(group_id or "").strip()
+    return int(value) if value.isdigit() else value
+
+
 def _upsert_core_file(cursor, group_id: Optional[int], topic_id: int, file_data: Dict[str, Any]) -> Optional[int]:
     file_id = file_data.get('file_id')
     if not file_id:
@@ -391,7 +396,10 @@ class ZSXQDatabase:
                 return False
 
             # 如果话题已存在，直接跳过，避免重复写入或更新
-            self.cursor.execute('SELECT 1 FROM topics WHERE topic_id = ? LIMIT 1', (topic_id,))
+            self.cursor.execute(
+                'SELECT 1 FROM topics WHERE topic_id = ? AND (? IS NULL OR group_id = ?) LIMIT 1',
+                (topic_id, _group_id_param(self.group_id), _group_id_param(self.group_id)),
+            )
             if self.cursor.fetchone():
                 if 'talk' in topic_data and topic_data['talk'] and 'files' in topic_data['talk']:
                     self._sync_topic_files_to_core_tables(topic_data, topic_data['talk']['files'])
@@ -567,6 +575,7 @@ class ZSXQDatabase:
                     digested = ?, sticky = ?, user_liked = ?, user_subscribed = ?,
                     imported_at = ?
                 WHERE topic_id = ?
+                  AND (? IS NULL OR group_id = ?)
             ''', (
                 topic_data.get('likes_count', 0),
                 topic_data.get('tourist_likes_count', 0),
@@ -579,7 +588,9 @@ class ZSXQDatabase:
                 topic_data.get('user_specific', {}).get('liked', False),
                 topic_data.get('user_specific', {}).get('subscribed', False),
                 current_time,
-                topic_id
+                topic_id,
+                _group_id_param(self.group_id),
+                _group_id_param(self.group_id),
             ))
 
             # 检查是否有行被更新
@@ -605,7 +616,40 @@ class ZSXQDatabase:
 
         for table in tables:
             try:
-                self.cursor.execute(f'SELECT COUNT(*) FROM {table}')
+                if self.group_id is None:
+                    self.cursor.execute(f'SELECT COUNT(*) FROM {table}')
+                elif table in {'groups', 'topics', 'comments'}:
+                    self.cursor.execute(f'SELECT COUNT(*) FROM {table} WHERE group_id = ?', (_group_id_param(self.group_id),))
+                elif table == 'users':
+                    self.cursor.execute(
+                        '''
+                        SELECT COUNT(DISTINCT user_id)
+                        FROM (
+                            SELECT owner_user_id AS user_id FROM talks WHERE topic_id IN (SELECT topic_id FROM topics WHERE group_id = ?)
+                            UNION
+                            SELECT owner_user_id AS user_id FROM comments WHERE topic_id IN (SELECT topic_id FROM topics WHERE group_id = ?)
+                            UNION
+                            SELECT owner_user_id AS user_id FROM questions WHERE topic_id IN (SELECT topic_id FROM topics WHERE group_id = ?)
+                            UNION
+                            SELECT questionee_user_id AS user_id FROM questions WHERE topic_id IN (SELECT topic_id FROM topics WHERE group_id = ?)
+                            UNION
+                            SELECT owner_user_id AS user_id FROM answers WHERE topic_id IN (SELECT topic_id FROM topics WHERE group_id = ?)
+                        ) scoped_users
+                        WHERE user_id IS NOT NULL
+                        ''',
+                        (
+                            _group_id_param(self.group_id),
+                            _group_id_param(self.group_id),
+                            _group_id_param(self.group_id),
+                            _group_id_param(self.group_id),
+                            _group_id_param(self.group_id),
+                        ),
+                    )
+                else:
+                    self.cursor.execute(
+                        f'SELECT COUNT(*) FROM {table} WHERE topic_id IN (SELECT topic_id FROM topics WHERE group_id = ?)',
+                        (_group_id_param(self.group_id),),
+                    )
                 stats[table] = self.cursor.fetchone()[0]
             except Exception as e:
                 print(f"获取表 {table} 统计信息失败: {e}")
@@ -619,23 +663,28 @@ class ZSXQDatabase:
             # 获取最新话题时间
             self.cursor.execute('''
                 SELECT create_time FROM topics 
-                WHERE create_time IS NOT NULL AND create_time != ''
+                WHERE (? IS NULL OR group_id = ?)
+                  AND create_time IS NOT NULL AND create_time != ''
                 ORDER BY create_time DESC LIMIT 1
-            ''')
+            ''', (_group_id_param(self.group_id), _group_id_param(self.group_id)))
             newest_result = self.cursor.fetchone()
             newest_time = newest_result[0] if newest_result else None
             
             # 获取最老话题时间
             self.cursor.execute('''
                 SELECT create_time FROM topics 
-                WHERE create_time IS NOT NULL AND create_time != ''
+                WHERE (? IS NULL OR group_id = ?)
+                  AND create_time IS NOT NULL AND create_time != ''
                 ORDER BY create_time ASC LIMIT 1
-            ''')
+            ''', (_group_id_param(self.group_id), _group_id_param(self.group_id)))
             oldest_result = self.cursor.fetchone()
             oldest_time = oldest_result[0] if oldest_result else None
             
             # 获取话题总数
-            self.cursor.execute('SELECT COUNT(*) FROM topics')
+            self.cursor.execute(
+                'SELECT COUNT(*) FROM topics WHERE (? IS NULL OR group_id = ?)',
+                (_group_id_param(self.group_id), _group_id_param(self.group_id)),
+            )
             total_topics = self.cursor.fetchone()[0]
             
             # 判断是否有数据
@@ -666,9 +715,10 @@ class ZSXQDatabase:
         try:
             self.cursor.execute('''
                 SELECT create_time FROM topics 
-                WHERE create_time IS NOT NULL AND create_time != ''
+                WHERE (? IS NULL OR group_id = ?)
+                  AND create_time IS NOT NULL AND create_time != ''
                 ORDER BY create_time ASC LIMIT 1
-            ''')
+            ''', (_group_id_param(self.group_id), _group_id_param(self.group_id)))
             result = self.cursor.fetchone()
             return result[0] if result else None
         except Exception as e:
@@ -680,9 +730,10 @@ class ZSXQDatabase:
         try:
             self.cursor.execute('''
                 SELECT create_time FROM topics 
-                WHERE create_time IS NOT NULL AND create_time != ''
+                WHERE (? IS NULL OR group_id = ?)
+                  AND create_time IS NOT NULL AND create_time != ''
                 ORDER BY create_time DESC LIMIT 1
-            ''')
+            ''', (_group_id_param(self.group_id), _group_id_param(self.group_id)))
             result = self.cursor.fetchone()
             return result[0] if result else None
         except Exception as e:
@@ -1184,8 +1235,9 @@ class ZSXQDatabase:
                 LEFT JOIN topics t ON t.topic_id = tf.topic_id
                 LEFT JOIN groups g ON g.group_id = t.group_id
                 WHERE tf.file_id IS NOT NULL
+                  AND (? IS NULL OR t.group_id = ?)
                 ORDER BY tf.topic_id ASC, tf.file_id ASC
-            ''')
+            ''', (_group_id_param(self.group_id), _group_id_param(self.group_id)))
             for row in self.cursor.fetchall():
                 stats['scanned'] += 1
                 (
@@ -1196,7 +1248,10 @@ class ZSXQDatabase:
                     group_name, group_type, background_url,
                 ) = row
 
-                self.cursor.execute('SELECT 1 FROM files WHERE file_id = ? LIMIT 1', (file_id,))
+                self.cursor.execute(
+                    'SELECT 1 FROM files WHERE file_id = ? AND (? IS NULL OR group_id = ?) LIMIT 1',
+                    (file_id, _group_id_param(self.group_id), _group_id_param(self.group_id)),
+                )
                 is_new_file = self.cursor.fetchone() is None
 
                 if group_id and group_name:

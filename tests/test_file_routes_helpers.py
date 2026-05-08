@@ -8,6 +8,7 @@ from backend.routes.file_routes import (
     _close_crawler_file_databases,
     _enqueue_file_task,
     _get_download_file_status,
+    _query_group_id,
     _resolve_download_record_status,
 )
 
@@ -213,6 +214,10 @@ class FileRoutesHelperTests(unittest.TestCase):
 
         self.assertTrue(crawler.downloader.file_db.closed)
         self.assertTrue(crawler.db.closed)
+
+    def test_query_group_id_casts_numeric_ids_for_sql_filters(self):
+        self.assertEqual(123, _query_group_id("123"))
+        self.assertEqual("abc", _query_group_id("abc"))
 
 
 if __name__ == "__main__":
