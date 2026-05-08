@@ -240,45 +240,62 @@ def _extract_day_from_state_key(key: str) -> Optional[str]:
 
 def read_topics_last_days(group_id: str, days: int, log_callback: LogCallback = None) -> List[Dict[str, Any]]:
     items: List[Dict[str, Any]] = []
+    normalized_group_id = str(group_id or "").strip()
+    query_group_id: Any = int(normalized_group_id) if normalized_group_id.isdigit() else normalized_group_id
 
     conn = connect()
-    cur = conn.cursor()
-    cur.execute("SELECT t.topic_id, t.title, t.create_time FROM topics t")
-    rows = cur.fetchall()
-    log_debug(f"loaded topics rows: {len(rows)} from zsxq_core")
-
-    talk_texts: Dict[Any, str] = {}
     try:
-        cur.execute("SELECT topic_id, text FROM talks")
-        for topic_id, text in cur.fetchall():
-            talk_texts[topic_id] = text or ""
-    except Exception:
-        pass
-    log_debug(f"loaded talks texts: {len(talk_texts)}")
-
-    start, end = get_last_days_range(days)
-    for topic_id, title, create_time in rows:
-        dt = parse_time(create_time)
-        if not dt or dt < start or dt > end:
-            continue
-        text = talk_texts.get(topic_id) or (title or "")
-        if not text:
-            continue
-        items.append(
-            {
-                "topic_id": topic_id,
-                "title": title or "",
-                "text": text,
-                "create_time": create_time,
-                "day": normalize_day(dt),
-                "source": "topics",
-                "group_id": str(group_id),
-            }
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT t.topic_id, t.title, t.create_time FROM topics t WHERE t.group_id = ?",
+            (query_group_id,),
         )
+        rows = cur.fetchall()
+        log_debug(f"loaded topics rows: {len(rows)} from zsxq_core for group {normalized_group_id}")
 
-    conn.close()
+        start, end = get_last_days_range(days)
+        filtered_rows = []
+        for topic_id, title, create_time in rows:
+            dt = parse_time(create_time)
+            if not dt or dt < start or dt > end:
+                continue
+            filtered_rows.append((topic_id, title, create_time, dt))
+
+        talk_texts: Dict[Any, str] = {}
+        topic_ids = [topic_id for topic_id, _, _, _ in filtered_rows]
+        if topic_ids:
+            try:
+                placeholders = ", ".join("?" for _ in topic_ids)
+                cur.execute(
+                    f"SELECT topic_id, text FROM talks WHERE topic_id IN ({placeholders})",
+                    tuple(topic_ids),
+                )
+                for topic_id, text in cur.fetchall():
+                    talk_texts[topic_id] = text or ""
+            except Exception:
+                pass
+        log_debug(f"loaded talks texts: {len(talk_texts)} for group {normalized_group_id}")
+
+        for topic_id, title, create_time, dt in filtered_rows:
+            text = talk_texts.get(topic_id) or (title or "")
+            if not text:
+                continue
+            items.append(
+                {
+                    "topic_id": topic_id,
+                    "title": title or "",
+                    "text": text,
+                    "create_time": create_time,
+                    "day": normalize_day(dt),
+                    "source": "topics",
+                    "group_id": normalized_group_id,
+                }
+            )
+    finally:
+        conn.close()
+
     _emit_log(
-        f"filtered topics items: {len(items)} for last {days} days in group {group_id}",
+        f"filtered topics items: {len(items)} for last {days} days in group {normalized_group_id}",
         log_callback,
     )
     return items

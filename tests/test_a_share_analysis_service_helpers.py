@@ -1,4 +1,39 @@
+from datetime import datetime
+from unittest.mock import patch
 import unittest
+
+
+class _FakeAShareCursor:
+    def __init__(self):
+        self.calls = []
+        self._rows = []
+
+    def execute(self, sql, params=None):
+        self.calls.append((sql, params))
+        if "FROM topics" in sql:
+            self._rows = [
+                (1001, "topic title", "2026-05-07T10:00:00+0800"),
+                (1002, "fallback title", "2026-05-07T11:00:00+0800"),
+            ]
+        elif "FROM talks" in sql:
+            self._rows = [(1001, "talk body")]
+        else:
+            self._rows = []
+
+    def fetchall(self):
+        return list(self._rows)
+
+
+class _FakeAShareConnection:
+    def __init__(self):
+        self.cursor_obj = _FakeAShareCursor()
+        self.closed = False
+
+    def cursor(self):
+        return self.cursor_obj
+
+    def close(self):
+        self.closed = True
 
 
 class AShareAnalysisServiceHelperTests(unittest.TestCase):
@@ -56,6 +91,50 @@ class AShareAnalysisServiceHelperTests(unittest.TestCase):
                 "ranking_top_n": 35,
             },
             _empty_chart_payload(" 12345 ", ["2026-05-01"], "2026-05-02", "2026-05-03", 20, 35),
+        )
+
+    def test_read_topics_last_days_filters_topics_and_talks_by_group_scope(self):
+        from backend.services import a_share_analysis_service as service
+
+        fake_conn = _FakeAShareConnection()
+
+        with patch.object(service, "connect", return_value=fake_conn), patch.object(
+            service,
+            "get_last_days_range",
+            return_value=(datetime(2026, 5, 1), datetime(2026, 5, 8, 23, 59, 59)),
+        ):
+            items = service.read_topics_last_days("51111112855254", 21)
+
+        topic_sql, topic_params = fake_conn.cursor_obj.calls[0]
+        talk_sql, talk_params = fake_conn.cursor_obj.calls[1]
+
+        self.assertIn("WHERE t.group_id = ?", topic_sql)
+        self.assertEqual((51111112855254,), topic_params)
+        self.assertIn("WHERE topic_id IN (?, ?)", talk_sql)
+        self.assertEqual((1001, 1002), talk_params)
+        self.assertTrue(fake_conn.closed)
+        self.assertEqual(
+            [
+                {
+                    "topic_id": 1001,
+                    "title": "topic title",
+                    "text": "talk body",
+                    "create_time": "2026-05-07T10:00:00+0800",
+                    "day": "2026-05-07",
+                    "source": "topics",
+                    "group_id": "51111112855254",
+                },
+                {
+                    "topic_id": 1002,
+                    "title": "fallback title",
+                    "text": "fallback title",
+                    "create_time": "2026-05-07T11:00:00+0800",
+                    "day": "2026-05-07",
+                    "source": "topics",
+                    "group_id": "51111112855254",
+                },
+            ],
+            items,
         )
 
 
