@@ -23,6 +23,7 @@ const ALLOWED_ATTR = [
   'viewBox',
   'width',
 ];
+const HIGHLIGHT_STYLE = 'background-color: #fef08a; color: #000; padding: 0 2px; border-radius: 2px;';
 
 function escapeHtml(value: string): string {
   return value
@@ -216,8 +217,16 @@ export function highlightSearchTerm(content: string, searchTerm: string): string
   // 创建正则表达式，忽略大小写
   const regex = new RegExp(`(${escapedSearchTerm})`, 'gi');
 
-  // 替换匹配的文本，添加黄色高亮样式
-  return content.replace(regex, '<mark style="background-color: #fef08a; color: #000; padding: 0 2px; border-radius: 2px;">$1</mark>');
+  // 只高亮标签外的文本，避免把 href/class/style 等 HTML 属性打断
+  return content
+    .split(/(<[^>]*>)/g)
+    .map((segment) => {
+      if (segment.startsWith('<') && segment.endsWith('>')) {
+        return segment;
+      }
+      return segment.replace(regex, `<mark style="${HIGHLIGHT_STYLE}">$1</mark>`);
+    })
+    .join('');
 }
 
 /**
