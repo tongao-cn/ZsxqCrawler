@@ -1336,8 +1336,15 @@ class ZSXQDatabase:
     def get_topic_detail(self, topic_id: int):
         """获取完整的话题详情"""
         try:
+            scoped_group_id = _group_id_param(self.group_id) if self.group_id is not None else None
+            topic_scope_sql = "t.topic_id = ?"
+            topic_scope_params = [topic_id]
+            if scoped_group_id is not None:
+                topic_scope_sql += " AND t.group_id = ?"
+                topic_scope_params.append(scoped_group_id)
+
             # 1. 获取基本话题信息和群组信息
-            self.cursor.execute('''
+            self.cursor.execute(f'''
                 SELECT
                     t.topic_id, t.type, t.title, t.create_time, t.digested, t.sticky,
                     t.likes_count, t.tourist_likes_count, t.rewards_count, t.comments_count,
@@ -1346,8 +1353,8 @@ class ZSXQDatabase:
                     g.group_id, g.name as group_name, g.type as group_type, g.background_url
                 FROM topics t
                 LEFT JOIN groups g ON t.group_id = g.group_id
-                WHERE t.topic_id = ?
-            ''', (topic_id,))
+                WHERE {topic_scope_sql}
+            ''', tuple(topic_scope_params))
 
             topic_row = self.cursor.fetchone()
             if not topic_row:
@@ -1416,8 +1423,9 @@ class ZSXQDatabase:
                         original_url, original_width, original_height, original_size
                     FROM images
                     WHERE topic_id = ? AND comment_id IS NULL
+                      AND (? IS NULL OR topic_id IN (SELECT topic_id FROM topics WHERE group_id = ?))
                     ORDER BY image_id
-                ''', (topic_id,))
+                ''', (topic_id, scoped_group_id, scoped_group_id))
 
                 images = []
                 for img_row in self.cursor.fetchall():
@@ -1448,11 +1456,12 @@ class ZSXQDatabase:
                 # 获取话题文件
                 self.cursor.execute('''
                     SELECT
-                        file_id, name, hash, size, duration, download_count, create_time
-                    FROM topic_files
-                    WHERE topic_id = ?
+                        tf.file_id, tf.name, tf.hash, tf.size, tf.duration, tf.download_count, tf.create_time
+                    FROM topic_files tf
+                    WHERE tf.topic_id = ?
+                      AND (? IS NULL OR tf.topic_id IN (SELECT topic_id FROM topics WHERE group_id = ?))
                     ORDER BY file_id
-                ''', (topic_id,))
+                ''', (topic_id, scoped_group_id, scoped_group_id))
 
                 files = []
                 for file_row in self.cursor.fetchall():
@@ -1474,8 +1483,9 @@ class ZSXQDatabase:
                     SELECT title, article_id, article_url, inline_article_url
                     FROM articles
                     WHERE topic_id = ?
+                      AND (? IS NULL OR topic_id IN (SELECT topic_id FROM topics WHERE group_id = ?))
                     LIMIT 1
-                ''', (topic_id,))
+                ''', (topic_id, scoped_group_id, scoped_group_id))
                 article_row = self.cursor.fetchone()
                 if article_row:
                     talk_data["article"] = {
@@ -1495,9 +1505,10 @@ class ZSXQDatabase:
                 FROM likes l
                 LEFT JOIN users u ON l.user_id = u.user_id
                 WHERE l.topic_id = ?
+                  AND (? IS NULL OR l.topic_id IN (SELECT topic_id FROM topics WHERE group_id = ?))
                 ORDER BY l.create_time DESC
                 LIMIT 5
-            ''', (topic_id,))
+            ''', (topic_id, scoped_group_id, scoped_group_id))
 
             latest_likes = []
             for like_row in self.cursor.fetchall():
@@ -1522,8 +1533,9 @@ class ZSXQDatabase:
                 LEFT JOIN users u ON c.owner_user_id = u.user_id
                 LEFT JOIN users r ON c.repliee_user_id = r.user_id
                 WHERE c.topic_id = ?
+                  AND (? IS NULL OR c.group_id = ?)
                 ORDER BY c.create_time ASC
-            ''', (topic_id,))
+            ''', (topic_id, scoped_group_id, scoped_group_id))
 
             comment_rows = self.cursor.fetchall()
             comment_ids = [row[0] for row in comment_rows]
@@ -1542,8 +1554,9 @@ class ZSXQDatabase:
                             original_url, original_width, original_height, original_size
                         FROM images
                         WHERE comment_id IN ({placeholders})
+                          AND (? IS NULL OR topic_id IN (SELECT topic_id FROM topics WHERE group_id = ?))
                         ORDER BY comment_id ASC, image_id ASC
-                    ''', chunk_ids)
+                    ''', [*chunk_ids, scoped_group_id, scoped_group_id])
 
                     for img_row in self.cursor.fetchall():
                         comment_images_map.setdefault(img_row[0], []).append({
@@ -1630,7 +1643,8 @@ class ZSXQDatabase:
                 SELECT emoji_key, likes_count
                 FROM like_emojis
                 WHERE topic_id = ?
-            ''', (topic_id,))
+                  AND (? IS NULL OR topic_id IN (SELECT topic_id FROM topics WHERE group_id = ?))
+            ''', (topic_id, scoped_group_id, scoped_group_id))
 
             emojis = []
             for emoji_row in self.cursor.fetchall():
@@ -1660,8 +1674,9 @@ class ZSXQDatabase:
                     LEFT JOIN users owner ON q.owner_user_id = owner.user_id
                     LEFT JOIN users questionee ON q.questionee_user_id = questionee.user_id
                     WHERE q.topic_id = ?
+                      AND (? IS NULL OR q.topic_id IN (SELECT topic_id FROM topics WHERE group_id = ?))
                     LIMIT 1
-                ''', (topic_id,))
+                ''', (topic_id, scoped_group_id, scoped_group_id))
 
                 question_row = self.cursor.fetchone()
                 if question_row:
@@ -1709,8 +1724,9 @@ class ZSXQDatabase:
                     FROM answers a
                     LEFT JOIN users u ON a.owner_user_id = u.user_id
                     WHERE a.topic_id = ?
+                      AND (? IS NULL OR a.topic_id IN (SELECT topic_id FROM topics WHERE group_id = ?))
                     LIMIT 1
-                ''', (topic_id,))
+                ''', (topic_id, scoped_group_id, scoped_group_id))
 
                 answer_row = self.cursor.fetchone()
                 if answer_row:

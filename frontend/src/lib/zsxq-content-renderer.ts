@@ -2,6 +2,44 @@
  * 知识星球内容渲染工具
  * 处理知识星球特殊标签格式的解析和渲染
  */
+import DOMPurify from 'dompurify';
+
+const ALLOWED_TAGS = ['a', 'br', 'del', 'em', 'img', 'mark', 'path', 'span', 'strong', 'svg', 'u'];
+const ALLOWED_ATTR = [
+  'alt',
+  'class',
+  'd',
+  'fill',
+  'height',
+  'href',
+  'rel',
+  'src',
+  'stroke',
+  'stroke-linecap',
+  'stroke-linejoin',
+  'stroke-width',
+  'style',
+  'target',
+  'viewBox',
+  'width',
+];
+
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function sanitizeHtml(html: string): string {
+  return DOMPurify.sanitize(html, {
+    ALLOWED_TAGS,
+    ALLOWED_ATTR,
+    ALLOW_DATA_ATTR: false,
+  });
+}
 
 /**
  * 解码URL编码的字符串
@@ -15,11 +53,53 @@ function decodeTitle(encodedTitle: string): string {
   }
 }
 
+function safeDecodedTitle(encodedTitle: string): string {
+  return escapeHtml(decodeTitle(encodedTitle));
+}
+
+function safeExternalHref(rawHref: string): string | null {
+  const decodedHref = decodeTitle(rawHref).trim();
+  try {
+    const parsed = new URL(decodedHref);
+    if (parsed.protocol === 'http:' || parsed.protocol === 'https:') {
+      return parsed.toString();
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+
+function linkIconForHref(href: string): string {
+  const isZsxqLink = href.includes('t.zsxq.com') || href.includes('zsxq.com');
+  if (isZsxqLink) {
+    return `<img src="https://zsxq.com/assets/img/zsxq_logo@2x.png" alt="知识星球" style="display: inline-block; width: 16px; height: 16px; margin-right: 4px; vertical-align: middle; filter: brightness(0) saturate(100%) invert(47%) sepia(69%) saturate(959%) hue-rotate(121deg) brightness(98%) contrast(86%);" />`;
+  }
+  return `<svg style="display: inline-block; width: 16px; height: 16px; margin-right: 4px; vertical-align: middle;" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path></svg>`;
+}
+
+function renderSafeLink(rawHref: string, encodedTitle: string): string {
+  const href = safeExternalHref(rawHref);
+  const title = safeDecodedTitle(encodedTitle);
+  if (!href) {
+    return title;
+  }
+
+  return `<span style="display: inline-flex; align-items: center; vertical-align: middle;"><a href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer" style="display: inline-flex; align-items: center; text-decoration: none; color: #2563eb;">${linkIconForHref(href)}<span style="vertical-align: middle;">${title}</span></a></span>`;
+}
+
 /**
  * 渲染知识星球内容中的特殊标签
  */
 export function renderZsxqContent(content: string): string {
   if (!content) return '';
+
+  const safeFragments: Array<[string, string]> = [];
+  const keepSafeFragment = (html: string) => {
+    const token = `__ZSXQ_SAFE_FRAGMENT_${safeFragments.length}__`;
+    safeFragments.push([token, html]);
+    return token;
+  };
 
   let renderedContent = content;
 
@@ -27,8 +107,7 @@ export function renderZsxqContent(content: string): string {
   renderedContent = renderedContent.replace(
     /<e\s+type="text_bold"\s+title="([^"]+)"\s*\/>/g,
     (match, encodedTitle) => {
-      const decodedTitle = decodeTitle(encodedTitle);
-      return `<strong>${decodedTitle}</strong>`;
+      return keepSafeFragment(`<strong>${safeDecodedTitle(encodedTitle)}</strong>`);
     }
   );
 
@@ -41,7 +120,7 @@ export function renderZsxqContent(content: string): string {
       const cleanTitle = decodedTitle.replace(/^#|#$/g, '');
       const encodedCleanTitle = encodeURIComponent(cleanTitle);
       
-      return `<br><a href="https://wx.zsxq.com/tags/${encodedCleanTitle}/${hid}" target="_blank" rel="noopener noreferrer" class="text-blue-600 hover:text-blue-800 font-medium no-underline transition-colors">#${cleanTitle}</a>`;
+      return keepSafeFragment(`<br><a href="https://wx.zsxq.com/tags/${encodedCleanTitle}/${escapeHtml(hid)}" target="_blank" rel="noopener noreferrer" class="text-blue-600 hover:text-blue-800 font-medium no-underline transition-colors">#${escapeHtml(cleanTitle)}</a>`);
     }
   );
 
@@ -49,8 +128,7 @@ export function renderZsxqContent(content: string): string {
   renderedContent = renderedContent.replace(
     /<e\s+type="text_italic"\s+title="([^"]+)"\s*\/>/g,
     (match, encodedTitle) => {
-      const decodedTitle = decodeTitle(encodedTitle);
-      return `<em>${decodedTitle}</em>`;
+      return keepSafeFragment(`<em>${safeDecodedTitle(encodedTitle)}</em>`);
     }
   );
 
@@ -58,8 +136,7 @@ export function renderZsxqContent(content: string): string {
   renderedContent = renderedContent.replace(
     /<e\s+type="text_strikethrough"\s+title="([^"]+)"\s*\/>/g,
     (match, encodedTitle) => {
-      const decodedTitle = decodeTitle(encodedTitle);
-      return `<del>${decodedTitle}</del>`;
+      return keepSafeFragment(`<del>${safeDecodedTitle(encodedTitle)}</del>`);
     }
   );
 
@@ -67,8 +144,7 @@ export function renderZsxqContent(content: string): string {
   renderedContent = renderedContent.replace(
     /<e\s+type="text_underline"\s+title="([^"]+)"\s*\/>/g,
     (match, encodedTitle) => {
-      const decodedTitle = decodeTitle(encodedTitle);
-      return `<u>${decodedTitle}</u>`;
+      return keepSafeFragment(`<u>${safeDecodedTitle(encodedTitle)}</u>`);
     }
   );
 
@@ -76,16 +152,7 @@ export function renderZsxqContent(content: string): string {
   renderedContent = renderedContent.replace(
     /<e\s+type="web_url"\s+href="([^"]+)"\s+title="([^"]+)"\s*\/>/g,
     (match, href, encodedTitle) => {
-      const decodedTitle = decodeTitle(encodedTitle);
-      const decodedHref = decodeTitle(href);
-
-      // 判断是否为知识星球链接
-      const isZsxqLink = decodedHref.includes('t.zsxq.com') || decodedHref.includes('zsxq.com');
-      const linkIcon = isZsxqLink
-        ? `<img src="https://zsxq.com/assets/img/zsxq_logo@2x.png" alt="知识星球" style="display: inline-block; width: 16px; height: 16px; margin-right: 4px; vertical-align: middle; filter: brightness(0) saturate(100%) invert(47%) sepia(69%) saturate(959%) hue-rotate(121deg) brightness(98%) contrast(86%);" />`
-        : `<svg style="display: inline-block; width: 16px; height: 16px; margin-right: 4px; vertical-align: middle;" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path></svg>`;
-
-      return `<span style="display: inline-flex; align-items: center; vertical-align: middle;"><a href="${decodedHref}" target="_blank" rel="noopener noreferrer" style="display: inline-flex; align-items: center; text-decoration: none; color: #2563eb;">${linkIcon}<span style="vertical-align: middle;">${decodedTitle}</span></a></span>`;
+      return keepSafeFragment(renderSafeLink(href, encodedTitle));
     }
   );
 
@@ -93,16 +160,7 @@ export function renderZsxqContent(content: string): string {
   renderedContent = renderedContent.replace(
     /<e\s+type="web"\s+href="([^"]+)"\s+title="([^"]+)"\s*\/>/g,
     (match, href, encodedTitle) => {
-      const decodedTitle = decodeTitle(encodedTitle);
-      const decodedHref = decodeTitle(href);
-
-      // 判断是否为知识星球链接
-      const isZsxqLink = decodedHref.includes('t.zsxq.com') || decodedHref.includes('zsxq.com');
-      const linkIcon = isZsxqLink
-        ? `<img src="https://zsxq.com/assets/img/zsxq_logo@2x.png" alt="知识星球" style="display: inline-block; width: 16px; height: 16px; margin-right: 4px; vertical-align: middle; filter: brightness(0) saturate(100%) invert(47%) sepia(69%) saturate(959%) hue-rotate(121deg) brightness(98%) contrast(86%);" />`
-        : `<svg style="display: inline-block; width: 16px; height: 16px; margin-right: 4px; vertical-align: middle;" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path></svg>`;
-
-      return `<span style="display: inline-flex; align-items: center; vertical-align: middle;"><a href="${decodedHref}" target="_blank" rel="noopener noreferrer" style="display: inline-flex; align-items: center; text-decoration: none; color: #2563eb;">${linkIcon}<span style="vertical-align: middle;">${decodedTitle}</span></a></span>`;
+      return keepSafeFragment(renderSafeLink(href, encodedTitle));
     }
   );
 
@@ -114,18 +172,22 @@ export function renderZsxqContent(content: string): string {
       // 移除标题中已有的@符号，避免重复显示
       const cleanTitle = decodedTitle.replace(/^@+/, '');
 
-      return `<br><span class="text-green-600 font-medium">@${cleanTitle}</span>`;
+      return keepSafeFragment(`<br><span class="text-green-600 font-medium">@${escapeHtml(cleanTitle)}</span>`);
     }
   );
 
-  return renderedContent;
+  let escapedContent = escapeHtml(renderedContent);
+  for (const [token, html] of safeFragments) {
+    escapedContent = escapedContent.replace(token, html);
+  }
+  return sanitizeHtml(escapedContent);
 }
 
 /**
  * 为React组件提供的安全HTML渲染
  */
 export function createSafeHtml(content: string) {
-  const renderedContent = renderZsxqContent(content);
+  const renderedContent = sanitizeHtml(renderZsxqContent(content));
   return { __html: renderedContent };
 }
 
@@ -169,7 +231,7 @@ export function createSafeHtmlWithHighlight(content: string, searchTerm?: string
     renderedContent = highlightSearchTerm(renderedContent, searchTerm);
   }
 
-  return { __html: renderedContent };
+  return { __html: sanitizeHtml(renderedContent) };
 }
 
 

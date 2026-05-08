@@ -1,6 +1,7 @@
 import unittest
 from datetime import datetime
 from importlib.util import find_spec
+from unittest.mock import patch
 
 
 HAS_STORAGE_DEPS = find_spec("psycopg2") is not None
@@ -82,6 +83,33 @@ class AShareAnalysisDbStorageHelperTests(unittest.TestCase):
         self.assertIn('"public"."zsxq_a_share_daily_mentions"', sql)
         self.assertIn("ON CONFLICT (group_id, mention_date, company)", sql)
         self.assertIn('"zsxq_core"."zsxq_a_share_tdx_exports"', sql)
+
+    @unittest.skipUnless(HAS_STORAGE_DEPS, "PostgreSQL storage dependencies are not installed")
+    def test_analysis_write_dsn_requires_zsxq_database(self):
+        from backend.services import a_share_analysis_db_storage as storage
+
+        with patch.object(storage, "get_zsxq_postgres_dsn", return_value=None):
+            with self.assertRaisesRegex(RuntimeError, "ZSXQ_POSTGRES_DSN"):
+                storage.get_postgres_dsn()
+
+    @unittest.skipUnless(HAS_STORAGE_DEPS, "PostgreSQL storage dependencies are not installed")
+    def test_stock_basic_dsn_can_use_knowaction_read_source(self):
+        from backend.services import a_share_analysis_db_storage as storage
+
+        env_values = {
+            "DB_HOST": "localhost",
+            "DB_PORT": "5433",
+            "DB_NAME": "market",
+            "DB_USER": "reader",
+            "DB_PASSWORD": "pw",
+        }
+        with patch.object(storage, "get_zsxq_postgres_dsn", return_value=None), patch.object(
+            storage, "_load_env_file", return_value=env_values
+        ):
+            self.assertEqual(
+                "dbname=market user=reader password=pw host=localhost port=5433",
+                storage.get_stock_basic_postgres_dsn(),
+            )
 
 
 if __name__ == "__main__":

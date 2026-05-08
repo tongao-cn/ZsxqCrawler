@@ -64,6 +64,14 @@ def get_postgres_dsn(env_path: Path = DEFAULT_KNOW_ACTION_ENV_PATH) -> str:
     if zsxq_dsn:
         return zsxq_dsn
 
+    raise RuntimeError("未找到 ZsxqCrawler PostgreSQL DSN，请设置 ZSXQ_POSTGRES_DSN 或 config.toml [database].postgres_dsn")
+
+
+def get_stock_basic_postgres_dsn(env_path: Path = DEFAULT_KNOW_ACTION_ENV_PATH) -> str:
+    zsxq_dsn = get_zsxq_postgres_dsn()
+    if zsxq_dsn:
+        return zsxq_dsn
+
     env_values = _load_env_file(env_path)
     host = _resolve_setting("DB_HOST", env_values)
     port = _resolve_setting("DB_PORT", env_values) or "5432"
@@ -397,7 +405,7 @@ def save_processed_state(
 
 
 def load_stock_basic_records(env_path: Path = DEFAULT_KNOW_ACTION_ENV_PATH) -> List[Dict[str, str]]:
-    with get_connection(env_path) as conn:
+    with psycopg2.connect(get_stock_basic_postgres_dsn(env_path)) as conn:
         with conn.cursor() as cur:
             cur.execute(
                 f"""

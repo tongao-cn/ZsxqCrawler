@@ -53,6 +53,62 @@ class DailyTopicAnalysisServiceHelperTests(unittest.TestCase):
         self.assertEqual({}, _parse_report_raw_json("{bad json"))
         self.assertEqual({}, _parse_report_raw_json("[1, 2]"))
 
+    @unittest.skipUnless(HAS_DAILY_SERVICE_DEPS, "daily topic analysis service dependencies are not installed")
+    def test_fetch_topics_for_date_scopes_child_queries_by_group(self):
+        from datetime import date
+
+        from backend.services.daily_topic_analysis_service import _fetch_topics_for_date
+
+        class FakeResult:
+            def __init__(self, rows):
+                self.rows = rows
+
+            def fetchall(self):
+                return self.rows
+
+        class FakeConn:
+            def __init__(self):
+                self.calls = []
+
+            def execute(self, sql, params=()):
+                normalized = " ".join(sql.split())
+                self.calls.append((normalized, tuple(params)))
+                if "FROM topics t" in normalized:
+                    return FakeResult(
+                        [
+                            {
+                                "topic_id": 101,
+                                "group_id": "303",
+                                "type": "talk",
+                                "title": "topic",
+                                "create_time": "2026-05-07T10:00:00.000+0800",
+                                "likes_count": 1,
+                                "comments_count": 2,
+                                "reading_count": 3,
+                                "readers_count": 4,
+                                "digested": 0,
+                                "sticky": 0,
+                                "talk_text": "body",
+                                "talk_owner_name": "owner",
+                                "question_text": None,
+                                "question_owner_name": None,
+                                "answer_text": None,
+                                "answer_owner_name": None,
+                            }
+                        ]
+                    )
+                return FakeResult([])
+
+        conn = FakeConn()
+        topics = _fetch_topics_for_date(conn, group_id="303", report_date=date(2026, 5, 7), comments_per_topic=5)
+
+        self.assertEqual(1, len(topics))
+        child_sql = "\n".join(sql for sql, _params in conn.calls[1:])
+        self.assertIn("c.group_id = ?", child_sql)
+        self.assertIn("tt.topic_id IN (SELECT topic_id FROM topics WHERE group_id = ?)", child_sql)
+        self.assertIn("topic_id IN (SELECT topic_id FROM topics WHERE group_id = ?)", child_sql)
+        self.assertIn((101, "303", 5), [params for _sql, params in conn.calls])
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -5,12 +5,48 @@
 
 import os
 import hashlib
+import ipaddress
 import requests
 import mimetypes
+import socket
 from pathlib import Path
 from typing import Optional, Tuple
 from urllib.parse import urlparse
 import time
+
+DEFAULT_MAX_IMAGE_BYTES = 10 * 1024 * 1024
+ALLOWED_IMAGE_URL_SCHEMES = {"http", "https"}
+
+
+def is_blocked_remote_ip(address: str) -> bool:
+    ip = ipaddress.ip_address(address)
+    return any(
+        (
+            ip.is_loopback,
+            ip.is_private,
+            ip.is_link_local,
+            ip.is_multicast,
+            ip.is_reserved,
+            ip.is_unspecified,
+        )
+    )
+
+
+def validate_remote_image_url(url: str) -> str:
+    parsed = urlparse(url.strip())
+    if parsed.scheme.lower() not in ALLOWED_IMAGE_URL_SCHEMES or not parsed.hostname:
+        raise ValueError("只允许代理 http/https 图片 URL")
+
+    try:
+        address_infos = socket.getaddrinfo(parsed.hostname, parsed.port, type=socket.SOCK_STREAM)
+    except socket.gaierror as exc:
+        raise ValueError("图片 URL 主机无法解析") from exc
+
+    addresses = {info[4][0] for info in address_infos if info[4]}
+    if not addresses or any(is_blocked_remote_ip(address) for address in addresses):
+        raise ValueError("禁止代理内网或本机图片 URL")
+
+    return url.strip()
 
 
 class ImageCacheManager:
@@ -152,7 +188,12 @@ class ImageCacheManager:
         
         return None
     
-    def download_and_cache(self, url: str, timeout: int = 30) -> Tuple[bool, Optional[Path], Optional[str]]:
+    def download_and_cache(
+        self,
+        url: str,
+        timeout: int = 30,
+        max_bytes: int = DEFAULT_MAX_IMAGE_BYTES,
+    ) -> Tuple[bool, Optional[Path], Optional[str]]:
         """
         下载并缓存图片
         
@@ -167,6 +208,8 @@ class ImageCacheManager:
             return False, None, "URL为空"
         
         try:
+            url = validate_remote_image_url(url)
+
             # 检查是否已缓存
             if self.is_cached(url):
                 cached_path = self.get_cached_path(url)
@@ -180,14 +223,24 @@ class ImageCacheManager:
             content_type = response.headers.get('content-type', '').lower()
             if not any(fmt in content_type for fmt in self.supported_formats.keys()):
                 return False, None, f"不支持的图片格式: {content_type}"
+
+            content_length = response.headers.get('content-length')
+            if content_length and int(content_length) > max_bytes:
+                return False, None, f"图片过大，超过限制 {max_bytes} bytes"
             
             # 获取缓存路径
             cache_path = self._get_cache_path(url, content_type)
             
             # 保存文件
+            downloaded = 0
             with open(cache_path, 'wb') as f:
                 for chunk in response.iter_content(chunk_size=8192):
                     if chunk:
+                        downloaded += len(chunk)
+                        if downloaded > max_bytes:
+                            f.close()
+                            cache_path.unlink(missing_ok=True)
+                            return False, None, f"图片过大，超过限制 {max_bytes} bytes"
                         f.write(chunk)
             
             return True, cache_path, None

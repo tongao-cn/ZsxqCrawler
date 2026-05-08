@@ -137,20 +137,11 @@ export function useTopicActions({
     setFetchingComments(new Set(fetchingCommentsRef.current));
 
     try {
-      const response = await fetch(`/api/topics/${topicKey}/${groupId}/fetch-comments`, {
-        method: 'POST',
-      });
+      const result = await apiClient.fetchMoreComments(topicKey, groupId);
+      toast.success(result.message);
 
-      if (response.ok) {
-        const result = await response.json();
-        toast.success(result.message);
-
-        if (result.comments_fetched > 0) {
-          await loadTopics();
-        }
-      } else {
-        const error = await response.json();
-        toast.error(error.detail || '获取评论失败');
+      if (result.comments_fetched > 0) {
+        await loadTopics();
       }
     } catch (error) {
       toast.error('获取评论失败');

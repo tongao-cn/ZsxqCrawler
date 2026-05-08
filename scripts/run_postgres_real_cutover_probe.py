@@ -104,7 +104,10 @@ def run_real_probe(group_id: str, *, count: int, apply: bool, verbose: bool = Fa
                 stats = {"api_succeeded": True, "new_topics": 0, "updated_topics": 0, "errors": 0}
                 for topic in payload.get("resp_data", {}).get("topics", []):
                     topic_id = topic.get("topic_id")
-                    topic_db.cursor.execute("SELECT 1 FROM topics WHERE topic_id = ? LIMIT 1", (topic_id,))
+                    topic_db.cursor.execute(
+                        "SELECT 1 FROM topics WHERE topic_id = ? AND group_id = ? LIMIT 1",
+                        (topic_id, group_id),
+                    )
                     exists = topic_db.cursor.fetchone() is not None
                     if topic_db.import_topic_data(topic):
                         stats["updated_topics" if exists else "new_topics"] += 1

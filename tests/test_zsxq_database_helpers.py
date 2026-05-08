@@ -26,6 +26,9 @@ class FakeCursor:
     def fetchone(self):
         return self.row
 
+    def fetchall(self):
+        return []
+
 
 class FakeFileDatabase:
     def __init__(self):
@@ -186,6 +189,45 @@ class ZSXQDatabaseHelperTests(unittest.TestCase):
         self.assertIn("INSERT OR REPLACE INTO comments", sql)
         self.assertIn("comment_id, group_id, topic_id", sql)
         self.assertEqual((101, 303, 202), params[:3])
+
+    def test_get_topic_detail_scopes_child_queries_when_group_is_set(self):
+        from backend.storage.zsxq_database import ZSXQDatabase
+
+        cursor = FakeCursor()
+        cursor.row = (
+            202,
+            "talk",
+            "title",
+            "2026-05-07T10:00:00.000+0800",
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            "",
+            0,
+            0,
+            303,
+            "group",
+            "paid",
+            "bg",
+        )
+        db = object.__new__(ZSXQDatabase)
+        db.cursor = cursor
+        db.group_id = "303"
+
+        detail = ZSXQDatabase.get_topic_detail(db, 202)
+
+        self.assertEqual(202, detail["topic_id"])
+        calls = "\n".join(sql for sql, _params in cursor.calls)
+        self.assertIn("WHERE t.topic_id = ? AND t.group_id = ?", calls)
+        self.assertIn("AND (? IS NULL OR c.group_id = ?)", calls)
+        self.assertIn("topic_id IN (SELECT topic_id FROM topics WHERE group_id = ?)", calls)
 
 
 if __name__ == "__main__":

@@ -190,10 +190,11 @@ def _fetch_topics_for_date(
             FROM comments c
             LEFT JOIN users u ON c.owner_user_id = u.user_id
             WHERE c.topic_id = ?
+              AND c.group_id = ?
             ORDER BY c.sticky DESC, c.likes_count DESC, c.create_time ASC
             LIMIT ?
             """,
-            (topic_id, comments_per_topic),
+            (topic_id, group_id, comments_per_topic),
         ).fetchall()
         tags = conn.execute(
             """
@@ -201,9 +202,10 @@ def _fetch_topics_for_date(
             FROM topic_tags tt
             INNER JOIN tags ON tt.tag_id = tags.tag_id
             WHERE tt.topic_id = ?
+              AND tt.topic_id IN (SELECT topic_id FROM topics WHERE group_id = ?)
             ORDER BY tags.tag_name ASC
             """,
-            (topic_id,),
+            (topic_id, group_id),
         ).fetchall()
         topic_image_rows = conn.execute(
             """
@@ -213,10 +215,11 @@ def _fetch_topics_for_date(
                 original_url, original_width, original_height, original_size
             FROM images
             WHERE topic_id = ? AND comment_id IS NULL
+              AND topic_id IN (SELECT topic_id FROM topics WHERE group_id = ?)
             ORDER BY image_id ASC
             LIMIT ?
             """,
-            (topic_id, MAX_IMAGES_PER_TOPIC),
+            (topic_id, group_id, MAX_IMAGES_PER_TOPIC),
         ).fetchall()
 
         comment_ids = [comment["comment_id"] for comment in comments]
@@ -231,9 +234,10 @@ def _fetch_topics_for_date(
                     original_url, original_width, original_height, original_size
                 FROM images
                 WHERE comment_id IN ({placeholders})
+                  AND topic_id IN (SELECT topic_id FROM topics WHERE group_id = ?)
                 ORDER BY comment_id ASC, image_id ASC
                 """,
-                comment_ids,
+                [*comment_ids, group_id],
             ).fetchall()
             for image_index, image_row in enumerate(comment_image_rows, start=1):
                 comment_id = image_row["comment_id"]

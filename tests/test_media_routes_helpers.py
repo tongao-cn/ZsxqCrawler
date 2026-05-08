@@ -5,11 +5,14 @@ from pathlib import Path
 try:
     from fastapi import HTTPException
 
+    from backend.core.image_cache_manager import ImageCacheManager
     from backend.routes.media_routes import (
         _build_cached_image_response,
         _guess_content_type,
+        _is_blocked_proxy_ip,
         _read_file_bytes,
         _resolve_safe_child_path,
+        _validate_proxy_image_url,
     )
 
     HAS_MEDIA_ROUTE_DEPS = True
@@ -59,6 +62,46 @@ class MediaRoutesHelperTests(unittest.TestCase):
 
         self.assertEqual(403, ctx.exception.status_code)
         self.assertEqual("禁止访问该路径", ctx.exception.detail)
+
+    def test_validate_proxy_image_url_rejects_unsafe_schemes(self):
+        with self.assertRaises(HTTPException) as ctx:
+            _validate_proxy_image_url("javascript:alert(1)")
+
+        self.assertEqual(400, ctx.exception.status_code)
+
+    def test_validate_proxy_image_url_rejects_private_ips(self):
+        with self.assertRaises(HTTPException) as ctx:
+            _validate_proxy_image_url("http://127.0.0.1/avatar.png")
+
+        self.assertEqual(403, ctx.exception.status_code)
+
+    def test_is_blocked_proxy_ip_identifies_private_ranges(self):
+        self.assertTrue(_is_blocked_proxy_ip("10.0.0.1"))
+        self.assertTrue(_is_blocked_proxy_ip("::1"))
+        self.assertFalse(_is_blocked_proxy_ip("8.8.8.8"))
+
+    def test_download_and_cache_rejects_large_content_length(self):
+        class FakeResponse:
+            headers = {"content-type": "image/png", "content-length": "11"}
+
+            def raise_for_status(self):
+                return None
+
+            def iter_content(self, chunk_size=8192):
+                yield b"x"
+
+        with tempfile.TemporaryDirectory() as tmp:
+            manager = ImageCacheManager(tmp)
+            original_get = __import__("requests").get
+            try:
+                __import__("requests").get = lambda *args, **kwargs: FakeResponse()
+                ok, path, error = manager.download_and_cache("https://example.com/a.png", max_bytes=10)
+            finally:
+                __import__("requests").get = original_get
+
+        self.assertFalse(ok)
+        self.assertIsNone(path)
+        self.assertIn("图片过大", error)
 
 
 if __name__ == "__main__":

@@ -242,6 +242,12 @@ export interface Topic {
   imported_at?: string;
 }
 
+export interface FetchMoreCommentsResponse {
+  success: boolean;
+  message: string;
+  comments_fetched: number;
+}
+
 export interface FileItem {
   file_id: number;
   name: string;
@@ -568,6 +574,13 @@ class ApiClient {
   async refreshTopic(topicId: number | string, groupId: number) {
     const id = String(topicId);
     return this.request(`/api/topics/${id}/${groupId}/refresh`, {
+      method: 'POST',
+    });
+  }
+
+  async fetchMoreComments(topicId: number | string, groupId: number | string): Promise<FetchMoreCommentsResponse> {
+    const id = String(topicId);
+    return this.request(`/api/topics/${id}/${groupId}/fetch-comments`, {
       method: 'POST',
     });
   }

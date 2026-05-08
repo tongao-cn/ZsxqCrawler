@@ -8,7 +8,9 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse, Response
 
 from backend.core.db_path_manager import get_db_path_manager
-from backend.core.image_cache_manager import get_image_cache_manager
+from backend.core.image_cache_manager import get_image_cache_manager, is_blocked_remote_ip, validate_remote_image_url
+
+_is_blocked_proxy_ip = is_blocked_remote_ip
 
 router = APIRouter(prefix="/api", tags=["media"])
 
@@ -44,23 +46,36 @@ def _resolve_safe_child_path(base_dir: Path, child_path: str) -> Path:
     return resolved_path
 
 
+def _validate_proxy_image_url(url: str) -> str:
+    try:
+        return validate_remote_image_url(url)
+    except ValueError as exc:
+        detail = str(exc)
+    if "http/https" in detail or "无法解析" in detail:
+        raise HTTPException(status_code=400, detail="只允许代理 http/https 图片 URL")
+    raise HTTPException(status_code=403, detail="禁止代理内网或本机图片 URL")
+
+
 @router.get("/proxy-image")
 async def proxy_image(url: str, group_id: Optional[str] = None):
     """代理图片请求，支持本地缓存"""
     try:
+        safe_url = _validate_proxy_image_url(url)
         cache_manager = get_image_cache_manager(group_id)
 
-        if cache_manager.is_cached(url):
-            cached_path = cache_manager.get_cached_path(url)
+        if cache_manager.is_cached(safe_url):
+            cached_path = cache_manager.get_cached_path(safe_url)
             if cached_path and cached_path.exists():
                 return _build_cached_image_response(cached_path, "HIT")
 
-        success, cached_path, error = cache_manager.download_and_cache(url)
+        success, cached_path, error = cache_manager.download_and_cache(safe_url)
 
         if success and cached_path and cached_path.exists():
             return _build_cached_image_response(cached_path, "MISS")
 
         raise HTTPException(status_code=404, detail=f"图片加载失败: {error}")
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"代理图片失败: {str(e)}")
 
