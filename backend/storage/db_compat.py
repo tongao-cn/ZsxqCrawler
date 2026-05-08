@@ -76,6 +76,11 @@ def get_postgres_dsn() -> Optional[str]:
     return str(dsn).strip() if dsn else None
 
 
+def _should_bootstrap_schema_on_connect() -> bool:
+    raw = os.getenv("ZSXQ_BOOTSTRAP_SCHEMA_ON_CONNECT", "")
+    return raw.strip().lower() in {"1", "true", "yes", "on"}
+
+
 def connect(*, row_factory: Any = None):
     """Open a PostgreSQL connection scoped to the fixed zsxq_core schema."""
     if get_database_backend() != "postgres":
@@ -115,7 +120,7 @@ class PostgresCompatConnection:
 
         self._conn = psycopg2.connect(dsn)
         self.schema_name = CORE_SCHEMA
-        if dsn not in _CORE_SCHEMA_BOOTSTRAPPED_DSNS:
+        if _should_bootstrap_schema_on_connect() and dsn not in _CORE_SCHEMA_BOOTSTRAPPED_DSNS:
             ensure_core_schema(self._conn)
             _CORE_SCHEMA_BOOTSTRAPPED_DSNS.add(dsn)
         with self._conn.cursor() as cursor:

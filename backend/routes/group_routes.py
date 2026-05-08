@@ -212,7 +212,7 @@ def _count_group_files(group_id: str) -> int:
         crawler = get_crawler_for_group(group_id)
         downloader = crawler.get_file_downloader()
         try:
-            downloader.file_db.cursor.execute("SELECT COUNT(*) FROM files")
+            downloader.file_db.cursor.execute("SELECT COUNT(*) FROM files WHERE group_id = ?", (group_id,))
             row = downloader.file_db.cursor.fetchone()
             return (row[0] or 0) if row else 0
         except Exception:

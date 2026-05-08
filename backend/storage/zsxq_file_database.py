@@ -57,6 +57,13 @@ def _group_id_param(group_id: Optional[str]) -> Any:
     return int(value) if value.isdigit() else value
 
 
+def _nullable_group_id_param(group_id: Optional[str]) -> Any:
+    value = str(group_id or "").strip()
+    if not value:
+        return None
+    return int(value) if value.isdigit() else value
+
+
 def _count_tables(cursor: Any, tables: Any = _STATS_TABLES, group_id: Optional[str] = None) -> Dict[str, Any]:
     stats = {}
     scoped_topic_ids_sql = "SELECT topic_id FROM topics WHERE group_id = ?"
@@ -301,6 +308,7 @@ class ZSXQFileDatabase:
         self.cursor.execute('''
         CREATE TABLE IF NOT EXISTS comments (
             comment_id INTEGER PRIMARY KEY,
+            group_id INTEGER,
             topic_id INTEGER,
             owner_user_id INTEGER,
             parent_comment_id INTEGER,
@@ -636,6 +644,7 @@ class ZSXQFileDatabase:
     
     def insert_comments(self, topic_id: int, comments_data: List[Dict[str, Any]]):
         """插入评论信息"""
+        group_id = self._resolve_topic_group_id(topic_id)
         for comment in comments_data:
             if not comment.get('comment_id'):
                 continue
@@ -648,11 +657,12 @@ class ZSXQFileDatabase:
             
             self.cursor.execute('''
             INSERT OR REPLACE INTO comments 
-            (comment_id, topic_id, owner_user_id, parent_comment_id, repliee_user_id,
+            (comment_id, group_id, topic_id, owner_user_id, parent_comment_id, repliee_user_id,
              text, create_time, likes_count, rewards_count, replies_count, sticky)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ''', (
                 comment.get('comment_id'),
+                group_id,
                 topic_id,
                 owner_id,
                 comment.get('parent_comment_id'),
@@ -664,6 +674,16 @@ class ZSXQFileDatabase:
                 comment.get('replies_count', 0),
                 comment.get('sticky', False)
             ))
+
+    def _resolve_topic_group_id(self, topic_id: int):
+        if self.group_id:
+            return _nullable_group_id_param(self.group_id)
+        try:
+            self.cursor.execute('SELECT group_id FROM topics WHERE topic_id = ? LIMIT 1', (topic_id,))
+            row = self.cursor.fetchone()
+            return row[0] if row and row[0] is not None else None
+        except Exception:
+            return None
     
     def insert_like_emojis(self, topic_id: int, likes_detail: Dict[str, Any]):
         """插入点赞表情详情"""
@@ -881,6 +901,11 @@ class ZSXQFileDatabase:
                 'table': 'file_ai_analyses',
                 'column': 'extracted_text',
                 'definition': 'TEXT'
+            },
+            {
+                'table': 'comments',
+                'column': 'group_id',
+                'definition': 'INTEGER'
             }
         ]
 

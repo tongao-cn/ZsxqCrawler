@@ -81,6 +81,13 @@ def _group_id_param(group_id: Optional[str]) -> Any:
     return int(value) if value.isdigit() else value
 
 
+def _nullable_group_id_param(group_id: Optional[str]) -> Any:
+    value = str(group_id or "").strip()
+    if not value:
+        return None
+    return int(value) if value.isdigit() else value
+
+
 class ZSXQColumnsDatabase:
     """知识星球专栏数据库管理器"""
     
@@ -217,6 +224,7 @@ class ZSXQColumnsDatabase:
         self.cursor.execute('''
             CREATE TABLE IF NOT EXISTS comments (
                 comment_id INTEGER PRIMARY KEY,
+                group_id INTEGER,
                 topic_id INTEGER NOT NULL,
                 owner_user_id INTEGER,
                 parent_comment_id INTEGER,
@@ -284,6 +292,11 @@ class ZSXQColumnsDatabase:
         columns = [row[1] for row in self.cursor.fetchall()]
         if 'comment_id' not in columns:
             self.cursor.execute('ALTER TABLE images ADD COLUMN comment_id INTEGER')
+
+        self.cursor.execute("PRAGMA table_info(comments)")
+        comment_columns = [row[1] for row in self.cursor.fetchall()]
+        if 'group_id' not in comment_columns:
+            self.cursor.execute('ALTER TABLE comments ADD COLUMN group_id INTEGER')
 
         # 为 comment_id 创建索引（新表和迁移后的旧表都需要）
         self.cursor.execute('CREATE INDEX IF NOT EXISTS idx_images_comment_id ON images (comment_id)')
@@ -551,14 +564,16 @@ class ZSXQColumnsDatabase:
         # 处理被回复者
         repliee = comment_data.get('repliee', {})
         repliee_id = self.insert_user(repliee) if repliee else None
+        group_id = self._resolve_topic_group_id(topic_id)
         
         self.cursor.execute('''
             INSERT OR REPLACE INTO comments 
-            (comment_id, topic_id, owner_user_id, parent_comment_id, repliee_user_id,
+            (comment_id, group_id, topic_id, owner_user_id, parent_comment_id, repliee_user_id,
              text, create_time, likes_count, rewards_count, replies_count, sticky)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', (
             comment_data.get('comment_id'),
+            group_id,
             topic_id,
             owner_id,
             comment_data.get('parent_comment_id'),
@@ -570,6 +585,16 @@ class ZSXQColumnsDatabase:
             comment_data.get('replies_count', 0),
             comment_data.get('sticky', False)
         ))
+
+    def _resolve_topic_group_id(self, topic_id: int):
+        if self.group_id:
+            return _nullable_group_id_param(self.group_id)
+        try:
+            self.cursor.execute('SELECT group_id FROM topic_details WHERE topic_id = ? LIMIT 1', (topic_id,))
+            row = self.cursor.fetchone()
+            return row[0] if row and row[0] is not None else None
+        except Exception:
+            return None
 
     def import_comments(self, topic_id: int, comments: List[Dict[str, Any]]):
         """导入评论列表（包括嵌套回复），用于持久化从API获取的完整评论"""

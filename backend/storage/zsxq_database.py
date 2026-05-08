@@ -70,6 +70,13 @@ def _group_id_param(group_id: Optional[str]) -> Any:
     return int(value) if value.isdigit() else value
 
 
+def _nullable_group_id_param(group_id: Optional[str]) -> Any:
+    value = str(group_id or "").strip()
+    if not value:
+        return None
+    return int(value) if value.isdigit() else value
+
+
 def _upsert_core_file(cursor, group_id: Optional[int], topic_id: int, file_data: Dict[str, Any]) -> Optional[int]:
     file_id = file_data.get('file_id')
     if not file_id:
@@ -267,6 +274,7 @@ class ZSXQDatabase:
         self.cursor.execute('''
             CREATE TABLE IF NOT EXISTS comments (
                 comment_id INTEGER PRIMARY KEY,
+                group_id INTEGER,
                 topic_id INTEGER,
                 owner_user_id INTEGER,
                 parent_comment_id INTEGER,
@@ -284,6 +292,10 @@ class ZSXQDatabase:
                 FOREIGN KEY (repliee_user_id) REFERENCES users (user_id)
             )
         ''')
+        self.cursor.execute("PRAGMA table_info(comments)")
+        comment_columns = [row[1] for row in self.cursor.fetchall()]
+        if 'group_id' not in comment_columns:
+            self.cursor.execute('ALTER TABLE comments ADD COLUMN group_id INTEGER')
         
         # 问题表
         self.cursor.execute('''
@@ -375,6 +387,7 @@ class ZSXQDatabase:
             'CREATE INDEX IF NOT EXISTS idx_like_emojis_topic_id ON like_emojis (topic_id)',
             'CREATE INDEX IF NOT EXISTS idx_user_liked_emojis_topic_id ON user_liked_emojis (topic_id)',
             'CREATE INDEX IF NOT EXISTS idx_comments_topic_create_time ON comments (topic_id, create_time ASC)',
+            'CREATE INDEX IF NOT EXISTS idx_comments_group_topic_create_time ON comments (group_id, topic_id, create_time ASC)',
             'CREATE INDEX IF NOT EXISTS idx_questions_topic_id ON questions (topic_id)',
             'CREATE INDEX IF NOT EXISTS idx_answers_topic_id ON answers (topic_id)',
             'CREATE INDEX IF NOT EXISTS idx_topic_files_topic_file_id ON topic_files (topic_id, file_id)',
@@ -983,14 +996,16 @@ class ZSXQDatabase:
         from datetime import datetime, timezone, timedelta
         beijing_tz = timezone(timedelta(hours=8))
         current_time = datetime.now(beijing_tz).strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + '+0800'
+        group_id = self._resolve_topic_group_id(topic_id, comment_data.get('group_id'))
         
         self.cursor.execute('''
             INSERT OR REPLACE INTO comments
-            (comment_id, topic_id, owner_user_id, parent_comment_id, repliee_user_id,
+            (comment_id, group_id, topic_id, owner_user_id, parent_comment_id, repliee_user_id,
              text, create_time, likes_count, rewards_count, replies_count, sticky, imported_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', (
             comment_id,
+            group_id,
             topic_id,
             owner_user_id,
             comment_data.get('parent_comment_id'),
@@ -1003,6 +1018,18 @@ class ZSXQDatabase:
             comment_data.get('sticky', False),
             current_time
         ))
+
+    def _resolve_topic_group_id(self, topic_id: int, explicit_group_id: Optional[Any] = None):
+        """Resolve group_id for comments fetched separately from topic payloads."""
+        group_id = explicit_group_id or self.group_id
+        if group_id:
+            return _nullable_group_id_param(str(group_id))
+        try:
+            self.cursor.execute('SELECT group_id FROM topics WHERE topic_id = ? LIMIT 1', (topic_id,))
+            row = self.cursor.fetchone()
+            return row[0] if row and row[0] is not None else None
+        except Exception:
+            return None
 
     def _import_comment_images(self, topic_id: int, comment_id: int, images: List[Dict[str, Any]]):
         """导入评论的图片信息"""

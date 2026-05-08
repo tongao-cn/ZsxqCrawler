@@ -49,6 +49,35 @@ class FakeDb:
         self.closed = True
 
 
+class FakeFileCursor:
+    def __init__(self):
+        self.calls = []
+
+    def execute(self, query, params=()):
+        self.calls.append((" ".join(query.split()), params))
+
+    def fetchone(self):
+        return (7,)
+
+
+class FakeFileDb:
+    def __init__(self):
+        self.cursor = FakeFileCursor()
+
+
+class FakeDownloader:
+    def __init__(self):
+        self.file_db = FakeFileDb()
+
+
+class FakeCrawler:
+    def __init__(self):
+        self.downloader = FakeDownloader()
+
+    def get_file_downloader(self):
+        return self.downloader
+
+
 @unittest.skipUnless(HAS_GROUP_ROUTE_DEPS, "group route dependencies are not installed")
 class GroupRoutesHelperTests(unittest.TestCase):
     def test_default_local_group_fields_and_entry(self):
@@ -139,6 +168,17 @@ class GroupRoutesHelperTests(unittest.TestCase):
     def test_count_group_files_returns_zero_when_crawler_fails(self):
         with patch.object(group_routes, "get_crawler_for_group", side_effect=RuntimeError("boom")):
             self.assertEqual(group_routes._count_group_files("123"), 0)
+
+    def test_count_group_files_filters_by_group_id(self):
+        crawler = FakeCrawler()
+
+        with patch.object(group_routes, "get_crawler_for_group", return_value=crawler):
+            self.assertEqual(group_routes._count_group_files("123"), 7)
+
+        self.assertEqual(
+            crawler.downloader.file_db.cursor.calls,
+            [("SELECT COUNT(*) FROM files WHERE group_id = ?", ("123",))],
+        )
 
 
 if __name__ == "__main__":

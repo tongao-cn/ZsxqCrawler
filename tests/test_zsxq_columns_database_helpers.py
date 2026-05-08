@@ -117,6 +117,32 @@ class ZSXQColumnsDatabaseHelperTests(unittest.TestCase):
             },
         )
 
+    def test_insert_comment_writes_group_id_from_runtime_scope(self):
+        from backend.storage.zsxq_columns_database import ZSXQColumnsDatabase
+
+        class FakeCursor:
+            def __init__(self):
+                self.calls = []
+
+            def execute(self, sql, params=()):
+                self.calls.append((" ".join(sql.split()), params))
+                return self
+
+            def fetchone(self):
+                return None
+
+        db = object.__new__(ZSXQColumnsDatabase)
+        db.cursor = FakeCursor()
+        db.group_id = "303"
+        db.insert_user = lambda user: user.get("user_id") if user else None
+
+        db._insert_comment(202, {"comment_id": 101, "owner": {"user_id": 9}, "text": "ok"})
+
+        sql, params = db.cursor.calls[-1]
+        self.assertIn("INSERT OR REPLACE INTO comments", sql)
+        self.assertIn("comment_id, group_id, topic_id", sql)
+        self.assertEqual((101, 303, 202), params[:3])
+
 
 if __name__ == "__main__":
     unittest.main()

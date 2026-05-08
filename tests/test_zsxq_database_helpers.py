@@ -15,12 +15,16 @@ class FakeCursor:
     def __init__(self):
         self.calls = []
         self.rowcount = 0
+        self.row = None
 
     def execute(self, query, params=()):
         self.calls.append((" ".join(query.split()), params))
         if "INSERT OR IGNORE INTO file_topic_relations" in query:
             self.rowcount = 1
         return self
+
+    def fetchone(self):
+        return self.row
 
 
 class FakeFileDatabase:
@@ -168,6 +172,20 @@ class ZSXQDatabaseHelperTests(unittest.TestCase):
         self.assertEqual(155, _group_id_param("155"))
         self.assertEqual("group-x", _group_id_param("group-x"))
         self.assertEqual("", _group_id_param(None))
+
+    def test_upsert_comment_writes_group_id_from_runtime_scope(self):
+        from backend.storage.zsxq_database import ZSXQDatabase
+
+        db = object.__new__(ZSXQDatabase)
+        db.cursor = FakeCursor()
+        db.group_id = "303"
+
+        ZSXQDatabase._upsert_comment(db, 202, {"comment_id": 101, "text": "ok"})
+
+        sql, params = db.cursor.calls[-1]
+        self.assertIn("INSERT OR REPLACE INTO comments", sql)
+        self.assertIn("comment_id, group_id, topic_id", sql)
+        self.assertEqual((101, 303, 202), params[:3])
 
 
 if __name__ == "__main__":

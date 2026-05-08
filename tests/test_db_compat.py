@@ -4,7 +4,9 @@ from unittest.mock import patch
 from backend.storage.db_compat import (
     CompatRow,
     connect,
+    PostgresCompatConnection,
     _parse_pragma_table_info,
+    _should_bootstrap_schema_on_connect,
     _should_return_id,
     _strip_env_value,
     _translate_sql,
@@ -68,6 +70,48 @@ class DbCompatTests(unittest.TestCase):
         with patch("backend.storage.db_compat.get_database_backend", return_value="sqlite"):
             with self.assertRaisesRegex(RuntimeError, "SQLite backend has been removed"):
                 connect()
+
+    def test_bootstrap_schema_on_connect_is_opt_in(self):
+        with patch.dict("os.environ", {}, clear=True):
+            self.assertFalse(_should_bootstrap_schema_on_connect())
+        with patch.dict("os.environ", {"ZSXQ_BOOTSTRAP_SCHEMA_ON_CONNECT": "true"}, clear=True):
+            self.assertTrue(_should_bootstrap_schema_on_connect())
+
+    def test_postgres_connection_sets_search_path_without_default_bootstrap(self):
+        class FakeCursor:
+            def __init__(self):
+                self.calls = []
+
+            def execute(self, sql, params=()):
+                self.calls.append((sql, params))
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+        class FakeConnection:
+            def __init__(self):
+                self.cursor_obj = FakeCursor()
+                self.commits = 0
+
+            def cursor(self):
+                return self.cursor_obj
+
+            def commit(self):
+                self.commits += 1
+
+        fake_conn = FakeConnection()
+
+        with patch.dict("os.environ", {}, clear=True), patch(
+            "psycopg2.connect", return_value=fake_conn
+        ), patch("backend.storage.db_compat.ensure_core_schema") as ensure_core_schema:
+            PostgresCompatConnection("postgresql://example")
+
+        ensure_core_schema.assert_not_called()
+        self.assertEqual(fake_conn.cursor_obj.calls, [('SET search_path TO "zsxq_core"', ())])
+        self.assertEqual(fake_conn.commits, 1)
 
     def test_compat_row_supports_index_and_column_access(self):
         row = CompatRow(("task-1", "running"), ("task_id", "status"))

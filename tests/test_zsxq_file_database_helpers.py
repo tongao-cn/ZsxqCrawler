@@ -102,6 +102,18 @@ class FakeAnalysisConnection:
         self.commits += 1
 
 
+class FakeCommentCursor:
+    def __init__(self):
+        self.calls = []
+
+    def execute(self, sql, params=()):
+        self.calls.append((" ".join(sql.split()), params))
+        return self
+
+    def fetchone(self):
+        return None
+
+
 class ZSXQFileDatabaseHelperTests(unittest.TestCase):
     def test_new_import_stats_returns_expected_zero_counts(self):
         stats = _new_import_stats()
@@ -223,6 +235,21 @@ class ZSXQFileDatabaseHelperTests(unittest.TestCase):
         insert_sql, insert_params = cursor.calls[-1]
         self.assertIn("file_id, group_id, status", insert_sql)
         self.assertEqual((101, 303, "completed"), insert_params[:3])
+
+    def test_insert_comments_writes_group_id_from_runtime_scope(self):
+        from backend.storage.zsxq_file_database import ZSXQFileDatabase
+
+        db = object.__new__(ZSXQFileDatabase)
+        db.cursor = FakeCommentCursor()
+        db.group_id = "303"
+        db.insert_user = lambda user: user.get("user_id") if user else None
+
+        db.insert_comments(202, [{"comment_id": 101, "owner": {"user_id": 9}, "text": "ok"}])
+
+        sql, params = db.cursor.calls[-1]
+        self.assertIn("INSERT OR REPLACE INTO comments", sql)
+        self.assertIn("comment_id, group_id, topic_id", sql)
+        self.assertEqual((101, 303, 202), params[:3])
 
 
 if __name__ == "__main__":

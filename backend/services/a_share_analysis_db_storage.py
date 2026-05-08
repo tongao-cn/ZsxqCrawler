@@ -1,4 +1,4 @@
-"""PostgreSQL-backed storage for ZSXQ A-share analysis, reusing KnowActionSystem DB."""
+"""PostgreSQL-backed storage for ZSXQ A-share analysis."""
 
 from __future__ import annotations
 
@@ -13,6 +13,9 @@ import psycopg2
 from psycopg2.extras import Json, execute_values
 from psycopg2 import sql
 
+from backend.storage.db_compat import get_postgres_dsn as get_zsxq_postgres_dsn
+from backend.storage.postgres_core_schema import CORE_SCHEMA, quote_identifier
+
 
 DEFAULT_KNOW_ACTION_ENV_PATH = Path(os.getenv("KNOW_ACTION_ENV_PATH", r"C:\Dev\KnowActionSystem\.env"))
 
@@ -21,6 +24,14 @@ PROCESSED_STATE_TABLE = "zsxq_a_share_processed_state"
 TDX_EXPORTS_TABLE = "zsxq_a_share_tdx_exports"
 TDX_EXPORT_BLOCKS_TABLE = "zsxq_a_share_tdx_export_blocks"
 STOCK_BASIC_TABLE = "stock_basic"
+
+
+def _core_table_ref(table_name: str) -> str:
+    return f"{quote_identifier(CORE_SCHEMA)}.{quote_identifier(table_name)}"
+
+
+def _public_table_ref(table_name: str) -> str:
+    return f"{quote_identifier('public')}.{quote_identifier(table_name)}"
 
 
 def _normalize_group_id(group_id: Optional[str]) -> str:
@@ -49,6 +60,10 @@ def _resolve_setting(key: str, env_values: Dict[str, str]) -> str:
 
 
 def get_postgres_dsn(env_path: Path = DEFAULT_KNOW_ACTION_ENV_PATH) -> str:
+    zsxq_dsn = get_zsxq_postgres_dsn()
+    if zsxq_dsn:
+        return zsxq_dsn
+
     env_values = _load_env_file(env_path)
     host = _resolve_setting("DB_HOST", env_values)
     port = _resolve_setting("DB_PORT", env_values) or "5432"
@@ -90,7 +105,7 @@ def _get_primary_key_columns(cur: Any, table_name: str) -> List[str]:
           AND con.contype = 'p'
         ORDER BY cols.ordinality
         """,
-        (table_name,),
+        (f"{CORE_SCHEMA}.{table_name}",),
     )
     return [str(row[0]) for row in cur.fetchall()]
 
@@ -101,20 +116,20 @@ def _drop_primary_key_if_needed(cur: Any, table_name: str, expected_columns: Seq
 
     cur.execute(
         "SELECT conname FROM pg_constraint WHERE conrelid = %s::regclass AND contype = 'p'",
-        (table_name,),
+        (f"{CORE_SCHEMA}.{table_name}",),
     )
     row = cur.fetchone()
     if row and row[0]:
         cur.execute(
             sql.SQL("ALTER TABLE {} DROP CONSTRAINT {}").format(
-                sql.Identifier(table_name),
+                sql.Identifier(CORE_SCHEMA, table_name),
                 sql.Identifier(str(row[0])),
             )
         )
 
     cur.execute(
         sql.SQL("ALTER TABLE {} ADD PRIMARY KEY ({})").format(
-            sql.Identifier(table_name),
+            sql.Identifier(CORE_SCHEMA, table_name),
             sql.SQL(", ").join(sql.Identifier(column) for column in expected_columns),
         )
     )
@@ -123,7 +138,7 @@ def _drop_primary_key_if_needed(cur: Any, table_name: str, expected_columns: Seq
 def _ensure_daily_mentions_schema(cur: Any) -> None:
     cur.execute(
         f"""
-        CREATE TABLE IF NOT EXISTS {DAILY_MENTIONS_TABLE} (
+        CREATE TABLE IF NOT EXISTS {_core_table_ref(DAILY_MENTIONS_TABLE)} (
             group_id TEXT NOT NULL DEFAULT '',
             mention_date DATE NOT NULL,
             company TEXT NOT NULL,
@@ -133,22 +148,23 @@ def _ensure_daily_mentions_schema(cur: Any) -> None:
         )
         """
     )
-    cur.execute(f"ALTER TABLE {DAILY_MENTIONS_TABLE} ADD COLUMN IF NOT EXISTS group_id TEXT")
-    cur.execute(f"UPDATE {DAILY_MENTIONS_TABLE} SET group_id = '' WHERE group_id IS NULL")
-    cur.execute(f"ALTER TABLE {DAILY_MENTIONS_TABLE} ALTER COLUMN group_id SET DEFAULT ''")
-    cur.execute(f"ALTER TABLE {DAILY_MENTIONS_TABLE} ALTER COLUMN group_id SET NOT NULL")
+    table_ref = _core_table_ref(DAILY_MENTIONS_TABLE)
+    cur.execute(f"ALTER TABLE {table_ref} ADD COLUMN IF NOT EXISTS group_id TEXT")
+    cur.execute(f"UPDATE {table_ref} SET group_id = '' WHERE group_id IS NULL")
+    cur.execute(f"ALTER TABLE {table_ref} ALTER COLUMN group_id SET DEFAULT ''")
+    cur.execute(f"ALTER TABLE {table_ref} ALTER COLUMN group_id SET NOT NULL")
     _drop_primary_key_if_needed(cur, DAILY_MENTIONS_TABLE, ("group_id", "mention_date", "company"))
-    cur.execute(f"CREATE INDEX IF NOT EXISTS idx_{DAILY_MENTIONS_TABLE}_date ON {DAILY_MENTIONS_TABLE} (mention_date)")
+    cur.execute(f"CREATE INDEX IF NOT EXISTS idx_{DAILY_MENTIONS_TABLE}_date ON {table_ref} (mention_date)")
     cur.execute(
         f"CREATE INDEX IF NOT EXISTS idx_{DAILY_MENTIONS_TABLE}_group_date "
-        f"ON {DAILY_MENTIONS_TABLE} (group_id, mention_date)"
+        f"ON {table_ref} (group_id, mention_date)"
     )
 
 
 def _ensure_processed_state_schema(cur: Any) -> None:
     cur.execute(
         f"""
-        CREATE TABLE IF NOT EXISTS {PROCESSED_STATE_TABLE} (
+        CREATE TABLE IF NOT EXISTS {_core_table_ref(PROCESSED_STATE_TABLE)} (
             group_id TEXT NOT NULL DEFAULT '',
             source TEXT NOT NULL,
             topic_id TEXT NOT NULL,
@@ -158,22 +174,24 @@ def _ensure_processed_state_schema(cur: Any) -> None:
         )
         """
     )
-    cur.execute(f"ALTER TABLE {PROCESSED_STATE_TABLE} ADD COLUMN IF NOT EXISTS group_id TEXT")
-    cur.execute(f"UPDATE {PROCESSED_STATE_TABLE} SET group_id = '' WHERE group_id IS NULL")
-    cur.execute(f"ALTER TABLE {PROCESSED_STATE_TABLE} ALTER COLUMN group_id SET DEFAULT ''")
-    cur.execute(f"ALTER TABLE {PROCESSED_STATE_TABLE} ALTER COLUMN group_id SET NOT NULL")
+    table_ref = _core_table_ref(PROCESSED_STATE_TABLE)
+    cur.execute(f"ALTER TABLE {table_ref} ADD COLUMN IF NOT EXISTS group_id TEXT")
+    cur.execute(f"UPDATE {table_ref} SET group_id = '' WHERE group_id IS NULL")
+    cur.execute(f"ALTER TABLE {table_ref} ALTER COLUMN group_id SET DEFAULT ''")
+    cur.execute(f"ALTER TABLE {table_ref} ALTER COLUMN group_id SET NOT NULL")
     _drop_primary_key_if_needed(cur, PROCESSED_STATE_TABLE, ("group_id", "source", "topic_id", "day"))
-    cur.execute(f"CREATE INDEX IF NOT EXISTS idx_{PROCESSED_STATE_TABLE}_day ON {PROCESSED_STATE_TABLE} (day)")
+    cur.execute(f"CREATE INDEX IF NOT EXISTS idx_{PROCESSED_STATE_TABLE}_day ON {table_ref} (day)")
     cur.execute(
         f"CREATE INDEX IF NOT EXISTS idx_{PROCESSED_STATE_TABLE}_group_day "
-        f"ON {PROCESSED_STATE_TABLE} (group_id, day)"
+        f"ON {table_ref} (group_id, day)"
     )
 
 
 def ensure_analysis_tables(env_path: Path = DEFAULT_KNOW_ACTION_ENV_PATH) -> None:
     statements = [
+        f"CREATE SCHEMA IF NOT EXISTS {quote_identifier(CORE_SCHEMA)}",
         f"""
-        CREATE TABLE IF NOT EXISTS {TDX_EXPORTS_TABLE} (
+        CREATE TABLE IF NOT EXISTS {_core_table_ref(TDX_EXPORTS_TABLE)} (
             id BIGSERIAL PRIMARY KEY,
             exported_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
             start_date DATE,
@@ -188,9 +206,9 @@ def ensure_analysis_tables(env_path: Path = DEFAULT_KNOW_ACTION_ENV_PATH) -> Non
         )
         """,
         f"""
-        CREATE TABLE IF NOT EXISTS {TDX_EXPORT_BLOCKS_TABLE} (
+        CREATE TABLE IF NOT EXISTS {_core_table_ref(TDX_EXPORT_BLOCKS_TABLE)} (
             id BIGSERIAL PRIMARY KEY,
-            export_id BIGINT NOT NULL REFERENCES {TDX_EXPORTS_TABLE}(id) ON DELETE CASCADE,
+            export_id BIGINT NOT NULL REFERENCES {_core_table_ref(TDX_EXPORTS_TABLE)}(id) ON DELETE CASCADE,
             window_days INTEGER NOT NULL,
             block_name TEXT NOT NULL,
             block_code TEXT NOT NULL,
@@ -200,7 +218,7 @@ def ensure_analysis_tables(env_path: Path = DEFAULT_KNOW_ACTION_ENV_PATH) -> Non
             skipped_companies JSONB NOT NULL DEFAULT '[]'::jsonb
         )
         """,
-        f"CREATE INDEX IF NOT EXISTS idx_{TDX_EXPORT_BLOCKS_TABLE}_export_id ON {TDX_EXPORT_BLOCKS_TABLE} (export_id)",
+        f"CREATE INDEX IF NOT EXISTS idx_{TDX_EXPORT_BLOCKS_TABLE}_export_id ON {_core_table_ref(TDX_EXPORT_BLOCKS_TABLE)} (export_id)",
     ]
 
     with get_connection(env_path) as conn:
@@ -222,12 +240,12 @@ def get_storage_health(
             cur.execute("SELECT current_database()")
             database_name = str(cur.fetchone()[0])
             cur.execute(
-                f"SELECT COUNT(*) FROM {DAILY_MENTIONS_TABLE} WHERE group_id = %s",
+                f"SELECT COUNT(*) FROM {_core_table_ref(DAILY_MENTIONS_TABLE)} WHERE group_id = %s",
                 (normalized_group_id,),
             )
             daily_rows = int(cur.fetchone()[0])
             cur.execute(
-                f"SELECT COUNT(*) FROM {PROCESSED_STATE_TABLE} WHERE group_id = %s",
+                f"SELECT COUNT(*) FROM {_core_table_ref(PROCESSED_STATE_TABLE)} WHERE group_id = %s",
                 (normalized_group_id,),
             )
             processed_rows = int(cur.fetchone()[0])
@@ -237,11 +255,11 @@ def get_storage_health(
                     COALESCE(MAX(updated_at), TIMESTAMPTZ 'epoch'),
                     COALESCE((
                         SELECT MAX(processed_at)
-                        FROM {PROCESSED_STATE_TABLE}
+                        FROM {_core_table_ref(PROCESSED_STATE_TABLE)}
                         WHERE group_id = %s
                     ), TIMESTAMPTZ 'epoch')
                 )
-                FROM {DAILY_MENTIONS_TABLE}
+                FROM {_core_table_ref(DAILY_MENTIONS_TABLE)}
                 WHERE group_id = %s
                 """,
                 (normalized_group_id, normalized_group_id),
@@ -250,7 +268,7 @@ def get_storage_health(
     return {
         "enabled": True,
         "mode": "postgres_primary",
-        "label": "KnowActionSystem PostgreSQL",
+        "label": f"ZsxqCrawler PostgreSQL {CORE_SCHEMA}",
         "database_name": database_name,
         "group_id": normalized_group_id or None,
         "daily_rows": daily_rows,
@@ -272,7 +290,7 @@ def load_daily_mentions(
             cur.execute(
                 f"""
                 SELECT mention_date::text, company, mentions_count
-                FROM {DAILY_MENTIONS_TABLE}
+                FROM {_core_table_ref(DAILY_MENTIONS_TABLE)}
                 WHERE group_id = %s
                 ORDER BY mention_date ASC, company ASC
                 """,
@@ -298,12 +316,12 @@ def save_daily_mentions(
 
     with get_connection(env_path) as conn:
         with conn.cursor() as cur:
-            cur.execute(f"DELETE FROM {DAILY_MENTIONS_TABLE} WHERE group_id = %s", (normalized_group_id,))
+            cur.execute(f"DELETE FROM {_core_table_ref(DAILY_MENTIONS_TABLE)} WHERE group_id = %s", (normalized_group_id,))
             if rows:
                 execute_values(
                     cur,
                     f"""
-                    INSERT INTO {DAILY_MENTIONS_TABLE} (group_id, mention_date, company, mentions_count, updated_at)
+                    INSERT INTO {_core_table_ref(DAILY_MENTIONS_TABLE)} (group_id, mention_date, company, mentions_count, updated_at)
                     VALUES %s
                     """,
                     [(normalized_group_id, day, company, count, datetime.now()) for day, company, count in rows],
@@ -336,7 +354,7 @@ def load_processed_state(
             cur.execute(
                 f"""
                 SELECT source, topic_id, day::text
-                FROM {PROCESSED_STATE_TABLE}
+                FROM {_core_table_ref(PROCESSED_STATE_TABLE)}
                 WHERE group_id = %s
                 ORDER BY day ASC, source ASC, topic_id ASC
                 """,
@@ -365,12 +383,12 @@ def save_processed_state(
 
     with get_connection(env_path) as conn:
         with conn.cursor() as cur:
-            cur.execute(f"DELETE FROM {PROCESSED_STATE_TABLE} WHERE group_id = %s", (normalized_group_id,))
+            cur.execute(f"DELETE FROM {_core_table_ref(PROCESSED_STATE_TABLE)} WHERE group_id = %s", (normalized_group_id,))
             if rows:
                 execute_values(
                     cur,
                     f"""
-                    INSERT INTO {PROCESSED_STATE_TABLE} (group_id, source, topic_id, day, processed_at)
+                    INSERT INTO {_core_table_ref(PROCESSED_STATE_TABLE)} (group_id, source, topic_id, day, processed_at)
                     VALUES %s
                     """,
                     rows,
@@ -384,7 +402,7 @@ def load_stock_basic_records(env_path: Path = DEFAULT_KNOW_ACTION_ENV_PATH) -> L
             cur.execute(
                 f"""
                 SELECT ts_code, symbol, name
-                FROM {STOCK_BASIC_TABLE}
+                FROM {_public_table_ref(STOCK_BASIC_TABLE)}
                 ORDER BY ts_code ASC
                 """
             )
@@ -419,7 +437,7 @@ def log_tdx_export(
         with conn.cursor() as cur:
             cur.execute(
                 f"""
-                INSERT INTO {TDX_EXPORTS_TABLE} (
+                INSERT INTO {_core_table_ref(TDX_EXPORTS_TABLE)} (
                     start_date,
                     end_date,
                     tdx_root,
@@ -466,7 +484,7 @@ def log_tdx_export(
                 execute_values(
                     cur,
                     f"""
-                    INSERT INTO {TDX_EXPORT_BLOCKS_TABLE} (
+                    INSERT INTO {_core_table_ref(TDX_EXPORT_BLOCKS_TABLE)} (
                         export_id,
                         window_days,
                         block_name,
@@ -577,7 +595,7 @@ def get_latest_tdx_export(env_path: Path = DEFAULT_KNOW_ACTION_ENV_PATH) -> Opti
                     stock_basic_source,
                     source_detail,
                     backup_files
-                FROM {TDX_EXPORTS_TABLE}
+                FROM {_core_table_ref(TDX_EXPORTS_TABLE)}
                 ORDER BY exported_at DESC, id DESC
                 LIMIT 1
                 """
@@ -610,7 +628,7 @@ def get_latest_tdx_export(env_path: Path = DEFAULT_KNOW_ACTION_ENV_PATH) -> Opti
                     written_count,
                     skipped_count,
                     skipped_companies
-                FROM {TDX_EXPORT_BLOCKS_TABLE}
+                FROM {_core_table_ref(TDX_EXPORT_BLOCKS_TABLE)}
                 WHERE export_id = %s
                 ORDER BY window_days ASC
                 """,

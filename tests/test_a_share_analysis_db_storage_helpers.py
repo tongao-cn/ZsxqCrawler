@@ -65,6 +65,24 @@ class AShareAnalysisDbStorageHelperTests(unittest.TestCase):
         self.assertEqual(["backup.blk"], payload["backup_files"])
         self.assertEqual(blocks, payload["blocks"])
 
+    @unittest.skipUnless(HAS_STORAGE_DEPS, "PostgreSQL storage dependencies are not installed")
+    def test_a_share_table_refs_use_core_schema_except_stock_basic(self):
+        from backend.services import a_share_analysis_db_storage as storage
+
+        self.assertEqual('"zsxq_core"."zsxq_a_share_daily_mentions"', storage._core_table_ref(storage.DAILY_MENTIONS_TABLE))
+        self.assertEqual('"public"."stock_basic"', storage._public_table_ref(storage.STOCK_BASIC_TABLE))
+
+    @unittest.skipUnless(HAS_STORAGE_DEPS, "PostgreSQL storage dependencies are not installed")
+    def test_backfill_sql_targets_core_from_public_sources(self):
+        from scripts.backfill_a_share_analysis_to_core import build_backfill_sql
+
+        sql = "\n".join(build_backfill_sql())
+
+        self.assertIn('"zsxq_core"."zsxq_a_share_daily_mentions"', sql)
+        self.assertIn('"public"."zsxq_a_share_daily_mentions"', sql)
+        self.assertIn("ON CONFLICT (group_id, mention_date, company)", sql)
+        self.assertIn('"zsxq_core"."zsxq_a_share_tdx_exports"', sql)
+
 
 if __name__ == "__main__":
     unittest.main()

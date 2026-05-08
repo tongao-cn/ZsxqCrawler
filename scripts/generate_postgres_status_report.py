@@ -10,6 +10,19 @@ from backend.storage.db_compat import get_database_backend, get_postgres_dsn
 from backend.storage.postgres_core_schema import CORE_SCHEMA, quote_identifier
 from scripts.backfill_postgres_core_group_ids import group_id_quality_counts
 
+IMPORTANT_CORE_TABLES = (
+    "groups",
+    "topics",
+    "files",
+    "comments",
+    "daily_ai_reports",
+    "file_ai_analyses",
+    "zsxq_a_share_daily_mentions",
+    "zsxq_a_share_processed_state",
+    "zsxq_a_share_tdx_exports",
+    "zsxq_a_share_tdx_export_blocks",
+)
+
 
 def _project_root() -> Path:
     return Path(__file__).resolve().parents[1]
@@ -62,8 +75,16 @@ def _group_id_quality_summary(conn) -> dict[str, int]:
         return {}
 
 
+def _important_core_table_counts(conn) -> list[tuple[str, int | None]]:
+    try:
+        return [(table_name, _table_count(conn, CORE_SCHEMA, table_name)) for table_name in IMPORTANT_CORE_TABLES]
+    except Exception:
+        return []
+
+
 def build_report(conn) -> str:
     core_rows = _schema_summary(conn, [CORE_SCHEMA])
+    important_tables = _important_core_table_counts(conn)
     group_id_quality = _group_id_quality_summary(conn)
 
     lines = [
@@ -79,6 +100,12 @@ def build_report(conn) -> str:
         lines.extend(f"| `{schema}` | {table_count} | {row_count} |" for schema, table_count, row_count in core_rows)
     else:
         lines.append("- `zsxq_core` has not been created.")
+
+    if important_tables:
+        lines.extend(["", "## Important Core Tables", "", "| Table | Rows |", "| --- | ---: |"])
+        for table_name, count in important_tables:
+            rendered = "missing" if count is None else str(count)
+            lines.append(f"| `{table_name}` | {rendered} |")
 
     if group_id_quality:
         lines.extend(["", "## Group ID Quality", "", "| Metric | Rows |", "| --- | ---: |"])
