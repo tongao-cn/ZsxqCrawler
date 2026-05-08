@@ -251,6 +251,16 @@ class ZSXQFileDatabaseHelperTests(unittest.TestCase):
         self.assertIn("comment_id, group_id, topic_id", sql)
         self.assertEqual((101, 303, 202), params[:3])
 
+    def test_runtime_create_tables_and_migration_are_noops(self):
+        from backend.storage.zsxq_file_database import ZSXQFileDatabase
+
+        db = object.__new__(ZSXQFileDatabase)
+        db.cursor = FakeCommentCursor()
+
+        self.assertIsNone(ZSXQFileDatabase.create_tables(db))
+        self.assertIsNone(ZSXQFileDatabase._migrate_database(db))
+        self.assertEqual([], db.cursor.calls)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -229,6 +229,15 @@ class ZSXQDatabaseHelperTests(unittest.TestCase):
         self.assertIn("AND (? IS NULL OR c.group_id = ?)", calls)
         self.assertIn("topic_id IN (SELECT topic_id FROM topics WHERE group_id = ?)", calls)
 
+    def test_runtime_init_database_does_not_execute_ddl(self):
+        from backend.storage.zsxq_database import ZSXQDatabase
+
+        db = object.__new__(ZSXQDatabase)
+        db.cursor = FakeCursor()
+
+        self.assertIsNone(ZSXQDatabase._init_database(db))
+        self.assertEqual([], db.cursor.calls)
+
 
 if __name__ == "__main__":
     unittest.main()

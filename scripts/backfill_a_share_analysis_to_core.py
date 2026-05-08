@@ -9,10 +9,9 @@ from backend.services.a_share_analysis_db_storage import (
     PROCESSED_STATE_TABLE,
     TDX_EXPORTS_TABLE,
     TDX_EXPORT_BLOCKS_TABLE,
-    ensure_analysis_tables,
 )
 from backend.storage.db_compat import get_postgres_dsn
-from backend.storage.postgres_core_schema import CORE_SCHEMA, quote_identifier
+from backend.storage.postgres_core_schema import CORE_SCHEMA, ensure_core_schema, quote_identifier
 
 
 def _table_ref(schema: str, table_name: str) -> str:
@@ -122,9 +121,9 @@ def backfill_a_share_analysis_to_core(*, apply: bool = False) -> list[str]:
 
     statements = build_backfill_sql()
     if apply:
-        ensure_analysis_tables()
         conn = psycopg2.connect(dsn)
         try:
+            ensure_core_schema(conn)
             with conn.cursor() as cur:
                 for statement in statements:
                     cur.execute(statement)

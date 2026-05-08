@@ -11,7 +11,6 @@ from typing import Any, Dict, Iterable, Iterator, List, Optional, Sequence, Set,
 
 import psycopg2
 from psycopg2.extras import Json, execute_values
-from psycopg2 import sql
 
 from backend.storage.db_compat import get_postgres_dsn as get_zsxq_postgres_dsn
 from backend.storage.postgres_core_schema import CORE_SCHEMA, quote_identifier
@@ -100,148 +99,15 @@ def get_connection(env_path: Path = DEFAULT_KNOW_ACTION_ENV_PATH) -> Iterator[An
         conn.close()
 
 
-def _get_primary_key_columns(cur: Any, table_name: str) -> List[str]:
-    cur.execute(
-        """
-        SELECT att.attname
-        FROM pg_constraint con
-        JOIN unnest(con.conkey) WITH ORDINALITY AS cols(attnum, ordinality) ON TRUE
-        JOIN pg_attribute att
-          ON att.attrelid = con.conrelid
-         AND att.attnum = cols.attnum
-        WHERE con.conrelid = %s::regclass
-          AND con.contype = 'p'
-        ORDER BY cols.ordinality
-        """,
-        (f"{CORE_SCHEMA}.{table_name}",),
-    )
-    return [str(row[0]) for row in cur.fetchall()]
-
-
-def _drop_primary_key_if_needed(cur: Any, table_name: str, expected_columns: Sequence[str]) -> None:
-    if list(expected_columns) == _get_primary_key_columns(cur, table_name):
-        return
-
-    cur.execute(
-        "SELECT conname FROM pg_constraint WHERE conrelid = %s::regclass AND contype = 'p'",
-        (f"{CORE_SCHEMA}.{table_name}",),
-    )
-    row = cur.fetchone()
-    if row and row[0]:
-        cur.execute(
-            sql.SQL("ALTER TABLE {} DROP CONSTRAINT {}").format(
-                sql.Identifier(CORE_SCHEMA, table_name),
-                sql.Identifier(str(row[0])),
-            )
-        )
-
-    cur.execute(
-        sql.SQL("ALTER TABLE {} ADD PRIMARY KEY ({})").format(
-            sql.Identifier(CORE_SCHEMA, table_name),
-            sql.SQL(", ").join(sql.Identifier(column) for column in expected_columns),
-        )
-    )
-
-
-def _ensure_daily_mentions_schema(cur: Any) -> None:
-    cur.execute(
-        f"""
-        CREATE TABLE IF NOT EXISTS {_core_table_ref(DAILY_MENTIONS_TABLE)} (
-            group_id TEXT NOT NULL DEFAULT '',
-            mention_date DATE NOT NULL,
-            company TEXT NOT NULL,
-            mentions_count INTEGER NOT NULL DEFAULT 0,
-            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-            PRIMARY KEY (group_id, mention_date, company)
-        )
-        """
-    )
-    table_ref = _core_table_ref(DAILY_MENTIONS_TABLE)
-    cur.execute(f"ALTER TABLE {table_ref} ADD COLUMN IF NOT EXISTS group_id TEXT")
-    cur.execute(f"UPDATE {table_ref} SET group_id = '' WHERE group_id IS NULL")
-    cur.execute(f"ALTER TABLE {table_ref} ALTER COLUMN group_id SET DEFAULT ''")
-    cur.execute(f"ALTER TABLE {table_ref} ALTER COLUMN group_id SET NOT NULL")
-    _drop_primary_key_if_needed(cur, DAILY_MENTIONS_TABLE, ("group_id", "mention_date", "company"))
-    cur.execute(f"CREATE INDEX IF NOT EXISTS idx_{DAILY_MENTIONS_TABLE}_date ON {table_ref} (mention_date)")
-    cur.execute(
-        f"CREATE INDEX IF NOT EXISTS idx_{DAILY_MENTIONS_TABLE}_group_date "
-        f"ON {table_ref} (group_id, mention_date)"
-    )
-
-
-def _ensure_processed_state_schema(cur: Any) -> None:
-    cur.execute(
-        f"""
-        CREATE TABLE IF NOT EXISTS {_core_table_ref(PROCESSED_STATE_TABLE)} (
-            group_id TEXT NOT NULL DEFAULT '',
-            source TEXT NOT NULL,
-            topic_id TEXT NOT NULL,
-            day DATE NOT NULL,
-            processed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-            PRIMARY KEY (group_id, source, topic_id, day)
-        )
-        """
-    )
-    table_ref = _core_table_ref(PROCESSED_STATE_TABLE)
-    cur.execute(f"ALTER TABLE {table_ref} ADD COLUMN IF NOT EXISTS group_id TEXT")
-    cur.execute(f"UPDATE {table_ref} SET group_id = '' WHERE group_id IS NULL")
-    cur.execute(f"ALTER TABLE {table_ref} ALTER COLUMN group_id SET DEFAULT ''")
-    cur.execute(f"ALTER TABLE {table_ref} ALTER COLUMN group_id SET NOT NULL")
-    _drop_primary_key_if_needed(cur, PROCESSED_STATE_TABLE, ("group_id", "source", "topic_id", "day"))
-    cur.execute(f"CREATE INDEX IF NOT EXISTS idx_{PROCESSED_STATE_TABLE}_day ON {table_ref} (day)")
-    cur.execute(
-        f"CREATE INDEX IF NOT EXISTS idx_{PROCESSED_STATE_TABLE}_group_day "
-        f"ON {table_ref} (group_id, day)"
-    )
-
-
 def ensure_analysis_tables(env_path: Path = DEFAULT_KNOW_ACTION_ENV_PATH) -> None:
-    statements = [
-        f"CREATE SCHEMA IF NOT EXISTS {quote_identifier(CORE_SCHEMA)}",
-        f"""
-        CREATE TABLE IF NOT EXISTS {_core_table_ref(TDX_EXPORTS_TABLE)} (
-            id BIGSERIAL PRIMARY KEY,
-            exported_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-            start_date DATE,
-            end_date DATE,
-            tdx_root TEXT NOT NULL,
-            ranking_top_n INTEGER NOT NULL,
-            total_written INTEGER NOT NULL DEFAULT 0,
-            unresolved_count INTEGER NOT NULL DEFAULT 0,
-            stock_basic_source TEXT NOT NULL DEFAULT 'unknown',
-            source_detail TEXT,
-            backup_files JSONB NOT NULL DEFAULT '[]'::jsonb
-        )
-        """,
-        f"""
-        CREATE TABLE IF NOT EXISTS {_core_table_ref(TDX_EXPORT_BLOCKS_TABLE)} (
-            id BIGSERIAL PRIMARY KEY,
-            export_id BIGINT NOT NULL REFERENCES {_core_table_ref(TDX_EXPORTS_TABLE)}(id) ON DELETE CASCADE,
-            window_days INTEGER NOT NULL,
-            block_name TEXT NOT NULL,
-            block_code TEXT NOT NULL,
-            block_path TEXT NOT NULL,
-            written_count INTEGER NOT NULL DEFAULT 0,
-            skipped_count INTEGER NOT NULL DEFAULT 0,
-            skipped_companies JSONB NOT NULL DEFAULT '[]'::jsonb
-        )
-        """,
-        f"CREATE INDEX IF NOT EXISTS idx_{TDX_EXPORT_BLOCKS_TABLE}_export_id ON {_core_table_ref(TDX_EXPORT_BLOCKS_TABLE)} (export_id)",
-    ]
-
-    with get_connection(env_path) as conn:
-        with conn.cursor() as cur:
-            _ensure_daily_mentions_schema(cur)
-            _ensure_processed_state_schema(cur)
-            for statement in statements:
-                cur.execute(statement)
+    """Schema is managed by manage-postgres-core-schema; runtime DDL is disabled."""
+    return None
 
 
 def get_storage_health(
     env_path: Path = DEFAULT_KNOW_ACTION_ENV_PATH,
     group_id: Optional[str] = None,
 ) -> Dict[str, Any]:
-    ensure_analysis_tables(env_path)
     normalized_group_id = _normalize_group_id(group_id)
     with get_connection(env_path) as conn:
         with conn.cursor() as cur:
@@ -289,7 +155,6 @@ def load_daily_mentions(
     env_path: Path = DEFAULT_KNOW_ACTION_ENV_PATH,
     group_id: Optional[str] = None,
 ) -> Dict[str, Dict[str, int]]:
-    ensure_analysis_tables(env_path)
     normalized_group_id = _normalize_group_id(group_id)
     daily: Dict[str, Dict[str, int]] = {}
 
@@ -314,7 +179,6 @@ def save_daily_mentions(
     env_path: Path = DEFAULT_KNOW_ACTION_ENV_PATH,
     group_id: Optional[str] = None,
 ) -> None:
-    ensure_analysis_tables(env_path)
     normalized_group_id = _normalize_group_id(group_id)
 
     rows: List[Tuple[str, str, int]] = []
@@ -353,7 +217,6 @@ def load_processed_state(
     env_path: Path = DEFAULT_KNOW_ACTION_ENV_PATH,
     group_id: Optional[str] = None,
 ) -> Set[str]:
-    ensure_analysis_tables(env_path)
     normalized_group_id = _normalize_group_id(group_id)
     processed: Set[str] = set()
 
@@ -378,7 +241,6 @@ def save_processed_state(
     env_path: Path = DEFAULT_KNOW_ACTION_ENV_PATH,
     group_id: Optional[str] = None,
 ) -> None:
-    ensure_analysis_tables(env_path)
     normalized_group_id = _normalize_group_id(group_id)
 
     rows: List[Tuple[str, str, str, str, datetime]] = []
@@ -439,8 +301,6 @@ def log_tdx_export(
     blocks: Sequence[Dict[str, Any]],
     env_path: Path = DEFAULT_KNOW_ACTION_ENV_PATH,
 ) -> int:
-    ensure_analysis_tables(env_path)
-
     with get_connection(env_path) as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -585,8 +445,6 @@ def _latest_tdx_export_payload(row: Sequence[Any], blocks: Sequence[Dict[str, An
 
 
 def get_latest_tdx_export(env_path: Path = DEFAULT_KNOW_ACTION_ENV_PATH) -> Optional[Dict[str, Any]]:
-    ensure_analysis_tables(env_path)
-
     with get_connection(env_path) as conn:
         with conn.cursor() as cur:
             cur.execute(

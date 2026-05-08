@@ -5,7 +5,13 @@ import re
 from pathlib import Path
 from typing import Any, Iterable, Optional
 
-from backend.storage.postgres_core_schema import CORE_SCHEMA, ensure_core_schema, quote_identifier
+from backend.storage.postgres_core_schema import (
+    CORE_SCHEMA,
+    ensure_core_schema,
+    is_schema_missing_error,
+    quote_identifier,
+    schema_not_ready_message,
+)
 
 try:
     import tomllib
@@ -170,7 +176,12 @@ class PostgresCompatCursor:
         if returning_column:
             translated = f"{translated.rstrip().rstrip(';')} RETURNING {quote_identifier(returning_column)}"
 
-        self._cursor.execute(translated, tuple(params or ()))
+        try:
+            self._cursor.execute(translated, tuple(params or ()))
+        except Exception as exc:
+            if is_schema_missing_error(exc):
+                raise RuntimeError(schema_not_ready_message(exc)) from exc
+            raise
         self.rowcount = self._cursor.rowcount
         if returning_column:
             row = self._cursor.fetchone()

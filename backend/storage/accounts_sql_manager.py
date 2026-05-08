@@ -63,48 +63,8 @@ class AccountsSQLManager:
         self._ensure_schema()
 
     def _ensure_schema(self):
-        """创建表结构"""
-        with _lock:
-            # 账号表
-            self.cursor.execute(
-                """
-                CREATE TABLE IF NOT EXISTS accounts (
-                    id TEXT PRIMARY KEY,
-                    name TEXT,
-                    cookie TEXT NOT NULL,
-                    is_default INTEGER DEFAULT 0,
-                    created_at TEXT NOT NULL,
-                    updated_at TEXT
-                )
-                """
-            )
-
-            # 检查是否需要添加updated_at列（兼容旧表）
-            self.cursor.execute("PRAGMA table_info(accounts)")
-            columns = [row[1] for row in self.cursor.fetchall()]
-            if "updated_at" not in columns:
-                self.cursor.execute("ALTER TABLE accounts ADD COLUMN updated_at TEXT")
-                self.conn.commit()
-
-            # 群组账号映射表
-            self.cursor.execute(
-                """
-                CREATE TABLE IF NOT EXISTS group_account_map (
-                    group_id TEXT PRIMARY KEY,
-                    account_id TEXT NOT NULL,
-                    assigned_at TEXT NOT NULL,
-                    FOREIGN KEY (account_id) REFERENCES accounts(id) ON DELETE CASCADE
-                )
-                """
-            )
-            # 创建索引
-            self.cursor.execute(
-                "CREATE INDEX IF NOT EXISTS idx_accounts_is_default ON accounts(is_default)"
-            )
-            self.cursor.execute(
-                "CREATE INDEX IF NOT EXISTS idx_group_account_map_account_id ON group_account_map(account_id)"
-            )
-            self.conn.commit()
+        """Schema is managed by manage-postgres-core-schema; runtime DDL is disabled."""
+        return None
 
     def get_accounts(self, mask_cookie: bool = True) -> List[Dict[str, Any]]:
         """

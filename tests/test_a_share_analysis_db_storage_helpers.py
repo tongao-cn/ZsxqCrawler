@@ -111,6 +111,15 @@ class AShareAnalysisDbStorageHelperTests(unittest.TestCase):
                 storage.get_stock_basic_postgres_dsn(),
             )
 
+    @unittest.skipUnless(HAS_STORAGE_DEPS, "PostgreSQL storage dependencies are not installed")
+    def test_ensure_analysis_tables_is_runtime_noop(self):
+        from backend.services import a_share_analysis_db_storage as storage
+
+        with patch.object(storage, "get_connection") as get_connection:
+            self.assertIsNone(storage.ensure_analysis_tables())
+
+        get_connection.assert_not_called()
+
 
 if __name__ == "__main__":
     unittest.main()

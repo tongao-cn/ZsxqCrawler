@@ -74,23 +74,8 @@ class AccountInfoDB:
         self._ensure_schema()
 
     def _ensure_schema(self):
-        with _lock:
-            self.cursor.execute(
-                """
-                CREATE TABLE IF NOT EXISTS accounts_self (
-                    account_id TEXT PRIMARY KEY,
-                    uid TEXT,
-                    name TEXT,
-                    avatar_url TEXT,
-                    location TEXT,
-                    user_sid TEXT,
-                    grade TEXT,
-                    raw_json TEXT,
-                    fetched_at TEXT
-                )
-                """
-            )
-            self.conn.commit()
+        """Schema is managed by manage-postgres-core-schema; runtime DDL is disabled."""
+        return None
 
     def upsert_self_info(
         self,

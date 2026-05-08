@@ -5,6 +5,14 @@ from backend.storage.db_compat import get_postgres_dsn
 from backend.storage.task_store import TaskStore
 
 
+class TaskStoreHelperTests(unittest.TestCase):
+    def test_runtime_init_db_is_noop(self):
+        store = object.__new__(TaskStore)
+        store._lock = None
+
+        self.assertIsNone(TaskStore._init_db(store))
+
+
 @unittest.skipUnless(
     get_postgres_dsn() and os.getenv("ZSXQ_RUN_PG_INTEGRATION_TESTS") == "1",
     "PostgreSQL integration tests are disabled",
@@ -287,7 +295,6 @@ class TaskStoreTests(unittest.TestCase):
             {"tasks_deleted": 2, "logs_deleted": 3, "kept_latest": 1},
             _cleanup_result(tasks_deleted=2, logs_deleted=3, kept_latest=1),
         )
-
 
 if __name__ == "__main__":
     unittest.main()

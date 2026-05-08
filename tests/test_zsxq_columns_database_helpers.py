@@ -143,6 +143,22 @@ class ZSXQColumnsDatabaseHelperTests(unittest.TestCase):
         self.assertIn("comment_id, group_id, topic_id", sql)
         self.assertEqual((101, 303, 202), params[:3])
 
+    def test_runtime_init_database_is_noop(self):
+        from backend.storage.zsxq_columns_database import ZSXQColumnsDatabase
+
+        class FakeCursor:
+            def __init__(self):
+                self.calls = []
+
+            def execute(self, sql, params=()):
+                self.calls.append((sql, params))
+
+        db = object.__new__(ZSXQColumnsDatabase)
+        db.cursor = FakeCursor()
+
+        self.assertIsNone(ZSXQColumnsDatabase._init_database(db))
+        self.assertEqual([], db.cursor.calls)
+
 
 if __name__ == "__main__":
     unittest.main()

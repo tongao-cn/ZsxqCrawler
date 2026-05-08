@@ -7,7 +7,7 @@ from pathlib import Path
 import psycopg2
 
 from backend.storage.db_compat import get_database_backend, get_postgres_dsn
-from backend.storage.postgres_core_schema import CORE_SCHEMA, quote_identifier
+from backend.storage.postgres_core_schema import CORE_SCHEMA, CORE_TABLE_SPECS, quote_identifier
 from scripts.backfill_postgres_core_group_ids import group_id_quality_counts
 
 IMPORTANT_CORE_TABLES = (
@@ -82,10 +82,30 @@ def _important_core_table_counts(conn) -> list[tuple[str, int | None]]:
         return []
 
 
+def _schema_readiness(conn) -> list[tuple[str, str]]:
+    required = {spec.name for spec in CORE_TABLE_SPECS}
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT table_name
+                FROM information_schema.tables
+                WHERE table_schema = %s
+                  AND table_type = 'BASE TABLE'
+                """,
+                (CORE_SCHEMA,),
+            )
+            existing = {str(row[0]) for row in cur.fetchall()}
+        return [(table_name, "ok" if table_name in existing else "missing") for table_name in sorted(required)]
+    except Exception:
+        return []
+
+
 def build_report(conn) -> str:
     core_rows = _schema_summary(conn, [CORE_SCHEMA])
     important_tables = _important_core_table_counts(conn)
     group_id_quality = _group_id_quality_summary(conn)
+    readiness = _schema_readiness(conn)
 
     lines = [
         "# PostgreSQL Status Report",
@@ -106,6 +126,15 @@ def build_report(conn) -> str:
         for table_name, count in important_tables:
             rendered = "missing" if count is None else str(count)
             lines.append(f"| `{table_name}` | {rendered} |")
+
+    if readiness:
+        missing = [table_name for table_name, status in readiness if status == "missing"]
+        lines.extend(["", "## Schema Readiness", ""])
+        if missing:
+            lines.append(f"- Missing {len(missing)} required tables. Run `uv run manage-postgres-core-schema --apply`.")
+            lines.extend(f"- `{table_name}`: missing" for table_name in missing)
+        else:
+            lines.append("- All required `zsxq_core` runtime tables are present.")
 
     if group_id_quality:
         lines.extend(["", "## Group ID Quality", "", "| Metric | Rows |", "| --- | ---: |"])

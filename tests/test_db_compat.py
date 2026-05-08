@@ -113,6 +113,24 @@ class DbCompatTests(unittest.TestCase):
         self.assertEqual(fake_conn.cursor_obj.calls, [('SET search_path TO "zsxq_core"', ())])
         self.assertEqual(fake_conn.commits, 1)
 
+    def test_missing_schema_error_is_wrapped_with_setup_hint(self):
+        class MissingSchemaCursor:
+            rowcount = -1
+
+            def execute(self, sql, params=()):
+                raise Exception('relation "topics" does not exist')
+
+        class FakeConnection:
+            schema_name = CORE_SCHEMA
+
+        compat_cursor = __import__("backend.storage.db_compat", fromlist=["PostgresCompatCursor"]).PostgresCompatCursor(
+            FakeConnection(),
+            MissingSchemaCursor(),
+        )
+
+        with self.assertRaisesRegex(RuntimeError, "manage-postgres-core-schema --apply"):
+            compat_cursor.execute("SELECT 1 FROM topics")
+
     def test_compat_row_supports_index_and_column_access(self):
         row = CompatRow(("task-1", "running"), ("task_id", "status"))
 

@@ -145,6 +145,8 @@ uv run generate-postgres-status-report --output docs\postgres_status_report.md
 uv run verify-postgres-reader-access --dsn "postgresql://zsxq_reader:password@host:5432/zsxq"
 ```
 
+`manage-postgres-core-schema --apply` 是唯一推荐的 PostgreSQL schema 初始化、补列和建索引入口。API、采集、文件下载、账号、任务、日报和 A 股分析运行时不会自动执行 DDL；新环境必须先运行该命令。
+
 为兼容旧后端启动命令，项目根目录暂时仅保留 `main.py`；其它命令请使用 `pyproject.toml` 中的入口或 `python -m ...` 新目录入口。新增后端代码时优先放入 `backend/` 对应子目录。
 
 ## 数据存储与下载路径
@@ -198,6 +200,9 @@ uv run cleanup-postgres-legacy-artifacts --dry-run
 uv run manage-postgres-core-schema --apply
 uv run manage-postgres-core-access --apply --login-roles --reader-password "<reader-password>" --writer-password "<writer-password>"
 ```
+
+应用运行时只做 `zsxq_core` 读写；如果缺表或缺列，错误信息会提示重新执行 `uv run manage-postgres-core-schema --apply`。
+仅测试或紧急兼容场景可临时设置 `ZSXQ_BOOTSTRAP_SCHEMA_ON_CONNECT=true` 让连接时补 schema，生产部署不建议启用。
 
 日常 PG 状态巡检可产出 Markdown 快照报告：
 

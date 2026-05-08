@@ -36,6 +36,20 @@ class AccountsSqlManagerHelperTests(unittest.TestCase):
 
         _close_quietly(BrokenClose())
 
+    def test_runtime_ensure_schema_is_noop(self):
+        class FakeCursor:
+            def __init__(self):
+                self.calls = []
+
+            def execute(self, sql, params=()):
+                self.calls.append((sql, params))
+
+        manager = object.__new__(AccountsSQLManager)
+        manager.cursor = FakeCursor()
+
+        self.assertIsNone(AccountsSQLManager._ensure_schema(manager))
+        self.assertEqual([], manager.cursor.calls)
+
     @unittest.skipUnless(
         get_postgres_dsn() and os.getenv("ZSXQ_RUN_PG_INTEGRATION_TESTS") == "1",
         "PostgreSQL integration tests are disabled",

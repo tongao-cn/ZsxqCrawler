@@ -80,26 +80,8 @@ def _connect_topics_db(group_id: str):
 
 
 def _ensure_report_table(conn: Any) -> None:
-    conn.execute(
-        """
-        CREATE TABLE IF NOT EXISTS daily_ai_reports (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            group_id TEXT NOT NULL,
-            report_date TEXT NOT NULL,
-            topic_count INTEGER DEFAULT 0,
-            model TEXT,
-            prompt_version TEXT,
-            summary_markdown TEXT,
-            raw_json TEXT,
-            status TEXT NOT NULL DEFAULT 'completed',
-            error TEXT,
-            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-            updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
-            UNIQUE(group_id, report_date)
-        )
-        """
-    )
-    conn.commit()
+    """Schema is managed by manage-postgres-core-schema; runtime DDL is disabled."""
+    return None
 
 
 def _upsert_report(
@@ -488,7 +470,6 @@ def analyze_daily_topics(
     parsed_date = _parse_report_date(report_date)
     report_date_text = parsed_date.isoformat()
     conn = _connect_topics_db(group_id)
-    _ensure_report_table(conn)
 
     try:
         _log(log_callback, f"📚 读取 {report_date_text} 的话题数据...")
@@ -566,7 +547,6 @@ def get_daily_report(group_id: str, report_date: Optional[str] = None) -> Option
     parsed_date = _parse_report_date(report_date)
     report_date_text = parsed_date.isoformat()
     conn = _connect_topics_db(group_id)
-    _ensure_report_table(conn)
     try:
         row = conn.execute(
             """

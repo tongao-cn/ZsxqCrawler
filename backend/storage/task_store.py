@@ -241,43 +241,8 @@ class TaskStore:
         return bool(row["stopped"]) if row else False
 
     def _init_db(self) -> None:
-        with self._lock:
-            conn = self._connect()
-            try:
-                conn.execute(
-                    """
-                    CREATE TABLE IF NOT EXISTS task_runs (
-                        task_id TEXT PRIMARY KEY,
-                        type TEXT NOT NULL,
-                        status TEXT NOT NULL,
-                        message TEXT NOT NULL,
-                        result_json TEXT,
-                        metadata_json TEXT,
-                        created_at TEXT NOT NULL,
-                        updated_at TEXT NOT NULL,
-                        stopped INTEGER NOT NULL DEFAULT 0
-                    )
-                    """
-                )
-                conn.execute(
-                    """
-                    CREATE TABLE IF NOT EXISTS task_logs (
-                        id INTEGER PRIMARY KEY AUTOINCREMENT,
-                        task_id TEXT NOT NULL,
-                        message TEXT NOT NULL,
-                        created_at TEXT NOT NULL
-                    )
-                    """
-                )
-                conn.execute(
-                    "CREATE INDEX IF NOT EXISTS idx_task_logs_task_id ON task_logs (task_id, id)"
-                )
-                conn.execute(
-                    "CREATE INDEX IF NOT EXISTS idx_task_runs_created_at ON task_runs (created_at)"
-                )
-                conn.commit()
-            finally:
-                conn.close()
+        """Schema is managed by manage-postgres-core-schema; runtime DDL is disabled."""
+        return None
 
     def _connect(self):
         return connect(row_factory=True)

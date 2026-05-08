@@ -54,6 +54,7 @@ try {
 
     $env:ZSXQ_DATABASE_BACKEND = "postgres"
     $env:ZSXQ_POSTGRES_DSN = "postgresql://postgres:$PostgresPassword@127.0.0.1:$Port/$Database"
+    Invoke-Checked { uv run manage-postgres-core-schema --apply }
 
     @'
 import os
