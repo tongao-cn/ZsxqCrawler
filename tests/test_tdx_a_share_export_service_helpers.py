@@ -5,11 +5,18 @@ from backend.services.tdx_a_share_export_service import (
     _build_block_export_result,
     _build_export_result,
     _build_pending_block_write,
+    _build_ranking_block_name,
     _collect_ranking_companies,
 )
 
 
 class TdxAShareExportServiceHelperTests(unittest.TestCase):
+    def test_build_ranking_block_name_uses_group_prefix_without_recommendation_pool_suffix(self):
+        self.assertEqual(_build_ranking_block_name(3, "纪要又要"), "纪要又要-3日")
+
+    def test_build_ranking_block_name_keeps_legacy_name_without_group_name(self):
+        self.assertEqual(_build_ranking_block_name(3), "3日推荐池")
+
     def test_collect_ranking_companies_preserves_existing_filtering(self):
         rankings = {
             "3": [
@@ -42,19 +49,26 @@ class TdxAShareExportServiceHelperTests(unittest.TestCase):
             "坏代码": "123456.BJ",
         }
         cfg_by_name = {
-            "3日推荐池": {
-                "name": "3日推荐池",
+            "纪要又要-3日": {
+                "name": "纪要又要-3日",
                 "code": "ZX001",
             }
         }
 
-        pending = _build_pending_block_write(3, rankings, resolved_codes, cfg_by_name, Path("blocknew"))
+        pending = _build_pending_block_write(
+            3,
+            rankings,
+            resolved_codes,
+            cfg_by_name,
+            Path("blocknew"),
+            "纪要又要",
+        )
 
         self.assertEqual(
             pending,
             (
                 3,
-                "3日推荐池",
+                "纪要又要-3日",
                 "ZX001",
                 Path("blocknew") / "ZX001.blk",
                 ["0000001", "1600036"],

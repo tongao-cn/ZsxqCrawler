@@ -174,6 +174,7 @@ export interface AShareAnalysisResetPayload {
 
 export interface AShareAnalysisExportTdxPayload {
   group_id?: string | number;
+  group_name?: string;
   start_date?: string;
   end_date?: string;
 }

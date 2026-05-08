@@ -378,6 +378,7 @@ export default function AShareAnalysisPanel({
       setExportingTdx(true);
       const result = await apiClient.exportAShareRankingsToTdx({
         group_id: selectedGroup.group_id,
+        group_name: selectedGroup.name,
         start_date: selectedStartDate || undefined,
         end_date: selectedEndDate || undefined,
       });

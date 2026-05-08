@@ -66,6 +66,7 @@ class AShareAnalysisResetRangeRequest(BaseModel):
 
 class AShareAnalysisExportTdxRequest(BaseModel):
     group_id: Optional[str | int] = Field(default=None, description="指定群组ID；为空时导出全局聚合结果")
+    group_name: Optional[str] = Field(default=None, description="当前群组名称；导出群组板块时用于生成通达信板块前缀")
     start_date: Optional[str] = Field(default=None, description="图表筛选开始日期 YYYY-MM-DD")
     end_date: Optional[str] = Field(default=None, description="图表筛选结束日期 YYYY-MM-DD")
 
@@ -261,6 +262,7 @@ async def reset_a_share_analysis_date_range(request: AShareAnalysisResetRangeReq
             request.start_date,
             request.end_date,
             group_id=normalize_group_id(request.group_id),
+            group_name=request.group_name,
         )
         return _success_payload(result)
     except ValueError as e:

@@ -61,6 +61,18 @@ RANKING_BLOCK_NAMES = {
 }
 
 
+def _normalize_tdx_group_name(group_name: Optional[str]) -> Optional[str]:
+    normalized = str(group_name or "").strip()
+    return normalized or None
+
+
+def _build_ranking_block_name(window: int, group_name: Optional[str] = None) -> str:
+    normalized_group_name = _normalize_tdx_group_name(group_name)
+    if normalized_group_name:
+        return f"{normalized_group_name}-{int(window)}日"
+    return RANKING_BLOCK_NAMES.get(int(window), f"{int(window)}日推荐池")
+
+
 def _get_group_latest_export_path(group_id: str) -> Path:
     group_paths = get_group_analysis_paths(group_id)
     return Path(group_paths["analysis_dir"]) / "latest_tdx_export.json"
@@ -412,8 +424,9 @@ def _build_pending_block_write(
     resolved_codes: Mapping[str, str],
     cfg_by_name: Mapping[str, Mapping[str, str]],
     block_dir: Path,
+    group_name: Optional[str] = None,
 ) -> Tuple[int, str, str, Path, List[str], List[str]]:
-    block_name = RANKING_BLOCK_NAMES.get(int(window), f"{int(window)}日推荐池")
+    block_name = _build_ranking_block_name(window, group_name)
     cfg_record = cfg_by_name[block_name]
     block_code = str(cfg_record.get("code") or "").strip()
     if not block_code:
@@ -541,6 +554,7 @@ def export_a_share_rankings_to_tdx(
     end_date: Optional[str] = None,
     *,
     group_id: Optional[str] = None,
+    group_name: Optional[str] = None,
     tdx_root: Optional[str] = None,
     ranking_windows: Sequence[int] = DEFAULT_RANKING_WINDOWS,
     ranking_top_n: int = DEFAULT_RANKING_TOP_N,
@@ -571,7 +585,7 @@ def export_a_share_rankings_to_tdx(
     cfg_by_name = {str(record.get("name") or "").strip(): record for record in cfg_records}
 
     expected_block_names = [
-        RANKING_BLOCK_NAMES.get(int(window), f"{int(window)}日推荐池")
+        _build_ranking_block_name(int(window), group_name)
         for window in ranking_windows
     ]
     missing_block_names = [name for name in expected_block_names if name not in cfg_by_name]
@@ -582,7 +596,7 @@ def export_a_share_rankings_to_tdx(
         )
 
     pending_writes = [
-        _build_pending_block_write(int(window), rankings, resolved_codes, cfg_by_name, block_dir)
+        _build_pending_block_write(int(window), rankings, resolved_codes, cfg_by_name, block_dir, group_name)
         for window in ranking_windows
     ]
 
