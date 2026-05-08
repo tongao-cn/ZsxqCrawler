@@ -186,16 +186,23 @@ class ZSXQFileDatabase:
         ))
         return group_data.get('group_id')
     
-    def insert_file(self, file_data: Dict[str, Any]) -> Optional[int]:
+    def insert_file(
+        self,
+        file_data: Dict[str, Any],
+        group_id: Optional[Any] = None,
+        topic_id: Optional[Any] = None,
+    ) -> Optional[int]:
         """插入或更新文件信息"""
         if not file_data or not file_data.get('file_id'):
             return None
             
         self.cursor.execute('''
         INSERT INTO files
-        (file_id, name, hash, size, duration, download_count, create_time)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+        (file_id, group_id, topic_id, name, hash, size, duration, download_count, create_time)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(file_id) DO UPDATE SET
+            group_id = COALESCE(excluded.group_id, files.group_id),
+            topic_id = COALESCE(excluded.topic_id, files.topic_id),
             name = excluded.name,
             hash = excluded.hash,
             size = excluded.size,
@@ -204,6 +211,8 @@ class ZSXQFileDatabase:
             create_time = excluded.create_time
         ''', (
             file_data.get('file_id'),
+            _nullable_group_id_param(str(group_id)) if group_id is not None else None,
+            topic_id,
             file_data.get('name', ''),
             file_data.get('hash'),
             file_data.get('size'),
@@ -554,7 +563,8 @@ class ZSXQFileDatabase:
                         if solution_id:
                             stats['solutions'] += 1
 
-                    file_id = self.insert_file(file_data)
+                    group_id_for_file = (topic_data.get('group') or {}).get('group_id')
+                    file_id = self.insert_file(file_data, group_id=group_id_for_file, topic_id=topic_id)
                     if file_id:
                         stats['files'] += 1
 

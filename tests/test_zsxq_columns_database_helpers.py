@@ -143,6 +143,70 @@ class ZSXQColumnsDatabaseHelperTests(unittest.TestCase):
         self.assertIn("comment_id, group_id, topic_id", sql)
         self.assertEqual((101, 303, 202), params[:3])
 
+    def test_column_queries_are_scoped_by_group(self):
+        from backend.storage.zsxq_columns_database import ZSXQColumnsDatabase
+
+        class FakeCursor:
+            def __init__(self):
+                self.calls = []
+
+            def execute(self, sql, params=()):
+                self.calls.append((" ".join(sql.split()), params))
+                return self
+
+            def fetchone(self):
+                return None
+
+            def fetchall(self):
+                return []
+
+        db = object.__new__(ZSXQColumnsDatabase)
+        db.cursor = FakeCursor()
+        db.group_id = "303"
+
+        self.assertIsNone(ZSXQColumnsDatabase.get_column(db, 101))
+        column_sql, column_params = db.cursor.calls[-1]
+        self.assertIn("WHERE column_id = ? AND (? IS NULL OR group_id = ?)", column_sql)
+        self.assertEqual((101, 303, 303), column_params)
+
+        self.assertEqual([], ZSXQColumnsDatabase.get_column_topics(db, 101))
+        topics_sql, topics_params = db.cursor.calls[-1]
+        self.assertIn("ct.group_id = td.group_id", topics_sql)
+        self.assertIn("WHERE ct.column_id = ? AND (? IS NULL OR ct.group_id = ?)", topics_sql)
+        self.assertEqual((101, 303, 303), topics_params)
+
+    def test_topic_detail_queries_are_scoped_by_group(self):
+        from backend.storage.zsxq_columns_database import ZSXQColumnsDatabase
+
+        class FakeCursor:
+            def __init__(self):
+                self.calls = []
+                self.fetchone_results = [None]
+
+            def execute(self, sql, params=()):
+                self.calls.append((" ".join(sql.split()), params))
+                return self
+
+            def fetchone(self):
+                return self.fetchone_results.pop(0) if self.fetchone_results else None
+
+            def fetchall(self):
+                return []
+
+        db = object.__new__(ZSXQColumnsDatabase)
+        db.cursor = FakeCursor()
+        db.group_id = "303"
+
+        self.assertIsNone(ZSXQColumnsDatabase.get_topic_detail(db, 202))
+        detail_sql, detail_params = db.cursor.calls[-1]
+        self.assertIn("WHERE td.topic_id = ? AND (? IS NULL OR td.group_id = ?)", detail_sql)
+        self.assertEqual((202, 303, 303), detail_params)
+
+        self.assertEqual([], ZSXQColumnsDatabase.get_topic_comments(db, 202))
+        comments_sql, comments_params = db.cursor.calls[-1]
+        self.assertIn("WHERE c.topic_id = ? AND (? IS NULL OR c.group_id = ?)", comments_sql)
+        self.assertEqual((202, 303, 303), comments_params)
+
     def test_runtime_init_database_is_noop(self):
         from backend.storage.zsxq_columns_database import ZSXQColumnsDatabase
 

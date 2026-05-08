@@ -64,8 +64,8 @@ class FakeImportDatabase:
         self.calls.append(("topic", topic_data.get("topic_id")))
         return topic_data.get("topic_id")
 
-    def insert_file(self, file_data):
-        self.calls.append(("file", file_data.get("file_id")))
+    def insert_file(self, file_data, group_id=None, topic_id=None):
+        self.calls.append(("file", file_data.get("file_id"), group_id, topic_id))
         return file_data.get("file_id")
 
     def insert_talk(self, topic_id, talk_data):
@@ -216,6 +216,28 @@ class ZSXQFileDatabaseHelperTests(unittest.TestCase):
         self.assertEqual(1, stats["files"])
         self.assertEqual(1, stats["topics"])
         self.assertEqual(1, stats["groups"])
+        self.assertIn(("file", 101, 303, 202), fake.calls)
+
+    def test_insert_file_writes_group_and_topic_ids(self):
+        from backend.storage.zsxq_file_database import ZSXQFileDatabase
+
+        db = object.__new__(ZSXQFileDatabase)
+        cursor = FakeCommentCursor()
+        db.cursor = cursor
+
+        file_id = ZSXQFileDatabase.insert_file(
+            db,
+            {"file_id": 101, "name": "memo.pdf", "hash": "h", "size": 20},
+            group_id="303",
+            topic_id=202,
+        )
+
+        self.assertEqual(101, file_id)
+        sql, params = cursor.calls[-1]
+        self.assertIn("INSERT INTO files", sql)
+        self.assertIn("file_id, group_id, topic_id", sql)
+        self.assertIn("group_id = COALESCE", sql)
+        self.assertEqual((101, 303, 202), params[:3])
 
     def test_file_ai_analysis_queries_are_scoped_by_group(self):
         from backend.storage.zsxq_file_database import ZSXQFileDatabase

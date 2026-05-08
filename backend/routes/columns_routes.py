@@ -1123,8 +1123,8 @@ async def get_column_topics(group_id: str, column_id: int):
     """获取专栏下的文章列表（从本地数据库）"""
     try:
         with _columns_db(group_id) as db:
-            topics = db.get_column_topics(column_id)
-            column = db.get_column(column_id)
+            topics = db.get_column_topics(column_id, group_id)
+            column = db.get_column(column_id, group_id)
         return {
             "column": column,
             "topics": topics,
@@ -1138,7 +1138,7 @@ async def get_column_topic_detail(group_id: str, topic_id: int):
     """获取专栏文章详情（从本地数据库）"""
     try:
         with _columns_db(group_id) as db:
-            detail = db.get_topic_detail(topic_id)
+            detail = db.get_topic_detail(topic_id, group_id)
 
         if not detail:
             raise HTTPException(status_code=404, detail="文章详情不存在")

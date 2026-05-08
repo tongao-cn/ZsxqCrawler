@@ -189,11 +189,10 @@ def build_core_schema_sql(schema: str = CORE_SCHEMA, *, include_indexes: bool = 
         statements.append(_create_table_sql(spec, schema))
         for column_sql in spec.columns:
             statements.append(_alter_table_column_sql(spec.name, column_sql, schema))
+        for unique_key in spec.unique_keys:
+            statements.append(_create_unique_sql(spec.name, unique_key, schema))
     statements.append(_tags_identity_backfill_sql(schema))
     if include_indexes:
-        for spec in CORE_TABLE_SPECS:
-            for unique_key in spec.unique_keys:
-                statements.append(_create_unique_sql(spec.name, unique_key, schema))
         for table_name, columns in CORE_INDEX_SPECS:
             statements.append(_create_index_sql(table_name, columns, schema))
     return statements

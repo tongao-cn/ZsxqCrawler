@@ -88,6 +88,10 @@ def _nullable_group_id_param(group_id: Optional[str]) -> Any:
     return int(value) if value.isdigit() else value
 
 
+def _scope_group_id_param(group_id: Optional[Any]) -> Any:
+    return _nullable_group_id_param(group_id)
+
+
 class ZSXQColumnsDatabase:
     """知识星球专栏数据库管理器"""
     
@@ -137,13 +141,15 @@ class ZSXQColumnsDatabase:
         
         return [_column_row_to_dict(row) for row in self.cursor.fetchall()]
     
-    def get_column(self, column_id: int) -> Optional[Dict[str, Any]]:
+    def get_column(self, column_id: int, group_id: Optional[Any] = None) -> Optional[Dict[str, Any]]:
         """获取单个专栏目录"""
+        scope_group_id = _scope_group_id_param(group_id if group_id is not None else self.group_id)
         self.cursor.execute('''
             SELECT column_id, group_id, name, cover_url, topics_count,
                    create_time, last_topic_attach_time, imported_at
-            FROM columns WHERE column_id = ?
-        ''', (column_id,))
+            FROM columns
+            WHERE column_id = ? AND (? IS NULL OR group_id = ?)
+        ''', (column_id, scope_group_id, scope_group_id))
         
         row = self.cursor.fetchone()
         return _column_row_to_dict(row) if row else None
@@ -171,17 +177,18 @@ class ZSXQColumnsDatabase:
         self.conn.commit()
         return topic_data.get('topic_id')
     
-    def get_column_topics(self, column_id: int) -> List[Dict[str, Any]]:
+    def get_column_topics(self, column_id: int, group_id: Optional[Any] = None) -> List[Dict[str, Any]]:
         """获取专栏下的所有文章列表"""
+        scope_group_id = _scope_group_id_param(group_id if group_id is not None else self.group_id)
         self.cursor.execute('''
             SELECT ct.topic_id, ct.column_id, ct.group_id, ct.title, ct.text, 
                    ct.create_time, ct.attached_to_column_time, ct.imported_at,
                    CASE WHEN td.topic_id IS NOT NULL THEN 1 ELSE 0 END as has_detail
             FROM column_topics ct
-            LEFT JOIN topic_details td ON ct.topic_id = td.topic_id
-            WHERE ct.column_id = ?
+            LEFT JOIN topic_details td ON ct.topic_id = td.topic_id AND ct.group_id = td.group_id
+            WHERE ct.column_id = ? AND (? IS NULL OR ct.group_id = ?)
             ORDER BY ct.attached_to_column_time DESC
-        ''', (column_id,))
+        ''', (column_id, scope_group_id, scope_group_id))
         
         return [_column_topic_row_to_dict(row) for row in self.cursor.fetchall()]
     
@@ -415,8 +422,9 @@ class ZSXQColumnsDatabase:
         self.conn.commit()
         return count
 
-    def get_topic_detail(self, topic_id: int) -> Optional[Dict[str, Any]]:
+    def get_topic_detail(self, topic_id: int, group_id: Optional[Any] = None) -> Optional[Dict[str, Any]]:
         """获取文章详情"""
+        scope_group_id = _scope_group_id_param(group_id if group_id is not None else self.group_id)
         self.cursor.execute('''
             SELECT td.topic_id, td.group_id, td.type, td.title, td.full_text,
                    td.likes_count, td.comments_count, td.readers_count,
@@ -426,8 +434,8 @@ class ZSXQColumnsDatabase:
             FROM topic_details td
             LEFT JOIN topic_owners tow ON td.topic_id = tow.topic_id AND tow.owner_type = 'talk'
             LEFT JOIN users u ON tow.user_id = u.user_id
-            WHERE td.topic_id = ?
-        ''', (topic_id,))
+            WHERE td.topic_id = ? AND (? IS NULL OR td.group_id = ?)
+        ''', (topic_id, scope_group_id, scope_group_id))
         
         row = self.cursor.fetchone()
         if not row:
@@ -467,37 +475,43 @@ class ZSXQColumnsDatabase:
             }
         
         # 获取图片
-        result['images'] = self.get_topic_images(topic_id)
+        result['images'] = self.get_topic_images(topic_id, scope_group_id)
         
         # 获取文件
-        result['files'] = self.get_topic_files(topic_id)
+        result['files'] = self.get_topic_files(topic_id, scope_group_id)
         
         # 获取视频
-        result['videos'] = self.get_topic_videos(topic_id)
+        result['videos'] = self.get_topic_videos(topic_id, scope_group_id)
         
         # 获取评论
-        result['comments'] = self.get_topic_comments(topic_id)
+        result['comments'] = self.get_topic_comments(topic_id, scope_group_id)
         
         return result
     
-    def get_topic_images(self, topic_id: int) -> List[Dict[str, Any]]:
+    def get_topic_images(self, topic_id: int, group_id: Optional[Any] = None) -> List[Dict[str, Any]]:
         """获取文章的所有图片"""
+        scope_group_id = _scope_group_id_param(group_id if group_id is not None else self.group_id)
         self.cursor.execute('''
             SELECT image_id, type, thumbnail_url, thumbnail_width, thumbnail_height,
                    large_url, large_width, large_height, original_url, original_width,
                    original_height, original_size, local_path
-            FROM images WHERE topic_id = ?
-        ''', (topic_id,))
+            FROM images
+            WHERE topic_id = ?
+              AND (? IS NULL OR topic_id IN (SELECT topic_id FROM topic_details WHERE group_id = ?))
+        ''', (topic_id, scope_group_id, scope_group_id))
         
         return [_topic_image_row_to_dict(row) for row in self.cursor.fetchall()]
     
-    def get_topic_files(self, topic_id: int) -> List[Dict[str, Any]]:
+    def get_topic_files(self, topic_id: int, group_id: Optional[Any] = None) -> List[Dict[str, Any]]:
         """获取文章的所有文件"""
+        scope_group_id = _scope_group_id_param(group_id if group_id is not None else self.group_id)
         self.cursor.execute('''
             SELECT file_id, name, hash, size, duration, download_count, 
                    create_time, download_status, local_path, download_time
-            FROM files WHERE topic_id = ?
-        ''', (topic_id,))
+            FROM files
+            WHERE topic_id = ?
+              AND (? IS NULL OR topic_id IN (SELECT topic_id FROM topic_details WHERE group_id = ?))
+        ''', (topic_id, scope_group_id, scope_group_id))
         
         files = []
         for row in self.cursor.fetchall():
@@ -515,13 +529,16 @@ class ZSXQColumnsDatabase:
             })
         return files
     
-    def get_topic_videos(self, topic_id: int) -> List[Dict[str, Any]]:
+    def get_topic_videos(self, topic_id: int, group_id: Optional[Any] = None) -> List[Dict[str, Any]]:
         """获取文章的所有视频"""
+        scope_group_id = _scope_group_id_param(group_id if group_id is not None else self.group_id)
         self.cursor.execute('''
             SELECT video_id, size, duration, cover_url, cover_width, cover_height,
                    cover_local_path, video_url, download_status, local_path, download_time
-            FROM videos WHERE topic_id = ?
-        ''', (topic_id,))
+            FROM videos
+            WHERE topic_id = ?
+              AND (? IS NULL OR topic_id IN (SELECT topic_id FROM topic_details WHERE group_id = ?))
+        ''', (topic_id, scope_group_id, scope_group_id))
         
         videos = []
         for row in self.cursor.fetchall():
@@ -598,8 +615,9 @@ class ZSXQColumnsDatabase:
             })
         return videos
     
-    def get_topic_comments(self, topic_id: int) -> List[Dict[str, Any]]:
+    def get_topic_comments(self, topic_id: int, group_id: Optional[Any] = None) -> List[Dict[str, Any]]:
         """获取文章的所有评论（支持嵌套结构）"""
+        scope_group_id = _scope_group_id_param(group_id if group_id is not None else self.group_id)
         self.cursor.execute('''
             SELECT c.comment_id, c.parent_comment_id, c.text, c.create_time,
                    c.likes_count, c.rewards_count, c.replies_count, c.sticky,
@@ -609,8 +627,9 @@ class ZSXQColumnsDatabase:
             LEFT JOIN users u ON c.owner_user_id = u.user_id
             LEFT JOIN users r ON c.repliee_user_id = r.user_id
             WHERE c.topic_id = ?
+              AND (? IS NULL OR c.group_id = ?)
             ORDER BY c.create_time ASC
-        ''', (topic_id,))
+        ''', (topic_id, scope_group_id, scope_group_id))
 
         # 先收集所有评论，然后构建嵌套结构
         all_comments = {}  # comment_id -> comment_data
@@ -656,8 +675,10 @@ class ZSXQColumnsDatabase:
                 SELECT image_id, type, thumbnail_url, thumbnail_width, thumbnail_height,
                        large_url, large_width, large_height, original_url, original_width,
                        original_height, original_size
-                FROM images WHERE comment_id = ?
-            ''', (comment_id,))
+                FROM images
+                WHERE comment_id = ?
+                  AND (? IS NULL OR topic_id = ?)
+            ''', (comment_id, scope_group_id, topic_id))
 
             images = []
             for img_row in self.cursor.fetchall():

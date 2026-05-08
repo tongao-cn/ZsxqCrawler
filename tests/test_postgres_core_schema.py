@@ -30,6 +30,14 @@ class PostgresCoreSchemaTests(unittest.TestCase):
         for spec in CORE_TABLE_SPECS:
             self.assertIn(f'CREATE TABLE IF NOT EXISTS "{CORE_SCHEMA}"."{spec.name}"', sql)
 
+    def test_no_indexes_keeps_unique_constraints_but_skips_performance_indexes(self):
+        sql = "\n".join(build_core_schema_sql(include_indexes=False))
+
+        self.assertIn('CREATE UNIQUE INDEX IF NOT EXISTS "daily_ai_reports_group_id_report_date_key"', sql)
+        self.assertIn('CREATE UNIQUE INDEX IF NOT EXISTS "topic_files_topic_id_file_id_key"', sql)
+        self.assertNotIn('CREATE INDEX IF NOT EXISTS "idx_', sql)
+        self.assertIn(f'CREATE TABLE IF NOT EXISTS "{CORE_SCHEMA}"."zsxq_a_share_daily_mentions"', sql)
+
     def test_schema_not_ready_message_points_to_setup_command(self):
         self.assertIn("uv run manage-postgres-core-schema --apply", schema_not_ready_message(RuntimeError("missing")))
 

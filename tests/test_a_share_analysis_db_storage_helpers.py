@@ -120,6 +120,33 @@ class AShareAnalysisDbStorageHelperTests(unittest.TestCase):
 
         get_connection.assert_not_called()
 
+    @unittest.skipUnless(HAS_STORAGE_DEPS, "PostgreSQL storage dependencies are not installed")
+    def test_get_connection_wraps_missing_schema_errors(self):
+        from psycopg2 import errors
+
+        from backend.services import a_share_analysis_db_storage as storage
+
+        class FakeConnection:
+            def __init__(self):
+                self.rolled_back = False
+                self.closed = False
+
+            def rollback(self):
+                self.rolled_back = True
+
+            def close(self):
+                self.closed = True
+
+        conn = FakeConnection()
+
+        with patch.object(storage.psycopg2, "connect", return_value=conn):
+            with self.assertRaisesRegex(RuntimeError, "manage-postgres-core-schema --apply"):
+                with storage.get_connection():
+                    raise errors.UndefinedTable("missing")
+
+        self.assertTrue(conn.rolled_back)
+        self.assertTrue(conn.closed)
+
 
 if __name__ == "__main__":
     unittest.main()

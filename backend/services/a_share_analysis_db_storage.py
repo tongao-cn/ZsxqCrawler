@@ -13,7 +13,12 @@ import psycopg2
 from psycopg2.extras import Json, execute_values
 
 from backend.storage.db_compat import get_postgres_dsn as get_zsxq_postgres_dsn
-from backend.storage.postgres_core_schema import CORE_SCHEMA, quote_identifier
+from backend.storage.postgres_core_schema import (
+    CORE_SCHEMA,
+    is_schema_missing_error,
+    quote_identifier,
+    schema_not_ready_message,
+)
 
 
 DEFAULT_KNOW_ACTION_ENV_PATH = Path(os.getenv("KNOW_ACTION_ENV_PATH", r"C:\Dev\KnowActionSystem\.env"))
@@ -92,8 +97,10 @@ def get_connection(env_path: Path = DEFAULT_KNOW_ACTION_ENV_PATH) -> Iterator[An
     try:
         yield conn
         conn.commit()
-    except Exception:
+    except Exception as exc:
         conn.rollback()
+        if is_schema_missing_error(exc):
+            raise RuntimeError(schema_not_ready_message(exc)) from exc
         raise
     finally:
         conn.close()
