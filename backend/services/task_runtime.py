@@ -24,6 +24,18 @@ sse_connections: Dict[str, List[Any]] = {}
 task_stop_flags: Dict[str, bool] = {}
 file_downloader_instances: Dict[str, Any] = {}
 
+INGESTION_LOCK_TYPES = {
+    "crawl_all",
+    "crawl_historical",
+    "crawl_incremental",
+    "crawl_latest_until_complete",
+    "crawl_time_range",
+    "collect_files",
+    "download_files",
+    "sync_files_from_topics",
+}
+INGESTION_LOCK_KEY = "ingestion"
+
 
 def _normalize_task_status(status: str) -> str:
     return "cancelled" if status == "stopped" else status
@@ -115,6 +127,35 @@ def create_task(task_type: str, description: str, metadata: Optional[Dict[str, A
     add_task_log(task_id, f"任务创建: {description}")
 
     return task_id
+
+
+def find_running_ingestion_task(group_id: str, exclude_task_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
+    normalized_group_id = normalize_group_id(group_id)
+    if normalized_group_id is None:
+        return None
+
+    for task in list_tasks():
+        if exclude_task_id and task.get("task_id") == exclude_task_id:
+            continue
+        if task.get("status") not in {"pending", "running"}:
+            continue
+        if task.get("ingestion_lock_key") != INGESTION_LOCK_KEY and task.get("type") not in INGESTION_LOCK_TYPES:
+            continue
+        if normalize_group_id(task.get("group_id")) == normalized_group_id:
+            return task
+    return None
+
+
+def create_ingestion_task(task_type: str, description: str, group_id: str) -> tuple[Optional[str], Optional[Dict[str, Any]]]:
+    existing = find_running_ingestion_task(group_id)
+    if existing:
+        return None, existing
+    task_id = create_task(
+        task_type,
+        description,
+        metadata={"group_id": str(group_id), "ingestion_lock_key": INGESTION_LOCK_KEY},
+    )
+    return task_id, None
 
 
 def add_task_log(task_id: str, log_message: str) -> None:

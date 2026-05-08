@@ -685,7 +685,9 @@ class ZSXQInteractiveCrawler:
                 print(f"   ⚠️ 话题导入失败: {e}")
         
         # 提交事务
+        self.log(f"💾 批量入库完成，准备提交: 新增{stats['new_topics']}, 更新{stats['updated_topics']}, 错误{stats['errors']}")
         self.db.conn.commit()
+        self.log("✅ 数据库提交完成")
         return stats
     
     def crawl_latest(self, count: int = 20) -> Dict[str, int]:
@@ -1281,6 +1283,7 @@ class ZSXQInteractiveCrawler:
                             new_topics_list.append(topic)
                     
                     print(f"   📊 页面分析: {len(topics)}个话题，{existing_count}个已存在，{len(new_topics_list)}个新话题")
+                    self.log(f"📊 页面分析: {len(topics)}个话题，{existing_count}个已存在，{len(new_topics_list)}个新话题")
                     
                     # 判断是否需要停止
                     if existing_count == len(topics):
@@ -1304,12 +1307,15 @@ class ZSXQInteractiveCrawler:
                     
                     elif existing_count == 0:
                         # 整页话题都是新的，全部存储
+                        self.log(f"💾 开始整页入库: {len(topics)}个话题")
                         page_stats = self.store_batch_data(data)
                         print(f"   💾 整页存储: 新增{page_stats['new_topics']}, 更新{page_stats['updated_topics']}")
+                        self.log(f"💾 整页入库完成: 新增{page_stats['new_topics']}, 更新{page_stats['updated_topics']}")
                     
                     else:
                         # 部分话题是新的，只存储新话题
                         print(f"   💾 部分存储: 只处理{len(new_topics_list)}个新话题")
+                        self.log(f"💾 开始部分入库: {len(new_topics_list)}个新话题")
                         new_topics_count = 0
                         updated_topics_count = 0
                         
@@ -1335,7 +1341,9 @@ class ZSXQInteractiveCrawler:
                                 print(f"   ⚠️ 话题导入失败: {e}")
                         
                         # 提交事务
+                        self.log(f"💾 部分入库完成，准备提交: 新增{new_topics_count}, 更新{updated_topics_count}")
                         self.db.conn.commit()
+                        self.log("✅ 数据库提交完成")
                         print(f"   💾 新话题存储: 新增{new_topics_count}, 更新{updated_topics_count}")
                         
                         # 更新统计
@@ -1352,12 +1360,14 @@ class ZSXQInteractiveCrawler:
                     
                     # 显示当前进度
                     print(f"   📈 累计: 新增{total_stats['new_topics']}, 更新{total_stats['updated_topics']}, 页数{total_stats['pages']}")
+                    self.log(f"📈 累计: 新增{total_stats['new_topics']}, 更新{total_stats['updated_topics']}, 页数{total_stats['pages']}")
                     
                     # 显示时间戳信息
                     if topics:
                         first_time = topics[0].get('create_time', 'N/A')
                         last_time = topics[-1].get('create_time', 'N/A')
                         print(f"   ⏰ 时间范围: {first_time} ~ {last_time}")
+                        self.log(f"⏰ 页面时间范围: {first_time} ~ {last_time}")
                     
                     # 准备下一页的时间戳
                     if topics:

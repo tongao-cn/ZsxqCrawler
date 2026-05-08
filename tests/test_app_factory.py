@@ -17,6 +17,7 @@ class AppFactoryTests(unittest.TestCase):
         self.assertIn("/api/health", paths)
         self.assertIn("/api/tasks/{task_id}", paths)
         self.assertIn("/api/crawl/latest-until-complete/{group_id}", paths)
+        self.assertIn("/api/diagnostics/postgres/activity", paths)
 
 
 if __name__ == "__main__":

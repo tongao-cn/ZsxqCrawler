@@ -699,13 +699,8 @@ class ZSXQFileDatabase:
                 
                 if not file_data.get('file_id') or not topic_data.get('topic_id'):
                     continue
-                
-                # 插入文件
-                file_id = self.insert_file(file_data)
-                if file_id:
-                    stats['files'] += 1
-                
-                # 插入群组
+
+                # 统一 ingestion 写表顺序：groups/users/topics/content/files/relations
                 group_data = topic_data.get('group', {})
                 if group_data:
                     group_id = self.insert_group(group_data)
@@ -716,20 +711,10 @@ class ZSXQFileDatabase:
                 topic_id = self.insert_topic(topic_data)
                 if topic_id:
                     stats['topics'] += 1
-                    
-                    # 插入文件-话题关联
-                    self.cursor.execute('''
-                    DELETE FROM file_topic_relations
-                    WHERE file_id = ? AND topic_id = ?
-                    ''', (file_id, topic_id))
 
-                    self.cursor.execute('''
-                    INSERT OR IGNORE INTO file_topic_relations (file_id, topic_id)
-                    VALUES (?, ?)
-                    ''', (file_id, topic_id))
-                    
                     # 处理talk信息
                     talk_data = topic_data.get('talk', {})
+                    topic_files = []
                     if talk_data:
                         self.insert_talk(topic_id, talk_data)
                         
@@ -741,8 +726,6 @@ class ZSXQFileDatabase:
                         
                         # 处理talk中的文件
                         topic_files = talk_data.get('files', [])
-                        if topic_files:
-                            self.insert_topic_files(topic_id, topic_files)
                     
                     # 处理最新点赞
                     latest_likes = topic_data.get('latest_likes', [])
@@ -779,6 +762,25 @@ class ZSXQFileDatabase:
                         solution_id = self.insert_solution(topic_id, solution)
                         if solution_id:
                             stats['solutions'] += 1
+
+                    file_id = self.insert_file(file_data)
+                    if file_id:
+                        stats['files'] += 1
+
+                    self.cursor.execute('''
+                    DELETE FROM file_topic_relations
+                    WHERE file_id = ? AND topic_id = ?
+                    ''', (file_id, topic_id))
+
+                    self.cursor.execute('''
+                    INSERT OR IGNORE INTO file_topic_relations (file_id, topic_id)
+                    VALUES (?, ?)
+                    ''', (file_id, topic_id))
+
+                    if file_id:
+                        self.insert_topic_files(topic_id, [file_data])
+                    if topic_files:
+                        self.insert_topic_files(topic_id, topic_files)
             
             self.conn.commit()
             print(f"数据导入成功: {stats}")

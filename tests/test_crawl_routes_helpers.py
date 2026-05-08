@@ -114,7 +114,7 @@ class CrawlRoutesHelperTests(unittest.TestCase):
 
         background_tasks = FakeBackgroundTasks()
 
-        with patch("backend.routes.crawl_routes.create_task", return_value="task-1") as create_task:
+        with patch("backend.routes.crawl_routes.create_ingestion_task", return_value=("task-1", None)) as create_task:
             response = _create_crawl_task_response(
                 background_tasks,
                 "crawl_latest",
@@ -124,9 +124,31 @@ class CrawlRoutesHelperTests(unittest.TestCase):
                 "request",
             )
 
-        create_task.assert_called_once_with("crawl_latest", "latest description")
+        create_task.assert_called_once_with("crawl_latest", "latest description", "group-1")
         self.assertEqual({"task_id": "task-1", "message": "任务已创建，正在后台执行"}, response)
         self.assertEqual([(fake_task_func, ("task-1", "group-1", "request"))], background_tasks.tasks)
+
+    @unittest.skipUnless(HAS_CRAWL_ROUTE_DEPS, "crawl route dependencies are not installed")
+    def test_create_crawl_task_response_rejects_same_group_ingestion_conflict(self):
+        from fastapi import HTTPException
+        from backend.routes.crawl_routes import _create_crawl_task_response
+
+        background_tasks = FakeBackgroundTasks()
+        existing = {"task_id": "task-old", "type": "crawl_latest", "status": "running"}
+
+        with patch("backend.routes.crawl_routes.create_ingestion_task", return_value=(None, existing)):
+            with self.assertRaises(HTTPException) as raised:
+                _create_crawl_task_response(
+                    background_tasks,
+                    "crawl_latest",
+                    "latest description",
+                    fake_task_func,
+                    "group-1",
+                    "request",
+                )
+
+        self.assertEqual(409, raised.exception.status_code)
+        self.assertEqual([], background_tasks.tasks)
 
     @unittest.skipUnless(HAS_CRAWL_ROUTE_DEPS, "crawl route dependencies are not installed")
     def test_build_task_callbacks_logs_and_checks_stop(self):

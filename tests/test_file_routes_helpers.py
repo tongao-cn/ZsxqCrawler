@@ -65,6 +65,44 @@ class FileRoutesHelperTests(unittest.TestCase):
         self.assertEqual({"task_id": "task-1", "message": "已创建"}, response)
         self.assertEqual([(fake_task, ("task-1", "group-1", 123))], background_tasks.calls)
 
+    def test_enqueue_file_task_uses_ingestion_lock_when_requested(self):
+        background_tasks = FakeBackgroundTasks()
+
+        with patch("backend.routes.file_routes.create_ingestion_task", return_value=("task-1", None)) as create_task:
+            response = _enqueue_file_task(
+                background_tasks,
+                "collect_files",
+                "收集文件列表",
+                fake_task,
+                "group-1",
+                "request",
+                ingestion_group_id="group-1",
+            )
+
+        create_task.assert_called_once_with("collect_files", "收集文件列表", "group-1")
+        self.assertEqual({"task_id": "task-1", "message": "任务已创建，正在后台执行"}, response)
+        self.assertEqual([(fake_task, ("task-1", "group-1", "request"))], background_tasks.calls)
+
+    def test_enqueue_file_task_rejects_ingestion_conflict(self):
+        from fastapi import HTTPException
+
+        existing = {"task_id": "task-old", "type": "crawl_latest", "status": "running"}
+        background_tasks = FakeBackgroundTasks()
+
+        with patch("backend.routes.file_routes.create_ingestion_task", return_value=(None, existing)):
+            with self.assertRaises(HTTPException) as raised:
+                _enqueue_file_task(
+                    background_tasks,
+                    "collect_files",
+                    "收集文件列表",
+                    fake_task,
+                    "group-1",
+                    ingestion_group_id="group-1",
+                )
+
+        self.assertEqual(409, raised.exception.status_code)
+        self.assertEqual([], background_tasks.calls)
+
     def test_get_download_file_status_handles_missing_file(self):
         with patch("backend.routes.file_routes.get_db_path_manager") as mocked_manager:
             mocked_manager.return_value.get_group_dir.return_value = r"C:\tmp\group-1"

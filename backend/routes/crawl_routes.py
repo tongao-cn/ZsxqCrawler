@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field
 
 from backend.core.account_context import get_cookie_for_group
 from backend.crawlers.zsxq_interactive_crawler import ZSXQInteractiveCrawler
-from backend.services.task_runtime import add_task_log, create_task, is_task_stopped, update_task
+from backend.services.task_runtime import add_task_log, create_ingestion_task, is_task_stopped, update_task
 
 router = APIRouter(prefix="/api/crawl", tags=["crawl"])
 
@@ -46,6 +46,7 @@ class CrawlTimeRangeRequest(BaseModel):
 TASK_CREATED_MESSAGE = "任务已创建，正在后台执行"
 INIT_STOPPED_MESSAGE = "🛑 任务在初始化过程中被停止"
 CRAWLER_STARTUP_LOGS = ("📡 连接到知识星球API...", "🔍 检查数据库状态...")
+INGESTION_CONFLICT_MESSAGE = "该群组已有采集或同步任务正在运行"
 
 
 def _should_stop_task(task_id: str) -> bool:
@@ -106,10 +107,21 @@ def _create_crawl_task_response(
     task_type: str,
     description: str,
     task_func: Callable[..., Any],
+    group_id: str,
     *task_args: Any,
 ) -> dict[str, str]:
-    task_id = create_task(task_type, description)
-    background_tasks.add_task(task_func, task_id, *task_args)
+    task_id, existing = create_ingestion_task(task_type, description, group_id)
+    if existing:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "message": INGESTION_CONFLICT_MESSAGE,
+                "task_id": existing.get("task_id"),
+                "type": existing.get("type"),
+                "status": existing.get("status"),
+            },
+        )
+    background_tasks.add_task(task_func, task_id, group_id, *task_args)
     return {"task_id": task_id, "message": TASK_CREATED_MESSAGE}
 
 
@@ -459,6 +471,8 @@ async def crawl_historical(group_id: str, request: CrawlHistoricalRequest, backg
             request.per_page,
             request,
         )
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"创建爬取任务失败: {str(e)}")
 
@@ -475,6 +489,8 @@ async def crawl_all(group_id: str, request: CrawlSettingsRequest, background_tas
             group_id,
             request,
         )
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"创建全量爬取任务失败: {str(e)}")
 
@@ -493,6 +509,8 @@ async def crawl_incremental(group_id: str, request: CrawlHistoricalRequest, back
             request.per_page,
             request,
         )
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"创建增量爬取任务失败: {str(e)}")
 
@@ -509,6 +527,8 @@ async def crawl_latest_until_complete(group_id: str, request: CrawlSettingsReque
             group_id,
             request,
         )
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"创建获取最新记录任务失败: {str(e)}")
 
@@ -525,5 +545,7 @@ async def crawl_by_time_range(group_id: str, request: CrawlTimeRangeRequest, bac
             group_id,
             request,
         )
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"创建时间区间爬取任务失败: {str(e)}")

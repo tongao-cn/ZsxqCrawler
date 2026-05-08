@@ -5,7 +5,8 @@ from backend.storage.zsxq_database import (
     _format_tag_row,
     _format_tag_topic_row,
     _replace_file_topic_relation,
-    _upsert_synced_file,
+    _topic_file_payload_from_row,
+    _upsert_core_file,
 )
 
 
@@ -121,10 +122,10 @@ class ZSXQDatabaseHelperTests(unittest.TestCase):
             file_db.cursor.calls,
         )
 
-    def test_upsert_synced_file_uses_current_cursor(self):
+    def test_upsert_core_file_uses_current_cursor(self):
         cursor = FakeCursor()
 
-        file_id = _upsert_synced_file(
+        file_id = _upsert_core_file(
             cursor,
             155,
             202,
@@ -145,6 +146,22 @@ class ZSXQDatabaseHelperTests(unittest.TestCase):
         self.assertIn("INSERT INTO files", query)
         self.assertIn("ON CONFLICT(file_id) DO UPDATE SET", query)
         self.assertEqual((101, 155, 202, "memo.pdf", "abc", 12, 0, 3, "2026-05-07T12:00:00.000+0800"), params)
+
+    def test_topic_file_payload_from_row_maps_backfill_columns(self):
+        row = (202, 101, "memo.pdf", "abc", 12, 0, 3, "2026-05-07T12:00:00.000+0800")
+
+        self.assertEqual(
+            {
+                "file_id": 101,
+                "name": "memo.pdf",
+                "hash": "abc",
+                "size": 12,
+                "duration": 0,
+                "download_count": 3,
+                "create_time": "2026-05-07T12:00:00.000+0800",
+            },
+            _topic_file_payload_from_row(row),
+        )
 
 
 if __name__ == "__main__":

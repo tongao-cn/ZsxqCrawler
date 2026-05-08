@@ -19,6 +19,7 @@ from backend.routes.account_routes import router as account_router
 from backend.routes.core_routes import router as core_router
 from backend.routes.crawl_routes import router as crawl_router
 from backend.routes.daily_analysis_routes import router as daily_analysis_router
+from backend.routes.diagnostics_routes import router as diagnostics_router
 from backend.routes.columns_routes import router as columns_router
 from backend.routes.group_routes import router as group_router
 from backend.routes.file_routes import router as file_router
@@ -74,6 +75,7 @@ def create_app() -> FastAPI:
         core_router,
         crawl_router,
         daily_analysis_router,
+        diagnostics_router,
         columns_router,
         group_router,
         file_router,

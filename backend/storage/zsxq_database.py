@@ -65,7 +65,7 @@ def _replace_file_topic_relation(file_db, file_id: int, topic_id: int) -> int:
     return file_db.cursor.rowcount
 
 
-def _upsert_synced_file(cursor, group_id: Optional[int], topic_id: int, file_data: Dict[str, Any]) -> Optional[int]:
+def _upsert_core_file(cursor, group_id: Optional[int], topic_id: int, file_data: Dict[str, Any]) -> Optional[int]:
     file_id = file_data.get('file_id')
     if not file_id:
         return None
@@ -95,6 +95,18 @@ def _upsert_synced_file(cursor, group_id: Optional[int], topic_id: int, file_dat
         file_data.get('create_time'),
     ))
     return file_id
+
+
+def _topic_file_payload_from_row(row) -> Dict[str, Any]:
+    return {
+        'file_id': row[1],
+        'name': row[2] or '',
+        'hash': row[3],
+        'size': row[4],
+        'duration': row[5],
+        'download_count': row[6],
+        'create_time': row[7],
+    }
 
 
 class ZSXQDatabase:
@@ -382,7 +394,7 @@ class ZSXQDatabase:
             self.cursor.execute('SELECT 1 FROM topics WHERE topic_id = ? LIMIT 1', (topic_id,))
             if self.cursor.fetchone():
                 if 'talk' in topic_data and topic_data['talk'] and 'files' in topic_data['talk']:
-                    self._sync_files_to_file_database(topic_data, topic_data['talk']['files'])
+                    self._sync_topic_files_to_core_tables(topic_data, topic_data['talk']['files'])
                 print(f"话题 {topic_id} 已存在，跳过导入")
                 return True
             
@@ -435,7 +447,7 @@ class ZSXQDatabase:
             # 导入文件信息
             if 'talk' in topic_data and topic_data['talk'] and 'files' in topic_data['talk']:
                 self._import_files(topic_id, topic_data['talk']['files'])
-                self._sync_files_to_file_database(topic_data, topic_data['talk']['files'])
+                self._sync_topic_files_to_core_tables(topic_data, topic_data['talk']['files'])
 
             return True
             
@@ -1122,16 +1134,8 @@ class ZSXQDatabase:
                 current_time
             ))
 
-    def _get_file_db(self):
-        """获取同组文件库连接，用于同步话题里的文件元数据。"""
-        if self.file_db is None:
-            from backend.storage.zsxq_file_database import ZSXQFileDatabase
-            self.file_db = ZSXQFileDatabase(self.group_id)
-
-        return self.file_db
-
-    def _sync_files_to_file_database(self, topic_data: Dict[str, Any], files_data: List[Dict[str, Any]]):
-        """把话题采集到的 talk.files 同步到文件库 files 表。"""
+    def _sync_topic_files_to_core_tables(self, topic_data: Dict[str, Any], files_data: List[Dict[str, Any]]):
+        """把话题采集到的 talk.files 同步到核心 files/relations 表。"""
         if not files_data:
             return
 
@@ -1143,7 +1147,7 @@ class ZSXQDatabase:
 
             synced_files = 0
             for file_data in files_data:
-                file_id = _upsert_synced_file(
+                file_id = _upsert_core_file(
                     self.cursor,
                     group_data.get('group_id') if group_data else None,
                     topic_id,
@@ -1161,13 +1165,10 @@ class ZSXQDatabase:
             print(f"同步话题文件到文件库失败: {e}")
             raise
 
-    def backfill_topic_files_to_file_database(self) -> Dict[str, int]:
-        """把当前话题库已有的 topic_files 回填到文件库。"""
-        file_db = self._get_file_db()
-        if file_db is None:
-            return {'scanned': 0, 'new_files': 0, 'relations': 0, 'topic_files': 0}
-
+    def backfill_topic_files_to_core_tables(self, batch_size: int = 500) -> Dict[str, int]:
+        """把当前 topic_files 回填到核心 files/file_topic_relations 表。"""
         stats = {'scanned': 0, 'new_files': 0, 'relations': 0, 'topic_files': 0}
+        batch_size = max(1, batch_size)
 
         try:
             self.cursor.execute('''
@@ -1185,9 +1186,7 @@ class ZSXQDatabase:
                 WHERE tf.file_id IS NOT NULL
                 ORDER BY tf.topic_id ASC, tf.file_id ASC
             ''')
-            rows = self.cursor.fetchall()
-
-            for row in rows:
+            for row in self.cursor.fetchall():
                 stats['scanned'] += 1
                 (
                     topic_id, file_id, name, file_hash, size, duration, download_count, file_create_time,
@@ -1197,23 +1196,11 @@ class ZSXQDatabase:
                     group_name, group_type, background_url,
                 ) = row
 
-                file_db.cursor.execute('SELECT 1 FROM files WHERE file_id = ? LIMIT 1', (file_id,))
-                is_new_file = file_db.cursor.fetchone() is None
+                self.cursor.execute('SELECT 1 FROM files WHERE file_id = ? LIMIT 1', (file_id,))
+                is_new_file = self.cursor.fetchone() is None
 
-                file_data = {
-                    'file_id': file_id,
-                    'name': name or '',
-                    'hash': file_hash,
-                    'size': size,
-                    'duration': duration,
-                    'download_count': download_count,
-                    'create_time': file_create_time,
-                }
-                if file_db.insert_file(file_data):
-                    stats['new_files'] += 1 if is_new_file else 0
-
-                if group_id:
-                    file_db.insert_group({
+                if group_id and group_name:
+                    self._upsert_group({
                         'group_id': group_id,
                         'name': group_name or '',
                         'type': group_type,
@@ -1242,16 +1229,26 @@ class ZSXQDatabase:
                         },
                     })
 
-                    stats['relations'] += _replace_file_topic_relation(file_db, file_id, topic_id)
+                file_data = _topic_file_payload_from_row(row)
+                if _upsert_core_file(self.cursor, group_id, topic_id, file_data):
+                    stats['new_files'] += 1 if is_new_file else 0
 
-                    file_db.insert_topic_files(topic_id, [file_data])
+                if topic_id and file_id:
+                    stats['relations'] += _replace_file_topic_relation(self, file_id, topic_id)
                     stats['topic_files'] += 1
 
-            file_db.conn.commit()
+                if stats['scanned'] % batch_size == 0:
+                    self.conn.commit()
+
+            self.conn.commit()
             return stats
         except Exception:
-            file_db.conn.rollback()
+            self.conn.rollback()
             raise
+
+    def backfill_topic_files_to_file_database(self) -> Dict[str, int]:
+        """兼容旧调用名：PostgreSQL 模式下回填到同一核心表。"""
+        return self.backfill_topic_files_to_core_tables()
 
 
     def get_topic_detail(self, topic_id: int):

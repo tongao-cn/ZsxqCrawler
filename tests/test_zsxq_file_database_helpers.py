@@ -31,6 +31,48 @@ class FakeConnection:
         self.closed = True
 
 
+class FakeImportDatabase:
+    def __init__(self):
+        self.calls = []
+        self.cursor = self
+        self.conn = self
+        self.lastrowid = 1
+
+    def execute(self, sql, params=()):
+        normalized = " ".join(sql.split())
+        if normalized.startswith("INSERT INTO api_responses"):
+            self.calls.append(("api_response", params))
+        elif normalized.startswith("DELETE FROM file_topic_relations"):
+            self.calls.append(("delete_relation", params))
+        elif normalized.startswith("INSERT OR IGNORE INTO file_topic_relations"):
+            self.calls.append(("insert_relation", params))
+        return self
+
+    def insert_group(self, group_data):
+        self.calls.append(("group", group_data.get("group_id")))
+        return group_data.get("group_id")
+
+    def insert_topic(self, topic_data):
+        self.calls.append(("topic", topic_data.get("topic_id")))
+        return topic_data.get("topic_id")
+
+    def insert_file(self, file_data):
+        self.calls.append(("file", file_data.get("file_id")))
+        return file_data.get("file_id")
+
+    def insert_talk(self, topic_id, talk_data):
+        self.calls.append(("talk", topic_id))
+
+    def insert_topic_files(self, topic_id, files_data):
+        self.calls.append(("topic_files", topic_id, [item.get("file_id") for item in files_data]))
+
+    def commit(self):
+        self.calls.append(("commit",))
+
+    def rollback(self):
+        self.calls.append(("rollback",))
+
+
 class ZSXQFileDatabaseHelperTests(unittest.TestCase):
     def test_new_import_stats_returns_expected_zero_counts(self):
         stats = _new_import_stats()
@@ -72,6 +114,47 @@ class ZSXQFileDatabaseHelperTests(unittest.TestCase):
         _close_connection(conn)
 
         self.assertTrue(conn.closed)
+
+    def test_import_file_response_writes_topic_before_file_and_relation(self):
+        from backend.storage.zsxq_file_database import ZSXQFileDatabase
+
+        db = object.__new__(ZSXQFileDatabase)
+        fake = FakeImportDatabase()
+        db.cursor = fake
+        db.conn = fake
+        db.insert_group = fake.insert_group
+        db.insert_topic = fake.insert_topic
+        db.insert_file = fake.insert_file
+        db.insert_talk = fake.insert_talk
+        db.insert_topic_files = fake.insert_topic_files
+
+        stats = ZSXQFileDatabase.import_file_response(
+            db,
+            {
+                "succeeded": True,
+                "resp_data": {
+                    "index": "next",
+                    "files": [
+                        {
+                            "file": {"file_id": 101, "name": "memo.pdf"},
+                            "topic": {
+                                "topic_id": 202,
+                                "group": {"group_id": 303, "name": "group"},
+                                "talk": {"files": [{"file_id": 101, "name": "memo.pdf"}]},
+                            },
+                        }
+                    ],
+                },
+            },
+        )
+
+        ordered = [call[0] for call in fake.calls]
+        self.assertLess(ordered.index("group"), ordered.index("topic"))
+        self.assertLess(ordered.index("topic"), ordered.index("file"))
+        self.assertLess(ordered.index("file"), ordered.index("insert_relation"))
+        self.assertEqual(1, stats["files"])
+        self.assertEqual(1, stats["topics"])
+        self.assertEqual(1, stats["groups"])
 
 
 if __name__ == "__main__":

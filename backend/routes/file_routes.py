@@ -30,6 +30,7 @@ from backend.services.file_ai_analysis_service import (
 from backend.services.task_runtime import (
     add_task_log,
     create_task,
+    create_ingestion_task,
     file_downloader_instances,
     is_task_stopped,
     update_task,
@@ -255,8 +256,22 @@ def _enqueue_file_task(
     task_func,
     *args,
     message: str = "任务已创建，正在后台执行",
+    ingestion_group_id: Optional[str] = None,
 ) -> Dict[str, str]:
-    task_id = create_task(task_type, description)
+    if ingestion_group_id is not None:
+        task_id, existing = create_ingestion_task(task_type, description, ingestion_group_id)
+        if existing:
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "message": "该群组已有采集或同步任务正在运行",
+                    "task_id": existing.get("task_id"),
+                    "type": existing.get("type"),
+                    "status": existing.get("status"),
+                },
+            )
+    else:
+        task_id = create_task(task_type, description)
     background_tasks.add_task(task_func, task_id, *args)
     return {"task_id": task_id, "message": message}
 
@@ -542,7 +557,10 @@ async def collect_files(group_id: str, request: FileCollectRequest, background_t
             run_collect_files_task,
             group_id,
             request,
+            ingestion_group_id=group_id,
         )
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"创建文件收集任务失败: {str(e)}")
 
@@ -569,7 +587,10 @@ async def download_files(group_id: str, request: FileDownloadRequest, background
             request.download_interval_max,
             request.long_sleep_interval_min,
             request.long_sleep_interval_max,
+            ingestion_group_id=group_id,
         )
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"创建文件下载任务失败: {str(e)}")
 
@@ -755,13 +776,31 @@ async def clear_file_database(group_id: str):
 async def sync_files_from_topics(group_id: str):
     """从话题库 topic_files 回填/重建文件库记录。"""
     topics_db = None
+    task_id = None
     try:
+        task_id, existing = create_ingestion_task("sync_files_from_topics", f"从话题同步文件记录 (群组: {group_id})", group_id)
+        if existing:
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "message": "该群组已有采集或同步任务正在运行",
+                    "task_id": existing.get("task_id"),
+                    "type": existing.get("type"),
+                    "status": existing.get("status"),
+                },
+            )
+        update_task(task_id, "running", "开始从话题同步文件记录...")
         topics_db = ZSXQDatabase(group_id)
         stats = topics_db.backfill_topic_files_to_file_database()
+        update_task(task_id, "completed", "从话题同步文件记录完成", stats)
         return _build_sync_files_response(group_id, stats)
     except HTTPException:
+        if task_id:
+            update_task(task_id, "failed", "从话题同步文件记录失败")
         raise
     except Exception as e:
+        if task_id:
+            update_task(task_id, "failed", f"从话题同步文件记录失败: {str(e)}")
         raise HTTPException(status_code=500, detail=f"同步文件记录失败: {str(e)}")
     finally:
         if topics_db:
