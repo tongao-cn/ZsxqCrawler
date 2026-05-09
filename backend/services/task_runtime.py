@@ -22,6 +22,7 @@ task_counter = 0
 task_logs: Dict[str, List[str]] = {}
 sse_connections: Dict[str, List[Any]] = {}
 task_stop_flags: Dict[str, bool] = {}
+crawler_instances: Dict[str, Any] = {}
 file_downloader_instances: Dict[str, Any] = {}
 
 INGESTION_LOCK_TYPES = {
@@ -198,6 +199,14 @@ def update_task(
     add_task_log(task_id, f"状态更新: {message}")
 
 
+def register_task_crawler(task_id: str, crawler: Any) -> None:
+    crawler_instances[task_id] = crawler
+
+
+def unregister_task_crawler(task_id: str) -> None:
+    crawler_instances.pop(task_id, None)
+
+
 def stop_task(task_id: str) -> bool:
     task = get_task_state(task_id)
     if not task:
@@ -210,7 +219,9 @@ def stop_task(task_id: str) -> bool:
     get_task_store().set_stop_flag(task_id, True)
     add_task_log(task_id, "🛑 收到停止请求，正在停止任务...")
 
-    if crawler_runtime.crawler_instance:
+    if task_id in crawler_instances:
+        crawler_instances[task_id].set_stop_flag()
+    elif crawler_runtime.crawler_instance:
         crawler_runtime.crawler_instance.set_stop_flag()
 
     if task_id in file_downloader_instances:

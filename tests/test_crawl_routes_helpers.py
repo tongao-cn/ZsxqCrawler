@@ -23,6 +23,23 @@ class FakeBackgroundTasks:
         self.tasks.append((func, args))
 
 
+class EmptyPageCrawler:
+    def __init__(self, cookie, group_id, log_callback):
+        self.cookie = cookie
+        self.group_id = group_id
+        self.log_callback = log_callback
+        self.stop_check_func = None
+        self.timestamp_offset_ms = 1
+        self.fetch_calls = []
+
+    def fetch_topics_safe(self, **kwargs):
+        self.fetch_calls.append(kwargs)
+        return {"succeeded": True, "resp_data": {"topics": []}}
+
+    def set_custom_intervals(self, **kwargs):
+        self.interval_kwargs = kwargs
+
+
 def fake_task_func(*args):
     return args
 
@@ -83,6 +100,10 @@ class CrawlRoutesHelperTests(unittest.TestCase):
             _parse_user_time("2026-05-07"),
         )
         self.assertEqual(
+            datetime(2026, 5, 7, 23, 59, 59, 999999, tzinfo=timezone(timedelta(hours=8))),
+            _parse_user_time("2026-05-07", date_end=True),
+        )
+        self.assertEqual(
             datetime(2026, 5, 7, 12, 30, tzinfo=timezone.utc),
             _parse_user_time("2026-05-07T12:30Z"),
         )
@@ -107,6 +128,54 @@ class CrawlRoutesHelperTests(unittest.TestCase):
         )
         self.assertLessEqual(start_dt, end_dt)
         self.assertEqual(datetime(2026, 5, 1, tzinfo=timezone(timedelta(hours=8))), start_dt)
+        self.assertEqual(datetime(2026, 5, 7, 23, 59, 59, 999999, tzinfo=timezone(timedelta(hours=8))), end_dt)
+
+    @unittest.skipUnless(HAS_CRAWL_ROUTE_DEPS, "crawl route dependencies are not installed")
+    def test_format_zsxq_time_uses_bj_timezone_without_colon(self):
+        from backend.routes.crawl_routes import _format_zsxq_time
+
+        self.assertEqual(
+            "2026-02-01T08:00:00.000+0800",
+            _format_zsxq_time(datetime(2026, 2, 1, 0, tzinfo=timezone.utc)),
+        )
+
+    @unittest.skipUnless(HAS_CRAWL_ROUTE_DEPS, "crawl route dependencies are not installed")
+    def test_time_range_crawl_stops_after_empty_page(self):
+        from backend.routes.crawl_routes import CrawlTimeRangeRequest, run_crawl_time_range_task
+
+        crawler = EmptyPageCrawler("cookie", "group-1", lambda message: None)
+
+        with (
+            patch("backend.routes.crawl_routes.get_cookie_for_group", return_value="cookie"),
+            patch("backend.routes.crawl_routes.ZSXQInteractiveCrawler", return_value=crawler),
+            patch("backend.routes.crawl_routes.is_task_stopped", return_value=False),
+            patch("backend.routes.crawl_routes.add_task_log") as add_task_log,
+            patch("backend.routes.crawl_routes.update_task") as update_task,
+        ):
+            run_crawl_time_range_task(
+                "task-1",
+                "group-1",
+                CrawlTimeRangeRequest(startTime="2026-02-01", endTime="2026-02-01", perPage=20),
+            )
+
+        self.assertEqual(1, len(crawler.fetch_calls))
+        self.assertEqual(
+            {
+                "scope": "all",
+                "count": 20,
+                "begin_time": "2026-02-01T00:00:00.000+0800",
+                "end_time": "2026-02-01T23:59:59.999+0800",
+                "is_historical": True,
+            },
+            crawler.fetch_calls[0],
+        )
+        add_task_log.assert_any_call("task-1", "📭 无更多数据，任务结束")
+        update_task.assert_any_call(
+            "task-1",
+            "completed",
+            "时间区间爬取完成",
+            {"new_topics": 0, "updated_topics": 0, "errors": 0, "pages": 0},
+        )
 
     @unittest.skipUnless(HAS_CRAWL_ROUTE_DEPS, "crawl route dependencies are not installed")
     def test_create_crawl_task_response_creates_and_enqueues_task(self):

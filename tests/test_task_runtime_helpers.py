@@ -2,6 +2,35 @@ import unittest
 from unittest.mock import patch
 
 
+class FakeTaskStore:
+    def __init__(self):
+        self.tasks = {}
+        self.stop_flags = {}
+        self.logs = []
+
+    def get_task(self, task_id):
+        return self.tasks.get(task_id)
+
+    def set_stop_flag(self, task_id, stopped=True):
+        self.stop_flags[task_id] = stopped
+
+    def add_log(self, task_id, message):
+        self.logs.append((task_id, message))
+        return message
+
+    def update_task(self, task_id, status, message, result=None, updated_at=None):
+        self.tasks[task_id].update({"status": status, "message": message, "result": result, "updated_at": updated_at})
+        return self.tasks[task_id]
+
+
+class Stoppable:
+    def __init__(self):
+        self.stopped = False
+
+    def set_stop_flag(self):
+        self.stopped = True
+
+
 class TaskRuntimeHelperTests(unittest.TestCase):
     def test_columns_fetch_is_ingestion_locked(self):
         from backend.services.task_runtime import INGESTION_LOCK_TYPES
@@ -61,6 +90,27 @@ class TaskRuntimeHelperTests(unittest.TestCase):
             "collect",
             metadata={"group_id": "166", "ingestion_lock_key": "ingestion"},
         )
+
+    def test_stop_task_stops_registered_task_crawler(self):
+        from backend.services import task_runtime
+
+        store = FakeTaskStore()
+        store.tasks["task-1"] = {"task_id": "task-1", "status": "running", "message": "running"}
+        crawler = Stoppable()
+
+        with patch("backend.services.task_runtime.get_task_store", return_value=store):
+            try:
+                task_runtime.register_task_crawler("task-1", crawler)
+
+                stopped = task_runtime.stop_task("task-1")
+            finally:
+                task_runtime.unregister_task_crawler("task-1")
+                task_runtime.task_stop_flags.pop("task-1", None)
+
+        self.assertTrue(stopped)
+        self.assertTrue(crawler.stopped)
+        self.assertTrue(store.stop_flags["task-1"])
+        self.assertEqual("cancelled", store.tasks["task-1"]["status"])
 
 
 if __name__ == "__main__":

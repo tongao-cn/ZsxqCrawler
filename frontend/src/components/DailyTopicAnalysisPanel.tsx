@@ -35,6 +35,10 @@ function formatDateTime(value?: string | null) {
   return new Date(value).toLocaleString('zh-CN');
 }
 
+function isAbortError(error: unknown) {
+  return error instanceof DOMException && error.name === 'AbortError';
+}
+
 function getReportStatusBadge(status?: string) {
   if (status === 'completed') {
     return <Badge className="bg-green-100 text-green-800">已完成</Badge>;
@@ -128,36 +132,50 @@ export default function DailyTopicAnalysisPanel({
 
   const visibleConceptStats = showAllConcepts ? conceptStats : conceptStats.slice(0, DEFAULT_VISIBLE_CONCEPT_COUNT);
 
-  const loadReport = useCallback(async () => {
+  const loadReport = useCallback(async (signal?: AbortSignal) => {
     try {
       setLoadingReport(true);
-      const data = await apiClient.getDailyTopicReport(groupId, reportDate);
+      const data = await apiClient.getDailyTopicReport(groupId, reportDate, { signal });
       setReport(data);
-    } catch {
+    } catch (error) {
+      if (isAbortError(error)) {
+        return;
+      }
       setReport(null);
     } finally {
-      setLoadingReport(false);
+      if (!signal?.aborted) {
+        setLoadingReport(false);
+      }
     }
   }, [groupId, reportDate]);
 
   useEffect(() => {
-    void loadReport();
+    const controller = new AbortController();
+    void loadReport(controller.signal);
+    return () => controller.abort();
   }, [loadReport]);
 
-  const loadStockConcepts = useCallback(async () => {
+  const loadStockConcepts = useCallback(async (signal?: AbortSignal) => {
     try {
       setLoadingStockConcepts(true);
-      const data = await apiClient.getDailyStockConcepts(groupId, reportDate);
+      const data = await apiClient.getDailyStockConcepts(groupId, reportDate, { signal });
       setStockConcepts(data);
-    } catch {
+    } catch (error) {
+      if (isAbortError(error)) {
+        return;
+      }
       setStockConcepts(null);
     } finally {
-      setLoadingStockConcepts(false);
+      if (!signal?.aborted) {
+        setLoadingStockConcepts(false);
+      }
     }
   }, [groupId, reportDate]);
 
   useEffect(() => {
-    void loadStockConcepts();
+    const controller = new AbortController();
+    void loadStockConcepts(controller.signal);
+    return () => controller.abort();
   }, [loadStockConcepts]);
 
   const handleRunToday = async () => {
@@ -241,7 +259,7 @@ export default function DailyTopicAnalysisPanel({
             <div className="flex items-end">
               <Button
                 variant="outline"
-                onClick={loadReport}
+                onClick={() => void loadReport()}
                 disabled={loadingReport}
                 className="w-full"
               >
@@ -266,7 +284,7 @@ export default function DailyTopicAnalysisPanel({
               </CardDescription>
             </div>
             <div className="flex flex-col gap-2 sm:flex-row">
-              <Button variant="outline" onClick={loadStockConcepts} disabled={loadingStockConcepts}>
+              <Button variant="outline" onClick={() => void loadStockConcepts()} disabled={loadingStockConcepts}>
                 <RefreshCw className={loadingStockConcepts ? 'h-4 w-4 animate-spin' : 'h-4 w-4'} />
                 刷新结果
               </Button>

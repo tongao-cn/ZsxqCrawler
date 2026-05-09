@@ -1,0 +1,35 @@
+import unittest
+
+from backend.crawlers.zsxq_interactive_crawler import ZSXQInteractiveCrawler
+
+
+class InteractiveCrawlerPaginationTests(unittest.TestCase):
+    def test_topic_next_end_time_returns_none_when_last_topic_has_no_create_time(self):
+        crawler = object.__new__(ZSXQInteractiveCrawler)
+        crawler.timestamp_offset_ms = 1
+        crawler.logs = []
+        crawler.log = crawler.logs.append
+
+        next_end_time = ZSXQInteractiveCrawler._topic_next_end_time(
+            crawler,
+            [{"create_time": "2026-02-01T10:00:00.000+0800"}, {}],
+        )
+
+        self.assertIsNone(next_end_time)
+        self.assertIn("缺少 create_time", crawler.logs[-1])
+
+    def test_topic_next_end_time_moves_before_last_topic_time(self):
+        crawler = object.__new__(ZSXQInteractiveCrawler)
+        crawler.timestamp_offset_ms = 1
+        crawler.log = lambda message: None
+
+        next_end_time = ZSXQInteractiveCrawler._topic_next_end_time(
+            crawler,
+            [{"create_time": "2026-02-01T10:00:00.000+0800"}],
+        )
+
+        self.assertEqual("2026-02-01T09:59:59.999+0800", next_end_time)
+
+
+if __name__ == "__main__":
+    unittest.main()

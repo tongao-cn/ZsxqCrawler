@@ -501,8 +501,25 @@ class ZSXQInteractiveCrawler:
             self.log(f"❌ 时间增量失败: {e}")
             return time_str
 
+    def _topic_next_end_time(self, topics: List[Dict[str, Any]]) -> Optional[str]:
+        if not topics:
+            return None
+        original_time = topics[-1].get('create_time')
+        if not original_time:
+            self.log("   ⚠️ 最后一条话题缺少 create_time，停止继续翻页")
+            return None
+        try:
+            from datetime import datetime, timedelta
+            dt = datetime.fromisoformat(original_time.replace('+0800', '+08:00'))
+            dt = dt - timedelta(milliseconds=self.timestamp_offset_ms)
+            return dt.strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + '+0800'
+        except Exception as e:
+            self.log(f"   ⚠️ 时间戳调整失败: {e}")
+            return original_time
+
     def fetch_topics_safe(self, scope: str = "all", count: int = 20,
-                         end_time: Optional[str] = None, is_historical: bool = False) -> Optional[Dict[str, Any]]:
+                         begin_time: Optional[str] = None, end_time: Optional[str] = None,
+                         is_historical: bool = False) -> Optional[Dict[str, Any]]:
         """安全的话题获取方法"""
         
         # 智能延迟
@@ -517,6 +534,8 @@ class ZSXQInteractiveCrawler:
             "count": str(count)
         }
         
+        if begin_time:
+            params["begin_time"] = begin_time
         if end_time:
             params["end_time"] = end_time
         
@@ -537,8 +556,8 @@ class ZSXQInteractiveCrawler:
         
         self.log(f"🌐 安全请求 #{self.request_count}")
         self.log(f"   🎯 参数: scope={scope}, count={count}")
-        if end_time:
-            self.log(f"   📅 时间: {end_time}")
+        if begin_time or end_time:
+            self.log(f"   📅 时间区间: {begin_time or '-'} ~ {end_time or '-'}")
         self.log(f"   🔗 完整链接: {full_url}")
         
         # 调试模式输出详细信息
@@ -773,19 +792,12 @@ class ZSXQInteractiveCrawler:
                             self.log(f"   {i+1:2d}. {topic_time} - {topic_title}")
                     
                     # 准备下一页的时间戳
-                    if topics:
-                        original_time = topics[-1].get('create_time')
-                        try:
-                            from datetime import datetime, timedelta
-                            dt = datetime.fromisoformat(original_time.replace('+0800', '+08:00'))
-                            dt = dt - timedelta(milliseconds=self.timestamp_offset_ms)
-                            end_time = dt.strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + '+0800'
-                            print(f"   📅 原始时间戳: {original_time}")
-                            print(f"   ⏭️ 下一页时间戳: {end_time} (减去{self.timestamp_offset_ms}毫秒)")
-                        except Exception as e:
-                            end_time = original_time
-                            print(f"   ⚠️ 时间戳调整失败: {e}")
-                            print(f"   ⏭️ 下一页时间戳: {end_time} (未调整)")
+                    next_end_time = self._topic_next_end_time(topics)
+                    if not next_end_time:
+                        return total_stats
+                    end_time = next_end_time
+                    print(f"   📅 原始时间戳: {topics[-1].get('create_time')}")
+                    print(f"   ⏭️ 下一页时间戳: {end_time} (减去{self.timestamp_offset_ms}毫秒)")
                     
                     # 检查是否已爬完
                     if len(topics) < per_page:
@@ -984,16 +996,10 @@ class ZSXQInteractiveCrawler:
                         print(f"   ⏰ 时间范围: {first_time} ~ {last_time}")
                     
                     # 准备下一页的时间戳
-                    if topics:
-                        original_time = topics[-1].get('create_time')
-                        try:
-                            from datetime import datetime, timedelta
-                            dt = datetime.fromisoformat(original_time.replace('+0800', '+08:00'))
-                            dt = dt - timedelta(milliseconds=self.timestamp_offset_ms)
-                            end_time = dt.strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + '+0800'
-                        except Exception as e:
-                            end_time = original_time
-                            print(f"   ⚠️ 时间戳调整失败: {e}")
+                    next_end_time = self._topic_next_end_time(topics)
+                    if not next_end_time:
+                        return total_stats
+                    end_time = next_end_time
                     
                     # 检查是否返回数据量小于预期（可能接近底部）
                     if len(topics) < per_page:
@@ -1036,7 +1042,6 @@ class ZSXQInteractiveCrawler:
                         print(f"   ⏰ 大幅度跳过时间段: {end_time} (减去1小时)")
                     except Exception as e:
                         print(f"   ⚠️ 大幅度时间戳调整失败: {e}")
-                completed_pages += 1  # 跳过这一页
             else:
                 # 页面成功处理后进行长休眠检查（基于页面数而非请求数）
                 self.check_page_long_delay()
@@ -1160,16 +1165,11 @@ class ZSXQInteractiveCrawler:
                             print(f"   {i+1:2d}. {topic_time} - {topic_title}")
                     
                     # 准备下一页的时间戳
-                    if topics:
-                        original_time = topics[-1].get('create_time')
-                        try:
-                            dt = datetime.fromisoformat(original_time.replace('+0800', '+08:00'))
-                            dt = dt - timedelta(milliseconds=self.timestamp_offset_ms)
-                            end_time = dt.strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + '+0800'
-                            print(f"   ⏭️ 下一页时间戳: {end_time}")
-                        except Exception as e:
-                            end_time = original_time
-                            print(f"   ⚠️ 时间戳调整失败: {e}")
+                    next_end_time = self._topic_next_end_time(topics)
+                    if not next_end_time:
+                        return total_stats
+                    end_time = next_end_time
+                    print(f"   ⏭️ 下一页时间戳: {end_time}")
                     
                     # 成功，跳出重试循环
                     self.check_page_long_delay()  # 页面成功处理后进行长休眠检查
@@ -1389,16 +1389,10 @@ class ZSXQInteractiveCrawler:
                         self.log(f"⏰ 页面时间范围: {first_time} ~ {last_time}")
                     
                     # 准备下一页的时间戳
-                    if topics:
-                        original_time = topics[-1].get('create_time')
-                        try:
-                            from datetime import datetime, timedelta
-                            dt = datetime.fromisoformat(original_time.replace('+0800', '+08:00'))
-                            dt = dt - timedelta(milliseconds=self.timestamp_offset_ms)
-                            end_time = dt.strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + '+0800'
-                        except Exception as e:
-                            end_time = original_time
-                            print(f"   ⚠️ 时间戳调整失败: {e}")
+                    next_end_time = self._topic_next_end_time(topics)
+                    if not next_end_time:
+                        return total_stats
+                    end_time = next_end_time
                     
                     # 成功，跳出重试循环
                     page_success = True

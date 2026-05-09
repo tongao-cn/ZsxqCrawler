@@ -896,7 +896,7 @@ class ZSXQFileDownloader:
                     
                 except Exception as e:
                     print(f"   ❌ 第{page_count}页存储失败: {e}")
-                    continue
+                    break
                 
                 print(f"   ✅ 第{page_count}页存储完成")
                 
@@ -1079,7 +1079,7 @@ class ZSXQFileDownloader:
 
                 except Exception as e:
                     self.log(f"   ❌ 第{page_count}页存储失败: {e}")
-                    continue
+                    break
 
                 if stop_before_time:
                     page_times = []

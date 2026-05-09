@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import time, datetime, timedelta, timezone
 from typing import Any, Callable, Optional
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException
@@ -9,7 +9,13 @@ from pydantic import BaseModel, Field
 from backend.core.account_context import get_cookie_for_group
 from backend.crawlers.zsxq_interactive_crawler import ZSXQInteractiveCrawler
 from backend.routes.ingestion_helpers import enqueue_ingestion_task
-from backend.services.task_runtime import add_task_log, is_task_stopped, update_task
+from backend.services.task_runtime import (
+    add_task_log,
+    is_task_stopped,
+    register_task_crawler,
+    unregister_task_crawler,
+    update_task,
+)
 
 router = APIRouter(prefix="/api/crawl", tags=["crawl"])
 
@@ -119,13 +125,18 @@ def _create_crawl_task_response(
     )
 
 
-def _parse_user_time(value: Optional[str]) -> Optional[datetime]:
+def _is_date_only(value: Optional[str]) -> bool:
+    text = (value or "").strip()
+    return len(text) == 10 and text[4] == "-" and text[7] == "-"
+
+
+def _parse_user_time(value: Optional[str], date_end: bool = False) -> Optional[datetime]:
     if not value:
         return None
     text = value.strip()
     try:
-        if len(text) == 10 and text[4] == "-" and text[7] == "-":
-            dt = datetime.strptime(text, "%Y-%m-%d")
+        if _is_date_only(text):
+            dt = datetime.combine(datetime.strptime(text, "%Y-%m-%d").date(), time.max if date_end else time.min)
             return dt.replace(tzinfo=timezone(timedelta(hours=8)))
         if "T" in text and len(text) == 16:
             text = text + ":00"
@@ -143,7 +154,7 @@ def _parse_user_time(value: Optional[str]) -> Optional[datetime]:
 
 def _resolve_time_range(request: CrawlTimeRangeRequest, now_bj: datetime) -> tuple[datetime, datetime]:
     start_dt = _parse_user_time(request.startTime)
-    end_dt = _parse_user_time(request.endTime) if request.endTime else None
+    end_dt = _parse_user_time(request.endTime, date_end=True) if request.endTime else None
 
     if request.lastDays and request.lastDays > 0:
         if end_dt is None:
@@ -156,9 +167,25 @@ def _resolve_time_range(request: CrawlTimeRangeRequest, now_bj: datetime) -> tup
         start_dt = end_dt - timedelta(days=30)
 
     if start_dt > end_dt:
-        start_dt, end_dt = end_dt, start_dt
+        if _is_date_only(request.startTime) and _is_date_only(request.endTime):
+            start_dt = _parse_user_time(request.endTime)
+            end_dt = _parse_user_time(request.startTime, date_end=True)
+        else:
+            start_dt, end_dt = end_dt, start_dt
 
     return start_dt, end_dt
+
+
+def _format_zsxq_time(dt: datetime) -> str:
+    return dt.astimezone(timezone(timedelta(hours=8))).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "+0800"
+
+
+def _create_task_crawler(task_id: str, group_id: str, log_callback: Callable[[str], None], stop_check: Callable[[], bool]) -> ZSXQInteractiveCrawler:
+    cookie = get_cookie_for_group(group_id)
+    crawler = ZSXQInteractiveCrawler(cookie, group_id, log_callback)
+    crawler.stop_check_func = stop_check
+    register_task_crawler(task_id, crawler)
+    return crawler
 
 
 def run_crawl_historical_task(
@@ -182,9 +209,7 @@ def run_crawl_historical_task(
 
         log_callback, stop_check = _build_task_callbacks(task_id)
 
-        cookie = get_cookie_for_group(group_id)
-        crawler = ZSXQInteractiveCrawler(cookie, group_id, log_callback)
-        crawler.stop_check_func = stop_check
+        crawler = _create_task_crawler(task_id, group_id, log_callback, stop_check)
 
         _apply_crawl_settings(crawler, crawl_settings)
 
@@ -212,6 +237,8 @@ def run_crawl_historical_task(
         if not is_task_stopped(task_id):
             add_task_log(task_id, f"❌ 获取失败: {str(e)}")
             update_task(task_id, "failed", f"爬取失败: {str(e)}")
+    finally:
+        unregister_task_crawler(task_id)
 
 
 def run_crawl_all_task(task_id: str, group_id: str, crawl_settings: CrawlSettingsRequest = None):
@@ -223,9 +250,7 @@ def run_crawl_all_task(task_id: str, group_id: str, crawl_settings: CrawlSetting
 
         log_callback, stop_check = _build_task_callbacks(task_id)
 
-        cookie = get_cookie_for_group(group_id)
-        crawler = ZSXQInteractiveCrawler(cookie, group_id, log_callback)
-        crawler.stop_check_func = stop_check
+        crawler = _create_task_crawler(task_id, group_id, log_callback, stop_check)
 
         _apply_crawl_settings(crawler, crawl_settings)
 
@@ -258,8 +283,11 @@ def run_crawl_all_task(task_id: str, group_id: str, crawl_settings: CrawlSetting
         add_task_log(task_id, f"📊 最终统计: 新增话题: {result.get('new_topics', 0)}, 更新话题: {result.get('updated_topics', 0)}, 总页数: {result.get('pages', 0)}")
         update_task(task_id, "completed", "全量爬取完成", result)
     except Exception as e:
-        add_task_log(task_id, f"❌ 全量爬取失败: {str(e)}")
-        update_task(task_id, "failed", f"全量爬取失败: {str(e)}")
+        if not is_task_stopped(task_id):
+            add_task_log(task_id, f"❌ 全量爬取失败: {str(e)}")
+            update_task(task_id, "failed", f"全量爬取失败: {str(e)}")
+    finally:
+        unregister_task_crawler(task_id)
 
 
 def run_crawl_incremental_task(
@@ -275,9 +303,7 @@ def run_crawl_incremental_task(
 
         log_callback, stop_check = _build_task_callbacks(task_id)
 
-        cookie = get_cookie_for_group(group_id)
-        crawler = ZSXQInteractiveCrawler(cookie, group_id, log_callback)
-        crawler.stop_check_func = stop_check
+        crawler = _create_task_crawler(task_id, group_id, log_callback, stop_check)
 
         _apply_crawl_settings(crawler, crawl_settings)
 
@@ -298,6 +324,8 @@ def run_crawl_incremental_task(
         if not is_task_stopped(task_id):
             add_task_log(task_id, f"❌ 增量爬取失败: {str(e)}")
             update_task(task_id, "failed", f"增量爬取失败: {str(e)}")
+    finally:
+        unregister_task_crawler(task_id)
 
 
 def run_crawl_latest_task(task_id: str, group_id: str, crawl_settings: CrawlSettingsRequest = None):
@@ -307,9 +335,7 @@ def run_crawl_latest_task(task_id: str, group_id: str, crawl_settings: CrawlSett
 
         log_callback, stop_check = _build_task_callbacks(task_id)
 
-        cookie = get_cookie_for_group(group_id)
-        crawler = ZSXQInteractiveCrawler(cookie, group_id, log_callback)
-        crawler.stop_check_func = stop_check
+        crawler = _create_task_crawler(task_id, group_id, log_callback, stop_check)
 
         _apply_crawl_settings(crawler, crawl_settings)
 
@@ -334,6 +360,8 @@ def run_crawl_latest_task(task_id: str, group_id: str, crawl_settings: CrawlSett
         if not is_task_stopped(task_id):
             add_task_log(task_id, f"❌ 获取最新记录失败: {str(e)}")
             update_task(task_id, "failed", f"获取最新记录失败: {str(e)}")
+    finally:
+        unregister_task_crawler(task_id)
 
 
 def run_crawl_time_range_task(task_id: str, group_id: str, request: "CrawlTimeRangeRequest"):
@@ -348,15 +376,14 @@ def run_crawl_time_range_task(task_id: str, group_id: str, request: "CrawlTimeRa
 
         log_callback, stop_check = _build_task_callbacks(task_id)
 
-        cookie = get_cookie_for_group(group_id)
-        crawler = ZSXQInteractiveCrawler(cookie, group_id, log_callback)
-        crawler.stop_check_func = stop_check
+        crawler = _create_task_crawler(task_id, group_id, log_callback, stop_check)
 
         _apply_crawl_settings(crawler, request, require_overrides=True)
 
         per_page = request.perPage or 20
         total_stats = {"new_topics": 0, "updated_topics": 0, "errors": 0, "pages": 0}
-        end_time_param = None
+        begin_time_param = _format_zsxq_time(start_dt)
+        end_time_param = _format_zsxq_time(end_dt)
         max_retries_per_page = 10
 
         while True:
@@ -366,6 +393,7 @@ def run_crawl_time_range_task(task_id: str, group_id: str, request: "CrawlTimeRa
 
             retry = 0
             page_processed = False
+            reached_end = False
             last_time_dt_in_page = None
 
             while retry < max_retries_per_page:
@@ -375,8 +403,9 @@ def run_crawl_time_range_task(task_id: str, group_id: str, request: "CrawlTimeRa
                 data = crawler.fetch_topics_safe(
                     scope="all",
                     count=per_page,
+                    begin_time=begin_time_param,
                     end_time=end_time_param,
-                    is_historical=True if end_time_param else False,
+                    is_historical=True,
                 )
 
                 if data and isinstance(data, dict) and data.get("expired"):
@@ -394,6 +423,7 @@ def run_crawl_time_range_task(task_id: str, group_id: str, request: "CrawlTimeRa
                 if not topics:
                     add_task_log(task_id, "📭 无更多数据，任务结束")
                     page_processed = True
+                    reached_end = True
                     break
 
                 filtered = []
@@ -411,6 +441,8 @@ def run_crawl_time_range_task(task_id: str, group_id: str, request: "CrawlTimeRa
                         last_time_dt_in_page = dt
                         if start_dt <= dt <= end_dt:
                             filtered.append(t)
+
+                add_task_log(task_id, f"📄 本页获取 {len(topics)} 个话题，区间内 {len(filtered)} 个")
 
                 if filtered:
                     filtered_data = {"succeeded": True, "resp_data": {"topics": filtered}}
@@ -441,7 +473,7 @@ def run_crawl_time_range_task(task_id: str, group_id: str, request: "CrawlTimeRa
                 add_task_log(task_id, "🚫 当前页面达到最大重试次数，终止任务")
                 break
 
-            if not end_time_param or (last_time_dt_in_page and last_time_dt_in_page < start_dt):
+            if reached_end or (last_time_dt_in_page and last_time_dt_in_page < start_dt):
                 break
 
         update_task(task_id, "completed", "时间区间爬取完成", total_stats)
@@ -449,6 +481,8 @@ def run_crawl_time_range_task(task_id: str, group_id: str, request: "CrawlTimeRa
         if not is_task_stopped(task_id):
             add_task_log(task_id, f"❌ 时间区间爬取失败: {str(e)}")
             update_task(task_id, "failed", f"时间区间爬取失败: {str(e)}")
+    finally:
+        unregister_task_crawler(task_id)
 
 
 @router.post("/historical/{group_id}")

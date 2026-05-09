@@ -199,6 +199,10 @@ export interface AShareAnalysisExportTdxPayload {
   end_date?: string;
 }
 
+interface ApiRequestOptions {
+  signal?: AbortSignal;
+}
+
 function normalizeOptionalId(value?: string | number) {
   if (value === undefined || value === null) {
     return undefined;
@@ -505,7 +509,7 @@ class ApiClient {
     startDate?: string;
     endDate?: string;
     topN?: number;
-  }): Promise<AShareAnalysisChart> {
+  }, options: ApiRequestOptions = {}): Promise<AShareAnalysisChart> {
     const search = new URLSearchParams();
     if (params?.groupId !== undefined && params?.groupId !== null && String(params.groupId).trim() !== '') {
       search.set('group_id', String(params.groupId));
@@ -520,7 +524,9 @@ class ApiClient {
       search.set('top_n', params.topN.toString());
     }
     const query = search.toString();
-    return this.request(`/api/analytics/a-share/chart${query ? `?${query}` : ''}`);
+    return this.request(`/api/analytics/a-share/chart${query ? `?${query}` : ''}`, {
+      signal: options.signal,
+    });
   }
 
   async runAShareAnalysis(payload: AShareAnalysisRunPayload) {
@@ -1094,13 +1100,15 @@ class ApiClient {
     });
   }
 
-  async getDailyTopicReport(groupId: number | string, date?: string): Promise<DailyTopicReport> {
+  async getDailyTopicReport(groupId: number | string, date?: string, options: ApiRequestOptions = {}): Promise<DailyTopicReport> {
     const search = new URLSearchParams();
     if (date) {
       search.set('date', date);
     }
     const query = search.toString();
-    return this.request(`/api/analysis/daily/${groupId}${query ? `?${query}` : ''}`);
+    return this.request(`/api/analysis/daily/${groupId}${query ? `?${query}` : ''}`, {
+      signal: options.signal,
+    });
   }
 
   async createDailyStockConcepts(
@@ -1116,13 +1124,15 @@ class ApiClient {
     });
   }
 
-  async getDailyStockConcepts(groupId: number | string, date?: string): Promise<DailyStockConceptResponse> {
+  async getDailyStockConcepts(groupId: number | string, date?: string, options: ApiRequestOptions = {}): Promise<DailyStockConceptResponse> {
     const search = new URLSearchParams();
     if (date) {
       search.set('date', date);
     }
     const query = search.toString();
-    return this.request(`/api/analysis/daily-stock-concepts/${groupId}${query ? `?${query}` : ''}`);
+    return this.request(`/api/analysis/daily-stock-concepts/${groupId}${query ? `?${query}` : ''}`, {
+      signal: options.signal,
+    });
   }
 
   // 删除社群本地数据
