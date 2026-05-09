@@ -38,6 +38,9 @@ class PostgresCoreSchemaTests(unittest.TestCase):
         self.assertIn('CREATE UNIQUE INDEX IF NOT EXISTS "daily_ai_reports_group_id_report_date_key"', sql)
         self.assertIn('CREATE UNIQUE INDEX IF NOT EXISTS "daily_stock_concepts_group_id_report_date_stock_name_key"', sql)
         self.assertIn('CREATE UNIQUE INDEX IF NOT EXISTS "topic_files_topic_id_file_id_key"', sql)
+        self.assertIn('CREATE UNIQUE INDEX IF NOT EXISTS "talks_topic_id_key"', sql)
+        self.assertIn('CREATE UNIQUE INDEX IF NOT EXISTS "latest_likes_topic_id_owner_user_id_create_time_key"', sql)
+        self.assertIn('CREATE UNIQUE INDEX IF NOT EXISTS "like_emojis_topic_id_emoji_key_key"', sql)
         self.assertNotIn('CREATE INDEX IF NOT EXISTS "idx_', sql)
         self.assertIn(f'CREATE TABLE IF NOT EXISTS "{CORE_SCHEMA}"."zsxq_a_share_daily_mentions"', sql)
 

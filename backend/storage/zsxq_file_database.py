@@ -316,6 +316,9 @@ class ZSXQFileDatabase:
         self.cursor.execute('''
         INSERT INTO talks (topic_id, owner_user_id, text)
         VALUES (?, ?, ?)
+        ON CONFLICT(topic_id) DO UPDATE SET
+            owner_user_id = excluded.owner_user_id,
+            text = excluded.text
         ''', (topic_id, owner_id, talk_data.get('text', '')))
     
     def insert_images(self, topic_id: int, images_data: List[Dict[str, Any]]):
@@ -397,6 +400,11 @@ class ZSXQFileDatabase:
     
     def insert_latest_likes(self, topic_id: int, likes_data: List[Dict[str, Any]]):
         """插入最新点赞记录"""
+        self.cursor.execute('''
+        DELETE FROM latest_likes
+        WHERE topic_id = ?
+        ''', (topic_id,))
+
         for like in likes_data:
             owner = like.get('owner', {})
             owner_id = self.insert_user(owner)
@@ -404,6 +412,7 @@ class ZSXQFileDatabase:
             self.cursor.execute('''
             INSERT INTO latest_likes (topic_id, owner_user_id, create_time)
             VALUES (?, ?, ?)
+            ON CONFLICT(topic_id, owner_user_id, create_time) DO NOTHING
             ''', (topic_id, owner_id, like.get('create_time')))
     
     def insert_comments(self, topic_id: int, comments_data: List[Dict[str, Any]]):
@@ -468,6 +477,8 @@ class ZSXQFileDatabase:
             self.cursor.execute('''
             INSERT INTO like_emojis (topic_id, emoji_key, likes_count)
             VALUES (?, ?, ?)
+            ON CONFLICT(topic_id, emoji_key) DO UPDATE SET
+                likes_count = excluded.likes_count
             ''', (topic_id, emoji.get('emoji_key'), emoji.get('likes_count', 0)))
     
     def insert_user_liked_emojis(self, topic_id: int, liked_emojis: List[str]):
@@ -476,6 +487,7 @@ class ZSXQFileDatabase:
             self.cursor.execute('''
             INSERT INTO user_liked_emojis (topic_id, emoji_key)
             VALUES (?, ?)
+            ON CONFLICT(topic_id, emoji_key) DO NOTHING
             ''', (topic_id, emoji_key))
     
     def insert_columns(self, topic_id: int, columns_data: List[Dict[str, Any]]):

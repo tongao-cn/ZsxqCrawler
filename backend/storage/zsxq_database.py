@@ -573,6 +573,10 @@ class ZSXQDatabase:
             INSERT INTO talks 
             (topic_id, owner_user_id, text, created_at)
             VALUES (?, ?, ?, ?)
+            ON CONFLICT(topic_id) DO UPDATE SET
+                owner_user_id = excluded.owner_user_id,
+                text = excluded.text,
+                created_at = excluded.created_at
         ''', (
             topic_id,
             owner_user_id,
@@ -660,6 +664,11 @@ class ZSXQDatabase:
         """导入点赞信息"""
         if 'latest_likes' not in topic_data:
             return
+
+        self.cursor.execute('''
+            DELETE FROM latest_likes
+            WHERE topic_id = ?
+        ''', (topic_id,))
         
         for like in topic_data['latest_likes']:
             owner = like.get('owner', {})
@@ -674,6 +683,18 @@ class ZSXQDatabase:
                     INSERT INTO likes 
                     (topic_id, user_id, create_time, imported_at)
                     VALUES (?, ?, ?, ?)
+                ''', (
+                    topic_id,
+                    user_id,
+                    like.get('create_time', ''),
+                    current_time
+                ))
+                self.cursor.execute('''
+                    INSERT INTO latest_likes
+                    (topic_id, owner_user_id, create_time, created_at)
+                    VALUES (?, ?, ?, ?)
+                    ON CONFLICT(topic_id, owner_user_id, create_time) DO UPDATE SET
+                        created_at = excluded.created_at
                 ''', (
                     topic_id,
                     user_id,
@@ -702,6 +723,9 @@ class ZSXQDatabase:
                     INSERT INTO like_emojis 
                     (topic_id, emoji_key, likes_count, created_at)
                     VALUES (?, ?, ?, ?)
+                    ON CONFLICT(topic_id, emoji_key) DO UPDATE SET
+                        likes_count = excluded.likes_count,
+                        created_at = excluded.created_at
                 ''', (
                     topic_id,
                     emoji_key,
@@ -723,6 +747,7 @@ class ZSXQDatabase:
                     INSERT INTO user_liked_emojis 
                     (topic_id, emoji_key)
                     VALUES (?, ?)
+                    ON CONFLICT(topic_id, emoji_key) DO NOTHING
                 ''', (
                     topic_id,
                     emoji_key
@@ -901,6 +926,17 @@ class ZSXQDatabase:
             (topic_id, owner_user_id, questionee_user_id, text, expired, anonymous,
              owner_questions_count, owner_join_time, owner_status, owner_location, created_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(topic_id) DO UPDATE SET
+                owner_user_id = excluded.owner_user_id,
+                questionee_user_id = excluded.questionee_user_id,
+                text = excluded.text,
+                expired = excluded.expired,
+                anonymous = excluded.anonymous,
+                owner_questions_count = excluded.owner_questions_count,
+                owner_join_time = excluded.owner_join_time,
+                owner_status = excluded.owner_status,
+                owner_location = excluded.owner_location,
+                created_at = excluded.created_at
         ''', (
             topic_id,
             owner_user_id,  # 对于匿名用户可能为 None
@@ -932,6 +968,10 @@ class ZSXQDatabase:
             INSERT INTO answers 
             (topic_id, owner_user_id, text, created_at)
             VALUES (?, ?, ?, ?)
+            ON CONFLICT(topic_id) DO UPDATE SET
+                owner_user_id = excluded.owner_user_id,
+                text = excluded.text,
+                created_at = excluded.created_at
         ''', (
             topic_id,
             owner_user_id,
@@ -985,6 +1025,12 @@ class ZSXQDatabase:
             INSERT INTO articles
             (topic_id, title, article_id, article_url, inline_article_url, created_at)
             VALUES (?, ?, ?, ?, ?, ?)
+            ON CONFLICT(topic_id) DO UPDATE SET
+                title = excluded.title,
+                article_id = excluded.article_id,
+                article_url = excluded.article_url,
+                inline_article_url = excluded.inline_article_url,
+                created_at = excluded.created_at
         ''', (
             topic_id,
             title,

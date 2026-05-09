@@ -274,6 +274,34 @@ class ZSXQFileDatabaseHelperTests(unittest.TestCase):
         self.assertIn("comment_id, group_id, topic_id", sql)
         self.assertEqual((101, 303, 202), params[:3])
 
+    def test_content_child_writes_use_explicit_unique_semantics(self):
+        from backend.storage.zsxq_file_database import ZSXQFileDatabase
+
+        db = object.__new__(ZSXQFileDatabase)
+        db.cursor = FakeCommentCursor()
+        db.insert_user = lambda user: user.get("user_id") if user else None
+
+        ZSXQFileDatabase.insert_talk(db, 202, {"owner": {"user_id": 9}, "text": "body"})
+        talk_sql, _talk_params = db.cursor.calls[-1]
+        self.assertIn("ON CONFLICT(topic_id) DO UPDATE SET", talk_sql)
+
+        ZSXQFileDatabase.insert_latest_likes(
+            db,
+            202,
+            [{"owner": {"user_id": 9}, "create_time": "2026-01-01"}],
+        )
+        calls = "\n".join(sql for sql, _params in db.cursor.calls)
+        self.assertIn("DELETE FROM latest_likes WHERE topic_id = ?", calls)
+        self.assertIn("ON CONFLICT(topic_id, owner_user_id, create_time) DO NOTHING", calls)
+
+        ZSXQFileDatabase.insert_like_emojis(
+            db,
+            202,
+            {"emojis": [{"emoji_key": "[ok]", "likes_count": 2}]},
+        )
+        emoji_sql, _emoji_params = db.cursor.calls[-1]
+        self.assertIn("ON CONFLICT(topic_id, emoji_key) DO UPDATE SET", emoji_sql)
+
     def test_runtime_create_tables_and_migration_are_noops(self):
         from backend.storage.zsxq_file_database import ZSXQFileDatabase
 
