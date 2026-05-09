@@ -6,7 +6,7 @@ from typing import Any, Dict, List, Optional
 
 import requests
 
-from backend.crawlers.zsxq_interactive_crawler import load_config
+from backend.core.app_config import load_config
 from backend.storage.accounts_sql_manager import get_accounts_sql_manager
 
 

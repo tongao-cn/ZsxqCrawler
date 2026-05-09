@@ -16,9 +16,9 @@ from backend.services.a_share_analysis_service import (
 )
 from backend.core.crawler_runtime import clear_crawler_instance
 from backend.core.account_context import is_configured
+from backend.core.app_config import load_config
 from backend.storage.zsxq_database import ZSXQDatabase
 from backend.storage.zsxq_file_database import ZSXQFileDatabase
-from backend.crawlers.zsxq_interactive_crawler import load_config
 
 router = APIRouter(tags=["core"])
 

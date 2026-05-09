@@ -47,7 +47,8 @@ def fake_task_func(*args):
 class CrawlRoutesHelperTests(unittest.TestCase):
     @unittest.skipUnless(HAS_CRAWL_ROUTE_DEPS, "crawl route dependencies are not installed")
     def test_crawl_interval_kwargs_maps_request_fields(self):
-        from backend.routes.crawl_routes import CrawlSettingsRequest, _crawl_interval_kwargs
+        from backend.routes.crawl_routes import CrawlSettingsRequest
+        from backend.services.crawl_service import _crawl_interval_kwargs
 
         request = CrawlSettingsRequest(
             crawlIntervalMin=2.0,
@@ -70,7 +71,8 @@ class CrawlRoutesHelperTests(unittest.TestCase):
 
     @unittest.skipUnless(HAS_CRAWL_ROUTE_DEPS, "crawl route dependencies are not installed")
     def test_apply_crawl_settings_skips_when_overrides_required_and_empty(self):
-        from backend.routes.crawl_routes import CrawlSettingsRequest, _apply_crawl_settings
+        from backend.routes.crawl_routes import CrawlSettingsRequest
+        from backend.services.crawl_service import _apply_crawl_settings
 
         crawler = FakeCrawler()
 
@@ -81,7 +83,8 @@ class CrawlRoutesHelperTests(unittest.TestCase):
 
     @unittest.skipUnless(HAS_CRAWL_ROUTE_DEPS, "crawl route dependencies are not installed")
     def test_apply_crawl_settings_sets_intervals_when_present(self):
-        from backend.routes.crawl_routes import CrawlSettingsRequest, _apply_crawl_settings
+        from backend.routes.crawl_routes import CrawlSettingsRequest
+        from backend.services.crawl_service import _apply_crawl_settings
 
         crawler = FakeCrawler()
 
@@ -93,7 +96,7 @@ class CrawlRoutesHelperTests(unittest.TestCase):
 
     @unittest.skipUnless(HAS_CRAWL_ROUTE_DEPS, "crawl route dependencies are not installed")
     def test_parse_user_time_accepts_date_and_iso_variants(self):
-        from backend.routes.crawl_routes import _parse_user_time
+        from backend.services.crawl_service import _parse_user_time
 
         self.assertEqual(
             datetime(2026, 5, 7, tzinfo=timezone(timedelta(hours=8))),
@@ -114,7 +117,8 @@ class CrawlRoutesHelperTests(unittest.TestCase):
 
     @unittest.skipUnless(HAS_CRAWL_ROUTE_DEPS, "crawl route dependencies are not installed")
     def test_resolve_time_range_uses_last_days_and_swaps_reversed_bounds(self):
-        from backend.routes.crawl_routes import CrawlTimeRangeRequest, _resolve_time_range
+        from backend.routes.crawl_routes import CrawlTimeRangeRequest
+        from backend.services.crawl_service import _resolve_time_range
 
         now_bj = datetime(2026, 5, 7, 12, tzinfo=timezone(timedelta(hours=8)))
 
@@ -132,7 +136,7 @@ class CrawlRoutesHelperTests(unittest.TestCase):
 
     @unittest.skipUnless(HAS_CRAWL_ROUTE_DEPS, "crawl route dependencies are not installed")
     def test_format_zsxq_time_uses_bj_timezone_without_colon(self):
-        from backend.routes.crawl_routes import _format_zsxq_time
+        from backend.services.crawl_service import _format_zsxq_time
 
         self.assertEqual(
             "2026-02-01T08:00:00.000+0800",
@@ -141,16 +145,17 @@ class CrawlRoutesHelperTests(unittest.TestCase):
 
     @unittest.skipUnless(HAS_CRAWL_ROUTE_DEPS, "crawl route dependencies are not installed")
     def test_time_range_crawl_stops_after_empty_page(self):
-        from backend.routes.crawl_routes import CrawlTimeRangeRequest, run_crawl_time_range_task
+        from backend.routes.crawl_routes import CrawlTimeRangeRequest
+        from backend.services.crawl_service import run_crawl_time_range_task
 
         crawler = EmptyPageCrawler("cookie", "group-1", lambda message: None)
 
         with (
-            patch("backend.routes.crawl_routes.get_cookie_for_group", return_value="cookie"),
-            patch("backend.routes.crawl_routes.ZSXQInteractiveCrawler", return_value=crawler),
-            patch("backend.routes.crawl_routes.is_task_stopped", return_value=False),
-            patch("backend.routes.crawl_routes.add_task_log") as add_task_log,
-            patch("backend.routes.crawl_routes.update_task") as update_task,
+            patch("backend.services.crawl_service.get_cookie_for_group", return_value="cookie"),
+            patch("backend.services.crawl_service.ZSXQTopicCrawler", return_value=crawler),
+            patch("backend.services.crawl_service.is_task_stopped", return_value=False),
+            patch("backend.services.crawl_service.add_task_log") as add_task_log,
+            patch("backend.services.crawl_service.update_task") as update_task,
         ):
             run_crawl_time_range_task(
                 "task-1",
@@ -221,13 +226,13 @@ class CrawlRoutesHelperTests(unittest.TestCase):
 
     @unittest.skipUnless(HAS_CRAWL_ROUTE_DEPS, "crawl route dependencies are not installed")
     def test_build_task_callbacks_logs_and_checks_stop(self):
-        from backend.routes.crawl_routes import _build_task_callbacks
+        from backend.services.crawl_service import _build_task_callbacks
 
         log_callback, stop_check = _build_task_callbacks("task-1")
 
         with (
-            patch("backend.routes.crawl_routes.add_task_log") as add_task_log,
-            patch("backend.routes.crawl_routes.is_task_stopped", return_value=True) as is_task_stopped,
+            patch("backend.services.crawl_service.add_task_log") as add_task_log,
+            patch("backend.services.crawl_service.is_task_stopped", return_value=True) as is_task_stopped,
         ):
             log_callback("hello")
             stopped = stop_check()
@@ -238,9 +243,9 @@ class CrawlRoutesHelperTests(unittest.TestCase):
 
     @unittest.skipUnless(HAS_CRAWL_ROUTE_DEPS, "crawl route dependencies are not installed")
     def test_log_crawler_startup_logs_connection_and_database_status(self):
-        from backend.routes.crawl_routes import _log_crawler_startup
+        from backend.services.crawl_service import _log_crawler_startup
 
-        with patch("backend.routes.crawl_routes.add_task_log") as add_task_log:
+        with patch("backend.services.crawl_service.add_task_log") as add_task_log:
             _log_crawler_startup("task-1")
 
         self.assertEqual(
@@ -253,22 +258,22 @@ class CrawlRoutesHelperTests(unittest.TestCase):
 
     @unittest.skipUnless(HAS_CRAWL_ROUTE_DEPS, "crawl route dependencies are not installed")
     def test_log_init_stopped_logs_existing_message(self):
-        from backend.routes.crawl_routes import _log_init_stopped
+        from backend.services.crawl_service import _log_init_stopped
 
-        with patch("backend.routes.crawl_routes.add_task_log") as add_task_log:
+        with patch("backend.services.crawl_service.add_task_log") as add_task_log:
             _log_init_stopped("task-1")
 
         add_task_log.assert_called_once_with("task-1", "🛑 任务在初始化过程中被停止")
 
     @unittest.skipUnless(HAS_CRAWL_ROUTE_DEPS, "crawl route dependencies are not installed")
     def test_mark_expired_task_logs_and_updates_failure(self):
-        from backend.routes.crawl_routes import _mark_expired_task
+        from backend.services.crawl_service import _mark_expired_task
 
         result = {"expired": True, "code": 1059, "message": "expired"}
 
         with (
-            patch("backend.routes.crawl_routes.add_task_log") as add_task_log,
-            patch("backend.routes.crawl_routes.update_task") as update_task,
+            patch("backend.services.crawl_service.add_task_log") as add_task_log,
+            patch("backend.services.crawl_service.update_task") as update_task,
         ):
             _mark_expired_task("task-1", result)
 
