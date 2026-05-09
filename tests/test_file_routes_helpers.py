@@ -69,7 +69,7 @@ class FileRoutesHelperTests(unittest.TestCase):
     def test_enqueue_file_task_uses_ingestion_lock_when_requested(self):
         background_tasks = FakeBackgroundTasks()
 
-        with patch("backend.routes.file_routes.create_ingestion_task", return_value=("task-1", None)) as create_task:
+        with patch("backend.routes.ingestion_helpers.create_ingestion_task", return_value=("task-1", None)) as create_task:
             response = _enqueue_file_task(
                 background_tasks,
                 "collect_files",
@@ -90,7 +90,7 @@ class FileRoutesHelperTests(unittest.TestCase):
         existing = {"task_id": "task-old", "type": "crawl_latest", "status": "running"}
         background_tasks = FakeBackgroundTasks()
 
-        with patch("backend.routes.file_routes.create_ingestion_task", return_value=(None, existing)):
+        with patch("backend.routes.ingestion_helpers.create_ingestion_task", return_value=(None, existing)):
             with self.assertRaises(HTTPException) as raised:
                 _enqueue_file_task(
                     background_tasks,

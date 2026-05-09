@@ -25,6 +25,7 @@ task_stop_flags: Dict[str, bool] = {}
 file_downloader_instances: Dict[str, Any] = {}
 
 INGESTION_LOCK_TYPES = {
+    "columns_fetch",
     "crawl_all",
     "crawl_historical",
     "crawl_incremental",

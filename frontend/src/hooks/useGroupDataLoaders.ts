@@ -16,14 +16,12 @@ interface UseGroupDataLoadersOptions {
   groupId: number;
   currentPage: number;
   debouncedSearchTerm: string;
-  selectedTag: number | null;
 }
 
 export function useGroupDataLoaders({
   groupId,
   currentPage,
   debouncedSearchTerm,
-  selectedTag,
 }: UseGroupDataLoadersOptions) {
   const [group, setGroup] = useState<Group | null>(null);
   const [groupStats, setGroupStats] = useState<GroupStats | null>(null);
@@ -42,8 +40,6 @@ export function useGroupDataLoaders({
     pending: 0,
     failed: 0,
   });
-  const [tags, setTags] = useState<any[]>([]);
-  const [tagsLoading, setTagsLoading] = useState(false);
   const [cacheInfo, setCacheInfo] = useState<any>(null);
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [groupAccount, setGroupAccount] = useState<Account | null>(null);
@@ -117,9 +113,7 @@ export function useGroupDataLoaders({
         setTopicsLoading(true);
       }
 
-      const data = selectedTag
-        ? await apiClient.getTagTopics(groupId, selectedTag, currentPage, 20)
-        : await apiClient.getGroupTopics(groupId, currentPage, 20, debouncedSearchTerm || undefined);
+      const data = await apiClient.getGroupTopics(groupId, currentPage, 20, debouncedSearchTerm || undefined);
 
       if (!data || !data.data) {
         throw new Error('API返回空数据，可能是反爬虫机制');
@@ -144,7 +138,7 @@ export function useGroupDataLoaders({
       console.error('加载话题列表失败:', err);
       setTopicsLoading(false);
     }
-  }, [currentPage, debouncedSearchTerm, groupId, selectedTag]);
+  }, [currentPage, debouncedSearchTerm, groupId]);
 
   useEffect(() => {
     loadTopics();
@@ -180,18 +174,6 @@ export function useGroupDataLoaders({
         pending: 0,
         failed: 0,
       });
-    }
-  }, [groupId]);
-
-  const loadTags = useCallback(async () => {
-    setTagsLoading(true);
-    try {
-      const data = await apiClient.getGroupTags(groupId);
-      setTags(data.tags || []);
-    } catch (error) {
-      console.error('Failed to load tags:', error);
-    } finally {
-      setTagsLoading(false);
     }
   }, [groupId]);
 
@@ -250,7 +232,6 @@ export function useGroupDataLoaders({
     loadGroupStats,
     loadGroupInfo,
     loadLocalFileCount,
-    loadTags,
     loadCacheInfo,
     loadGroupAccount,
     loadAccounts,
@@ -266,7 +247,6 @@ export function useGroupDataLoaders({
     loadGroupInfo,
     loadGroupStats,
     loadLocalFileCount,
-    loadTags,
   ]);
 
   useInitialLoad({ loaders: initialLoaders });
@@ -285,8 +265,6 @@ export function useGroupDataLoaders({
     groupInfo,
     localFileCount,
     localFileStats,
-    tags,
-    tagsLoading,
     cacheInfo,
     accounts,
     groupAccount,
@@ -299,7 +277,6 @@ export function useGroupDataLoaders({
     loadGroupStats,
     loadTopics,
     loadLocalFileCount,
-    loadTags,
     loadGroupAccount,
     loadGroupAccountSelf,
     loadCacheInfo,

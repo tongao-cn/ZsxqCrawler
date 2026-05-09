@@ -30,11 +30,11 @@ from backend.services.file_ai_analysis_service import (
 from backend.services.task_runtime import (
     add_task_log,
     create_task,
-    create_ingestion_task,
     file_downloader_instances,
     is_task_stopped,
     update_task,
 )
+from backend.routes.ingestion_helpers import create_ingestion_task_or_raise
 from backend.storage.zsxq_database import ZSXQDatabase
 from backend.storage.zsxq_file_database import ZSXQFileDatabase
 from backend.storage.db_compat import connect
@@ -264,17 +264,7 @@ def _enqueue_file_task(
     ingestion_group_id: Optional[str] = None,
 ) -> Dict[str, str]:
     if ingestion_group_id is not None:
-        task_id, existing = create_ingestion_task(task_type, description, ingestion_group_id)
-        if existing:
-            raise HTTPException(
-                status_code=409,
-                detail={
-                    "message": "该群组已有采集或同步任务正在运行",
-                    "task_id": existing.get("task_id"),
-                    "type": existing.get("type"),
-                    "status": existing.get("status"),
-                },
-            )
+        task_id = create_ingestion_task_or_raise(task_type, description, ingestion_group_id)
     else:
         task_id = create_task(task_type, description)
     background_tasks.add_task(task_func, task_id, *args)
@@ -786,17 +776,11 @@ async def sync_files_from_topics(group_id: str):
     topics_db = None
     task_id = None
     try:
-        task_id, existing = create_ingestion_task("sync_files_from_topics", f"从话题同步文件记录 (群组: {group_id})", group_id)
-        if existing:
-            raise HTTPException(
-                status_code=409,
-                detail={
-                    "message": "该群组已有采集或同步任务正在运行",
-                    "task_id": existing.get("task_id"),
-                    "type": existing.get("type"),
-                    "status": existing.get("status"),
-                },
-            )
+        task_id = create_ingestion_task_or_raise(
+            "sync_files_from_topics",
+            f"从话题同步文件记录 (群组: {group_id})",
+            group_id,
+        )
         update_task(task_id, "running", "开始从话题同步文件记录...")
         topics_db = ZSXQDatabase(group_id)
         stats = topics_db.backfill_topic_files_to_file_database()

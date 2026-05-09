@@ -22,7 +22,7 @@ TASK_CREATED_MESSAGE = "任务已创建，正在后台执行"
 
 class DailyAnalysisRequest(BaseModel):
     date: Optional[str] = Field(default=None, description="报告日期，格式 YYYY-MM-DD；默认今天（东八区）")
-    commentsPerTopic: int = Field(default=8, ge=0, le=50, description="每个话题最多纳入的评论数")
+    commentsPerTopic: int = Field(default=0, ge=0, le=50, description="每个话题最多纳入的评论数")
 
 
 class DailyRunTodayRequest(DailyAnalysisRequest):

@@ -13,7 +13,6 @@ interface UseTopicActionsOptions {
   setTopics: Dispatch<SetStateAction<Topic[]>>;
   loadTopics: () => void | Promise<void>;
   loadGroupStats: () => void | Promise<void>;
-  loadTags: () => void | Promise<void>;
 }
 
 export function useTopicActions({
@@ -21,7 +20,6 @@ export function useTopicActions({
   setTopics,
   loadTopics,
   loadGroupStats,
-  loadTags,
 }: UseTopicActionsOptions) {
   const [expandedComments, setExpandedComments] = useState<Set<string>>(new Set());
   const [expandedContent, setExpandedContent] = useState<Set<string>>(new Set());
@@ -111,7 +109,6 @@ export function useTopicActions({
         setTopics((prev) => prev.filter((topic) => String(topic.topic_id) !== topicKey));
         toast.success('话题已删除');
         void loadGroupStats();
-        void loadTags();
       } else {
         toast.error(response?.message || '删除失败');
       }
@@ -125,7 +122,7 @@ export function useTopicActions({
         return next;
       });
     }
-  }, [groupId, loadGroupStats, loadTags, setTopics]);
+  }, [groupId, loadGroupStats, setTopics]);
 
   const fetchMoreComments = useCallback(async (topicId: TopicId) => {
     const topicKey = String(topicId);

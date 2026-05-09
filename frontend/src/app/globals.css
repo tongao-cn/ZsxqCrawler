@@ -1,6 +1,7 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "yet-another-react-lightbox/styles.css";
+@import "github-markdown-css/github-markdown-light.css";
 
 @custom-variant dark (&:is(.dark *));
 
@@ -193,5 +194,16 @@
     display: inline-flex !important;
     align-items: center !important;
     vertical-align: middle !important;
+  }
+
+  .markdown-body {
+    background: transparent;
+    color: inherit;
+    font-family: inherit;
+  }
+
+  .markdown-body h1,
+  .markdown-body h2 {
+    border-bottom-color: var(--border);
   }
 }

@@ -97,7 +97,6 @@ export default function GroupDetailPage() {
   const deferredSearchTerm = useDeferredValue(searchTerm);
   const [activeMode, setActiveMode] = useState<'crawl' | 'download'>('crawl');
   // 注意：topic_id 可能超过 JS 安全整数范围，这里统一按字符串处理 ID
-  const [selectedTag, setSelectedTag] = useState<number | null>(null);
   const [clearingCache, setClearingCache] = useState(false);
   const {
     activeTab,
@@ -130,8 +129,6 @@ export default function GroupDetailPage() {
     groupInfo,
     localFileCount,
     localFileStats,
-    tags,
-    tagsLoading,
     cacheInfo,
     accounts,
     groupAccount,
@@ -144,7 +141,6 @@ export default function GroupDetailPage() {
     loadGroupStats,
     loadTopics,
     loadLocalFileCount,
-    loadTags,
     loadGroupAccount,
     loadGroupAccountSelf,
     loadCacheInfo,
@@ -152,7 +148,6 @@ export default function GroupDetailPage() {
     groupId,
     currentPage,
     debouncedSearchTerm,
-    selectedTag,
   });
   const {
     assigningAccount,
@@ -237,8 +232,6 @@ export default function GroupDetailPage() {
     onTaskCreated: handleTaskCreated,
     loadGroupStats,
     loadTopics,
-    loadTags,
-    onSelectedTagChange: setSelectedTag,
   });
 
   const {
@@ -257,7 +250,6 @@ export default function GroupDetailPage() {
     setTopics,
     loadTopics,
     loadGroupStats,
-    loadTags,
   });
 
   // 清空图片缓存（使用自定义弹窗，不再重复浏览器确认）
@@ -452,13 +444,6 @@ export default function GroupDetailPage() {
           groupInfo={groupInfo}
           localFileCount={localFileCount}
           localFileStats={localFileStats}
-          tags={tags}
-          tagsLoading={tagsLoading}
-          selectedTag={selectedTag}
-          onSelectedTagChange={(tagId) => {
-            setSelectedTag(tagId);
-            setCurrentPage(1);
-          }}
           accountSelf={accountSelf}
           accounts={accounts}
           groupAccount={groupAccount}

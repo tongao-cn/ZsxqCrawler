@@ -4,7 +4,6 @@ import asyncio
 import json
 import random
 from contextlib import contextmanager
-from dataclasses import dataclass
 from typing import Any, Dict, Iterator, List, Optional
 
 import requests
@@ -15,7 +14,15 @@ from backend.core.db_path_manager import get_db_path_manager
 from backend.core.image_cache_manager import get_image_cache_manager
 from backend.core.logger_config import log_debug, log_error, log_exception, log_info, log_warning
 from backend.core.account_context import build_stealth_headers, get_cookie_for_group
-from backend.services.task_runtime import add_task_log, create_task, is_task_stopped, update_task
+from backend.services.columns_fetch_summary import (
+    ColumnFetchStats,
+    build_columns_fetch_result as _build_columns_fetch_result,
+    build_columns_progress_message as _build_columns_progress_message,
+    combined_column_stats as _combined_column_stats,
+    resolve_columns_fetch_config as _resolve_columns_fetch_config,
+)
+from backend.routes.ingestion_helpers import create_ingestion_task_or_raise
+from backend.services.task_runtime import add_task_log, is_task_stopped, update_task
 from backend.storage.accounts_sql_manager import get_accounts_sql_manager
 from backend.storage.zsxq_columns_database import ZSXQColumnsDatabase
 
@@ -34,54 +41,6 @@ class ColumnsSettingsRequest(BaseModel):
     cacheImages: Optional[bool] = Field(default=True, description="是否缓存图片")
     incrementalMode: Optional[bool] = Field(default=False, description="增量模式：跳过已存在的文章详情")
 
-
-@dataclass
-class ColumnFetchStats:
-    columns_count: int = 0
-    topics_count: int = 0
-    details_count: int = 0
-    files_count: int = 0
-    images_count: int = 0
-    videos_count: int = 0
-    skipped_count: int = 0
-    files_skipped: int = 0
-    videos_skipped: int = 0
-    request_count: int = 0
-
-    def add(self, other: "ColumnFetchStats") -> None:
-        self.columns_count += other.columns_count
-        self.topics_count += other.topics_count
-        self.details_count += other.details_count
-        self.files_count += other.files_count
-        self.images_count += other.images_count
-        self.videos_count += other.videos_count
-        self.skipped_count += other.skipped_count
-        self.files_skipped += other.files_skipped
-        self.videos_skipped += other.videos_skipped
-        self.request_count += other.request_count
-
-
-def _combined_column_stats(first: ColumnFetchStats, second: ColumnFetchStats) -> ColumnFetchStats:
-    combined = ColumnFetchStats()
-    combined.add(first)
-    combined.add(second)
-    return combined
-
-
-def _resolve_columns_fetch_config(settings: ColumnsSettingsRequest) -> Dict[str, Any]:
-    return {
-        "crawl_interval_min": settings.crawlIntervalMin or 2.0,
-        "crawl_interval_max": settings.crawlIntervalMax or 5.0,
-        "long_sleep_min": settings.longSleepIntervalMin or 30.0,
-        "long_sleep_max": settings.longSleepIntervalMax or 60.0,
-        "items_per_batch": settings.itemsPerBatch or 10,
-        "download_files": settings.downloadFiles if settings.downloadFiles is not None else True,
-        "download_videos": settings.downloadVideos if settings.downloadVideos is not None else True,
-        "cache_images": settings.cacheImages if settings.cacheImages is not None else True,
-        "incremental_mode": settings.incrementalMode if settings.incrementalMode is not None else False,
-    }
-
-
 def _log_columns_fetch_config(task_id: str, group_id: str, config: Dict[str, Any]) -> None:
     add_task_log(task_id, f"📚 开始采集群组 {group_id} 的专栏内容")
     add_task_log(task_id, "=" * 50)
@@ -96,31 +55,22 @@ def _log_columns_fetch_config(task_id: str, group_id: str, config: Dict[str, Any
     add_task_log(task_id, "=" * 50)
 
 
-def _build_columns_fetch_result(
-    columns_count: int,
-    topics_count: int,
-    details_count: int,
-    files_count: int,
-    images_count: int,
-    videos_count: int,
-    skipped_count: int,
-    files_skipped: int,
-    videos_skipped: int,
-) -> tuple[str, Dict[str, int]]:
-    result_msg = f"采集完成: {columns_count} 个专栏, {details_count} 篇新文章, {files_count} 个文件, {videos_count} 个视频"
-    if skipped_count:
-        result_msg += f", 跳过 {skipped_count} 篇已存在文章"
-
-    return result_msg, {
-        "columns_count": columns_count,
-        "topics_count": topics_count,
-        "details_count": details_count,
-        "files_count": files_count,
-        "images_count": images_count,
-        "videos_count": videos_count,
-        "skipped_count": skipped_count,
-        "files_skipped": files_skipped,
-        "videos_skipped": videos_skipped,
+def _create_columns_fetch_task_response(
+    background_tasks: BackgroundTasks,
+    group_id: str,
+    request: ColumnsSettingsRequest,
+) -> Dict[str, Any]:
+    task_id = create_ingestion_task_or_raise(
+        "columns_fetch",
+        f"采集专栏内容 (群组: {group_id})",
+        group_id,
+    )
+    update_task(task_id, "running", "正在采集专栏内容...")
+    background_tasks.add_task(_fetch_columns_task, task_id, group_id, request)
+    return {
+        "success": True,
+        "task_id": task_id,
+        "message": "专栏采集任务已启动",
     }
 
 
@@ -146,15 +96,6 @@ def _save_topic_detail(
 
     db.insert_topic_detail(int(group_id), topic_data, json.dumps(topic_detail, ensure_ascii=False))
     return True
-
-
-def _build_columns_progress_message(
-    details_count: int,
-    files_count: int,
-    videos_count: int,
-    images_count: int,
-) -> str:
-    return f"进度: {details_count} 篇文章, {files_count} 个文件, {videos_count} 个视频, {images_count} 张图片"
 
 
 def _prepare_column_topic(
@@ -1182,25 +1123,9 @@ async def get_column_topic_detail(group_id: str, topic_id: int):
 async def fetch_group_columns(group_id: str, request: ColumnsSettingsRequest, background_tasks: BackgroundTasks):
     """采集群组的所有专栏内容（后台任务）"""
     try:
-        task_id = create_task(
-            "columns_fetch",
-            f"采集专栏内容 (群组: {group_id})",
-            {"group_id": group_id},
-        )
-        update_task(task_id, "running", "正在采集专栏内容...")
-
-        background_tasks.add_task(
-            _fetch_columns_task,
-            task_id,
-            group_id,
-            request,
-        )
-
-        return {
-            "success": True,
-            "task_id": task_id,
-            "message": "专栏采集任务已启动",
-        }
+        return _create_columns_fetch_task_response(background_tasks, group_id, request)
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"启动专栏采集失败: {str(e)}")
 

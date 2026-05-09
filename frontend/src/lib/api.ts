@@ -45,6 +45,26 @@ export interface DailyTopicAnalysisPayload {
   crawlLatestFirst?: boolean;
 }
 
+export interface DailyStockConcept {
+  stock_name: string;
+  stock_code: string;
+  market: string;
+  concepts: string[];
+  reason: string;
+  topic_ids: Array<string | number>;
+  confidence: number;
+  model?: string;
+}
+
+export interface DailyStockConceptResponse {
+  group_id: string;
+  report_date: string;
+  stocks: DailyStockConcept[];
+  status: string;
+  error?: string | null;
+  updated_at?: string | null;
+}
+
 export interface TaskCreateResponse {
   task_id: string;
   message: string;
@@ -185,6 +205,40 @@ function normalizeOptionalId(value?: string | number) {
   }
   const normalized = String(value).trim();
   return normalized || undefined;
+}
+
+export function formatApiError(errorData: unknown, fallback: string): string {
+  if (!errorData || typeof errorData !== 'object') {
+    return fallback;
+  }
+
+  const data = errorData as {
+    detail?: unknown;
+    message?: unknown;
+    error?: unknown;
+  };
+  const detail = data.detail;
+
+  if (typeof detail === 'string' && detail.trim()) {
+    return detail;
+  }
+  if (detail && typeof detail === 'object') {
+    const detailObject = detail as { message?: unknown; error?: unknown };
+    if (typeof detailObject.message === 'string' && detailObject.message.trim()) {
+      return detailObject.message;
+    }
+    if (typeof detailObject.error === 'string' && detailObject.error.trim()) {
+      return detailObject.error;
+    }
+  }
+  if (typeof data.message === 'string' && data.message.trim()) {
+    return data.message;
+  }
+  if (typeof data.error === 'string' && data.error.trim()) {
+    return data.error;
+  }
+
+  return fallback;
 }
 
 export interface AShareAnalysisExportTdxBlock {
@@ -394,7 +448,7 @@ class ApiClient {
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
-      throw new Error(errorData.detail || `HTTP ${response.status}: ${response.statusText}`);
+      throw new Error(formatApiError(errorData, `HTTP ${response.status}: ${response.statusText}`));
     }
 
     return response.json();
@@ -1020,7 +1074,7 @@ class ApiClient {
     return this.request(`/api/analysis/daily/run-today/${groupId}`, {
       method: 'POST',
       body: JSON.stringify({
-        commentsPerTopic: payload.commentsPerTopic ?? 8,
+        commentsPerTopic: payload.commentsPerTopic ?? 0,
         crawlLatestFirst: payload.crawlLatestFirst ?? true,
         ...(payload.date ? { date: payload.date } : {}),
       }),
@@ -1034,7 +1088,7 @@ class ApiClient {
     return this.request(`/api/analysis/daily/${groupId}`, {
       method: 'POST',
       body: JSON.stringify({
-        commentsPerTopic: payload.commentsPerTopic ?? 8,
+        commentsPerTopic: payload.commentsPerTopic ?? 0,
         ...(payload.date ? { date: payload.date } : {}),
       }),
     });
@@ -1047,6 +1101,28 @@ class ApiClient {
     }
     const query = search.toString();
     return this.request(`/api/analysis/daily/${groupId}${query ? `?${query}` : ''}`);
+  }
+
+  async createDailyStockConcepts(
+    groupId: number | string,
+    payload: DailyTopicAnalysisPayload = {}
+  ): Promise<TaskCreateResponse> {
+    return this.request(`/api/analysis/daily-stock-concepts/${groupId}`, {
+      method: 'POST',
+      body: JSON.stringify({
+        commentsPerTopic: payload.commentsPerTopic ?? 0,
+        ...(payload.date ? { date: payload.date } : {}),
+      }),
+    });
+  }
+
+  async getDailyStockConcepts(groupId: number | string, date?: string): Promise<DailyStockConceptResponse> {
+    const search = new URLSearchParams();
+    if (date) {
+      search.set('date', date);
+    }
+    const query = search.toString();
+    return this.request(`/api/analysis/daily-stock-concepts/${groupId}${query ? `?${query}` : ''}`);
   }
 
   // 删除社群本地数据

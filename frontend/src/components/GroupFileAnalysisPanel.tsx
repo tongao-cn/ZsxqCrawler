@@ -1,17 +1,25 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { FileText, Loader2, RefreshCw, Sparkles } from 'lucide-react';
+import { Download, FileText, Loader2, RefreshCw, Search, Sparkles } from 'lucide-react';
 import { apiClient, FileAIAnalysis, FileItem, PaginatedResponse } from '@/lib/api';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { toast } from 'sonner';
 
 
 interface GroupFileAnalysisPanelProps {
   groupId: number;
+}
+
+interface FileTaskState {
+  taskId: string;
+  status: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
+  message: string;
 }
 
 function formatFileSize(size: number) {
@@ -38,24 +46,66 @@ function getExtractedTextLabel(contentType?: string | null) {
   return '提取原文';
 }
 
+function isFileDownloaded(file: FileItem) {
+  return Boolean(
+    file.local_exists
+    || file.local_path
+    || ['completed', 'downloaded', 'skipped'].includes(file.download_status)
+  );
+}
+
+function getDownloadStatusBadge(file: FileItem) {
+  if (isFileDownloaded(file)) {
+    if (file.download_status === 'skipped') {
+      return <Badge className="bg-slate-100 text-slate-800">已存在</Badge>;
+    }
+    return <Badge className="bg-green-100 text-green-800">已完成</Badge>;
+  }
+
+  switch (file.download_status) {
+    case 'pending':
+      return <Badge className="bg-yellow-100 text-yellow-800">未下载</Badge>;
+    case 'failed':
+      return <Badge className="bg-red-100 text-red-800">失败</Badge>;
+    default:
+      return <Badge variant="secondary">{file.download_status || 'unknown'}</Badge>;
+  }
+}
+
+function getAnalysisStatusBadge(file: FileItem) {
+  if (file.has_ai_analysis) {
+    return <Badge variant="secondary">已有分析</Badge>;
+  }
+  return <Badge variant="outline">未分析</Badge>;
+}
+
 export default function GroupFileAnalysisPanel({ groupId }: GroupFileAnalysisPanelProps) {
   const [files, setFiles] = useState<FileItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [totalFiles, setTotalFiles] = useState(0);
+  const [searchInput, setSearchInput] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
   const [analysisOpen, setAnalysisOpen] = useState(false);
   const [selectedFile, setSelectedFile] = useState<FileItem | null>(null);
   const [analysisLoading, setAnalysisLoading] = useState(false);
   const [analysis, setAnalysis] = useState<FileAIAnalysis | null>(null);
-
-  const isFileDownloaded = (file: FileItem) =>
-    Boolean(file.local_exists || file.local_path);
+  const [downloadingFiles, setDownloadingFiles] = useState<Set<number>>(new Set());
+  const [fileTasks, setFileTasks] = useState<Map<number, FileTaskState>>(new Map());
 
   const loadFiles = useCallback(async (targetPage: number) => {
     try {
       setLoading(true);
-      const data: PaginatedResponse<FileItem> = await apiClient.getFiles(groupId, targetPage, 20);
+      const status = statusFilter === 'all' ? undefined : statusFilter;
+      const data: PaginatedResponse<FileItem> = await apiClient.getFiles(
+        groupId,
+        targetPage,
+        20,
+        status,
+        searchQuery || undefined,
+      );
       setFiles(data.data || []);
       setPage(data.pagination.page);
       setTotalPages(data.pagination.pages || 1);
@@ -65,11 +115,129 @@ export default function GroupFileAnalysisPanel({ groupId }: GroupFileAnalysisPan
     } finally {
       setLoading(false);
     }
-  }, [groupId]);
+  }, [groupId, searchQuery, statusFilter]);
 
   useEffect(() => {
     void loadFiles(1);
   }, [loadFiles]);
+
+  const handleSearch = () => {
+    const nextQuery = searchInput.trim();
+    setPage(1);
+    if (nextQuery === searchQuery) {
+      void loadFiles(1);
+      return;
+    }
+    setSearchQuery(nextQuery);
+  };
+
+  const handleStatusFilterChange = (value: string) => {
+    setPage(1);
+    setStatusFilter(value);
+  };
+
+  const pollFileTask = useCallback((fileId: number, taskId: string, attempt: number = 0) => {
+    window.setTimeout(async () => {
+      try {
+        const task = await apiClient.getTask(taskId);
+        setFileTasks(prev => {
+          const next = new Map(prev);
+          next.set(fileId, {
+            taskId,
+            status: task.status,
+            message: task.message,
+          });
+          return next;
+        });
+
+        if (['completed', 'failed', 'cancelled'].includes(task.status)) {
+          setDownloadingFiles(prev => {
+            const next = new Set(prev);
+            next.delete(fileId);
+            return next;
+          });
+          await loadFiles(page);
+          return;
+        }
+
+        if (attempt < 120) {
+          pollFileTask(fileId, taskId, attempt + 1);
+          return;
+        }
+
+        setDownloadingFiles(prev => {
+          const next = new Set(prev);
+          next.delete(fileId);
+          return next;
+        });
+        setFileTasks(prev => {
+          const next = new Map(prev);
+          next.set(fileId, {
+            taskId,
+            status: 'failed',
+            message: '任务状态刷新超时，请手动刷新',
+          });
+          return next;
+        });
+      } catch (error) {
+        console.error('轮询文件下载任务失败:', error);
+        if (attempt < 12) {
+          pollFileTask(fileId, taskId, attempt + 1);
+          return;
+        }
+
+        setDownloadingFiles(prev => {
+          const next = new Set(prev);
+          next.delete(fileId);
+          return next;
+        });
+      }
+    }, 1500);
+  }, [loadFiles, page]);
+
+  const handleDownloadFile = async (file: FileItem) => {
+    if (downloadingFiles.has(file.file_id)) {
+      return;
+    }
+
+    try {
+      setDownloadingFiles(prev => new Set(prev).add(file.file_id));
+      const response = await apiClient.downloadSingleFile(
+        String(groupId),
+        file.file_id,
+        file.name,
+        file.size,
+      ) as { task_id?: string };
+      toast.success(response.task_id ? `文件下载任务已创建: ${response.task_id}` : '文件下载任务已创建');
+
+      if (response.task_id) {
+        setFileTasks(prev => {
+          const next = new Map(prev);
+          next.set(file.file_id, {
+            taskId: response.task_id || '',
+            status: 'pending',
+            message: '下载任务已创建',
+          });
+          return next;
+        });
+        pollFileTask(file.file_id, response.task_id);
+      } else {
+        await loadFiles(page);
+        setDownloadingFiles(prev => {
+          const next = new Set(prev);
+          next.delete(file.file_id);
+          return next;
+        });
+      }
+    } catch (error) {
+      toast.error(`文件下载失败: ${error instanceof Error ? error.message : '未知错误'}`);
+      setDownloadingFiles(prev => {
+        const next = new Set(prev);
+        next.delete(file.file_id);
+        return next;
+      });
+    }
+  };
 
   const openAnalysisDialog = async (file: FileItem, force: boolean = false) => {
     try {
@@ -105,68 +273,152 @@ export default function GroupFileAnalysisPanel({ groupId }: GroupFileAnalysisPan
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <div className="text-sm text-muted-foreground">
           当前群文件数：{totalFiles}
         </div>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => void loadFiles(page)}
-          disabled={loading}
-        >
-          <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
-          刷新
-        </Button>
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+          <div className="flex min-w-0 gap-2 sm:w-80">
+            <Input
+              value={searchInput}
+              placeholder="搜索文件名..."
+              onChange={(event) => setSearchInput(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') {
+                  handleSearch();
+                }
+              }}
+            />
+            <Button variant="outline" size="sm" onClick={handleSearch} disabled={loading}>
+              <Search className="h-4 w-4 mr-2" />
+              搜索
+            </Button>
+          </div>
+          <Select value={statusFilter} onValueChange={handleStatusFilterChange}>
+            <SelectTrigger className="w-full sm:w-36">
+              <SelectValue placeholder="文件状态" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">全部状态</SelectItem>
+              <SelectItem value="pending">未下载</SelectItem>
+              <SelectItem value="completed">已完成</SelectItem>
+              <SelectItem value="failed">失败</SelectItem>
+              <SelectItem value="skipped">已存在</SelectItem>
+            </SelectContent>
+          </Select>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => void loadFiles(page)}
+            disabled={loading}
+          >
+            <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
+            刷新
+          </Button>
+        </div>
       </div>
 
       {loading ? (
         <div className="rounded-lg border border-dashed p-10 text-center text-muted-foreground">文件列表加载中...</div>
       ) : files.length === 0 ? (
         <div className="rounded-lg border border-dashed p-10 text-center text-muted-foreground">
-          当前群还没有文件记录，请先采集包含附件的话题
+          {searchQuery || statusFilter !== 'all'
+            ? '没有匹配的文件记录'
+            : '当前群还没有文件记录，请先采集包含附件的话题'}
         </div>
       ) : (
-        <div className="space-y-3">
-          {files.map((file) => (
-            <Card key={file.file_id} className="border border-gray-200 shadow-none">
-              <CardContent className="p-4">
-                <div className="flex items-start justify-between gap-4">
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
-                      <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
-                      <div className="font-medium truncate" title={file.name}>{file.name}</div>
-                      {file.has_ai_analysis && (
-                        <Badge variant="secondary">已有分析</Badge>
-                      )}
-                    </div>
-                    <div className="mt-2 flex flex-wrap gap-3 text-xs text-muted-foreground">
-                      <span>大小：{formatFileSize(file.size)}</span>
-                      <span>下载次数：{file.download_count || 0}</span>
-                      <span>创建时间：{formatDate(file.create_time)}</span>
-                      <span>状态：{file.download_status || 'unknown'}</span>
-                    </div>
-                    {file.analysis_updated_at && (
-                      <div className="mt-2 text-xs text-muted-foreground">
-                        最近分析：{formatDate(file.analysis_updated_at)}
+        <div className="rounded-lg border border-gray-200">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>文件名</TableHead>
+                <TableHead>大小</TableHead>
+                <TableHead>下载次数</TableHead>
+                <TableHead>创建时间</TableHead>
+                <TableHead>下载状态</TableHead>
+                <TableHead>分析状态</TableHead>
+                <TableHead className="text-right">操作</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {files.map((file) => {
+                const downloaded = isFileDownloaded(file);
+                const creatingTask = downloadingFiles.has(file.file_id);
+                const fileTask = fileTasks.get(file.file_id);
+
+                return (
+                  <TableRow key={file.file_id}>
+                    <TableCell className="min-w-[260px] max-w-xl whitespace-normal">
+                      <div className="flex min-w-0 items-center gap-2">
+                        <FileText className="h-4 w-4 shrink-0 text-muted-foreground" />
+                        <div className="min-w-0">
+                          <div className="truncate font-medium" title={file.name}>{file.name}</div>
+                          {file.local_path && (
+                            <div className="mt-1 truncate text-xs text-muted-foreground" title={file.local_path}>
+                              {file.local_path}
+                            </div>
+                          )}
+                        </div>
                       </div>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      disabled={!isFileDownloaded(file)}
-                      onClick={() => void openAnalysisDialog(file, false)}
-                    >
-                      <Sparkles className="h-4 w-4 mr-2" />
-                      {isFileDownloaded(file) ? 'AI分析' : '需先下载'}
-                    </Button>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
+                    </TableCell>
+                    <TableCell>{formatFileSize(file.size)}</TableCell>
+                    <TableCell>{file.download_count || 0}</TableCell>
+                    <TableCell>{formatDate(file.create_time)}</TableCell>
+                    <TableCell>{getDownloadStatusBadge(file)}</TableCell>
+                    <TableCell>
+                      <div className="space-y-1">
+                        {getAnalysisStatusBadge(file)}
+                        {file.analysis_updated_at && (
+                          <div className="text-xs text-muted-foreground">
+                            {formatDate(file.analysis_updated_at)}
+                          </div>
+                        )}
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex flex-col items-end gap-1">
+                        {downloaded ? (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => void openAnalysisDialog(file, false)}
+                          >
+                            <Sparkles className="h-4 w-4 mr-2" />
+                            {file.has_ai_analysis ? '查看分析' : 'AI 分析'}
+                          </Button>
+                        ) : (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={creatingTask}
+                            onClick={() => void handleDownloadFile(file)}
+                          >
+                            {creatingTask ? (
+                              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                            ) : (
+                              <Download className="h-4 w-4 mr-2" />
+                            )}
+                            {creatingTask ? '创建中' : file.download_status === 'failed' ? '重试' : '下载'}
+                          </Button>
+                        )}
+                        {fileTask && !downloaded && (
+                          <div className={`max-w-48 truncate text-xs ${
+                            fileTask.status === 'failed' || fileTask.status === 'cancelled'
+                              ? 'text-red-600'
+                              : fileTask.status === 'completed'
+                                ? 'text-green-600'
+                                : 'text-muted-foreground'
+                          }`} title={fileTask.message}>
+                            {fileTask.message}
+                          </div>
+                        )}
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
         </div>
       )}
 

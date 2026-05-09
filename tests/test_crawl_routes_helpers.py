@@ -114,7 +114,7 @@ class CrawlRoutesHelperTests(unittest.TestCase):
 
         background_tasks = FakeBackgroundTasks()
 
-        with patch("backend.routes.crawl_routes.create_ingestion_task", return_value=("task-1", None)) as create_task:
+        with patch("backend.routes.ingestion_helpers.create_ingestion_task", return_value=("task-1", None)) as create_task:
             response = _create_crawl_task_response(
                 background_tasks,
                 "crawl_latest",
@@ -136,7 +136,7 @@ class CrawlRoutesHelperTests(unittest.TestCase):
         background_tasks = FakeBackgroundTasks()
         existing = {"task_id": "task-old", "type": "crawl_latest", "status": "running"}
 
-        with patch("backend.routes.crawl_routes.create_ingestion_task", return_value=(None, existing)):
+        with patch("backend.routes.ingestion_helpers.create_ingestion_task", return_value=(None, existing)):
             with self.assertRaises(HTTPException) as raised:
                 _create_crawl_task_response(
                     background_tasks,

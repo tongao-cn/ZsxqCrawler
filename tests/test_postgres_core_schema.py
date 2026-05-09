@@ -19,6 +19,8 @@ class PostgresCoreSchemaTests(unittest.TestCase):
         self.assertIn('CREATE UNIQUE INDEX IF NOT EXISTS "tags_group_id_tag_name_key"', sql)
         self.assertIn(f'CREATE TABLE IF NOT EXISTS "{CORE_SCHEMA}"."zsxq_a_share_daily_mentions"', sql)
         self.assertIn(f'CREATE TABLE IF NOT EXISTS "{CORE_SCHEMA}"."zsxq_a_share_tdx_exports"', sql)
+        self.assertIn(f'CREATE TABLE IF NOT EXISTS "{CORE_SCHEMA}"."daily_stock_concepts"', sql)
+        self.assertIn('CREATE UNIQUE INDEX IF NOT EXISTS "daily_stock_concepts_group_id_report_date_stock_name_key"', sql)
         self.assertIn('CREATE INDEX IF NOT EXISTS "idx_zsxq_a_share_daily_mentions_group_id_mention_date"', sql)
         self.assertNotIn("source_schema TEXT", sql)
         self.assertNotIn(f'CREATE TABLE IF NOT EXISTS "{CORE_SCHEMA}"."record_sources"', sql)
@@ -34,6 +36,7 @@ class PostgresCoreSchemaTests(unittest.TestCase):
         sql = "\n".join(build_core_schema_sql(include_indexes=False))
 
         self.assertIn('CREATE UNIQUE INDEX IF NOT EXISTS "daily_ai_reports_group_id_report_date_key"', sql)
+        self.assertIn('CREATE UNIQUE INDEX IF NOT EXISTS "daily_stock_concepts_group_id_report_date_stock_name_key"', sql)
         self.assertIn('CREATE UNIQUE INDEX IF NOT EXISTS "topic_files_topic_id_file_id_key"', sql)
         self.assertNotIn('CREATE INDEX IF NOT EXISTS "idx_', sql)
         self.assertIn(f'CREATE TABLE IF NOT EXISTS "{CORE_SCHEMA}"."zsxq_a_share_daily_mentions"', sql)

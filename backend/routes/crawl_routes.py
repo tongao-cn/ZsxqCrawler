@@ -8,7 +8,8 @@ from pydantic import BaseModel, Field
 
 from backend.core.account_context import get_cookie_for_group
 from backend.crawlers.zsxq_interactive_crawler import ZSXQInteractiveCrawler
-from backend.services.task_runtime import add_task_log, create_ingestion_task, is_task_stopped, update_task
+from backend.routes.ingestion_helpers import enqueue_ingestion_task
+from backend.services.task_runtime import add_task_log, is_task_stopped, update_task
 
 router = APIRouter(prefix="/api/crawl", tags=["crawl"])
 
@@ -43,10 +44,8 @@ class CrawlTimeRangeRequest(BaseModel):
     pagesPerBatch: Optional[int] = Field(default=None, ge=5, le=50, description="每批次页面数")
 
 
-TASK_CREATED_MESSAGE = "任务已创建，正在后台执行"
 INIT_STOPPED_MESSAGE = "🛑 任务在初始化过程中被停止"
 CRAWLER_STARTUP_LOGS = ("📡 连接到知识星球API...", "🔍 检查数据库状态...")
-INGESTION_CONFLICT_MESSAGE = "该群组已有采集或同步任务正在运行"
 
 
 def _should_stop_task(task_id: str) -> bool:
@@ -110,19 +109,14 @@ def _create_crawl_task_response(
     group_id: str,
     *task_args: Any,
 ) -> dict[str, str]:
-    task_id, existing = create_ingestion_task(task_type, description, group_id)
-    if existing:
-        raise HTTPException(
-            status_code=409,
-            detail={
-                "message": INGESTION_CONFLICT_MESSAGE,
-                "task_id": existing.get("task_id"),
-                "type": existing.get("type"),
-                "status": existing.get("status"),
-            },
-        )
-    background_tasks.add_task(task_func, task_id, group_id, *task_args)
-    return {"task_id": task_id, "message": TASK_CREATED_MESSAGE}
+    return enqueue_ingestion_task(
+        background_tasks,
+        task_type,
+        description,
+        task_func,
+        group_id,
+        *task_args,
+    )
 
 
 def _parse_user_time(value: Optional[str]) -> Optional[datetime]:

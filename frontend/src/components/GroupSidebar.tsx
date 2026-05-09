@@ -24,22 +24,12 @@ type LocalFileStats = {
   failed: number;
 };
 
-type TopicTag = {
-  tag_id: number;
-  tag_name: string;
-  topic_count: number;
-};
-
 type GroupSidebarProps = {
   group: Group;
   groupStats: GroupStats | null;
   groupInfo: GroupInfo | null;
   localFileCount: number;
   localFileStats: LocalFileStats;
-  tags: TopicTag[];
-  tagsLoading: boolean;
-  selectedTag: number | null;
-  onSelectedTagChange: (tagId: number | null) => void;
   accountSelf: AccountSelf | null;
   accounts: Account[];
   groupAccount?: Account | null;
@@ -106,10 +96,6 @@ export default function GroupSidebar({
   groupInfo,
   localFileCount,
   localFileStats,
-  tags,
-  tagsLoading,
-  selectedTag,
-  onSelectedTagChange,
   accountSelf,
   accounts,
   groupAccount,
@@ -278,47 +264,6 @@ export default function GroupSidebar({
               </div>
             </div>
 
-            <div className="mt-6 border-t border-gray-200 pt-4">
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="text-sm font-medium text-gray-900">话题标签</h3>
-                {selectedTag && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => onSelectedTagChange(null)}
-                    className="text-xs h-6 px-2"
-                  >
-                    清除筛选
-                  </Button>
-                )}
-              </div>
-
-              {tagsLoading ? (
-                <div className="text-xs text-gray-500">加载标签中...</div>
-              ) : tags.length === 0 ? (
-                <div className="text-xs text-gray-500">暂无标签</div>
-              ) : (
-                <div className="max-h-80 overflow-y-auto">
-                  <div className="flex flex-wrap gap-1.5">
-                    {tags.map((tag) => (
-                      <button
-                        type="button"
-                        key={tag.tag_id}
-                        onClick={() => onSelectedTagChange(selectedTag === tag.tag_id ? null : tag.tag_id)}
-                        className={`inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium transition-colors ${
-                          selectedTag === tag.tag_id
-                            ? 'bg-blue-100 text-blue-800 border border-blue-200'
-                            : 'bg-gray-100 text-gray-700 hover:bg-gray-200 border border-gray-200'
-                        }`}
-                      >
-                        {tag.tag_name}
-                        <span className="ml-1 text-xs opacity-75">({tag.topic_count})</span>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
           </CardContent>
         </ScrollArea>
       </Card>

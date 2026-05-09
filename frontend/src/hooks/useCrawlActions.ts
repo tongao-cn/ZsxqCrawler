@@ -15,8 +15,6 @@ interface UseCrawlActionsOptions {
   onTaskCreated: (taskId: string) => void;
   loadGroupStats: () => void | Promise<void>;
   loadTopics: () => void | Promise<void>;
-  loadTags: () => void | Promise<void>;
-  onSelectedTagChange: (tagId: number | null) => void;
 }
 
 export function useCrawlActions({
@@ -24,8 +22,6 @@ export function useCrawlActions({
   onTaskCreated,
   loadGroupStats,
   loadTopics,
-  loadTags,
-  onSelectedTagChange,
 }: UseCrawlActionsOptions) {
   const [crawlLoading, setCrawlLoading] = useState<GroupCrawlLoading>(null);
   const [selectedCrawlOption, setSelectedCrawlOption] = useState<GroupCrawlOption>('all');
@@ -202,14 +198,12 @@ export function useCrawlActions({
 
       void loadGroupStats();
       void loadTopics();
-      void loadTags();
 
       setSelectedCrawlOption('all');
-      onSelectedTagChange(null);
     } catch (error) {
       toast.error(`删除失败: ${error instanceof Error ? error.message : '未知错误'}`);
     }
-  }, [groupId, loadGroupStats, loadTags, loadTopics, onSelectedTagChange]);
+  }, [groupId, loadGroupStats, loadTopics]);
 
   const handleCrawlSettingsChange = useCallback((settings: CrawlSettingsValue) => {
     setCrawlInterval(settings.crawlInterval);

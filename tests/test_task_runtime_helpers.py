@@ -3,6 +3,11 @@ from unittest.mock import patch
 
 
 class TaskRuntimeHelperTests(unittest.TestCase):
+    def test_columns_fetch_is_ingestion_locked(self):
+        from backend.services.task_runtime import INGESTION_LOCK_TYPES
+
+        self.assertIn("columns_fetch", INGESTION_LOCK_TYPES)
+
     def test_find_running_ingestion_task_matches_same_group(self):
         from backend.services.task_runtime import find_running_ingestion_task
 
