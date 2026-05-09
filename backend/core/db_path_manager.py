@@ -10,7 +10,7 @@ _DEFAULT_CONFIG_TOML = """# 知识星球数据采集器配置文件
 [auth]
 # 知识星球登录 Cookie（Web 模式可留空，推荐使用“账号管理”配置）
 cookie = "your_cookie_here"
-# 交互式命令行模式需要单个群组ID；Web 模式可留空
+# 旧单群组本地配置可留空；Web/API 会按当前群组动态选择
 group_id = "your_group_id_here"
 
 [download]

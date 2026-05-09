@@ -16,7 +16,6 @@
 
 - **智能采集**: 支持全量、增量、智能更新等多种采集模式
 - **文件管理**: 自动下载和管理知识星球中的文件资源，支持直接下载
-- **命令行界面**: 提供交互式命令行工具
 - **Web 界面**: 现代化的 React 前端界面，操作直观
 
 ## 界面展示
@@ -100,18 +99,6 @@ NEXT_PUBLIC_API_BASE_URL=http://192.168.x.x:8208
 - **Web 界面**: http://localhost:3060
 - **API 文档**: http://localhost:8508/docs
 
-#### 方式二：命令行工具
-
-```bash
-# 运行交互式命令行工具
-uv run python -m backend.crawlers.zsxq_interactive_crawler
-```
-
-<div align="center">
-  <img src="images/QQ20250703-170055.png" alt="命令行界面" height="400">
-  <p><em>命令行界面 - 交互式操作控制台</em></p>
-</div>
-
 ## 项目代码结构
 
 后端代码已经按职责整理到 `backend/`：
@@ -128,14 +115,12 @@ uv run python -m backend.crawlers.zsxq_interactive_crawler
 
 ```bash
 uv run python -m backend.main
-uv run python -m backend.crawlers.zsxq_interactive_crawler
 ```
 
 安装后也可以使用 `pyproject.toml` 中定义的命令入口：
 
 ```bash
 uv run zsxq-api
-uv run zsxq-crawler
 uv run a-share-analysis
 uv run csv-chart-server
 uv run migrate-accounts
@@ -155,7 +140,7 @@ uv run verify-postgres-reader-access --dsn "postgresql://zsxq_reader:password@ho
 
 - **话题 / 文章内容 / 文件元数据**: PostgreSQL `zsxq_core` schema；其他项目通过只读账号直接读取 `zsxq_core`。
 - **已下载附件 / 文件**: `output/databases/{group_id}/downloads/`  
-  - 通过 Web 界面或命令行触发的文件下载，实际都会保存在这里。  
+  - 通过 Web 界面触发的文件下载，实际都会保存在这里。  
   - 例如当前示例配置中，群组 `88851415151812` 的文件路径为：`output/databases/88851415151812/downloads/`。
 - **图片缓存（可安全删除）**: `output/databases/{group_id}/images/`  
   - 用于话题图片预览的本地缓存，如被删除，后续访问时会自动重新生成。
