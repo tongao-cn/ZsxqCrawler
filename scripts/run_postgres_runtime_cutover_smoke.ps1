@@ -82,15 +82,30 @@ ok = topic_db.import_topic_data({
         "owner": {"user_id": 8001, "name": "Owner"},
         "files": [{"file_id": 9101, "name": "topic-file.pdf", "size": 12, "create_time": "2026-05-07T18:00:01"}],
     },
+    "latest_likes": [{"owner": {"user_id": 8004, "name": "Liker"}, "create_time": "2026-05-07T18:01:00"}],
+    "likes_detail": {"emojis": [{"emoji_key": "[ok]", "likes_count": 2}]},
+    "user_specific": {"liked_emojis": ["[ok]"]},
     "show_comments": [{"comment_id": 9201, "text": "comment", "owner": {"user_id": 8002, "name": "Commenter"}, "create_time": "2026-05-07T18:02:00"}],
+})
+ok_repeat = topic_db.import_topic_data({
+    "topic_id": 9001,
+    "group": {"group_id": 7001, "name": "Runtime Group", "type": "paid", "background_url": "https://example.test/bg.png"},
+    "type": "talk",
+    "title": "Runtime Topic",
+    "create_time": "2026-05-07T18:00:00",
+    "talk": {
+        "text": "runtime smoke repeat",
+        "owner": {"user_id": 8001, "name": "Owner"},
+        "files": [{"file_id": 9101, "name": "topic-file.pdf", "size": 12, "create_time": "2026-05-07T18:00:01"}],
+    },
 })
 topic_db.conn.commit()
 topic_db.close()
-if not ok:
+if not ok or not ok_repeat:
     raise RuntimeError("topic import failed")
 
 file_db = ZSXQFileDatabase("7001")
-file_db.import_file_response({
+file_response = {
     "succeeded": True,
     "resp_data": {
         "index": "runtime-index",
@@ -103,10 +118,15 @@ file_db.import_file_response({
                 "title": "Runtime File Topic",
                 "create_time": "2026-05-07T18:04:00",
                 "talk": {"text": "file topic", "owner": {"user_id": 8003, "name": "File Owner"}},
+                "latest_likes": [{"owner": {"user_id": 8005, "name": "File Liker"}, "create_time": "2026-05-07T18:05:00"}],
+                "likes_detail": {"emojis": [{"emoji_key": "[file]", "likes_count": 3}]},
+                "user_specific": {"liked_emojis": ["[file]"]},
             },
         }],
     },
-})
+}
+file_db.import_file_response(file_response)
+file_db.import_file_response(file_response)
 file_db.upsert_file_ai_analysis(9301, status="completed", summary="summary", content_type="application/pdf")
 file_db.close()
 
@@ -144,6 +164,19 @@ with psycopg2.connect(dsn) as conn:
             count = int(cur.fetchone()[0])
             if count <= 0:
                 raise RuntimeError(f"{name} was not written to zsxq_core")
+            print(f"[ok] {name}: {count}")
+        unique_checks = {
+            "talks topic 9001": "SELECT COUNT(*) FROM zsxq_core.talks WHERE topic_id = 9001",
+            "talks topic 9302": "SELECT COUNT(*) FROM zsxq_core.talks WHERE topic_id = 9302",
+            "latest_likes topic 9302": "SELECT COUNT(*) FROM zsxq_core.latest_likes WHERE topic_id = 9302",
+            "like_emojis topic 9302": "SELECT COUNT(*) FROM zsxq_core.like_emojis WHERE topic_id = 9302",
+            "user_liked_emojis topic 9302": "SELECT COUNT(*) FROM zsxq_core.user_liked_emojis WHERE topic_id = 9302",
+        }
+        for name, sql in unique_checks.items():
+            cur.execute(sql)
+            count = int(cur.fetchone()[0])
+            if count != 1:
+                raise RuntimeError(f"{name} expected 1 row after repeat imports, got {count}")
             print(f"[ok] {name}: {count}")
         cur.execute("""
             SELECT COUNT(*)

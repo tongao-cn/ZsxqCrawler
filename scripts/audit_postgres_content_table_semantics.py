@@ -15,6 +15,7 @@ from backend.storage.postgres_core_schema import CORE_SCHEMA, quote_identifier
 class DedupSpec:
     table: str
     key_columns: tuple[str, ...]
+    mode: str = "dedup"
 
 
 @dataclass
@@ -35,6 +36,10 @@ DEDUP_SPECS: tuple[DedupSpec, ...] = (
     DedupSpec("latest_likes", ("topic_id", "owner_user_id", "create_time")),
     DedupSpec("like_emojis", ("topic_id", "emoji_key")),
     DedupSpec("user_liked_emojis", ("topic_id", "emoji_key")),
+)
+
+READ_ONLY_SPECS: tuple[DedupSpec, ...] = (
+    DedupSpec("likes", ("topic_id", "user_id", "create_time"), mode="read-only"),
 )
 
 
@@ -129,9 +134,9 @@ def apply_dedup(conn, spec: DedupSpec) -> int:
 
 def run_audit(conn, *, apply: bool) -> list[DedupStats]:
     stats: list[DedupStats] = []
-    for spec in DEDUP_SPECS:
+    for spec in DEDUP_SPECS + READ_ONLY_SPECS:
         item = collect_stats(conn, spec)
-        if apply and item.rows_to_delete:
+        if apply and spec.mode == "dedup" and item.rows_to_delete:
             item.deleted = apply_dedup(conn, spec)
         stats.append(item)
     if apply:
@@ -162,7 +167,7 @@ def write_report(conn, stats: list[DedupStats], *, sample_limit: int, apply: boo
         )
 
     lines.extend(["", "## Top Duplicate Samples", ""])
-    for spec in DEDUP_SPECS:
+    for spec in DEDUP_SPECS + READ_ONLY_SPECS:
         samples = collect_samples(conn, spec, limit=sample_limit)
         lines.append(f"### {spec.table}")
         if not samples:
@@ -185,7 +190,7 @@ def write_report(conn, stats: list[DedupStats], *, sample_limit: int, apply: boo
             "- `talks`, `questions`, `answers`, and `articles` have one logical row per `topic_id`.",
             "- `latest_likes` is the current latest-like snapshot keyed by `(topic_id, owner_user_id, create_time)`.",
             "- `like_emojis` and `user_liked_emojis` are keyed by `(topic_id, emoji_key)`.",
-            "- `likes` remains an append/history table and is intentionally excluded.",
+            "- `likes` remains an append/history table and is audited read-only by `(topic_id, user_id, create_time)`.",
             "",
         ]
     )
@@ -209,8 +214,9 @@ def main() -> None:
         stats = run_audit(conn, apply=args.apply)
         for item in stats:
             key = ", ".join(item.key_columns)
+            mode = next((spec.mode for spec in DEDUP_SPECS + READ_ONLY_SPECS if spec.table == item.table), "dedup")
             print(
-                f"{item.table}({key}): duplicate_groups={item.duplicate_groups} "
+                f"{item.table}({key})[{mode}]: duplicate_groups={item.duplicate_groups} "
                 f"duplicate_rows={item.duplicate_rows} rows_to_delete={item.rows_to_delete} "
                 f"deleted={item.deleted}"
             )
