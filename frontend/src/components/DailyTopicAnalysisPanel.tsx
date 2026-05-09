@@ -77,6 +77,8 @@ interface ConceptStat {
   stockCount: number;
 }
 
+const DEFAULT_VISIBLE_CONCEPT_COUNT = 20;
+
 export default function DailyTopicAnalysisPanel({
   groupId,
   onTaskCreated,
@@ -124,7 +126,7 @@ export default function DailyTopicAnalysisPanel({
       });
   }, [stockConcepts]);
 
-  const visibleConceptStats = showAllConcepts ? conceptStats : conceptStats.slice(0, 10);
+  const visibleConceptStats = showAllConcepts ? conceptStats : conceptStats.slice(0, DEFAULT_VISIBLE_CONCEPT_COUNT);
 
   const loadReport = useCallback(async () => {
     try {
@@ -311,7 +313,7 @@ export default function DailyTopicAnalysisPanel({
                       );
                     })}
                     </div>
-                    {conceptStats.length > 10 && (
+                    {conceptStats.length > DEFAULT_VISIBLE_CONCEPT_COUNT && (
                       <Button
                         variant="outline"
                         size="sm"
