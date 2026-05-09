@@ -499,36 +499,20 @@ def run_single_file_download_task_with_info(
 
             actual_file_info = file_info["file"]
             actual_file_name = actual_file_info.get("name", f"file_{file_id}")
-            actual_file_size = actual_file_info.get("size", 0)
-
             safe_filename = _safe_filename(actual_file_name, f"file_{file_id}")
             local_path = os.path.join(downloader.download_dir, safe_filename)
 
-            if os.path.exists(local_path):
-                actual_file_size = os.path.getsize(local_path)
-
-            downloader.file_db.cursor.execute(
-                """
-                INSERT OR REPLACE INTO files
-                (file_id, group_id, name, size, download_status, local_path, download_time, download_count)
-                VALUES (?, ?, ?, ?, 'downloaded', ?, CURRENT_TIMESTAMP, ?)
-            """,
-                (
-                    file_id,
-                    _query_group_id(group_id),
-                    actual_file_name,
-                    actual_file_size,
-                    local_path,
-                    actual_file_info.get("download_count", 0),
-                ),
-            )
-            downloader.file_db.conn.commit()
+            downloader.file_db.update_file_download_status(file_id, "completed", local_path)
 
             update_task(task_id, "completed", "下载成功")
         else:
             add_task_log(task_id, "❌ 文件下载失败")
             update_task(task_id, "failed", "下载失败")
     except Exception as e:
+        try:
+            downloader.file_db.conn.rollback()
+        except Exception:
+            pass
         try:
             if not is_task_stopped(task_id):
                 add_task_log(task_id, f"❌ 任务执行失败: {str(e)}")
@@ -699,27 +683,19 @@ async def get_file_stats(group_id: str):
         with _file_db(group_id) as file_db:
             stats = file_db.get_database_stats()
 
-            file_db.cursor.execute("PRAGMA table_info(files)")
-            columns = [col[1] for col in file_db.cursor.fetchall()]
-
-            if "download_status" in columns:
-                file_db.cursor.execute(
-                    """
-                    SELECT
-                        COUNT(*) as total_files,
-                        COUNT(CASE WHEN download_status IN ('completed', 'downloaded', 'skipped') THEN 1 END) as downloaded,
-                        COUNT(CASE WHEN download_status = 'pending' THEN 1 END) as pending,
-                        COUNT(CASE WHEN download_status = 'failed' THEN 1 END) as failed
-                    FROM files
-                    WHERE group_id = ?
-                    """,
-                    (_query_group_id(group_id),),
-                )
-                download_stats = file_db.cursor.fetchone()
-            else:
-                file_db.cursor.execute("SELECT COUNT(*) FROM files WHERE group_id = ?", (_query_group_id(group_id),))
-                total_files = file_db.cursor.fetchone()[0]
-                download_stats = (total_files, 0, 0, 0)
+            file_db.cursor.execute(
+                """
+                SELECT
+                    COUNT(*) as total_files,
+                    COUNT(CASE WHEN download_status IN ('completed', 'downloaded', 'skipped') THEN 1 END) as downloaded,
+                    COUNT(CASE WHEN download_status = 'pending' THEN 1 END) as pending,
+                    COUNT(CASE WHEN download_status = 'failed' THEN 1 END) as failed
+                FROM files
+                WHERE group_id = ?
+                """,
+                (_query_group_id(group_id),),
+            )
+            download_stats = file_db.cursor.fetchone()
 
             return {
                 "database_stats": stats,

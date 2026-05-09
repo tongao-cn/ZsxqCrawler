@@ -59,8 +59,9 @@ def _replace_file_topic_relation(file_db, file_id: int, topic_id: int) -> int:
     WHERE file_id = ? AND topic_id = ?
     ''', (file_id, topic_id))
     file_db.cursor.execute('''
-    INSERT OR IGNORE INTO file_topic_relations (file_id, topic_id)
+    INSERT INTO file_topic_relations (file_id, topic_id)
     VALUES (?, ?)
+    ON CONFLICT(file_id, topic_id) DO NOTHING
     ''', (file_id, topic_id))
     return file_db.cursor.rowcount
 
@@ -227,9 +228,14 @@ class ZSXQDatabase:
         current_time = datetime.now(beijing_tz).strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + '+0800'
         
         self.cursor.execute('''
-            INSERT OR REPLACE INTO groups 
+            INSERT INTO groups 
             (group_id, name, type, background_url, created_at)
             VALUES (?, ?, ?, ?, ?)
+            ON CONFLICT(group_id) DO UPDATE SET
+                name = excluded.name,
+                type = excluded.type,
+                background_url = excluded.background_url,
+                created_at = excluded.created_at
         ''', (
             group_id,
             group_data.get('name', ''),
@@ -250,9 +256,17 @@ class ZSXQDatabase:
         current_time = datetime.now(beijing_tz).strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + '+0800'
         
         self.cursor.execute('''
-            INSERT OR REPLACE INTO users 
+            INSERT INTO users 
             (user_id, name, alias, avatar_url, location, description, ai_comment_url, created_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(user_id) DO UPDATE SET
+                name = excluded.name,
+                alias = excluded.alias,
+                avatar_url = excluded.avatar_url,
+                location = excluded.location,
+                description = excluded.description,
+                ai_comment_url = excluded.ai_comment_url,
+                created_at = excluded.created_at
         ''', (
             user_id,
             user_data.get('name', ''),
@@ -276,12 +290,31 @@ class ZSXQDatabase:
         current_time = datetime.now(beijing_tz).strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + '+0800'
         
         self.cursor.execute('''
-            INSERT OR REPLACE INTO topics 
+            INSERT INTO topics 
             (topic_id, group_id, type, title, create_time, digested, sticky, 
              likes_count, tourist_likes_count, rewards_count, comments_count, 
              reading_count, readers_count, answered, silenced, annotation, 
              user_liked, user_subscribed, imported_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(topic_id) DO UPDATE SET
+                group_id = excluded.group_id,
+                type = excluded.type,
+                title = excluded.title,
+                create_time = excluded.create_time,
+                digested = excluded.digested,
+                sticky = excluded.sticky,
+                likes_count = excluded.likes_count,
+                tourist_likes_count = excluded.tourist_likes_count,
+                rewards_count = excluded.rewards_count,
+                comments_count = excluded.comments_count,
+                reading_count = excluded.reading_count,
+                readers_count = excluded.readers_count,
+                answered = excluded.answered,
+                silenced = excluded.silenced,
+                annotation = excluded.annotation,
+                user_liked = excluded.user_liked,
+                user_subscribed = excluded.user_subscribed,
+                imported_at = excluded.imported_at
         ''', (
             topic_id,
             topic_data.get('group', {}).get('group_id', ''),
@@ -537,7 +570,7 @@ class ZSXQDatabase:
         current_time = datetime.now(beijing_tz).strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + '+0800'
         
         self.cursor.execute('''
-            INSERT OR REPLACE INTO talks 
+            INSERT INTO talks 
             (topic_id, owner_user_id, text, created_at)
             VALUES (?, ?, ?, ?)
         ''', (
@@ -585,10 +618,25 @@ class ZSXQDatabase:
         current_time = datetime.now(beijing_tz).strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + '+0800'
         
         self.cursor.execute('''
-            INSERT OR REPLACE INTO images 
+            INSERT INTO images 
             (image_id, topic_id, comment_id, type, thumbnail_url, thumbnail_width, thumbnail_height,
              large_url, large_width, large_height, original_url, original_width, original_height, original_size, created_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(image_id) DO UPDATE SET
+                topic_id = excluded.topic_id,
+                comment_id = excluded.comment_id,
+                type = excluded.type,
+                thumbnail_url = excluded.thumbnail_url,
+                thumbnail_width = excluded.thumbnail_width,
+                thumbnail_height = excluded.thumbnail_height,
+                large_url = excluded.large_url,
+                large_width = excluded.large_width,
+                large_height = excluded.large_height,
+                original_url = excluded.original_url,
+                original_width = excluded.original_width,
+                original_height = excluded.original_height,
+                original_size = excluded.original_size,
+                created_at = excluded.created_at
         ''', (
             image_id,
             topic_id,
@@ -623,7 +671,7 @@ class ZSXQDatabase:
                 current_time = datetime.now(beijing_tz).strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + '+0800'
                 
                 self.cursor.execute('''
-                    INSERT OR IGNORE INTO likes 
+                    INSERT INTO likes 
                     (topic_id, user_id, create_time, imported_at)
                     VALUES (?, ?, ?, ?)
                 ''', (
@@ -651,7 +699,7 @@ class ZSXQDatabase:
                 current_time = datetime.now(beijing_tz).strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + '+0800'
                 
                 self.cursor.execute('''
-                    INSERT OR REPLACE INTO like_emojis 
+                    INSERT INTO like_emojis 
                     (topic_id, emoji_key, likes_count, created_at)
                     VALUES (?, ?, ?, ?)
                 ''', (
@@ -672,7 +720,7 @@ class ZSXQDatabase:
         for emoji_key in topic_data['user_specific']['liked_emojis']:
             if emoji_key:
                 self.cursor.execute('''
-                    INSERT OR IGNORE INTO user_liked_emojis 
+                    INSERT INTO user_liked_emojis 
                     (topic_id, emoji_key)
                     VALUES (?, ?)
                 ''', (
@@ -735,10 +783,23 @@ class ZSXQDatabase:
         group_id = self._resolve_topic_group_id(topic_id, comment_data.get('group_id'))
         
         self.cursor.execute('''
-            INSERT OR REPLACE INTO comments
+            INSERT INTO comments
             (comment_id, group_id, topic_id, owner_user_id, parent_comment_id, repliee_user_id,
              text, create_time, likes_count, rewards_count, replies_count, sticky, imported_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(comment_id) DO UPDATE SET
+                group_id = excluded.group_id,
+                topic_id = excluded.topic_id,
+                owner_user_id = excluded.owner_user_id,
+                parent_comment_id = excluded.parent_comment_id,
+                repliee_user_id = excluded.repliee_user_id,
+                text = excluded.text,
+                create_time = excluded.create_time,
+                likes_count = excluded.likes_count,
+                rewards_count = excluded.rewards_count,
+                replies_count = excluded.replies_count,
+                sticky = excluded.sticky,
+                imported_at = excluded.imported_at
         ''', (
             comment_id,
             group_id,
@@ -779,11 +840,26 @@ class ZSXQDatabase:
             current_time = datetime.now(beijing_tz).strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + '+0800'
 
             self.cursor.execute('''
-                INSERT OR REPLACE INTO images
+                INSERT INTO images
                 (image_id, topic_id, comment_id, type, thumbnail_url, thumbnail_width, thumbnail_height,
                  large_url, large_width, large_height, original_url, original_width, original_height,
                  original_size, created_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(image_id) DO UPDATE SET
+                    topic_id = excluded.topic_id,
+                    comment_id = excluded.comment_id,
+                    type = excluded.type,
+                    thumbnail_url = excluded.thumbnail_url,
+                    thumbnail_width = excluded.thumbnail_width,
+                    thumbnail_height = excluded.thumbnail_height,
+                    large_url = excluded.large_url,
+                    large_width = excluded.large_width,
+                    large_height = excluded.large_height,
+                    original_url = excluded.original_url,
+                    original_width = excluded.original_width,
+                    original_height = excluded.original_height,
+                    original_size = excluded.original_size,
+                    created_at = excluded.created_at
             ''', (
                 image.get('image_id'),
                 topic_id,
@@ -821,7 +897,7 @@ class ZSXQDatabase:
         current_time = datetime.now(beijing_tz).strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + '+0800'
 
         self.cursor.execute('''
-            INSERT OR REPLACE INTO questions
+            INSERT INTO questions
             (topic_id, owner_user_id, questionee_user_id, text, expired, anonymous,
              owner_questions_count, owner_join_time, owner_status, owner_location, created_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -853,7 +929,7 @@ class ZSXQDatabase:
         current_time = datetime.now(beijing_tz).strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + '+0800'
         
         self.cursor.execute('''
-            INSERT OR REPLACE INTO answers 
+            INSERT INTO answers 
             (topic_id, owner_user_id, text, created_at)
             VALUES (?, ?, ?, ?)
         ''', (
@@ -906,7 +982,7 @@ class ZSXQDatabase:
         created_at = result[0] if result else ''
         
         self.cursor.execute('''
-            INSERT OR REPLACE INTO articles
+            INSERT INTO articles
             (topic_id, title, article_id, article_url, inline_article_url, created_at)
             VALUES (?, ?, ?, ?, ?, ?)
         ''', (
@@ -933,9 +1009,17 @@ class ZSXQDatabase:
             current_time = datetime.now(beijing_tz).strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + '+0800'
 
             self.cursor.execute('''
-                INSERT OR REPLACE INTO topic_files
+                INSERT INTO topic_files
                 (topic_id, file_id, name, hash, size, duration, download_count, create_time, created_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(topic_id, file_id) DO UPDATE SET
+                    name = excluded.name,
+                    hash = excluded.hash,
+                    size = excluded.size,
+                    duration = excluded.duration,
+                    download_count = excluded.download_count,
+                    create_time = excluded.create_time,
+                    created_at = excluded.created_at
             ''', (
                 topic_id,
                 file_data.get('file_id'),
@@ -1565,9 +1649,11 @@ class ZSXQDatabase:
                 self.cursor.execute('''
                     INSERT INTO tags (group_id, tag_name, hid, created_at)
                     VALUES (?, ?, ?, ?)
+                    RETURNING tag_id
                 ''', (group_id, tag_name, hid, current_time))
-                
-                return self.cursor.lastrowid
+
+                row = self.cursor.fetchone()
+                return row[0] if row else None
         except Exception as e:
             print(f"插入标签失败: {e}")
             return None
@@ -1580,8 +1666,9 @@ class ZSXQDatabase:
             current_time = datetime.now(beijing_tz).strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + '+0800'
             
             self.cursor.execute('''
-                INSERT OR IGNORE INTO topic_tags (topic_id, tag_id, created_at)
+                INSERT INTO topic_tags (topic_id, tag_id, created_at)
                 VALUES (?, ?, ?)
+                ON CONFLICT(topic_id, tag_id) DO NOTHING
             ''', (topic_id, tag_id, current_time))
             
             # 更新标签的话题计数

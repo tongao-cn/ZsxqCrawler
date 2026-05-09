@@ -52,7 +52,7 @@ class FakeImportDatabase:
             self.calls.append(("api_response", params))
         elif normalized.startswith("DELETE FROM file_topic_relations"):
             self.calls.append(("delete_relation", params))
-        elif normalized.startswith("INSERT OR IGNORE INTO file_topic_relations"):
+        elif normalized.startswith("INSERT INTO file_topic_relations"):
             self.calls.append(("insert_relation", params))
         return self
 
@@ -269,7 +269,8 @@ class ZSXQFileDatabaseHelperTests(unittest.TestCase):
         db.insert_comments(202, [{"comment_id": 101, "owner": {"user_id": 9}, "text": "ok"}])
 
         sql, params = db.cursor.calls[-1]
-        self.assertIn("INSERT OR REPLACE INTO comments", sql)
+        self.assertIn("INSERT INTO comments", sql)
+        self.assertIn("ON CONFLICT(comment_id) DO UPDATE SET", sql)
         self.assertIn("comment_id, group_id, topic_id", sql)
         self.assertEqual((101, 303, 202), params[:3])
 

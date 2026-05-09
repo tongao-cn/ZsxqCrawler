@@ -139,7 +139,8 @@ class ZSXQColumnsDatabaseHelperTests(unittest.TestCase):
         db._insert_comment(202, {"comment_id": 101, "owner": {"user_id": 9}, "text": "ok"})
 
         sql, params = db.cursor.calls[-1]
-        self.assertIn("INSERT OR REPLACE INTO comments", sql)
+        self.assertIn("INSERT INTO comments", sql)
+        self.assertIn("ON CONFLICT(comment_id) DO UPDATE SET", sql)
         self.assertIn("comment_id, group_id, topic_id", sql)
         self.assertEqual((101, 303, 202), params[:3])
 

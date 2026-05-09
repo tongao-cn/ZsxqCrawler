@@ -155,9 +155,16 @@ class ZSXQFileDatabase:
             return None
             
         self.cursor.execute('''
-        INSERT OR REPLACE INTO users 
+        INSERT INTO users 
         (user_id, name, alias, avatar_url, description, location, ai_comment_url)
         VALUES (?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(user_id) DO UPDATE SET
+            name = excluded.name,
+            alias = excluded.alias,
+            avatar_url = excluded.avatar_url,
+            description = excluded.description,
+            location = excluded.location,
+            ai_comment_url = excluded.ai_comment_url
         ''', (
             user_data.get('user_id'),
             user_data.get('name', ''),
@@ -175,9 +182,13 @@ class ZSXQFileDatabase:
             return None
             
         self.cursor.execute('''
-        INSERT OR REPLACE INTO groups 
+        INSERT INTO groups 
         (group_id, name, type, background_url)
         VALUES (?, ?, ?, ?)
+        ON CONFLICT(group_id) DO UPDATE SET
+            name = excluded.name,
+            type = excluded.type,
+            background_url = excluded.background_url
         ''', (
             group_data.get('group_id'),
             group_data.get('name', ''),
@@ -231,11 +242,28 @@ class ZSXQFileDatabase:
         user_specific = topic_data.get('user_specific', {})
         
         self.cursor.execute('''
-        INSERT OR REPLACE INTO topics 
+        INSERT INTO topics 
         (topic_id, group_id, type, title, annotation, likes_count, tourist_likes_count,
          rewards_count, comments_count, reading_count, readers_count, digested, sticky,
          create_time, modify_time, user_liked, user_subscribed)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(topic_id) DO UPDATE SET
+            group_id = excluded.group_id,
+            type = excluded.type,
+            title = excluded.title,
+            annotation = excluded.annotation,
+            likes_count = excluded.likes_count,
+            tourist_likes_count = excluded.tourist_likes_count,
+            rewards_count = excluded.rewards_count,
+            comments_count = excluded.comments_count,
+            reading_count = excluded.reading_count,
+            readers_count = excluded.readers_count,
+            digested = excluded.digested,
+            sticky = excluded.sticky,
+            create_time = excluded.create_time,
+            modify_time = excluded.modify_time,
+            user_liked = excluded.user_liked,
+            user_subscribed = excluded.user_subscribed
         ''', (
             topic_data.get('topic_id'),
             topic_data.get('group', {}).get('group_id'),
@@ -286,7 +314,7 @@ class ZSXQFileDatabase:
         owner_id = self.insert_user(owner)
         
         self.cursor.execute('''
-        INSERT OR IGNORE INTO talks (topic_id, owner_user_id, text)
+        INSERT INTO talks (topic_id, owner_user_id, text)
         VALUES (?, ?, ?)
         ''', (topic_id, owner_id, talk_data.get('text', '')))
     
@@ -301,10 +329,23 @@ class ZSXQFileDatabase:
             original = image.get('original', {})
             
             self.cursor.execute('''
-            INSERT OR REPLACE INTO images 
+            INSERT INTO images 
             (image_id, topic_id, type, thumbnail_url, thumbnail_width, thumbnail_height,
              large_url, large_width, large_height, original_url, original_width, original_height, original_size)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(image_id) DO UPDATE SET
+                topic_id = excluded.topic_id,
+                type = excluded.type,
+                thumbnail_url = excluded.thumbnail_url,
+                thumbnail_width = excluded.thumbnail_width,
+                thumbnail_height = excluded.thumbnail_height,
+                large_url = excluded.large_url,
+                large_width = excluded.large_width,
+                large_height = excluded.large_height,
+                original_url = excluded.original_url,
+                original_width = excluded.original_width,
+                original_height = excluded.original_height,
+                original_size = excluded.original_size
             ''', (
                 image.get('image_id'),
                 topic_id,
@@ -333,9 +374,16 @@ class ZSXQFileDatabase:
             ''', (topic_id, file.get('file_id')))
 
             self.cursor.execute('''
-            INSERT OR REPLACE INTO topic_files 
+            INSERT INTO topic_files 
             (topic_id, file_id, name, hash, size, duration, download_count, create_time)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(topic_id, file_id) DO UPDATE SET
+                name = excluded.name,
+                hash = excluded.hash,
+                size = excluded.size,
+                duration = excluded.duration,
+                download_count = excluded.download_count,
+                create_time = excluded.create_time
             ''', (
                 topic_id,
                 file.get('file_id'),
@@ -354,7 +402,7 @@ class ZSXQFileDatabase:
             owner_id = self.insert_user(owner)
             
             self.cursor.execute('''
-            INSERT OR IGNORE INTO latest_likes (topic_id, owner_user_id, create_time)
+            INSERT INTO latest_likes (topic_id, owner_user_id, create_time)
             VALUES (?, ?, ?)
             ''', (topic_id, owner_id, like.get('create_time')))
     
@@ -372,10 +420,22 @@ class ZSXQFileDatabase:
             repliee_id = self.insert_user(repliee) if repliee else None
             
             self.cursor.execute('''
-            INSERT OR REPLACE INTO comments 
+            INSERT INTO comments 
             (comment_id, group_id, topic_id, owner_user_id, parent_comment_id, repliee_user_id,
              text, create_time, likes_count, rewards_count, replies_count, sticky)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(comment_id) DO UPDATE SET
+                group_id = excluded.group_id,
+                topic_id = excluded.topic_id,
+                owner_user_id = excluded.owner_user_id,
+                parent_comment_id = excluded.parent_comment_id,
+                repliee_user_id = excluded.repliee_user_id,
+                text = excluded.text,
+                create_time = excluded.create_time,
+                likes_count = excluded.likes_count,
+                rewards_count = excluded.rewards_count,
+                replies_count = excluded.replies_count,
+                sticky = excluded.sticky
             ''', (
                 comment.get('comment_id'),
                 group_id,
@@ -406,7 +466,7 @@ class ZSXQFileDatabase:
         emojis = likes_detail.get('emojis', [])
         for emoji in emojis:
             self.cursor.execute('''
-            INSERT OR REPLACE INTO like_emojis (topic_id, emoji_key, likes_count)
+            INSERT INTO like_emojis (topic_id, emoji_key, likes_count)
             VALUES (?, ?, ?)
             ''', (topic_id, emoji.get('emoji_key'), emoji.get('likes_count', 0)))
     
@@ -414,7 +474,7 @@ class ZSXQFileDatabase:
         """插入用户点赞的表情"""
         for emoji_key in liked_emojis:
             self.cursor.execute('''
-            INSERT OR IGNORE INTO user_liked_emojis (topic_id, emoji_key)
+            INSERT INTO user_liked_emojis (topic_id, emoji_key)
             VALUES (?, ?)
             ''', (topic_id, emoji_key))
     
@@ -426,14 +486,17 @@ class ZSXQFileDatabase:
                 
             # 插入栏目
             self.cursor.execute('''
-            INSERT OR REPLACE INTO columns (column_id, name)
+            INSERT INTO columns (column_id, name)
             VALUES (?, ?)
+            ON CONFLICT(column_id) DO UPDATE SET
+                name = excluded.name
             ''', (column.get('column_id'), column.get('name', '')))
             
             # 插入话题-栏目关联
             self.cursor.execute('''
-            INSERT OR IGNORE INTO topic_columns (topic_id, column_id)
+            INSERT INTO topic_columns (topic_id, column_id)
             VALUES (?, ?)
+            ON CONFLICT(topic_id, column_id) DO NOTHING
             ''', (topic_id, column.get('column_id')))
     
     def insert_solution(self, topic_id: int, solution_data: Dict[str, Any]):
@@ -445,8 +508,9 @@ class ZSXQFileDatabase:
         owner_id = self.insert_user(owner)
         
         self.cursor.execute('''
-        INSERT OR REPLACE INTO solutions (topic_id, task_id, owner_user_id, text)
+        INSERT INTO solutions (topic_id, task_id, owner_user_id, text)
         VALUES (?, ?, ?, ?)
+        RETURNING id
         ''', (
             topic_id,
             solution_data.get('task_id'),
@@ -454,15 +518,23 @@ class ZSXQFileDatabase:
             solution_data.get('text', '')
         ))
         
-        solution_id = self.cursor.lastrowid
+        row = self.cursor.fetchone()
+        solution_id = row[0] if row else None
         
         # 插入解决方案文件
         files = solution_data.get('files', [])
         for file in files:
             self.cursor.execute('''
-            INSERT OR REPLACE INTO solution_files 
+            INSERT INTO solution_files 
             (solution_id, file_id, name, hash, size, duration, download_count, create_time)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(solution_id, file_id) DO UPDATE SET
+                name = excluded.name,
+                hash = excluded.hash,
+                size = excluded.size,
+                duration = excluded.duration,
+                download_count = excluded.download_count,
+                create_time = excluded.create_time
             ''', (
                 solution_id,
                 file.get('file_id'),
@@ -574,8 +646,9 @@ class ZSXQFileDatabase:
                     ''', (file_id, topic_id))
 
                     self.cursor.execute('''
-                    INSERT OR IGNORE INTO file_topic_relations (file_id, topic_id)
+                    INSERT INTO file_topic_relations (file_id, topic_id)
                     VALUES (?, ?)
+                    ON CONFLICT(file_id, topic_id) DO NOTHING
                     ''', (file_id, topic_id))
 
                     if file_id:

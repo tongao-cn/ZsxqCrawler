@@ -46,13 +46,22 @@ class TaskStore:
             try:
                 conn.execute(
                     """
-                    INSERT OR REPLACE INTO task_runs (
+                    INSERT INTO task_runs (
                         task_id, type, status, message, result_json,
                         metadata_json, created_at, updated_at, stopped
                     )
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, COALESCE(
                         (SELECT stopped FROM task_runs WHERE task_id = ?), 0
                     ))
+                    ON CONFLICT(task_id) DO UPDATE SET
+                        type = excluded.type,
+                        status = excluded.status,
+                        message = excluded.message,
+                        result_json = excluded.result_json,
+                        metadata_json = excluded.metadata_json,
+                        created_at = excluded.created_at,
+                        updated_at = excluded.updated_at,
+                        stopped = excluded.stopped
                     """,
                     (
                         task_id,

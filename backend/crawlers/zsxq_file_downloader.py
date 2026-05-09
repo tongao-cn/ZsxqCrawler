@@ -851,9 +851,12 @@ class ZSXQFileDownloader:
         print(f"\n📊 开始收集文件列表到数据库...")
         
         # 创建收集记录
-        self.file_db.cursor.execute("INSERT INTO collection_log (start_time) VALUES (?)", 
-                      (datetime.datetime.now().isoformat(),))
-        log_id = self.file_db.cursor.lastrowid
+        self.file_db.cursor.execute(
+            "INSERT INTO collection_log (start_time) VALUES (?) RETURNING id",
+            (datetime.datetime.now().isoformat(),),
+        )
+        row = self.file_db.cursor.fetchone()
+        log_id = row[0] if row else None
         self.file_db.conn.commit()
         
         stats = {'total_files': 0, 'new_files': 0, 'skipped_files': 0}

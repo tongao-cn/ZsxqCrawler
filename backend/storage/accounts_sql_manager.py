@@ -57,8 +57,6 @@ class AccountsSQLManager:
 
     def __init__(self):
         self.conn = connect()
-        self.conn.execute("PRAGMA journal_mode=WAL;")
-        self.conn.execute("PRAGMA foreign_keys=ON;")
         self.cursor = self.conn.cursor()
         self._ensure_schema()
 

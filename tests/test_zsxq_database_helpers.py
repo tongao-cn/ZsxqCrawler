@@ -19,7 +19,7 @@ class FakeCursor:
 
     def execute(self, query, params=()):
         self.calls.append((" ".join(query.split()), params))
-        if "INSERT OR IGNORE INTO file_topic_relations" in query:
+        if "INSERT INTO file_topic_relations" in query:
             self.rowcount = 1
         return self
 
@@ -123,7 +123,7 @@ class ZSXQDatabaseHelperTests(unittest.TestCase):
                     (101, 202),
                 ),
                 (
-                    "INSERT OR IGNORE INTO file_topic_relations (file_id, topic_id) VALUES (?, ?)",
+                    "INSERT INTO file_topic_relations (file_id, topic_id) VALUES (?, ?) ON CONFLICT(file_id, topic_id) DO NOTHING",
                     (101, 202),
                 ),
             ],
@@ -186,7 +186,8 @@ class ZSXQDatabaseHelperTests(unittest.TestCase):
         ZSXQDatabase._upsert_comment(db, 202, {"comment_id": 101, "text": "ok"})
 
         sql, params = db.cursor.calls[-1]
-        self.assertIn("INSERT OR REPLACE INTO comments", sql)
+        self.assertIn("INSERT INTO comments", sql)
+        self.assertIn("ON CONFLICT(comment_id) DO UPDATE SET", sql)
         self.assertIn("comment_id, group_id, topic_id", sql)
         self.assertEqual((101, 303, 202), params[:3])
 

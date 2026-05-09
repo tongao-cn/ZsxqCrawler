@@ -239,27 +239,16 @@ export default function GroupSidebar({
                 {localFileCount === 0 ? (
                   <div className="mt-2">当前还没有文件记录。采集包含附件的话题后，文件会自动同步到这里。</div>
                 ) : (
-                  <>
-                    <div className="mt-2 grid grid-cols-3 gap-2">
-                      <div className="rounded border border-blue-100 bg-white/70 p-2">
-                        <div className="text-[10px] text-blue-500">已下载</div>
-                        <div className="font-semibold text-blue-900">{localFileStats.downloaded}</div>
-                      </div>
-                      <div className="rounded border border-blue-100 bg-white/70 p-2">
-                        <div className="text-[10px] text-blue-500">未下载</div>
-                        <div className="font-semibold text-blue-900">{localFileStats.pending}</div>
-                      </div>
-                      <div className="rounded border border-blue-100 bg-white/70 p-2">
-                        <div className="text-[10px] text-blue-500">失败</div>
-                        <div className="font-semibold text-blue-900">{localFileStats.failed}</div>
-                      </div>
-                    </div>
+                  <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px]">
+                    <span>已下载 {localFileStats.downloaded}</span>
+                    <span>未下载 {localFileStats.pending}</span>
+                    <span className={localFileStats.failed > 0 ? 'text-red-600' : ''}>
+                      失败 {localFileStats.failed}
+                    </span>
                     {remoteFileCount !== undefined && (
-                      <div className="mt-2 text-[10px] text-blue-600">
-                        本地/远端文件：{localFileCount}/{remoteFileCount}
-                      </div>
+                      <span className="text-blue-600">本地/远端 {localFileCount}/{remoteFileCount}</span>
                     )}
-                  </>
+                  </div>
                 )}
               </div>
             </div>

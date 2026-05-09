@@ -6,15 +6,15 @@ import { useState, useRef, useCallback, useDeferredValue } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Input } from '@/components/ui/input';
-import { ArrowLeft, MessageSquare, Search, BarChart3, File, FileText, Archive, BookOpen, Sparkles } from 'lucide-react';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { ArrowLeft, MessageSquare, BarChart3, File, Sparkles } from 'lucide-react';
 import { apiClient } from '@/lib/api';
 import { toast } from 'sonner';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import GroupSidebar from '@/components/GroupSidebar';
 import TopicCard from '@/components/TopicCard';
 import GroupActionPanel from '@/components/GroupActionPanel';
+import GroupTopBar from '@/components/GroupTopBar';
+import TaskDock from '@/components/TaskDock';
 import TopicPagination from '@/components/TopicPagination';
 import { useTopicDetailsPrefetch } from '@/hooks/useTopicDetailsPrefetch';
 import { useDebouncedSearch } from '@/hooks/useDebouncedSearch';
@@ -32,10 +32,6 @@ const LazyPanelFallback = () => (
   </div>
 );
 
-const TaskLogViewer = dynamic(() => import('@/components/TaskLogViewer'), {
-  loading: LazyPanelFallback,
-  ssr: false,
-});
 const GroupFileAnalysisPanel = dynamic(() => import('@/components/GroupFileAnalysisPanel'), {
   loading: LazyPanelFallback,
   ssr: false,
@@ -102,8 +98,13 @@ export default function GroupDetailPage() {
     activeTab,
     setActiveTab,
     currentTaskId,
+    taskDockVisible,
+    taskLogExpanded,
     handleTaskCreated,
-    closeTaskLog,
+    openTaskLog,
+    toggleTaskLog,
+    collapseTaskLog,
+    closeTaskDock,
   } = useGroupTaskBridge();
   const {
     fileStatuses,
@@ -347,93 +348,20 @@ export default function GroupDetailPage() {
 
   return (
     <div className="h-screen bg-gray-50 overflow-hidden flex flex-col">
-      <div className="flex-shrink-0 p-4">
-        <div className="flex items-center gap-4">
-          <Button
-            variant="ghost"
-            onClick={() => router.push('/')}
-            className="flex items-center gap-2"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            返回群组列表
-          </Button>
-
-          <div className="flex items-center gap-4 flex-1 justify-center max-w-2xl mx-auto">
-            {/* 专栏入口按钮 - 仅在有专栏时显示 */}
-            {hasColumns && (
-              <Button
-                variant="outline"
-                size="sm"
-                className="flex items-center gap-2 whitespace-nowrap bg-gradient-to-r from-amber-50 to-orange-50 border-amber-200 hover:border-amber-300 hover:from-amber-100 hover:to-orange-100 text-amber-700"
-                onClick={() => router.push(`/groups/${groupId}/columns`)}
-              >
-                <BookOpen className="h-4 w-4" />
-                {columnsTitle || '专栏'}
-              </Button>
-            )}
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
-              <Input
-                placeholder="搜索话题..."
-                value={searchTerm}
-                onChange={(e) => {
-                  setSearchTerm(e.target.value);
-                }}
-                className="pl-10"
-              />
-            </div>
-            <Button onClick={() => loadTopics()} disabled={topicsLoading}>
-              {topicsLoading ? '加载中...' : '刷新'}
-            </Button>
-          </div>
-
-          {/* 图片缓存管理 */}
-          <div className="flex items-center gap-2">
-            <Dialog>
-              <DialogTrigger asChild>
-                <Button variant="destructive" size="sm" className="flex items-center gap-2">
-                  <Archive className="h-4 w-4" />
-                  清空缓存 {cacheInfo ? `(${cacheInfo.total_files}个文件 ${cacheInfo.total_size_mb}MB)` : '(加载中...)'}
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="sm:max-w-[425px]">
-                <DialogHeader>
-                  <DialogTitle>确认清空图片缓存</DialogTitle>
-                  <DialogDescription>
-                    这将删除当前群组的所有本地缓存图片文件。清空后图片将重新下载，确定要继续吗？
-                  </DialogDescription>
-                </DialogHeader>
-                <div className="space-y-4 py-4">
-                  <div className="flex items-center justify-center p-4 border rounded-lg bg-red-50">
-                    <div className="text-center">
-                      <div className="font-medium text-red-800">当前缓存信息</div>
-                      <div className="text-sm text-red-600">
-                        {cacheInfo ? `${cacheInfo.total_files}个文件 (${cacheInfo.total_size_mb}MB)` : '加载中...'}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                <DialogFooter>
-                  <DialogTrigger asChild>
-                    <Button variant="outline">
-                      取消
-                    </Button>
-                  </DialogTrigger>
-                  <Button
-                    variant="destructive"
-                    onClick={clearImageCache}
-                    disabled={clearingCache}
-                    className="flex items-center gap-2"
-                  >
-                    <Archive className="h-4 w-4" />
-                    {clearingCache ? '清空中...' : '确认清空'}
-                  </Button>
-                </DialogFooter>
-              </DialogContent>
-            </Dialog>
-          </div>
-        </div>
-      </div>
+      <GroupTopBar
+        searchTerm={searchTerm}
+        onSearchTermChange={setSearchTerm}
+        topicsLoading={topicsLoading}
+        onRefreshTopics={loadTopics}
+        showTopicSearch={activeTab === 'topics'}
+        taskDockVisible={taskDockVisible}
+        currentTaskId={currentTaskId}
+        onToggleTaskLog={toggleTaskLog}
+        cacheInfo={cacheInfo}
+        clearingCache={clearingCache}
+        onClearImageCache={clearImageCache}
+        onBack={() => router.push('/')}
+      />
 
       {/* 三列布局 - 使用flex布局，左右固定，中间滚动 */}
       <div className="flex-1 flex gap-4 px-4 pb-4 min-h-0">
@@ -456,12 +384,12 @@ export default function GroupDetailPage() {
           onOpenColumns={() => router.push(`/groups/${groupId}/columns`)}
         />
 
-        {/* 中间：话题和日志 - 可滚动区域 */}
+        {/* 中间：群组内容 - 可滚动区域 */}
         <div className="flex-1 flex flex-col min-w-0 min-h-0">
           <Tabs value={activeTab} onValueChange={setActiveTab} className="flex flex-col h-full">
             {/* 固定的标签页头部 */}
             <div className="flex-shrink-0 mb-4">
-              <TabsList className="grid w-full grid-cols-5">
+              <TabsList className="grid w-full grid-cols-4">
                 <TabsTrigger value="topics" className="flex items-center gap-2">
                   <MessageSquare className="h-4 w-4" />
                   话题列表
@@ -469,10 +397,6 @@ export default function GroupDetailPage() {
                 <TabsTrigger value="files" className="flex items-center gap-2">
                   <File className="h-4 w-4" />
                   文件
-                </TabsTrigger>
-                <TabsTrigger value="logs" className="flex items-center gap-2">
-                  <FileText className="h-4 w-4" />
-                  任务日志
                 </TabsTrigger>
                 <TabsTrigger value="analysis" className="flex items-center gap-2">
                   <BarChart3 className="h-4 w-4" />
@@ -547,25 +471,6 @@ export default function GroupDetailPage() {
             <TabsContent value="files" className="flex-1 flex flex-col min-h-0">
               <div className="flex-1 min-h-0 overflow-auto">
                 <GroupFileAnalysisPanel groupId={groupId} />
-              </div>
-            </TabsContent>
-
-            {/* 任务日志区域 */}
-            <TabsContent value="logs" className="flex-1 flex flex-col min-h-0">
-              <div className="flex-1 min-h-0">
-                <div className="h-full bg-gradient-to-br from-slate-50 to-gray-100 rounded-lg border border-gray-200 overflow-hidden">
-                  <TaskLogViewer
-                    taskId={currentTaskId}
-                    onClose={closeTaskLog}
-                    inline={true}
-                    onTaskStop={() => {
-                      setTimeout(() => {
-                        loadGroupStats();
-                        loadTopics();
-                      }, 1000);
-                    }}
-                  />
-                </div>
               </div>
             </TabsContent>
 
@@ -664,6 +569,21 @@ export default function GroupDetailPage() {
         />
       </div>
 
+      {taskDockVisible && (
+        <TaskDock
+          taskId={currentTaskId}
+          expanded={taskLogExpanded}
+          onOpen={openTaskLog}
+          onCollapse={collapseTaskLog}
+          onClose={closeTaskDock}
+          onTaskStop={() => {
+            setTimeout(() => {
+              loadGroupStats();
+              loadTopics();
+            }, 1000);
+          }}
+        />
+      )}
     </div>
   );
 }

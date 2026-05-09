@@ -114,9 +114,16 @@ class ZSXQColumnsDatabase:
         statistics = column_data.get('statistics', {})
         
         self.cursor.execute('''
-            INSERT OR REPLACE INTO columns 
+            INSERT INTO columns 
             (column_id, group_id, name, cover_url, topics_count, create_time, last_topic_attach_time)
             VALUES (?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(column_id) DO UPDATE SET
+                group_id = excluded.group_id,
+                name = excluded.name,
+                cover_url = excluded.cover_url,
+                topics_count = excluded.topics_count,
+                create_time = excluded.create_time,
+                last_topic_attach_time = excluded.last_topic_attach_time
         ''', (
             column_data.get('column_id'),
             group_id,
@@ -162,9 +169,16 @@ class ZSXQColumnsDatabase:
             return None
         
         self.cursor.execute('''
-            INSERT OR REPLACE INTO column_topics 
+            INSERT INTO column_topics 
             (topic_id, column_id, group_id, title, text, create_time, attached_to_column_time)
             VALUES (?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(topic_id) DO UPDATE SET
+                column_id = excluded.column_id,
+                group_id = excluded.group_id,
+                title = excluded.title,
+                text = excluded.text,
+                create_time = excluded.create_time,
+                attached_to_column_time = excluded.attached_to_column_time
         ''', (
             topic_data.get('topic_id'),
             column_id,
@@ -200,9 +214,15 @@ class ZSXQColumnsDatabase:
             return None
         
         self.cursor.execute('''
-            INSERT OR REPLACE INTO users 
+            INSERT INTO users 
             (user_id, name, alias, avatar_url, description, location)
             VALUES (?, ?, ?, ?, ?, ?)
+            ON CONFLICT(user_id) DO UPDATE SET
+                name = excluded.name,
+                alias = excluded.alias,
+                avatar_url = excluded.avatar_url,
+                description = excluded.description,
+                location = excluded.location
         ''', (
             user_data.get('user_id'),
             user_data.get('name', ''),
@@ -225,10 +245,24 @@ class ZSXQColumnsDatabase:
         full_text = talk.get('text', '')
         
         self.cursor.execute('''
-            INSERT OR REPLACE INTO topic_details 
+            INSERT INTO topic_details 
             (topic_id, group_id, type, title, full_text, likes_count, comments_count,
              readers_count, digested, sticky, create_time, modify_time, raw_json, updated_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+            ON CONFLICT(topic_id) DO UPDATE SET
+                group_id = excluded.group_id,
+                type = excluded.type,
+                title = excluded.title,
+                full_text = excluded.full_text,
+                likes_count = excluded.likes_count,
+                comments_count = excluded.comments_count,
+                readers_count = excluded.readers_count,
+                digested = excluded.digested,
+                sticky = excluded.sticky,
+                create_time = excluded.create_time,
+                modify_time = excluded.modify_time,
+                raw_json = excluded.raw_json,
+                updated_at = excluded.updated_at
         ''', (
             topic_id,
             group_id,
@@ -251,8 +285,10 @@ class ZSXQColumnsDatabase:
             user_id = self.insert_user(owner)
             if user_id:
                 self.cursor.execute('''
-                    INSERT OR REPLACE INTO topic_owners (topic_id, user_id, owner_type)
+                    INSERT INTO topic_owners (topic_id, user_id, owner_type)
                     VALUES (?, ?, 'talk')
+                    ON CONFLICT(topic_id, owner_type) DO UPDATE SET
+                        user_id = excluded.user_id
                 ''', (topic_id, user_id))
         
         # 处理图片
@@ -293,11 +329,24 @@ class ZSXQColumnsDatabase:
         original = image_data.get('original', {})
         
         self.cursor.execute('''
-            INSERT OR REPLACE INTO images 
+            INSERT INTO images 
             (image_id, topic_id, type, thumbnail_url, thumbnail_width, thumbnail_height,
              large_url, large_width, large_height, original_url, original_width, 
              original_height, original_size)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(image_id) DO UPDATE SET
+                topic_id = excluded.topic_id,
+                type = excluded.type,
+                thumbnail_url = excluded.thumbnail_url,
+                thumbnail_width = excluded.thumbnail_width,
+                thumbnail_height = excluded.thumbnail_height,
+                large_url = excluded.large_url,
+                large_width = excluded.large_width,
+                large_height = excluded.large_height,
+                original_url = excluded.original_url,
+                original_width = excluded.original_width,
+                original_height = excluded.original_height,
+                original_size = excluded.original_size
         ''', (
             image_data.get('image_id'),
             topic_id,
@@ -320,9 +369,17 @@ class ZSXQColumnsDatabase:
             return
         
         self.cursor.execute('''
-            INSERT OR REPLACE INTO files 
+            INSERT INTO files 
             (file_id, topic_id, name, hash, size, duration, download_count, create_time)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(file_id) DO UPDATE SET
+                topic_id = excluded.topic_id,
+                name = excluded.name,
+                hash = excluded.hash,
+                size = excluded.size,
+                duration = excluded.duration,
+                download_count = excluded.download_count,
+                create_time = excluded.create_time
         ''', (
             file_data.get('file_id'),
             topic_id,
@@ -342,9 +399,16 @@ class ZSXQColumnsDatabase:
         cover = video_data.get('cover', {})
         
         self.cursor.execute('''
-            INSERT OR REPLACE INTO videos 
+            INSERT INTO videos 
             (video_id, topic_id, size, duration, cover_url, cover_width, cover_height)
             VALUES (?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(video_id) DO UPDATE SET
+                topic_id = excluded.topic_id,
+                size = excluded.size,
+                duration = excluded.duration,
+                cover_url = excluded.cover_url,
+                cover_width = excluded.cover_width,
+                cover_height = excluded.cover_height
         ''', (
             video_data.get('video_id'),
             topic_id,
@@ -370,10 +434,22 @@ class ZSXQColumnsDatabase:
         group_id = self._resolve_topic_group_id(topic_id)
         
         self.cursor.execute('''
-            INSERT OR REPLACE INTO comments 
+            INSERT INTO comments 
             (comment_id, group_id, topic_id, owner_user_id, parent_comment_id, repliee_user_id,
              text, create_time, likes_count, rewards_count, replies_count, sticky)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(comment_id) DO UPDATE SET
+                group_id = excluded.group_id,
+                topic_id = excluded.topic_id,
+                owner_user_id = excluded.owner_user_id,
+                parent_comment_id = excluded.parent_comment_id,
+                repliee_user_id = excluded.repliee_user_id,
+                text = excluded.text,
+                create_time = excluded.create_time,
+                likes_count = excluded.likes_count,
+                rewards_count = excluded.rewards_count,
+                replies_count = excluded.replies_count,
+                sticky = excluded.sticky
         ''', (
             comment_data.get('comment_id'),
             group_id,
@@ -872,9 +948,11 @@ class ZSXQColumnsDatabase:
         self.cursor.execute('''
             INSERT INTO crawl_log (group_id, crawl_type)
             VALUES (?, ?)
+            RETURNING id
         ''', (group_id, crawl_type))
+        row = self.cursor.fetchone()
         self.conn.commit()
-        return self.cursor.lastrowid
+        return row[0] if row else None
     
     def update_crawl_log(self, log_id: int, columns_count: int = 0, topics_count: int = 0,
                          details_count: int = 0, files_count: int = 0,

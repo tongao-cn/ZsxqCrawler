@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import dynamic from 'next/dynamic';
 
 import { Badge } from '@/components/ui/badge';
@@ -22,6 +23,8 @@ import {
 import {
   BarChart3,
   Calendar,
+  ChevronDown,
+  ChevronRight,
   Download,
   Edit,
   FileText,
@@ -152,6 +155,7 @@ export default function GroupActionPanel({
   download,
   actions,
 }: GroupActionPanelProps) {
+  const [advancedCrawlOpen, setAdvancedCrawlOpen] = useState(false);
   const hasTopics = crawl.topicsCount > 0;
   const hasLocalFiles = download.localFileCount > 0;
   const sourceFileCount = download.sourceFileCount ?? '?';
@@ -198,7 +202,146 @@ export default function GroupActionPanel({
                 </TabsList>
 
                 <TabsContent value="crawl" className="space-y-3 mt-4">
-                  <div className="space-y-2">
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <div className="text-xs font-medium text-gray-500">常用采集</div>
+                      <div
+                        className={`border rounded-lg p-3 cursor-pointer transition-all ${
+                          crawl.selectedOption === 'latest'
+                            ? 'bg-blue-50 border-blue-200'
+                            : 'border-gray-200 hover:bg-gray-50'
+                        }`}
+                        onClick={() => {
+                          crawl.onSelectedOptionChange('latest');
+                          crawl.onLatestDialogOpenChange(true);
+                        }}
+                      >
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="flex items-center gap-2">
+                            <RefreshCw
+                              className={`h-3 w-3 ${
+                                crawl.selectedOption === 'latest' ? 'text-blue-600' : 'text-gray-400'
+                              }`}
+                            />
+                            <span
+                              className={`text-xs font-medium ${
+                                crawl.selectedOption === 'latest' ? 'text-blue-700' : 'text-gray-600'
+                              }`}
+                            >
+                              获取最新
+                            </span>
+                          </div>
+                          {hasTopics && (
+                            <Badge variant="secondary" className="text-xs px-1 py-0">
+                              推荐
+                            </Badge>
+                          )}
+                        </div>
+                        {crawl.selectedOption === 'latest' && (
+                          <AlertDialog open={crawl.latestDialogOpen} onOpenChange={crawl.onLatestDialogOpenChange}>
+                            <Button
+                              size="sm"
+                              className="w-full h-7 text-xs bg-blue-600 hover:bg-blue-700"
+                              disabled={!!crawl.loading}
+                              onClick={() => crawl.onLatestDialogOpenChange(true)}
+                            >
+                              {crawl.loading === 'latest' ? '执行中...' : '开始'}
+                            </Button>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>获取最新或按时间区间</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                  默认从最新开始抓取；也可选择最近N天或自定义时间范围。
+                                </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <div className="space-y-3">
+                                <div className="text-xs text-gray-600">快速选择：最近N天</div>
+                                <div className="flex items-center gap-2">
+                                  <Input
+                                    type="number"
+                                    min={1}
+                                    value={crawl.quickLastDays}
+                                    onChange={(event) => crawl.onQuickLastDaysChange(parseInt(event.target.value || '1'))}
+                                    className="h-7 text-xs w-24"
+                                  />
+                                  <span className="text-xs text-gray-500">天</span>
+                                  <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => crawl.onQuickLastDaysChange(3)}>
+                                    3天
+                                  </Button>
+                                  <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => crawl.onQuickLastDaysChange(7)}>
+                                    7天
+                                  </Button>
+                                  <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => crawl.onQuickLastDaysChange(30)}>
+                                    30天
+                                  </Button>
+                                </div>
+                                <div className="text-[10px] text-gray-400">或 自定义日期范围</div>
+                                <div className="flex items-center gap-2">
+                                  <Input
+                                    type="date"
+                                    value={crawl.rangeStartDate}
+                                    onChange={(event) => crawl.onRangeStartDateChange(event.target.value)}
+                                    className="h-7 text-xs"
+                                  />
+                                  <span className="text-xs text-gray-500">~</span>
+                                  <Input
+                                    type="date"
+                                    value={crawl.rangeEndDate}
+                                    onChange={(event) => crawl.onRangeEndDateChange(event.target.value)}
+                                    className="h-7 text-xs"
+                                  />
+                                </div>
+                              </div>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    crawl.onLatestDialogOpenChange(false);
+                                  }}
+                                >
+                                  取消
+                                </AlertDialogCancel>
+                                <AlertDialogAction
+                                  onClick={actions.onCrawlLatest}
+                                  className="bg-blue-600 hover:bg-blue-700 focus:ring-blue-600"
+                                >
+                                  从最新开始
+                                </AlertDialogAction>
+                                <AlertDialogAction
+                                  onClick={actions.onCrawlLastDays}
+                                  className="bg-teal-600 hover:bg-teal-700 focus:ring-teal-600"
+                                >
+                                  最近N天开始
+                                </AlertDialogAction>
+                                <AlertDialogAction
+                                  onClick={actions.onCrawlCustomRange}
+                                  className="bg-teal-600 hover:bg-teal-700 focus:ring-teal-600"
+                                >
+                                  按时间区间开始
+                                </AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="space-y-2 border-t border-gray-200 pt-3">
+                      <button
+                        type="button"
+                        className="flex w-full items-center justify-between text-xs font-medium text-gray-500"
+                        onClick={() => setAdvancedCrawlOpen((open) => !open)}
+                        aria-expanded={advancedCrawlOpen}
+                      >
+                        <span>进阶采集</span>
+                        {advancedCrawlOpen ? (
+                          <ChevronDown className="h-3 w-3" />
+                        ) : (
+                          <ChevronRight className="h-3 w-3" />
+                        )}
+                      </button>
+                      {advancedCrawlOpen && (
+                        <>
                     <div className="border rounded-lg p-3 cursor-pointer transition-all border-blue-200 hover:bg-blue-50">
                       <div className="flex items-center justify-between mb-2">
                         <div className="flex items-center gap-2">
@@ -290,126 +433,6 @@ export default function GroupActionPanel({
 
                     <div
                       className={`border rounded-lg p-3 cursor-pointer transition-all ${
-                        crawl.selectedOption === 'latest'
-                          ? 'bg-blue-50 border-blue-200'
-                          : 'border-gray-200 hover:bg-gray-50'
-                      }`}
-                      onClick={() => {
-                        crawl.onSelectedOptionChange('latest');
-                        crawl.onLatestDialogOpenChange(true);
-                      }}
-                    >
-                      <div className="flex items-center justify-between mb-2">
-                        <div className="flex items-center gap-2">
-                          <RefreshCw
-                            className={`h-3 w-3 ${
-                              crawl.selectedOption === 'latest' ? 'text-blue-600' : 'text-gray-400'
-                            }`}
-                          />
-                          <span
-                            className={`text-xs font-medium ${
-                              crawl.selectedOption === 'latest' ? 'text-blue-700' : 'text-gray-600'
-                            }`}
-                          >
-                            获取最新
-                          </span>
-                        </div>
-                        {hasTopics && (
-                          <Badge variant="secondary" className="text-xs px-1 py-0">
-                            推荐
-                          </Badge>
-                        )}
-                      </div>
-                      {crawl.selectedOption === 'latest' && (
-                        <AlertDialog open={crawl.latestDialogOpen} onOpenChange={crawl.onLatestDialogOpenChange}>
-                          <Button
-                            size="sm"
-                            className="w-full h-7 text-xs bg-blue-600 hover:bg-blue-700"
-                            disabled={!!crawl.loading}
-                            onClick={() => crawl.onLatestDialogOpenChange(true)}
-                          >
-                            {crawl.loading === 'latest' ? '执行中...' : '开始'}
-                          </Button>
-                          <AlertDialogContent>
-                            <AlertDialogHeader>
-                              <AlertDialogTitle>获取最新或按时间区间</AlertDialogTitle>
-                              <AlertDialogDescription>
-                                默认从最新开始抓取；也可选择最近N天或自定义时间范围。
-                              </AlertDialogDescription>
-                            </AlertDialogHeader>
-                            <div className="space-y-3">
-                              <div className="text-xs text-gray-600">快速选择：最近N天</div>
-                              <div className="flex items-center gap-2">
-                                <Input
-                                  type="number"
-                                  min={1}
-                                  value={crawl.quickLastDays}
-                                  onChange={(event) => crawl.onQuickLastDaysChange(parseInt(event.target.value || '1'))}
-                                  className="h-7 text-xs w-24"
-                                />
-                                <span className="text-xs text-gray-500">天</span>
-                                <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => crawl.onQuickLastDaysChange(3)}>
-                                  3天
-                                </Button>
-                                <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => crawl.onQuickLastDaysChange(7)}>
-                                  7天
-                                </Button>
-                                <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => crawl.onQuickLastDaysChange(30)}>
-                                  30天
-                                </Button>
-                              </div>
-                              <div className="text-[10px] text-gray-400">或 自定义日期范围</div>
-                              <div className="flex items-center gap-2">
-                                <Input
-                                  type="date"
-                                  value={crawl.rangeStartDate}
-                                  onChange={(event) => crawl.onRangeStartDateChange(event.target.value)}
-                                  className="h-7 text-xs"
-                                />
-                                <span className="text-xs text-gray-500">~</span>
-                                <Input
-                                  type="date"
-                                  value={crawl.rangeEndDate}
-                                  onChange={(event) => crawl.onRangeEndDateChange(event.target.value)}
-                                  className="h-7 text-xs"
-                                />
-                              </div>
-                            </div>
-                            <AlertDialogFooter>
-                              <AlertDialogCancel
-                                onClick={(event) => {
-                                  event.stopPropagation();
-                                  crawl.onLatestDialogOpenChange(false);
-                                }}
-                              >
-                                取消
-                              </AlertDialogCancel>
-                              <AlertDialogAction
-                                onClick={actions.onCrawlLatest}
-                                className="bg-blue-600 hover:bg-blue-700 focus:ring-blue-600"
-                              >
-                                从最新开始
-                              </AlertDialogAction>
-                              <AlertDialogAction
-                                onClick={actions.onCrawlLastDays}
-                                className="bg-teal-600 hover:bg-teal-700 focus:ring-teal-600"
-                              >
-                                最近N天开始
-                              </AlertDialogAction>
-                              <AlertDialogAction
-                                onClick={actions.onCrawlCustomRange}
-                                className="bg-teal-600 hover:bg-teal-700 focus:ring-teal-600"
-                              >
-                                按时间区间开始
-                              </AlertDialogAction>
-                            </AlertDialogFooter>
-                          </AlertDialogContent>
-                        </AlertDialog>
-                      )}
-                    </div>
-
-                    <div
-                      className={`border rounded-lg p-3 cursor-pointer transition-all ${
                         crawl.selectedOption === 'incremental'
                           ? 'bg-green-50 border-green-200'
                           : !hasTopics
@@ -445,9 +468,12 @@ export default function GroupActionPanel({
                         </Button>
                       )}
                     </div>
+                        </>
+                      )}
+                    </div>
 
                     {hasTopics && (
-                      <div className="border-t pt-3 mt-4">
+                      <div className="space-y-2 border-t border-red-100 pt-3">
                         <div className="text-xs font-medium text-red-900 mb-2">数据管理</div>
                         <AlertDialog>
                           <AlertDialogTrigger asChild>
