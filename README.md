@@ -111,6 +111,8 @@ NEXT_PUBLIC_API_BASE_URL=http://192.168.x.x:8208
 - `backend/crawlers/`: 知识星球话题采集和文件下载器。
 - `scripts/`: 一次性或辅助命令行脚本。
 
+架构分层、数据边界和后续演进路线见 `docs/project-architecture-roadmap.md`。
+
 推荐使用新目录入口：
 
 ```bash
