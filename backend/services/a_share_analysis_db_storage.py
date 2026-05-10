@@ -25,6 +25,7 @@ DEFAULT_KNOW_ACTION_ENV_PATH = Path(os.getenv("KNOW_ACTION_ENV_PATH", r"C:\Dev\K
 
 DAILY_MENTIONS_TABLE = "zsxq_a_share_daily_mentions"
 PROCESSED_STATE_TABLE = "zsxq_a_share_processed_state"
+TOPIC_STOCK_EXTRACTIONS_TABLE = "zsxq_a_share_topic_stock_extractions"
 TDX_EXPORTS_TABLE = "zsxq_a_share_tdx_exports"
 TDX_EXPORT_BLOCKS_TABLE = "zsxq_a_share_tdx_export_blocks"
 STOCK_BASIC_TABLE = "stock_basic"
@@ -206,6 +207,126 @@ def save_daily_mentions(
                     [(normalized_group_id, day, company, count, datetime.now()) for day, company, count in rows],
                     template="(%s, %s::date, %s, %s, %s)",
                 )
+
+
+def save_topic_stock_extractions(
+    extractions: Sequence[Dict[str, Any]],
+    env_path: Path = DEFAULT_KNOW_ACTION_ENV_PATH,
+    group_id: Optional[str] = None,
+) -> int:
+    normalized_group_id = _normalize_group_id(group_id)
+    rows: List[Tuple[str, str, str, str, str, str, str, str, float, str, str, datetime]] = []
+    now = datetime.now()
+    for item in extractions:
+        stock_name = str(item.get("stock_name") or "").strip()
+        topic_id = str(item.get("topic_id") or "").strip()
+        topic_date = str(item.get("topic_date") or item.get("day") or "").strip()
+        if not stock_name or not topic_id or not topic_date:
+            continue
+        rows.append(
+            (
+                str(item.get("group_id") or normalized_group_id),
+                topic_id,
+                topic_date,
+                stock_name,
+                str(item.get("stock_code") or ""),
+                str(item.get("market") or ""),
+                json.dumps(list(item.get("concepts") or []), ensure_ascii=False),
+                str(item.get("reason") or ""),
+                float(item.get("confidence") or 0),
+                str(item.get("model") or ""),
+                str(item.get("prompt_version") or ""),
+                now,
+            )
+        )
+
+    if not rows:
+        return 0
+
+    with get_connection(env_path) as conn:
+        with conn.cursor() as cur:
+            execute_values(
+                cur,
+                f"""
+                INSERT INTO {_core_table_ref(TOPIC_STOCK_EXTRACTIONS_TABLE)} (
+                    group_id, topic_id, topic_date, stock_name, stock_code, market,
+                    concepts_json, reason, confidence, model, prompt_version, updated_at
+                )
+                VALUES %s
+                ON CONFLICT (group_id, topic_id, stock_name) DO UPDATE SET
+                    topic_date = excluded.topic_date,
+                    stock_code = excluded.stock_code,
+                    market = excluded.market,
+                    concepts_json = excluded.concepts_json,
+                    reason = excluded.reason,
+                    confidence = excluded.confidence,
+                    model = excluded.model,
+                    prompt_version = excluded.prompt_version,
+                    updated_at = excluded.updated_at
+                """,
+                rows,
+                template="(%s, %s, %s::date, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
+            )
+    return len(rows)
+
+
+def _parse_json_list(value: Any) -> List[Any]:
+    if not value:
+        return []
+    if isinstance(value, list):
+        return value
+    try:
+        parsed = json.loads(value)
+    except Exception:
+        return []
+    return parsed if isinstance(parsed, list) else []
+
+
+def load_topic_stock_extractions(
+    env_path: Path = DEFAULT_KNOW_ACTION_ENV_PATH,
+    group_id: Optional[str] = None,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+) -> List[Dict[str, Any]]:
+    normalized_group_id = _normalize_group_id(group_id)
+    conditions = ["group_id = %s"]
+    params: List[Any] = [normalized_group_id]
+    if start_date:
+        conditions.append("topic_date >= %s::date")
+        params.append(start_date)
+    if end_date:
+        conditions.append("topic_date <= %s::date")
+        params.append(end_date)
+
+    with get_connection(env_path) as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                f"""
+                SELECT group_id, topic_id, topic_date::text, stock_name, stock_code, market,
+                       concepts_json, reason, confidence, model, prompt_version, updated_at
+                FROM {_core_table_ref(TOPIC_STOCK_EXTRACTIONS_TABLE)}
+                WHERE {" AND ".join(conditions)}
+                ORDER BY topic_date ASC, topic_id ASC, stock_name ASC
+                """,
+                params,
+            )
+            return [
+                {
+                    "group_id": str(row[0] or ""),
+                    "topic_id": str(row[1] or ""),
+                    "topic_date": str(row[2] or ""),
+                    "stock_name": str(row[3] or ""),
+                    "stock_code": str(row[4] or ""),
+                    "market": str(row[5] or ""),
+                    "concepts": [str(item) for item in _parse_json_list(row[6]) if str(item).strip()],
+                    "reason": str(row[7] or ""),
+                    "confidence": float(row[8] or 0),
+                    "model": str(row[9] or ""),
+                    "prompt_version": str(row[10] or ""),
+                    "updated_at": row[11].isoformat() if hasattr(row[11], "isoformat") else str(row[11] or ""),
+                }
+                for row in cur.fetchall()
+            ]
 
 
 def _parse_state_key(key: str) -> Optional[Tuple[str, str, str]]:
@@ -519,6 +640,7 @@ __all__ = [
     "DEFAULT_KNOW_ACTION_ENV_PATH",
     "DAILY_MENTIONS_TABLE",
     "PROCESSED_STATE_TABLE",
+    "TOPIC_STOCK_EXTRACTIONS_TABLE",
     "TDX_EXPORTS_TABLE",
     "TDX_EXPORT_BLOCKS_TABLE",
     "ensure_analysis_tables",
@@ -527,7 +649,9 @@ __all__ = [
     "load_daily_mentions",
     "load_processed_state",
     "load_stock_basic_records",
+    "load_topic_stock_extractions",
     "log_tdx_export",
     "save_daily_mentions",
     "save_processed_state",
+    "save_topic_stock_extractions",
 ]

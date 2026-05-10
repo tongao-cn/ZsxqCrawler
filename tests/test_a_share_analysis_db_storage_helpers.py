@@ -71,7 +71,19 @@ class AShareAnalysisDbStorageHelperTests(unittest.TestCase):
         from backend.services import a_share_analysis_db_storage as storage
 
         self.assertEqual('"zsxq_core"."zsxq_a_share_daily_mentions"', storage._core_table_ref(storage.DAILY_MENTIONS_TABLE))
+        self.assertEqual(
+            '"zsxq_core"."zsxq_a_share_topic_stock_extractions"',
+            storage._core_table_ref(storage.TOPIC_STOCK_EXTRACTIONS_TABLE),
+        )
         self.assertEqual('"public"."stock_basic"', storage._public_table_ref(storage.STOCK_BASIC_TABLE))
+
+    @unittest.skipUnless(HAS_STORAGE_DEPS, "PostgreSQL storage dependencies are not installed")
+    def test_parse_json_list_handles_invalid_values(self):
+        from backend.services import a_share_analysis_db_storage as storage
+
+        self.assertEqual(["算力"], storage._parse_json_list('["算力"]'))
+        self.assertEqual([], storage._parse_json_list("not json"))
+        self.assertEqual([], storage._parse_json_list({"bad": "shape"}))
 
     @unittest.skipUnless(HAS_STORAGE_DEPS, "PostgreSQL storage dependencies are not installed")
     def test_backfill_sql_targets_core_from_public_sources(self):

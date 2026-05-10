@@ -96,6 +96,72 @@ class AShareAnalysisServiceHelperTests(unittest.TestCase):
             _empty_chart_payload(" 12345 ", ["2026-05-01"], "2026-05-02", "2026-05-03", 20, 35),
         )
 
+    def test_parse_topic_stock_extraction_output_supports_new_schema(self):
+        from backend.services.a_share_analysis_service import _parse_company_extraction_output, _parse_topic_stock_extraction_output
+
+        message = """
+        {
+          "stocks": [
+            {
+              "stock_name": "宁德时代",
+              "concepts": ["固态电池", "储能"],
+              "reason": "话题明确讨论宁德时代电池链。",
+              "confidence": 0.86
+            },
+            {
+              "stock_name": "沪深300ETF",
+              "concepts": ["指数"],
+              "reason": "不是股票",
+              "confidence": 0.9
+            }
+          ]
+        }
+        """
+
+        stocks = _parse_topic_stock_extraction_output(message)
+
+        self.assertEqual(
+            [
+                {
+                    "stock_name": "宁德时代",
+                    "concepts": ["固态电池", "储能"],
+                    "reason": "话题明确讨论宁德时代电池链。",
+                    "confidence": 0.86,
+                }
+            ],
+            stocks,
+        )
+        self.assertEqual(["宁德时代"], _parse_company_extraction_output(message))
+
+    def test_parse_topic_stock_extraction_output_keeps_legacy_company_schema(self):
+        from backend.services.a_share_analysis_service import _parse_topic_stock_extraction_output
+
+        stocks = _parse_topic_stock_extraction_output('{"companies": ["宁德时代", "中信证券"]}')
+
+        self.assertEqual(
+            [{"stock_name": "宁德时代", "concepts": [], "reason": "", "confidence": 0.7}],
+            stocks,
+        )
+
+    def test_backfill_topic_stock_extractions_uses_recent_seven_day_reset_range(self):
+        from backend.services import a_share_analysis_service as service
+
+        with patch.object(service, "datetime") as mock_datetime, patch.object(service, "run_analysis") as run_analysis:
+            mock_datetime.now.return_value = datetime(2026, 5, 10, 12, 0, 0)
+            mock_datetime.strptime.side_effect = datetime.strptime
+            run_analysis.return_value = {"ok": True}
+
+            result = service.backfill_topic_stock_extractions(group_id="123", days=7, concurrency=2)
+
+        self.assertEqual({"ok": True}, result)
+        run_analysis.assert_called_once()
+        kwargs = run_analysis.call_args.kwargs
+        self.assertEqual("123", kwargs["group_id"])
+        self.assertEqual(7, kwargs["days"])
+        self.assertEqual("2026-05-04", kwargs["reset_start_date"])
+        self.assertEqual("2026-05-10", kwargs["reset_end_date"])
+        self.assertEqual(2, kwargs["concurrency"])
+
     def test_read_topics_last_days_filters_topics_and_talks_by_group_scope(self):
         from backend.services import a_share_analysis_service as service
 

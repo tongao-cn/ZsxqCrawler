@@ -23,6 +23,7 @@ from backend.services.a_share_analysis_db_storage import (
     get_storage_health,
     load_daily_mentions as load_daily_mentions_from_db,
     load_processed_state as load_processed_state_from_db,
+    save_topic_stock_extractions,
     save_daily_mentions as save_daily_mentions_to_db,
     save_processed_state as save_processed_state_to_db,
 )
@@ -70,15 +71,26 @@ DEFAULT_OPENAI_MAX_RETRIES = max(1, int(os.environ.get("OPENAI_MAX_RETRIES", "4"
 GROUP_ANALYSIS_DIRNAME = "a_share_analysis"
 GROUP_OUTPUT_FILENAME = "company_mentions.csv"
 GROUP_STATE_FILENAME = "company_mentions_state.json"
+TOPIC_STOCK_EXTRACTION_PROMPT_VERSION = "a-share-topic-stock-extraction-v1"
 A_SHARE_COMPANY_EXTRACTION_SCHEMA: Dict[str, Any] = {
     "type": "object",
     "properties": {
-        "companies": {
+        "stocks": {
             "type": "array",
-            "items": {"type": "string"},
+            "items": {
+                "type": "object",
+                "properties": {
+                    "stock_name": {"type": "string"},
+                    "concepts": {"type": "array", "items": {"type": "string"}},
+                    "reason": {"type": "string"},
+                    "confidence": {"type": "number"},
+                },
+                "required": ["stock_name", "concepts", "reason", "confidence"],
+                "additionalProperties": False,
+            },
         },
     },
-    "required": ["companies"],
+    "required": ["stocks"],
     "additionalProperties": False,
 }
 
@@ -370,41 +382,95 @@ def _extract_json_object(text: str) -> Dict[str, Any]:
     return payload if isinstance(payload, dict) else {}
 
 
-def _parse_company_extraction_output(message: str) -> List[str]:
-    payload = _extract_json_object(message)
-    raw_companies = payload.get("companies")
-    if raw_companies is None:
-        raw_companies = payload.get("a_share_companies")
-    if not isinstance(raw_companies, list):
-        return []
+def _safe_float(value: Any, default: float = 0.0) -> float:
+    try:
+        parsed = float(value)
+    except Exception:
+        return default
+    return max(0.0, min(1.0, parsed))
 
+
+def _safe_text_list(value: Any, *, limit: int = 10) -> List[str]:
+    if not isinstance(value, list):
+        return []
     cleaned: List[str] = []
     seen: Set[str] = set()
-    for raw in raw_companies:
-        company = str(raw or "").strip()
-        if not company:
+    for raw in value:
+        text = str(raw or "").strip()[:80]
+        if not text or text in seen:
             continue
-        company = (
-            company.replace("•", "")
-            .replace("-", "")
-            .replace("1.", "")
-            .replace("2.", "")
-            .replace("3.", "")
-            .strip()
-        )
-        if "、" in company and company.split("、", 1)[0].isdigit():
-            company = company.split("、", 1)[1].strip()
-        if (
-            company
-            and company not in seen
-            and 2 <= len(company) <= 12
-            and "证券" not in company
-            and "指数" not in company
-            and "ETF" not in company.upper()
-        ):
-            cleaned.append(company)
-            seen.add(company)
+        cleaned.append(text)
+        seen.add(text)
+        if len(cleaned) >= limit:
+            break
     return cleaned
+
+
+def _clean_company_name(raw: Any) -> str:
+    company = str(raw or "").strip()
+    company = (
+        company.replace("•", "")
+        .replace("-", "")
+        .replace("1.", "")
+        .replace("2.", "")
+        .replace("3.", "")
+        .strip()
+    )
+    if "、" in company and company.split("、", 1)[0].isdigit():
+        company = company.split("、", 1)[1].strip()
+    return company
+
+
+def _is_valid_company_name(company: str) -> bool:
+    return (
+        bool(company)
+        and 2 <= len(company) <= 12
+        and "证券" not in company
+        and "指数" not in company
+        and "ETF" not in company.upper()
+    )
+
+
+def _parse_topic_stock_extraction_output(message: str) -> List[Dict[str, Any]]:
+    payload = _extract_json_object(message)
+    raw_stocks = payload.get("stocks")
+    if raw_stocks is None:
+        raw_stocks = payload.get("companies")
+    if raw_stocks is None:
+        raw_stocks = payload.get("a_share_companies")
+    if not isinstance(raw_stocks, list):
+        return []
+
+    cleaned: List[Dict[str, Any]] = []
+    seen: Set[str] = set()
+    for raw in raw_stocks:
+        if isinstance(raw, dict):
+            company = _clean_company_name(raw.get("stock_name") or raw.get("company") or raw.get("name"))
+            concepts = _safe_text_list(raw.get("concepts"), limit=10)
+            reason = str(raw.get("reason") or "").strip()[:1000]
+            confidence = _safe_float(raw.get("confidence"))
+        else:
+            company = _clean_company_name(raw)
+            concepts = []
+            reason = ""
+            confidence = 0.7
+
+        if not _is_valid_company_name(company) or company in seen:
+            continue
+        cleaned.append(
+            {
+                "stock_name": company,
+                "concepts": concepts,
+                "reason": reason,
+                "confidence": confidence,
+            }
+        )
+        seen.add(company)
+    return cleaned
+
+
+def _parse_company_extraction_output(message: str) -> List[str]:
+    return [stock["stock_name"] for stock in _parse_topic_stock_extraction_output(message)]
 
 
 def _get_chat_json_schema_response_format() -> Dict[str, Any]:
@@ -445,7 +511,7 @@ def _is_retryable_openai_error(exc: Exception) -> bool:
     return False
 
 
-def call_openai_extract_companies(
+def call_openai_extract_topic_stocks(
     text: str,
     api_key: Optional[str],
     model: str,
@@ -456,7 +522,7 @@ def call_openai_extract_companies(
     item_context: Optional[str] = None,
     log_callback: LogCallback = None,
     timeout: int = 120,
-) -> List[str]:
+) -> List[Dict[str, Any]]:
     if not api_key:
         log_warning("openai-compatible api key missing")
         return []
@@ -467,13 +533,14 @@ def call_openai_extract_companies(
         raise RuntimeError("缺少 openai 依赖，请先安装后再运行分析") from exc
 
     prompt = (
-        "请从下面内容中提取明确提到的中国A股上市公司名称。\n"
+        "请从下面内容中提取明确提到的中国A股上市公司，并给出上下文中的投资概念。\n"
         "要求：\n"
         "1. 只保留可以明确判断为A股上市公司的公司名称。\n"
         "2. 港股、美股、ETF、指数、板块、行业、产品、基金、机构、人物都不要输出。\n"
         "3. 如果只是业务、产品、子公司、老板姓名，且无法唯一映射到A股上市公司，不要猜。\n"
         "4. 同一家公司如果同时出现全称和简称，只输出一个更常见的A股证券简称。\n"
-        "5. 去掉股票代码、交易所后缀、括号说明、序号、项目符号和多余标点。"
+        "5. concepts 必须来自上下文，例如固态电池、机器人、算力、低空经济等；没有明确概念可给空数组。\n"
+        "6. reason 简要说明该股票为什么被提到；不确定时降低 confidence。"
     )
     content = text if len(text) <= 8000 else text[:8000]
     messages = [
@@ -481,7 +548,7 @@ def call_openai_extract_companies(
             "role": "system",
             "content": (
                 "你是A股上市公司名称抽取助手。"
-                "你的任务是从中文投资内容中抽取明确提及的中国A股上市公司名称。"
+                "你的任务是从中文投资内容中抽取明确提及的中国A股上市公司、关联概念和理由。"
                 "如果无法确认是A股上市公司，就不要输出。"
             ),
         },
@@ -533,12 +600,41 @@ def call_openai_extract_companies(
         raise last_error
 
     try:
-        cleaned = _parse_company_extraction_output(message)
+        cleaned = _parse_topic_stock_extraction_output(message)
     except json.JSONDecodeError as exc:
         raise RuntimeError(f"AI 公司抽取结果不是合法 JSON: {message[:200]}") from exc
 
-    log_debug(f"openai-compatible model extracted companies: {len(cleaned)}")
+    log_debug(f"openai-compatible model extracted topic stocks: {len(cleaned)}")
     return cleaned
+
+
+def call_openai_extract_companies(
+    text: str,
+    api_key: Optional[str],
+    model: str,
+    api_base: Optional[str] = None,
+    wire_api: str = DEFAULT_WIRE_API,
+    reasoning_effort: str = DEFAULT_REASONING_EFFORT,
+    max_retries: int = DEFAULT_OPENAI_MAX_RETRIES,
+    item_context: Optional[str] = None,
+    log_callback: LogCallback = None,
+    timeout: int = 120,
+) -> List[str]:
+    return [
+        stock["stock_name"]
+        for stock in call_openai_extract_topic_stocks(
+            text,
+            api_key,
+            model,
+            api_base,
+            wire_api=wire_api,
+            reasoning_effort=reasoning_effort,
+            max_retries=max_retries,
+            item_context=item_context,
+            log_callback=log_callback,
+            timeout=timeout,
+        )
+    ]
 
 
 def aggregate_daily(
@@ -550,17 +646,18 @@ def aggregate_daily(
     reasoning_effort: str = DEFAULT_REASONING_EFFORT,
     concurrency: int = DEFAULT_CONCURRENCY,
     log_callback: LogCallback = None,
-) -> Tuple[Dict[str, Dict[str, int]], Set[str], List[Dict[str, Any]]]:
+) -> Tuple[Dict[str, Dict[str, int]], Set[str], List[Dict[str, Any]], List[Dict[str, Any]]]:
     from concurrent.futures import ThreadPoolExecutor, as_completed
 
     daily: Dict[str, Dict[str, int]] = {}
     succeeded_item_keys: Set[str] = set()
     failed_items: List[Dict[str, Any]] = []
+    topic_stock_extractions: List[Dict[str, Any]] = []
 
     def _work(item: Dict[str, Any]):
         log_debug(f"process item topic_id={item.get('topic_id')} day={item.get('day')}")
         item_key = make_item_key(item)
-        companies = call_openai_extract_companies(
+        stocks = call_openai_extract_topic_stocks(
             item["text"],
             api_key,
             model,
@@ -570,8 +667,25 @@ def aggregate_daily(
             item_context=f"topic_id={item.get('topic_id')} day={item.get('day')} key={item_key}",
             log_callback=log_callback,
         )
-        unique = sorted(set(company for company in companies if company))
-        return item.get("day"), unique, item.get("topic_id"), item_key
+        unique_stocks: Dict[str, Dict[str, Any]] = {}
+        for stock in stocks:
+            stock_name = str(stock.get("stock_name") or "").strip()
+            if not stock_name or stock_name in unique_stocks:
+                continue
+            unique_stocks[stock_name] = {
+                "group_id": str(item.get("group_id") or ""),
+                "topic_id": str(item.get("topic_id") or ""),
+                "topic_date": str(item.get("day") or ""),
+                "stock_name": stock_name,
+                "stock_code": "",
+                "market": "",
+                "concepts": list(stock.get("concepts") or []),
+                "reason": str(stock.get("reason") or ""),
+                "confidence": float(stock.get("confidence") or 0),
+                "model": model,
+                "prompt_version": TOPIC_STOCK_EXTRACTION_PROMPT_VERSION,
+            }
+        return item.get("day"), list(unique_stocks.values()), item.get("topic_id"), item_key
 
     max_workers = max(1, int(concurrency or 1))
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
@@ -580,11 +694,13 @@ def aggregate_daily(
             item = future_to_item[future]
             item_key = make_item_key(item)
             try:
-                day, companies, topic_id, result_item_key = future.result()
+                day, stocks, topic_id, result_item_key = future.result()
+                companies = sorted(stock["stock_name"] for stock in stocks if stock.get("stock_name"))
                 if companies:
                     day_bucket = daily.setdefault(day, {})
                     for company in companies:
                         day_bucket[company] = day_bucket.get(company, 0) + 1
+                    topic_stock_extractions.extend(stocks)
                 succeeded_item_keys.add(result_item_key)
                 _emit_log(
                     f"extracted {len(companies)} companies for topic_id={topic_id}: {_format_company_log(companies)}",
@@ -605,7 +721,7 @@ def aggregate_daily(
                     log_callback,
                     level="exception",
                 )
-    return daily, succeeded_item_keys, failed_items
+    return daily, succeeded_item_keys, failed_items, topic_stock_extractions
 
 
 def _read_existing_csv_file(output_path: str = DEFAULT_OUTPUT_PATH) -> Dict[str, Dict[str, int]]:
@@ -824,6 +940,36 @@ def reset_analysis_range(
         "removed_state_keys": removed_state_keys,
         "summary": summary,
     }
+
+
+def backfill_topic_stock_extractions(
+    *,
+    group_id: Optional[str],
+    days: int = 7,
+    model: str = DEFAULT_MODEL,
+    api_base: str = DEFAULT_API_BASE,
+    wire_api: str = DEFAULT_WIRE_API,
+    reasoning_effort: str = DEFAULT_REASONING_EFFORT,
+    concurrency: int = DEFAULT_CONCURRENCY,
+    retention_days: int = DEFAULT_RETENTION_DAYS,
+    log_callback: LogCallback = None,
+) -> Dict[str, Any]:
+    bounded_days = max(1, int(days))
+    end_day = datetime.now().strftime("%Y-%m-%d")
+    start_day = (datetime.now() - timedelta(days=bounded_days - 1)).strftime("%Y-%m-%d")
+    return run_analysis(
+        days=bounded_days,
+        group_id=group_id,
+        model=model,
+        api_base=api_base,
+        wire_api=wire_api,
+        reasoning_effort=reasoning_effort,
+        concurrency=concurrency,
+        retention_days=retention_days,
+        reset_start_date=start_day,
+        reset_end_date=end_day,
+        log_callback=log_callback,
+    )
 
 
 def _compute_total_mentions(daily: Dict[str, Dict[str, int]]) -> int:
@@ -1149,7 +1295,7 @@ def run_analysis(
         log_callback,
     )
 
-    new_daily, succeeded_item_keys, failed_items = aggregate_daily(
+    new_daily, succeeded_item_keys, failed_items, topic_stock_extractions = aggregate_daily(
         items_to_process,
         api_key=api_key,
         model=model,
@@ -1167,6 +1313,14 @@ def run_analysis(
             day_bucket[company] = day_bucket.get(company, 0) + added_count
             added_mentions += added_count
 
+    saved_topic_stock_extractions = 0
+    if topic_stock_extractions and normalized_group_id and should_use_db_storage(normalized_group_id):
+        saved_topic_stock_extractions = save_topic_stock_extractions(
+            topic_stock_extractions,
+            group_id=normalized_group_id,
+        )
+        _emit_log(f"saved topic stock extractions={saved_topic_stock_extractions}", log_callback)
+
     write_csv(existing_daily, resolved_output_path, group_id=normalized_group_id)
     processed_keys.update(succeeded_item_keys)
     save_state(resolved_state_path, processed_keys, group_id=normalized_group_id)
@@ -1182,6 +1336,7 @@ def run_analysis(
         "items_failed": len(failed_items),
         "new_days": len(new_daily),
         "added_mentions": added_mentions,
+        "topic_stock_extractions": saved_topic_stock_extractions,
         "failed_items": failed_items[:100],
         "reset_summary": reset_summary,
         "summary": summary,
@@ -1190,7 +1345,8 @@ def run_analysis(
     }
     _emit_log(
         f"analysis finished: processed={len(items_to_process)}, succeeded={len(succeeded_item_keys)}, "
-        f"failed={len(failed_items)}, added_mentions={added_mentions}, date_count={summary['date_count']}",
+        f"failed={len(failed_items)}, added_mentions={added_mentions}, "
+        f"topic_stock_extractions={saved_topic_stock_extractions}, date_count={summary['date_count']}",
         log_callback,
     )
     return result

@@ -15,7 +15,7 @@ from backend.core.ai_provider_config import (
     get_extraction_reasoning_effort,
     get_openai_compatible_config,
 )
-from backend.services.a_share_analysis_db_storage import load_stock_basic_records
+from backend.services.a_share_analysis_db_storage import load_stock_basic_records, load_topic_stock_extractions
 from backend.services.daily_topic_analysis_service import (
     DEFAULT_COMMENTS_PER_TOPIC,
     _build_prompt_payload,
@@ -223,6 +223,75 @@ def _parse_stock_concept_output(
     return results
 
 
+def _aggregate_topic_stock_extractions(
+    rows: List[Dict[str, Any]],
+    *,
+    stock_lookup: Optional[Dict[str, Dict[str, str]]] = None,
+) -> List[Dict[str, Any]]:
+    if not rows:
+        return []
+
+    lookup = stock_lookup if stock_lookup is not None else _build_stock_lookup()
+    grouped: Dict[str, Dict[str, Any]] = {}
+    for row in rows:
+        stock_name = _normalize_stock_name(row.get("stock_name"))
+        if not stock_name:
+            continue
+        key = stock_name
+        item = grouped.setdefault(
+            key,
+            {
+                "stock_name": stock_name,
+                "stock_code": _normalize_text(row.get("stock_code")),
+                "market": _normalize_text(row.get("market")).upper(),
+                "concepts": [],
+                "reason_parts": [],
+                "topic_ids": set(),
+                "confidence_values": [],
+            },
+        )
+        for concept in _safe_string_list(row.get("concepts"), limit=10):
+            if concept not in item["concepts"]:
+                item["concepts"].append(concept)
+        reason = _normalize_text(row.get("reason"))
+        topic_id = _normalize_text(row.get("topic_id"))
+        if reason and reason not in item["reason_parts"]:
+            item["reason_parts"].append(reason)
+        if topic_id:
+            item["topic_ids"].add(topic_id)
+        item["confidence_values"].append(_safe_float(row.get("confidence")))
+
+    results: List[Dict[str, Any]] = []
+    for item in grouped.values():
+        matched = _match_stock(item["stock_name"], lookup)
+        stock_name = item["stock_name"]
+        stock_code = item["stock_code"]
+        market = item["market"]
+        confidence_values = [value for value in item["confidence_values"] if value > 0]
+        confidence = max(confidence_values) if confidence_values else 0.0
+        if matched:
+            stock_name = matched["stock_name"] or stock_name
+            stock_code = matched["stock_code"] or stock_code
+            market = matched["market"] or market
+            confidence = max(confidence, 0.7)
+        elif not stock_code:
+            confidence = min(confidence, 0.5)
+        reason = "；".join(item["reason_parts"])[:1000]
+        results.append(
+            {
+                "stock_name": stock_name,
+                "stock_code": stock_code,
+                "market": market,
+                "concepts": item["concepts"][:10],
+                "reason": reason,
+                "topic_ids": sorted(item["topic_ids"]),
+                "confidence": confidence,
+            }
+        )
+
+    return sorted(results, key=lambda item: (-float(item.get("confidence") or 0), str(item.get("stock_name") or "")))
+
+
 def _get_responses_json_schema_text_format() -> Dict[str, Any]:
     return {
         "format": {
@@ -420,9 +489,24 @@ def extract_daily_stock_concepts(
             stocks: List[Dict[str, Any]] = []
             model = ""
         else:
-            prompt_payload = _build_prompt_payload(group_id, report_date_text, topics)
-            _log(log_callback, "🤖 正在调用 AI 提取股票概念...")
-            stocks, model = _generate_stock_concepts_with_ai(prompt_payload, report_date_text)
+            try:
+                topic_extractions = load_topic_stock_extractions(
+                    group_id=group_id,
+                    start_date=report_date_text,
+                    end_date=report_date_text,
+                )
+            except Exception as exc:
+                topic_extractions = []
+                _log(log_callback, f"⚠️ 读取话题级A股明细失败，将回退按天 AI 提取: {exc}")
+            if topic_extractions:
+                _log(log_callback, f"🧩 使用话题级A股抽取明细聚合股票概念: {len(topic_extractions)} 条")
+                stocks = _aggregate_topic_stock_extractions(topic_extractions)
+                model_values = [str(item.get("model") or "") for item in topic_extractions if item.get("model")]
+                model = model_values[0] if model_values else ""
+            else:
+                prompt_payload = _build_prompt_payload(group_id, report_date_text, topics)
+                _log(log_callback, "🤖 未找到话题级明细，回退为按天 AI 提取股票概念...")
+                stocks, model = _generate_stock_concepts_with_ai(prompt_payload, report_date_text)
 
         _save_stock_concepts(
             conn,
@@ -506,6 +590,7 @@ def get_daily_stock_concepts(group_id: str, report_date: Optional[str] = None) -
 __all__ = [
     "extract_daily_stock_concepts",
     "get_daily_stock_concepts",
+    "_aggregate_topic_stock_extractions",
     "_build_stock_lookup",
     "_parse_stock_concept_output",
 ]
