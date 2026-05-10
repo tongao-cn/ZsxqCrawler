@@ -16,7 +16,7 @@ import GroupActionPanel from '@/components/GroupActionPanel';
 import GroupTopBar from '@/components/GroupTopBar';
 import TaskDock from '@/components/TaskDock';
 import TopicPagination from '@/components/TopicPagination';
-import { useTopicDetailsPrefetch } from '@/hooks/useTopicDetailsPrefetch';
+import { useTopicDetailsCache } from '@/hooks/useTopicDetailsPrefetch';
 import { useDebouncedSearch } from '@/hooks/useDebouncedSearch';
 import { useTopicFileActions } from '@/hooks/useTopicFileActions';
 import { useTopicActions } from '@/hooks/useTopicActions';
@@ -167,10 +167,11 @@ export default function GroupDetailPage() {
   });
 
   // 话题详情缓存：key 使用字符串形式的 topic_id，避免大整数精度问题
-  const topicDetails = useTopicDetailsPrefetch({
-    active: activeTab === 'topics',
+  const {
+    loadTopicDetail,
+    topicDetails,
+  } = useTopicDetailsCache({
     groupId,
-    topics,
   });
   const scrollAreaRef = useRef<HTMLDivElement>(null);
 
@@ -458,6 +459,7 @@ export default function GroupDetailPage() {
                               onToggleContent={toggleContent}
                               onFetchMoreComments={fetchMoreComments}
                               onToggleComments={toggleComments}
+                              onLoadTopicDetail={loadTopicDetail}
                               onGetFileStatus={getFileStatus}
                               onDownloadFile={downloadSingleFile}
                               formatDateTime={formatDateTime}

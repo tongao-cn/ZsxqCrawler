@@ -18,6 +18,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 interface DailyTopicAnalysisPanelProps {
   groupId: number;
   onTaskCreated?: (taskId: string) => void;
+  mode?: 'report' | 'stock-concepts';
 }
 
 function getTodayText() {
@@ -86,6 +87,7 @@ const DEFAULT_VISIBLE_CONCEPT_COUNT = 20;
 export default function DailyTopicAnalysisPanel({
   groupId,
   onTaskCreated,
+  mode = 'report',
 }: DailyTopicAnalysisPanelProps) {
   const [reportDate, setReportDate] = useState(getTodayText);
   const [submitting, setSubmitting] = useState(false);
@@ -150,10 +152,15 @@ export default function DailyTopicAnalysisPanel({
   }, [groupId, reportDate]);
 
   useEffect(() => {
+    if (mode !== 'report') {
+      setReport(null);
+      setLoadingReport(false);
+      return;
+    }
     const controller = new AbortController();
     void loadReport(controller.signal);
     return () => controller.abort();
-  }, [loadReport]);
+  }, [loadReport, mode]);
 
   const loadStockConcepts = useCallback(async (signal?: AbortSignal) => {
     try {
@@ -173,10 +180,15 @@ export default function DailyTopicAnalysisPanel({
   }, [groupId, reportDate]);
 
   useEffect(() => {
+    if (mode !== 'stock-concepts') {
+      setStockConcepts(null);
+      setLoadingStockConcepts(false);
+      return;
+    }
     const controller = new AbortController();
     void loadStockConcepts(controller.signal);
     return () => controller.abort();
-  }, [loadStockConcepts]);
+  }, [loadStockConcepts, mode]);
 
   const handleRunToday = async () => {
     try {

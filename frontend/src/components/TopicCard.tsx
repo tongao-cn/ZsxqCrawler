@@ -92,6 +92,7 @@ export interface TopicCardProps {
   onToggleContent: (topicId: TopicId) => void;
   onFetchMoreComments: (topicId: TopicId) => void | Promise<void>;
   onToggleComments: (topicId: TopicId) => void;
+  onLoadTopicDetail?: (topicId: TopicId) => void | Promise<unknown>;
   onGetFileStatus: (fileId: number, fileName?: string, fileSize?: number) => Promise<FileStatus>;
   onDownloadFile: (fileId: number, fileName: string, fileSize?: number) => void;
   formatDateTime: (dateString: string) => string;
@@ -119,6 +120,7 @@ function TopicCard({
   onToggleContent,
   onFetchMoreComments,
   onToggleComments,
+  onLoadTopicDetail,
   onGetFileStatus,
   onDownloadFile,
   formatDateTime,
@@ -134,6 +136,21 @@ function TopicCard({
   const shouldShowTitleToggle = shouldShowContentToggle(extractPlainText(titleText));
   const isRefreshing = refreshingTopics.has(topicId);
   const isDeleting = deletingTopics.has(topicId);
+  const loadDetail = () => {
+    void onLoadTopicDetail?.(topic.topic_id);
+  };
+  const handleToggleContent = () => {
+    loadDetail();
+    onToggleContent(topic.topic_id);
+  };
+  const handleFetchMoreComments = () => {
+    loadDetail();
+    void onFetchMoreComments(topic.topic_id);
+  };
+  const handleToggleComments = () => {
+    loadDetail();
+    onToggleComments(topic.topic_id);
+  };
 
   return (
     <div className="border border-gray-200 shadow-none w-full max-w-full bg-white rounded-lg" style={{ width: '100%', maxWidth: '100%', boxSizing: 'border-box' }}>
@@ -311,7 +328,7 @@ function TopicCard({
                       <div className="text-center mt-2">
                         <button
                           type="button"
-                          onClick={() => onToggleContent(topic.topic_id)}
+                          onClick={handleToggleContent}
                           className="text-xs text-blue-600 hover:text-blue-800 font-medium transition-colors"
                         >
                           {expandedContent.has(topicId) ? '收起' : '展开全部'}
@@ -338,7 +355,7 @@ function TopicCard({
                       <div className="text-center mt-2">
                         <button
                           type="button"
-                          onClick={() => onToggleContent(topic.topic_id)}
+                          onClick={handleToggleContent}
                           className="text-xs text-blue-600 hover:text-blue-800 font-medium transition-colors"
                         >
                           {expandedContent.has(topicId) ? '收起' : '展开全部'}
@@ -360,7 +377,7 @@ function TopicCard({
                       <div className="text-center mt-2">
                         <button
                           type="button"
-                          onClick={() => onToggleContent(topic.topic_id)}
+                          onClick={handleToggleContent}
                           className="text-xs text-blue-600 hover:text-blue-800 font-medium transition-colors"
                         >
                           {expandedContent.has(topicId) ? '收起' : '展开全部'}
@@ -413,8 +430,8 @@ function TopicCard({
             searchTerm={searchTerm}
             expandedComments={expandedComments}
             fetchingComments={fetchingComments}
-            onFetchMoreComments={onFetchMoreComments}
-            onToggleComments={onToggleComments}
+            onFetchMoreComments={handleFetchMoreComments}
+            onToggleComments={handleToggleComments}
             formatDateTime={formatDateTime}
           />
 

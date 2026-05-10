@@ -20,6 +20,7 @@ import {
   Group,
   Task,
 } from '@/lib/api';
+import { useTaskStatus } from '@/hooks/useTaskStatus';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -103,6 +104,7 @@ export default function AShareAnalysisPanel({
   const [resetStartDate, setResetStartDate] = useState('');
   const [resetEndDate, setResetEndDate] = useState('');
   const [initialized, setInitialized] = useState(false);
+  const [activeRunTaskId, setActiveRunTaskId] = useState<string | null>(null);
 
   const rankingWindows = useMemo(
     () => status?.defaults.ranking_windows ?? [3, 7, 14, 21],
@@ -256,24 +258,15 @@ export default function AShareAnalysisPanel({
     [loadChart, loadStatus, selectedEndDate, selectedGroupId, selectedStartDate, topN]
   );
 
-  useEffect(() => {
-    if (!selectedGroupId) {
-      return;
-    }
-    const isTaskRunning =
-      status?.running_task?.status === 'running' || status?.latest_task?.status === 'running';
-    if (!isTaskRunning) {
-      return;
-    }
-
-    const timer = window.setInterval(() => {
-      void refreshAll(false, selectedGroupId);
-    }, 5000);
-
-    return () => {
-      window.clearInterval(timer);
-    };
-  }, [refreshAll, selectedGroupId, status?.latest_task?.status, status?.running_task?.status]);
+  useTaskStatus(activeRunTaskId, {
+    enabled: Boolean(activeRunTaskId && selectedGroupId),
+    onTerminal: async () => {
+      if (selectedGroupId) {
+        await refreshAll(false, selectedGroupId);
+      }
+      setActiveRunTaskId(null);
+    },
+  });
 
   const handleApplyFilters = async () => {
     if (!selectedGroup) {
@@ -319,8 +312,10 @@ export default function AShareAnalysisPanel({
           : {}),
       });
       toast.success('A股分析任务已创建，结果会在完成后自动刷新');
-      if ((response as { task_id?: string })?.task_id && onTaskCreated) {
-        onTaskCreated((response as { task_id: string }).task_id);
+      const taskId = (response as { task_id?: string })?.task_id;
+      if (taskId) {
+        setActiveRunTaskId(taskId);
+        onTaskCreated?.(taskId);
       }
       await loadStatus(false, selectedGroup.group_id);
     } catch (error) {

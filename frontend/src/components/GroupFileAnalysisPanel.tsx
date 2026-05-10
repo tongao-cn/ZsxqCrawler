@@ -10,6 +10,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { toast } from 'sonner';
+import { useTaskStatus } from '@/hooks/useTaskStatus';
 
 
 interface GroupFileAnalysisPanelProps {
@@ -20,6 +21,26 @@ interface FileTaskState {
   taskId: string;
   status: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
   message: string;
+}
+
+interface FileTaskWatcherProps {
+  fileId: number;
+  taskId: string;
+  onStatus: (fileId: number, taskId: string, status: FileTaskState['status'], message: string) => void;
+  onTerminal: (fileId: number, taskId: string, status: FileTaskState['status'], message: string) => void | Promise<void>;
+}
+
+function FileTaskWatcher({
+  fileId,
+  taskId,
+  onStatus,
+  onTerminal,
+}: FileTaskWatcherProps) {
+  useTaskStatus(taskId, {
+    onStatus: (task) => onStatus(fileId, taskId, task.status, task.message),
+    onTerminal: (task) => onTerminal(fileId, taskId, task.status, task.message),
+  });
+  return null;
 }
 
 function formatFileSize(size: number) {
@@ -171,64 +192,33 @@ export default function GroupFileAnalysisPanel({ groupId }: GroupFileAnalysisPan
     setAnalysisStatusFilter(value);
   };
 
-  const pollFileTask = useCallback((fileId: number, taskId: string, attempt: number = 0) => {
-    window.setTimeout(async () => {
-      try {
-        const task = await apiClient.getTask(taskId);
-        setFileTasks(prev => {
-          const next = new Map(prev);
-          next.set(fileId, {
-            taskId,
-            status: task.status,
-            message: task.message,
-          });
-          return next;
-        });
+  const updateFileTaskStatus = useCallback((
+    fileId: number,
+    taskId: string,
+    status: FileTaskState['status'],
+    message: string,
+  ) => {
+    setFileTasks(prev => {
+      const next = new Map(prev);
+      next.set(fileId, { taskId, status, message });
+      return next;
+    });
+  }, []);
 
-        if (['completed', 'failed', 'cancelled'].includes(task.status)) {
-          setDownloadingFiles(prev => {
-            const next = new Set(prev);
-            next.delete(fileId);
-            return next;
-          });
-          await loadFiles(page);
-          return;
-        }
-
-        if (attempt < 120) {
-          pollFileTask(fileId, taskId, attempt + 1);
-          return;
-        }
-
-        setDownloadingFiles(prev => {
-          const next = new Set(prev);
-          next.delete(fileId);
-          return next;
-        });
-        setFileTasks(prev => {
-          const next = new Map(prev);
-          next.set(fileId, {
-            taskId,
-            status: 'failed',
-            message: '任务状态刷新超时，请手动刷新',
-          });
-          return next;
-        });
-      } catch (error) {
-        console.error('轮询文件下载任务失败:', error);
-        if (attempt < 12) {
-          pollFileTask(fileId, taskId, attempt + 1);
-          return;
-        }
-
-        setDownloadingFiles(prev => {
-          const next = new Set(prev);
-          next.delete(fileId);
-          return next;
-        });
-      }
-    }, 1500);
-  }, [loadFiles, page]);
+  const handleFileTaskTerminal = useCallback(async (
+    fileId: number,
+    taskId: string,
+    status: FileTaskState['status'],
+    message: string,
+  ) => {
+    updateFileTaskStatus(fileId, taskId, status, message);
+    setDownloadingFiles(prev => {
+      const next = new Set(prev);
+      next.delete(fileId);
+      return next;
+    });
+    await loadFiles(page);
+  }, [loadFiles, page, updateFileTaskStatus]);
 
   const handleDownloadFile = async (file: FileItem) => {
     if (downloadingFiles.has(file.file_id)) {
@@ -255,7 +245,7 @@ export default function GroupFileAnalysisPanel({ groupId }: GroupFileAnalysisPan
           });
           return next;
         });
-        pollFileTask(file.file_id, response.task_id);
+        updateFileTaskStatus(file.file_id, response.task_id, 'pending', '下载任务已创建');
       } else {
         await loadFiles(page);
         setDownloadingFiles(prev => {
@@ -302,7 +292,7 @@ export default function GroupFileAnalysisPanel({ groupId }: GroupFileAnalysisPan
             });
             return next;
           });
-          pollFileTask(file.file_id, response.task_id);
+          updateFileTaskStatus(file.file_id, response.task_id, 'pending', '下载任务已创建');
         } else {
           setDownloadingFiles(prev => {
             const next = new Set(prev);
@@ -391,6 +381,17 @@ export default function GroupFileAnalysisPanel({ groupId }: GroupFileAnalysisPan
 
   return (
     <div className="flex h-full min-h-0 flex-col space-y-4">
+      {Array.from(fileTasks.entries()).map(([fileId, task]) => (
+        task.status === 'pending' || task.status === 'running' ? (
+          <FileTaskWatcher
+            key={`${fileId}-${task.taskId}`}
+            fileId={fileId}
+            taskId={task.taskId}
+            onStatus={updateFileTaskStatus}
+            onTerminal={handleFileTaskTerminal}
+          />
+        ) : null
+      ))}
       <div className="flex flex-col gap-2 lg:flex-row lg:items-end lg:justify-between">
         <div>
           <div className="text-lg font-semibold text-gray-950">文件工作台</div>

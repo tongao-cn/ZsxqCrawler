@@ -5,6 +5,7 @@ import { toast } from 'sonner';
 
 import { apiClient, FileStatus, getTaskConflictDetail } from '@/lib/api';
 import { useSyncedRef } from '@/hooks/useSyncedRef';
+import { useTaskStatus } from '@/hooks/useTaskStatus';
 
 interface UseTopicFileActionsOptions {
   groupId: number;
@@ -19,7 +20,33 @@ export function useTopicFileActions({
 }: UseTopicFileActionsOptions) {
   const [fileStatuses, setFileStatuses] = useState<Map<number, FileStatus>>(new Map());
   const [downloadingFiles, setDownloadingFiles] = useState<Set<number>>(new Set());
+  const [activeDownload, setActiveDownload] = useState<{
+    fileId: number;
+    fileName: string;
+    fileSize?: number;
+    taskId: string;
+  } | null>(null);
   const downloadingFilesRef = useSyncedRef(downloadingFiles);
+
+  useTaskStatus(activeDownload?.taskId, {
+    enabled: Boolean(activeDownload),
+    onTerminal: async (task) => {
+      if (!activeDownload) {
+        return;
+      }
+      const status = await getFileStatus(activeDownload.fileId, activeDownload.fileName, activeDownload.fileSize);
+      if (task.status === 'completed' && status?.is_complete) {
+        toast.success(`文件下载完成: ${activeDownload.fileName}`);
+      } else if (task.status === 'failed' || task.status === 'cancelled') {
+        toast.error(task.message || `文件下载未完成: ${activeDownload.fileName}`);
+      }
+      const next = new Set(downloadingFilesRef.current);
+      next.delete(activeDownload.fileId);
+      downloadingFilesRef.current = next;
+      setDownloadingFiles(next);
+      setActiveDownload(null);
+    },
+  });
 
   const getFileStatus = useCallback(async (fileId: number, fileName?: string, fileSize?: number) => {
     try {
@@ -75,25 +102,7 @@ export function useTopicFileActions({
       const response = await apiClient.downloadSingleFile(String(groupId), fileId, fileName, fileSize) as any;
       toast.success(`文件下载任务已创建: ${response.task_id}`);
       onTaskCreated(response.task_id);
-
-      const checkStatus = async () => {
-        const status = await getFileStatus(fileId, fileName, fileSize);
-        if (status && status.is_complete) {
-          toast.success(`文件下载完成: ${fileName}`);
-          setFileStatuses((prev) => new Map(prev).set(fileId, status));
-          return true;
-        }
-        return false;
-      };
-
-      let attempts = 0;
-      const statusInterval = window.setInterval(async () => {
-        attempts++;
-        const completed = await checkStatus();
-        if (completed || attempts >= 12) {
-          window.clearInterval(statusInterval);
-        }
-      }, 5000);
+      setActiveDownload({ fileId, fileName, fileSize, taskId: response.task_id });
     } catch (error) {
       const conflict = getTaskConflictDetail(error);
       if (conflict?.task_id) {
@@ -102,13 +111,12 @@ export function useTopicFileActions({
       } else {
         toast.error(`文件下载失败: ${error instanceof Error ? error.message : '未知错误'}`);
       }
-    } finally {
       const next = new Set(downloadingFilesRef.current);
       next.delete(fileId);
       downloadingFilesRef.current = next;
       setDownloadingFiles(next);
     }
-  }, [downloadingFilesRef, getFileStatus, groupId, onTaskConflict, onTaskCreated]);
+  }, [downloadingFilesRef, groupId, onTaskConflict, onTaskCreated]);
 
   return {
     fileStatuses,

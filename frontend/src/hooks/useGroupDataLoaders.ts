@@ -227,29 +227,36 @@ export function useGroupDataLoaders({
     }
   }, [groupId]);
 
-  const initialLoaders = useMemo(() => [
+  const criticalLoaders = useMemo(() => [
     loadGroupDetail,
     loadGroupStats,
-    loadGroupInfo,
-    loadLocalFileCount,
-    loadCacheInfo,
-    loadGroupAccount,
-    loadAccounts,
-    loadGroupAccountSelf,
-    loadColumnsSummary,
   ], [
-    loadAccounts,
-    loadCacheInfo,
-    loadColumnsSummary,
-    loadGroupAccount,
-    loadGroupAccountSelf,
     loadGroupDetail,
-    loadGroupInfo,
     loadGroupStats,
-    loadLocalFileCount,
   ]);
 
-  useInitialLoad({ loaders: initialLoaders });
+  useInitialLoad({ loaders: criticalLoaders });
+
+  useEffect(() => {
+    const timeout = window.setTimeout(() => {
+      void loadGroupInfo();
+      void loadLocalFileCount();
+      void loadCacheInfo();
+      void loadGroupAccount();
+      void loadAccounts();
+      void loadGroupAccountSelf();
+      void loadColumnsSummary();
+    }, 0);
+    return () => window.clearTimeout(timeout);
+  }, [
+    loadAccounts,
+    loadCacheInfo,
+    loadColumnsSummary,
+    loadGroupAccount,
+    loadGroupAccountSelf,
+    loadGroupInfo,
+    loadLocalFileCount,
+  ]);
 
   return {
     group,
