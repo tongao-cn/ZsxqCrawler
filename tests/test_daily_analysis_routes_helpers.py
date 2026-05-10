@@ -26,7 +26,10 @@ class DailyAnalysisRoutesHelperTests(unittest.TestCase):
         background_tasks = FakeBackgroundTasks()
         metadata = {"group_id": "group-1", "report_date": "2026-05-07"}
 
-        with patch("backend.routes.daily_analysis_routes.create_task", return_value="task-1") as create_task:
+        with (
+            patch("backend.routes.daily_analysis_routes.create_task", return_value="task-1") as create_task,
+            patch("backend.routes.daily_analysis_routes.enqueue_runtime_task") as enqueue_runtime_task,
+        ):
             response = _create_daily_task_response(
                 background_tasks,
                 "daily_topic_analysis",
@@ -43,7 +46,8 @@ class DailyAnalysisRoutesHelperTests(unittest.TestCase):
             metadata,
         )
         self.assertEqual({"task_id": "task-1", "message": "任务已创建，正在后台执行"}, response)
-        self.assertEqual([(fake_task, ("task-1", "group-1", "request"))], background_tasks.tasks)
+        enqueue_runtime_task.assert_called_once_with(fake_task, "task-1", "group-1", "request")
+        self.assertEqual([], background_tasks.tasks)
 
     @unittest.skipUnless(HAS_DAILY_ROUTE_DEPS, "daily analysis route dependencies are not installed")
     def test_build_daily_log_callback_writes_task_log(self):

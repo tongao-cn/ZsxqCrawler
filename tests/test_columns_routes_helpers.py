@@ -142,6 +142,7 @@ class ColumnsRoutesHelperTests(unittest.TestCase):
         with (
             patch("backend.routes.columns_routes.create_ingestion_task_or_raise", return_value="task-1") as create_task,
             patch("backend.routes.columns_routes.update_task") as update_task,
+            patch("backend.routes.columns_routes.enqueue_runtime_task") as enqueue_runtime_task,
         ):
             response = _create_columns_fetch_task_response(background_tasks, "123", request)
 
@@ -151,7 +152,8 @@ class ColumnsRoutesHelperTests(unittest.TestCase):
             {"success": True, "task_id": "task-1", "message": "专栏采集任务已启动"},
             response,
         )
-        self.assertEqual([(_fetch_columns_task, ("task-1", "123", request))], background_tasks.tasks)
+        enqueue_runtime_task.assert_called_once_with(_fetch_columns_task, "task-1", "123", request)
+        self.assertEqual([], background_tasks.tasks)
 
     @unittest.skipUnless(HAS_COLUMNS_ROUTE_DEPS, "columns route dependencies are not installed")
     def test_create_columns_fetch_task_response_rejects_ingestion_conflict(self):

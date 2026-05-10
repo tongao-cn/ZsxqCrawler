@@ -9,7 +9,7 @@ from backend.services.daily_stock_concept_service import (
     extract_daily_stock_concepts,
     get_daily_stock_concepts,
 )
-from backend.services.task_runtime import add_task_log, create_task, is_task_stopped, update_task
+from backend.services.task_runtime import add_task_log, create_task, enqueue_runtime_task, is_task_stopped, update_task
 
 
 router = APIRouter(prefix="/api/analysis/daily-stock-concepts", tags=["daily-stock-concepts"])
@@ -69,7 +69,7 @@ async def create_daily_stock_concepts(
             f"提取每日股票概念 (群组: {group_id})",
             {"group_id": group_id, "report_date": request.date},
         )
-        background_tasks.add_task(run_daily_stock_concept_task, task_id, group_id, request)
+        enqueue_runtime_task(run_daily_stock_concept_task, task_id, group_id, request)
         return {"task_id": task_id, "message": TASK_CREATED_MESSAGE}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"创建每日股票概念提取任务失败: {str(e)}")

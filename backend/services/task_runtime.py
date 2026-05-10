@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+import threading
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 from backend.core import crawler_runtime
 from backend.services.a_share_analysis_service import normalize_group_id
@@ -24,6 +25,7 @@ sse_connections: Dict[str, List[Any]] = {}
 task_stop_flags: Dict[str, bool] = {}
 crawler_instances: Dict[str, Any] = {}
 file_downloader_instances: Dict[str, Any] = {}
+runtime_task_threads: Dict[str, threading.Thread] = {}
 
 INGESTION_LOCK_TYPES = {
     "columns_fetch",
@@ -232,6 +234,22 @@ def stop_task(task_id: str) -> bool:
     return True
 
 
+def enqueue_runtime_task(task_func: Callable[..., Any], task_id: str, *args: Any) -> None:
+    def run_task() -> None:
+        try:
+            task_func(task_id, *args)
+        finally:
+            runtime_task_threads.pop(task_id, None)
+
+    thread = threading.Thread(
+        target=run_task,
+        name=f"zsxq-task-{task_id}",
+        daemon=True,
+    )
+    runtime_task_threads[task_id] = thread
+    thread.start()
+
+
 def request_runtime_shutdown() -> None:
     stopping_task_ids = [
         task_id
@@ -258,6 +276,7 @@ def request_runtime_shutdown() -> None:
     crawler_instances.clear()
     file_downloader_instances.clear()
     sse_connections.clear()
+    runtime_task_threads.clear()
 
 
 def is_task_stopped(task_id: str) -> bool:

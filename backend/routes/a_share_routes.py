@@ -27,6 +27,7 @@ from backend.services.tdx_a_share_export_service import export_a_share_rankings_
 from backend.services.task_runtime import (
     add_task_log,
     create_task,
+    enqueue_runtime_task,
     get_latest_task_by_type,
     is_task_stopped,
     update_task,
@@ -247,7 +248,7 @@ async def start_a_share_analysis(request: AShareAnalysisRunRequest, background_t
             f"A股公司分析（{scope_text}，最近 {request.days} 天）",
             metadata={"group_id": normalized_group_id},
         )
-        background_tasks.add_task(run_a_share_analysis_task, task_id, request)
+        enqueue_runtime_task(run_a_share_analysis_task, task_id, request)
         return {"task_id": task_id, "message": "任务已创建，正在后台执行"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"创建A股分析任务失败: {str(e)}")

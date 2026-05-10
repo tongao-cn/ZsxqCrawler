@@ -30,6 +30,7 @@ from backend.services.file_ai_analysis_service import (
 from backend.services.task_runtime import (
     add_task_log,
     create_task,
+    enqueue_runtime_task,
     file_downloader_instances,
     is_task_stopped,
     update_task,
@@ -267,7 +268,7 @@ def _enqueue_file_task(
         task_id = create_ingestion_task_or_raise(task_type, description, ingestion_group_id)
     else:
         task_id = create_task(task_type, description)
-    background_tasks.add_task(task_func, task_id, *args)
+    enqueue_runtime_task(task_func, task_id, *args)
     return {"task_id": task_id, "message": message}
 
 

@@ -58,19 +58,21 @@ class IngestionHelpersTests(unittest.TestCase):
         background_tasks = FakeBackgroundTasks()
 
         with patch("backend.routes.ingestion_helpers.create_ingestion_task_or_raise", return_value="task-2") as create_task:
-            response = enqueue_ingestion_task(
-                background_tasks,
-                "columns_fetch",
-                "desc",
-                fake_task,
-                "123",
-                "request",
-                message="已启动",
-            )
+            with patch("backend.routes.ingestion_helpers.enqueue_runtime_task") as enqueue_runtime_task:
+                response = enqueue_ingestion_task(
+                    background_tasks,
+                    "columns_fetch",
+                    "desc",
+                    fake_task,
+                    "123",
+                    "request",
+                    message="已启动",
+                )
 
         create_task.assert_called_once_with("columns_fetch", "desc", "123")
         self.assertEqual({"task_id": "task-2", "message": "已启动"}, response)
-        self.assertEqual([(fake_task, ("task-2", "123", "request"))], background_tasks.tasks)
+        enqueue_runtime_task.assert_called_once_with(fake_task, "task-2", "123", "request")
+        self.assertEqual([], background_tasks.tasks)
 
 
 if __name__ == "__main__":

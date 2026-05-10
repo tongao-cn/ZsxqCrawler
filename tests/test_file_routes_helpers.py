@@ -51,7 +51,10 @@ class FileRoutesHelperTests(unittest.TestCase):
     def test_enqueue_file_task_creates_task_and_schedules_callback(self):
         background_tasks = FakeBackgroundTasks()
 
-        with patch("backend.routes.file_routes.create_task", return_value="task-1") as create_task:
+        with (
+            patch("backend.routes.file_routes.create_task", return_value="task-1") as create_task,
+            patch("backend.routes.file_routes.enqueue_runtime_task") as enqueue_runtime_task,
+        ):
             response = _enqueue_file_task(
                 background_tasks,
                 "unit_file_task",
@@ -64,12 +67,16 @@ class FileRoutesHelperTests(unittest.TestCase):
 
         create_task.assert_called_once_with("unit_file_task", "测试文件任务")
         self.assertEqual({"task_id": "task-1", "message": "已创建"}, response)
-        self.assertEqual([(fake_task, ("task-1", "group-1", 123))], background_tasks.calls)
+        enqueue_runtime_task.assert_called_once_with(fake_task, "task-1", "group-1", 123)
+        self.assertEqual([], background_tasks.calls)
 
     def test_enqueue_file_task_uses_ingestion_lock_when_requested(self):
         background_tasks = FakeBackgroundTasks()
 
-        with patch("backend.routes.ingestion_helpers.create_ingestion_task", return_value=("task-1", None)) as create_task:
+        with (
+            patch("backend.routes.ingestion_helpers.create_ingestion_task", return_value=("task-1", None)) as create_task,
+            patch("backend.routes.file_routes.enqueue_runtime_task") as enqueue_runtime_task,
+        ):
             response = _enqueue_file_task(
                 background_tasks,
                 "collect_files",
@@ -82,7 +89,8 @@ class FileRoutesHelperTests(unittest.TestCase):
 
         create_task.assert_called_once_with("collect_files", "收集文件列表", "group-1")
         self.assertEqual({"task_id": "task-1", "message": "任务已创建，正在后台执行"}, response)
-        self.assertEqual([(fake_task, ("task-1", "group-1", "request"))], background_tasks.calls)
+        enqueue_runtime_task.assert_called_once_with(fake_task, "task-1", "group-1", "request")
+        self.assertEqual([], background_tasks.calls)
 
     def test_enqueue_file_task_rejects_ingestion_conflict(self):
         from fastapi import HTTPException

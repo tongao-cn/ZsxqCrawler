@@ -1,4 +1,5 @@
 import unittest
+from threading import Event
 from unittest.mock import patch
 
 
@@ -145,6 +146,31 @@ class TaskRuntimeHelperTests(unittest.TestCase):
         self.assertEqual("cancelled", store.tasks["task-1"]["status"])
         self.assertEqual("completed", store.tasks["task-2"]["status"])
         self.assertEqual({}, task_runtime.sse_connections)
+
+    def test_enqueue_runtime_task_runs_daemon_thread_and_unregisters(self):
+        from backend.services import task_runtime
+
+        seen = []
+        release = Event()
+        finished = Event()
+
+        def task_func(task_id, value):
+            seen.append((task_id, value))
+            release.wait(2)
+            finished.set()
+
+        try:
+            task_runtime.enqueue_runtime_task(task_func, "task-thread", "payload")
+            thread = task_runtime.runtime_task_threads["task-thread"]
+            self.assertTrue(thread.daemon)
+            release.set()
+            self.assertTrue(finished.wait(2))
+            thread.join(2)
+        finally:
+            task_runtime.runtime_task_threads.pop("task-thread", None)
+
+        self.assertEqual([("task-thread", "payload")], seen)
+        self.assertNotIn("task-thread", task_runtime.runtime_task_threads)
 
 
 if __name__ == "__main__":

@@ -4,7 +4,7 @@ from typing import Any, Callable, Dict
 
 from fastapi import BackgroundTasks, HTTPException
 
-from backend.services.task_runtime import create_ingestion_task
+from backend.services.task_runtime import create_ingestion_task, enqueue_runtime_task
 
 
 INGESTION_CONFLICT_MESSAGE = "该群组已有采集或同步任务正在运行"
@@ -41,5 +41,5 @@ def enqueue_ingestion_task(
     message: str = TASK_CREATED_MESSAGE,
 ) -> Dict[str, str]:
     task_id = create_ingestion_task_or_raise(task_type, description, group_id)
-    background_tasks.add_task(task_func, task_id, group_id, *task_args)
+    enqueue_runtime_task(task_func, task_id, group_id, *task_args)
     return {"task_id": task_id, "message": message}

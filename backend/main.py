@@ -101,7 +101,7 @@ def run_server():
             port = int(sys.argv[2])
         except ValueError:
             port = 8508
-    uvicorn.run(app, host="0.0.0.0", port=port)
+    uvicorn.run(app, host="0.0.0.0", port=port, timeout_graceful_shutdown=5)
 
 
 if __name__ == "__main__":

@@ -22,7 +22,7 @@ from backend.services.columns_fetch_summary import (
     resolve_columns_fetch_config as _resolve_columns_fetch_config,
 )
 from backend.routes.ingestion_helpers import create_ingestion_task_or_raise
-from backend.services.task_runtime import add_task_log, is_task_stopped, update_task
+from backend.services.task_runtime import add_task_log, enqueue_runtime_task, is_task_stopped, update_task
 from backend.storage.accounts_sql_manager import get_accounts_sql_manager
 from backend.storage.zsxq_columns_database import ZSXQColumnsDatabase
 
@@ -66,7 +66,7 @@ def _create_columns_fetch_task_response(
         group_id,
     )
     update_task(task_id, "running", "正在采集专栏内容...")
-    background_tasks.add_task(_fetch_columns_task, task_id, group_id, request)
+    enqueue_runtime_task(_fetch_columns_task, task_id, group_id, request)
     return {
         "success": True,
         "task_id": task_id,

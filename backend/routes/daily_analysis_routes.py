@@ -11,6 +11,7 @@ from backend.services.task_runtime import (
     add_task_log,
     create_task,
     current_tasks,
+    enqueue_runtime_task,
     is_task_stopped,
     update_task,
 )
@@ -61,7 +62,7 @@ def _create_daily_task_response(
     *task_args: Any,
 ) -> dict[str, str]:
     task_id = create_task(task_type, description, metadata)
-    background_tasks.add_task(task_func, task_id, *task_args)
+    enqueue_runtime_task(task_func, task_id, *task_args)
     return {"task_id": task_id, "message": TASK_CREATED_MESSAGE}
 
 
