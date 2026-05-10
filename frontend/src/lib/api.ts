@@ -19,6 +19,8 @@ export interface Task {
   result?: any;
   created_at: string;
   updated_at: string;
+  group_id?: string | number | null;
+  ingestion_lock_key?: string | null;
 }
 
 export interface DailyTopicReport {
@@ -68,6 +70,15 @@ export interface DailyStockConceptResponse {
 export interface TaskCreateResponse {
   task_id: string;
   message: string;
+}
+
+export interface ApiErrorDetail {
+  message?: string;
+  error?: string;
+  task_id?: string;
+  type?: string;
+  status?: string;
+  [key: string]: unknown;
 }
 
 export interface AShareAnalysisSummary {
@@ -243,6 +254,33 @@ export function formatApiError(errorData: unknown, fallback: string): string {
   }
 
   return fallback;
+}
+
+export class ApiClientError extends Error {
+  status: number;
+  detail?: unknown;
+  errorData: unknown;
+
+  constructor(message: string, status: number, errorData: unknown) {
+    super(message);
+    this.name = 'ApiClientError';
+    this.status = status;
+    this.errorData = errorData;
+    this.detail = errorData && typeof errorData === 'object'
+      ? (errorData as { detail?: unknown }).detail
+      : undefined;
+  }
+}
+
+export function getTaskConflictDetail(error: unknown): ApiErrorDetail | null {
+  if (!(error instanceof ApiClientError) || error.status !== 409) {
+    return null;
+  }
+  if (!error.detail || typeof error.detail !== 'object') {
+    return null;
+  }
+  const detail = error.detail as ApiErrorDetail;
+  return detail.task_id ? detail : null;
 }
 
 export interface AShareAnalysisExportTdxBlock {
@@ -452,7 +490,11 @@ class ApiClient {
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
-      throw new Error(formatApiError(errorData, `HTTP ${response.status}: ${response.statusText}`));
+      throw new ApiClientError(
+        formatApiError(errorData, `HTTP ${response.status}: ${response.statusText}`),
+        response.status,
+        errorData,
+      );
     }
 
     return response.json();

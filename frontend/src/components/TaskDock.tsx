@@ -1,9 +1,10 @@
 'use client';
 
 import dynamic from 'next/dynamic';
-import { ChevronDown, ChevronUp, FileText, X } from 'lucide-react';
+import { ChevronDown, ChevronUp, FileText, ListChecks, Terminal, X } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
+import TaskListCompact from '@/components/TaskListCompact';
 
 const TaskLogViewer = dynamic(() => import('@/components/TaskLogViewer'), {
   loading: () => (
@@ -17,19 +18,27 @@ const TaskLogViewer = dynamic(() => import('@/components/TaskLogViewer'), {
 interface TaskDockProps {
   taskId: string | null;
   expanded: boolean;
+  view: 'logs' | 'tasks';
+  groupId?: number | string | null;
   onOpen: () => void;
   onCollapse: () => void;
   onClose: () => void;
   onTaskStop: () => void;
+  onViewChange: (view: 'logs' | 'tasks') => void;
+  onTaskSelect: (taskId: string) => void;
 }
 
 export default function TaskDock({
   taskId,
   expanded,
+  view,
+  groupId,
   onOpen,
   onCollapse,
   onClose,
   onTaskStop,
+  onViewChange,
+  onTaskSelect,
 }: TaskDockProps) {
   const toggleExpanded = expanded ? onCollapse : onOpen;
   const shortTaskId = taskId ? `${taskId.slice(0, 8)}...` : null;
@@ -62,6 +71,32 @@ export default function TaskDock({
         </button>
 
         <div className="flex items-center gap-2">
+          <div className="flex rounded-md border border-gray-200 bg-gray-50 p-0.5">
+            <Button
+              variant={view === 'logs' ? 'default' : 'ghost'}
+              size="sm"
+              className="h-7 gap-1 px-2 text-xs"
+              onClick={() => {
+                onViewChange('logs');
+                onOpen();
+              }}
+            >
+              <Terminal className="h-3.5 w-3.5" />
+              日志
+            </Button>
+            <Button
+              variant={view === 'tasks' ? 'default' : 'ghost'}
+              size="sm"
+              className="h-7 gap-1 px-2 text-xs"
+              onClick={() => {
+                onViewChange('tasks');
+                onOpen();
+              }}
+            >
+              <ListChecks className="h-3.5 w-3.5" />
+              任务
+            </Button>
+          </div>
           <Button
             variant="outline"
             size="sm"
@@ -87,12 +122,25 @@ export default function TaskDock({
       </div>
       {expanded && (
         <div className="h-[38vh] min-h-[260px] max-h-[520px] bg-gradient-to-br from-slate-50 to-gray-100">
-          <TaskLogViewer
-            taskId={taskId}
-            onClose={onCollapse}
-            inline={true}
-            onTaskStop={onTaskStop}
-          />
+          {view === 'logs' ? (
+            <TaskLogViewer
+              taskId={taskId}
+              onClose={onCollapse}
+              inline={true}
+              onTaskStop={onTaskStop}
+            />
+          ) : (
+            <TaskListCompact
+              groupId={groupId}
+              selectedTaskId={taskId}
+              onSelectTask={(selectedTaskId) => {
+                onTaskSelect(selectedTaskId);
+                onViewChange('logs');
+                onOpen();
+              }}
+              onTaskStop={onTaskStop}
+            />
+          )}
         </div>
       )}
     </div>

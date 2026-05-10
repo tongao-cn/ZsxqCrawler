@@ -3,7 +3,7 @@
 import { useCallback, useState } from 'react';
 import { toast } from 'sonner';
 
-import { apiClient } from '@/lib/api';
+import { apiClient, getTaskConflictDetail } from '@/lib/api';
 import type {
   CrawlSettingsValue,
   GroupCrawlLoading,
@@ -13,6 +13,7 @@ import type {
 interface UseCrawlActionsOptions {
   groupId: number;
   onTaskCreated: (taskId: string) => void;
+  onTaskConflict?: (taskId: string) => void;
   loadGroupStats: () => void | Promise<void>;
   loadTopics: () => void | Promise<void>;
 }
@@ -20,6 +21,7 @@ interface UseCrawlActionsOptions {
 export function useCrawlActions({
   groupId,
   onTaskCreated,
+  onTaskConflict,
   loadGroupStats,
   loadTopics,
 }: UseCrawlActionsOptions) {
@@ -61,6 +63,16 @@ export function useCrawlActions({
     crawlPagesPerBatch,
   ]);
 
+  const handleTaskCreateError = useCallback((error: unknown, fallback: string) => {
+    const conflict = getTaskConflictDetail(error);
+    if (conflict?.task_id) {
+      toast.error(`已有任务 ${conflict.task_id} 正在运行`);
+      onTaskConflict?.(conflict.task_id);
+      return;
+    }
+    toast.error(`${fallback}: ${error instanceof Error ? error.message : '未知错误'}`);
+  }, [onTaskConflict]);
+
   const handleCrawlLatest = useCallback(async () => {
     try {
       setLatestDialogOpen(false);
@@ -72,11 +84,11 @@ export function useCrawlActions({
       onTaskCreated(taskId);
       reloadAfterTaskCreated(2000);
     } catch (error) {
-      toast.error(`创建任务失败: ${error instanceof Error ? error.message : '未知错误'}`);
+      handleTaskCreateError(error, '创建任务失败');
     } finally {
       setCrawlLoading(null);
     }
-  }, [buildCrawlSettings, groupId, onTaskCreated, reloadAfterTaskCreated]);
+  }, [buildCrawlSettings, groupId, handleTaskCreateError, onTaskCreated, reloadAfterTaskCreated]);
 
   const handleCrawlAll = useCallback(async () => {
     try {
@@ -88,11 +100,11 @@ export function useCrawlActions({
       onTaskCreated(taskId);
       reloadAfterTaskCreated(2000);
     } catch (error) {
-      toast.error(`创建任务失败: ${error instanceof Error ? error.message : '未知错误'}`);
+      handleTaskCreateError(error, '创建任务失败');
     } finally {
       setCrawlLoading(null);
     }
-  }, [buildCrawlSettings, groupId, onTaskCreated, reloadAfterTaskCreated]);
+  }, [buildCrawlSettings, groupId, handleTaskCreateError, onTaskCreated, reloadAfterTaskCreated]);
 
   const handleIncrementalCrawl = useCallback(async () => {
     try {
@@ -104,11 +116,11 @@ export function useCrawlActions({
       onTaskCreated(taskId);
       reloadAfterTaskCreated(2000);
     } catch (error) {
-      toast.error(`增量爬取失败: ${error instanceof Error ? error.message : '未知错误'}`);
+      handleTaskCreateError(error, '增量爬取失败');
     } finally {
       setCrawlLoading(null);
     }
-  }, [buildCrawlSettings, groupId, onTaskCreated, reloadAfterTaskCreated]);
+  }, [buildCrawlSettings, groupId, handleTaskCreateError, onTaskCreated, reloadAfterTaskCreated]);
 
   const buildCrawlRangeParams = useCallback((useCustomRange: boolean) => {
     const params: any = {};
@@ -137,11 +149,11 @@ export function useCrawlActions({
       onTaskCreated(taskId);
       reloadAfterTaskCreated(2000);
     } catch (error) {
-      toast.error(`创建任务失败: ${error instanceof Error ? error.message : '未知错误'}`);
+      handleTaskCreateError(error, '创建任务失败');
     } finally {
       setCrawlLoading(null);
     }
-  }, [buildCrawlRangeParams, groupId, onTaskCreated, reloadAfterTaskCreated]);
+  }, [buildCrawlRangeParams, groupId, handleTaskCreateError, onTaskCreated, reloadAfterTaskCreated]);
 
   const handleCrawlCustomRange = useCallback(async () => {
     if (!rangeStartDate && !rangeEndDate) {
@@ -159,13 +171,14 @@ export function useCrawlActions({
       onTaskCreated(taskId);
       reloadAfterTaskCreated(2000);
     } catch (error) {
-      toast.error(`创建任务失败: ${error instanceof Error ? error.message : '未知错误'}`);
+      handleTaskCreateError(error, '创建任务失败');
     } finally {
       setCrawlLoading(null);
     }
   }, [
     buildCrawlRangeParams,
     groupId,
+    handleTaskCreateError,
     onTaskCreated,
     rangeEndDate,
     rangeStartDate,

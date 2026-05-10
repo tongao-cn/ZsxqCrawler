@@ -3,7 +3,7 @@
 import { useCallback, useState } from 'react';
 import { toast } from 'sonner';
 
-import { apiClient } from '@/lib/api';
+import { apiClient, getTaskConflictDetail } from '@/lib/api';
 import type {
   DownloadSettingsValue,
   GroupDownloadOption,
@@ -14,6 +14,7 @@ interface UseDownloadActionsOptions {
   groupId: number;
   localFileCount: number;
   onTaskCreated: (taskId: string) => void;
+  onTaskConflict?: (taskId: string) => void;
   loadLocalFileCount: () => void | Promise<void>;
 }
 
@@ -21,6 +22,7 @@ export function useDownloadActions({
   groupId,
   localFileCount,
   onTaskCreated,
+  onTaskConflict,
   loadLocalFileCount,
 }: UseDownloadActionsOptions) {
   const [fileLoading, setFileLoading] = useState<GroupFileLoading>(null);
@@ -46,6 +48,16 @@ export function useDownloadActions({
     }
     return true;
   }, [localFileCount]);
+
+  const handleTaskCreateError = useCallback((error: unknown, fallback: string) => {
+    const conflict = getTaskConflictDetail(error);
+    if (conflict?.task_id) {
+      toast.error(`已有任务 ${conflict.task_id} 正在运行`);
+      onTaskConflict?.(conflict.task_id);
+      return;
+    }
+    toast.error(`${fallback}: ${error instanceof Error ? error.message : '未知错误'}`);
+  }, [onTaskConflict]);
 
   const handleDownloadByTime = useCallback(async () => {
     if (!canDownloadFiles()) {
@@ -77,7 +89,7 @@ export function useDownloadActions({
       onTaskCreated(taskId);
       setDownloadDialogOpen(false);
     } catch (error) {
-      toast.error(`文件下载失败: ${error instanceof Error ? error.message : '未知错误'}`);
+      handleTaskCreateError(error, '文件下载失败');
     } finally {
       setFileLoading(null);
     }
@@ -91,6 +103,7 @@ export function useDownloadActions({
     downloadRangeStartDate,
     filesPerBatch,
     groupId,
+    handleTaskCreateError,
     longSleepInterval,
     longSleepIntervalMax,
     longSleepIntervalMin,
@@ -121,7 +134,7 @@ export function useDownloadActions({
       toast.success(`文件下载任务已创建: ${taskId}`);
       onTaskCreated(taskId);
     } catch (error) {
-      toast.error(`文件下载失败: ${error instanceof Error ? error.message : '未知错误'}`);
+      handleTaskCreateError(error, '文件下载失败');
     } finally {
       setFileLoading(null);
     }
@@ -132,6 +145,7 @@ export function useDownloadActions({
     downloadIntervalMin,
     filesPerBatch,
     groupId,
+    handleTaskCreateError,
     longSleepInterval,
     longSleepIntervalMax,
     longSleepIntervalMin,

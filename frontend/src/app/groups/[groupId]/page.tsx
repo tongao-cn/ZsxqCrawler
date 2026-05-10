@@ -100,8 +100,12 @@ export default function GroupDetailPage() {
     currentTaskId,
     taskDockVisible,
     taskLogExpanded,
+    taskDockView,
+    setTaskDockView,
     handleTaskCreated,
+    selectTaskLog,
     openTaskLog,
+    openTaskList,
     toggleTaskLog,
     collapseTaskLog,
     closeTaskDock,
@@ -198,6 +202,7 @@ export default function GroupDetailPage() {
     groupId,
     localFileCount,
     onTaskCreated: handleTaskCreated,
+    onTaskConflict: openTaskList,
     loadLocalFileCount,
   });
   const {
@@ -231,6 +236,7 @@ export default function GroupDetailPage() {
   } = useCrawlActions({
     groupId,
     onTaskCreated: handleTaskCreated,
+    onTaskConflict: openTaskList,
     loadGroupStats,
     loadTopics,
   });
@@ -573,9 +579,13 @@ export default function GroupDetailPage() {
         <TaskDock
           taskId={currentTaskId}
           expanded={taskLogExpanded}
+          view={taskDockView}
+          groupId={groupId}
           onOpen={openTaskLog}
           onCollapse={collapseTaskLog}
           onClose={closeTaskDock}
+          onViewChange={setTaskDockView}
+          onTaskSelect={selectTaskLog}
           onTaskStop={() => {
             setTimeout(() => {
               loadGroupStats();
