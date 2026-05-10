@@ -28,7 +28,6 @@ export function useGroupTaskBridge() {
   }, []);
 
   const openTaskLog = useCallback(() => {
-    setTaskDockView('logs');
     setTaskDockVisible(true);
     setTaskLogExpanded(true);
   }, []);
@@ -45,6 +44,7 @@ export function useGroupTaskBridge() {
         setTaskLogExpanded(false);
         return false;
       }
+      setTaskDockView('logs');
       setTaskLogExpanded(true);
       return true;
     });
