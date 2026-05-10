@@ -27,7 +27,6 @@ class AShareRoutesHelperTests(unittest.TestCase):
             A_SHARE_DEFAULT_MODEL,
             A_SHARE_DEFAULT_RANKING_WINDOWS,
             A_SHARE_DEFAULT_REASONING_EFFORT,
-            A_SHARE_DEFAULT_RETENTION_DAYS,
             A_SHARE_DEFAULT_WIRE_API,
             _analysis_defaults_payload,
         )
@@ -35,7 +34,6 @@ class AShareRoutesHelperTests(unittest.TestCase):
         self.assertEqual(
             {
                 "days": 21,
-                "retention_days": A_SHARE_DEFAULT_RETENTION_DAYS,
                 "concurrency": A_SHARE_DEFAULT_CONCURRENCY,
                 "model": A_SHARE_DEFAULT_MODEL,
                 "api_base": A_SHARE_DEFAULT_API_BASE,

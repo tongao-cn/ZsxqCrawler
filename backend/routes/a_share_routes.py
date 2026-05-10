@@ -14,7 +14,6 @@ from backend.services.a_share_analysis_service import (
     DEFAULT_MODEL as A_SHARE_DEFAULT_MODEL,
     DEFAULT_REASONING_EFFORT as A_SHARE_DEFAULT_REASONING_EFFORT,
     DEFAULT_RANKING_WINDOWS as A_SHARE_DEFAULT_RANKING_WINDOWS,
-    DEFAULT_RETENTION_DAYS as A_SHARE_DEFAULT_RETENTION_DAYS,
     DEFAULT_WIRE_API as A_SHARE_DEFAULT_WIRE_API,
     build_chart_payload,
     get_analysis_summary,
@@ -39,12 +38,6 @@ router = APIRouter(prefix="/api/analytics/a-share", tags=["a-share"])
 class AShareAnalysisRunRequest(BaseModel):
     group_id: Optional[str | int] = Field(default=None, description="指定群组ID；为空时使用全局聚合")
     days: int = Field(default=21, ge=1, le=365, description="分析最近多少天的话题")
-    retention_days: int = Field(
-        default=A_SHARE_DEFAULT_RETENTION_DAYS,
-        ge=1,
-        le=3650,
-        description="保留最近多少天的分析数据",
-    )
     concurrency: int = Field(
         default=A_SHARE_DEFAULT_CONCURRENCY,
         ge=1,
@@ -81,7 +74,6 @@ def _normalize_group_scope(group_id: Optional[str | int]) -> tuple[Optional[str]
 def _analysis_defaults_payload() -> dict:
     return {
         "days": 21,
-        "retention_days": A_SHARE_DEFAULT_RETENTION_DAYS,
         "concurrency": A_SHARE_DEFAULT_CONCURRENCY,
         "model": A_SHARE_DEFAULT_MODEL,
         "api_base": A_SHARE_DEFAULT_API_BASE,
@@ -117,7 +109,7 @@ def run_a_share_analysis_task(task_id: str, request: AShareAnalysisRunRequest):
         add_task_log(task_id, f"🚀 {description}")
         add_task_log(
             task_id,
-            f"⚙️ 参数: group_id={normalized_group_id or 'GLOBAL'}, retention_days={request.retention_days}, concurrency={request.concurrency}, "
+            f"⚙️ 参数: group_id={normalized_group_id or 'GLOBAL'}, concurrency={request.concurrency}, "
             f"model={request.model}, api_base={request.api_base}, wire_api={request.wire_api}, "
             f"reasoning_effort={request.reasoning_effort}",
         )
@@ -139,7 +131,6 @@ def run_a_share_analysis_task(task_id: str, request: AShareAnalysisRunRequest):
             wire_api=request.wire_api,
             reasoning_effort=request.reasoning_effort,
             concurrency=request.concurrency,
-            retention_days=request.retention_days,
             reset_start_date=request.reset_start_date,
             reset_end_date=request.reset_end_date,
             log_callback=log_callback,
@@ -170,23 +161,16 @@ async def get_a_share_analysis_status(group_id: Optional[str] = None):
             status="running",
             group_id=normalized_group_id,
         )
-        if normalized_group_id:
+        try:
+            storage = await asyncio.to_thread(get_storage_health, group_id=normalized_group_id)
+        except Exception as storage_error:
             storage = {
                 "enabled": False,
-                "mode": "file_per_group",
-                "label": f"群组 {normalized_group_id} 本地分析文件",
+                "mode": "file_fallback",
+                "label": f"本地文件降级（PostgreSQL 不可用: {storage_error}）",
                 "daily_rows": summary.get("rows_count") or 0,
                 "processed_rows": summary.get("processed_items") or 0,
             }
-        else:
-            try:
-                storage = await asyncio.to_thread(get_storage_health)
-            except Exception as storage_error:
-                storage = {
-                    "enabled": False,
-                    "mode": "file_only",
-                    "label": f"本地文件镜像（PostgreSQL 不可用: {storage_error}）",
-                }
 
         try:
             latest_tdx_export = await asyncio.to_thread(get_latest_tdx_export, normalized_group_id)
@@ -263,7 +247,6 @@ async def reset_a_share_analysis_date_range(request: AShareAnalysisResetRangeReq
             request.start_date,
             request.end_date,
             group_id=normalize_group_id(request.group_id),
-            group_name=request.group_name,
         )
         return _success_payload(result)
     except ValueError as e:

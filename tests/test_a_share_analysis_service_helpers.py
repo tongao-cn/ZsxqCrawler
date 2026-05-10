@@ -1,5 +1,7 @@
 from datetime import datetime
 from unittest.mock import patch
+import os
+import tempfile
 import unittest
 
 
@@ -40,6 +42,67 @@ class _FakeAShareConnection:
 
 
 class AShareAnalysisServiceHelperTests(unittest.TestCase):
+    def test_db_storage_reads_empty_db_without_local_file_fallback(self):
+        from backend.services import a_share_analysis_service as service
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_path = os.path.join(temp_dir, "company_mentions.csv")
+            state_path = os.path.join(temp_dir, "company_mentions_state.json")
+            with open(output_path, "w", encoding="utf-8") as file_obj:
+                file_obj.write("date,company,articles_count\n2026-05-01,旧数据,3\n")
+            with open(state_path, "w", encoding="utf-8") as file_obj:
+                file_obj.write('{"processed": ["old-topic"]}')
+
+            with patch.object(service, "should_use_db_storage", return_value=True), patch.object(
+                service, "load_daily_mentions_from_db", return_value={}
+            ), patch.object(service, "load_processed_state_from_db", return_value=set()), patch.object(
+                service, "_read_existing_csv_file"
+            ) as read_file, patch.object(
+                service, "_load_state_file"
+            ) as load_file:
+                self.assertEqual({}, service.read_existing_csv(output_path, group_id="511"))
+                self.assertEqual(set(), service.load_state(state_path, group_id="511"))
+
+        read_file.assert_not_called()
+        load_file.assert_not_called()
+
+    def test_db_storage_writes_do_not_write_local_files(self):
+        from backend.services import a_share_analysis_service as service
+
+        daily = {"2026-05-01": {"宁德时代": 2}}
+        processed = {"topic-1"}
+
+        with patch.object(service, "should_use_db_storage", return_value=True), patch.object(
+            service, "save_daily_mentions_to_db"
+        ) as save_daily, patch.object(service, "save_processed_state_to_db") as save_processed, patch.object(
+            service, "_write_csv_file"
+        ) as write_file, patch.object(
+            service, "_save_state_file"
+        ) as save_file:
+            service.write_csv(daily, group_id="511")
+            service.save_state(processed_keys=processed, group_id="511")
+
+        save_daily.assert_called_once_with(daily, group_id="511")
+        save_processed.assert_called_once_with(processed, group_id="511")
+        write_file.assert_not_called()
+        save_file.assert_not_called()
+
+    def test_file_fallback_still_reads_and_writes_local_files(self):
+        from backend.services import a_share_analysis_service as service
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_path = os.path.join(temp_dir, "company_mentions.csv")
+            state_path = os.path.join(temp_dir, "company_mentions_state.json")
+
+            with patch.object(service, "should_use_db_storage", return_value=False):
+                service.write_csv({"2026-05-01": {"宁德时代": 2}}, output_path, group_id="511")
+                service.save_state(state_path, {"topic-1"}, group_id="511")
+                daily = service.read_existing_csv(output_path, group_id="511")
+                processed = service.load_state(state_path, group_id="511")
+
+        self.assertEqual({"2026-05-01": {"宁德时代": 2}}, daily)
+        self.assertEqual({"topic-1"}, processed)
+
     def test_normalize_date_range_validates_and_rejects_reversed_range(self):
         from backend.services.a_share_analysis_service import _normalize_date_range
 

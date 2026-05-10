@@ -8,7 +8,6 @@ from backend.services.a_share_analysis_service import (
     DEFAULT_MODEL,
     DEFAULT_REASONING_EFFORT,
     DEFAULT_WIRE_API,
-    DEFAULT_RETENTION_DAYS,
     ensure_configured,
     run_analysis,
 )
@@ -24,7 +23,6 @@ def main():
     parser.add_argument("--wire_api", type=str, default=DEFAULT_WIRE_API)
     parser.add_argument("--reasoning_effort", type=str, default=DEFAULT_REASONING_EFFORT)
     parser.add_argument("--concurrency", type=int, default=DEFAULT_CONCURRENCY)
-    parser.add_argument("--retention_days", type=int, default=DEFAULT_RETENTION_DAYS)
     parser.add_argument("--reset_start_date", type=str, default=None)
     parser.add_argument("--reset_end_date", type=str, default=None)
     args = parser.parse_args()
@@ -37,7 +35,6 @@ def main():
             wire_api=args.wire_api,
             reasoning_effort=args.reasoning_effort,
             concurrency=args.concurrency,
-            retention_days=args.retention_days,
             reset_start_date=args.reset_start_date,
             reset_end_date=args.reset_end_date,
         )

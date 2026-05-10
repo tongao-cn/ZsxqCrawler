@@ -65,7 +65,6 @@ DEFAULT_API_BASE = get_default_base_url()
 DEFAULT_WIRE_API = get_default_wire_api()
 DEFAULT_REASONING_EFFORT = get_extraction_reasoning_effort()
 DEFAULT_CONCURRENCY = 10
-DEFAULT_RETENTION_DAYS = 30
 DEFAULT_RANKING_WINDOWS = (3, 7, 14, 21)
 DEFAULT_RANKING_TOP_N = 35
 DEFAULT_CHECKPOINT_BATCH_SIZE = 20
@@ -358,6 +357,40 @@ def _format_company_log(companies: Sequence[str], max_chars: int = 160) -> str:
     remaining = len(normalized) - len(visible)
     suffix = f" ... (+{remaining})" if remaining > 0 else ""
     return ", ".join(visible) + suffix
+
+
+def _format_stock_concepts_log(stocks: Sequence[Dict[str, Any]], max_chars: int = 220) -> str:
+    entries: List[str] = []
+    for stock in stocks:
+        stock_name = str(stock.get("stock_name") or "").strip()
+        concepts = [
+            str(concept).strip()
+            for concept in stock.get("concepts") or []
+            if str(concept).strip()
+        ]
+        if not stock_name or not concepts:
+            continue
+        entries.append(f"{stock_name}: {'/'.join(concepts[:3])}")
+
+    if not entries:
+        return "无"
+
+    joined = "; ".join(entries)
+    if len(joined) <= max_chars:
+        return joined
+
+    current_length = 0
+    visible: List[str] = []
+    for entry in entries:
+        addition = len(entry) if not visible else len(entry) + 2
+        if current_length + addition > max_chars:
+            break
+        visible.append(entry)
+        current_length += addition
+
+    remaining = len(entries) - len(visible)
+    suffix = f" ... (+{remaining})" if remaining > 0 else ""
+    return "; ".join(visible) + suffix
 
 
 def _extract_json_object(text: str) -> Dict[str, Any]:
@@ -726,7 +759,8 @@ def aggregate_daily(
             if success_callback:
                 success_callback(result_item_key, str(day or ""), stocks, companies)
             _emit_log(
-                f"extracted {len(companies)} companies for topic_id={topic_id}: {_format_company_log(companies)}",
+                f"extracted {len(companies)} companies for topic_id={topic_id}: "
+                f"{_format_company_log(companies)}; concepts: {_format_stock_concepts_log(stocks)}",
                 log_callback,
             )
     return daily, succeeded_item_keys, failed_items, topic_stock_extractions
@@ -764,9 +798,7 @@ def read_existing_csv(
     resolved_output_path, _resolved_state_path = resolve_analysis_paths(output_path, DEFAULT_STATE_PATH, group_id)
     if should_use_db_storage(group_id):
         try:
-            daily = load_daily_mentions_from_db(group_id=group_id)
-            if daily or not resolved_output_path or not os.path.exists(resolved_output_path):
-                return daily
+            return load_daily_mentions_from_db(group_id=group_id)
         except Exception as exc:
             raise RuntimeError(f"read daily mentions from PostgreSQL failed: {exc}") from exc
     return _read_existing_csv_file(resolved_output_path)
@@ -782,7 +814,7 @@ def _write_csv_file(daily: Dict[str, Dict[str, int]], output_path: str = DEFAULT
         for day in sorted(daily.keys()):
             for company, count in sorted(daily[day].items(), key=lambda item: (-item[1], item[0])):
                 writer.writerow([day, company, count])
-    log_info(f"wrote csv: {output_path}")
+    log_info(f"legacy local csv fallback written: {output_path}")
 
 
 def write_csv(
@@ -794,8 +826,13 @@ def write_csv(
     if should_use_db_storage(group_id):
         try:
             save_daily_mentions_to_db(daily, group_id=group_id)
-            if group_id is None:
-                return
+            total_rows = sum(len(company_counts) for company_counts in daily.values())
+            total_mentions = _compute_total_mentions(daily)
+            log_info(
+                f"db daily mentions saved: group_id={normalize_group_id(group_id) or 'GLOBAL'}, "
+                f"days={len(daily)}, rows={total_rows}, mentions={total_mentions}"
+            )
+            return
         except Exception as exc:
             raise RuntimeError(f"save daily mentions to PostgreSQL failed: {exc}") from exc
     _write_csv_file(daily, resolved_output_path)
@@ -822,9 +859,7 @@ def load_state(
     _resolved_output_path, resolved_state_path = resolve_analysis_paths(DEFAULT_OUTPUT_PATH, state_path, group_id)
     if should_use_db_storage(group_id):
         try:
-            processed = load_processed_state_from_db(group_id=group_id)
-            if processed or not resolved_state_path or not os.path.exists(resolved_state_path):
-                return processed
+            return load_processed_state_from_db(group_id=group_id)
         except Exception as exc:
             raise RuntimeError(f"read processed state from PostgreSQL failed: {exc}") from exc
     return _load_state_file(resolved_state_path)
@@ -850,39 +885,10 @@ def save_state(
     if should_use_db_storage(group_id):
         try:
             save_processed_state_to_db(normalized_keys, group_id=group_id)
-            if group_id is None:
-                return
+            return
         except Exception as exc:
             raise RuntimeError(f"save processed state to PostgreSQL failed: {exc}") from exc
     _save_state_file(resolved_state_path, normalized_keys)
-
-
-def prune_daily_retention(
-    daily: Dict[str, Dict[str, int]],
-    keep_days: int,
-) -> Tuple[Dict[str, Dict[str, int]], int]:
-    cutoff_day = normalize_day(datetime.now() - timedelta(days=keep_days))
-    pruned: Dict[str, Dict[str, int]] = {}
-    removed_days = 0
-    for day, company_counts in daily.items():
-        if day >= cutoff_day:
-            pruned[day] = company_counts
-        else:
-            removed_days += 1
-    return pruned, removed_days
-
-
-def prune_state_retention(processed_keys: set, keep_days: int) -> Tuple[set, int]:
-    cutoff_day = normalize_day(datetime.now() - timedelta(days=keep_days))
-    kept = set()
-    removed = 0
-    for key in processed_keys:
-        day = _extract_day_from_state_key(key)
-        if day and day < cutoff_day:
-            removed += 1
-            continue
-        kept.add(key)
-    return kept, removed
 
 
 def remove_daily_range(
@@ -959,7 +965,6 @@ def backfill_topic_stock_extractions(
     wire_api: str = DEFAULT_WIRE_API,
     reasoning_effort: str = DEFAULT_REASONING_EFFORT,
     concurrency: int = DEFAULT_CONCURRENCY,
-    retention_days: int = DEFAULT_RETENTION_DAYS,
     log_callback: LogCallback = None,
 ) -> Dict[str, Any]:
     bounded_days = max(1, int(days))
@@ -973,7 +978,6 @@ def backfill_topic_stock_extractions(
         wire_api=wire_api,
         reasoning_effort=reasoning_effort,
         concurrency=concurrency,
-        retention_days=retention_days,
         reset_start_date=start_day,
         reset_end_date=end_day,
         log_callback=log_callback,
@@ -1219,7 +1223,6 @@ def run_analysis(
     wire_api: str = DEFAULT_WIRE_API,
     reasoning_effort: str = DEFAULT_REASONING_EFFORT,
     concurrency: int = DEFAULT_CONCURRENCY,
-    retention_days: int = DEFAULT_RETENTION_DAYS,
     reset_start_date: Optional[str] = None,
     reset_end_date: Optional[str] = None,
     log_callback: LogCallback = None,
@@ -1228,19 +1231,10 @@ def run_analysis(
     normalized_group_id = normalize_group_id(group_id)
     days = max(1, int(days))
     concurrency = max(1, int(concurrency))
-    retention_days = max(1, int(retention_days))
 
     resolved_output_path, resolved_state_path = resolve_analysis_paths(output_path, state_path, normalized_group_id)
     existing_daily = read_existing_csv(resolved_output_path, group_id=normalized_group_id)
     processed_keys = load_state(resolved_state_path, group_id=normalized_group_id)
-
-    existing_daily, removed_csv_days = prune_daily_retention(existing_daily, retention_days)
-    processed_keys, removed_state_keys = prune_state_retention(processed_keys, retention_days)
-    _emit_log(
-        f"retention cleanup finished: keep_days={retention_days}, "
-        f"removed_csv_days={removed_csv_days}, removed_state_keys={removed_state_keys}",
-        log_callback,
-    )
 
     reset_summary = None
     if reset_start_date or reset_end_date:
@@ -1332,9 +1326,10 @@ def run_analysis(
         processed_keys.update(checkpoint_keys)
         checkpoint_saved_topic_stock_extractions += int(result.get("topic_stock_extractions") or 0)
         _emit_log(
-            f"checkpoint saved topics={result.get('processed_state', 0)}, "
-            f"daily_rows={result.get('daily_mentions', 0)}, "
-            f"topic_stock_extractions={result.get('topic_stock_extractions', 0)}",
+            f"db checkpoint saved at {datetime.now().isoformat(timespec='seconds')}: "
+            f"group_id={normalized_group_id}, daily_mentions={result.get('daily_mentions', 0)}, "
+            f"topic_stock_extractions={result.get('topic_stock_extractions', 0)}, "
+            f"processed_state={result.get('processed_state', 0)}",
             log_callback,
         )
         checkpoint_daily = {}
@@ -1381,7 +1376,11 @@ def run_analysis(
                 topic_stock_extractions,
                 group_id=normalized_group_id,
             )
-            _emit_log(f"saved topic stock extractions={saved_topic_stock_extractions}", log_callback)
+            _emit_log(
+                f"db topic stock extractions saved at {datetime.now().isoformat(timespec='seconds')}: "
+                f"group_id={normalized_group_id}, topic_stock_extractions={saved_topic_stock_extractions}",
+                log_callback,
+            )
 
     write_csv(existing_daily, resolved_output_path, group_id=normalized_group_id)
     processed_keys.update(succeeded_item_keys)
