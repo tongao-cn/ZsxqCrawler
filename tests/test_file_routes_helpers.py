@@ -52,8 +52,8 @@ class FileRoutesHelperTests(unittest.TestCase):
         background_tasks = FakeBackgroundTasks()
 
         with (
-            patch("backend.routes.file_routes.create_task", return_value="task-1") as create_task,
-            patch("backend.routes.file_routes.enqueue_runtime_task") as enqueue_runtime_task,
+            patch("backend.services.file_workflow_service.create_task", return_value="task-1") as create_task,
+            patch("backend.services.file_workflow_service.enqueue_runtime_task") as enqueue_runtime_task,
         ):
             response = _enqueue_file_task(
                 background_tasks,
@@ -75,7 +75,7 @@ class FileRoutesHelperTests(unittest.TestCase):
 
         with (
             patch("backend.routes.ingestion_helpers.create_ingestion_task", return_value=("task-1", None)) as create_task,
-            patch("backend.routes.file_routes.enqueue_runtime_task") as enqueue_runtime_task,
+            patch("backend.services.file_workflow_service.enqueue_runtime_task") as enqueue_runtime_task,
         ):
             response = _enqueue_file_task(
                 background_tasks,
@@ -143,7 +143,7 @@ class FileRoutesHelperTests(unittest.TestCase):
         self.assertEqual([], background_tasks.calls)
 
     def test_get_download_file_status_handles_missing_file(self):
-        with patch("backend.routes.file_routes.get_db_path_manager") as mocked_manager:
+        with patch("backend.services.file_workflow_service.get_db_path_manager") as mocked_manager:
             mocked_manager.return_value.get_group_dir.return_value = r"C:\tmp\group-1"
 
             status = _get_download_file_status("group-1", "missing.pdf", 123, "fallback.pdf")
@@ -155,7 +155,7 @@ class FileRoutesHelperTests(unittest.TestCase):
         self.assertFalse(status["is_complete"])
 
     def test_resolve_download_record_status_marks_existing_file_completed(self):
-        with patch("backend.routes.file_routes.resolve_local_file_path") as mocked_resolve:
+        with patch("backend.services.file_workflow_service.resolve_local_file_path") as mocked_resolve:
             mocked_resolve.return_value = r"C:\tmp\group-1\downloads\file.pdf"
 
             status = _resolve_download_record_status(

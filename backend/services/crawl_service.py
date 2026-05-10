@@ -5,6 +5,7 @@ from typing import Any, Callable, Optional
 
 from backend.core.account_context import get_cookie_for_group
 from backend.crawlers.topic_crawler import ZSXQTopicCrawler
+from backend.schemas.crawl import CrawlTimeRangeRequest
 from backend.services.task_runtime import (
     add_task_log,
     is_task_stopped,

@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from typing import Any, Callable, Optional
+from typing import Any, Callable
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException
-from pydantic import BaseModel, Field
 
 from backend.routes.ingestion_helpers import enqueue_ingestion_task
+from backend.schemas.crawl import CrawlHistoricalRequest, CrawlSettingsRequest, CrawlTimeRangeRequest
 from backend.services.crawl_service import (
     run_crawl_all_task,
     run_crawl_historical_task,
@@ -15,36 +15,6 @@ from backend.services.crawl_service import (
 )
 
 router = APIRouter(prefix="/api/crawl", tags=["crawl"])
-
-
-class CrawlHistoricalRequest(BaseModel):
-    pages: int = Field(default=10, ge=1, le=1000, description="爬取页数")
-    per_page: int = Field(default=20, ge=1, le=100, description="每页数量")
-    crawlIntervalMin: Optional[float] = Field(default=None, ge=1.0, le=60.0, description="爬取间隔最小值(秒)")
-    crawlIntervalMax: Optional[float] = Field(default=None, ge=1.0, le=60.0, description="爬取间隔最大值(秒)")
-    longSleepIntervalMin: Optional[float] = Field(default=None, ge=60.0, le=3600.0, description="长休眠间隔最小值(秒)")
-    longSleepIntervalMax: Optional[float] = Field(default=None, ge=60.0, le=3600.0, description="长休眠间隔最大值(秒)")
-    pagesPerBatch: Optional[int] = Field(default=None, ge=5, le=50, description="每批次页面数")
-
-
-class CrawlSettingsRequest(BaseModel):
-    crawlIntervalMin: Optional[float] = Field(default=None, ge=1.0, le=60.0, description="爬取间隔最小值(秒)")
-    crawlIntervalMax: Optional[float] = Field(default=None, ge=1.0, le=60.0, description="爬取间隔最大值(秒)")
-    longSleepIntervalMin: Optional[float] = Field(default=None, ge=60.0, le=3600.0, description="长休眠间隔最小值(秒)")
-    longSleepIntervalMax: Optional[float] = Field(default=None, ge=60.0, le=3600.0, description="长休眠间隔最大值(秒)")
-    pagesPerBatch: Optional[int] = Field(default=None, ge=5, le=50, description="每批次页面数")
-
-
-class CrawlTimeRangeRequest(BaseModel):
-    startTime: Optional[str] = Field(default=None, description="开始时间，支持 YYYY-MM-DD 或 ISO8601，缺省则按 lastDays 推导")
-    endTime: Optional[str] = Field(default=None, description="结束时间，默认当前时间（本地东八区）")
-    lastDays: Optional[int] = Field(default=None, ge=1, le=3650, description="最近N天（与 startTime/endTime 互斥优先；当 startTime 缺省时可用）")
-    perPage: Optional[int] = Field(default=20, ge=1, le=100, description="每页数量")
-    crawlIntervalMin: Optional[float] = Field(default=None, ge=1.0, le=60.0, description="爬取间隔最小值(秒)")
-    crawlIntervalMax: Optional[float] = Field(default=None, ge=1.0, le=60.0, description="爬取间隔最大值(秒)")
-    longSleepIntervalMin: Optional[float] = Field(default=None, ge=60.0, le=3600.0, description="长休眠间隔最小值(秒)")
-    longSleepIntervalMax: Optional[float] = Field(default=None, ge=60.0, le=3600.0, description="长休眠间隔最大值(秒)")
-    pagesPerBatch: Optional[int] = Field(default=None, ge=5, le=50, description="每批次页面数")
 
 
 def _create_crawl_task_response(

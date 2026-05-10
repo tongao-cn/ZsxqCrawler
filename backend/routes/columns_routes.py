@@ -21,6 +21,7 @@ from backend.services.columns_fetch_summary import (
     combined_column_stats as _combined_column_stats,
     resolve_columns_fetch_config as _resolve_columns_fetch_config,
 )
+from backend.services.columns_summary_service import get_columns_summary
 from backend.routes.ingestion_helpers import create_ingestion_task_or_raise
 from backend.services.task_runtime import add_task_log, enqueue_runtime_task, is_task_stopped, update_task
 from backend.storage.accounts_sql_manager import get_accounts_sql_manager
@@ -997,51 +998,7 @@ async def _download_topic_video(
 @router.get("/groups/{group_id}/columns/summary")
 async def get_group_columns_summary(group_id: str):
     """获取群组专栏摘要信息，检查是否存在专栏内容"""
-    try:
-        cookie = get_cookie_for_group(group_id)
-
-        if not cookie:
-            return {
-                "has_columns": False,
-                "title": None,
-                "error": "未找到可用Cookie",
-            }
-
-        headers = build_stealth_headers(cookie)
-        url = f"https://api.zsxq.com/v2/groups/{group_id}/columns/summary"
-
-        response = requests.get(url, headers=headers, timeout=30)
-
-        if response.status_code == 200:
-            data = response.json()
-            if data.get("succeeded"):
-                resp_data = data.get("resp_data", {})
-                return {
-                    "has_columns": resp_data.get("has_columns", False),
-                    "title": resp_data.get("title", None),
-                }
-            return {
-                "has_columns": False,
-                "title": None,
-                "error": data.get("error_message", "API返回失败"),
-            }
-        return {
-            "has_columns": False,
-            "title": None,
-            "error": f"HTTP {response.status_code}",
-        }
-    except requests.RequestException as e:
-        return {
-            "has_columns": False,
-            "title": None,
-            "error": f"网络请求失败: {str(e)}",
-        }
-    except Exception as e:
-        return {
-            "has_columns": False,
-            "title": None,
-            "error": f"获取专栏信息失败: {str(e)}",
-        }
+    return get_columns_summary(group_id)
 
 
 @router.get("/groups/{group_id}/columns")

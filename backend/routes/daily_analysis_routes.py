@@ -5,7 +5,8 @@ from typing import Any, Callable, Optional
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Query
 from pydantic import BaseModel, Field
 
-from backend.routes.crawl_routes import CrawlSettingsRequest, run_crawl_latest_task
+from backend.schemas.crawl import CrawlSettingsRequest
+from backend.services.crawl_service import run_crawl_latest_task
 from backend.services.daily_topic_analysis_service import analyze_daily_topics, get_daily_report
 from backend.services.task_runtime import (
     add_task_log,
