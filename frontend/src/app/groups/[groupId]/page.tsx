@@ -94,6 +94,7 @@ export default function GroupDetailPage() {
   const [activeMode, setActiveMode] = useState<'crawl' | 'download'>('crawl');
   // 注意：topic_id 可能超过 JS 安全整数范围，这里统一按字符串处理 ID
   const [clearingCache, setClearingCache] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const {
     activeTab,
     setActiveTab,
@@ -388,6 +389,8 @@ export default function GroupDetailPage() {
           hasColumns={hasColumns}
           columnsTitle={columnsTitle}
           onOpenColumns={() => router.push(`/groups/${groupId}/columns`)}
+          collapsed={sidebarCollapsed}
+          onCollapsedChange={setSidebarCollapsed}
         />
 
         {/* 中间：群组内容 - 可滚动区域 */}

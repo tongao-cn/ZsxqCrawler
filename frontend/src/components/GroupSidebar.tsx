@@ -7,7 +7,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { apiClient, type Account, type AccountSelf, type Group, type GroupStats } from '@/lib/api';
-import { BookOpen } from 'lucide-react';
+import { BookOpen, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 
 type GroupInfo = {
   statistics?: {
@@ -40,6 +40,8 @@ type GroupSidebarProps = {
   hasColumns: boolean;
   columnsTitle?: string | null;
   onOpenColumns?: () => void;
+  collapsed: boolean;
+  onCollapsedChange: (collapsed: boolean) => void;
 };
 
 const getTypeBadge = (type: string) => {
@@ -106,11 +108,54 @@ export default function GroupSidebar({
   hasColumns,
   columnsTitle,
   onOpenColumns,
+  collapsed,
+  onCollapsedChange,
 }: GroupSidebarProps) {
   const accountName = accountSelf?.name || groupAccount?.name || groupAccount?.id || '默认账号';
   const accountFallbackText = accountName.slice(0, 1) || '账';
   const remoteFileCount = groupInfo?.statistics?.files?.count;
   const showAccountAssignment = accounts.length > 0 && false;
+
+  if (collapsed) {
+    return (
+      <div className="w-16 flex-shrink-0 sticky top-0 h-fit max-h-screen">
+        <Card className="border border-gray-200 shadow-none h-full">
+          <CardContent className="p-2 flex flex-col items-center gap-3">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-9 w-9 p-0"
+              aria-label="展开群组信息侧边栏"
+              title="展开群组信息侧边栏"
+              onClick={() => onCollapsedChange(false)}
+            >
+              <PanelLeftOpen className="h-4 w-4" />
+            </Button>
+            <SafeImage
+              src={group.background_url}
+              alt={group.name}
+              className="w-10 h-10 rounded-lg object-cover"
+              fallbackClassName="w-10 h-10 rounded-lg"
+              fallbackText={group.name.slice(0, 2)}
+              fallbackGradient={getGradientByType(group.type)}
+            />
+            {hasColumns && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-9 w-9 p-0"
+                aria-label={columnsTitle || '打开专栏'}
+                title={columnsTitle || '打开专栏'}
+                onClick={onOpenColumns}
+              >
+                <BookOpen className="h-4 w-4" />
+              </Button>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="w-80 flex-shrink-0 sticky top-0 h-fit max-h-screen">
