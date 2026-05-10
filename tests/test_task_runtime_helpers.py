@@ -112,6 +112,40 @@ class TaskRuntimeHelperTests(unittest.TestCase):
         self.assertTrue(store.stop_flags["task-1"])
         self.assertEqual("cancelled", store.tasks["task-1"]["status"])
 
+    def test_request_runtime_shutdown_cancels_running_resources(self):
+        from backend.services import task_runtime
+
+        store = FakeTaskStore()
+        store.tasks["task-1"] = {"task_id": "task-1", "status": "running", "message": "running"}
+        store.tasks["task-2"] = {"task_id": "task-2", "status": "completed", "message": "done"}
+        crawler = Stoppable()
+        downloader = Stoppable()
+
+        with patch("backend.services.task_runtime.get_task_store", return_value=store):
+            try:
+                task_runtime.current_tasks["task-1"] = dict(store.tasks["task-1"])
+                task_runtime.current_tasks["task-2"] = dict(store.tasks["task-2"])
+                task_runtime.register_task_crawler("task-1", crawler)
+                task_runtime.file_downloader_instances["task-1"] = downloader
+                task_runtime.sse_connections["task-1"] = [object()]
+
+                task_runtime.request_runtime_shutdown()
+            finally:
+                task_runtime.current_tasks.pop("task-1", None)
+                task_runtime.current_tasks.pop("task-2", None)
+                task_runtime.task_stop_flags.pop("task-1", None)
+                task_runtime.task_stop_flags.pop("task-2", None)
+                task_runtime.crawler_instances.clear()
+                task_runtime.file_downloader_instances.clear()
+                task_runtime.sse_connections.clear()
+
+        self.assertTrue(crawler.stopped)
+        self.assertTrue(downloader.stopped)
+        self.assertTrue(store.stop_flags["task-1"])
+        self.assertEqual("cancelled", store.tasks["task-1"]["status"])
+        self.assertEqual("completed", store.tasks["task-2"]["status"])
+        self.assertEqual({}, task_runtime.sse_connections)
+
 
 if __name__ == "__main__":
     unittest.main()

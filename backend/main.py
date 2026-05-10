@@ -28,6 +28,7 @@ from backend.routes.media_routes import router as media_router
 from backend.routes.settings_routes import router as settings_router
 from backend.routes.topic_routes import router as topic_router
 from backend.routes.task_routes import router as task_router
+from backend.services.task_runtime import request_runtime_shutdown
 
 # 初始化日志系统
 ensure_configured()
@@ -42,7 +43,7 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         print(f"⚠️ 启动扫描本地群失败: {e}")
     yield
-    # 关闭时执行（如需要可添加清理逻辑）
+    request_runtime_shutdown()
 
 
 def _get_cors_allow_origins() -> List[str]:

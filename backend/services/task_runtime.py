@@ -232,6 +232,34 @@ def stop_task(task_id: str) -> bool:
     return True
 
 
+def request_runtime_shutdown() -> None:
+    stopping_task_ids = [
+        task_id
+        for task_id, task in list(current_tasks.items())
+        if task.get("status") in {"pending", "running"}
+    ]
+
+    for task_id in stopping_task_ids:
+        task_stop_flags[task_id] = True
+
+    for crawler in list(crawler_instances.values()):
+        if hasattr(crawler, "set_stop_flag"):
+            crawler.set_stop_flag()
+
+    for downloader in list(file_downloader_instances.values()):
+        if hasattr(downloader, "set_stop_flag"):
+            downloader.set_stop_flag()
+
+    for task_id, task in list(current_tasks.items()):
+        if task.get("status") in {"pending", "running"}:
+            get_task_store().set_stop_flag(task_id, True)
+            update_task(task_id, "cancelled", "服务关闭，任务已停止")
+
+    crawler_instances.clear()
+    file_downloader_instances.clear()
+    sse_connections.clear()
+
+
 def is_task_stopped(task_id: str) -> bool:
     return task_stop_flags.get(task_id, False) or get_task_store().is_stopped(task_id)
 
