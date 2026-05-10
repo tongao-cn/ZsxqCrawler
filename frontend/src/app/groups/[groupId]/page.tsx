@@ -6,7 +6,7 @@ import { useState, useRef, useCallback, useDeferredValue } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { ArrowLeft, MessageSquare, BarChart3, File, Sparkles } from 'lucide-react';
+import { ArrowLeft, MessageSquare, BarChart3, File, Sparkles, Search } from 'lucide-react';
 import { apiClient } from '@/lib/api';
 import { toast } from 'sonner';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -41,6 +41,10 @@ const AShareAnalysisPanel = dynamic(() => import('@/components/AShareAnalysisPan
   ssr: false,
 });
 const DailyTopicAnalysisPanel = dynamic(() => import('@/components/DailyTopicAnalysisPanel'), {
+  loading: LazyPanelFallback,
+  ssr: false,
+});
+const StockTopicAnalysisPanel = dynamic(() => import('@/components/StockTopicAnalysisPanel'), {
   loading: LazyPanelFallback,
   ssr: false,
 });
@@ -400,7 +404,7 @@ export default function GroupDetailPage() {
           <Tabs value={activeTab} onValueChange={setActiveTab} className="flex flex-col h-full">
             {/* 固定的标签页头部 */}
             <div className="flex-shrink-0 mb-4">
-              <TabsList className="grid w-full grid-cols-4">
+              <TabsList className="grid w-full grid-cols-5">
                 <TabsTrigger value="topics" className="flex items-center gap-2">
                   <MessageSquare className="h-4 w-4" />
                   话题列表
@@ -416,6 +420,10 @@ export default function GroupDetailPage() {
                 <TabsTrigger value="daily-analysis" className="flex items-center gap-2">
                   <Sparkles className="h-4 w-4" />
                   每日总结
+                </TabsTrigger>
+                <TabsTrigger value="stock-topic-analysis" className="flex items-center gap-2">
+                  <Search className="h-4 w-4" />
+                  个股话题
                 </TabsTrigger>
               </TabsList>
             </div>
@@ -498,6 +506,15 @@ export default function GroupDetailPage() {
             <TabsContent value="daily-analysis" className="flex-1 flex flex-col min-h-0">
               <div className="flex-1 min-h-0 overflow-auto">
                 <DailyTopicAnalysisPanel
+                  groupId={groupId}
+                  onTaskCreated={handleTaskCreated}
+                />
+              </div>
+            </TabsContent>
+
+            <TabsContent value="stock-topic-analysis" className="flex-1 flex flex-col min-h-0">
+              <div className="flex-1 min-h-0 overflow-auto">
+                <StockTopicAnalysisPanel
                   groupId={groupId}
                   onTaskCreated={handleTaskCreated}
                 />
