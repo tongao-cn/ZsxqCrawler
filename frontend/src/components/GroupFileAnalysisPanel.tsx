@@ -88,6 +88,7 @@ export default function GroupFileAnalysisPanel({ groupId }: GroupFileAnalysisPan
   const [searchInput, setSearchInput] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [analysisStatusFilter, setAnalysisStatusFilter] = useState('all');
   const [analysisOpen, setAnalysisOpen] = useState(false);
   const [selectedFile, setSelectedFile] = useState<FileItem | null>(null);
   const [analysisLoading, setAnalysisLoading] = useState(false);
@@ -97,10 +98,32 @@ export default function GroupFileAnalysisPanel({ groupId }: GroupFileAnalysisPan
   const [analyzingFileIds, setAnalyzingFileIds] = useState<Set<number>>(new Set());
   const [batchAnalyzing, setBatchAnalyzing] = useState(false);
 
+  const displayedFiles = files.filter((file) => {
+    if (analysisStatusFilter === 'analyzed') {
+      return file.has_ai_analysis;
+    }
+    if (analysisStatusFilter === 'pending') {
+      return !file.has_ai_analysis;
+    }
+    return true;
+  });
   const downloadedFiles = files.filter(isFileDownloaded);
   const failedFiles = files.filter((file) => !isFileDownloaded(file) && file.download_status === 'failed');
-  const analyzedFiles = files.filter((file) => file.has_ai_analysis);
-  const pendingAnalysisFiles = files.filter((file) => isFileDownloaded(file) && !file.has_ai_analysis);
+  const pendingAnalysisFiles = displayedFiles.filter((file) => isFileDownloaded(file) && !file.has_ai_analysis);
+  const downloadableFiles = displayedFiles.filter((file) => !isFileDownloaded(file) && !downloadingFiles.has(file.file_id));
+  const hasActiveFilters = Boolean(searchQuery) || statusFilter !== 'all' || analysisStatusFilter !== 'all';
+  const downloadStatusLabel = {
+    all: '全部获取状态',
+    pending: '未下载',
+    completed: '已完成',
+    failed: '失败',
+    skipped: '已存在',
+  }[statusFilter] || statusFilter;
+  const analysisStatusLabel = {
+    all: '全部分析状态',
+    pending: '未分析',
+    analyzed: '已分析',
+  }[analysisStatusFilter] || analysisStatusFilter;
 
   const loadFiles = useCallback(async (targetPage: number) => {
     try {
@@ -141,6 +164,11 @@ export default function GroupFileAnalysisPanel({ groupId }: GroupFileAnalysisPan
   const handleStatusFilterChange = (value: string) => {
     setPage(1);
     setStatusFilter(value);
+  };
+
+  const handleAnalysisStatusFilterChange = (value: string) => {
+    setPage(1);
+    setAnalysisStatusFilter(value);
   };
 
   const pollFileTask = useCallback((fileId: number, taskId: string, attempt: number = 0) => {
@@ -246,6 +274,53 @@ export default function GroupFileAnalysisPanel({ groupId }: GroupFileAnalysisPan
     }
   };
 
+  const handleBatchDownloadCurrentPage = async () => {
+    if (downloadableFiles.length === 0) {
+      return;
+    }
+
+    const filesToDownload = downloadableFiles.slice();
+    toast.info(`开始创建 ${filesToDownload.length} 个文件下载任务`);
+
+    for (const file of filesToDownload) {
+      try {
+        setDownloadingFiles(prev => new Set(prev).add(file.file_id));
+        const response = await apiClient.downloadSingleFile(
+          String(groupId),
+          file.file_id,
+          file.name,
+          file.size,
+        ) as { task_id?: string };
+
+        if (response.task_id) {
+          setFileTasks(prev => {
+            const next = new Map(prev);
+            next.set(file.file_id, {
+              taskId: response.task_id || '',
+              status: 'pending',
+              message: '下载任务已创建',
+            });
+            return next;
+          });
+          pollFileTask(file.file_id, response.task_id);
+        } else {
+          setDownloadingFiles(prev => {
+            const next = new Set(prev);
+            next.delete(file.file_id);
+            return next;
+          });
+        }
+      } catch (error) {
+        toast.error(`${file.name} 下载任务创建失败: ${error instanceof Error ? error.message : '未知错误'}`);
+        setDownloadingFiles(prev => {
+          const next = new Set(prev);
+          next.delete(file.file_id);
+          return next;
+        });
+      }
+    }
+  };
+
   const handleBatchAnalyzeCurrentPage = async () => {
     if (pendingAnalysisFiles.length === 0 || batchAnalyzing) {
       return;
@@ -316,92 +391,153 @@ export default function GroupFileAnalysisPanel({ groupId }: GroupFileAnalysisPan
 
   return (
     <div className="flex h-full min-h-0 flex-col space-y-4">
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
-        <div className="rounded-lg border border-gray-200 bg-white p-3">
-          <div className="text-xs text-muted-foreground">当前结果</div>
-          <div className="mt-1 text-xl font-semibold">{files.length}</div>
+      <div className="flex flex-col gap-2 lg:flex-row lg:items-end lg:justify-between">
+        <div>
+          <div className="text-lg font-semibold text-gray-950">文件工作台</div>
+          <div className="text-sm text-muted-foreground">
+            定位文件、下载或重试、AI 分析和查看结果都在这里完成。
+          </div>
         </div>
-        <div className="rounded-lg border border-gray-200 bg-white p-3">
-          <div className="text-xs text-muted-foreground">已下载</div>
-          <div className="mt-1 text-xl font-semibold text-green-700">{downloadedFiles.length}</div>
-        </div>
-        <div className="rounded-lg border border-gray-200 bg-white p-3">
-          <div className="text-xs text-muted-foreground">下载失败</div>
-          <div className="mt-1 text-xl font-semibold text-red-700">{failedFiles.length}</div>
-        </div>
-        <div className="rounded-lg border border-gray-200 bg-white p-3">
-          <div className="text-xs text-muted-foreground">已分析</div>
-          <div className="mt-1 text-xl font-semibold text-blue-700">{analyzedFiles.length}</div>
-        </div>
-        <div className="rounded-lg border border-gray-200 bg-white p-3">
-          <div className="text-xs text-muted-foreground">待分析</div>
-          <div className="mt-1 text-xl font-semibold text-amber-700">{pendingAnalysisFiles.length}</div>
+        <div className="rounded-lg border border-blue-100 bg-blue-50 px-3 py-2 text-xs text-blue-700">
+          当前筛选：{downloadStatusLabel} · {analysisStatusLabel} · {searchQuery ? `关键词 ${searchQuery}` : '无关键词'} · 第 {page} 页
         </div>
       </div>
 
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-        <div className="text-sm text-muted-foreground">
-          当前群文件数：{totalFiles}
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+        <div className="rounded-lg border border-gray-200 bg-white p-3">
+          <div className="text-xs text-muted-foreground">当前结果</div>
+          <div className="mt-1 text-xl font-semibold">{displayedFiles.length}</div>
         </div>
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-          <div className="flex min-w-0 gap-2 sm:w-80">
-            <Input
-              value={searchInput}
-              placeholder="搜索文件名..."
-              onChange={(event) => setSearchInput(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter') {
-                  handleSearch();
-                }
-              }}
-            />
-            <Button variant="outline" size="sm" onClick={handleSearch} disabled={loading}>
-              <Search className="h-4 w-4 mr-2" />
-              搜索
-            </Button>
-          </div>
-          <Select value={statusFilter} onValueChange={handleStatusFilterChange}>
-            <SelectTrigger className="w-full sm:w-36">
-              <SelectValue placeholder="文件状态" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">全部状态</SelectItem>
-              <SelectItem value="pending">未下载</SelectItem>
-              <SelectItem value="completed">已完成</SelectItem>
-              <SelectItem value="failed">失败</SelectItem>
-              <SelectItem value="skipped">已存在</SelectItem>
-            </SelectContent>
-          </Select>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => void loadFiles(page)}
-            disabled={loading || batchAnalyzing}
-          >
-            <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
-            刷新
-          </Button>
-          <Button
-            size="sm"
-            onClick={() => void handleBatchAnalyzeCurrentPage()}
-            disabled={pendingAnalysisFiles.length === 0 || batchAnalyzing}
-          >
-            {batchAnalyzing ? (
-              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-            ) : (
-              <Sparkles className="h-4 w-4 mr-2" />
-            )}
-            分析当前页待分析
+        <div className="rounded-lg border border-gray-200 bg-white p-3">
+          <div className="text-xs text-muted-foreground">全群文件</div>
+          <div className="mt-1 text-xl font-semibold">{totalFiles}</div>
+        </div>
+        <div className="rounded-lg border border-gray-200 bg-white p-3">
+          <div className="text-xs text-muted-foreground">当前页已下载</div>
+          <div className="mt-1 text-xl font-semibold text-green-700">{downloadedFiles.length}</div>
+        </div>
+        <div className="rounded-lg border border-gray-200 bg-white p-3">
+          <div className="text-xs text-muted-foreground">当前页失败</div>
+          <div className="mt-1 text-xl font-semibold text-red-700">{failedFiles.length}</div>
+        </div>
+        <div className="rounded-lg border border-gray-200 bg-white p-3">
+          <div className="text-xs text-muted-foreground">当前页待分析</div>
+          <div className="mt-1 text-xl font-semibold text-amber-700">{files.filter((file) => isFileDownloaded(file) && !file.has_ai_analysis).length}</div>
+        </div>
+      </div>
+
+      <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
+        <div className="flex flex-col gap-2 xl:flex-row xl:items-center">
+          <div className="flex min-w-0 flex-1 gap-2">
+          <Input
+            value={searchInput}
+            placeholder="搜索文件名、来源话题、扩展名..."
+            onChange={(event) => setSearchInput(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') {
+                handleSearch();
+              }
+            }}
+          />
+          <Button variant="outline" size="sm" onClick={handleSearch} disabled={loading}>
+            <Search className="h-4 w-4 mr-2" />
+            搜索
           </Button>
         </div>
+        <div className="flex flex-wrap gap-2">
+        <Select value={statusFilter} onValueChange={handleStatusFilterChange}>
+          <SelectTrigger className="w-36">
+            <SelectValue placeholder="获取状态" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">全部获取状态</SelectItem>
+            <SelectItem value="pending">未下载</SelectItem>
+            <SelectItem value="completed">已完成</SelectItem>
+            <SelectItem value="failed">失败</SelectItem>
+            <SelectItem value="skipped">已存在</SelectItem>
+          </SelectContent>
+        </Select>
+        <Select value={analysisStatusFilter} onValueChange={handleAnalysisStatusFilterChange}>
+          <SelectTrigger className="w-36">
+            <SelectValue placeholder="分析状态" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">全部分析状态</SelectItem>
+            <SelectItem value="pending">未分析</SelectItem>
+            <SelectItem value="analyzed">已分析</SelectItem>
+          </SelectContent>
+        </Select>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => void loadFiles(page)}
+          disabled={loading || batchAnalyzing}
+        >
+          <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
+          刷新
+        </Button>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => void handleBatchDownloadCurrentPage()}
+          disabled={downloadableFiles.length === 0 || loading}
+        >
+          <Download className="h-4 w-4 mr-2" />
+          下载当前页
+        </Button>
+        <Button
+          size="sm"
+          onClick={() => void handleBatchAnalyzeCurrentPage()}
+          disabled={pendingAnalysisFiles.length === 0 || batchAnalyzing}
+        >
+          {batchAnalyzing ? (
+            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+          ) : (
+            <Sparkles className="h-4 w-4 mr-2" />
+          )}
+          分析当前页
+        </Button>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => {
+            setStatusFilter('all');
+            setAnalysisStatusFilter('pending');
+            setPage(1);
+          }}
+          disabled={analysisStatusFilter === 'pending' && statusFilter === 'all'}
+        >
+          只看需处理
+        </Button>
+        {hasActiveFilters && (
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => {
+              setSearchInput('');
+              setSearchQuery('');
+              setStatusFilter('all');
+              setAnalysisStatusFilter('all');
+              setPage(1);
+            }}
+          >
+            清空筛选
+          </Button>
+        )}
+        </div>
+        </div>
+      </div>
+
+      <div className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs text-muted-foreground">
+        操作语义统一：未下载 → 下载；失败 → 重试；已下载未分析 → AI 分析；已分析 → 查看分析。
       </div>
 
       <div className="min-h-0 flex-1 overflow-auto">
         {loading ? (
           <div className="rounded-lg border border-dashed p-10 text-center text-muted-foreground">文件列表加载中...</div>
-        ) : files.length === 0 ? (
+        ) : displayedFiles.length === 0 ? (
           <div className="rounded-lg border border-dashed p-10 text-center text-muted-foreground">
-            {searchQuery || statusFilter !== 'all'
+            {hasActiveFilters
               ? '没有匹配的文件记录'
               : '当前群还没有文件记录，请先采集包含附件的话题'}
           </div>
@@ -420,7 +556,7 @@ export default function GroupFileAnalysisPanel({ groupId }: GroupFileAnalysisPan
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {files.map((file) => {
+                {displayedFiles.map((file) => {
                   const downloaded = isFileDownloaded(file);
                   const creatingTask = downloadingFiles.has(file.file_id);
                   const analyzing = analyzingFileIds.has(file.file_id);

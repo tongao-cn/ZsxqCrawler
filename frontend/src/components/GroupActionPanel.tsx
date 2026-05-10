@@ -527,6 +527,15 @@ export default function GroupActionPanel({
                 </TabsContent>
 
                 <TabsContent value="download" className="space-y-3 mt-4">
+                  <div>
+                    <div className="flex items-center gap-2 text-sm font-medium text-gray-900">
+                      <FileText className="h-4 w-4" />
+                      下载文件
+                    </div>
+                    <div className="mt-1 text-xs text-gray-500">
+                      这里只启动长任务；单文件下载、重试和 AI 分析在中间工作台完成。
+                    </div>
+                  </div>
                   <div className="space-y-2">
                     <div
                       className={`rounded-lg border p-3 text-xs ${
@@ -560,6 +569,8 @@ export default function GroupActionPanel({
                         </div>
                       )}
                     </div>
+
+                    <div className="pt-1 text-xs font-medium text-gray-500">任务启动器</div>
 
                     <div
                       className={`border rounded-lg p-3 cursor-pointer transition-all ${
@@ -711,6 +722,8 @@ export default function GroupActionPanel({
                       )}
                     </div>
 
+                    <div className="pt-1 text-xs font-medium text-gray-500">任务参数</div>
+
                     <div className="border rounded-lg p-3 border-gray-200">
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2">
@@ -742,42 +755,46 @@ export default function GroupActionPanel({
                       </div>
                     </div>
 
-                    <div className="border rounded-lg p-3 cursor-pointer transition-all border-red-200 hover:bg-red-50">
-                      <div className="flex items-center justify-between mb-2">
-                        <div className="flex items-center gap-2">
-                          <Trash2 className="h-3 w-3 text-red-400" />
-                          <span className="text-xs font-medium text-red-600">删除文件数据库</span>
+                    <details className="rounded-lg border border-red-200 bg-red-50/50 p-3">
+                      <summary className="cursor-pointer text-xs font-medium text-red-600">
+                        危险操作
+                      </summary>
+                      <div className="mt-3 space-y-2">
+                        <div className="flex items-center justify-between text-xs text-red-700">
+                          <div className="flex items-center gap-2">
+                            <Trash2 className="h-3 w-3 text-red-400" />
+                            删除文件数据库
+                          </div>
+                          <span className="text-gray-500">
+                            {download.localFileCount}/{sourceFileCount}
+                          </span>
                         </div>
-                        <span className="text-xs text-gray-500">
-                          {download.localFileCount}/{sourceFileCount}
-                        </span>
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <Button size="sm" variant="destructive" className="w-full h-7 text-xs" disabled={!!download.loading}>
+                              {download.loading === 'clear' ? '执行中...' : '删除数据库'}
+                            </Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle className="text-red-600">确认删除文件数据库</AlertDialogTitle>
+                              <AlertDialogDescription className="text-red-700">
+                                此操作将删除当前群组的所有文件数据库，包括文件记录、下载状态等，此操作不可撤销。
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel>取消</AlertDialogCancel>
+                              <AlertDialogAction
+                                onClick={actions.onClearFileDatabase}
+                                className="bg-red-600 hover:bg-red-700 focus:ring-red-600"
+                              >
+                                确认删除
+                              </AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
                       </div>
-                      <AlertDialog>
-                        <AlertDialogTrigger asChild>
-                          <Button size="sm" variant="destructive" className="w-full h-7 text-xs" disabled={!!download.loading}>
-                            {download.loading === 'clear' ? '执行中...' : '删除数据库'}
-                          </Button>
-                        </AlertDialogTrigger>
-                        <AlertDialogContent>
-                          <AlertDialogHeader>
-                            <AlertDialogTitle className="text-red-600">确认删除文件数据库</AlertDialogTitle>
-                            <AlertDialogDescription className="text-red-700">
-                              ⚠️ 警告：此操作将删除当前群组的所有文件数据库！
-                              包括文件记录、下载状态等，此操作不可撤销。
-                            </AlertDialogDescription>
-                          </AlertDialogHeader>
-                          <AlertDialogFooter>
-                            <AlertDialogCancel>取消</AlertDialogCancel>
-                            <AlertDialogAction
-                              onClick={actions.onClearFileDatabase}
-                              className="bg-red-600 hover:bg-red-700 focus:ring-red-600"
-                            >
-                              确认删除
-                            </AlertDialogAction>
-                          </AlertDialogFooter>
-                        </AlertDialogContent>
-                      </AlertDialog>
-                    </div>
+                    </details>
                   </div>
                 </TabsContent>
               </Tabs>
