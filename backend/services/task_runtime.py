@@ -10,6 +10,8 @@ from backend.storage.task_store import TaskStore
 
 
 task_store: Optional[TaskStore] = None
+TASK_LOCK_LEASE_MINUTES = 30
+TASK_LOCK_HEARTBEAT_SECONDS = 60
 
 
 def get_task_store() -> TaskStore:
@@ -26,6 +28,7 @@ task_stop_flags: Dict[str, bool] = {}
 crawler_instances: Dict[str, Any] = {}
 file_downloader_instances: Dict[str, Any] = {}
 runtime_task_threads: Dict[str, threading.Thread] = {}
+runtime_task_heartbeats: Dict[str, threading.Event] = {}
 
 INGESTION_LOCK_TYPES = {
     "columns_fetch",
@@ -152,14 +155,39 @@ def find_running_ingestion_task(group_id: str, exclude_task_id: Optional[str] = 
 
 
 def create_ingestion_task(task_type: str, description: str, group_id: str) -> tuple[Optional[str], Optional[Dict[str, Any]]]:
-    existing = find_running_ingestion_task(group_id)
-    if existing:
-        return None, existing
-    task_id = create_task(
+    global task_counter
+    if task_counter == 0:
+        task_counter = get_task_store().max_task_sequence()
+    task_counter += 1
+    task_id = f"task_{task_counter}_{int(datetime.now().timestamp())}"
+    now = datetime.now()
+    metadata = {"group_id": str(group_id), "ingestion_lock_key": INGESTION_LOCK_KEY}
+    task, existing = get_task_store().create_task_with_lock(
+        task_id,
         task_type,
         description,
-        metadata={"group_id": str(group_id), "ingestion_lock_key": INGESTION_LOCK_KEY},
+        str(group_id),
+        INGESTION_LOCK_KEY,
+        metadata=metadata,
+        lease_minutes=TASK_LOCK_LEASE_MINUTES,
+        created_at=now,
     )
+    if existing:
+        return None, _normalize_task(existing)
+    current_tasks[task_id] = task or {
+        "task_id": task_id,
+        "type": task_type,
+        "status": "pending",
+        "message": description,
+        "result": None,
+        "created_at": now,
+        "updated_at": now,
+        **metadata,
+    }
+    task_logs[task_id] = []
+    task_stop_flags[task_id] = False
+    get_task_store().set_stop_flag(task_id, False)
+    add_task_log(task_id, f"任务创建: {description}")
     return task_id, None
 
 
@@ -184,7 +212,10 @@ def update_task(
 ) -> None:
     status = _normalize_task_status(status)
     store = get_task_store()
-    if task_id not in current_tasks and store.get_task(task_id) is None:
+    existing_task = get_task_state(task_id)
+    if task_id not in current_tasks and existing_task is None:
+        return
+    if existing_task and existing_task.get("status") == "cancelled" and status != "cancelled":
         return
 
     now = datetime.now()
@@ -200,6 +231,11 @@ def update_task(
 
     store.update_task(task_id, status, message, result=result, updated_at=now)
     add_task_log(task_id, f"状态更新: {message}")
+    if status in {"completed", "failed", "cancelled"}:
+        try:
+            store.release_task_lock(task_id, status, released_at=now)
+        except Exception as exc:
+            add_task_log(task_id, f"⚠️ 释放任务锁失败: {exc}")
 
 
 def register_task_crawler(task_id: str, crawler: Any) -> None:
@@ -235,11 +271,41 @@ def stop_task(task_id: str) -> bool:
     return True
 
 
+def _start_task_lock_heartbeat(task_id: str) -> None:
+    task = get_task_state(task_id)
+    if not task or task.get("ingestion_lock_key") != INGESTION_LOCK_KEY:
+        return
+    stop_event = threading.Event()
+    runtime_task_heartbeats[task_id] = stop_event
+
+    def heartbeat() -> None:
+        while not stop_event.wait(TASK_LOCK_HEARTBEAT_SECONDS):
+            try:
+                get_task_store().heartbeat_task_lock(task_id, lease_minutes=TASK_LOCK_LEASE_MINUTES)
+            except Exception:
+                pass
+
+    thread = threading.Thread(
+        target=heartbeat,
+        name=f"zsxq-lock-heartbeat-{task_id}",
+        daemon=True,
+    )
+    thread.start()
+
+
+def _stop_task_lock_heartbeat(task_id: str) -> None:
+    stop_event = runtime_task_heartbeats.pop(task_id, None)
+    if stop_event:
+        stop_event.set()
+
+
 def enqueue_runtime_task(task_func: Callable[..., Any], task_id: str, *args: Any) -> None:
     def run_task() -> None:
         try:
+            _start_task_lock_heartbeat(task_id)
             task_func(task_id, *args)
         finally:
+            _stop_task_lock_heartbeat(task_id)
             runtime_task_threads.pop(task_id, None)
 
     thread = threading.Thread(
@@ -277,6 +343,8 @@ def request_runtime_shutdown() -> None:
     crawler_instances.clear()
     file_downloader_instances.clear()
     sse_connections.clear()
+    for task_id in list(runtime_task_heartbeats):
+        _stop_task_lock_heartbeat(task_id)
     runtime_task_threads.clear()
 
 

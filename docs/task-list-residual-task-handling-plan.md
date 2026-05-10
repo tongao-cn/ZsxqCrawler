@@ -22,6 +22,7 @@
 - `apiClient.request()` 抛出 `ApiClientError`，保留 `error.message`，额外携带 `status` 与 `detail`。
 - 采集和文件下载入口识别 409 任务冲突，提示占用任务 ID，并打开任务列表视图。
 - 单文件下载任务纳入同组 ingestion 锁，并在任务列表中显示为“单文件下载”。
+- 写入型任务锁已升级为 `task_locks` 数据库租约锁；同群组 ingestion 锁通过 `ingestion:{group_id}` 原子获取，默认 30 分钟租约，任务终态或停止后释放。
 
 ## Verification
 
@@ -29,6 +30,7 @@
 - `cd frontend && npx eslint src/components/TaskDock.tsx src/components/TaskPanel.tsx src/components/TaskLogViewer.tsx src/components/TaskListCompact.tsx src/lib/api.ts src/hooks/useCrawlActions.ts src/hooks/useDownloadActions.ts`
 - `python -m pytest tests/test_ingestion_helpers.py tests/test_task_runtime_helpers.py tests/test_task_routes_helpers.py`
 - `python -m pytest tests/test_file_routes_helpers.py tests/test_task_runtime_helpers.py tests/test_task_routes_helpers.py`
+- `python -m pytest tests/test_postgres_core_schema.py tests/test_task_store.py`
 
 ## Status
 

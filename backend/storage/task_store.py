@@ -2,13 +2,14 @@ from __future__ import annotations
 
 import json
 import threading
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
 
 from backend.storage.db_compat import connect
 
 
 TERMINAL_TASK_STATUSES = ("completed", "failed", "cancelled", "stopped")
+TASK_LOCK_LEASE_MINUTES = 30
 
 
 def _chunk_values(values: List[Any], chunk_size: int) -> List[List[Any]]:
@@ -21,6 +22,10 @@ def _cleanup_result(tasks_deleted: int, logs_deleted: int, kept_latest: int) -> 
         "logs_deleted": logs_deleted,
         "kept_latest": kept_latest,
     }
+
+
+def _task_lock_key(category: str, group_id: str) -> str:
+    return f"{category}:{group_id}"
 
 
 class TaskStore:
@@ -81,6 +86,125 @@ class TaskStore:
         task = self.get_task(task_id)
         return task or {}
 
+    def create_task_with_lock(
+        self,
+        task_id: str,
+        task_type: str,
+        message: str,
+        group_id: str,
+        category: str,
+        metadata: Optional[Dict[str, Any]] = None,
+        lease_minutes: int = TASK_LOCK_LEASE_MINUTES,
+        created_at: Any = None,
+    ) -> tuple[Optional[Dict[str, Any]], Optional[Dict[str, Any]]]:
+        created = self._iso(created_at)
+        expires = self._iso(datetime.fromisoformat(created) + timedelta(minutes=lease_minutes))
+        lock_key = _task_lock_key(category, str(group_id))
+        lock_metadata = dict(metadata or {})
+        lock_metadata.update({"group_id": str(group_id), "ingestion_lock_key": category})
+
+        with self._lock:
+            conn = self._connect()
+            try:
+                cursor = conn.cursor()
+                cursor.execute(
+                    """
+                    INSERT INTO task_locks (
+                        lock_key, group_id, category, owner_task_id, owner_task_type,
+                        acquired_at, expires_at, heartbeat_at, released_at, release_reason
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL)
+                    ON CONFLICT(lock_key) DO UPDATE SET
+                        group_id = excluded.group_id,
+                        category = excluded.category,
+                        owner_task_id = excluded.owner_task_id,
+                        owner_task_type = excluded.owner_task_type,
+                        acquired_at = excluded.acquired_at,
+                        expires_at = excluded.expires_at,
+                        heartbeat_at = excluded.heartbeat_at,
+                        released_at = NULL,
+                        release_reason = NULL
+                    WHERE task_locks.released_at IS NOT NULL OR task_locks.expires_at < ?
+                    """,
+                    (
+                        lock_key,
+                        str(group_id),
+                        category,
+                        task_id,
+                        task_type,
+                        created,
+                        expires,
+                        created,
+                        created,
+                    ),
+                )
+                acquired = cursor.rowcount == 1
+                if not acquired:
+                    existing_task_row = cursor.execute(
+                        """
+                        SELECT tr.*
+                        FROM task_locks tl
+                        LEFT JOIN task_runs tr ON tr.task_id = tl.owner_task_id
+                        WHERE tl.lock_key = ?
+                        """,
+                        (lock_key,),
+                    ).fetchone()
+                    existing_lock_row = cursor.execute(
+                        """
+                        SELECT owner_task_id, owner_task_type, group_id
+                        FROM task_locks
+                        WHERE lock_key = ?
+                        """,
+                        (lock_key,),
+                    ).fetchone()
+                    conn.rollback()
+                    if existing_task_row and existing_task_row["task_id"]:
+                        existing_task = self._task_from_row(existing_task_row)
+                    elif existing_lock_row:
+                        existing_task = {
+                            "task_id": existing_lock_row["owner_task_id"],
+                            "type": existing_lock_row["owner_task_type"],
+                            "status": "running",
+                            "group_id": existing_lock_row["group_id"],
+                        }
+                    else:
+                        existing_task = None
+                    return None, existing_task
+
+                cursor.execute(
+                    """
+                    INSERT INTO task_runs (
+                        task_id, type, status, message, result_json,
+                        metadata_json, created_at, updated_at, stopped
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0)
+                    ON CONFLICT(task_id) DO UPDATE SET
+                        type = excluded.type,
+                        status = excluded.status,
+                        message = excluded.message,
+                        result_json = excluded.result_json,
+                        metadata_json = excluded.metadata_json,
+                        created_at = excluded.created_at,
+                        updated_at = excluded.updated_at,
+                        stopped = excluded.stopped
+                    """,
+                    (
+                        task_id,
+                        task_type,
+                        "pending",
+                        message,
+                        self._dump(None),
+                        self._dump(lock_metadata),
+                        created,
+                        created,
+                    ),
+                )
+                conn.commit()
+            finally:
+                conn.close()
+        task = self.get_task(task_id)
+        return task, None
+
     def update_task(
         self,
         task_id: str,
@@ -104,6 +228,54 @@ class TaskStore:
             finally:
                 conn.close()
         return self.get_task(task_id)
+
+    def release_task_lock(self, task_id: str, reason: str, released_at: Any = None) -> None:
+        released = self._iso(released_at)
+        with self._lock:
+            conn = self._connect()
+            try:
+                conn.execute(
+                    """
+                    UPDATE task_locks
+                    SET released_at = ?, release_reason = ?
+                    WHERE owner_task_id = ? AND released_at IS NULL
+                    """,
+                    (released, reason, task_id),
+                )
+                conn.commit()
+            finally:
+                conn.close()
+
+    def heartbeat_task_lock(self, task_id: str, lease_minutes: int = TASK_LOCK_LEASE_MINUTES, heartbeat_at: Any = None) -> None:
+        heartbeat = self._iso(heartbeat_at)
+        expires = self._iso(datetime.fromisoformat(heartbeat) + timedelta(minutes=lease_minutes))
+        with self._lock:
+            conn = self._connect()
+            try:
+                conn.execute(
+                    """
+                    UPDATE task_locks
+                    SET heartbeat_at = ?, expires_at = ?
+                    WHERE owner_task_id = ? AND released_at IS NULL
+                    """,
+                    (heartbeat, expires, task_id),
+                )
+                conn.commit()
+            finally:
+                conn.close()
+
+    def get_task_lock(self, category: str, group_id: str) -> Optional[Dict[str, Any]]:
+        lock_key = _task_lock_key(category, str(group_id))
+        with self._lock:
+            conn = self._connect()
+            try:
+                row = conn.execute(
+                    "SELECT * FROM task_locks WHERE lock_key = ?",
+                    (lock_key,),
+                ).fetchone()
+            finally:
+                conn.close()
+        return {key: row[key] for key in row.keys()} if row else None
 
     def get_task(self, task_id: str) -> Optional[Dict[str, Any]]:
         with self._lock:

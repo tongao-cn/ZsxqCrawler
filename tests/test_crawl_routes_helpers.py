@@ -188,7 +188,10 @@ class CrawlRoutesHelperTests(unittest.TestCase):
 
         background_tasks = FakeBackgroundTasks()
 
-        with patch("backend.routes.ingestion_helpers.create_ingestion_task", return_value=("task-1", None)) as create_task:
+        with (
+            patch("backend.routes.ingestion_helpers.create_ingestion_task", return_value=("task-1", None)) as create_task,
+            patch("backend.routes.ingestion_helpers.enqueue_runtime_task") as enqueue_runtime_task,
+        ):
             response = _create_crawl_task_response(
                 background_tasks,
                 "crawl_latest",
@@ -200,7 +203,8 @@ class CrawlRoutesHelperTests(unittest.TestCase):
 
         create_task.assert_called_once_with("crawl_latest", "latest description", "group-1")
         self.assertEqual({"task_id": "task-1", "message": "任务已创建，正在后台执行"}, response)
-        self.assertEqual([(fake_task_func, ("task-1", "group-1", "request"))], background_tasks.tasks)
+        enqueue_runtime_task.assert_called_once_with(fake_task_func, "task-1", "group-1", "request")
+        self.assertEqual([], background_tasks.tasks)
 
     @unittest.skipUnless(HAS_CRAWL_ROUTE_DEPS, "crawl route dependencies are not installed")
     def test_create_crawl_task_response_rejects_same_group_ingestion_conflict(self):

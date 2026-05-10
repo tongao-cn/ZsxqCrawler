@@ -8,9 +8,14 @@ class FakeTaskStore:
         self.tasks = {}
         self.stop_flags = {}
         self.logs = []
+        self.released_locks = []
+        self.heartbeats = []
 
     def get_task(self, task_id):
         return self.tasks.get(task_id)
+
+    def max_task_sequence(self):
+        return 0
 
     def set_stop_flag(self, task_id, stopped=True):
         self.stop_flags[task_id] = stopped
@@ -22,6 +27,27 @@ class FakeTaskStore:
     def update_task(self, task_id, status, message, result=None, updated_at=None):
         self.tasks[task_id].update({"status": status, "message": message, "result": result, "updated_at": updated_at})
         return self.tasks[task_id]
+
+    def create_task_with_lock(self, task_id, task_type, message, group_id, category, metadata=None, lease_minutes=30, created_at=None):
+        task = {
+            "task_id": task_id,
+            "type": task_type,
+            "status": "pending",
+            "message": message,
+            "result": None,
+            "created_at": created_at,
+            "updated_at": created_at,
+        }
+        if metadata:
+            task.update(metadata)
+        self.tasks[task_id] = task
+        return task, None
+
+    def release_task_lock(self, task_id, reason, released_at=None):
+        self.released_locks.append((task_id, reason))
+
+    def heartbeat_task_lock(self, task_id, lease_minutes=30, heartbeat_at=None):
+        self.heartbeats.append(task_id)
 
 
 class Stoppable:
@@ -65,33 +91,36 @@ class TaskRuntimeHelperTests(unittest.TestCase):
         from backend.services.task_runtime import create_ingestion_task
 
         existing = {"task_id": "task-1", "status": "running", "group_id": "155"}
+        store = FakeTaskStore()
 
         with (
-            patch("backend.services.task_runtime.find_running_ingestion_task", return_value=existing),
-            patch("backend.services.task_runtime.create_task") as create_task,
+            patch("backend.services.task_runtime.get_task_store", return_value=store),
+            patch.object(store, "create_task_with_lock", return_value=(None, existing)) as create_with_lock,
         ):
             task_id, conflict = create_ingestion_task("collect_files", "collect", "155")
 
         self.assertIsNone(task_id)
         self.assertEqual(existing, conflict)
-        create_task.assert_not_called()
+        create_with_lock.assert_called_once()
 
     def test_create_ingestion_task_allows_different_group_when_no_conflict(self):
+        from backend.services import task_runtime
         from backend.services.task_runtime import create_ingestion_task
 
-        with (
-            patch("backend.services.task_runtime.find_running_ingestion_task", return_value=None),
-            patch("backend.services.task_runtime.create_task", return_value="task-2") as create_task,
-        ):
-            task_id, conflict = create_ingestion_task("collect_files", "collect", "166")
+        store = FakeTaskStore()
 
-        self.assertEqual("task-2", task_id)
+        with patch("backend.services.task_runtime.get_task_store", return_value=store):
+            try:
+                task_id, conflict = create_ingestion_task("collect_files", "collect", "166")
+            finally:
+                for task_id_to_remove in list(store.tasks):
+                    task_runtime.current_tasks.pop(task_id_to_remove, None)
+                    task_runtime.task_stop_flags.pop(task_id_to_remove, None)
+
+        self.assertTrue(task_id.startswith("task_"))
         self.assertIsNone(conflict)
-        create_task.assert_called_once_with(
-            "collect_files",
-            "collect",
-            metadata={"group_id": "166", "ingestion_lock_key": "ingestion"},
-        )
+        self.assertEqual("166", store.tasks[task_id]["group_id"])
+        self.assertEqual("ingestion", store.tasks[task_id]["ingestion_lock_key"])
 
     def test_stop_task_stops_registered_task_crawler(self):
         from backend.services import task_runtime
@@ -113,6 +142,36 @@ class TaskRuntimeHelperTests(unittest.TestCase):
         self.assertTrue(crawler.stopped)
         self.assertTrue(store.stop_flags["task-1"])
         self.assertEqual("cancelled", store.tasks["task-1"]["status"])
+        self.assertEqual([("task-1", "cancelled")], store.released_locks)
+
+    def test_update_task_releases_lock_on_terminal_status(self):
+        from backend.services import task_runtime
+
+        store = FakeTaskStore()
+        store.tasks["task-1"] = {"task_id": "task-1", "status": "running", "message": "running"}
+
+        with patch("backend.services.task_runtime.get_task_store", return_value=store):
+            task_runtime.current_tasks["task-1"] = dict(store.tasks["task-1"])
+            try:
+                task_runtime.update_task("task-1", "completed", "done")
+            finally:
+                task_runtime.current_tasks.pop("task-1", None)
+                task_runtime.task_stop_flags.pop("task-1", None)
+
+        self.assertEqual("completed", store.tasks["task-1"]["status"])
+        self.assertEqual([("task-1", "completed")], store.released_locks)
+
+    def test_update_task_does_not_overwrite_cancelled_status(self):
+        from backend.services import task_runtime
+
+        store = FakeTaskStore()
+        store.tasks["task-1"] = {"task_id": "task-1", "status": "cancelled", "message": "stopped"}
+
+        with patch("backend.services.task_runtime.get_task_store", return_value=store):
+            task_runtime.update_task("task-1", "completed", "done")
+
+        self.assertEqual("cancelled", store.tasks["task-1"]["status"])
+        self.assertEqual([], store.released_locks)
 
     def test_request_runtime_shutdown_cancels_running_resources(self):
         from backend.services import task_runtime
@@ -133,10 +192,8 @@ class TaskRuntimeHelperTests(unittest.TestCase):
 
                 task_runtime.request_runtime_shutdown()
             finally:
-                task_runtime.current_tasks.pop("task-1", None)
-                task_runtime.current_tasks.pop("task-2", None)
-                task_runtime.task_stop_flags.pop("task-1", None)
-                task_runtime.task_stop_flags.pop("task-2", None)
+                task_runtime.current_tasks.clear()
+                task_runtime.task_stop_flags.clear()
                 task_runtime.crawler_instances.clear()
                 task_runtime.file_downloader_instances.clear()
                 task_runtime.sse_connections.clear()
