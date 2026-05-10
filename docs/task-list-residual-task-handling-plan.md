@@ -21,12 +21,14 @@
 - 新增 `TaskListCompact`，支持当前群组/全部任务切换、运行中优先排序、自动刷新、手动刷新和停止任务。
 - `apiClient.request()` 抛出 `ApiClientError`，保留 `error.message`，额外携带 `status` 与 `detail`。
 - 采集和文件下载入口识别 409 任务冲突，提示占用任务 ID，并打开任务列表视图。
+- 单文件下载任务纳入同组 ingestion 锁，并在任务列表中显示为“单文件下载”。
 
 ## Verification
 
 - `cd frontend && npx tsc --noEmit --pretty false`
 - `cd frontend && npx eslint src/components/TaskDock.tsx src/components/TaskPanel.tsx src/components/TaskLogViewer.tsx src/components/TaskListCompact.tsx src/lib/api.ts src/hooks/useCrawlActions.ts src/hooks/useDownloadActions.ts`
 - `python -m pytest tests/test_ingestion_helpers.py tests/test_task_runtime_helpers.py tests/test_task_routes_helpers.py`
+- `python -m pytest tests/test_file_routes_helpers.py tests/test_task_runtime_helpers.py tests/test_task_routes_helpers.py`
 
 ## Status
 

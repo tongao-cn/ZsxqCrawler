@@ -3,17 +3,19 @@
 import { useCallback, useState } from 'react';
 import { toast } from 'sonner';
 
-import { apiClient, FileStatus } from '@/lib/api';
+import { apiClient, FileStatus, getTaskConflictDetail } from '@/lib/api';
 import { useSyncedRef } from '@/hooks/useSyncedRef';
 
 interface UseTopicFileActionsOptions {
   groupId: number;
   onTaskCreated: (taskId: string) => void;
+  onTaskConflict?: (taskId: string) => void;
 }
 
 export function useTopicFileActions({
   groupId,
   onTaskCreated,
+  onTaskConflict,
 }: UseTopicFileActionsOptions) {
   const [fileStatuses, setFileStatuses] = useState<Map<number, FileStatus>>(new Map());
   const [downloadingFiles, setDownloadingFiles] = useState<Set<number>>(new Set());
@@ -93,14 +95,20 @@ export function useTopicFileActions({
         }
       }, 5000);
     } catch (error) {
-      toast.error(`文件下载失败: ${error instanceof Error ? error.message : '未知错误'}`);
+      const conflict = getTaskConflictDetail(error);
+      if (conflict?.task_id) {
+        toast.error(`已有任务 ${conflict.task_id} 正在运行`);
+        onTaskConflict?.(conflict.task_id);
+      } else {
+        toast.error(`文件下载失败: ${error instanceof Error ? error.message : '未知错误'}`);
+      }
     } finally {
       const next = new Set(downloadingFilesRef.current);
       next.delete(fileId);
       downloadingFilesRef.current = next;
       setDownloadingFiles(next);
     }
-  }, [downloadingFilesRef, getFileStatus, groupId, onTaskCreated]);
+  }, [downloadingFilesRef, getFileStatus, groupId, onTaskConflict, onTaskCreated]);
 
   return {
     fileStatuses,

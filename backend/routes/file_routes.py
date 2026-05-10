@@ -596,7 +596,10 @@ async def download_single_file(
             file_name,
             file_size,
             message="单个文件下载任务已创建",
+            ingestion_group_id=group_id,
         )
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"创建单个文件下载任务失败: {str(e)}")
 

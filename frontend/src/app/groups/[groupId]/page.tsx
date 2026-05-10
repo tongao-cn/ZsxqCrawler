@@ -119,6 +119,7 @@ export default function GroupDetailPage() {
   } = useTopicFileActions({
     groupId,
     onTaskCreated: handleTaskCreated,
+    onTaskConflict: openTaskList,
   });
 
   const {

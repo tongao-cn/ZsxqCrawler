@@ -45,6 +45,8 @@ function getTaskTypeLabel(type: string) {
       return '收集文件';
     case 'download_files':
       return '下载文件';
+    case 'download_single_file':
+      return '单文件下载';
     case 'sync_files_from_topics':
       return '同步文件';
     case 'columns_fetch':

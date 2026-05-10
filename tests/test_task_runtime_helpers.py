@@ -37,6 +37,7 @@ class TaskRuntimeHelperTests(unittest.TestCase):
         from backend.services.task_runtime import INGESTION_LOCK_TYPES
 
         self.assertIn("columns_fetch", INGESTION_LOCK_TYPES)
+        self.assertIn("download_single_file", INGESTION_LOCK_TYPES)
 
     def test_find_running_ingestion_task_matches_same_group(self):
         from backend.services.task_runtime import find_running_ingestion_task

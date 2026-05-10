@@ -36,6 +36,7 @@ INGESTION_LOCK_TYPES = {
     "crawl_time_range",
     "collect_files",
     "download_files",
+    "download_single_file",
     "sync_files_from_topics",
 }
 INGESTION_LOCK_KEY = "ingestion"

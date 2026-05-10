@@ -92,6 +92,36 @@ class FileRoutesHelperTests(unittest.TestCase):
         enqueue_runtime_task.assert_called_once_with(fake_task, "task-1", "group-1", "request")
         self.assertEqual([], background_tasks.calls)
 
+    def test_download_single_file_uses_group_ingestion_lock(self):
+        from backend.routes.file_routes import download_single_file, run_single_file_download_task_with_info
+
+        background_tasks = FakeBackgroundTasks()
+
+        with patch("backend.routes.file_routes._enqueue_file_task", return_value={"task_id": "task-1", "message": "ok"}) as enqueue:
+            response = self._run_async(
+                download_single_file(
+                    "group-1",
+                    123,
+                    background_tasks,
+                    file_name="file.pdf",
+                    file_size=456,
+                )
+            )
+
+        self.assertEqual({"task_id": "task-1", "message": "ok"}, response)
+        enqueue.assert_called_once_with(
+            background_tasks,
+            "download_single_file",
+            "下载单个文件 (ID: 123)",
+            run_single_file_download_task_with_info,
+            "group-1",
+            123,
+            "file.pdf",
+            456,
+            message="单个文件下载任务已创建",
+            ingestion_group_id="group-1",
+        )
+
     def test_enqueue_file_task_rejects_ingestion_conflict(self):
         from fastapi import HTTPException
 
@@ -226,6 +256,11 @@ class FileRoutesHelperTests(unittest.TestCase):
     def test_query_group_id_casts_numeric_ids_for_sql_filters(self):
         self.assertEqual(123, _query_group_id("123"))
         self.assertEqual("abc", _query_group_id("abc"))
+
+    def _run_async(self, coro):
+        import asyncio
+
+        return asyncio.run(coro)
 
 
 if __name__ == "__main__":
