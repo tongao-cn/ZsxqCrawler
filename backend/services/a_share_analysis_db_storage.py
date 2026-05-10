@@ -214,31 +214,7 @@ def save_topic_stock_extractions(
     env_path: Path = DEFAULT_KNOW_ACTION_ENV_PATH,
     group_id: Optional[str] = None,
 ) -> int:
-    normalized_group_id = _normalize_group_id(group_id)
-    rows: List[Tuple[str, str, str, str, str, str, str, str, float, str, str, datetime]] = []
-    now = datetime.now()
-    for item in extractions:
-        stock_name = str(item.get("stock_name") or "").strip()
-        topic_id = str(item.get("topic_id") or "").strip()
-        topic_date = str(item.get("topic_date") or item.get("day") or "").strip()
-        if not stock_name or not topic_id or not topic_date:
-            continue
-        rows.append(
-            (
-                str(item.get("group_id") or normalized_group_id),
-                topic_id,
-                topic_date,
-                stock_name,
-                str(item.get("stock_code") or ""),
-                str(item.get("market") or ""),
-                json.dumps(list(item.get("concepts") or []), ensure_ascii=False),
-                str(item.get("reason") or ""),
-                float(item.get("confidence") or 0),
-                str(item.get("model") or ""),
-                str(item.get("prompt_version") or ""),
-                now,
-            )
-        )
+    rows = _build_topic_stock_extraction_rows(extractions, group_id, datetime.now())
 
     if not rows:
         return 0
@@ -268,6 +244,136 @@ def save_topic_stock_extractions(
                 template="(%s, %s, %s::date, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
             )
     return len(rows)
+
+
+def _build_topic_stock_extraction_rows(
+    extractions: Sequence[Dict[str, Any]],
+    group_id: Optional[str],
+    now: datetime,
+) -> List[Tuple[str, str, str, str, str, str, str, str, float, str, str, datetime]]:
+    normalized_group_id = _normalize_group_id(group_id)
+    rows: List[Tuple[str, str, str, str, str, str, str, str, float, str, str, datetime]] = []
+    for item in extractions:
+        stock_name = str(item.get("stock_name") or "").strip()
+        topic_id = str(item.get("topic_id") or "").strip()
+        topic_date = str(item.get("topic_date") or item.get("day") or "").strip()
+        if not stock_name or not topic_id or not topic_date:
+            continue
+        rows.append(
+            (
+                str(item.get("group_id") or normalized_group_id),
+                topic_id,
+                topic_date,
+                stock_name,
+                str(item.get("stock_code") or ""),
+                str(item.get("market") or ""),
+                json.dumps(list(item.get("concepts") or []), ensure_ascii=False),
+                str(item.get("reason") or ""),
+                float(item.get("confidence") or 0),
+                str(item.get("model") or ""),
+                str(item.get("prompt_version") or ""),
+                now,
+            )
+        )
+    return rows
+
+
+def _build_processed_state_rows(
+    processed_keys: Iterable[str],
+    group_id: Optional[str],
+    now: datetime,
+) -> List[Tuple[str, str, str, str, datetime]]:
+    normalized_group_id = _normalize_group_id(group_id)
+    rows: List[Tuple[str, str, str, str, datetime]] = []
+    for key in sorted(set(processed_keys or [])):
+        parsed = _parse_state_key(key)
+        if parsed is None:
+            continue
+        source, topic_id, day = parsed
+        rows.append((normalized_group_id, source, topic_id, day, now))
+    return rows
+
+
+def save_recommendation_pool_checkpoint(
+    *,
+    daily_delta: Dict[str, Dict[str, int]],
+    processed_keys: Iterable[str],
+    topic_stock_extractions: Sequence[Dict[str, Any]],
+    env_path: Path = DEFAULT_KNOW_ACTION_ENV_PATH,
+    group_id: Optional[str] = None,
+) -> Dict[str, int]:
+    normalized_group_id = _normalize_group_id(group_id)
+    now = datetime.now()
+    mention_rows: List[Tuple[str, str, str, int, datetime]] = []
+    for day in sorted(daily_delta.keys()):
+        for company, count in sorted(daily_delta[day].items(), key=lambda item: item[0]):
+            mention_count = int(count or 0)
+            if not company or mention_count <= 0:
+                continue
+            mention_rows.append((normalized_group_id, day, company, mention_count, now))
+
+    extraction_rows = _build_topic_stock_extraction_rows(topic_stock_extractions, normalized_group_id, now)
+    state_rows = _build_processed_state_rows(processed_keys, normalized_group_id, now)
+
+    if not mention_rows and not extraction_rows and not state_rows:
+        return {"daily_mentions": 0, "topic_stock_extractions": 0, "processed_state": 0}
+
+    with get_connection(env_path) as conn:
+        with conn.cursor() as cur:
+            if extraction_rows:
+                execute_values(
+                    cur,
+                    f"""
+                    INSERT INTO {_core_table_ref(TOPIC_STOCK_EXTRACTIONS_TABLE)} (
+                        group_id, topic_id, topic_date, stock_name, stock_code, market,
+                        concepts_json, reason, confidence, model, prompt_version, updated_at
+                    )
+                    VALUES %s
+                    ON CONFLICT (group_id, topic_id, stock_name) DO UPDATE SET
+                        topic_date = excluded.topic_date,
+                        stock_code = excluded.stock_code,
+                        market = excluded.market,
+                        concepts_json = excluded.concepts_json,
+                        reason = excluded.reason,
+                        confidence = excluded.confidence,
+                        model = excluded.model,
+                        prompt_version = excluded.prompt_version,
+                        updated_at = excluded.updated_at
+                    """,
+                    extraction_rows,
+                    template="(%s, %s, %s::date, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
+                )
+            if mention_rows:
+                execute_values(
+                    cur,
+                    f"""
+                    INSERT INTO {_core_table_ref(DAILY_MENTIONS_TABLE)}
+                        (group_id, mention_date, company, mentions_count, updated_at)
+                    VALUES %s
+                    ON CONFLICT (group_id, mention_date, company) DO UPDATE SET
+                        mentions_count = {_core_table_ref(DAILY_MENTIONS_TABLE)}.mentions_count + excluded.mentions_count,
+                        updated_at = excluded.updated_at
+                    """,
+                    mention_rows,
+                    template="(%s, %s::date, %s, %s, %s)",
+                )
+            if state_rows:
+                execute_values(
+                    cur,
+                    f"""
+                    INSERT INTO {_core_table_ref(PROCESSED_STATE_TABLE)} (group_id, source, topic_id, day, processed_at)
+                    VALUES %s
+                    ON CONFLICT (group_id, source, topic_id, day) DO UPDATE SET
+                        processed_at = excluded.processed_at
+                    """,
+                    state_rows,
+                    template="(%s, %s, %s, %s::date, %s)",
+                )
+    return {
+        "daily_mentions": len(mention_rows),
+        "topic_stock_extractions": len(extraction_rows),
+        "processed_state": len(state_rows),
+    }
 
 
 def _parse_json_list(value: Any) -> List[Any]:
@@ -653,5 +759,6 @@ __all__ = [
     "log_tdx_export",
     "save_daily_mentions",
     "save_processed_state",
+    "save_recommendation_pool_checkpoint",
     "save_topic_stock_extractions",
 ]

@@ -2,9 +2,52 @@ import unittest
 from datetime import datetime
 from importlib.util import find_spec
 from unittest.mock import patch
+from contextlib import contextmanager
 
 
 HAS_STORAGE_DEPS = find_spec("psycopg2") is not None
+
+
+class _FakeStorageCursor:
+    def __init__(self, fail_on_execute_values_call=None):
+        self.executed = []
+        self.execute_values_calls = []
+        self.fail_on_execute_values_call = fail_on_execute_values_call
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        return False
+
+    def execute(self, sql, params=None):
+        self.executed.append((sql, params))
+
+
+class _FakeStorageConnection:
+    def __init__(self, cursor):
+        self.cursor_obj = cursor
+        self.committed = False
+        self.rolled_back = False
+        self.closed = False
+
+    def cursor(self):
+        return self.cursor_obj
+
+    def commit(self):
+        self.committed = True
+
+    def rollback(self):
+        self.rolled_back = True
+
+    def close(self):
+        self.closed = True
+
+
+def _fake_execute_values(cursor, sql, rows, template=None):
+    cursor.execute_values_calls.append((sql, list(rows), template))
+    if cursor.fail_on_execute_values_call == len(cursor.execute_values_calls):
+        raise RuntimeError("boom")
 
 
 class AShareAnalysisDbStorageHelperTests(unittest.TestCase):
@@ -158,6 +201,90 @@ class AShareAnalysisDbStorageHelperTests(unittest.TestCase):
 
         self.assertTrue(conn.rolled_back)
         self.assertTrue(conn.closed)
+
+    @unittest.skipUnless(HAS_STORAGE_DEPS, "PostgreSQL storage dependencies are not installed")
+    def test_checkpoint_upserts_mentions_and_state_without_delete(self):
+        from backend.services import a_share_analysis_db_storage as storage
+
+        cursor = _FakeStorageCursor()
+        conn = _FakeStorageConnection(cursor)
+
+        @contextmanager
+        def fake_connection(env_path=storage.DEFAULT_KNOW_ACTION_ENV_PATH):
+            try:
+                yield conn
+                conn.commit()
+            except Exception:
+                conn.rollback()
+                raise
+            finally:
+                conn.close()
+
+        with patch.object(storage, "get_connection", fake_connection), patch.object(
+            storage, "execute_values", side_effect=_fake_execute_values
+        ):
+            result = storage.save_recommendation_pool_checkpoint(
+                daily_delta={"2026-05-10": {"宁德时代": 2}},
+                processed_keys=["topics:1001:2026-05-10"],
+                topic_stock_extractions=[
+                    {
+                        "group_id": "511",
+                        "topic_id": "1001",
+                        "topic_date": "2026-05-10",
+                        "stock_name": "宁德时代",
+                        "concepts": ["电池"],
+                    }
+                ],
+                group_id="511",
+            )
+
+        self.assertEqual({"daily_mentions": 1, "topic_stock_extractions": 1, "processed_state": 1}, result)
+        joined_sql = "\n".join(call[0] for call in cursor.execute_values_calls)
+        self.assertIn("ON CONFLICT (group_id, mention_date, company)", joined_sql)
+        self.assertIn("mentions_count = \"zsxq_core\".\"zsxq_a_share_daily_mentions\".mentions_count + excluded.mentions_count", joined_sql)
+        self.assertIn("ON CONFLICT (group_id, source, topic_id, day) DO UPDATE SET", joined_sql)
+        self.assertNotIn("DELETE FROM", joined_sql)
+        self.assertTrue(conn.committed)
+        self.assertFalse(conn.rolled_back)
+
+    @unittest.skipUnless(HAS_STORAGE_DEPS, "PostgreSQL storage dependencies are not installed")
+    def test_checkpoint_rolls_back_when_any_write_fails(self):
+        from backend.services import a_share_analysis_db_storage as storage
+
+        cursor = _FakeStorageCursor(fail_on_execute_values_call=2)
+        conn = _FakeStorageConnection(cursor)
+
+        @contextmanager
+        def fake_connection(env_path=storage.DEFAULT_KNOW_ACTION_ENV_PATH):
+            try:
+                yield conn
+                conn.commit()
+            except Exception:
+                conn.rollback()
+                raise
+            finally:
+                conn.close()
+
+        with patch.object(storage, "get_connection", fake_connection), patch.object(
+            storage, "execute_values", side_effect=_fake_execute_values
+        ):
+            with self.assertRaisesRegex(RuntimeError, "boom"):
+                storage.save_recommendation_pool_checkpoint(
+                    daily_delta={"2026-05-10": {"宁德时代": 2}},
+                    processed_keys=["topics:1001:2026-05-10"],
+                    topic_stock_extractions=[
+                        {
+                            "group_id": "511",
+                            "topic_id": "1001",
+                            "topic_date": "2026-05-10",
+                            "stock_name": "宁德时代",
+                        }
+                    ],
+                    group_id="511",
+                )
+
+        self.assertFalse(conn.committed)
+        self.assertTrue(conn.rolled_back)
 
 
 if __name__ == "__main__":

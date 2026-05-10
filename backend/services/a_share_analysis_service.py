@@ -23,6 +23,7 @@ from backend.services.a_share_analysis_db_storage import (
     get_storage_health,
     load_daily_mentions as load_daily_mentions_from_db,
     load_processed_state as load_processed_state_from_db,
+    save_recommendation_pool_checkpoint,
     save_topic_stock_extractions,
     save_daily_mentions as save_daily_mentions_to_db,
     save_processed_state as save_processed_state_to_db,
@@ -67,6 +68,7 @@ DEFAULT_CONCURRENCY = 10
 DEFAULT_RETENTION_DAYS = 30
 DEFAULT_RANKING_WINDOWS = (3, 7, 14, 21)
 DEFAULT_RANKING_TOP_N = 35
+DEFAULT_CHECKPOINT_BATCH_SIZE = 20
 DEFAULT_OPENAI_MAX_RETRIES = max(1, int(os.environ.get("OPENAI_MAX_RETRIES", "4")))
 GROUP_ANALYSIS_DIRNAME = "a_share_analysis"
 GROUP_OUTPUT_FILENAME = "company_mentions.csv"
@@ -95,6 +97,7 @@ A_SHARE_COMPANY_EXTRACTION_SCHEMA: Dict[str, Any] = {
 }
 
 LogCallback = Optional[Callable[[str], None]]
+AggregateSuccessCallback = Optional[Callable[[str, str, List[Dict[str, Any]], List[str]], None]]
 _db_storage_available: Optional[bool] = None
 
 
@@ -646,6 +649,7 @@ def aggregate_daily(
     reasoning_effort: str = DEFAULT_REASONING_EFFORT,
     concurrency: int = DEFAULT_CONCURRENCY,
     log_callback: LogCallback = None,
+    success_callback: AggregateSuccessCallback = None,
 ) -> Tuple[Dict[str, Dict[str, int]], Set[str], List[Dict[str, Any]], List[Dict[str, Any]]]:
     from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -695,17 +699,6 @@ def aggregate_daily(
             item_key = make_item_key(item)
             try:
                 day, stocks, topic_id, result_item_key = future.result()
-                companies = sorted(stock["stock_name"] for stock in stocks if stock.get("stock_name"))
-                if companies:
-                    day_bucket = daily.setdefault(day, {})
-                    for company in companies:
-                        day_bucket[company] = day_bucket.get(company, 0) + 1
-                    topic_stock_extractions.extend(stocks)
-                succeeded_item_keys.add(result_item_key)
-                _emit_log(
-                    f"extracted {len(companies)} companies for topic_id={topic_id}: {_format_company_log(companies)}",
-                    log_callback,
-                )
             except Exception as exc:
                 failed_items.append(
                     {
@@ -721,6 +714,21 @@ def aggregate_daily(
                     log_callback,
                     level="exception",
                 )
+                continue
+
+            companies = sorted(stock["stock_name"] for stock in stocks if stock.get("stock_name"))
+            if companies:
+                day_bucket = daily.setdefault(day, {})
+                for company in companies:
+                    day_bucket[company] = day_bucket.get(company, 0) + 1
+                topic_stock_extractions.extend(stocks)
+            succeeded_item_keys.add(result_item_key)
+            if success_callback:
+                success_callback(result_item_key, str(day or ""), stocks, companies)
+            _emit_log(
+                f"extracted {len(companies)} companies for topic_id={topic_id}: {_format_company_log(companies)}",
+                log_callback,
+            )
     return daily, succeeded_item_keys, failed_items, topic_stock_extractions
 
 
@@ -1261,6 +1269,8 @@ def run_analysis(
             f"removed_state_keys={removed_state_in_range}",
             log_callback,
         )
+        write_csv(existing_daily, resolved_output_path, group_id=normalized_group_id)
+        save_state(resolved_state_path, processed_keys, group_id=normalized_group_id)
 
         required_days = get_required_days_for_start_date(start_day)
         if required_days > days:
@@ -1295,6 +1305,53 @@ def run_analysis(
         log_callback,
     )
 
+    checkpoint_enabled = bool(normalized_group_id and should_use_db_storage(normalized_group_id))
+    checkpoint_batch_size = DEFAULT_CHECKPOINT_BATCH_SIZE
+    checkpoint_daily: Dict[str, Dict[str, int]] = {}
+    checkpoint_keys: Set[str] = set()
+    checkpoint_extractions: List[Dict[str, Any]] = []
+    checkpoint_saved_topic_stock_extractions = 0
+
+    def flush_checkpoint(force: bool = False) -> None:
+        nonlocal checkpoint_daily
+        nonlocal checkpoint_keys
+        nonlocal checkpoint_extractions
+        nonlocal checkpoint_saved_topic_stock_extractions
+
+        if not checkpoint_enabled or not checkpoint_keys:
+            return
+        if not force and len(checkpoint_keys) < checkpoint_batch_size:
+            return
+
+        result = save_recommendation_pool_checkpoint(
+            daily_delta=checkpoint_daily,
+            processed_keys=checkpoint_keys,
+            topic_stock_extractions=checkpoint_extractions,
+            group_id=normalized_group_id,
+        )
+        processed_keys.update(checkpoint_keys)
+        checkpoint_saved_topic_stock_extractions += int(result.get("topic_stock_extractions") or 0)
+        _emit_log(
+            f"checkpoint saved topics={result.get('processed_state', 0)}, "
+            f"daily_rows={result.get('daily_mentions', 0)}, "
+            f"topic_stock_extractions={result.get('topic_stock_extractions', 0)}",
+            log_callback,
+        )
+        checkpoint_daily = {}
+        checkpoint_keys = set()
+        checkpoint_extractions = []
+
+    def on_success(item_key: str, day: str, stocks: List[Dict[str, Any]], companies: List[str]) -> None:
+        if not checkpoint_enabled:
+            return
+        if companies:
+            day_bucket = checkpoint_daily.setdefault(day, {})
+            for company in companies:
+                day_bucket[company] = day_bucket.get(company, 0) + 1
+        checkpoint_keys.add(item_key)
+        checkpoint_extractions.extend(stocks)
+        flush_checkpoint()
+
     new_daily, succeeded_item_keys, failed_items, topic_stock_extractions = aggregate_daily(
         items_to_process,
         api_key=api_key,
@@ -1304,7 +1361,9 @@ def run_analysis(
         reasoning_effort=reasoning_effort or str(runtime_ai_config.get("reasoning_effort") or DEFAULT_REASONING_EFFORT),
         concurrency=concurrency,
         log_callback=log_callback,
+        success_callback=on_success,
     )
+    flush_checkpoint(force=True)
 
     added_mentions = 0
     for day, company_counts in new_daily.items():
@@ -1315,11 +1374,14 @@ def run_analysis(
 
     saved_topic_stock_extractions = 0
     if topic_stock_extractions and normalized_group_id and should_use_db_storage(normalized_group_id):
-        saved_topic_stock_extractions = save_topic_stock_extractions(
-            topic_stock_extractions,
-            group_id=normalized_group_id,
-        )
-        _emit_log(f"saved topic stock extractions={saved_topic_stock_extractions}", log_callback)
+        if checkpoint_enabled:
+            saved_topic_stock_extractions = checkpoint_saved_topic_stock_extractions
+        else:
+            saved_topic_stock_extractions = save_topic_stock_extractions(
+                topic_stock_extractions,
+                group_id=normalized_group_id,
+            )
+            _emit_log(f"saved topic stock extractions={saved_topic_stock_extractions}", log_callback)
 
     write_csv(existing_daily, resolved_output_path, group_id=normalized_group_id)
     processed_keys.update(succeeded_item_keys)

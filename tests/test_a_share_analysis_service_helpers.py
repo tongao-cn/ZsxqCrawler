@@ -162,6 +162,139 @@ class AShareAnalysisServiceHelperTests(unittest.TestCase):
         self.assertEqual("2026-05-10", kwargs["reset_end_date"])
         self.assertEqual(2, kwargs["concurrency"])
 
+    def test_run_analysis_checkpoints_every_twenty_successful_topics(self):
+        from backend.services import a_share_analysis_service as service
+
+        items = [
+            {
+                "topic_id": index,
+                "title": f"title {index}",
+                "text": f"text {index}",
+                "create_time": "2026-05-10T10:00:00+0800",
+                "day": "2026-05-10",
+                "source": "topics",
+                "group_id": "511",
+            }
+            for index in range(1, 46)
+        ]
+        checkpoint_calls = []
+
+        def fake_extract(text, api_key, model, api_base, **kwargs):
+            topic_id = kwargs["item_context"].split("topic_id=", 1)[1].split(" ", 1)[0]
+            return [
+                {
+                    "stock_name": f"公司{topic_id}",
+                    "concepts": [],
+                    "reason": "",
+                    "confidence": 0.8,
+                }
+            ]
+
+        def fake_checkpoint(**kwargs):
+            checkpoint_calls.append(kwargs)
+            return {
+                "daily_mentions": sum(len(values) for values in kwargs["daily_delta"].values()),
+                "topic_stock_extractions": len(kwargs["topic_stock_extractions"]),
+                "processed_state": len(set(kwargs["processed_keys"])),
+            }
+
+        with patch.object(service, "get_openai_compatible_config", return_value={"api_key": "key"}), patch.object(
+            service, "read_existing_csv", return_value={}
+        ), patch.object(service, "load_state", return_value=set()), patch.object(
+            service, "read_topics_last_days", return_value=items
+        ), patch.object(service, "should_use_db_storage", return_value=True), patch.object(
+            service, "call_openai_extract_topic_stocks", side_effect=fake_extract
+        ), patch.object(service, "save_recommendation_pool_checkpoint", side_effect=fake_checkpoint), patch.object(
+            service, "write_csv"
+        ), patch.object(
+            service, "save_state"
+        ), patch.object(
+            service,
+            "get_analysis_summary",
+            return_value={"date_count": 1, "output_path": "db.daily", "state_path": "db.state"},
+        ):
+            result = service.run_analysis(group_id="511", days=1, concurrency=1)
+
+        self.assertEqual([20, 20, 5], [len(call["processed_keys"]) for call in checkpoint_calls])
+        self.assertEqual(45, result["items_succeeded"])
+        self.assertEqual(45, result["topic_stock_extractions"])
+
+    def test_run_analysis_checkpoint_failure_stops_final_writes(self):
+        from backend.services import a_share_analysis_service as service
+
+        items = [
+            {
+                "topic_id": index,
+                "title": f"title {index}",
+                "text": f"text {index}",
+                "create_time": "2026-05-10T10:00:00+0800",
+                "day": "2026-05-10",
+                "source": "topics",
+                "group_id": "511",
+            }
+            for index in range(1, 21)
+        ]
+
+        with patch.object(service, "get_openai_compatible_config", return_value={"api_key": "key"}), patch.object(
+            service, "read_existing_csv", return_value={}
+        ), patch.object(service, "load_state", return_value=set()), patch.object(
+            service, "read_topics_last_days", return_value=items
+        ), patch.object(service, "should_use_db_storage", return_value=True), patch.object(
+            service,
+            "call_openai_extract_topic_stocks",
+            return_value=[{"stock_name": "宁德时代", "concepts": [], "reason": "", "confidence": 0.8}],
+        ), patch.object(
+            service, "save_recommendation_pool_checkpoint", side_effect=RuntimeError("checkpoint failed")
+        ), patch.object(
+            service, "write_csv"
+        ) as write_csv, patch.object(
+            service, "save_state"
+        ) as save_state:
+            with self.assertRaisesRegex(RuntimeError, "checkpoint failed"):
+                service.run_analysis(group_id="511", days=1, concurrency=1)
+
+        write_csv.assert_not_called()
+        save_state.assert_not_called()
+
+    def test_run_analysis_file_only_mode_skips_checkpoint(self):
+        from backend.services import a_share_analysis_service as service
+
+        item = {
+            "topic_id": 1001,
+            "title": "title",
+            "text": "text",
+            "create_time": "2026-05-10T10:00:00+0800",
+            "day": "2026-05-10",
+            "source": "topics",
+            "group_id": "511",
+        }
+
+        with patch.object(service, "get_openai_compatible_config", return_value={"api_key": "key"}), patch.object(
+            service, "read_existing_csv", return_value={}
+        ), patch.object(service, "load_state", return_value=set()), patch.object(
+            service, "read_topics_last_days", return_value=[item]
+        ), patch.object(service, "should_use_db_storage", return_value=False), patch.object(
+            service,
+            "call_openai_extract_topic_stocks",
+            return_value=[{"stock_name": "宁德时代", "concepts": [], "reason": "", "confidence": 0.8}],
+        ), patch.object(
+            service, "save_recommendation_pool_checkpoint"
+        ) as checkpoint, patch.object(
+            service, "write_csv"
+        ) as write_csv, patch.object(
+            service, "save_state"
+        ) as save_state, patch.object(
+            service,
+            "get_analysis_summary",
+            return_value={"date_count": 1, "output_path": "file.csv", "state_path": "state.json"},
+        ):
+            result = service.run_analysis(group_id="511", days=1, concurrency=1)
+
+        checkpoint.assert_not_called()
+        write_csv.assert_called()
+        save_state.assert_called()
+        self.assertEqual(1, result["items_succeeded"])
+
     def test_read_topics_last_days_filters_topics_and_talks_by_group_scope(self):
         from backend.services import a_share_analysis_service as service
 
