@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { ReactNode, useCallback, useEffect, useMemo, useState } from 'react';
 import {
   CartesianGrid,
   Line,
@@ -16,7 +16,12 @@ import {
   apiClient,
   AShareAnalysisChart,
   AShareAnalysisExportTdxResponse,
+  AShareAnalysisLatestTdxExport,
+  AShareAnalysisRankingItem,
+  AShareAnalysisSeries,
   AShareAnalysisStatus,
+  AShareAnalysisStorageStatus,
+  AShareAnalysisSummary,
   Group,
   Task,
 } from '@/lib/api';
@@ -82,6 +87,547 @@ function getTaskStatusBadge(task?: Task | null) {
   return <Badge variant="secondary">暂无任务</Badge>;
 }
 
+interface SummaryCardsProps {
+  apiKeyConfigured?: boolean;
+  latestTask?: Task | null;
+  nextStepMessage: string;
+  storage?: AShareAnalysisStorageStatus;
+  summary?: AShareAnalysisSummary;
+}
+
+function SummaryCards({
+  apiKeyConfigured,
+  latestTask,
+  nextStepMessage,
+  storage,
+  summary,
+}: SummaryCardsProps) {
+  return (
+    <Card className="border border-gray-200 shadow-none">
+      <CardContent className="p-4">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-[1fr_1fr_1fr_1.4fr]">
+          <CompactMetric
+            icon={<Database className="h-4 w-4" />}
+            label="数据覆盖"
+            value={`${summary?.date_count || 0} 天`}
+            detail={`${summary?.available_start_date || '暂无'} 至 ${summary?.available_end_date || '暂无'}`}
+          />
+          <CompactMetric
+            icon={<TrendingUp className="h-4 w-4" />}
+            label="公司数"
+            value={String(summary?.unique_companies || 0)}
+            detail="累计去重公司"
+          />
+          <CompactMetric
+            icon={<Activity className="h-4 w-4" />}
+            label="提及总数"
+            value={String(summary?.total_mentions || 0)}
+            detail="累计文章提及次数"
+          />
+          <div className="min-w-0">
+            <div className="mb-2 text-sm font-medium text-gray-900">当前状态</div>
+            <div className="flex flex-wrap items-center gap-2">
+              {getTaskStatusBadge(latestTask)}
+              <Badge variant={apiKeyConfigured ? 'secondary' : 'destructive'}>
+                {apiKeyConfigured ? 'API Key 已配置' : '缺少 API Key'}
+              </Badge>
+            </div>
+            <p className="mt-2 text-xs text-muted-foreground">{nextStepMessage}</p>
+          </div>
+        </div>
+
+        <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-gray-200 pt-3 text-sm">
+          <span className="font-medium text-gray-900">存储：{storage?.label || '存储状态未知'}</span>
+          <Badge variant={storage?.enabled ? 'secondary' : 'outline'}>
+            {storage?.enabled ? 'PostgreSQL 已启用' : '本地文件降级'}
+          </Badge>
+          <span className="text-muted-foreground">
+            提及行数 <span className="font-semibold text-foreground">{storage?.daily_rows ?? summary?.rows_count ?? 0}</span>
+          </span>
+          <span className="text-muted-foreground">
+            增量状态 <span className="font-semibold text-foreground">{storage?.processed_rows ?? summary?.processed_items ?? 0}</span>
+          </span>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+interface CompactMetricProps {
+  detail: string;
+  icon: ReactNode;
+  label: string;
+  value: string;
+}
+
+function CompactMetric({ detail, icon, label, value }: CompactMetricProps) {
+  return (
+    <div className="min-w-0">
+      <div className="flex items-center gap-2 text-sm font-medium text-gray-900">
+        {icon}
+        <span>{label}</span>
+      </div>
+      <div className="mt-2 text-2xl font-semibold">{value}</div>
+      <div className="mt-1 truncate text-xs text-muted-foreground" title={detail}>
+        {detail}
+      </div>
+    </div>
+  );
+}
+
+interface AnalysisResultsSectionProps {
+  chart: AShareAnalysisChart | null;
+  emptyStateHint: string | null;
+  emptyStateMessage: string;
+  hasChartData: boolean;
+  rankingWindows: number[];
+  renderedLineSeries: AShareAnalysisSeries[];
+  scopeName: string;
+  sortedSeries: AShareAnalysisSeries[];
+}
+
+function AnalysisResultsSection({
+  chart,
+  emptyStateHint,
+  emptyStateMessage,
+  hasChartData,
+  rankingWindows,
+  renderedLineSeries,
+  scopeName,
+  sortedSeries,
+}: AnalysisResultsSectionProps) {
+  return (
+    <Card className="border border-gray-200 shadow-none">
+      <CardHeader>
+        <div className="space-y-1">
+          <CardTitle>A股分析结果</CardTitle>
+          <CardDescription>{scopeName} 的独立分析结果，可按当前群组同步到通达信</CardDescription>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-5">
+        <div className="text-sm text-muted-foreground">
+          当前范围内公司数: {chart?.total_companies_in_range || 0}，折线展示 Top {chart?.company_count || 0}
+        </div>
+
+        <div className="h-[440px]">
+          {hasChartData ? (
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={chart?.chart_data} margin={{ top: 16, right: 24, left: 8, bottom: 16 }}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="date" minTickGap={24} />
+                <YAxis allowDecimals={false} />
+                <Tooltip itemSorter={(item) => -Number(item?.value ?? 0)} />
+                {renderedLineSeries.map((series) => (
+                  <Line
+                    key={series.key}
+                    type="monotone"
+                    dataKey={series.key}
+                    name={`${series.label} (${series.total})`}
+                    stroke={series.color}
+                    strokeWidth={2}
+                    dot={false}
+                    activeDot={{ r: 4 }}
+                  />
+                ))}
+              </LineChart>
+            </ResponsiveContainer>
+          ) : (
+            <div className="h-full flex flex-col items-center justify-center gap-2 border border-dashed rounded-lg px-6 text-center text-muted-foreground">
+              <div>{emptyStateMessage}</div>
+              {emptyStateHint ? <div className="text-xs">{emptyStateHint}</div> : null}
+            </div>
+          )}
+        </div>
+
+        <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_360px] gap-4">
+          <SeriesRankingList sortedSeries={sortedSeries} />
+        </div>
+
+        <RankingWindowGrid
+          chart={chart}
+          rankingWindows={rankingWindows}
+        />
+      </CardContent>
+    </Card>
+  );
+}
+
+function SeriesRankingList({ sortedSeries }: { sortedSeries: AShareAnalysisSeries[] }) {
+  if (sortedSeries.length === 0) {
+    return (
+      <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 text-sm text-muted-foreground">
+        图表公司排序暂无数据
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
+      <div className="text-sm font-medium mb-3">图表公司排序</div>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-2">
+        {sortedSeries.map((series, index) => (
+          <div key={`legend-${series.key}`} className="flex items-center gap-2 text-sm min-w-0">
+            <span className="text-muted-foreground tabular-nums w-6">{index + 1}</span>
+            <span
+              className="h-2.5 w-2.5 rounded-full shrink-0"
+              style={{ backgroundColor: series.color }}
+            />
+            <span className="truncate" title={series.label}>
+              {series.label}
+            </span>
+            <span className="ml-auto font-medium tabular-nums">{series.total}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+interface RankingWindowGridProps {
+  chart: AShareAnalysisChart | null;
+  rankingWindows: number[];
+}
+
+function RankingWindowGrid({
+  chart,
+  rankingWindows,
+}: RankingWindowGridProps) {
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+      {rankingWindows.map((windowDays) => {
+        const rankingRows = chart?.rankings?.[String(windowDays)] || [];
+        return (
+          <Card key={windowDays} className="border border-gray-200 shadow-none">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">{windowDays} 日推荐池排序</CardTitle>
+              <CardDescription>Top {chart?.ranking_top_n || 35}</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {rankingRows.length === 0 ? (
+                <div className="text-sm text-muted-foreground">暂无数据</div>
+              ) : (
+                <RankingRows rows={rankingRows} windowDays={windowDays} />
+              )}
+            </CardContent>
+          </Card>
+        );
+      })}
+    </div>
+  );
+}
+
+function RankingRows({
+  rows,
+  windowDays,
+}: {
+  rows: AShareAnalysisRankingItem[];
+  windowDays: number;
+}) {
+  return (
+    <div className="space-y-2">
+      {rows.map((item, index) => (
+        <div
+          key={`${windowDays}-${item.company}`}
+          className="grid grid-cols-[28px_minmax(0,1fr)_auto] gap-2 text-sm items-center border-b border-dashed pb-2 last:border-b-0"
+        >
+          <span className="text-muted-foreground">{index + 1}</span>
+          <span className="truncate" title={item.company}>
+            {item.company}
+          </span>
+          <span className="font-medium tabular-nums">{item.count}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+interface AShareActionPanelProps {
+  advancedOpen: boolean;
+  concurrency: number;
+  exportingTdx: boolean;
+  latestExport?: AShareAnalysisLatestTdxExport | null;
+  loadingChart: boolean;
+  loadingStatus: boolean;
+  onApplyFilters: () => void;
+  onExportToTdx: () => void;
+  onRefresh: () => void;
+  onResetOnly: () => void;
+  onRunAnalysis: () => void;
+  resetEndDate: string;
+  resetStartDate: string;
+  resetting: boolean;
+  runDays: number;
+  running: boolean;
+  scopeName: string;
+  selectedEndDate: string;
+  selectedStartDate: string;
+  setAdvancedOpen: (open: boolean) => void;
+  setConcurrency: (value: number) => void;
+  setResetEndDate: (value: string) => void;
+  setResetStartDate: (value: string) => void;
+  setRunDays: (value: number) => void;
+  setSelectedEndDate: (value: string) => void;
+  setSelectedStartDate: (value: string) => void;
+  setTopN: (value: number) => void;
+  summary?: AShareAnalysisSummary;
+  topN: number;
+}
+
+function AShareActionPanel({
+  advancedOpen,
+  concurrency,
+  exportingTdx,
+  latestExport,
+  loadingChart,
+  loadingStatus,
+  onApplyFilters,
+  onExportToTdx,
+  onRefresh,
+  onResetOnly,
+  onRunAnalysis,
+  resetEndDate,
+  resetStartDate,
+  resetting,
+  runDays,
+  running,
+  scopeName,
+  selectedEndDate,
+  selectedStartDate,
+  setAdvancedOpen,
+  setConcurrency,
+  setResetEndDate,
+  setResetStartDate,
+  setRunDays,
+  setSelectedEndDate,
+  setSelectedStartDate,
+  setTopN,
+  summary,
+  topN,
+}: AShareActionPanelProps) {
+  return (
+    <aside className="w-full 2xl:w-80 flex-shrink-0 2xl:sticky 2xl:top-0 h-fit 2xl:max-h-screen">
+      <Card className="border border-gray-200 shadow-none">
+        <CardContent className="flex flex-col gap-4 p-4">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2 text-sm font-medium text-gray-900">
+              <TrendingUp className="h-4 w-4" />
+              A股分析策略栏
+            </div>
+            <p className="text-xs text-muted-foreground">
+              查看结果、生成推荐池、发布到通达信和维护数据。
+            </p>
+          </div>
+
+          <div className="space-y-3">
+            <div className="text-sm font-medium text-gray-900">查看结果</div>
+            <div className="grid grid-cols-2 gap-2">
+              <div className="space-y-2">
+                <Label htmlFor="a-share-start-date">开始日期</Label>
+                <Input
+                  id="a-share-start-date"
+                  type="date"
+                  value={selectedStartDate}
+                  min={summary?.available_start_date || undefined}
+                  max={summary?.available_end_date || undefined}
+                  onChange={(e) => setSelectedStartDate(e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="a-share-end-date">结束日期</Label>
+                <Input
+                  id="a-share-end-date"
+                  type="date"
+                  value={selectedEndDate}
+                  min={summary?.available_start_date || undefined}
+                  max={summary?.available_end_date || undefined}
+                  onChange={(e) => setSelectedEndDate(e.target.value)}
+                />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="a-share-top-n">图表公司数</Label>
+              <Input
+                id="a-share-top-n"
+                type="number"
+                min={1}
+                max={100}
+                value={topN}
+                onChange={(e) => setTopN(Number(e.target.value) || DEFAULT_TOP_N)}
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <Button variant="outline" onClick={onRefresh} disabled={loadingStatus || loadingChart}>
+                <RefreshCw className={`h-4 w-4 ${loadingStatus || loadingChart ? 'animate-spin' : ''}`} />
+                刷新
+              </Button>
+              <Button onClick={onApplyFilters} disabled={loadingChart}>
+                {loadingChart ? '加载中' : '更新图表'}
+              </Button>
+            </div>
+          </div>
+
+          <div className="space-y-3 border-t border-gray-200 pt-4">
+            <div className="text-sm font-medium text-gray-900">生成结果</div>
+            <div className="grid grid-cols-2 gap-2">
+              <div className="space-y-2">
+                <Label htmlFor="a-share-run-days">扫描</Label>
+                <Input
+                  id="a-share-run-days"
+                  type="number"
+                  min={1}
+                  max={365}
+                  value={runDays}
+                  onChange={(e) => setRunDays(Number(e.target.value) || 21)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="a-share-concurrency">并发</Label>
+                <Input
+                  id="a-share-concurrency"
+                  type="number"
+                  min={1}
+                  max={128}
+                  value={concurrency}
+                  onChange={(e) => setConcurrency(Number(e.target.value) || 1)}
+                />
+              </div>
+            </div>
+            <Button className="w-full bg-green-600 hover:bg-green-700" onClick={onRunAnalysis} disabled={running}>
+              <Play className="h-4 w-4" />
+              {running ? '创建任务中...' : '生成/更新推荐池'}
+            </Button>
+            <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 text-xs text-muted-foreground">
+              当前只处理 {scopeName} 的数据；任务会逐话题抽取 A 股股票和概念，并更新推荐池。
+            </div>
+          </div>
+
+          <LatestExportSummary
+            exportingTdx={exportingTdx}
+            latestExport={latestExport}
+            onExportToTdx={onExportToTdx}
+          />
+
+          <div className="space-y-3 border-t border-gray-200 pt-4">
+            <button
+              type="button"
+              className="flex w-full items-center justify-between text-sm font-medium text-gray-900"
+              onClick={() => setAdvancedOpen(!advancedOpen)}
+              aria-expanded={advancedOpen}
+            >
+              <span>高级维护</span>
+              <span className="text-xs text-muted-foreground">{advancedOpen ? '收起' : '展开'}</span>
+            </button>
+            {advancedOpen ? (
+              <div className="space-y-3">
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="a-share-reset-start">删除开始</Label>
+                    <Input
+                      id="a-share-reset-start"
+                      type="date"
+                      value={resetStartDate}
+                      min={summary?.available_start_date || undefined}
+                      max={summary?.available_end_date || undefined}
+                      onChange={(e) => setResetStartDate(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="a-share-reset-end">删除结束</Label>
+                    <Input
+                      id="a-share-reset-end"
+                      type="date"
+                      value={resetEndDate}
+                      min={summary?.available_start_date || undefined}
+                      max={summary?.available_end_date || undefined}
+                      onChange={(e) => setResetEndDate(e.target.value)}
+                    />
+                  </div>
+                </div>
+                <Button variant="outline" className="w-full" onClick={onResetOnly} disabled={resetting}>
+                  <Eraser className="h-4 w-4" />
+                  {resetting ? '删除中...' : '仅删除区间数据'}
+                </Button>
+              </div>
+            ) : (
+              <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
+                删除区间数据默认折叠，避免误触。
+              </div>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+    </aside>
+  );
+}
+
+interface LatestExportSummaryProps {
+  exportingTdx: boolean;
+  latestExport?: AShareAnalysisLatestTdxExport | null;
+  onExportToTdx: () => void;
+}
+
+function LatestExportSummary({
+  exportingTdx,
+  latestExport,
+  onExportToTdx,
+}: LatestExportSummaryProps) {
+  return (
+    <div className="space-y-3 border-t border-gray-200 pt-4">
+      <div className="text-sm font-medium text-gray-900">发布到通达信</div>
+      <Button variant="outline" className="w-full" onClick={onExportToTdx} disabled={exportingTdx}>
+        <Upload className={`h-4 w-4 ${exportingTdx ? 'animate-pulse' : ''}`} />
+        {exportingTdx ? '导入中...' : '导入到通达信'}
+      </Button>
+      <div className="grid grid-cols-2 gap-2 text-xs">
+        <div className="rounded border border-gray-200 bg-white p-2">
+          <div className="text-muted-foreground">写入总数</div>
+          <div className="font-semibold">{latestExport?.total_written ?? 0}</div>
+        </div>
+        <div className="rounded border border-gray-200 bg-white p-2">
+          <div className="text-muted-foreground">未匹配</div>
+          <div className="font-semibold">{latestExport?.unresolved_count ?? 0}</div>
+        </div>
+      </div>
+      {latestExport ? (
+        <details className="rounded-lg border border-gray-200 bg-gray-50 p-3 text-xs">
+          <summary className="cursor-pointer font-medium text-gray-900">最近导入记录</summary>
+          <div className="mt-3 space-y-2 text-muted-foreground">
+            <div>导入时间：{formatDateTime(latestExport.exported_at)}</div>
+            <div>范围：{formatDateRange(latestExport.start_date, latestExport.end_date)}</div>
+            <div>股票主数据：{latestExport.stock_basic_source || '未知'}</div>
+            <div className="grid grid-cols-1 gap-2">
+              {latestExport.blocks.map((block) => (
+                <div key={`latest-export-${block.window_days}`} className="rounded border border-gray-200 bg-white p-2">
+                  <div className="font-medium text-gray-900">{block.block_name}</div>
+                  <div>写入 {block.written_count}，跳过 {block.skipped_count}</div>
+                </div>
+              ))}
+            </div>
+            {latestExport.unresolved_companies.length > 0 ? (
+              <div className="flex flex-wrap gap-2">
+                {latestExport.unresolved_companies.slice(0, 8).map((company) => (
+                  <Badge key={company} variant="outline" className="bg-white">
+                    {company}
+                  </Badge>
+                ))}
+                {latestExport.unresolved_companies.length > 8 ? (
+                  <Badge variant="outline" className="bg-white">
+                    +{latestExport.unresolved_companies.length - 8}
+                  </Badge>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
+        </details>
+      ) : (
+        <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 text-xs text-muted-foreground">
+          还没有导入记录。
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function AShareAnalysisPanel({
   onTaskCreated,
   selectedGroup,
@@ -99,11 +645,11 @@ export default function AShareAnalysisPanel({
   const [selectedStartDate, setSelectedStartDate] = useState('');
   const [selectedEndDate, setSelectedEndDate] = useState('');
   const [runDays, setRunDays] = useState(21);
-  const [retentionDays, setRetentionDays] = useState(30);
   const [concurrency, setConcurrency] = useState(10);
   const [resetStartDate, setResetStartDate] = useState('');
   const [resetEndDate, setResetEndDate] = useState('');
   const [initialized, setInitialized] = useState(false);
+  const [advancedOpen, setAdvancedOpen] = useState(false);
   const [activeRunTaskId, setActiveRunTaskId] = useState<string | null>(null);
 
   const rankingWindows = useMemo(
@@ -140,7 +686,6 @@ export default function AShareAnalysisPanel({
 
         setStatus(statusData);
         setRunDays(statusData.defaults.days);
-        setRetentionDays(statusData.defaults.retention_days);
         setConcurrency(statusData.defaults.concurrency);
         setSelectedStartDate(statusData.summary.available_start_date || '');
         setSelectedEndDate(statusData.summary.available_end_date || '');
@@ -194,7 +739,6 @@ export default function AShareAnalysisPanel({
 
         if (!initialized || bootstrap) {
           setRunDays(data.defaults.days);
-          setRetentionDays(data.defaults.retention_days);
           setConcurrency(data.defaults.concurrency);
           setSelectedStartDate(data.summary.available_start_date || '');
           setSelectedEndDate(data.summary.available_end_date || '');
@@ -302,7 +846,6 @@ export default function AShareAnalysisPanel({
       const response = await apiClient.runAShareAnalysis({
         group_id: selectedGroup.group_id,
         days: runDays,
-        retention_days: retentionDays,
         concurrency: concurrency,
         ...(hasResetRange
           ? {
@@ -432,6 +975,24 @@ export default function AShareAnalysisPanel({
     }
     return parts.join('，');
   }, [summary]);
+  const nextStepMessage = useMemo(() => {
+    if (!status?.api_key_configured) {
+      return '缺少 API Key，需先配置后再生成新结果';
+    }
+    if (latestTask?.status === 'running') {
+      return '任务运行中，完成后会自动刷新结果';
+    }
+    if (hasChartData) {
+      return '已有分析结果，可查看图表或发布到通达信';
+    }
+    if (!summary?.output_exists && (summary?.source_topics_count ?? 0) > 0) {
+      return '已有源话题，建议先开始增量分析';
+    }
+    if ((summary?.source_topics_count ?? 0) === 0) {
+      return '当前群话题库为空，请先采集或同步话题';
+    }
+    return `更新于 ${formatDateTime(summary?.updated_at)}`;
+  }, [hasChartData, latestTask?.status, status?.api_key_configured, summary]);
 
   if (!selectedGroup) {
     return (
@@ -445,411 +1006,59 @@ export default function AShareAnalysisPanel({
   }
 
   return (
-    <div className="space-y-4">
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
-        <Card className="border border-gray-200 shadow-none">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium flex items-center gap-2">
-              <Database className="h-4 w-4" />
-              数据覆盖
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-xl font-semibold">{summary?.date_count || 0} 天</div>
-            <p className="text-xs text-muted-foreground mt-1">
-              {summary?.available_start_date || '暂无'} 至 {summary?.available_end_date || '暂无'}
-            </p>
-          </CardContent>
-        </Card>
+    <div className="flex flex-col 2xl:flex-row gap-4">
+      <div className="flex min-w-0 flex-1 flex-col gap-4">
+        <SummaryCards
+          apiKeyConfigured={status?.api_key_configured}
+          latestTask={latestTask}
+          nextStepMessage={nextStepMessage}
+          storage={storage}
+          summary={summary}
+        />
 
-        <Card className="border border-gray-200 shadow-none">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium flex items-center gap-2">
-              <TrendingUp className="h-4 w-4" />
-              公司数
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-xl font-semibold">{summary?.unique_companies || 0}</div>
-            <p className="text-xs text-muted-foreground mt-1">当前分析结果中的累计去重公司数</p>
-          </CardContent>
-        </Card>
-
-        <Card className="border border-gray-200 shadow-none">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium flex items-center gap-2">
-              <Activity className="h-4 w-4" />
-              提及总数
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-xl font-semibold">{summary?.total_mentions || 0}</div>
-            <p className="text-xs text-muted-foreground mt-1">累计文章提及次数</p>
-          </CardContent>
-        </Card>
-
-        <Card className="border border-gray-200 shadow-none">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">最新任务</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="flex items-center justify-between gap-2">
-              {getTaskStatusBadge(latestTask)}
-              <Badge variant={status?.api_key_configured ? 'secondary' : 'destructive'}>
-                {status?.api_key_configured ? 'API Key 已配置' : '缺少 API Key'}
-              </Badge>
-            </div>
-            <p className="text-xs text-muted-foreground mt-2">
-              更新于 {formatDateTime(summary?.updated_at)}
-            </p>
-          </CardContent>
-        </Card>
+        <AnalysisResultsSection
+          chart={chart}
+          emptyStateHint={emptyStateHint}
+          emptyStateMessage={emptyStateMessage}
+          hasChartData={hasChartData}
+          rankingWindows={rankingWindows}
+          renderedLineSeries={renderedLineSeries}
+          scopeName={scopeName}
+          sortedSeries={sortedSeries}
+        />
       </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-        <Card className="border border-gray-200 shadow-none">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base">存储状态</CardTitle>
-            <CardDescription>当前分析结果的主存储位置</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <div className="flex items-center justify-between gap-3">
-              <div className="font-medium">{storage?.label || '本地文件镜像'}</div>
-              <Badge variant={storage?.enabled ? 'secondary' : 'outline'}>
-                {storage?.enabled ? 'PostgreSQL 已启用' : '文件模式'}
-              </Badge>
-            </div>
-            <div className="grid grid-cols-2 gap-3 text-sm text-muted-foreground">
-              <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
-                <div>提及行数</div>
-                <div className="mt-1 text-lg font-semibold text-foreground">
-                  {storage?.daily_rows ?? summary?.rows_count ?? 0}
-                </div>
-              </div>
-              <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
-                <div>增量状态</div>
-                <div className="mt-1 text-lg font-semibold text-foreground">
-                  {storage?.processed_rows ?? summary?.processed_items ?? 0}
-                </div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="border border-gray-200 shadow-none">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base">最近一次通达信导入</CardTitle>
-            <CardDescription>展示最近一次覆盖导入的结果摘要</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {!latestExport ? (
-              <div className="text-sm text-muted-foreground">还没有导入记录</div>
-            ) : (
-              <>
-                <div className="flex items-center justify-between gap-3">
-                  <div className="font-medium">{formatDateTime(latestExport.exported_at)}</div>
-                  <Badge variant="secondary">导入ID {latestExport.export_id}</Badge>
-                </div>
-                <div className="text-sm text-muted-foreground">
-                  范围：{formatDateRange(latestExport.start_date, latestExport.end_date)}
-                </div>
-                <div className="grid grid-cols-2 gap-3 text-sm">
-                  <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
-                    <div className="text-muted-foreground">写入总数</div>
-                    <div className="mt-1 text-lg font-semibold">{latestExport.total_written}</div>
-                  </div>
-                  <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
-                    <div className="text-muted-foreground">未匹配公司</div>
-                    <div className="mt-1 text-lg font-semibold">{latestExport.unresolved_count}</div>
-                  </div>
-                </div>
-                <div className="text-sm text-muted-foreground">
-                  股票主数据：{latestExport.stock_basic_source || '未知'}
-                </div>
-                <div className="grid grid-cols-2 gap-2">
-                  {latestExport.blocks.map((block) => (
-                    <div
-                      key={`latest-export-${block.window_days}`}
-                      className="rounded-lg border border-gray-200 bg-gray-50 p-3 text-sm"
-                    >
-                      <div className="font-medium">{block.block_name}</div>
-                      <div className="mt-1 text-muted-foreground">
-                        写入 {block.written_count}，跳过 {block.skipped_count}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-                {latestExport.unresolved_companies.length > 0 && (
-                  <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
-                    <div className="text-sm font-medium text-amber-900">未匹配公司</div>
-                    <div className="mt-2 flex flex-wrap gap-2">
-                      {latestExport.unresolved_companies.slice(0, 16).map((company) => (
-                        <Badge key={company} variant="outline" className="bg-white">
-                          {company}
-                        </Badge>
-                      ))}
-                      {latestExport.unresolved_companies.length > 16 && (
-                        <Badge variant="outline" className="bg-white">
-                          +{latestExport.unresolved_companies.length - 16}
-                        </Badge>
-                      )}
-                    </div>
-                  </div>
-                )}
-              </>
-            )}
-          </CardContent>
-        </Card>
-      </div>
-
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
-        <Card className="border border-gray-200 shadow-none xl:col-span-2">
-          <CardHeader>
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <CardTitle>A股分析图表</CardTitle>
-                <CardDescription>{scopeName} 的独立分析结果，可按当前群组同步到通达信</CardDescription>
-              </div>
-              <div className="flex items-center gap-2">
-                <Button variant="outline" size="sm" onClick={() => void refreshAll(false, selectedGroup.group_id)} disabled={loadingStatus || loadingChart}>
-                  <RefreshCw className={`h-4 w-4 mr-2 ${loadingStatus || loadingChart ? 'animate-spin' : ''}`} />
-                  刷新
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => void handleExportToTdx()}
-                  disabled={exportingTdx}
-                >
-                  <Upload className={`h-4 w-4 mr-2 ${exportingTdx ? 'animate-pulse' : ''}`} />
-                  {exportingTdx ? '导入中...' : '导入到通达信'}
-                </Button>
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-              <div className="space-y-2">
-                <Label htmlFor="a-share-start-date">开始日期</Label>
-                <Input
-                  id="a-share-start-date"
-                  type="date"
-                  value={selectedStartDate}
-                  min={summary?.available_start_date || undefined}
-                  max={summary?.available_end_date || undefined}
-                  onChange={(e) => setSelectedStartDate(e.target.value)}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="a-share-end-date">结束日期</Label>
-                <Input
-                  id="a-share-end-date"
-                  type="date"
-                  value={selectedEndDate}
-                  min={summary?.available_start_date || undefined}
-                  max={summary?.available_end_date || undefined}
-                  onChange={(e) => setSelectedEndDate(e.target.value)}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="a-share-top-n">图表公司数</Label>
-                <Input
-                  id="a-share-top-n"
-                  type="number"
-                  min={1}
-                  max={100}
-                  value={topN}
-                  onChange={(e) => setTopN(Number(e.target.value) || DEFAULT_TOP_N)}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label className="opacity-0">操作</Label>
-                <Button className="w-full" onClick={() => void handleApplyFilters()} disabled={loadingChart}>
-                  {loadingChart ? '加载中...' : '更新图表'}
-                </Button>
-              </div>
-            </div>
-
-            <div className="text-sm text-muted-foreground">
-              当前范围内公司数: {chart?.total_companies_in_range || 0}，折线展示 Top {chart?.company_count || 0}
-            </div>
-
-            <div className="h-[440px]">
-              {hasChartData ? (
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={chart?.chart_data} margin={{ top: 16, right: 24, left: 8, bottom: 16 }}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="date" minTickGap={24} />
-                    <YAxis allowDecimals={false} />
-                    <Tooltip
-                      itemSorter={(item) => -Number(item?.value ?? 0)}
-                    />
-                    {renderedLineSeries.map((series) => (
-                      <Line
-                        key={series.key}
-                        type="monotone"
-                        dataKey={series.key}
-                        name={`${series.label} (${series.total})`}
-                        stroke={series.color}
-                        strokeWidth={2}
-                        dot={false}
-                        activeDot={{ r: 4 }}
-                      />
-                    ))}
-                  </LineChart>
-                </ResponsiveContainer>
-              ) : (
-                <div className="h-full flex flex-col items-center justify-center gap-2 border border-dashed rounded-lg px-6 text-center text-muted-foreground">
-                  <div>{emptyStateMessage}</div>
-                  {emptyStateHint ? <div className="text-xs">{emptyStateHint}</div> : null}
-                </div>
-              )}
-            </div>
-
-            {sortedSeries.length > 0 && (
-              <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
-                <div className="text-sm font-medium mb-3">图表公司排序</div>
-                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-x-4 gap-y-2">
-                  {sortedSeries.map((series, index) => (
-                    <div
-                      key={`legend-${series.key}`}
-                      className="flex items-center gap-2 text-sm min-w-0"
-                    >
-                      <span className="text-muted-foreground tabular-nums w-6">{index + 1}</span>
-                      <span
-                        className="h-2.5 w-2.5 rounded-full shrink-0"
-                        style={{ backgroundColor: series.color }}
-                      />
-                      <span className="truncate" title={series.label}>
-                        {series.label}
-                      </span>
-                      <span className="ml-auto font-medium tabular-nums">{series.total}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card className="border border-gray-200 shadow-none">
-          <CardHeader>
-            <CardTitle>运行控制</CardTitle>
-            <CardDescription>当前只处理 {scopeName} 的数据；可以直接重跑，也可以先删除一段结果再补跑</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="a-share-run-days">扫描最近天数</Label>
-              <Input
-                id="a-share-run-days"
-                type="number"
-                min={1}
-                max={365}
-                value={runDays}
-                onChange={(e) => setRunDays(Number(e.target.value) || 21)}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="a-share-retention">保留天数</Label>
-              <Input
-                id="a-share-retention"
-                type="number"
-                min={1}
-                max={3650}
-                value={retentionDays}
-                onChange={(e) => setRetentionDays(Number(e.target.value) || 30)}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="a-share-concurrency">并发数</Label>
-              <Input
-                id="a-share-concurrency"
-                type="number"
-                min={1}
-                max={128}
-                value={concurrency}
-                onChange={(e) => setConcurrency(Number(e.target.value) || 1)}
-              />
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-2">
-                <Label htmlFor="a-share-reset-start">删除开始日期</Label>
-                <Input
-                  id="a-share-reset-start"
-                  type="date"
-                  value={resetStartDate}
-                  min={summary?.available_start_date || undefined}
-                  max={summary?.available_end_date || undefined}
-                  onChange={(e) => setResetStartDate(e.target.value)}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="a-share-reset-end">删除结束日期</Label>
-                <Input
-                  id="a-share-reset-end"
-                  type="date"
-                  value={resetEndDate}
-                  min={summary?.available_start_date || undefined}
-                  max={summary?.available_end_date || undefined}
-                  onChange={(e) => setResetEndDate(e.target.value)}
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 gap-2">
-              <Button onClick={() => void handleRunAnalysis()} disabled={running}>
-                <Play className="h-4 w-4 mr-2" />
-                {running ? '创建任务中...' : '开始分析 / 删除并重跑'}
-              </Button>
-              <Button variant="outline" onClick={() => void handleResetOnly()} disabled={resetting}>
-                <Eraser className="h-4 w-4 mr-2" />
-                {resetting ? '删除中...' : '仅删除区间数据'}
-              </Button>
-            </div>
-
-            <div className="rounded-lg bg-gray-50 border border-gray-200 p-3 text-sm text-muted-foreground space-y-1">
-              <p>1. 不填删除日期时，点击上方按钮会直接重跑最近 N 天。</p>
-              <p>2. 填写删除日期后，再点击上方按钮，会先删这段结果再补跑。</p>
-              <p>3. 当前分析和推荐池排序仅针对已选中的群组，不再混合其他群组数据。</p>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
-        {rankingWindows.map((windowDays) => {
-          const rankingRows = chart?.rankings?.[String(windowDays)] || [];
-          return (
-            <Card key={windowDays} className="border border-gray-200 shadow-none">
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base">{windowDays} 日推荐池排序</CardTitle>
-                <CardDescription>Top {chart?.ranking_top_n || 35}</CardDescription>
-              </CardHeader>
-              <CardContent>
-                {rankingRows.length === 0 ? (
-                  <div className="text-sm text-muted-foreground">暂无数据</div>
-                ) : (
-                  <div className="space-y-2">
-                    {rankingRows.map((item, index) => (
-                      <div
-                        key={`${windowDays}-${item.company}`}
-                        className="grid grid-cols-[28px_minmax(0,1fr)_auto] gap-2 text-sm items-center border-b border-dashed pb-2 last:border-b-0"
-                      >
-                        <span className="text-muted-foreground">{index + 1}</span>
-                        <span className="truncate" title={item.company}>
-                          {item.company}
-                        </span>
-                        <span className="font-medium tabular-nums">{item.count}</span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          );
-        })}
-      </div>
+      <AShareActionPanel
+        advancedOpen={advancedOpen}
+        concurrency={concurrency}
+        exportingTdx={exportingTdx}
+        latestExport={latestExport}
+        loadingChart={loadingChart}
+        loadingStatus={loadingStatus}
+        onApplyFilters={() => void handleApplyFilters()}
+        onExportToTdx={() => void handleExportToTdx()}
+        onRefresh={() => void refreshAll(false, selectedGroup.group_id)}
+        onResetOnly={() => void handleResetOnly()}
+        onRunAnalysis={() => void handleRunAnalysis()}
+        resetEndDate={resetEndDate}
+        resetStartDate={resetStartDate}
+        resetting={resetting}
+        runDays={runDays}
+        running={running}
+        scopeName={scopeName}
+        selectedEndDate={selectedEndDate}
+        selectedStartDate={selectedStartDate}
+        setAdvancedOpen={setAdvancedOpen}
+        setConcurrency={setConcurrency}
+        setResetEndDate={setResetEndDate}
+        setResetStartDate={setResetStartDate}
+        setRunDays={setRunDays}
+        setSelectedEndDate={setSelectedEndDate}
+        setSelectedStartDate={setSelectedStartDate}
+        setTopN={setTopN}
+        summary={summary}
+        topN={topN}
+      />
     </div>
   );
 }
