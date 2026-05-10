@@ -25,6 +25,7 @@ from backend.storage.db_compat import connect
 
 MAX_TOPIC_CHARS = 5000
 MAX_PROMPT_CHARS = 60000
+REPORT_CHUNK_PROMPT_CHARS = 45000
 MAX_IMAGES_PER_REPORT = 12
 MAX_IMAGES_PER_TOPIC = 2
 MAX_IMAGE_BYTES = 4 * 1024 * 1024
@@ -280,6 +281,38 @@ def _build_prompt_payload(group_id: str, report_date: str, topics: List[Dict[str
     return _clip(text, MAX_PROMPT_CHARS)
 
 
+def _build_prompt_payload_unclipped(group_id: str, report_date: str, topics: List[Dict[str, Any]]) -> str:
+    payload = {
+        "group_id": group_id,
+        "report_date": report_date,
+        "topic_count": len(topics),
+        "topics": topics,
+    }
+    return json.dumps(payload, ensure_ascii=False, indent=2)
+
+
+def _split_topics_for_report_chunks(
+    group_id: str,
+    report_date: str,
+    topics: List[Dict[str, Any]],
+    *,
+    max_chars: int = REPORT_CHUNK_PROMPT_CHARS,
+) -> List[List[Dict[str, Any]]]:
+    chunks: List[List[Dict[str, Any]]] = []
+    current: List[Dict[str, Any]] = []
+    for topic in topics:
+        candidate = [*current, topic]
+        candidate_text = _build_prompt_payload_unclipped(group_id, report_date, candidate)
+        if current and len(candidate_text) > max_chars:
+            chunks.append(current)
+            current = [topic]
+            continue
+        current = candidate
+    if current:
+        chunks.append(current)
+    return chunks
+
+
 def _build_empty_report_summary(report_date: str) -> str:
     return (
         "# 每日话题分析报告\n\n"
@@ -373,25 +406,12 @@ def _extract_response_text(response: Any) -> str:
     return "\n".join(chunks)
 
 
-def _generate_report_with_ai(
+def _build_report_user_prompt(
     prompt_payload: str,
     report_date: str,
     *,
-    group_id: str,
-    image_inputs: Optional[List[Dict[str, Any]]] = None,
-) -> Tuple[str, str]:
-    runtime_ai_config = get_openai_compatible_config()
-    api_key = str(runtime_ai_config.get("api_key") or "").strip()
-    if not api_key:
-        raise RuntimeError("OPENAI_API_KEY not set and config.toml [ai].api_key is empty")
-
-    model = str(runtime_ai_config.get("model") or get_default_model())
-    api_base = str(runtime_ai_config.get("base_url") or get_default_base_url())
-    wire_api = str(runtime_ai_config.get("wire_api") or get_default_wire_api())
-    reasoning_effort = get_summary_reasoning_effort()
-
-    image_inputs = image_inputs or []
-    image_refs = [str(image.get("image_ref") or "") for image in image_inputs if image.get("image_ref")]
+    image_refs: Optional[List[str]] = None,
+) -> str:
     image_note = ""
     if image_refs:
         image_note = (
@@ -418,6 +438,72 @@ def _generate_report_with_ai(
         "- 不要输出 JSON。\n\n"
         f"话题数据：\n{prompt_payload}"
     )
+    return user_prompt
+
+
+def _build_chunk_summary_user_prompt(
+    prompt_payload: str,
+    report_date: str,
+    *,
+    chunk_index: int,
+    chunk_count: int,
+) -> str:
+    return (
+        f"请为 {report_date} 的第 {chunk_index}/{chunk_count} 个话题分块生成局部摘要。\n\n"
+        "输出中文 Markdown，结构如下：\n"
+        "## 分块核心结论\n"
+        "## 重要话题与证据\n"
+        "## 股票、产业链和概念线索\n"
+        "## 风险与待跟进事项\n"
+        "## topic_id 索引\n\n"
+        "要求：\n"
+        "- 只基于本分块输入，不要补充外部信息。\n"
+        "- 每个重点尽量引用 topic_id。\n"
+        "- 保留能支撑最终日报的高信息密度，不要写寒暄。\n\n"
+        f"话题数据：\n{prompt_payload}"
+    )
+
+
+def _build_final_report_user_prompt(chunk_summaries: List[str], report_date: str) -> str:
+    joined = "\n\n".join(
+        f"<!-- chunk {index + 1} -->\n{summary}"
+        for index, summary in enumerate(chunk_summaries)
+    )
+    return (
+        f"请基于 {report_date} 的多个分块摘要，生成最终 AI 日报。\n\n"
+        "请按以下结构输出：\n"
+        "# 每日话题分析报告\n"
+        "## 一句话结论\n"
+        "## 今日核心洞察\n"
+        "## 热点话题 Top 5\n"
+        "## 高价值观点与问答\n"
+        "## 需要跟进的机会或风险\n"
+        "## 明日关注点\n"
+        "## 话题索引\n\n"
+        "要求：\n"
+        "- 只能基于分块摘要，不要编造未出现的信息。\n"
+        "- 合并重复观点，保留 topic_id 方便回溯。\n"
+        "- 不要输出 JSON。\n\n"
+        f"分块摘要：\n{joined}"
+    )
+
+
+def _call_report_ai(
+    user_prompt: str,
+    *,
+    group_id: str,
+    image_inputs: Optional[List[Dict[str, Any]]] = None,
+) -> Tuple[str, str]:
+    runtime_ai_config = get_openai_compatible_config()
+    api_key = str(runtime_ai_config.get("api_key") or "").strip()
+    if not api_key:
+        raise RuntimeError("OPENAI_API_KEY not set and config.toml [ai].api_key is empty")
+
+    model = str(runtime_ai_config.get("model") or get_default_model())
+    api_base = str(runtime_ai_config.get("base_url") or get_default_base_url())
+    wire_api = str(runtime_ai_config.get("wire_api") or get_default_wire_api())
+    reasoning_effort = get_summary_reasoning_effort()
+    image_inputs = image_inputs or []
 
     messages = [
         {
@@ -450,6 +536,54 @@ def _generate_report_with_ai(
     return str(response.choices[0].message.content or "").strip(), model
 
 
+def _generate_report_with_ai(
+    prompt_payload: str,
+    report_date: str,
+    *,
+    group_id: str,
+    image_inputs: Optional[List[Dict[str, Any]]] = None,
+) -> Tuple[str, str]:
+    image_refs = [str(image.get("image_ref") or "") for image in image_inputs or [] if image.get("image_ref")]
+    return _call_report_ai(
+        _build_report_user_prompt(prompt_payload, report_date, image_refs=image_refs),
+        group_id=group_id,
+        image_inputs=image_inputs,
+    )
+
+
+def _generate_chunk_summary_with_ai(
+    prompt_payload: str,
+    report_date: str,
+    *,
+    group_id: str,
+    chunk_index: int,
+    chunk_count: int,
+) -> Tuple[str, str]:
+    return _call_report_ai(
+        _build_chunk_summary_user_prompt(
+            prompt_payload,
+            report_date,
+            chunk_index=chunk_index,
+            chunk_count=chunk_count,
+        ),
+        group_id=group_id,
+        image_inputs=[],
+    )
+
+
+def _generate_final_report_from_chunks_with_ai(
+    chunk_summaries: List[str],
+    report_date: str,
+    *,
+    group_id: str,
+) -> Tuple[str, str]:
+    return _call_report_ai(
+        _build_final_report_user_prompt(chunk_summaries, report_date),
+        group_id=group_id,
+        image_inputs=[],
+    )
+
+
 def _write_report_file(group_id: str, report_date: str, summary_markdown: str) -> str:
     group_dir = Path(get_db_path_manager().get_group_dir(group_id))
     report_dir = group_dir / "daily_reports"
@@ -457,6 +591,79 @@ def _write_report_file(group_id: str, report_date: str, summary_markdown: str) -
     report_path = report_dir / f"{report_date}.md"
     report_path.write_text(summary_markdown, encoding="utf-8")
     return str(report_path)
+
+
+def _generate_daily_report_summary(
+    *,
+    group_id: str,
+    report_date: str,
+    topics: List[Dict[str, Any]],
+    log_callback: Optional[Callable[[str], None]] = None,
+) -> Tuple[str, str, Dict[str, Any]]:
+    full_prompt_payload = _build_prompt_payload_unclipped(group_id, report_date, topics)
+    if len(full_prompt_payload) <= MAX_PROMPT_CHARS:
+        image_inputs = _collect_report_images(topics)
+        if image_inputs:
+            _log(log_callback, f"🖼️ 将随日报传入 {len(image_inputs)} 张话题图片附件")
+        _log(log_callback, "🤖 正在调用 AI 生成日报...")
+        try:
+            summary, model = _generate_report_with_ai(
+                full_prompt_payload,
+                report_date,
+                group_id=group_id,
+                image_inputs=image_inputs,
+            )
+            image_retry_without_images = False
+        except Exception as exc:
+            if not image_inputs:
+                raise
+            _log(log_callback, f"⚠️ 带图片的 AI 请求失败，改用纯文本重试: {exc}")
+            summary, model = _generate_report_with_ai(
+                full_prompt_payload,
+                report_date,
+                group_id=group_id,
+                image_inputs=[],
+            )
+            image_retry_without_images = True
+        return summary, model, {
+            "generation_mode": "single",
+            "prompt_chars": len(full_prompt_payload),
+            "chunk_count": 1,
+            "image_count": len(image_inputs),
+            "image_retry_without_images": image_retry_without_images,
+        }
+
+    chunks = _split_topics_for_report_chunks(group_id, report_date, topics)
+    _log(log_callback, f"🧩 日报输入较长，拆分为 {len(chunks)} 个分块摘要后汇总")
+    chunk_summaries: List[str] = []
+    model = ""
+    for index, chunk_topics in enumerate(chunks, start=1):
+        prompt_payload = _build_prompt_payload_unclipped(group_id, report_date, chunk_topics)
+        _log(log_callback, f"🤖 正在生成日报分块摘要 {index}/{len(chunks)}，话题 {len(chunk_topics)} 个")
+        chunk_summary, chunk_model = _generate_chunk_summary_with_ai(
+            prompt_payload,
+            report_date,
+            group_id=group_id,
+            chunk_index=index,
+            chunk_count=len(chunks),
+        )
+        if not chunk_summary:
+            raise RuntimeError(f"AI 返回分块摘要为空: {index}/{len(chunks)}")
+        chunk_summaries.append(chunk_summary)
+        model = chunk_model or model
+
+    _log(log_callback, "🤖 正在合并分块摘要生成最终日报...")
+    summary, final_model = _generate_final_report_from_chunks_with_ai(
+        chunk_summaries,
+        report_date,
+        group_id=group_id,
+    )
+    return summary, final_model or model, {
+        "generation_mode": "chunked",
+        "prompt_chars": len(full_prompt_payload),
+        "chunk_count": len(chunks),
+        "chunk_topic_counts": [len(chunk) for chunk in chunks],
+    }
 
 
 def analyze_daily_topics(
@@ -485,17 +692,13 @@ def analyze_daily_topics(
         if topic_count == 0:
             summary = _build_empty_report_summary(report_date_text)
             model = ""
+            generation_meta = {"generation_mode": "empty", "chunk_count": 0}
         else:
-            prompt_payload = _build_prompt_payload(group_id, report_date_text, topics)
-            image_inputs = _collect_report_images(topics)
-            if image_inputs:
-                _log(log_callback, f"🖼️ 将随日报传入 {len(image_inputs)} 张话题图片附件")
-            _log(log_callback, "🤖 正在调用 AI 生成日报...")
-            summary, model = _generate_report_with_ai(
-                prompt_payload,
-                report_date_text,
+            summary, model, generation_meta = _generate_daily_report_summary(
                 group_id=group_id,
-                image_inputs=image_inputs,
+                report_date=report_date_text,
+                topics=topics,
+                log_callback=log_callback,
             )
             if not summary:
                 raise RuntimeError("AI 返回内容为空")
@@ -507,6 +710,7 @@ def analyze_daily_topics(
             topics=topics,
             report_path=report_path,
         )
+        raw_json.update(generation_meta)
         _upsert_report(
             conn,
             group_id=group_id,
