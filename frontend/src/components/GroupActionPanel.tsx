@@ -8,7 +8,6 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -25,7 +24,6 @@ import {
   Calendar,
   ChevronDown,
   ChevronRight,
-  Download,
   Edit,
   FileText,
   MessageSquare,
@@ -80,7 +78,6 @@ export interface GroupActionPanelProps {
   className?: string;
   mode: {
     activeMode: GroupActionMode;
-    onActiveModeChange: (mode: GroupActionMode) => void;
   };
   crawl: {
     selectedOption: GroupCrawlOption;
@@ -92,10 +89,8 @@ export interface GroupActionPanelProps {
     fetchingSingle: boolean;
     quickLastDays: number;
     onQuickLastDaysChange: (days: number) => void;
-    rangeStartDate: string;
-    onRangeStartDateChange: (date: string) => void;
-    rangeEndDate: string;
-    onRangeEndDateChange: (date: string) => void;
+    crawlMonth: string;
+    onCrawlMonthChange: (month: string) => void;
     latestDialogOpen: boolean;
     onLatestDialogOpenChange: (open: boolean) => void;
     settingsOpen: boolean;
@@ -137,7 +132,7 @@ export interface GroupActionPanelProps {
     onCrawlAll: () => void;
     onCrawlLatest: () => void;
     onCrawlLastDays: () => void;
-    onCrawlCustomRange: () => void;
+    onCrawlMonth: () => void;
     onIncrementalCrawl: () => void;
     onDeleteTopics: () => void;
     onDownloadByTime: () => void;
@@ -181,27 +176,16 @@ export default function GroupActionPanel({
 
   return (
     <>
-      <div className={`w-80 flex-shrink-0 sticky top-0 h-fit max-h-screen ${className}`}>
+      <div className={`w-80 flex-shrink-0 sticky top-0 h-fit max-h-full ${className}`}>
         <Card className="border border-gray-200 shadow-none h-full">
           <ScrollArea className="h-full">
             <CardContent className="p-4">
-              <Tabs
-                value={mode.activeMode}
-                onValueChange={(value) => mode.onActiveModeChange(value as GroupActionMode)}
-                className="space-y-4"
-              >
-                <TabsList className="grid w-full grid-cols-2">
-                  <TabsTrigger value="crawl" className="text-xs">
-                    <MessageSquare className="h-3 w-3 mr-1" />
+              {mode.activeMode === 'crawl' && (
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2 text-sm font-medium text-gray-900">
+                    <MessageSquare className="h-4 w-4" />
                     采集话题
-                  </TabsTrigger>
-                  <TabsTrigger value="download" className="text-xs">
-                    <Download className="h-3 w-3 mr-1" />
-                    下载文件
-                  </TabsTrigger>
-                </TabsList>
-
-                <TabsContent value="crawl" className="space-y-3 mt-4">
+                  </div>
                   <div className="space-y-4">
                     <div className="space-y-2">
                       <div className="text-xs font-medium text-gray-500">常用采集</div>
@@ -249,13 +233,13 @@ export default function GroupActionPanel({
                             </Button>
                             <AlertDialogContent>
                               <AlertDialogHeader>
-                                <AlertDialogTitle>获取最新或按时间区间</AlertDialogTitle>
+                                <AlertDialogTitle>获取最新或按范围</AlertDialogTitle>
                                 <AlertDialogDescription>
-                                  默认从最新开始抓取；也可选择最近N天或自定义时间范围。
+                                  默认从最新开始抓取；也可按最近天数或月份采集。
                                 </AlertDialogDescription>
                               </AlertDialogHeader>
                               <div className="space-y-3">
-                                <div className="text-xs text-gray-600">快速选择：最近N天</div>
+                                <div className="text-xs text-gray-600">最近天数</div>
                                 <div className="flex items-center gap-2">
                                   <Input
                                     type="number"
@@ -275,19 +259,12 @@ export default function GroupActionPanel({
                                     30天
                                   </Button>
                                 </div>
-                                <div className="text-[10px] text-gray-400">或 自定义日期范围</div>
-                                <div className="flex items-center gap-2">
+                                <div className="text-xs text-gray-600">选择月份</div>
+                                <div className="flex items-center gap-2 max-w-[180px]">
                                   <Input
-                                    type="date"
-                                    value={crawl.rangeStartDate}
-                                    onChange={(event) => crawl.onRangeStartDateChange(event.target.value)}
-                                    className="h-7 text-xs"
-                                  />
-                                  <span className="text-xs text-gray-500">~</span>
-                                  <Input
-                                    type="date"
-                                    value={crawl.rangeEndDate}
-                                    onChange={(event) => crawl.onRangeEndDateChange(event.target.value)}
+                                    type="month"
+                                    value={crawl.crawlMonth}
+                                    onChange={(event) => crawl.onCrawlMonthChange(event.target.value)}
                                     className="h-7 text-xs"
                                   />
                                 </div>
@@ -314,10 +291,10 @@ export default function GroupActionPanel({
                                   最近N天开始
                                 </AlertDialogAction>
                                 <AlertDialogAction
-                                  onClick={actions.onCrawlCustomRange}
+                                  onClick={actions.onCrawlMonth}
                                   className="bg-teal-600 hover:bg-teal-700 focus:ring-teal-600"
                                 >
-                                  按时间区间开始
+                                  按月份开始
                                 </AlertDialogAction>
                               </AlertDialogFooter>
                             </AlertDialogContent>
@@ -524,9 +501,11 @@ export default function GroupActionPanel({
                       调整页面爬取间隔和批次设置，避免触发反爬虫机制。
                     </div>
                   </div>
-                </TabsContent>
+                </div>
+              )}
 
-                <TabsContent value="download" className="space-y-3 mt-4">
+              {mode.activeMode === 'download' && (
+                <div className="space-y-3">
                   <div>
                     <div className="flex items-center gap-2 text-sm font-medium text-gray-900">
                       <FileText className="h-4 w-4" />
@@ -796,8 +775,8 @@ export default function GroupActionPanel({
                       </div>
                     </details>
                   </div>
-                </TabsContent>
-              </Tabs>
+                </div>
+              )}
 
               {(crawl.loading || download.loading) && (
                 <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
@@ -828,6 +807,11 @@ export default function GroupActionPanel({
           downloadInterval={download.downloadInterval}
           longSleepInterval={download.longSleepInterval}
           filesPerBatch={download.filesPerBatch}
+          downloadIntervalMin={download.downloadIntervalMin}
+          downloadIntervalMax={download.downloadIntervalMax}
+          longSleepIntervalMin={download.longSleepIntervalMin}
+          longSleepIntervalMax={download.longSleepIntervalMax}
+          useRandomInterval={download.useRandomInterval}
           onSettingsChange={download.onSettingsChange}
         />
       )}

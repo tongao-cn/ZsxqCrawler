@@ -19,6 +19,11 @@ interface DownloadSettingsDialogProps {
   downloadInterval: number;
   longSleepInterval: number;
   filesPerBatch: number;
+  downloadIntervalMin: number;
+  downloadIntervalMax: number;
+  longSleepIntervalMin: number;
+  longSleepIntervalMax: number;
+  useRandomInterval: boolean;
   onSettingsChange: (settings: {
     downloadInterval: number;
     longSleepInterval: number;
@@ -36,50 +41,70 @@ export default function DownloadSettingsDialog({
   downloadInterval,
   longSleepInterval,
   filesPerBatch,
+  downloadIntervalMin,
+  downloadIntervalMax,
+  longSleepIntervalMin,
+  longSleepIntervalMax,
+  useRandomInterval,
   onSettingsChange,
 }: DownloadSettingsDialogProps) {
   const [localFilesPerBatch, setLocalFilesPerBatch] = useState<number | ''>(filesPerBatch);
 
-  // 新增范围设置状态
-  const [downloadIntervalMin, setDownloadIntervalMin] = useState<number | ''>(15);
-  const [downloadIntervalMax, setDownloadIntervalMax] = useState<number | ''>(30);
-  const [longSleepIntervalMin, setLongSleepIntervalMin] = useState<number | ''>(30);
-  const [longSleepIntervalMax, setLongSleepIntervalMax] = useState<number | ''>(60);
-  const [useRandomInterval, setUseRandomInterval] = useState(true);
+  const [localDownloadIntervalMin, setLocalDownloadIntervalMin] = useState<number | ''>(downloadIntervalMin);
+  const [localDownloadIntervalMax, setLocalDownloadIntervalMax] = useState<number | ''>(downloadIntervalMax);
+  const [localLongSleepIntervalMin, setLocalLongSleepIntervalMin] = useState<number | ''>(longSleepIntervalMin);
+  const [localLongSleepIntervalMax, setLocalLongSleepIntervalMax] = useState<number | ''>(longSleepIntervalMax);
+  const [localUseRandomInterval, setLocalUseRandomInterval] = useState(useRandomInterval);
   const [selectedPreset, setSelectedPreset] = useState<'fast' | 'standard' | 'safe' | null>('fast');
 
   // 当对话框打开时，同步当前设置值
   useEffect(() => {
     if (open) {
       setLocalFilesPerBatch(filesPerBatch);
+      setLocalDownloadIntervalMin(downloadIntervalMin);
+      setLocalDownloadIntervalMax(downloadIntervalMax);
+      setLocalLongSleepIntervalMin(longSleepIntervalMin);
+      setLocalLongSleepIntervalMax(longSleepIntervalMax);
+      setLocalUseRandomInterval(useRandomInterval);
+      setSelectedPreset(null);
 
       // 如果是第一次打开，默认设置为快速配置
       if (downloadInterval === 1.0 && longSleepInterval === 60.0 && filesPerBatch === 10) {
         setPreset('fast');
       }
     }
-  }, [open, downloadInterval, longSleepInterval, filesPerBatch]);
+  }, [
+    open,
+    downloadInterval,
+    longSleepInterval,
+    filesPerBatch,
+    downloadIntervalMin,
+    downloadIntervalMax,
+    longSleepIntervalMin,
+    longSleepIntervalMax,
+    useRandomInterval,
+  ]);
 
   const handleSave = () => {
     // 确保所有值都有默认值
-    const finalDownloadIntervalMin = Number(downloadIntervalMin || 15);
-    const finalDownloadIntervalMax = Number(downloadIntervalMax || 30);
-    const finalLongSleepIntervalMin = Number(longSleepIntervalMin || 30);
-    const finalLongSleepIntervalMax = Number(longSleepIntervalMax || 60);
+    const finalDownloadIntervalMin = Number(localDownloadIntervalMin || 15);
+    const finalDownloadIntervalMax = Number(localDownloadIntervalMax || 30);
+    const finalLongSleepIntervalMin = Number(localLongSleepIntervalMin || 30);
+    const finalLongSleepIntervalMax = Number(localLongSleepIntervalMax || 60);
     const finalFilesPerBatch = Number(localFilesPerBatch || 10);
 
     onSettingsChange({
-      downloadInterval: useRandomInterval
+      downloadInterval: localUseRandomInterval
         ? (finalDownloadIntervalMin + finalDownloadIntervalMax) / 2
         : Math.round((finalDownloadIntervalMin + finalDownloadIntervalMax) / 2),
-      longSleepInterval: useRandomInterval
+      longSleepInterval: localUseRandomInterval
         ? (finalLongSleepIntervalMin + finalLongSleepIntervalMax) / 2
         : Math.round((finalLongSleepIntervalMin + finalLongSleepIntervalMax) / 2),
       filesPerBatch: finalFilesPerBatch,
-      downloadIntervalMin: useRandomInterval ? finalDownloadIntervalMin : undefined,
-      downloadIntervalMax: useRandomInterval ? finalDownloadIntervalMax : undefined,
-      longSleepIntervalMin: useRandomInterval ? finalLongSleepIntervalMin : undefined,
-      longSleepIntervalMax: useRandomInterval ? finalLongSleepIntervalMax : undefined,
+      downloadIntervalMin: localUseRandomInterval ? finalDownloadIntervalMin : undefined,
+      downloadIntervalMax: localUseRandomInterval ? finalDownloadIntervalMax : undefined,
+      longSleepIntervalMin: localUseRandomInterval ? finalLongSleepIntervalMin : undefined,
+      longSleepIntervalMax: localUseRandomInterval ? finalLongSleepIntervalMax : undefined,
     });
     onOpenChange(false);
   };
@@ -87,32 +112,37 @@ export default function DownloadSettingsDialog({
   const handleCancel = () => {
     // 重置为原始值
     setLocalFilesPerBatch(filesPerBatch);
+    setLocalDownloadIntervalMin(downloadIntervalMin);
+    setLocalDownloadIntervalMax(downloadIntervalMax);
+    setLocalLongSleepIntervalMin(longSleepIntervalMin);
+    setLocalLongSleepIntervalMax(longSleepIntervalMax);
+    setLocalUseRandomInterval(useRandomInterval);
     onOpenChange(false);
   };
 
   const setPreset = (preset: 'fast' | 'standard' | 'safe') => {
-    setUseRandomInterval(true);
+    setLocalUseRandomInterval(true);
     setSelectedPreset(preset);
     switch (preset) {
       case 'fast':
-        setDownloadIntervalMin(15);
-        setDownloadIntervalMax(30);
-        setLongSleepIntervalMin(30);
-        setLongSleepIntervalMax(60);
+        setLocalDownloadIntervalMin(15);
+        setLocalDownloadIntervalMax(30);
+        setLocalLongSleepIntervalMin(30);
+        setLocalLongSleepIntervalMax(60);
         setLocalFilesPerBatch(30);
         break;
       case 'standard':
-        setDownloadIntervalMin(30);
-        setDownloadIntervalMax(60);
-        setLongSleepIntervalMin(60);
-        setLongSleepIntervalMax(180);
+        setLocalDownloadIntervalMin(30);
+        setLocalDownloadIntervalMax(60);
+        setLocalLongSleepIntervalMin(60);
+        setLocalLongSleepIntervalMax(180);
         setLocalFilesPerBatch(15);
         break;
       case 'safe':
-        setDownloadIntervalMin(60);
-        setDownloadIntervalMax(180);
-        setLongSleepIntervalMin(180);
-        setLongSleepIntervalMax(300);
+        setLocalDownloadIntervalMin(60);
+        setLocalDownloadIntervalMax(180);
+        setLocalLongSleepIntervalMin(180);
+        setLocalLongSleepIntervalMax(300);
         setLocalFilesPerBatch(5);
         break;
     }
@@ -135,18 +165,18 @@ export default function DownloadSettingsDialog({
             <div className="flex gap-2">
               <Button
                 type="button"
-                variant={useRandomInterval ? "default" : "outline"}
+                variant={localUseRandomInterval ? "default" : "outline"}
                 size="sm"
-                onClick={() => setUseRandomInterval(true)}
+                onClick={() => setLocalUseRandomInterval(true)}
                 className="flex-1"
               >
                 随机间隔 (推荐)
               </Button>
               <Button
                 type="button"
-                variant={!useRandomInterval ? "default" : "outline"}
+                variant={!localUseRandomInterval ? "default" : "outline"}
                 size="sm"
-                onClick={() => setUseRandomInterval(false)}
+                onClick={() => setLocalUseRandomInterval(false)}
                 className="flex-1"
               >
                 固定间隔
@@ -162,21 +192,21 @@ export default function DownloadSettingsDialog({
                 type="number"
                 min="1"
                 max="300"
-                value={downloadIntervalMin}
+                value={localDownloadIntervalMin}
                 onChange={(e) => {
                   const value = e.target.value;
                   if (value === '') {
-                    setDownloadIntervalMin('');
+                    setLocalDownloadIntervalMin('');
                   } else {
                     const num = parseInt(value);
                     if (!isNaN(num)) {
-                      setDownloadIntervalMin(num);
+                      setLocalDownloadIntervalMin(num);
                     }
                   }
                 }}
                 onBlur={(e) => {
                   if (e.target.value === '') {
-                    setDownloadIntervalMin(15);
+                    setLocalDownloadIntervalMin(15);
                   }
                 }}
                 placeholder="15"
@@ -187,21 +217,21 @@ export default function DownloadSettingsDialog({
                 type="number"
                 min="1"
                 max="300"
-                value={downloadIntervalMax}
+                value={localDownloadIntervalMax}
                 onChange={(e) => {
                   const value = e.target.value;
                   if (value === '') {
-                    setDownloadIntervalMax('');
+                    setLocalDownloadIntervalMax('');
                   } else {
                     const num = parseInt(value);
                     if (!isNaN(num)) {
-                      setDownloadIntervalMax(num);
+                      setLocalDownloadIntervalMax(num);
                     }
                   }
                 }}
                 onBlur={(e) => {
                   if (e.target.value === '') {
-                    setDownloadIntervalMax(30);
+                    setLocalDownloadIntervalMax(30);
                   }
                 }}
                 placeholder="30"
@@ -209,9 +239,9 @@ export default function DownloadSettingsDialog({
               />
             </div>
             <p className="text-xs text-gray-500">
-              {useRandomInterval
+              {localUseRandomInterval
                 ? '每次下载文件后的随机等待时间范围'
-                : `每次下载文件后的固定等待时间 (取中间值: ${Math.round((Number(downloadIntervalMin || 15) + Number(downloadIntervalMax || 30)) / 2)}秒)`
+                : `每次下载文件后的固定等待时间 (取中间值: ${Math.round((Number(localDownloadIntervalMin || 15) + Number(localDownloadIntervalMax || 30)) / 2)}秒)`
               }
             </p>
           </div>
@@ -224,21 +254,21 @@ export default function DownloadSettingsDialog({
                 type="number"
                 min="10"
                 max="3600"
-                value={longSleepIntervalMin}
+                value={localLongSleepIntervalMin}
                 onChange={(e) => {
                   const value = e.target.value;
                   if (value === '') {
-                    setLongSleepIntervalMin('');
+                    setLocalLongSleepIntervalMin('');
                   } else {
                     const num = parseInt(value);
                     if (!isNaN(num)) {
-                      setLongSleepIntervalMin(num);
+                      setLocalLongSleepIntervalMin(num);
                     }
                   }
                 }}
                 onBlur={(e) => {
                   if (e.target.value === '') {
-                    setLongSleepIntervalMin(30);
+                    setLocalLongSleepIntervalMin(30);
                   }
                 }}
                 placeholder="30"
@@ -249,21 +279,21 @@ export default function DownloadSettingsDialog({
                 type="number"
                 min="10"
                 max="3600"
-                value={longSleepIntervalMax}
+                value={localLongSleepIntervalMax}
                 onChange={(e) => {
                   const value = e.target.value;
                   if (value === '') {
-                    setLongSleepIntervalMax('');
+                    setLocalLongSleepIntervalMax('');
                   } else {
                     const num = parseInt(value);
                     if (!isNaN(num)) {
-                      setLongSleepIntervalMax(num);
+                      setLocalLongSleepIntervalMax(num);
                     }
                   }
                 }}
                 onBlur={(e) => {
                   if (e.target.value === '') {
-                    setLongSleepIntervalMax(60);
+                    setLocalLongSleepIntervalMax(60);
                   }
                 }}
                 placeholder="60"
@@ -271,9 +301,9 @@ export default function DownloadSettingsDialog({
               />
             </div>
             <p className="text-xs text-gray-500">
-              {useRandomInterval
+              {localUseRandomInterval
                 ? '达到批次大小后的随机长时间休眠范围'
-                : `达到批次大小后的固定长时间休眠 (取中间值: ${Math.round((Number(longSleepIntervalMin || 30) + Number(longSleepIntervalMax || 60)) / 2)}秒)`
+                : `达到批次大小后的固定长时间休眠 (取中间值: ${Math.round((Number(localLongSleepIntervalMin || 30) + Number(localLongSleepIntervalMax || 60)) / 2)}秒)`
               }
             </p>
           </div>

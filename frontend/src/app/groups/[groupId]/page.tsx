@@ -6,7 +6,7 @@ import { useState, useRef, useCallback, useDeferredValue } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { ArrowLeft, MessageSquare, BarChart3, File, Sparkles, Search } from 'lucide-react';
+import { ArrowLeft, MessageSquare, BarChart3, File, Sparkles, TrendingUp, Search } from 'lucide-react';
 import { apiClient } from '@/lib/api';
 import { toast } from 'sonner';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -95,7 +95,6 @@ export default function GroupDetailPage() {
     onDebouncedChange: handleDebouncedSearchChange,
   });
   const deferredSearchTerm = useDeferredValue(searchTerm);
-  const [activeMode, setActiveMode] = useState<'crawl' | 'download'>('crawl');
   // 注意：topic_id 可能超过 JS 安全整数范围，这里统一按字符串处理 ID
   const [clearingCache, setClearingCache] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -223,10 +222,8 @@ export default function GroupDetailPage() {
     crawlPagesPerBatch,
     quickLastDays,
     setQuickLastDays,
-    rangeStartDate,
-    setRangeStartDate,
-    rangeEndDate,
-    setRangeEndDate,
+    crawlMonth,
+    setCrawlMonth,
     latestDialogOpen,
     setLatestDialogOpen,
     singleTopicId,
@@ -236,7 +233,7 @@ export default function GroupDetailPage() {
     handleCrawlAll,
     handleIncrementalCrawl,
     handleCrawlLastDays,
-    handleCrawlCustomRange,
+    handleCrawlMonth,
     handleFetchSingleTopic,
     handleDeleteTopics,
     handleCrawlSettingsChange,
@@ -359,6 +356,76 @@ export default function GroupDetailPage() {
     );
   }
 
+  const contextActionPanel = (
+    <GroupActionPanel
+      mode={{
+        activeMode: activeTab === 'files' ? 'download' : 'crawl',
+      }}
+      crawl={{
+        selectedOption: selectedCrawlOption || 'all',
+        onSelectedOptionChange: setSelectedCrawlOption,
+        loading: crawlLoading as any,
+        topicsCount: groupStats?.topics_count || 0,
+        singleTopicId,
+        onSingleTopicIdChange: setSingleTopicId,
+        fetchingSingle,
+        quickLastDays,
+        onQuickLastDaysChange: setQuickLastDays,
+        crawlMonth,
+        onCrawlMonthChange: setCrawlMonth,
+        latestDialogOpen,
+        onLatestDialogOpenChange: setLatestDialogOpen,
+        settingsOpen: crawlSettingsOpen,
+        onSettingsOpenChange: setCrawlSettingsOpen,
+        crawlInterval,
+        longSleepInterval: crawlLongSleepInterval,
+        pagesPerBatch: crawlPagesPerBatch,
+        onSettingsChange: handleCrawlSettingsChange,
+      }}
+      download={{
+        selectedOption: selectedDownloadOption || 'time',
+        onSelectedOptionChange: setSelectedDownloadOption,
+        loading: fileLoading as any,
+        localFileCount,
+        localFileStats,
+        sourceFileCount: groupInfo?.statistics?.files?.count,
+        dialogOpen: downloadDialogOpen,
+        onDialogOpenChange: setDownloadDialogOpen,
+        quickLastDays: downloadQuickLastDays,
+        onQuickLastDaysChange: setDownloadQuickLastDays,
+        rangeStartDate: downloadRangeStartDate,
+        onRangeStartDateChange: setDownloadRangeStartDate,
+        rangeEndDate: downloadRangeEndDate,
+        onRangeEndDateChange: setDownloadRangeEndDate,
+        settingsOpen: showSettingsDialog,
+        onSettingsOpenChange: setShowSettingsDialog,
+        downloadInterval,
+        longSleepInterval,
+        filesPerBatch,
+        downloadIntervalMin,
+        downloadIntervalMax,
+        longSleepIntervalMin,
+        longSleepIntervalMax,
+        useRandomInterval,
+        onSettingsChange: handleSettingsChange,
+      }}
+      actions={{
+        onFetchSingleTopic: handleFetchSingleTopic,
+        onCrawlAll: handleCrawlAll,
+        onCrawlLatest: handleCrawlLatest,
+        onCrawlLastDays: handleCrawlLastDays,
+        onCrawlMonth: handleCrawlMonth,
+        onIncrementalCrawl: handleIncrementalCrawl,
+        onDeleteTopics: handleDeleteTopics,
+        onDownloadByTime: handleDownloadByTime,
+        onDownloadByCount: handleDownloadByCount,
+        onClearFileDatabase: handleClearFileDatabase,
+        onEmptyTopicsBlocked: () => toast.error('数据库为空，请先执行全量爬取'),
+        onEmptyFilesBlocked: () => toast.error('当前没有可下载的文件记录，请先采集包含附件的话题'),
+      }}
+    />
+  );
+
   return (
     <div className="h-screen bg-gray-50 overflow-hidden flex flex-col">
       <GroupTopBar
@@ -382,9 +449,6 @@ export default function GroupDetailPage() {
         <GroupSidebar
           group={group}
           groupStats={groupStats}
-          groupInfo={groupInfo}
-          localFileCount={localFileCount}
-          localFileStats={localFileStats}
           accountSelf={accountSelf}
           accounts={accounts}
           groupAccount={groupAccount}
@@ -404,7 +468,7 @@ export default function GroupDetailPage() {
           <Tabs value={activeTab} onValueChange={setActiveTab} className="flex flex-col h-full">
             {/* 固定的标签页头部 */}
             <div className="flex-shrink-0 mb-4">
-              <TabsList className="grid w-full grid-cols-5">
+              <TabsList className="grid w-full grid-cols-6">
                 <TabsTrigger value="topics" className="flex items-center gap-2">
                   <MessageSquare className="h-4 w-4" />
                   话题列表
@@ -421,6 +485,10 @@ export default function GroupDetailPage() {
                   <Sparkles className="h-4 w-4" />
                   每日总结
                 </TabsTrigger>
+                <TabsTrigger value="stock-concepts" className="flex items-center gap-2">
+                  <TrendingUp className="h-4 w-4" />
+                  股票概念
+                </TabsTrigger>
                 <TabsTrigger value="stock-topic-analysis" className="flex items-center gap-2">
                   <Search className="h-4 w-4" />
                   个股话题
@@ -429,7 +497,8 @@ export default function GroupDetailPage() {
             </div>
 
             {/* 话题内容区域 */}
-            <TabsContent value="topics" className="flex-1 flex flex-col min-h-0">
+            <TabsContent value="topics" className="flex-1 min-h-0">
+              <div className="flex h-full min-h-0 gap-4">
               {/* 可滚动的话题列表区域 */}
               <div className="flex-1 flex flex-col min-h-0">
                 {topicsLoading ? (
@@ -486,11 +555,16 @@ export default function GroupDetailPage() {
                   </>
                 )}
               </div>
+              {contextActionPanel}
+              </div>
             </TabsContent>
 
-            <TabsContent value="files" className="flex-1 flex flex-col min-h-0">
+            <TabsContent value="files" className="flex-1 min-h-0">
+              <div className="flex h-full min-h-0 gap-4">
               <div className="flex-1 min-h-0 overflow-auto">
                 <GroupFileAnalysisPanel groupId={groupId} />
+              </div>
+              {contextActionPanel}
               </div>
             </TabsContent>
 
@@ -508,6 +582,17 @@ export default function GroupDetailPage() {
                 <DailyTopicAnalysisPanel
                   groupId={groupId}
                   onTaskCreated={handleTaskCreated}
+                  mode="report"
+                />
+              </div>
+            </TabsContent>
+
+            <TabsContent value="stock-concepts" className="flex-1 flex flex-col min-h-0">
+              <div className="flex-1 min-h-0 overflow-auto">
+                <DailyTopicAnalysisPanel
+                  groupId={groupId}
+                  onTaskCreated={handleTaskCreated}
+                  mode="stock-concepts"
                 />
               </div>
             </TabsContent>
@@ -523,79 +608,6 @@ export default function GroupDetailPage() {
           </Tabs>
         </div>
 
-
-
-        {/* 右侧：爬取和下载菜单 - 固定宽度，使用sticky定位 */}
-        <GroupActionPanel
-          mode={{
-            activeMode,
-            onActiveModeChange: setActiveMode,
-          }}
-          crawl={{
-            selectedOption: selectedCrawlOption || 'all',
-            onSelectedOptionChange: setSelectedCrawlOption,
-            loading: crawlLoading as any,
-            topicsCount: groupStats?.topics_count || 0,
-            singleTopicId,
-            onSingleTopicIdChange: setSingleTopicId,
-            fetchingSingle,
-            quickLastDays,
-            onQuickLastDaysChange: setQuickLastDays,
-            rangeStartDate,
-            onRangeStartDateChange: setRangeStartDate,
-            rangeEndDate,
-            onRangeEndDateChange: setRangeEndDate,
-            latestDialogOpen,
-            onLatestDialogOpenChange: setLatestDialogOpen,
-            settingsOpen: crawlSettingsOpen,
-            onSettingsOpenChange: setCrawlSettingsOpen,
-            crawlInterval,
-            longSleepInterval: crawlLongSleepInterval,
-            pagesPerBatch: crawlPagesPerBatch,
-            onSettingsChange: handleCrawlSettingsChange,
-          }}
-          download={{
-            selectedOption: selectedDownloadOption || 'time',
-            onSelectedOptionChange: setSelectedDownloadOption,
-            loading: fileLoading as any,
-            localFileCount,
-            localFileStats,
-            sourceFileCount: groupInfo?.statistics?.files?.count,
-            dialogOpen: downloadDialogOpen,
-            onDialogOpenChange: setDownloadDialogOpen,
-            quickLastDays: downloadQuickLastDays,
-            onQuickLastDaysChange: setDownloadQuickLastDays,
-            rangeStartDate: downloadRangeStartDate,
-            onRangeStartDateChange: setDownloadRangeStartDate,
-            rangeEndDate: downloadRangeEndDate,
-            onRangeEndDateChange: setDownloadRangeEndDate,
-            settingsOpen: showSettingsDialog,
-            onSettingsOpenChange: setShowSettingsDialog,
-            downloadInterval,
-            longSleepInterval,
-            filesPerBatch,
-            downloadIntervalMin,
-            downloadIntervalMax,
-            longSleepIntervalMin,
-            longSleepIntervalMax,
-            useRandomInterval,
-            onSettingsChange: handleSettingsChange,
-          }}
-          actions={{
-            onFetchSingleTopic: handleFetchSingleTopic,
-            onCrawlAll: handleCrawlAll,
-            onCrawlLatest: handleCrawlLatest,
-            onCrawlLastDays: handleCrawlLastDays,
-            onCrawlCustomRange: handleCrawlCustomRange,
-            onIncrementalCrawl: handleIncrementalCrawl,
-            onDeleteTopics: handleDeleteTopics,
-            onDownloadByTime: handleDownloadByTime,
-            onDownloadByCount: handleDownloadByCount,
-            onClearFileDatabase: handleClearFileDatabase,
-            onEmptyTopicsBlocked: () => toast.error('数据库为空，请先执行全量爬取'),
-            onEmptyFilesBlocked: () => toast.error('当前没有可下载的文件记录，请先采集包含附件的话题'),
-          }}
-        />
       </div>
 
       {taskDockVisible && (

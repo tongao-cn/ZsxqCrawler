@@ -28,6 +28,26 @@ interface CrawlLatestDialogProps {
   defaultPerPage?: number;
 }
 
+function getCurrentMonth() {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+}
+
+function buildMonthRange(month: string) {
+  const matched = /^(\d{4})-(\d{2})$/.exec(month);
+  if (!matched) return null;
+
+  const year = Number(matched[1]);
+  const monthNumber = Number(matched[2]);
+  if (monthNumber < 1 || monthNumber > 12) return null;
+
+  const lastDay = new Date(year, monthNumber, 0).getDate();
+  return {
+    startTime: `${month}-01`,
+    endTime: `${month}-${String(lastDay).padStart(2, '0')}`,
+  };
+}
+
 export default function CrawlLatestDialog({
   open,
   onOpenChange,
@@ -38,49 +58,62 @@ export default function CrawlLatestDialog({
 }: CrawlLatestDialogProps) {
   const [mode, setMode] = useState<'latest' | 'range'>('latest');
   const [lastDays, setLastDays] = useState<number | ''>(defaultLastDays);
-  const [startTime, setStartTime] = useState('');
-  const [endTime, setEndTime] = useState('');
+  const [month, setMonth] = useState(getCurrentMonth);
   const [perPage, setPerPage] = useState<number | ''>(defaultPerPage);
 
   useEffect(() => {
     if (open) {
       setMode('latest');
       setLastDays(defaultLastDays);
-      setStartTime('');
-      setEndTime('');
+      setMonth(getCurrentMonth());
       setPerPage(defaultPerPage);
     }
   }, [open, defaultLastDays, defaultPerPage]);
 
-  const buildRangePayload = (useCustomRange: boolean) => {
+  const buildLastDaysPayload = () => {
     const payload: {
       mode: 'latest' | 'range';
-      startTime?: string;
-      endTime?: string;
       lastDays?: number;
       perPage?: number;
     } = { mode: 'range' };
 
-    if (useCustomRange) {
-      if (startTime) payload.startTime = new Date(startTime).toISOString();
-      if (endTime) payload.endTime = new Date(endTime).toISOString();
-      if (perPage !== '' && !Number.isNaN(Number(perPage))) {
-        payload.perPage = Number(perPage);
-      }
-    } else if (lastDays !== '' && !Number.isNaN(Number(lastDays))) {
-      payload.lastDays = Number(lastDays);
+    if (lastDays !== '' && !Number.isNaN(Number(lastDays))) {
+      payload.lastDays = Math.max(1, Number(lastDays));
+    }
+    if (perPage !== '' && !Number.isNaN(Number(perPage))) {
+      payload.perPage = Number(perPage);
+    }
+
+    return payload;
+  };
+
+  const buildMonthPayload = () => {
+    const range = buildMonthRange(month);
+    const payload: {
+      mode: 'latest' | 'range';
+      startTime?: string;
+      endTime?: string;
+      perPage?: number;
+    } = { mode: 'range' };
+
+    if (range) {
+      payload.startTime = range.startTime;
+      payload.endTime = range.endTime;
+    }
+    if (perPage !== '' && !Number.isNaN(Number(perPage))) {
+      payload.perPage = Number(perPage);
     }
 
     return payload;
   };
 
   const handleLatest = () => onConfirm({ mode: 'latest' });
-  const handleLastDays = () => onConfirm(buildRangePayload(false));
-  const handleCustomRange = () => {
-    if (!startTime && !endTime) {
+  const handleLastDays = () => onConfirm(buildLastDaysPayload());
+  const handleMonth = () => {
+    if (!buildMonthRange(month)) {
       return;
     }
-    onConfirm(buildRangePayload(true));
+    onConfirm(buildMonthPayload());
   };
 
   return (
@@ -89,7 +122,7 @@ export default function CrawlLatestDialog({
         <DialogHeader>
           <DialogTitle>获取最新话题</DialogTitle>
           <DialogDescription>
-            默认从最新开始抓取；也可以按最近N天或自定义时间范围采集，首次数据库为空也可使用。
+            默认从最新开始抓取；也可以按最近天数或月份采集。
           </DialogDescription>
         </DialogHeader>
 
@@ -113,7 +146,7 @@ export default function CrawlLatestDialog({
                 onClick={() => setMode('range')}
                 className="flex-1"
               >
-                按时间区间
+                按范围
               </Button>
             </div>
           </div>
@@ -121,7 +154,7 @@ export default function CrawlLatestDialog({
           {mode === 'range' ? (
             <div className="space-y-4">
               <div className="space-y-2">
-                <Label>最近天数（可选）</Label>
+                <Label>最近天数</Label>
                 <Input
                   type="number"
                   min="1"
@@ -137,28 +170,15 @@ export default function CrawlLatestDialog({
                     }
                   }}
                 />
-                <p className="text-xs text-muted-foreground">
-                  填写“最近N天”或下方自定义开始/结束时间，留空则不限制该项。
-                </p>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div className="space-y-2">
-                  <Label>开始时间（可选）</Label>
-                  <Input
-                    type="datetime-local"
-                    value={startTime}
-                    onChange={(e) => setStartTime(e.target.value)}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>结束时间（可选）</Label>
-                  <Input
-                    type="datetime-local"
-                    value={endTime}
-                    onChange={(e) => setEndTime(e.target.value)}
-                  />
-                </div>
+              <div className="space-y-2">
+                <Label>月份</Label>
+                <Input
+                  type="month"
+                  value={month}
+                  onChange={(e) => setMonth(e.target.value)}
+                />
               </div>
 
               <div className="space-y-2">
@@ -183,14 +203,14 @@ export default function CrawlLatestDialog({
                   }}
                 />
                 <p className="text-xs text-muted-foreground">
-                  用于时间区间采集的每页数量，默认 {defaultPerPage}。
+                  用于月份采集的每页数量，默认 {defaultPerPage}。
                 </p>
               </div>
             </div>
           ) : (
             <div className="text-xs text-muted-foreground space-y-1">
               <p>• 直接点击“确认开始”将从最新话题向后增量抓取。</p>
-              <p>• 如需限定时间范围，请切换到“按时间区间”。</p>
+              <p>• 如需限定范围，请切换到“按范围”。</p>
             </div>
           )}
         </div>
@@ -207,11 +227,11 @@ export default function CrawlLatestDialog({
           <Button type="button" variant="default" onClick={handleLatest} disabled={submitting}>
             {submitting ? '创建任务中...' : '从最新开始'}
           </Button>
-          <Button type="button" variant="secondary" onClick={handleLastDays} disabled={submitting || (mode === 'range' && lastDays === '')}>
+          <Button type="button" variant="secondary" onClick={handleLastDays} disabled={submitting || lastDays === ''}>
             最近N天开始
           </Button>
-          <Button type="button" variant="secondary" onClick={handleCustomRange} disabled={submitting || (!startTime && !endTime)}>
-            按时间区间开始
+          <Button type="button" variant="secondary" onClick={handleMonth} disabled={submitting || !buildMonthRange(month)}>
+            按月份开始
           </Button>
         </DialogFooter>
       </DialogContent>

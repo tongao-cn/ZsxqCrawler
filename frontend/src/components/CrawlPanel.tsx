@@ -196,13 +196,13 @@ export default function CrawlPanel({ onStatsUpdate, selectedGroup }: CrawlPanelP
             获取最新话题
           </CardTitle>
           <CardDescription>
-            默认从最新开始，也可按时间区间采集
+            默认从最新开始，也可按月份采集
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="text-sm text-muted-foreground space-y-2">
             <p>✅ 默认：直接从最新话题开始增量抓取</p>
-            <p>🕒 可选：按时间区间采集（首次也可用）</p>
+            <p>🕒 可选：按月份采集（首次也可用）</p>
           </div>
           <Button
             onClick={() => setCrawlLatestOpen(true)}

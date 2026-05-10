@@ -18,6 +18,26 @@ interface UseCrawlActionsOptions {
   loadTopics: () => void | Promise<void>;
 }
 
+function getCurrentMonth() {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+}
+
+function buildMonthRange(month: string) {
+  const matched = /^(\d{4})-(\d{2})$/.exec(month);
+  if (!matched) return null;
+
+  const year = Number(matched[1]);
+  const monthNumber = Number(matched[2]);
+  if (monthNumber < 1 || monthNumber > 12) return null;
+
+  const lastDay = new Date(year, monthNumber, 0).getDate();
+  return {
+    startTime: `${month}-01`,
+    endTime: `${month}-${String(lastDay).padStart(2, '0')}`,
+  };
+}
+
 export function useCrawlActions({
   groupId,
   onTaskCreated,
@@ -36,8 +56,7 @@ export function useCrawlActions({
   const [crawlLongSleepIntervalMin, setCrawlLongSleepIntervalMin] = useState<number>(180);
   const [crawlLongSleepIntervalMax, setCrawlLongSleepIntervalMax] = useState<number>(300);
   const [quickLastDays, setQuickLastDays] = useState<number>(30);
-  const [rangeStartDate, setRangeStartDate] = useState<string>('');
-  const [rangeEndDate, setRangeEndDate] = useState<string>('');
+  const [crawlMonth, setCrawlMonth] = useState<string>(getCurrentMonth);
   const [latestDialogOpen, setLatestDialogOpen] = useState<boolean>(false);
   const [singleTopicId, setSingleTopicId] = useState<string>('');
   const [fetchingSingle, setFetchingSingle] = useState<boolean>(false);
@@ -122,28 +141,15 @@ export function useCrawlActions({
     }
   }, [buildCrawlSettings, groupId, handleTaskCreateError, onTaskCreated, reloadAfterTaskCreated]);
 
-  const buildCrawlRangeParams = useCallback((useCustomRange: boolean) => {
-    const params: any = {};
-
-    if (useCustomRange) {
-      if (rangeStartDate) params.startTime = rangeStartDate;
-      if (rangeEndDate) params.endTime = rangeEndDate;
-    } else {
-      params.lastDays = Math.max(1, quickLastDays || 1);
-    }
-
-    return {
-      ...params,
-      ...buildCrawlSettings(),
-    };
-  }, [buildCrawlSettings, quickLastDays, rangeEndDate, rangeStartDate]);
-
   const handleCrawlLastDays = useCallback(async () => {
     try {
       setLatestDialogOpen(false);
       setCrawlLoading('range');
 
-      const response = await apiClient.crawlByTimeRange(groupId, buildCrawlRangeParams(false));
+      const response = await apiClient.crawlByTimeRange(groupId, {
+        lastDays: Math.max(1, quickLastDays || 1),
+        ...buildCrawlSettings(),
+      });
       const taskId = (response as any).task_id;
       toast.success(`任务已创建: ${taskId}`);
       onTaskCreated(taskId);
@@ -153,11 +159,12 @@ export function useCrawlActions({
     } finally {
       setCrawlLoading(null);
     }
-  }, [buildCrawlRangeParams, groupId, handleTaskCreateError, onTaskCreated, reloadAfterTaskCreated]);
+  }, [buildCrawlSettings, groupId, handleTaskCreateError, onTaskCreated, quickLastDays, reloadAfterTaskCreated]);
 
-  const handleCrawlCustomRange = useCallback(async () => {
-    if (!rangeStartDate && !rangeEndDate) {
-      toast.error('请输入开始日期或结束日期');
+  const handleCrawlMonth = useCallback(async () => {
+    const range = buildMonthRange(crawlMonth);
+    if (!range) {
+      toast.error('请选择有效月份');
       return;
     }
 
@@ -165,7 +172,10 @@ export function useCrawlActions({
       setLatestDialogOpen(false);
       setCrawlLoading('range');
 
-      const response = await apiClient.crawlByTimeRange(groupId, buildCrawlRangeParams(true));
+      const response = await apiClient.crawlByTimeRange(groupId, {
+        ...range,
+        ...buildCrawlSettings(),
+      });
       const taskId = (response as any).task_id;
       toast.success(`任务已创建: ${taskId}`);
       onTaskCreated(taskId);
@@ -176,12 +186,11 @@ export function useCrawlActions({
       setCrawlLoading(null);
     }
   }, [
-    buildCrawlRangeParams,
+    buildCrawlSettings,
+    crawlMonth,
     groupId,
     handleTaskCreateError,
     onTaskCreated,
-    rangeEndDate,
-    rangeStartDate,
     reloadAfterTaskCreated,
   ]);
 
@@ -242,10 +251,8 @@ export function useCrawlActions({
     crawlPagesPerBatch,
     quickLastDays,
     setQuickLastDays,
-    rangeStartDate,
-    setRangeStartDate,
-    rangeEndDate,
-    setRangeEndDate,
+    crawlMonth,
+    setCrawlMonth,
     latestDialogOpen,
     setLatestDialogOpen,
     singleTopicId,
@@ -255,7 +262,7 @@ export function useCrawlActions({
     handleCrawlAll,
     handleIncrementalCrawl,
     handleCrawlLastDays,
-    handleCrawlCustomRange,
+    handleCrawlMonth,
     handleFetchSingleTopic,
     handleDeleteTopics,
     handleCrawlSettingsChange,
