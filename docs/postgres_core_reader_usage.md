@@ -99,6 +99,14 @@ The export is read-only and uses existing `zsxq_core` tables. Each row is one `g
 - `concepts`, `reasons`, `avg_confidence`, `max_confidence`: extraction evidence for audit and later factor review.
 - `likes_count`, `comments_count`, `reading_count`: summed source-topic engagement metrics.
 
+To run a first return smoke, use KnowActionSystem as the market-data source:
+
+```powershell
+uv run run-a-share-research-return-smoke --group-id 51111112855254 --start-date 2026-05-01 --end-date 2026-05-12 --hold-days 5 --output output\a_share_research\51111112855254_return_smoke.csv
+```
+
+The return smoke reads ZsxqCrawler signals, resolves stock codes through KnowActionSystem `stock_basic`, and reads KnowActionSystem `daily_quotes`. The first execution model is intentionally simple: signal day `T`, entry at `T+1` tradable open, exit at the `hold_days`-th tradable close after entry. Rows near the available quote tail may be flagged as `completed_forced_end_of_sample`; use earlier historical windows for formal performance conclusions.
+
 ## Access Rules
 
 - `zsxq_reader` may `SELECT` from `zsxq_core`.
