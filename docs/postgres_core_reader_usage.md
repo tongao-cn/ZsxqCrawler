@@ -24,6 +24,10 @@ Recommended starting points:
 - `zsxq_core.files`: file metadata and download status.
 - `zsxq_core.file_ai_analyses`: AI summaries for files.
 - `zsxq_core.daily_ai_reports`: daily topic reports.
+- `zsxq_core.zsxq_a_share_daily_mentions`: group-scoped A-share recommendation-pool mention counts.
+- `zsxq_core.zsxq_a_share_topic_stock_extractions`: topic-level stock, concept, reason, and confidence extraction evidence.
+- `zsxq_core.daily_stock_concepts`: same-day stock-concept summaries derived from group topics.
+- `zsxq_core.stock_topic_analyses`: latest saved per-stock topic summaries.
 - `zsxq_core.accounts` and `zsxq_core.group_account_map`: account metadata, if the reader role is allowed to inspect account ownership.
 
 ## Example Queries
@@ -58,6 +62,42 @@ WHERE f.group_id = 51111112855254
 ORDER BY f.create_time DESC
 LIMIT 50;
 ```
+
+A-share recommendation-pool rows:
+
+```sql
+SELECT group_id, mention_date, company, mentions_count, updated_at
+FROM zsxq_core.zsxq_a_share_daily_mentions
+WHERE group_id = '51111112855254'
+ORDER BY mention_date DESC, mentions_count DESC
+LIMIT 100;
+```
+
+Topic-level A-share evidence:
+
+```sql
+SELECT group_id, topic_date, topic_id, stock_name, stock_code, market,
+       concepts_json, reason, confidence
+FROM zsxq_core.zsxq_a_share_topic_stock_extractions
+WHERE group_id = '51111112855254'
+ORDER BY topic_date DESC, stock_name ASC
+LIMIT 100;
+```
+
+## A-share Research Dataset Export
+
+For downstream stock research, export a daily stock-signal CSV:
+
+```powershell
+uv run export-a-share-research-dataset --group-id 51111112855254 --start-date 2026-05-01 --end-date 2026-05-12 --output output\a_share_research\51111112855254.csv
+```
+
+The export is read-only and uses existing `zsxq_core` tables. Each row is one `group_id + signal_date + stock_name` signal with:
+
+- `mention_count`: same-day recommendation-pool mentions from `zsxq_a_share_daily_mentions`.
+- `topic_count`, `topic_ids`, `topic_titles`: topic-level evidence from `zsxq_a_share_topic_stock_extractions` plus topic metrics.
+- `concepts`, `reasons`, `avg_confidence`, `max_confidence`: extraction evidence for audit and later factor review.
+- `likes_count`, `comments_count`, `reading_count`: summed source-topic engagement metrics.
 
 ## Access Rules
 
