@@ -22,6 +22,7 @@ Turn the existing A-share recommendation, stock-concept, and stock-topic outputs
 - Keep implementation read-only against PostgreSQL.
 - Use KnowActionSystem market data for return checks; do not introduce a second market data source.
 - For pool rotation, use signal day `T` to form the recommendation pool, buy at the next tradable open, and sell at the following tradable open to avoid same-day A-share sell assumptions.
+- Use KnowActionSystem `trade_calendar` (`SSE`, `is_open=1`) as the trade-date source for pool rotation; use `daily_quotes` only for entry and exit prices.
 - If multiple signal days map to the same entry date, keep the latest signal day so each tradable entry date contributes at most one portfolio return.
 
 ## Docs Checked
@@ -59,7 +60,7 @@ Turn the existing A-share recommendation, stock-concept, and stock-topic outputs
 - Added a KnowActionSystem-backed return-smoke service and CLI using `daily_quotes`.
 - Validated a real group smoke for `51111112855254`, `2026-05-01` to `2026-05-12`, `hold_days=5`; the run wrote `output\a_share_research\51111112855254_return_smoke_20260501_20260512.csv`.
 - The real smoke completed technically, but all completed rows were marked `completed_forced_end_of_sample` because the signal window is close to the current quote tail. Treat it as plumbing validation, not a formal performance conclusion.
-- Added a KnowActionSystem-backed recommendation-pool rotation backtest. The 3/7/14/21-day pools are rebuilt from trailing recommendation mentions each signal day, entered on the next tradable open, exited at the following tradable open, deduplicated by entry date, and summarized by daily, weekly, and monthly returns.
+- Added a KnowActionSystem-backed recommendation-pool rotation backtest. The 3/7/14/21-day pools are rebuilt from trailing recommendation mentions each signal day, entered on the next `trade_calendar` open day, exited at the following open day, deduplicated by entry date, and summarized by daily, weekly, and monthly returns.
 - Validated a real pool-rotation smoke for `51111112855254`, `2026-05-01` to `2026-05-12`; the run wrote `output\a_share_research\51111112855254_pool_rotation_daily_20260501_20260512.csv` and `output\a_share_research\51111112855254_pool_rotation_period_20260501_20260512.csv`.
 
 ## Changed Files
@@ -89,4 +90,4 @@ Turn the existing A-share recommendation, stock-concept, and stock-topic outputs
 - `uv run python -m unittest tests.test_a_share_research_export_service_helpers tests.test_a_share_research_return_smoke_service_helpers tests.test_a_share_recommendation_pool_rotation_helpers`: passed.
 - `uv run python -m py_compile backend\services\a_share_research_export_service.py backend\services\a_share_research_return_smoke_service.py scripts\export_a_share_research_dataset.py scripts\run_a_share_research_return_smoke.py scripts\run_a_share_recommendation_pool_rotation.py`: passed.
 - `uv run run-a-share-recommendation-pool-rotation --help`: passed.
-- `uv run run-a-share-recommendation-pool-rotation --group-id 51111112855254 --start-date 2026-05-01 --end-date 2026-05-12 --daily-output output\a_share_research\51111112855254_pool_rotation_daily_20260501_20260512.csv --period-output output\a_share_research\51111112855254_pool_rotation_period_20260501_20260512.csv`: passed; daily rows `24`, completed `16`, skipped `8` due to missing entry or exit date at the quote tail. Monthly compound returns: 3-day `0.062794`, 7-day `0.049257`, 14-day `0.051931`, 21-day `0.068179`.
+- `uv run run-a-share-recommendation-pool-rotation --group-id 51111112855254 --start-date 2026-05-01 --end-date 2026-05-12 --daily-output output\a_share_research\51111112855254_pool_rotation_daily_20260501_20260512.csv --period-output output\a_share_research\51111112855254_pool_rotation_period_20260501_20260512.csv`: passed; daily rows `24`, completed `16`, skipped `8` due to missing quote prices at the quote tail. Monthly compound returns: 3-day `0.062794`, 7-day `0.049257`, 14-day `0.051931`, 21-day `0.068179`.

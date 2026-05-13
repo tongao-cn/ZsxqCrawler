@@ -29,6 +29,7 @@ DEFAULT_KNOW_ACTION_ENV_PATH = Path(os.getenv("KNOW_ACTION_ENV_PATH", r"C:\Dev\K
 DEFAULT_RETURN_HOLD_DAYS = 5
 DEFAULT_POOL_ROTATION_WINDOWS = DEFAULT_RANKING_WINDOWS
 DEFAULT_POOL_ROTATION_TOP_N = DEFAULT_RANKING_TOP_N
+DEFAULT_TRADE_CALENDAR_EXCHANGE = "SSE"
 DEFAULT_RETURN_SMOKE_FIELDS = [
     "group_id",
     "signal_date",
@@ -279,6 +280,34 @@ def load_knowaction_quotes(
             ]
 
 
+def load_knowaction_trade_dates(
+    start_date: date,
+    end_date: date,
+    *,
+    exchange: str = DEFAULT_TRADE_CALENDAR_EXCHANGE,
+    env_path: Path = DEFAULT_KNOW_ACTION_ENV_PATH,
+) -> List[str]:
+    normalized_exchange = _normalize_text(exchange).upper() or DEFAULT_TRADE_CALENDAR_EXCHANGE
+    with get_knowaction_connection(env_path) as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT cal_date
+                FROM trade_calendar
+                WHERE exchange = %s
+                  AND cal_date >= %s
+                  AND cal_date <= %s
+                  AND is_open = 1
+                ORDER BY cal_date ASC
+                """,
+                (normalized_exchange, start_date, end_date),
+            )
+            return [
+                row[0].isoformat() if hasattr(row[0], "isoformat") else _normalize_text(row[0])
+                for row in cur.fetchall()
+            ]
+
+
 def _is_tradable_quote(quote: Mapping[str, Any]) -> bool:
     return _safe_float(quote.get("close")) > 0 and (_safe_float(quote.get("amount")) > 0 or _safe_float(quote.get("vol")) > 0)
 
@@ -405,8 +434,8 @@ def _quotes_by_ts_code_and_day(quote_rows: Iterable[Mapping[str, Any]]) -> Dict[
     return lookup
 
 
-def _trade_dates_from_quotes(quote_rows: Iterable[Mapping[str, Any]]) -> List[str]:
-    trade_dates = sorted({_normalize_text(row.get("trade_date")) for row in quote_rows if _normalize_text(row.get("trade_date"))})
+def _normalize_trade_dates(trade_dates: Iterable[Any]) -> List[str]:
+    trade_dates = sorted({_normalize_text(value) for value in trade_dates if _normalize_text(value)})
     for trade_date in trade_dates:
         _parse_day(trade_date, "trade_date")
     return trade_dates
@@ -426,11 +455,14 @@ def build_pool_rotation_daily_rows(
     membership_rows: Iterable[Mapping[str, Any]],
     quote_rows: Iterable[Mapping[str, Any]],
     *,
+    trade_dates: Iterable[Any] | None = None,
     stock_basic_index: Mapping[str, str] | None = None,
 ) -> List[Dict[str, Any]]:
     quote_list = list(quote_rows)
     quote_lookup = _quotes_by_ts_code_and_day(quote_list)
-    trade_dates = _trade_dates_from_quotes(quote_list)
+    normalized_trade_dates = _normalize_trade_dates(
+        trade_dates if trade_dates is not None else [row.get("trade_date") for row in quote_list]
+    )
     grouped_members: Dict[Tuple[str, int, str], List[Mapping[str, Any]]] = defaultdict(list)
     for member in membership_rows:
         group_id = _normalize_text(member.get("group_id"))
@@ -444,7 +476,7 @@ def build_pool_rotation_daily_rows(
     keys_without_entry: List[Tuple[str, int, str]] = []
     for key in grouped_members.keys():
         group_id, window_days, signal_date = key
-        entry_date, _exit_date = _rotation_entry_exit_dates(signal_date, trade_dates)
+        entry_date, _exit_date = _rotation_entry_exit_dates(signal_date, normalized_trade_dates)
         if not entry_date:
             keys_without_entry.append(key)
             continue
@@ -459,7 +491,7 @@ def build_pool_rotation_daily_rows(
     daily_rows: List[Dict[str, Any]] = []
     for group_id, window_days, signal_date in sorted(selected_member_keys, key=lambda item: (item[0], item[1], item[2])):
         members = sorted(grouped_members[(group_id, window_days, signal_date)], key=lambda item: _safe_int(item.get("rank")))
-        entry_date, exit_date = _rotation_entry_exit_dates(signal_date, trade_dates)
+        entry_date, exit_date = _rotation_entry_exit_dates(signal_date, normalized_trade_dates)
         returns: List[float] = []
         holdings: List[Dict[str, Any]] = []
         unresolved_count = 0
@@ -793,6 +825,7 @@ def run_recommendation_pool_rotation_backtest(
         for row in membership_rows
     ]
     quote_start, quote_end = _pool_quote_range_bounds(membership_with_codes)
+    trade_dates = load_knowaction_trade_dates(quote_start, quote_end, env_path=env_path)
     quotes = load_knowaction_quotes(
         [row["ts_code"] for row in membership_with_codes],
         quote_start,
@@ -802,6 +835,7 @@ def run_recommendation_pool_rotation_backtest(
     daily_rows = build_pool_rotation_daily_rows(
         membership_with_codes,
         quotes,
+        trade_dates=trade_dates,
         stock_basic_index=stock_basic_index,
     )
     period_rows = summarize_pool_rotation_period_returns(daily_rows)
@@ -854,10 +888,12 @@ __all__ = [
     "DEFAULT_POOL_ROTATION_WINDOWS",
     "DEFAULT_RETURN_HOLD_DAYS",
     "DEFAULT_RETURN_SMOKE_FIELDS",
+    "DEFAULT_TRADE_CALENDAR_EXCHANGE",
     "build_pool_rotation_daily_rows",
     "build_recommendation_pool_memberships",
     "build_return_smoke_rows",
     "get_knowaction_postgres_dsn",
+    "load_knowaction_trade_dates",
     "resolve_signal_ts_code",
     "run_recommendation_pool_rotation_backtest",
     "run_a_share_return_smoke",

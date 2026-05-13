@@ -61,6 +61,7 @@ class AShareRecommendationPoolRotationHelperTests(unittest.TestCase):
         rows = build_pool_rotation_daily_rows(
             memberships,
             quotes,
+            trade_dates=("2026-05-02", "2026-05-03"),
             stock_basic_index={"宁德时代": "300750.SZ", "贵州茅台": "600519.SH"},
         )
 
@@ -103,6 +104,7 @@ class AShareRecommendationPoolRotationHelperTests(unittest.TestCase):
         rows = build_pool_rotation_daily_rows(
             memberships,
             quotes,
+            trade_dates=("2026-05-04", "2026-05-05"),
             stock_basic_index={"宁德时代": "300750.SZ", "贵州茅台": "600519.SH"},
         )
 
@@ -110,6 +112,23 @@ class AShareRecommendationPoolRotationHelperTests(unittest.TestCase):
         self.assertEqual("2026-05-02", rows[0]["signal_date"])
         self.assertEqual("2026-05-04", rows[0]["entry_date"])
         self.assertEqual(-0.1, rows[0]["portfolio_return"])
+
+    def test_build_pool_rotation_daily_rows_uses_calendar_dates_when_quotes_are_missing(self):
+        from backend.services.a_share_research_return_smoke_service import build_pool_rotation_daily_rows
+
+        rows = build_pool_rotation_daily_rows(
+            [
+                {"group_id": "511", "window_days": 3, "signal_date": "2026-05-01", "rank": 1, "stock_name": "宁德时代"},
+            ],
+            [],
+            trade_dates=("2026-05-02", "2026-05-03"),
+            stock_basic_index={"宁德时代": "300750.SZ"},
+        )
+
+        self.assertEqual("2026-05-02", rows[0]["entry_date"])
+        self.assertEqual("2026-05-03", rows[0]["exit_date"])
+        self.assertEqual("skipped_no_completed_holding", rows[0]["status"])
+        self.assertEqual(1, rows[0]["missing_quote_count"])
 
     def test_run_recommendation_pool_rotation_backtest_loads_mentions_and_quotes(self):
         from backend.services import a_share_research_return_smoke_service as service
@@ -122,7 +141,11 @@ class AShareRecommendationPoolRotationHelperTests(unittest.TestCase):
 
         with patch.object(service, "read_existing_csv", return_value=daily_mentions) as load_mentions, patch.object(
             service, "load_knowaction_stock_basic_index", return_value={"宁德时代": "300750.SZ"}
-        ), patch.object(service, "load_knowaction_quotes", return_value=quotes) as load_quotes:
+        ), patch.object(
+            service, "load_knowaction_trade_dates", return_value=["2026-05-02", "2026-05-03"]
+        ) as load_trade_dates, patch.object(
+            service, "load_knowaction_quotes", return_value=quotes
+        ) as load_quotes:
             daily_rows, period_rows, summary = service.run_recommendation_pool_rotation_backtest(
                 group_id="511",
                 windows=(3,),
@@ -130,6 +153,7 @@ class AShareRecommendationPoolRotationHelperTests(unittest.TestCase):
             )
 
         load_mentions.assert_called_once_with(group_id="511")
+        load_trade_dates.assert_called_once()
         load_quotes.assert_called_once()
         self.assertEqual(1, len(daily_rows))
         self.assertEqual(2, len(period_rows))
