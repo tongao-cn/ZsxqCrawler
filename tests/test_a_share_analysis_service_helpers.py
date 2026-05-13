@@ -1,5 +1,5 @@
 from datetime import datetime
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 import os
 import tempfile
 import unittest
@@ -39,6 +39,36 @@ class _FakeAShareConnection:
 
     def close(self):
         self.closed = True
+
+
+class _FakeOpenAIResponseMessage:
+    content = '{"stocks":[]}'
+
+
+class _FakeOpenAIChoice:
+    message = _FakeOpenAIResponseMessage()
+
+
+class _FakeOpenAIResponse:
+    choices = [_FakeOpenAIChoice()]
+
+
+class _FakeChatCompletions:
+    def __init__(self, recorder):
+        self.recorder = recorder
+
+    def create(self, **kwargs):
+        self.recorder.update(kwargs)
+        return _FakeOpenAIResponse()
+
+
+class _FakeOpenAIClient:
+    recorder = {}
+
+    def __init__(self, **kwargs):
+        self.kwargs = kwargs
+        self.chat = Mock()
+        self.chat.completions = _FakeChatCompletions(self.recorder)
 
 
 class AShareAnalysisServiceHelperTests(unittest.TestCase):
@@ -205,6 +235,44 @@ class AShareAnalysisServiceHelperTests(unittest.TestCase):
             [{"stock_name": "宁德时代", "concepts": [], "reason": "", "confidence": 0.7}],
             stocks,
         )
+
+    def test_topic_stock_extraction_prompt_requires_positive_recommendation_context(self):
+        from backend.services.a_share_analysis_service import (
+            TOPIC_STOCK_EXTRACTION_PROMPT_VERSION,
+            _build_topic_stock_extraction_prompt,
+        )
+
+        prompt = _build_topic_stock_extraction_prompt()
+
+        self.assertEqual("a-share-topic-stock-extraction-v2", TOPIC_STOCK_EXTRACTION_PROMPT_VERSION)
+        self.assertIn("正向推荐或受益语义", prompt)
+        self.assertIn("不要仅因为公司名称出现就输出", prompt)
+        self.assertIn("风险、暴雷、利空、业绩下修", prompt)
+        self.assertIn("如果只有负面或风险语义，应直接不输出", prompt)
+        self.assertIn("重点关注、买入/增持、受益", prompt)
+
+    def test_call_openai_extract_topic_stocks_sends_recommendation_pool_prompt(self):
+        from backend.services import a_share_analysis_service as service
+
+        _FakeOpenAIClient.recorder = {}
+
+        with patch("openai.OpenAI", _FakeOpenAIClient):
+            self.assertEqual(
+                [],
+                service.call_openai_extract_topic_stocks(
+                    "五粮液年报出现重大调整，营收利润重算后大幅下滑。",
+                    api_key="test-key",
+                    model="test-model",
+                    wire_api="chat",
+                ),
+            )
+
+        messages = _FakeOpenAIClient.recorder["messages"]
+        self.assertIn("正向推荐或明确受益", messages[0]["content"])
+        self.assertIn("负面风险、暴雷、利空、避雷、跌幅归因", messages[0]["content"])
+        self.assertIn("不要仅因为公司名称出现就输出", messages[1]["content"])
+        self.assertIn("业绩下修", messages[1]["content"])
+        self.assertIn("营收利润重算后大幅下滑", messages[1]["content"])
 
     def test_backfill_topic_stock_extractions_uses_recent_seven_day_reset_range(self):
         from backend.services import a_share_analysis_service as service

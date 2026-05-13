@@ -72,7 +72,7 @@ DEFAULT_OPENAI_MAX_RETRIES = max(1, int(os.environ.get("OPENAI_MAX_RETRIES", "4"
 GROUP_ANALYSIS_DIRNAME = "a_share_analysis"
 GROUP_OUTPUT_FILENAME = "company_mentions.csv"
 GROUP_STATE_FILENAME = "company_mentions_state.json"
-TOPIC_STOCK_EXTRACTION_PROMPT_VERSION = "a-share-topic-stock-extraction-v1"
+TOPIC_STOCK_EXTRACTION_PROMPT_VERSION = "a-share-topic-stock-extraction-v2"
 A_SHARE_COMPANY_EXTRACTION_SCHEMA: Dict[str, Any] = {
     "type": "object",
     "properties": {
@@ -547,6 +547,23 @@ def _is_retryable_openai_error(exc: Exception) -> bool:
     return False
 
 
+def _build_topic_stock_extraction_prompt() -> str:
+    return (
+        "请从下面内容中提取明确具有正向推荐或受益语义的中国A股上市公司，并给出上下文中的投资概念。\n"
+        "这里的推荐池只收录被看好、被推荐、可能受益、作为投资主线或机会提及的股票；"
+        "不要仅因为公司名称出现就输出。\n"
+        "要求：\n"
+        "1. 只保留可以明确判断为A股上市公司的公司名称。\n"
+        "2. 只有当上下文对该股票是正向推荐、重点关注、买入/增持、受益、催化、业绩改善、困境反转、弹性向上等语义时才输出。\n"
+        "3. 如果公司只是风险、暴雷、利空、业绩下修、利润重算下滑、处罚、减持、踩雷、避雷、跌幅归因、表现平平、净卖出、负面案例或需要规避的对象，不要输出。\n"
+        "4. 港股、美股、ETF、指数、板块、行业、产品、基金、机构、人物都不要输出。\n"
+        "5. 如果只是业务、产品、子公司、老板姓名，且无法唯一映射到A股上市公司，不要猜。\n"
+        "6. 同一家公司如果同时出现全称和简称，只输出一个更常见的A股证券简称。\n"
+        "7. concepts 必须来自上下文，例如固态电池、机器人、算力、低空经济等；没有明确概念可给空数组。\n"
+        "8. reason 简要说明该股票被推荐或受益的原因；如果只有负面或风险语义，应直接不输出，而不是降低 confidence。"
+    )
+
+
 def call_openai_extract_topic_stocks(
     text: str,
     api_key: Optional[str],
@@ -568,24 +585,15 @@ def call_openai_extract_topic_stocks(
     except ImportError as exc:
         raise RuntimeError("缺少 openai 依赖，请先安装后再运行分析") from exc
 
-    prompt = (
-        "请从下面内容中提取明确提到的中国A股上市公司，并给出上下文中的投资概念。\n"
-        "要求：\n"
-        "1. 只保留可以明确判断为A股上市公司的公司名称。\n"
-        "2. 港股、美股、ETF、指数、板块、行业、产品、基金、机构、人物都不要输出。\n"
-        "3. 如果只是业务、产品、子公司、老板姓名，且无法唯一映射到A股上市公司，不要猜。\n"
-        "4. 同一家公司如果同时出现全称和简称，只输出一个更常见的A股证券简称。\n"
-        "5. concepts 必须来自上下文，例如固态电池、机器人、算力、低空经济等；没有明确概念可给空数组。\n"
-        "6. reason 简要说明该股票为什么被提到；不确定时降低 confidence。"
-    )
+    prompt = _build_topic_stock_extraction_prompt()
     content = text if len(text) <= 8000 else text[:8000]
     messages = [
         {
             "role": "system",
             "content": (
-                "你是A股上市公司名称抽取助手。"
-                "你的任务是从中文投资内容中抽取明确提及的中国A股上市公司、关联概念和理由。"
-                "如果无法确认是A股上市公司，就不要输出。"
+                "你是A股推荐池抽取助手。"
+                "你的任务是从中文投资内容中抽取明确被正向推荐或明确受益的中国A股上市公司、关联概念和理由。"
+                "如果无法确认是A股上市公司，或上下文只是负面风险、暴雷、利空、避雷、跌幅归因，就不要输出。"
             ),
         },
         {"role": "user", "content": prompt + "\n\n" + content},
