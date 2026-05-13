@@ -44,7 +44,7 @@ class AShareRecommendationPoolRotationHelperTests(unittest.TestCase):
         self.assertEqual(1, len(rows))
         self.assertEqual("宁德时代", rows[0]["stock_name"])
 
-    def test_build_pool_rotation_daily_rows_uses_next_trade_open_close_equal_weight(self):
+    def test_build_pool_rotation_daily_rows_uses_next_open_to_following_open_equal_weight(self):
         from backend.services.a_share_research_return_smoke_service import build_pool_rotation_daily_rows
 
         memberships = [
@@ -53,7 +53,9 @@ class AShareRecommendationPoolRotationHelperTests(unittest.TestCase):
         ]
         quotes = [
             {"ts_code": "300750.SZ", "trade_date": "2026-05-02", "open": 100, "close": 110, "vol": 100, "amount": 1000},
+            {"ts_code": "300750.SZ", "trade_date": "2026-05-03", "open": 110, "close": 111, "vol": 100, "amount": 1000},
             {"ts_code": "600519.SH", "trade_date": "2026-05-02", "open": 50, "close": 45, "vol": 100, "amount": 1000},
+            {"ts_code": "600519.SH", "trade_date": "2026-05-03", "open": 45, "close": 44, "vol": 100, "amount": 1000},
         ]
 
         rows = build_pool_rotation_daily_rows(
@@ -64,7 +66,8 @@ class AShareRecommendationPoolRotationHelperTests(unittest.TestCase):
 
         self.assertEqual(1, len(rows))
         self.assertEqual("completed", rows[0]["status"])
-        self.assertEqual("2026-05-02", rows[0]["trade_date"])
+        self.assertEqual("2026-05-02", rows[0]["entry_date"])
+        self.assertEqual("2026-05-03", rows[0]["exit_date"])
         self.assertEqual(2, rows[0]["resolved_count"])
         self.assertEqual(0.0, rows[0]["portfolio_return"])
 
@@ -72,8 +75,8 @@ class AShareRecommendationPoolRotationHelperTests(unittest.TestCase):
         from backend.services.a_share_research_return_smoke_service import summarize_pool_rotation_period_returns
 
         rows = [
-            {"group_id": "511", "window_days": 3, "trade_date": "2026-05-04", "portfolio_return": 0.1, "status": "completed"},
-            {"group_id": "511", "window_days": 3, "trade_date": "2026-05-05", "portfolio_return": -0.05, "status": "completed"},
+            {"group_id": "511", "window_days": 3, "exit_date": "2026-05-04", "portfolio_return": 0.1, "status": "completed"},
+            {"group_id": "511", "window_days": 3, "exit_date": "2026-05-05", "portfolio_return": -0.05, "status": "completed"},
         ]
 
         period_rows = summarize_pool_rotation_period_returns(rows)
@@ -83,12 +86,38 @@ class AShareRecommendationPoolRotationHelperTests(unittest.TestCase):
         self.assertTrue(all(row["compound_return"] == 0.045 for row in period_rows))
         self.assertTrue(all(row["win_rate"] == 0.5 for row in period_rows))
 
+    def test_build_pool_rotation_daily_rows_keeps_latest_signal_for_same_entry_date(self):
+        from backend.services.a_share_research_return_smoke_service import build_pool_rotation_daily_rows
+
+        memberships = [
+            {"group_id": "511", "window_days": 3, "signal_date": "2026-05-01", "rank": 1, "stock_name": "宁德时代"},
+            {"group_id": "511", "window_days": 3, "signal_date": "2026-05-02", "rank": 1, "stock_name": "贵州茅台"},
+        ]
+        quotes = [
+            {"ts_code": "300750.SZ", "trade_date": "2026-05-04", "open": 100, "close": 110, "vol": 100, "amount": 1000},
+            {"ts_code": "300750.SZ", "trade_date": "2026-05-05", "open": 110, "close": 111, "vol": 100, "amount": 1000},
+            {"ts_code": "600519.SH", "trade_date": "2026-05-04", "open": 50, "close": 45, "vol": 100, "amount": 1000},
+            {"ts_code": "600519.SH", "trade_date": "2026-05-05", "open": 45, "close": 44, "vol": 100, "amount": 1000},
+        ]
+
+        rows = build_pool_rotation_daily_rows(
+            memberships,
+            quotes,
+            stock_basic_index={"宁德时代": "300750.SZ", "贵州茅台": "600519.SH"},
+        )
+
+        self.assertEqual(1, len(rows))
+        self.assertEqual("2026-05-02", rows[0]["signal_date"])
+        self.assertEqual("2026-05-04", rows[0]["entry_date"])
+        self.assertEqual(-0.1, rows[0]["portfolio_return"])
+
     def test_run_recommendation_pool_rotation_backtest_loads_mentions_and_quotes(self):
         from backend.services import a_share_research_return_smoke_service as service
 
         daily_mentions = {"2026-05-01": {"宁德时代": 2}}
         quotes = [
             {"ts_code": "300750.SZ", "trade_date": "2026-05-02", "open": 100, "close": 110, "vol": 100, "amount": 1000},
+            {"ts_code": "300750.SZ", "trade_date": "2026-05-03", "open": 110, "close": 111, "vol": 100, "amount": 1000},
         ]
 
         with patch.object(service, "read_existing_csv", return_value=daily_mentions) as load_mentions, patch.object(
@@ -115,7 +144,8 @@ class AShareRecommendationPoolRotationHelperTests(unittest.TestCase):
                 "group_id": "511",
                 "window_days": 3,
                 "signal_date": "2026-05-01",
-                "trade_date": "2026-05-02",
+                "entry_date": "2026-05-02",
+                "exit_date": "2026-05-03",
                 "pool_size": 1,
                 "resolved_count": 1,
                 "unresolved_count": 0,

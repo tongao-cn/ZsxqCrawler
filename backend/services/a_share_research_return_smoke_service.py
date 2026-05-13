@@ -53,7 +53,8 @@ DEFAULT_POOL_ROTATION_DAILY_FIELDS = [
     "group_id",
     "window_days",
     "signal_date",
-    "trade_date",
+    "entry_date",
+    "exit_date",
     "pool_size",
     "resolved_count",
     "unresolved_count",
@@ -411,11 +412,14 @@ def _trade_dates_from_quotes(quote_rows: Iterable[Mapping[str, Any]]) -> List[st
     return trade_dates
 
 
-def _next_trade_date(signal_date: str, trade_dates: Sequence[str]) -> str:
-    index = bisect_right(trade_dates, signal_date)
-    if index >= len(trade_dates):
-        return ""
-    return trade_dates[index]
+def _rotation_entry_exit_dates(signal_date: str, trade_dates: Sequence[str]) -> Tuple[str, str]:
+    entry_index = bisect_right(trade_dates, signal_date)
+    if entry_index >= len(trade_dates):
+        return "", ""
+    exit_index = entry_index + 1
+    if exit_index >= len(trade_dates):
+        return trade_dates[entry_index], ""
+    return trade_dates[entry_index], trade_dates[exit_index]
 
 
 def build_pool_rotation_daily_rows(
@@ -436,10 +440,26 @@ def build_pool_rotation_daily_rows(
             continue
         grouped_members[(group_id, window_days, signal_date)].append(member)
 
+    selected_by_entry: Dict[Tuple[str, int, str], Tuple[str, int, str]] = {}
+    keys_without_entry: List[Tuple[str, int, str]] = []
+    for key in grouped_members.keys():
+        group_id, window_days, signal_date = key
+        entry_date, _exit_date = _rotation_entry_exit_dates(signal_date, trade_dates)
+        if not entry_date:
+            keys_without_entry.append(key)
+            continue
+        selected_key = (group_id, window_days, entry_date)
+        existing = selected_by_entry.get(selected_key)
+        if existing is None or signal_date > existing[2]:
+            selected_by_entry[selected_key] = key
+
+    selected_member_keys = set(selected_by_entry.values())
+    selected_member_keys.update(keys_without_entry)
+
     daily_rows: List[Dict[str, Any]] = []
-    for group_id, window_days, signal_date in sorted(grouped_members.keys(), key=lambda item: (item[0], item[1], item[2])):
+    for group_id, window_days, signal_date in sorted(selected_member_keys, key=lambda item: (item[0], item[1], item[2])):
         members = sorted(grouped_members[(group_id, window_days, signal_date)], key=lambda item: _safe_int(item.get("rank")))
-        trade_date = _next_trade_date(signal_date, trade_dates)
+        entry_date, exit_date = _rotation_entry_exit_dates(signal_date, trade_dates)
         returns: List[float] = []
         holdings: List[Dict[str, Any]] = []
         unresolved_count = 0
@@ -459,25 +479,34 @@ def build_pool_rotation_daily_rows(
                 unresolved_count += 1
                 holdings.append({**holding, "status": "skipped_unresolved_ts_code"})
                 continue
-            if not trade_date:
-                holdings.append({**holding, "status": "skipped_no_next_trade_date"})
+            if not entry_date:
+                holdings.append({**holding, "status": "skipped_no_entry_trade_date"})
+                continue
+            if not exit_date:
+                holdings.append({**holding, "status": "skipped_no_exit_trade_date"})
                 continue
 
-            quote = quote_lookup.get((ts_code, trade_date))
-            if not quote or not _is_tradable_entry_quote(quote):
+            entry_quote = quote_lookup.get((ts_code, entry_date))
+            exit_quote = quote_lookup.get((ts_code, exit_date))
+            if not entry_quote or not _is_tradable_entry_quote(entry_quote):
                 missing_quote_count += 1
-                holdings.append({**holding, "status": "skipped_missing_or_untradable_quote"})
+                holdings.append({**holding, "status": "skipped_missing_or_untradable_entry_quote"})
+                continue
+            if not exit_quote or not _is_tradable_entry_quote(exit_quote):
+                missing_quote_count += 1
+                holdings.append({**holding, "status": "skipped_missing_or_untradable_exit_quote"})
                 continue
 
-            open_price = _safe_float(quote.get("open"))
-            close_price = _safe_float(quote.get("close"))
-            daily_return = close_price / open_price - 1 if open_price > 0 else 0.0
+            entry_open = _safe_float(entry_quote.get("open"))
+            exit_open = _safe_float(exit_quote.get("open"))
+            daily_return = exit_open / entry_open - 1 if entry_open > 0 else 0.0
+
             returns.append(daily_return)
             holdings.append(
                 {
                     **holding,
-                    "open": round(open_price, 6),
-                    "close": round(close_price, 6),
+                    "entry_open": round(entry_open, 6),
+                    "exit_open": round(exit_open, 6),
                     "return": round(daily_return, 6),
                     "status": "completed",
                 }
@@ -486,8 +515,10 @@ def build_pool_rotation_daily_rows(
         portfolio_return = round(sum(returns) / len(returns), 6) if returns else ""
         if returns:
             status = "completed"
-        elif not trade_date:
-            status = "skipped_no_next_trade_date"
+        elif not entry_date:
+            status = "skipped_no_entry_trade_date"
+        elif not exit_date:
+            status = "skipped_no_exit_trade_date"
         else:
             status = "skipped_no_completed_holding"
         daily_rows.append(
@@ -495,7 +526,8 @@ def build_pool_rotation_daily_rows(
                 "group_id": group_id,
                 "window_days": window_days,
                 "signal_date": signal_date,
-                "trade_date": trade_date,
+                "entry_date": entry_date,
+                "exit_date": exit_date,
                 "pool_size": len(members),
                 "resolved_count": len(returns),
                 "unresolved_count": unresolved_count,
@@ -521,7 +553,7 @@ def summarize_pool_rotation_period_returns(rows: Iterable[Mapping[str, Any]]) ->
     for row in rows:
         if _normalize_text(row.get("status")) != "completed" or _normalize_text(row.get("portfolio_return")) == "":
             continue
-        trade_date_text = _normalize_text(row.get("trade_date"))
+        trade_date_text = _normalize_text(row.get("exit_date") or row.get("trade_date"))
         trade_day = _parse_day(trade_date_text, "trade_date")
         iso_year, iso_week, _iso_weekday = trade_day.isocalendar()
         periods = (

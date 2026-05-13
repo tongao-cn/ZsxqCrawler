@@ -113,7 +113,7 @@ To evaluate the recommendation pools as daily rotating portfolios, run:
 uv run run-a-share-recommendation-pool-rotation --group-id 51111112855254 --start-date 2026-05-01 --end-date 2026-05-12 --daily-output output\a_share_research\51111112855254_pool_rotation_daily.csv --period-output output\a_share_research\51111112855254_pool_rotation_period.csv
 ```
 
-This rebuilds the 3/7/14/21-day recommendation pools from trailing daily mentions. For each signal day `T`, the backtest enters the pool at the next tradable open and exits the same day close, equal-weighting all resolved stocks in that pool. The daily CSV contains one row per `window_days + signal_date`; the period CSV compounds daily portfolio returns into weekly and monthly rows. The default pool size follows the UI ranking top `35`; pass `--top-n 0` to include all ranked stocks.
+This rebuilds the 3/7/14/21-day recommendation pools from trailing daily mentions. For each signal day `T`, the backtest enters the pool at the next tradable open and exits at the following tradable open, equal-weighting all resolved stocks in that pool. If multiple signal days map to the same entry date, only the latest signal day is kept. The daily CSV contains one row per `window_days + signal_date`; the period CSV compounds daily portfolio returns into weekly and monthly rows by exit date. The default pool size follows the UI ranking top `35`; pass `--top-n 0` to include all ranked stocks.
 
 ## Access Rules
 
