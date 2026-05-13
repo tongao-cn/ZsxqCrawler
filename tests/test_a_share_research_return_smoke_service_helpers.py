@@ -13,6 +13,8 @@ class AShareResearchReturnSmokeServiceHelperTests(unittest.TestCase):
         self.assertEqual("300750.SZ", resolve_signal_ts_code({"stock_code": "300750", "market": "SZ"}))
         self.assertEqual("600519.SH", resolve_signal_ts_code({"stock_code": "600519"}))
         self.assertEqual("300750.SZ", resolve_signal_ts_code({"stock_name": "宁德时代"}, {"宁德时代": "300750.SZ"}))
+        self.assertEqual("688256.SH", resolve_signal_ts_code({"stock_name": "寒武纪"}, {"寒武纪": "688256.SH"}))
+        self.assertEqual("688256.SH", resolve_signal_ts_code({"stock_name": "寒武纪-U"}, {"寒武纪": "688256.SH"}))
 
     def test_build_return_smoke_rows_uses_tplus1_open_and_hold_close(self):
         from backend.services.a_share_research_return_smoke_service import build_return_smoke_rows

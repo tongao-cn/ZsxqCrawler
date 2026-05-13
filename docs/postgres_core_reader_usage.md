@@ -107,6 +107,14 @@ uv run run-a-share-research-return-smoke --group-id 51111112855254 --start-date 
 
 The return smoke reads ZsxqCrawler signals, resolves stock codes through KnowActionSystem `stock_basic`, and reads KnowActionSystem `daily_quotes`. The first execution model is intentionally simple: signal day `T`, entry at `T+1` tradable open, exit at the `hold_days`-th tradable close after entry. Rows near the available quote tail may be flagged as `completed_forced_end_of_sample`; use earlier historical windows for formal performance conclusions.
 
+To evaluate the recommendation pools as daily rotating portfolios, run:
+
+```powershell
+uv run run-a-share-recommendation-pool-rotation --group-id 51111112855254 --start-date 2026-05-01 --end-date 2026-05-12 --daily-output output\a_share_research\51111112855254_pool_rotation_daily.csv --period-output output\a_share_research\51111112855254_pool_rotation_period.csv
+```
+
+This rebuilds the 3/7/14/21-day recommendation pools from trailing daily mentions. For each signal day `T`, the backtest enters the pool at the next tradable open and exits the same day close, equal-weighting all resolved stocks in that pool. The daily CSV contains one row per `window_days + signal_date`; the period CSV compounds daily portfolio returns into weekly and monthly rows. The default pool size follows the UI ranking top `35`; pass `--top-n 0` to include all ranked stocks.
+
 ## Access Rules
 
 - `zsxq_reader` may `SELECT` from `zsxq_core`.
