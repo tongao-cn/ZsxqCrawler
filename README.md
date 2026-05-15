@@ -93,10 +93,10 @@ npm run dev
 NEXT_PUBLIC_API_BASE_URL=http://192.168.x.x:8208
 ```
 
-后端 CORS 默认只允许来自 `http://localhost:3100` 和 `http://127.0.0.1:3100` 的浏览器请求；如果前端运行在其他地址，请在启动后端前设置 `CORS_ALLOW_ORIGINS`，多个来源用逗号分隔。
+后端 CORS 默认只允许来自 `http://localhost:18080` 和 `http://127.0.0.1:18080` 的浏览器请求；如果前端运行在其他地址，请在启动后端前设置 `CORS_ALLOW_ORIGINS`，多个来源用逗号分隔。
 
 然后访问：
-- **Web 界面**: http://localhost:3100
+- **Web 界面**: http://localhost:18080
 - **API 文档**: http://localhost:8508/docs
 
 ## 项目代码结构

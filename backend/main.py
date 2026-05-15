@@ -53,8 +53,8 @@ def _get_cors_allow_origins() -> List[str]:
     if raw_origins:
         return [origin.strip() for origin in raw_origins.split(",") if origin.strip()]
     return [
-        "http://localhost:3100",
-        "http://127.0.0.1:3100",
+        "http://localhost:18080",
+        "http://127.0.0.1:18080",
     ]
 
 
