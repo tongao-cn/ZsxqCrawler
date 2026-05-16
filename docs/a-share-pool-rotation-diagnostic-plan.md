@@ -75,3 +75,7 @@ Evaluate whether the A-share recommendation-pool rotation strategy can credibly 
   - `rank51_70` and `rank51_80` keep the same direction but dilute raw edge, which argues for keeping the 50-60 band as the core focus and treating wider bands as robustness checks.
   - Monthly breakdown shows the same pattern: the best buckets still have a weak March and stronger April-May, so the edge is not uniformly smooth across the whole sample.
   - Contribution concentration is not dominated by a single stock; top names such as `烽火通信`, `宏景科技`, `潍柴动力`, `易点天下`, and `信科移动` recur across the best buckets, which supports a reusable mid-band thesis instead of a one-name accident.
+  - Split-band validation refined the core region further: `rank56_60 / 29日` is the first combination that crosses `100%` after `10bp` cost, at `102.1242%`, with `81.3690%` average turnover and `-12.4461%` max drawdown after cost.
+  - `rank51_55` does not show the same strength, so the edge is concentrated in the upper half of the original `51~60` band rather than the whole band.
+  - Monthly stability for `rank56_60 / 29日` is still mixed, but the sample is not a one-month fluke: January through May stay positive overall, with especially strong February, April, and May.
+  - The top contributors in `rank56_60 / 29日` are still recurring names like `信维通信`, `烽火通信`, `东阳光`, `优刻得`, `中材科技`, and `宏景科技`, which argues for a repeatable mid-band phenomenon rather than a one-off spike.
