@@ -54,10 +54,12 @@ Evaluate whether the A-share recommendation-pool rotation strategy can credibly 
 ## Findings
 
 - The raw best combination is `Top50 / 1日`: compound return `36.3597%`, average turnover `77.5931%`, max drawdown `-16.4682%`.
-- `Top50 / 1日` is cost-sensitive: after `20bp` turnover cost, compound return drops to `19.7427%`; after `50bp`, it drops to `-1.5020%`.
-- The best `20bp`-cost combinations are longer-horizon, lower-turnover variants:
-  - `Top10 / 22日`: raw `27.6410%`, after `20bp` `24.3508%`, average turnover `15.6349%`, max drawdown after `20bp` `-28.0962%`.
-  - `Top10 / 16日`: raw `27.3898%`, after `20bp` `23.4324%`, average turnover `18.8492%`, max drawdown after `20bp` `-27.5940%`.
-  - `Top100 / 20日`: raw `25.6551%`, after `20bp` `23.3706%`, average turnover `10.9586%`, max drawdown after `20bp` `-13.6215%`.
+- `Top50 / 1日` is cost-sensitive: after `10bp` turnover cost, compound return drops to `27.7846%`; after `20bp`, it drops to `19.7427%`; after `50bp`, it drops to `-1.5020%`.
+- With `10bp` turnover cost, the leading combinations are:
+  - `Top50 / 1日`: raw `36.3597%`, after `10bp` `27.7846%`, average turnover `77.5931%`, max drawdown after `10bp` `-18.8850%`.
+  - `Top10 / 22日`: raw `27.6410%`, after `10bp` `25.9854%`, average turnover `15.6349%`, max drawdown after `10bp` `-27.6832%`.
+  - `Top10 / 11日`: raw `28.2456%`, after `10bp` `25.7687%`, average turnover `23.3466%`, max drawdown after `10bp` `-26.2629%`.
+  - `Top100 / 20日`: raw `25.6551%`, after `10bp` `24.5078%`, average turnover `10.9586%`, max drawdown after `10bp` `-13.4132%`.
+- The low-turnover candidates are less sensitive to cost than the raw top `1日` variants, but they also do not approach the 100% threshold.
 - No tested combination reaches `100%` compound return in the available 2026 sample.
 - The available evidence does not justify claiming a 100% 2026 compound-return strategy without overfitting. The best raw result is far below that threshold, and transaction-cost assumptions reduce it materially.
