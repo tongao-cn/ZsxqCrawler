@@ -223,63 +223,11 @@ def _build_stock_alias_terms(stock_name: Any, stock_code: Any = "", market: Any 
     return _ordered_unique((term for term in terms if term), limit=10)
 
 
-def _split_topic_text_segments(text: str) -> List[str]:
-    normalized = _normalize_text(text)
-    if not normalized:
-        return []
-    segments = [segment.strip() for segment in re.findall(r"[^。！？!?；;\n\r]+[。！？!?；;\n\r]*", normalized) if segment.strip()]
-    return segments or [normalized]
-
-
-def _count_term_hits(text: str, terms: Iterable[str]) -> int:
-    normalized = _normalize_text(text)
-    if not normalized:
-        return 0
-    return sum(1 for term in _ordered_unique(terms, limit=10) if term and term in normalized)
-
-
-def _extract_relevant_topic_content(title: Any, body: Any, terms: Iterable[str]) -> tuple[str, str, List[str]]:
-    title_text = _normalize_text(title)
-    body_text = _normalize_text(body)
-    full_text = "\n".join(part for part in (title_text, body_text) if part)
-    if not full_text:
-        return "", "empty", []
-
-    alias_terms = _ordered_unique(terms, limit=10)
-    matched_terms = [term for term in alias_terms if term in full_text]
-    if not matched_terms:
-        if title_text and any(term in title_text for term in alias_terms):
-            return full_text, "title_full", alias_terms
-        return "", "irrelevant", []
-
-    if not body_text:
-        return full_text, "title_full", matched_terms
-
-    segments = _split_topic_text_segments(body_text)
-    if len(body_text) <= 600 or len(segments) <= 2:
-        return full_text, "full", matched_terms
-
-    matched_indices = [
-        index
-        for index, segment in enumerate(segments)
-        if any(term in segment for term in matched_terms)
-    ]
-    if not matched_indices:
-        return full_text, "full", matched_terms
-
-    if len(matched_indices) / max(1, len(segments)) >= 0.5:
-        return full_text, "full", matched_terms
-
-    chosen_indices: List[int] = []
-    for index in matched_indices:
-        for neighbor in range(max(0, index - 1), min(len(segments), index + 2)):
-            if neighbor not in chosen_indices:
-                chosen_indices.append(neighbor)
-    chosen_indices.sort()
-    excerpt = "".join(segments[index] for index in chosen_indices)
-    if title_text:
-        excerpt = f"{title_text}\n{excerpt}"
-    return excerpt, "snippet", matched_terms
+def _require_topic_excerpt(value: Any, *, topic_id: Any, stock_name: Any) -> str:
+    excerpt = _normalize_text(value)
+    if not excerpt:
+        raise RuntimeError(f"topic {topic_id} 缺少 {_normalize_company_name(stock_name)} 的 excerpt，请先运行推荐池话题抽取")
+    return excerpt
 
 
 def _score_relevant_topic(extracted_content: str, mode: str, matched_terms: Iterable[str], topic_row: Dict[str, Any]) -> int:
@@ -341,23 +289,25 @@ def _load_topic_summaries(conn: Any, group_id: str, topic_ids: List[str], stock_
         """,
         [f"%{_normalize_company_name(stock_name)}%", group_id, *topic_ids],
     ).fetchall()
-    summaries = [
-        {
-            "topic_id": str(row["topic_id"]),
-            "title": row["title"] or "",
-            "create_time": row["create_time"] or "",
-            "likes_count": int(row["likes_count"] or 0),
-            "comments_count": int(row["comments_count"] or 0),
-            "reading_count": int(row["reading_count"] or 0),
-            "excerpt": _normalize_text(row["excerpt"]),
-            "content_preview": _clip(_normalize_text(row["excerpt"]) or _topic_content(row), 260),
-            "concepts": [],
-            "reasons": [],
-            "confidence": 0.0,
-            "recommendation_count": 0,
-        }
-        for row in rows
-    ]
+    summaries: List[Dict[str, Any]] = []
+    for row in rows:
+        excerpt = _require_topic_excerpt(row["excerpt"], topic_id=row["topic_id"], stock_name=stock_name)
+        summaries.append(
+            {
+                "topic_id": str(row["topic_id"]),
+                "title": row["title"] or "",
+                "create_time": row["create_time"] or "",
+                "likes_count": int(row["likes_count"] or 0),
+                "comments_count": int(row["comments_count"] or 0),
+                "reading_count": int(row["reading_count"] or 0),
+                "excerpt": excerpt,
+                "content_preview": _clip(excerpt, 260),
+                "concepts": [],
+                "reasons": [],
+                "confidence": 0.0,
+                "recommendation_count": 0,
+            }
+        )
     found = {topic["topic_id"] for topic in summaries}
     summaries.extend(_empty_topic_summary(topic_id) for topic_id in topic_ids if str(topic_id) not in found)
     return summaries
@@ -637,10 +587,7 @@ def get_latest_stock_topic_analysis(group_id: str, stock_name: str) -> Dict[str,
         if not row:
             return None
         topic_ids = _parse_json_list(row["topic_ids_json"])
-        try:
-            topics = _load_topic_summaries(conn, _normalize_text(row["group_id"]), topic_ids, row["stock_name"])
-        except Exception:
-            topics = [_empty_topic_summary(topic_id) for topic_id in topic_ids]
+        topics = _load_topic_summaries(conn, _normalize_text(row["group_id"]), topic_ids, row["stock_name"])
         return {
             "group_id": row["group_id"],
             "stock_name": row["stock_name"],
@@ -694,7 +641,6 @@ def search_stock_topics(group_id: str, stock_name: str, *, limit: int | None = N
     try:
         processed_topic_ids = _load_latest_processed_topic_ids(conn, group_id_text, query)
         processed_topic_id_set = set(processed_topic_ids)
-        skipped_topic_ids: List[str] = []
         rows = conn.execute(
             _build_topic_search_sql(recent_cutoff=recent_cutoff),
             (like, group_id_text, like, like, like, like, recent_cutoff, MAX_SEARCH_CANDIDATE_TOPICS),
@@ -714,32 +660,10 @@ def search_stock_topics(group_id: str, stock_name: str, *, limit: int | None = N
             topic_id = str(row["topic_id"])
             if topic_id in processed_topic_id_set:
                 continue
-            topic_body = "\n".join(
-                part for part in (row["talk_text"], row["question_text"], row["answer_text"]) if _normalize_text(part)
-            )
-            stored_excerpt = _normalize_text(row["excerpt"])
-            if stored_excerpt:
-                extracted_content = "\n".join(part for part in (row["title"], stored_excerpt) if _normalize_text(part))
-                mode = "stored_excerpt"
-                matched_terms = _ordered_unique([_normalize_text(row["stock_name"]), *alias_terms], limit=10)
-            else:
-                extracted_content, mode, matched_terms = _extract_relevant_topic_content(
-                    row["title"],
-                    topic_body,
-                    alias_terms,
-                )
-            if not extracted_content and _normalize_text(row["stock_name"]):
-                extracted_content = "\n".join(
-                    part
-                    for part in (row["title"], topic_body, row["reason"])
-                    if _normalize_text(part)
-                )
-                mode = "extraction_full"
-                matched_terms = [_normalize_text(row["stock_name"])]
-            if not extracted_content:
-                processed_topic_ids.append(topic_id)
-                skipped_topic_ids.append(topic_id)
-                continue
+            stored_excerpt = _require_topic_excerpt(row["excerpt"], topic_id=topic_id, stock_name=query)
+            extracted_content = stored_excerpt
+            mode = "stored_excerpt"
+            matched_terms = _ordered_unique([_normalize_text(row["stock_name"]), *alias_terms], limit=10)
             topic = topics_by_id.setdefault(
                 topic_id,
                 {
@@ -752,6 +676,7 @@ def search_stock_topics(group_id: str, stock_name: str, *, limit: int | None = N
                     "content_preview": _clip(extracted_content, 260),
                     "concepts": [],
                     "reasons": [],
+                    "excerpt": stored_excerpt,
                     "confidence": 0.0,
                     "recommendation_count": 0,
                     "extract_mode": mode,
@@ -811,7 +736,7 @@ def search_stock_topics(group_id: str, stock_name: str, *, limit: int | None = N
             "recommendation_count": recommendation_count,
             "processed_topic_ids": _ordered_unique(processed_topic_ids, limit=MAX_TRACKED_TOPIC_IDS),
             "analyzed_topic_ids": _ordered_unique(processed_topic_ids, limit=MAX_TRACKED_TOPIC_IDS),
-            "skipped_topic_ids": _ordered_unique(skipped_topic_ids, limit=MAX_TRACKED_TOPIC_IDS),
+            "skipped_topic_ids": [],
         }
     finally:
         conn.close()
@@ -909,28 +834,30 @@ def _build_analysis_topic_payload(search_result: Dict[str, Any]) -> List[Dict[st
         conn.close()
 
     topic_map = {str(topic.get("topic_id")): topic for topic in search_result.get("topics", [])}
-    return [
-        {
-            "topic_id": str(row["topic_id"]),
-            "title": row["title"] or "",
-            "create_time": row["create_time"] or "",
-            "metrics": {
-                "likes_count": int(row["likes_count"] or 0),
-                "comments_count": int(row["comments_count"] or 0),
-                "reading_count": int(row["reading_count"] or 0),
-            },
-            "concepts": list(topic_map.get(str(row["topic_id"]), {}).get("concepts") or []),
-            "excerpt": _normalize_text(topic_map.get(str(row["topic_id"]), {}).get("excerpt")) or _normalize_text(row["excerpt"]),
-            "content": _clip(
-                _normalize_text(topic_map.get(str(row["topic_id"]), {}).get("analysis_content"))
-                or _normalize_text(topic_map.get(str(row["topic_id"]), {}).get("excerpt"))
-                or _normalize_text(row["excerpt"])
-                or _topic_content(row),
-                MAX_TOPIC_TEXT_CHARS,
-            ),
-        }
-        for row in rows
-    ]
+    payload: List[Dict[str, Any]] = []
+    for row in rows:
+        topic_id = str(row["topic_id"])
+        excerpt = _require_topic_excerpt(
+            topic_map.get(topic_id, {}).get("excerpt") or row["excerpt"],
+            topic_id=topic_id,
+            stock_name=search_result.get("stock_name"),
+        )
+        payload.append(
+            {
+                "topic_id": str(row["topic_id"]),
+                "title": row["title"] or "",
+                "create_time": row["create_time"] or "",
+                "metrics": {
+                    "likes_count": int(row["likes_count"] or 0),
+                    "comments_count": int(row["comments_count"] or 0),
+                    "reading_count": int(row["reading_count"] or 0),
+                },
+                "concepts": list(topic_map.get(topic_id, {}).get("concepts") or []),
+                "excerpt": excerpt,
+                "content": _clip(excerpt, MAX_TOPIC_TEXT_CHARS),
+            }
+        )
+    return payload
 
 
 def _build_question_topic_payload(search_result: Dict[str, Any]) -> List[Dict[str, Any]]:

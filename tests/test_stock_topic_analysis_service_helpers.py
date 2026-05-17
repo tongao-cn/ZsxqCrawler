@@ -31,30 +31,6 @@ class StockTopicAnalysisServiceHelperTests(unittest.TestCase):
         self.assertEqual(20, len(parse_stock_names([f"股票{i}" for i in range(25)])))
 
     @unittest.skipUnless(HAS_SERVICE_DEPS, "stock topic analysis service dependencies are not installed")
-    def test_extract_relevant_topic_content_filters_irrelevant_multi_company_text(self):
-        from backend.services.stock_topic_analysis_service import _extract_relevant_topic_content
-
-        terms = ["宁德时代", "300750"]
-        full_text, mode, matched_terms = _extract_relevant_topic_content(
-            "宁德时代",
-            "A公司看好，宁德时代受益，B公司也同步跟进。",
-            terms,
-        )
-        self.assertIn("宁德时代", full_text)
-        self.assertIn("A公司看好", full_text)
-        self.assertEqual("full", mode)
-        self.assertIn("宁德时代", matched_terms)
-
-        empty_text, empty_mode, empty_terms = _extract_relevant_topic_content(
-            "多公司对比",
-            "A公司表现亮眼，B公司维持增长，C公司也在扩产。",
-            terms,
-        )
-        self.assertEqual("", empty_text)
-        self.assertEqual("irrelevant", empty_mode)
-        self.assertEqual([], empty_terms)
-
-    @unittest.skipUnless(HAS_SERVICE_DEPS, "stock topic analysis service dependencies are not installed")
     def test_normalize_question_keywords_dedupes_and_limits(self):
         from backend.services.stock_topic_analysis_service import _normalize_question_keywords
 
@@ -182,7 +158,7 @@ class StockTopicAnalysisServiceHelperTests(unittest.TestCase):
         conn.close.assert_called_once()
 
     @unittest.skipUnless(HAS_SERVICE_DEPS, "stock topic analysis service dependencies are not installed")
-    def test_search_stock_topics_tracks_only_skipped_new_topics_as_processed(self):
+    def test_search_stock_topics_raises_without_stored_excerpt(self):
         from backend.services.stock_topic_analysis_service import search_stock_topics
 
         conn = Mock()
@@ -202,7 +178,7 @@ class StockTopicAnalysisServiceHelperTests(unittest.TestCase):
                 "talk_text": "宁德时代储能需求增长。",
                 "question_text": "",
                 "answer_text": "",
-                "stock_name": "",
+                "stock_name": "宁德时代",
                 "stock_code": "",
                 "market": "",
                 "concepts_json": '["储能"]',
@@ -210,35 +186,14 @@ class StockTopicAnalysisServiceHelperTests(unittest.TestCase):
                 "reason": "",
                 "confidence": 0,
             },
-            {
-                "topic_id": "102",
-                "title": "多公司交流",
-                "create_time": "2026-05-09T09:00:00",
-                "likes_count": 1,
-                "comments_count": 2,
-                "reading_count": 3,
-                "talk_text": "A公司订单增长，B公司扩产。",
-                "question_text": "",
-                "answer_text": "",
-                "stock_name": "",
-                "stock_code": "",
-                "market": "",
-                "concepts_json": "[]",
-                "excerpt": "",
-                "reason": "",
-                "confidence": 0,
-            },
         ]
-        counts_cursor = Mock()
-        counts_cursor.fetchall.return_value = []
-        conn.execute.side_effect = [state_cursor, latest_cursor, search_cursor, counts_cursor]
+        conn.execute.side_effect = [state_cursor, latest_cursor, search_cursor]
 
         with patch("backend.services.stock_topic_analysis_service.connect", return_value=conn):
-            result = search_stock_topics("51111112855254", "宁德时代")
+            with self.assertRaisesRegex(RuntimeError, "缺少 宁德时代 的 excerpt"):
+                search_stock_topics("51111112855254", "宁德时代")
 
-        self.assertEqual(["101"], [topic["topic_id"] for topic in result["topics"]])
-        self.assertEqual(["102"], result["processed_topic_ids"])
-        self.assertEqual(["102"], result["skipped_topic_ids"])
+        conn.close.assert_called_once()
 
     @unittest.skipUnless(HAS_SERVICE_DEPS, "stock topic analysis service dependencies are not installed")
     def test_search_stock_topics_prefers_stored_excerpt(self):
@@ -280,7 +235,8 @@ class StockTopicAnalysisServiceHelperTests(unittest.TestCase):
         self.assertEqual(1, result["topic_count"])
         topic = result["topics"][0]
         self.assertEqual("stored_excerpt", topic["extract_mode"])
-        self.assertEqual("多公司交流\n宁德时代储能订单持续增长。", topic["analysis_content"])
+        self.assertEqual("宁德时代储能订单持续增长。", topic["analysis_content"])
+        self.assertEqual("宁德时代储能订单持续增长。", topic["excerpt"])
         self.assertIn("宁德时代储能订单持续增长", topic["content_preview"])
 
     @unittest.skipUnless(HAS_SERVICE_DEPS, "stock topic analysis service dependencies are not installed")
@@ -478,7 +434,7 @@ class StockTopicAnalysisServiceHelperTests(unittest.TestCase):
                 "talk_text": "content 102",
                 "question_text": "",
                 "answer_text": "",
-                "excerpt": "",
+                "excerpt": "excerpt 102",
             },
         ]
         conn = Mock()
@@ -495,6 +451,49 @@ class StockTopicAnalysisServiceHelperTests(unittest.TestCase):
         self.assertEqual(2, len(result["topics"]))
         self.assertEqual("excerpt 101", result["topics"][0]["excerpt"])
         self.assertEqual("excerpt 101", result["topics"][0]["content_preview"])
+
+    @unittest.skipUnless(HAS_SERVICE_DEPS, "stock topic analysis service dependencies are not installed")
+    def test_get_latest_stock_topic_analysis_raises_without_excerpt(self):
+        from backend.services.stock_topic_analysis_service import get_latest_stock_topic_analysis
+
+        row = {
+            "group_id": "51111112855254",
+            "stock_name": "宁德时代",
+            "stock_code": "300750",
+            "market": "SZ",
+            "topic_ids_json": '["101"]',
+            "concepts_json": "[]",
+            "recommendation_count": 1,
+            "summary_markdown": "summary",
+            "model": "test-model",
+            "status": "completed",
+            "error": "",
+            "created_at": "2026-05-10T10:00:00",
+            "updated_at": "2026-05-10T10:01:00",
+        }
+        latest_cursor = Mock()
+        latest_cursor.fetchone.return_value = row
+        topics_cursor = Mock()
+        topics_cursor.fetchall.return_value = [
+            {
+                "topic_id": "101",
+                "title": "topic 101",
+                "create_time": "2026-05-10T09:00:00",
+                "likes_count": 1,
+                "comments_count": 2,
+                "reading_count": 3,
+                "talk_text": "content 101",
+                "question_text": "",
+                "answer_text": "",
+                "excerpt": "",
+            },
+        ]
+        conn = Mock()
+        conn.execute.side_effect = [latest_cursor, topics_cursor]
+
+        with patch("backend.services.stock_topic_analysis_service.connect", return_value=conn):
+            with self.assertRaisesRegex(RuntimeError, "缺少 宁德时代 的 excerpt"):
+                get_latest_stock_topic_analysis("51111112855254", "宁德时代")
 
     @unittest.skipUnless(HAS_SERVICE_DEPS, "stock topic analysis service dependencies are not installed")
     def test_build_analysis_topic_payload_prefers_stored_excerpt(self):
