@@ -634,6 +634,7 @@ export default function GroupActionPanel({
                                   <DatePickerButton
                                     value={download.rangeEndDate}
                                     onChange={download.onRangeEndDateChange}
+                                    align="end"
                                   />
                                 </div>
                               </div>

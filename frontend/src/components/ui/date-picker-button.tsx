@@ -7,6 +7,8 @@ import { Button } from "@/components/ui/button"
 import { Calendar } from "@/components/ui/calendar"
 import { cn } from "@/lib/utils"
 
+const MONTH_LABELS = Array.from({ length: 12 }, (_, index) => `${index + 1}月`)
+
 function formatDate(date: Date) {
   const year = date.getFullYear()
   const month = String(date.getMonth() + 1).padStart(2, "0")
@@ -28,6 +30,7 @@ function isDateDisabled(date: Date, min?: string, max?: string) {
 }
 
 interface DatePickerButtonProps {
+  align?: "start" | "end"
   className?: string
   max?: string
   min?: string
@@ -37,6 +40,7 @@ interface DatePickerButtonProps {
 }
 
 export function DatePickerButton({
+  align = "start",
   className,
   max,
   min,
@@ -45,9 +49,51 @@ export function DatePickerButton({
   value,
 }: DatePickerButtonProps) {
   const [open, setOpen] = React.useState(false)
+  const selectedDate = parseDate(value)
+  const [viewMonth, setViewMonth] = React.useState(selectedDate || new Date())
+  const rootRef = React.useRef<HTMLDivElement>(null)
+
+  React.useEffect(() => {
+    const nextSelectedDate = parseDate(value)
+    if (nextSelectedDate) {
+      setViewMonth(nextSelectedDate)
+    }
+  }, [value])
+
+  React.useEffect(() => {
+    if (!open) {
+      return
+    }
+
+    const closeOnOutside = (event: PointerEvent) => {
+      if (!rootRef.current?.contains(event.target as Node)) {
+        setOpen(false)
+      }
+    }
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setOpen(false)
+      }
+    }
+
+    document.addEventListener("pointerdown", closeOnOutside)
+    document.addEventListener("keydown", closeOnEscape)
+    return () => {
+      document.removeEventListener("pointerdown", closeOnOutside)
+      document.removeEventListener("keydown", closeOnEscape)
+    }
+  }, [open])
+
+  const jumpYear = (offset: number) => {
+    setViewMonth(new Date(viewMonth.getFullYear() + offset, viewMonth.getMonth(), 1))
+  }
+
+  const jumpMonth = (monthIndex: number) => {
+    setViewMonth(new Date(viewMonth.getFullYear(), monthIndex, 1))
+  }
 
   return (
-    <div className={cn("relative", className)}>
+    <div ref={rootRef} className={cn("relative", className)}>
       <Button
         type="button"
         variant="outline"
@@ -58,10 +104,52 @@ export function DatePickerButton({
         <CalendarDays className="h-3.5 w-3.5 text-muted-foreground" />
       </Button>
       {open && (
-        <div className="absolute left-0 top-[calc(100%+0.375rem)] z-50 rounded-md border bg-background shadow-lg">
+        <div
+          className={cn(
+            "absolute top-[calc(100%+0.375rem)] z-50 w-[19rem] rounded-md border bg-background p-3 shadow-lg",
+            align === "end" ? "right-0" : "left-0"
+          )}
+        >
+          <div className="mb-3 flex items-center justify-between">
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              className="h-7 w-7"
+              onClick={() => jumpYear(-1)}
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+            <div className="text-sm font-medium">{viewMonth.getFullYear()}</div>
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              className="h-7 w-7"
+              onClick={() => jumpYear(1)}
+            >
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
+          <div className="mb-3 grid grid-cols-6 gap-1">
+            {MONTH_LABELS.map((label, index) => (
+              <Button
+                key={label}
+                type="button"
+                variant={viewMonth.getMonth() === index ? "secondary" : "ghost"}
+                size="sm"
+                className="h-7 px-1 text-xs"
+                onClick={() => jumpMonth(index)}
+              >
+                {label}
+              </Button>
+            ))}
+          </div>
           <Calendar
             mode="single"
-            selected={parseDate(value)}
+            month={viewMonth}
+            onMonthChange={setViewMonth}
+            selected={selectedDate}
             disabled={(date) => isDateDisabled(date, min, max)}
             onSelect={(date) => {
               if (!date) {
@@ -91,6 +179,7 @@ export function MonthPickerButton({
   value,
 }: MonthPickerButtonProps) {
   const [open, setOpen] = React.useState(false)
+  const rootRef = React.useRef<HTMLDivElement>(null)
   const selectedYear = value ? Number(value.slice(0, 4)) : new Date().getFullYear()
   const selectedMonth = value ? Number(value.slice(5, 7)) : undefined
   const [viewYear, setViewYear] = React.useState(selectedYear)
@@ -101,8 +190,32 @@ export function MonthPickerButton({
     }
   }, [value])
 
+  React.useEffect(() => {
+    if (!open) {
+      return
+    }
+
+    const closeOnOutside = (event: PointerEvent) => {
+      if (!rootRef.current?.contains(event.target as Node)) {
+        setOpen(false)
+      }
+    }
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setOpen(false)
+      }
+    }
+
+    document.addEventListener("pointerdown", closeOnOutside)
+    document.addEventListener("keydown", closeOnEscape)
+    return () => {
+      document.removeEventListener("pointerdown", closeOnOutside)
+      document.removeEventListener("keydown", closeOnEscape)
+    }
+  }, [open])
+
   return (
-    <div className={cn("relative", className)}>
+    <div ref={rootRef} className={cn("relative", className)}>
       <Button
         type="button"
         variant="outline"
@@ -136,11 +249,12 @@ export function MonthPickerButton({
             </Button>
           </div>
           <div className="grid grid-cols-3 gap-2">
-            {Array.from({ length: 12 }, (_, index) => index + 1).map((month) => {
+            {MONTH_LABELS.map((label, index) => {
+              const month = index + 1
               const selected = viewYear === selectedYear && month === selectedMonth
               return (
                 <Button
-                  key={month}
+                  key={label}
                   type="button"
                   variant={selected ? "default" : "ghost"}
                   size="sm"
@@ -150,7 +264,7 @@ export function MonthPickerButton({
                     setOpen(false)
                   }}
                 >
-                  {month}月
+                  {label}
                 </Button>
               )
             })}
