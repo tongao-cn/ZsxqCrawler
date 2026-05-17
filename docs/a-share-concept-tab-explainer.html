@@ -1,0 +1,649 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>A 股概念分析 Tab 说明</title>
+  <style>
+    :root {
+      --ink: #172033;
+      --muted: #667085;
+      --line: #d8dee8;
+      --paper: #f6f7f9;
+      --panel: #ffffff;
+      --blue: #2563eb;
+      --green: #12805c;
+      --amber: #b45309;
+      --rose: #be123c;
+      --violet: #6d28d9;
+      --shadow: 0 18px 45px rgba(17, 24, 39, 0.08);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background: var(--paper);
+      color: var(--ink);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", sans-serif;
+      line-height: 1.6;
+    }
+
+    main {
+      width: min(1180px, calc(100% - 32px));
+      margin: 0 auto;
+      padding: 32px 0 56px;
+    }
+
+    header {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 340px;
+      gap: 24px;
+      align-items: end;
+      padding: 32px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+      box-shadow: var(--shadow);
+    }
+
+    h1, h2, h3 {
+      margin: 0;
+      line-height: 1.2;
+      letter-spacing: 0;
+    }
+
+    h1 {
+      font-size: clamp(30px, 5vw, 56px);
+      max-width: 860px;
+    }
+
+    h2 {
+      font-size: 24px;
+      margin-bottom: 14px;
+    }
+
+    h3 {
+      font-size: 17px;
+      margin-bottom: 8px;
+    }
+
+    p {
+      margin: 0;
+    }
+
+    .lead {
+      margin-top: 18px;
+      max-width: 820px;
+      color: var(--muted);
+      font-size: 18px;
+    }
+
+    .stamp {
+      display: grid;
+      gap: 10px;
+      padding: 18px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fafbfc;
+      font-size: 14px;
+      color: var(--muted);
+    }
+
+    .stamp strong {
+      display: block;
+      color: var(--ink);
+      font-size: 16px;
+    }
+
+    .section {
+      margin-top: 24px;
+      padding: 28px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+    }
+
+    .grid {
+      display: grid;
+      gap: 16px;
+    }
+
+    .grid.cols-3 {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .grid.cols-2 {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .tile {
+      min-height: 128px;
+      padding: 18px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fbfcfe;
+    }
+
+    .tile .kicker,
+    .step .kicker {
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 600;
+    }
+
+    .tile p {
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .screen {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 300px;
+      gap: 18px;
+      min-height: 520px;
+      padding: 18px;
+      border: 1px solid #cbd5e1;
+      border-radius: 8px;
+      background: #eef2f7;
+    }
+
+    .screen-main,
+    .screen-side,
+    .mini-panel {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #ffffff;
+    }
+
+    .screen-main {
+      padding: 16px;
+    }
+
+    .screen-side {
+      padding: 16px;
+      align-self: start;
+    }
+
+    .screen-grid {
+      display: grid;
+      grid-template-columns: 260px minmax(0, 1fr);
+      gap: 14px;
+      margin-top: 14px;
+    }
+
+    .rank-list {
+      display: grid;
+      gap: 10px;
+      height: 390px;
+      overflow: hidden;
+      padding: 12px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #f8fafc;
+    }
+
+    .rank-item {
+      display: grid;
+      grid-template-columns: 26px minmax(0, 1fr);
+      gap: 8px;
+      padding: 10px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #ffffff;
+      font-size: 13px;
+    }
+
+    .rank-item.active {
+      border-color: #93c5fd;
+      background: #eff6ff;
+    }
+
+    .table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+
+    .table th,
+    .table td {
+      padding: 10px;
+      border-bottom: 1px solid var(--line);
+      text-align: left;
+      vertical-align: top;
+    }
+
+    .table th {
+      color: var(--muted);
+      font-weight: 600;
+      background: #f8fafc;
+    }
+
+    .badge-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 8px;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      min-height: 24px;
+      padding: 2px 8px;
+      border-radius: 999px;
+      background: #e5e7eb;
+      color: #344054;
+      font-size: 12px;
+      white-space: nowrap;
+    }
+
+    .badge.blue { background: #dbeafe; color: #1d4ed8; }
+    .badge.green { background: #dcfce7; color: #166534; }
+    .badge.amber { background: #fef3c7; color: #92400e; }
+    .badge.rose { background: #ffe4e6; color: #be123c; }
+    .badge.violet { background: #ede9fe; color: #5b21b6; }
+
+    .metric-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+      margin: 16px 0;
+    }
+
+    .metric {
+      padding: 12px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #f8fafc;
+      font-size: 13px;
+      color: var(--muted);
+    }
+
+    .metric strong {
+      display: block;
+      margin-top: 2px;
+      color: var(--ink);
+      font-size: 18px;
+    }
+
+    .button-row {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+      margin-top: 12px;
+    }
+
+    .button {
+      display: inline-flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 40px;
+      padding: 8px 12px;
+      border: 1px solid #bfdbfe;
+      border-radius: 8px;
+      background: #eff6ff;
+      color: #1d4ed8;
+      font-size: 14px;
+      font-weight: 600;
+    }
+
+    .button.primary {
+      background: var(--blue);
+      color: #ffffff;
+      border-color: var(--blue);
+    }
+
+    .flow {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 12px;
+      margin-top: 16px;
+    }
+
+    .step {
+      position: relative;
+      min-height: 158px;
+      padding: 16px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fbfcfe;
+    }
+
+    .step::after {
+      content: "→";
+      position: absolute;
+      right: -15px;
+      top: 50%;
+      color: var(--muted);
+      transform: translateY(-50%);
+    }
+
+    .step:last-child::after {
+      content: "";
+    }
+
+    .compare {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 16px;
+    }
+
+    .compare article {
+      padding: 18px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fbfcfe;
+    }
+
+    .compare ul,
+    .notes ul {
+      margin: 10px 0 0;
+      padding-left: 20px;
+      color: var(--muted);
+    }
+
+    code {
+      padding: 2px 5px;
+      border-radius: 5px;
+      background: #eef2f7;
+      color: #334155;
+      font-family: Consolas, "SFMono-Regular", monospace;
+      font-size: 0.92em;
+    }
+
+    footer {
+      margin-top: 24px;
+      color: var(--muted);
+      font-size: 13px;
+      text-align: center;
+    }
+
+    @media (max-width: 960px) {
+      header,
+      .screen,
+      .screen-grid,
+      .compare,
+      .grid.cols-2,
+      .grid.cols-3,
+      .flow {
+        grid-template-columns: 1fr;
+      }
+
+      .step::after {
+        display: none;
+      }
+    }
+
+    @media (max-width: 640px) {
+      main {
+        width: min(100% - 20px, 1180px);
+        padding-top: 10px;
+      }
+
+      header,
+      .section {
+        padding: 18px;
+      }
+
+      .screen {
+        padding: 12px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <div>
+        <h1>A 股概念分析 Tab 现在在做什么</h1>
+        <p class="lead">
+          当前页面里真正的“概念分析”是独立的“股票概念” Tab：它从某一天已入库的知识星球话题里，提取被明确提到的 A 股、关联概念、来源话题和推荐池命中情况。
+        </p>
+      </div>
+      <aside class="stamp">
+        <div>
+          <strong>入口位置</strong>
+          群组详情页顶部主标签：话题列表 / 文件 / A股分析 / 每日总结 / 股票概念
+        </div>
+        <div>
+          <strong>实现组件</strong>
+          <code>DailyTopicAnalysisPanel</code> 的 <code>mode="stock-concepts"</code>
+        </div>
+        <div>
+          <strong>核心结论</strong>
+          它是同日解释工具，不是多日推荐池本身。
+        </div>
+      </aside>
+    </header>
+
+    <section class="section">
+      <h2>一句话理解</h2>
+      <div class="grid cols-3">
+        <article class="tile">
+          <div class="kicker">输入</div>
+          <h3>某个群组、某一天的话题</h3>
+          <p>默认按报告日期读取当天已入库话题，不负责重新爬取内容。</p>
+        </article>
+        <article class="tile">
+          <div class="kicker">处理</div>
+          <h3>AI 提取股票与概念</h3>
+          <p>只保留明确提到或能从上下文明确映射到 A 股上市公司的结果，并记录来源话题。</p>
+        </article>
+        <article class="tile">
+          <div class="kicker">输出</div>
+          <h3>概念榜、股票表、详情回溯</h3>
+          <p>前端把结果整理成概念聚合、股票列表、7 天趋势、推荐池共振和原始话题弹窗。</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="section">
+      <h2>页面结构</h2>
+      <div class="screen" aria-label="股票概念 Tab 页面结构示意">
+        <div class="screen-main">
+          <h3>股票概念提取</h3>
+          <p style="color: var(--muted); font-size: 14px;">从当天话题中提取 A 股股票、关联概念、推荐池命中和来源话题。</p>
+          <div class="screen-grid">
+            <div class="rank-list">
+              <strong>概念榜</strong>
+              <div class="rank-item active">
+                <span>1</span>
+                <div>
+                  <strong>机器人</strong>
+                  <div class="badge-row">
+                    <span class="badge">话题 4</span>
+                    <span class="badge">股 6</span>
+                    <span class="badge green">推 2</span>
+                  </div>
+                  <div class="badge-row">
+                    <span class="badge blue">多话题共振</span>
+                    <span class="badge rose">持续升温</span>
+                  </div>
+                </div>
+              </div>
+              <div class="rank-item">
+                <span>2</span>
+                <div>
+                  <strong>固态电池</strong>
+                  <div class="badge-row">
+                    <span class="badge">话题 2</span>
+                    <span class="badge">股 3</span>
+                  </div>
+                </div>
+              </div>
+              <div class="rank-item">
+                <span>3</span>
+                <div>
+                  <strong>算力</strong>
+                  <div class="badge-row">
+                    <span class="badge">话题 1</span>
+                    <span class="badge">股 8</span>
+                    <span class="badge amber">单话题扩散</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div>
+              <div class="mini-panel" style="padding: 14px; margin-bottom: 14px;">
+                <strong>选中概念详情</strong>
+                <div class="metric-grid">
+                  <div class="metric">来源话题<strong>4</strong></div>
+                  <div class="metric">相关股票<strong>6</strong></div>
+                  <div class="metric">推荐池命中<strong>2</strong></div>
+                  <div class="metric">7 天累计话题<strong>9</strong></div>
+                </div>
+                <p style="color: var(--muted); font-size: 13px;">这里展示近 7 天趋势和可点击的来源话题 ID。</p>
+              </div>
+              <table class="table">
+                <thead>
+                  <tr>
+                    <th>股票</th>
+                    <th>代码</th>
+                    <th>推荐池</th>
+                    <th>概念</th>
+                    <th>置信度</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td>示例股份</td>
+                    <td>000001.SZ</td>
+                    <td><span class="badge green">命中</span></td>
+                    <td><span class="badge">机器人</span> <span class="badge">智能制造</span></td>
+                    <td>86%</td>
+                  </tr>
+                  <tr>
+                    <td>样本科技</td>
+                    <td>未匹配</td>
+                    <td>-</td>
+                    <td><span class="badge">算力</span></td>
+                    <td>50%</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+        <aside class="screen-side">
+          <h3>股票概念操作</h3>
+          <p style="color: var(--muted); font-size: 14px;">右侧控制栏只做日期、刷新、提取和视图过滤。</p>
+          <div class="metric-grid">
+            <div class="metric">概念<strong>20</strong></div>
+            <div class="metric">股票<strong>48</strong></div>
+            <div class="metric">当前展示<strong>12</strong></div>
+            <div class="metric">推荐命中<strong>5</strong></div>
+          </div>
+          <div class="button-row">
+            <div class="button">刷新</div>
+            <div class="button primary">提取</div>
+          </div>
+          <div class="button-row">
+            <div class="button" style="grid-column: span 2;">只看推荐池命中</div>
+          </div>
+        </aside>
+      </div>
+    </section>
+
+    <section class="section">
+      <h2>数据怎么流动</h2>
+      <div class="flow">
+        <article class="step">
+          <div class="kicker">1. 选日期</div>
+          <h3>报告日期</h3>
+          <p>前端用日期输入框确定要看的交易日或自然日。</p>
+        </article>
+        <article class="step">
+          <div class="kicker">2. 创建任务</div>
+          <h3><code>POST /api/analysis/daily-stock-concepts/{group_id}</code></h3>
+          <p>后端创建 <code>daily_stock_concepts</code> 后台任务，并把任务 ID 交给已有任务日志浮层。</p>
+        </article>
+        <article class="step">
+          <div class="kicker">3. 读取话题</div>
+          <h3>当天已入库话题</h3>
+          <p>服务复用每日总结的日期解析、话题读取和提示词组装逻辑。</p>
+        </article>
+        <article class="step">
+          <div class="kicker">4. AI 结构化输出</div>
+          <h3>股票、概念、理由、topic_ids</h3>
+          <p>输出受 JSON Schema 约束；股票名称会再尝试用 <code>stock_basic</code> 补齐代码和市场。</p>
+        </article>
+        <article class="step">
+          <div class="kicker">5. 前端展示</div>
+          <h3>概念聚合与回溯</h3>
+          <p>结果存入 <code>daily_stock_concepts</code>，前端再聚合成概念榜、趋势和股票表。</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="section">
+      <h2>它展示哪些判断</h2>
+      <div class="grid cols-2">
+        <article class="tile">
+          <h3>概念榜排序</h3>
+          <p>先按去重来源话题数排序，再看推荐池命中数量、相关股票数，最后按中文概念名排序。</p>
+        </article>
+        <article class="tile">
+          <h3>质量标签</h3>
+          <p>
+            <span class="badge blue">多话题共振</span>
+            <span class="badge green">推荐池共振</span>
+            <span class="badge amber">单话题扩散</span>
+            <span class="badge violet">新出现</span>
+            <span class="badge rose">持续升温</span>
+          </p>
+        </article>
+        <article class="tile">
+          <h3>推荐池命中</h3>
+          <p>前端会用同一天的 A 股分析图表接口取 Top 100 排名，把公司名规范化后与概念结果比对。</p>
+        </article>
+        <article class="tile">
+          <h3>详情弹窗</h3>
+          <p>点击股票可看当天概念、来源话题和近 7 天出现情况；点击来源话题 ID 可回到原始话题内容。</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="section">
+      <h2>和 A 股分析 Tab 的边界</h2>
+      <div class="compare">
+        <article>
+          <h3>股票概念 Tab</h3>
+          <ul>
+            <li>对象：某一天的话题。</li>
+            <li>目标：解释“今天聊到了哪些股票和概念”。</li>
+            <li>输出：股票、概念、理由、来源话题、7 天趋势。</li>
+            <li>存储：<code>daily_stock_concepts</code>。</li>
+          </ul>
+        </article>
+        <article>
+          <h3>A 股分析 Tab</h3>
+          <ul>
+            <li>对象：多日公司提及结果和排名窗口。</li>
+            <li>目标：形成公司热度榜、推荐池和通达信导出。</li>
+            <li>输出：日期序列、排名窗口、公司提及统计、导出板块。</li>
+            <li>存储：<code>zsxq_a_share_daily_mentions</code> 等表。</li>
+          </ul>
+        </article>
+      </div>
+    </section>
+
+    <section class="section notes">
+      <h2>使用时要注意</h2>
+      <ul>
+        <li>没有当天结果时，页面会提示“还没有股票概念结果”，需要先点“提取”。</li>
+        <li>“未匹配”不一定代表 AI 没识别到股票，而是没有从股票基础库可靠补齐代码。</li>
+        <li>置信度低的结果通常来自名称不完整、上下文不够确定或代码无法匹配。</li>
+        <li>推荐池命中只是共振标记，不等于买入建议。</li>
+        <li>这个 Tab 适合做盘后解释和线索回溯，不应该替代多日推荐池排名。</li>
+      </ul>
+    </section>
+
+    <footer>
+      生成依据：当前前端 <code>DailyTopicAnalysisPanel</code>、群组页 Tab 接入、每日股票概念后端路由与服务实现。
+    </footer>
+  </main>
+</body>
+</html>

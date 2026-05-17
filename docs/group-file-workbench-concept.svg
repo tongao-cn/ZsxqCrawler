@@ -1,0 +1,198 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1000" viewBox="0 0 1600 1000">
+  <defs>
+    <style>
+      .bg { fill: #f6f7f9; }
+      .panel { fill: #ffffff; stroke: #d9dee7; stroke-width: 1.2; }
+      .soft { fill: #f9fafb; stroke: #e3e7ee; stroke-width: 1; }
+      .muted { fill: #6b7280; font-family: "Microsoft YaHei", "PingFang SC", Arial, sans-serif; }
+      .text { fill: #111827; font-family: "Microsoft YaHei", "PingFang SC", Arial, sans-serif; }
+      .title { fill: #0f172a; font-family: "Microsoft YaHei", "PingFang SC", Arial, sans-serif; font-weight: 700; }
+      .small { font-size: 18px; }
+      .body { font-size: 21px; }
+      .label { font-size: 16px; }
+      .h1 { font-size: 32px; }
+      .h2 { font-size: 24px; font-weight: 700; }
+      .tab { fill: #eef2f7; }
+      .tabActive { fill: #111827; }
+      .tabText { fill: #4b5563; font-family: "Microsoft YaHei", "PingFang SC", Arial, sans-serif; font-size: 18px; }
+      .tabTextActive { fill: #ffffff; font-family: "Microsoft YaHei", "PingFang SC", Arial, sans-serif; font-size: 18px; font-weight: 700; }
+      .blue { fill: #2563eb; }
+      .green { fill: #059669; }
+      .amber { fill: #d97706; }
+      .red { fill: #dc2626; }
+      .line { stroke: #e5e7eb; stroke-width: 1; }
+      .chip { fill: #eef2ff; stroke: #c7d2fe; }
+      .chipText { fill: #3730a3; font-family: "Microsoft YaHei", "PingFang SC", Arial, sans-serif; font-size: 16px; font-weight: 700; }
+      .btn { fill: #111827; }
+      .btnText { fill: #ffffff; font-family: "Microsoft YaHei", "PingFang SC", Arial, sans-serif; font-size: 17px; font-weight: 700; }
+      .btnGhost { fill: #ffffff; stroke: #d1d5db; }
+      .btnGhostText { fill: #374151; font-family: "Microsoft YaHei", "PingFang SC", Arial, sans-serif; font-size: 17px; font-weight: 700; }
+      .dangerSoft { fill: #fef2f2; stroke: #fecaca; }
+      .shadow { filter: drop-shadow(0 10px 24px rgba(15, 23, 42, 0.08)); }
+    </style>
+  </defs>
+
+  <rect class="bg" width="1600" height="1000"/>
+
+  <rect x="32" y="28" width="1536" height="72" rx="8" class="panel shadow"/>
+  <text x="58" y="73" class="title h1">纪要又要-3日</text>
+  <text x="274" y="73" class="muted body">群组文件工作台概念图</text>
+  <rect x="1190" y="47" width="126" height="34" rx="6" class="tab"/>
+  <text x="1220" y="70" class="tabText">刷新状态</text>
+  <rect x="1330" y="47" width="202" height="34" rx="6" class="tabActive"/>
+  <text x="1362" y="70" class="tabTextActive">打开任务日志</text>
+
+  <rect x="32" y="124" width="270" height="828" rx="8" class="panel"/>
+  <text x="58" y="164" class="title h2">群组信息</text>
+  <rect x="58" y="194" width="218" height="88" rx="8" class="soft"/>
+  <text x="78" y="229" class="muted label">话题总数</text>
+  <text x="78" y="264" class="title h2">1,284</text>
+  <rect x="58" y="302" width="218" height="122" rx="8" class="soft"/>
+  <text x="78" y="337" class="muted label">文件记录</text>
+  <text x="78" y="372" class="title h2">386 条</text>
+  <text x="78" y="402" class="muted label">已下载 248 · 未下载 112 · 失败 26</text>
+  <rect x="58" y="452" width="218" height="152" rx="8" class="soft"/>
+  <text x="78" y="488" class="muted label">当前账号</text>
+  <text x="78" y="523" class="text body">默认采集账号</text>
+  <rect x="78" y="548" width="126" height="34" rx="6" class="btnGhost"/>
+  <text x="101" y="571" class="btnGhostText">切换账号</text>
+  <rect x="58" y="632" width="218" height="270" rx="8" class="soft"/>
+  <text x="78" y="668" class="title body">左侧只做上下文</text>
+  <text x="78" y="704" class="muted label">不再放主要文件动作，避免</text>
+  <text x="78" y="730" class="muted label">和中间工作台重复。</text>
+  <text x="78" y="780" class="muted label">文件状态保留一行摘要：</text>
+  <text x="78" y="808" class="muted label">本地 / 远端、失败数、最近</text>
+  <text x="78" y="836" class="muted label">任务状态。</text>
+
+  <rect x="326" y="124" width="882" height="828" rx="8" class="panel"/>
+  <rect x="354" y="150" width="830" height="48" rx="8" class="soft"/>
+  <rect x="360" y="156" width="196" height="36" rx="6" class="tab"/>
+  <text x="413" y="180" class="tabText">话题列表</text>
+  <rect x="564" y="156" width="156" height="36" rx="6" class="tabActive"/>
+  <text x="616" y="180" class="tabTextActive">文件</text>
+  <rect x="728" y="156" width="178" height="36" rx="6" class="tab"/>
+  <text x="783" y="180" class="tabText">A股分析</text>
+  <rect x="914" y="156" width="196" height="36" rx="6" class="tab"/>
+  <text x="963" y="180" class="tabText">每日总结</text>
+
+  <text x="354" y="248" class="title h1">文件工作台</text>
+  <text x="354" y="284" class="muted body">围绕“找到文件 → 下载 → 分析 → 查看结果”的一条主路径组织。</text>
+
+  <rect x="354" y="318" width="155" height="82" rx="8" class="soft"/>
+  <text x="376" y="349" class="muted label">当前结果</text>
+  <text x="376" y="382" class="title h2">20</text>
+  <rect x="525" y="318" width="155" height="82" rx="8" class="soft"/>
+  <text x="547" y="349" class="muted label">已下载</text>
+  <text x="547" y="382" class="title h2 green">14</text>
+  <rect x="696" y="318" width="155" height="82" rx="8" class="soft"/>
+  <text x="718" y="349" class="muted label">待分析</text>
+  <text x="718" y="382" class="title h2 amber">8</text>
+  <rect x="867" y="318" width="155" height="82" rx="8" class="soft"/>
+  <text x="889" y="349" class="muted label">失败</text>
+  <text x="889" y="382" class="title h2 red">2</text>
+  <rect x="1038" y="318" width="146" height="82" rx="8" class="soft"/>
+  <text x="1060" y="349" class="muted label">已分析</text>
+  <text x="1060" y="382" class="title h2 blue">6</text>
+
+  <rect x="354" y="424" width="830" height="64" rx="8" class="soft"/>
+  <rect x="374" y="438" width="276" height="36" rx="6" fill="#ffffff" stroke="#d1d5db"/>
+  <text x="394" y="462" class="muted label">搜索文件名、来源话题...</text>
+  <rect x="662" y="438" width="126" height="36" rx="6" class="btnGhost"/>
+  <text x="701" y="462" class="btnGhostText">全部状态</text>
+  <rect x="800" y="438" width="104" height="36" rx="6" class="btnGhost"/>
+  <text x="832" y="462" class="btnGhostText">刷新</text>
+  <rect x="916" y="438" width="118" height="36" rx="6" class="btn"/>
+  <text x="944" y="462" class="btnText">批量下载</text>
+  <rect x="1046" y="438" width="118" height="36" rx="6" class="btn"/>
+  <text x="1074" y="462" class="btnText">批量分析</text>
+
+  <rect x="354" y="512" width="830" height="342" rx="8" fill="#ffffff" stroke="#d9dee7"/>
+  <line x1="354" y1="566" x2="1184" y2="566" class="line"/>
+  <text x="378" y="547" class="muted label">文件名</text>
+  <text x="682" y="547" class="muted label">获取状态</text>
+  <text x="804" y="547" class="muted label">解析状态</text>
+  <text x="936" y="547" class="muted label">来源/时间</text>
+  <text x="1084" y="547" class="muted label">操作</text>
+
+  <g>
+    <line x1="354" y1="626" x2="1184" y2="626" class="line"/>
+    <text x="378" y="604" class="text small">2026策略电话会纪要.pdf</text>
+    <rect x="682" y="584" width="78" height="28" rx="14" fill="#dcfce7"/>
+    <text x="704" y="604" class="green label">已下载</text>
+    <rect x="804" y="584" width="78" height="28" rx="14" fill="#eef2ff"/>
+    <text x="826" y="604" class="blue label">已分析</text>
+    <text x="936" y="604" class="muted label">05-09 09:41</text>
+    <rect x="1072" y="582" width="88" height="32" rx="6" class="btnGhost"/>
+    <text x="1086" y="604" class="btnGhostText">查看分析</text>
+  </g>
+  <g>
+    <line x1="354" y1="686" x2="1184" y2="686" class="line"/>
+    <text x="378" y="664" class="text small">行业数据库更新.xlsx</text>
+    <rect x="682" y="644" width="78" height="28" rx="14" fill="#dcfce7"/>
+    <text x="704" y="664" class="green label">已下载</text>
+    <rect x="804" y="644" width="78" height="28" rx="14" fill="#fef3c7"/>
+    <text x="826" y="664" class="amber label">待分析</text>
+    <text x="936" y="664" class="muted label">05-08 21:17</text>
+    <rect x="1072" y="642" width="88" height="32" rx="6" class="btn"/>
+    <text x="1096" y="664" class="btnText">AI分析</text>
+  </g>
+  <g>
+    <line x1="354" y1="746" x2="1184" y2="746" class="line"/>
+    <text x="378" y="724" class="text small">会议录音-新能源.mp3</text>
+    <rect x="682" y="704" width="78" height="28" rx="14" fill="#fee2e2"/>
+    <text x="713" y="724" class="red label">失败</text>
+    <rect x="804" y="704" width="78" height="28" rx="14" fill="#f3f4f6"/>
+    <text x="826" y="724" class="muted label">未分析</text>
+    <text x="936" y="724" class="muted label">05-08 17:03</text>
+    <rect x="1072" y="702" width="88" height="32" rx="6" class="btnGhost"/>
+    <text x="1100" y="724" class="btnGhostText">重试</text>
+  </g>
+  <g>
+    <line x1="354" y1="806" x2="1184" y2="806" class="line"/>
+    <text x="378" y="784" class="text small">AI应用周报.docx</text>
+    <rect x="682" y="764" width="78" height="28" rx="14" fill="#fef3c7"/>
+    <text x="704" y="784" class="amber label">未下载</text>
+    <rect x="804" y="764" width="78" height="28" rx="14" fill="#f3f4f6"/>
+    <text x="826" y="784" class="muted label">未分析</text>
+    <text x="936" y="784" class="muted label">05-07 15:30</text>
+    <rect x="1072" y="762" width="88" height="32" rx="6" class="btnGhost"/>
+    <text x="1100" y="784" class="btnGhostText">下载</text>
+  </g>
+
+  <rect x="520" y="878" width="110" height="36" rx="6" class="btnGhost"/>
+  <text x="553" y="902" class="btnGhostText">上一页</text>
+  <text x="690" y="902" class="muted label">第 1 / 20 页</text>
+  <rect x="836" y="878" width="110" height="36" rx="6" class="btnGhost"/>
+  <text x="869" y="902" class="btnGhostText">下一页</text>
+
+  <rect x="1232" y="124" width="336" height="828" rx="8" class="panel"/>
+  <text x="1260" y="164" class="title h2">任务启动器</text>
+  <text x="1260" y="196" class="muted label">右侧只放长任务和参数，不重复列表操作。</text>
+
+  <rect x="1260" y="226" width="280" height="146" rx="8" class="soft"/>
+  <text x="1282" y="262" class="title body">按时间下载</text>
+  <text x="1282" y="294" class="muted label">最近 3 天，或指定日期范围。</text>
+  <rect x="1282" y="318" width="236" height="34" rx="6" class="btn"/>
+  <text x="1360" y="341" class="btnText">开始任务</text>
+
+  <rect x="1260" y="394" width="280" height="126" rx="8" class="soft"/>
+  <text x="1282" y="430" class="title body">按热度下载</text>
+  <text x="1282" y="462" class="muted label">优先下载高下载次数文件。</text>
+  <rect x="1282" y="482" width="236" height="28" rx="6" class="btnGhost"/>
+  <text x="1355" y="502" class="btnGhostText">启动</text>
+
+  <rect x="1260" y="542" width="280" height="146" rx="8" class="soft"/>
+  <text x="1282" y="578" class="title body">下载参数</text>
+  <text x="1282" y="610" class="muted label">间隔 8-16 秒 · 批次 5 个文件</text>
+  <text x="1282" y="640" class="muted label">长休眠 5-12 分钟 · 随机模式</text>
+  <rect x="1282" y="660" width="120" height="28" rx="6" class="btnGhost"/>
+  <text x="1312" y="680" class="btnGhostText">修改</text>
+
+  <rect x="1260" y="720" width="280" height="86" rx="8" class="chip"/>
+  <text x="1282" y="754" class="chipText">任务反馈统一进 TaskDock</text>
+  <text x="1282" y="784" class="muted label">不再散落在按钮、Toast 和列表中。</text>
+
+  <rect x="1260" y="836" width="280" height="84" rx="8" class="dangerSoft"/>
+  <text x="1282" y="868" class="red body">危险操作折叠</text>
+  <text x="1282" y="898" class="muted label">删除文件数据库移入更多/设置区。</text>
+</svg>

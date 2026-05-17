@@ -1,0 +1,289 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="2048" height="1000" viewBox="0 0 2048 1000">
+  <defs>
+    <style>
+      .bg{fill:#f7f8fa}
+      .card{fill:#fff;stroke:#dfe3ea;stroke-width:1}
+      .soft{fill:#f9fafb;stroke:#e4e7ed;stroke-width:1}
+      .tabbar{fill:#f1f2f4}
+      .activeTab{fill:#fff;stroke:#d7dbe3;filter:drop-shadow(0 1px 2px rgba(15,23,42,.12))}
+      .text{font-family:"Microsoft YaHei","PingFang SC",Arial,sans-serif;fill:#111827}
+      .muted{font-family:"Microsoft YaHei","PingFang SC",Arial,sans-serif;fill:#6b7280}
+      .title{font-family:"Microsoft YaHei","PingFang SC",Arial,sans-serif;fill:#0f172a;font-weight:700}
+      .xs{font-size:13px}.sm{font-size:15px}.md{font-size:17px}.lg{font-size:20px}.xl{font-size:24px}
+      .line{stroke:#e5e7eb;stroke-width:1}
+      .blue{fill:#2563eb}.green{fill:#059669}.amber{fill:#d97706}.red{fill:#dc2626}.purple{fill:#7c3aed}
+      .btn{fill:#111827}.btnText{fill:#fff;font-family:"Microsoft YaHei","PingFang SC",Arial,sans-serif;font-size:15px;font-weight:700}
+      .ghost{fill:#fff;stroke:#d5dae3}.ghostText{fill:#374151;font-family:"Microsoft YaHei","PingFang SC",Arial,sans-serif;font-size:15px;font-weight:700}
+      .pill{fill:#eef2ff;stroke:#c7d2fe}.pillText{fill:#3730a3;font-family:"Microsoft YaHei","PingFang SC",Arial,sans-serif;font-size:13px;font-weight:700}
+      .okPill{fill:#dcfce7}.warnPill{fill:#fef3c7}.failPill{fill:#fee2e2}.grayPill{fill:#f3f4f6}
+      .danger{fill:#fff1f2;stroke:#fecdd3}
+      .note{fill:#f8fafc;stroke:#dbeafe}
+    </style>
+  </defs>
+
+  <rect width="2048" height="1000" class="bg"/>
+
+  <!-- Top chrome -->
+  <text x="32" y="42" class="text md">← 返回群组列表</text>
+  <rect x="1876" y="19" width="108" height="34" rx="8" class="ghost"/>
+  <text x="1905" y="42" class="ghostText">任务日志</text>
+  <rect x="1993" y="19" width="39" height="34" rx="8" class="ghost"/>
+  <text x="2006" y="42" class="text md">···</text>
+
+  <!-- Left column -->
+  <rect x="18" y="73" width="340" height="511" rx="14" class="card"/>
+  <rect x="36" y="111" width="50" height="50" rx="10" fill="#1f2937"/>
+  <text x="100" y="131" class="title xl">纪要又要</text>
+  <rect x="100" y="143" width="44" height="22" rx="8" fill="#ffedd5"/>
+  <text x="111" y="159" class="amber xs">付费</text>
+  <rect x="152" y="143" width="44" height="22" rx="8" fill="#dcfce7"/>
+  <text x="163" y="159" class="green xs">活跃</text>
+  <text x="35" y="199" class="muted sm">加入时间</text>
+  <text x="35" y="221" class="text md">2025/7/22</text>
+  <text x="141" y="199" class="muted sm">到期时间</text>
+  <text x="141" y="221" class="text md">2026/7/22</text>
+  <text x="247" y="199" class="muted sm">本地话题数</text>
+  <text x="247" y="221" class="blue md">13251</text>
+  <line x1="35" y1="251" x2="340" y2="251" class="line"/>
+  <rect x="35" y="269" width="305" height="35" rx="8" fill="#fffbeb" stroke="#fbbf24"/>
+  <text x="101" y="292" class="amber sm">消息速递，助力涨停！</text>
+  <line x1="35" y1="329" x2="340" y2="329" class="line"/>
+  <text x="35" y="364" class="text md">所属账号</text>
+  <rect x="270" y="347" width="70" height="24" rx="8" class="ghost"/>
+  <text x="281" y="364" class="text xs">自动匹配</text>
+  <text x="64" y="396" class="text md">Diamond_Ha*</text>
+  <line x1="35" y1="439" x2="340" y2="439" class="line"/>
+  <rect x="35" y="457" width="305" height="91" rx="10" fill="#eff6ff" stroke="#bfdbfe"/>
+  <text x="50" y="485" class="blue sm">文件记录</text>
+  <text x="275" y="485" class="text xs">19095 条</text>
+  <text x="50" y="513" class="blue xs">已下载 267    未下载 18828    失败 0</text>
+  <text x="50" y="536" class="blue xs">本地/远端 19095/31672</text>
+
+  <!-- Main tabs -->
+  <rect x="376" y="73" width="1654" height="38" rx="10" class="tabbar"/>
+  <text x="543" y="98" class="text md">▱ 话题列表</text>
+  <rect x="790" y="76" width="414" height="32" rx="8" class="activeTab"/>
+  <text x="972" y="98" class="title md">▯ 文件</text>
+  <text x="1368" y="98" class="text md">▥ A股分析</text>
+  <text x="1780" y="98" class="text md">✧ 每日总结</text>
+
+  <!-- Main workbench -->
+  <rect x="376" y="137" width="1296" height="785" rx="12" fill="#fff" opacity=".0"/>
+  <text x="376" y="164" class="title lg">文件工作台</text>
+  <text x="470" y="164" class="muted sm">主路径：定位文件 → 下载/重试 → AI 分析 → 查看结果</text>
+  <rect x="1280" y="137" width="392" height="34" rx="8" class="note"/>
+  <text x="1300" y="159" class="blue sm">当前筛选：全部状态 · 文件名为空 · 第 1 页</text>
+
+  <!-- Stats row reorganized -->
+  <rect x="376" y="185" width="206" height="74" rx="10" class="card"/>
+  <text x="390" y="214" class="muted sm">当前结果</text>
+  <text x="390" y="241" class="title xl">20</text>
+  <rect x="594" y="185" width="206" height="74" rx="10" class="card"/>
+  <text x="608" y="214" class="muted sm">全群文件</text>
+  <text x="608" y="241" class="title xl">19095</text>
+  <rect x="812" y="185" width="206" height="74" rx="10" class="card"/>
+  <text x="826" y="214" class="muted sm">已下载</text>
+  <text x="826" y="241" class="title xl green">267</text>
+  <rect x="1030" y="185" width="206" height="74" rx="10" class="card"/>
+  <text x="1044" y="214" class="muted sm">未下载</text>
+  <text x="1044" y="241" class="title xl amber">18828</text>
+  <rect x="1248" y="185" width="206" height="74" rx="10" class="card"/>
+  <text x="1262" y="214" class="muted sm">下载失败</text>
+  <text x="1262" y="241" class="title xl red">0</text>
+  <rect x="1466" y="185" width="206" height="74" rx="10" class="card"/>
+  <text x="1480" y="214" class="muted sm">待分析</text>
+  <text x="1480" y="241" class="title xl purple">18828</text>
+
+  <!-- Workbench toolbar -->
+  <rect x="376" y="278" width="1296" height="58" rx="10" class="soft"/>
+  <rect x="392" y="290" width="292" height="34" rx="8" fill="#fff" stroke="#d7dce5"/>
+  <text x="409" y="312" class="muted sm">搜索文件名、来源话题、扩展名...</text>
+  <rect x="696" y="290" width="92" height="34" rx="8" class="ghost"/>
+  <text x="725" y="312" class="ghostText">搜索</text>
+  <rect x="801" y="290" width="134" height="34" rx="8" class="ghost"/>
+  <text x="830" y="312" class="ghostText">全部获取状态</text>
+  <rect x="948" y="290" width="134" height="34" rx="8" class="ghost"/>
+  <text x="977" y="312" class="ghostText">全部分析状态</text>
+  <rect x="1095" y="290" width="82" height="34" rx="8" class="ghost"/>
+  <text x="1123" y="312" class="ghostText">刷新</text>
+  <rect x="1192" y="290" width="142" height="34" rx="8" class="btn"/>
+  <text x="1219" y="312" class="btnText">下载当前筛选</text>
+  <rect x="1346" y="290" width="142" height="34" rx="8" class="btn"/>
+  <text x="1373" y="312" class="btnText">分析当前页</text>
+  <rect x="1500" y="290" width="154" height="34" rx="8" class="ghost"/>
+  <text x="1528" y="312" class="ghostText">只看需处理</text>
+
+  <!-- Intent strip -->
+  <rect x="376" y="351" width="1296" height="42" rx="10" fill="#f8fafc" stroke="#e2e8f0"/>
+  <text x="392" y="378" class="muted sm">操作语义统一：</text>
+  <rect x="506" y="360" width="116" height="24" rx="12" class="grayPill"/>
+  <text x="535" y="377" class="text xs">未下载</text>
+  <text x="632" y="377" class="muted xs">→ 下载</text>
+  <rect x="693" y="360" width="116" height="24" rx="12" class="warnPill"/>
+  <text x="721" y="377" class="amber xs">下载失败</text>
+  <text x="819" y="377" class="muted xs">→ 重试</text>
+  <rect x="885" y="360" width="136" height="24" rx="12" class="okPill"/>
+  <text x="913" y="377" class="green xs">已下载未分析</text>
+  <text x="1031" y="377" class="muted xs">→ AI 分析</text>
+  <rect x="1127" y="360" width="116" height="24" rx="12" class="pill"/>
+  <text x="1155" y="377" class="pillText">已分析</text>
+  <text x="1253" y="377" class="muted xs">→ 查看分析</text>
+
+  <!-- Table -->
+  <rect x="376" y="412" width="1296" height="512" rx="10" class="card"/>
+  <line x1="376" y1="462" x2="1672" y2="462" class="line"/>
+  <text x="388" y="443" class="title sm">文件名</text>
+  <text x="864" y="443" class="title sm">大小</text>
+  <text x="955" y="443" class="title sm">热度</text>
+  <text x="1048" y="443" class="title sm">创建时间</text>
+  <text x="1240" y="443" class="title sm">获取状态</text>
+  <text x="1370" y="443" class="title sm">分析状态</text>
+  <text x="1548" y="443" class="title sm">主操作</text>
+
+  <g class="row">
+    <line x1="376" y1="512" x2="1672" y2="512" class="line"/>
+    <text x="388" y="493" class="text sm">▯ 注塑机龙头专家交流20260507_1.mp3</text>
+    <text x="864" y="493" class="text sm">9.1 MB</text>
+    <text x="955" y="493" class="text sm">0</text>
+    <text x="1048" y="493" class="text sm">2026/5/8 22:34</text>
+    <rect x="1240" y="475" width="70" height="24" rx="12" class="grayPill"/>
+    <text x="1255" y="492" class="amber xs">未下载</text>
+    <rect x="1370" y="475" width="70" height="24" rx="12" class="grayPill"/>
+    <text x="1385" y="492" class="muted xs">未分析</text>
+    <rect x="1530" y="470" width="84" height="32" rx="8" class="ghost"/>
+    <text x="1559" y="491" class="ghostText">下载</text>
+  </g>
+  <g>
+    <line x1="376" y1="562" x2="1672" y2="562" class="line"/>
+    <text x="388" y="543" class="text sm">▯ 永臻股份20260507_1.mp3</text>
+    <text x="864" y="543" class="text sm">7.5 MB</text>
+    <text x="955" y="543" class="text sm">0</text>
+    <text x="1048" y="543" class="text sm">2026/5/8 22:34</text>
+    <rect x="1240" y="525" width="70" height="24" rx="12" class="okPill"/>
+    <text x="1252" y="542" class="green xs">已下载</text>
+    <rect x="1370" y="525" width="70" height="24" rx="12" class="warnPill"/>
+    <text x="1385" y="542" class="amber xs">未分析</text>
+    <rect x="1530" y="520" width="84" height="32" rx="8" class="btn"/>
+    <text x="1551" y="541" class="btnText">AI 分析</text>
+  </g>
+  <g>
+    <line x1="376" y1="612" x2="1672" y2="612" class="line"/>
+    <text x="388" y="593" class="text sm">▯ 皖能电力20260506_1.mp3</text>
+    <text x="864" y="593" class="text sm">7.4 MB</text>
+    <text x="955" y="593" class="text sm">1</text>
+    <text x="1048" y="593" class="text sm">2026/5/8 22:34</text>
+    <rect x="1240" y="575" width="70" height="24" rx="12" class="failPill"/>
+    <text x="1261" y="592" class="red xs">失败</text>
+    <rect x="1370" y="575" width="70" height="24" rx="12" class="grayPill"/>
+    <text x="1385" y="592" class="muted xs">未分析</text>
+    <rect x="1530" y="570" width="84" height="32" rx="8" class="ghost"/>
+    <text x="1559" y="591" class="ghostText">重试</text>
+  </g>
+  <g>
+    <line x1="376" y1="662" x2="1672" y2="662" class="line"/>
+    <text x="388" y="643" class="text sm">▯ 盛美半导体20260507_1.mp3</text>
+    <text x="864" y="643" class="text sm">7.2 MB</text>
+    <text x="955" y="643" class="text sm">6</text>
+    <text x="1048" y="643" class="text sm">2026/5/8 22:34</text>
+    <rect x="1240" y="625" width="70" height="24" rx="12" class="okPill"/>
+    <text x="1252" y="642" class="green xs">已下载</text>
+    <rect x="1370" y="625" width="70" height="24" rx="12" class="pill"/>
+    <text x="1385" y="642" class="pillText">已分析</text>
+    <rect x="1530" y="620" width="84" height="32" rx="8" class="ghost"/>
+    <text x="1545" y="641" class="ghostText">查看分析</text>
+  </g>
+  <g>
+    <line x1="376" y1="712" x2="1672" y2="712" class="line"/>
+    <text x="388" y="693" class="text sm">▯ 走向繁荣20260507_1.mp3</text>
+    <text x="864" y="693" class="text sm">4.8 MB</text>
+    <text x="955" y="693" class="text sm">0</text>
+    <text x="1048" y="693" class="text sm">2026/5/8 22:34</text>
+    <rect x="1240" y="675" width="70" height="24" rx="12" class="grayPill"/>
+    <text x="1255" y="692" class="amber xs">未下载</text>
+    <rect x="1370" y="675" width="70" height="24" rx="12" class="grayPill"/>
+    <text x="1385" y="692" class="muted xs">未分析</text>
+    <rect x="1530" y="670" width="84" height="32" rx="8" class="ghost"/>
+    <text x="1559" y="691" class="ghostText">下载</text>
+  </g>
+  <g>
+    <line x1="376" y1="762" x2="1672" y2="762" class="line"/>
+    <text x="388" y="743" class="text sm">▯ 为什么我们认为cpu的产业趋势才刚开始20260506_1.mp3</text>
+    <text x="864" y="743" class="text sm">4.3 MB</text>
+    <text x="955" y="743" class="text sm">5</text>
+    <text x="1048" y="743" class="text sm">2026/5/8 22:34</text>
+    <rect x="1240" y="725" width="70" height="24" rx="12" class="grayPill"/>
+    <text x="1255" y="742" class="amber xs">未下载</text>
+    <rect x="1370" y="725" width="70" height="24" rx="12" class="grayPill"/>
+    <text x="1385" y="742" class="muted xs">未分析</text>
+    <rect x="1530" y="720" width="84" height="32" rx="8" class="ghost"/>
+    <text x="1559" y="741" class="ghostText">下载</text>
+  </g>
+  <g>
+    <line x1="376" y1="812" x2="1672" y2="812" class="line"/>
+    <text x="388" y="793" class="text sm">▯ 首华燃气20260507_1.mp3</text>
+    <text x="864" y="793" class="text sm">5.2 MB</text>
+    <text x="955" y="793" class="text sm">3</text>
+    <text x="1048" y="793" class="text sm">2026/5/8 22:34</text>
+    <rect x="1240" y="775" width="70" height="24" rx="12" class="okPill"/>
+    <text x="1252" y="792" class="green xs">已下载</text>
+    <rect x="1370" y="775" width="70" height="24" rx="12" class="warnPill"/>
+    <text x="1385" y="792" class="amber xs">未分析</text>
+    <rect x="1530" y="770" width="84" height="32" rx="8" class="btn"/>
+    <text x="1551" y="791" class="btnText">AI 分析</text>
+  </g>
+  <line x1="376" y1="862" x2="1672" y2="862" class="line"/>
+  <rect x="895" y="882" width="72" height="34" rx="8" class="ghost"/>
+  <text x="910" y="904" class="muted sm">上一页</text>
+  <text x="982" y="904" class="muted sm">第 1 / 955 页</text>
+  <rect x="1081" y="882" width="72" height="34" rx="8" class="ghost"/>
+  <text x="1096" y="904" class="text sm">下一页</text>
+
+  <!-- Right launcher -->
+  <rect x="1690" y="137" width="340" height="599" rx="14" class="card"/>
+  <text x="1722" y="188" class="title lg">下载文件</text>
+  <text x="1810" y="188" class="muted xs">任务启动器</text>
+  <rect x="1708" y="206" width="304" height="108" rx="10" fill="#eff6ff" stroke="#bfdbfe"/>
+  <text x="1722" y="235" class="blue sm">文件记录</text>
+  <text x="1948" y="235" class="text xs">19095 条</text>
+  <rect x="1724" y="250" width="84" height="48" rx="4" fill="#f8fafc" stroke="#bfdbfe"/>
+  <text x="1738" y="270" class="blue xs">已下载</text>
+  <text x="1738" y="288" class="blue sm">267</text>
+  <rect x="1819" y="250" width="84" height="48" rx="4" fill="#f8fafc" stroke="#bfdbfe"/>
+  <text x="1833" y="270" class="blue xs">未下载</text>
+  <text x="1833" y="288" class="blue sm">18828</text>
+  <rect x="1914" y="250" width="84" height="48" rx="4" fill="#f8fafc" stroke="#bfdbfe"/>
+  <text x="1928" y="270" class="blue xs">失败</text>
+  <text x="1928" y="288" class="blue sm">0</text>
+
+  <rect x="1708" y="322" width="304" height="84" rx="10" fill="#faf5ff" stroke="#d8b4fe"/>
+  <text x="1722" y="350" class="purple sm">按时间下载</text>
+  <text x="1722" y="376" class="muted xs">最近 N 天或自定义日期范围</text>
+  <rect x="1722" y="360" width="276" height="31" rx="8" fill="#9333ea"/>
+  <text x="1849" y="381" class="btnText">开始</text>
+
+  <rect x="1708" y="414" width="304" height="52" rx="10" class="soft"/>
+  <text x="1722" y="445" class="muted sm">⌁ 按热度下载</text>
+  <text x="1909" y="445" class="muted xs">折叠</text>
+
+  <rect x="1708" y="475" width="304" height="135" rx="10" class="soft"/>
+  <text x="1722" y="505" class="text sm">⚙ 下载间隔设置</text>
+  <rect x="1937" y="489" width="61" height="28" rx="8" class="ghost"/>
+  <text x="1955" y="508" class="text xs">修改</text>
+  <text x="1722" y="539" class="muted xs">下载间隔: 15-30秒 | 长休眠: 0-1分钟 | 批次: 10</text>
+  <text x="1722" y="568" class="muted xs">随机间隔模式。这里只保留长任务参数，列表内</text>
+  <text x="1722" y="591" class="muted xs">下载/分析动作回到中间工作台。</text>
+
+  <rect x="1708" y="618" width="304" height="82" rx="10" class="danger"/>
+  <text x="1722" y="649" class="red sm">危险操作</text>
+  <text x="1885" y="649" class="muted xs">19095/31672</text>
+  <rect x="1722" y="659" width="276" height="29" rx="8" fill="#ef4444"/>
+  <text x="1835" y="679" class="btnText">删除数据库</text>
+
+  <!-- Annotation badges -->
+  <rect x="1690" y="758" width="340" height="164" rx="14" fill="#fff" stroke="#dbeafe"/>
+  <text x="1720" y="793" class="title md">这版的变化</text>
+  <text x="1720" y="824" class="muted sm">1. 主操作不再散在右栏和列表两处。</text>
+  <text x="1720" y="852" class="muted sm">2. 获取状态和分析状态分开表达。</text>
+  <text x="1720" y="880" class="muted sm">3. 右栏降级成批量任务启动器。</text>
+  <text x="1720" y="908" class="muted sm">4. 删除数据库从日常路径中弱化。</text>
+</svg>
