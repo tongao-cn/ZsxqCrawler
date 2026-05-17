@@ -55,6 +55,10 @@ Evaluate whether the A-share recommendation-pool rotation strategy can credibly 
 - `output\a_share_research\51111112855254_pool_rotation_focused_rank41_80_windows15_30_20260101_20260516_20260516_235714_daily.csv`
 - `output\a_share_research\51111112855254_pool_rotation_focused_rank41_80_windows15_30_20260101_20260516_20260516_235714_period.csv`
 - `output\a_share_research\51111112855254_pool_rotation_focused_rank41_80_windows15_30_20260101_20260516_20260516_235714_contribution.csv`
+- `output\a_share_research\51111112855254_pool_rotation_mid_band_split_20260101_20260516_20260517_001644_summary.csv`
+- `output\a_share_research\51111112855254_pool_rotation_mid_band_split_20260101_20260516_20260517_001644_daily.csv`
+- `output\a_share_research\51111112855254_pool_rotation_mid_band_split_20260101_20260516_20260517_001644_period.csv`
+- `output\a_share_research\51111112855254_pool_rotation_mid_band_split_20260101_20260516_20260517_001644_contribution.csv`
 
 ## Findings
 
@@ -79,3 +83,7 @@ Evaluate whether the A-share recommendation-pool rotation strategy can credibly 
   - `rank51_55` does not show the same strength, so the edge is concentrated in the upper half of the original `51~60` band rather than the whole band.
   - Monthly stability for `rank56_60 / 29日` is still mixed, but the sample is not a one-month fluke: January through May stay positive overall, with especially strong February, April, and May.
   - The top contributors in `rank56_60 / 29日` are still recurring names like `信维通信`, `烽火通信`, `东阳光`, `优刻得`, `中材科技`, and `宏景科技`, which argues for a repeatable mid-band phenomenon rather than a one-off spike.
+- Turnover-threshold review shows three practical tiers:
+  - Low-turnover compromise: `rank41_80 / 24日` keeps average turnover at `27.7438%` with `34.1211%` after `10bp`; `rank41_80 / 27日` keeps turnover at `25.7071%` with `32.3837%` after `10bp`.
+  - Moderate-turnover compromise: `rank51_80 / 27日` has `34.1598%` average turnover and `37.9182%` after `10bp`; `rank51_70 / 29日` raises turnover to `42.4937%` and reaches `38.6380%` after `10bp`.
+  - High-turnover extreme: `rank56_60 / 29日` reaches `102.1242%` after `10bp`, but average turnover is already `81.3690%`, so it should be treated as the high-return/high-friction candidate rather than the balanced default.
