@@ -12,7 +12,6 @@ from openai import OpenAI
 from backend.core.ai_provider_config import (
     get_default_base_url,
     get_default_model,
-    get_default_wire_api,
     get_openai_compatible_config,
     get_summary_reasoning_effort,
 )
@@ -954,7 +953,6 @@ def _call_stock_analysis_ai(prompt_payload: str, *, incremental: bool = False) -
 
     model = _normalize_text(runtime_ai_config.get("model")) or get_default_model()
     api_base = _normalize_text(runtime_ai_config.get("base_url")) or get_default_base_url()
-    wire_api = _normalize_text(runtime_ai_config.get("wire_api")) or get_default_wire_api()
     reasoning_effort = get_summary_reasoning_effort()
     user_prompt = (
         "请基于输入话题，对这只股票生成中文 Markdown 公司调研报告。\n\n"
@@ -999,16 +997,12 @@ def _call_stock_analysis_ai(prompt_payload: str, *, incremental: bool = False) -
     ]
 
     client = OpenAI(api_key=api_key, base_url=api_base, timeout=180)
-    if wire_api.strip().lower() == "responses":
-        response = client.responses.create(
-            model=model,
-            input=messages,
-            reasoning={"effort": reasoning_effort},
-        )
-        return _extract_response_text(response).strip(), model
-
-    response = client.chat.completions.create(model=model, messages=messages, stream=False)
-    return _normalize_text(response.choices[0].message.content), model
+    response = client.responses.create(
+        model=model,
+        input=messages,
+        reasoning={"effort": reasoning_effort},
+    )
+    return _extract_response_text(response).strip(), model
 
 
 def _extract_json_object(text: str) -> Dict[str, Any]:
@@ -1035,7 +1029,6 @@ def _call_question_keyword_ai(question: str) -> Tuple[List[str], str]:
 
     model = _normalize_text(runtime_ai_config.get("model")) or get_default_model()
     api_base = _normalize_text(runtime_ai_config.get("base_url")) or get_default_base_url()
-    wire_api = _normalize_text(runtime_ai_config.get("wire_api")) or get_default_wire_api()
     reasoning_effort = get_summary_reasoning_effort()
     messages = [
         {
@@ -1061,16 +1054,12 @@ def _call_question_keyword_ai(question: str) -> Tuple[List[str], str]:
     ]
 
     client = OpenAI(api_key=api_key, base_url=api_base, timeout=120)
-    if wire_api.strip().lower() == "responses":
-        response = client.responses.create(
-            model=model,
-            input=messages,
-            reasoning={"effort": reasoning_effort},
-        )
-        text = _extract_response_text(response)
-    else:
-        response = client.chat.completions.create(model=model, messages=messages, stream=False)
-        text = _normalize_text(response.choices[0].message.content)
+    response = client.responses.create(
+        model=model,
+        input=messages,
+        reasoning={"effort": reasoning_effort},
+    )
+    text = _extract_response_text(response)
 
     parsed = _extract_json_object(text)
     keywords = _normalize_question_keywords(parsed.get("keywords") or parsed.get("keyword") or [])
@@ -1087,7 +1076,6 @@ def _call_question_analysis_ai(question: str, prompt_payload: str) -> Tuple[str,
 
     model = _normalize_text(runtime_ai_config.get("model")) or get_default_model()
     api_base = _normalize_text(runtime_ai_config.get("base_url")) or get_default_base_url()
-    wire_api = _normalize_text(runtime_ai_config.get("wire_api")) or get_default_wire_api()
     reasoning_effort = get_summary_reasoning_effort()
     messages = [
         {
@@ -1114,16 +1102,12 @@ def _call_question_analysis_ai(question: str, prompt_payload: str) -> Tuple[str,
     ]
 
     client = OpenAI(api_key=api_key, base_url=api_base, timeout=180)
-    if wire_api.strip().lower() == "responses":
-        response = client.responses.create(
-            model=model,
-            input=messages,
-            reasoning={"effort": reasoning_effort},
-        )
-        return _extract_response_text(response).strip(), model
-
-    response = client.chat.completions.create(model=model, messages=messages, stream=False)
-    return _normalize_text(response.choices[0].message.content), model
+    response = client.responses.create(
+        model=model,
+        input=messages,
+        reasoning={"effort": reasoning_effort},
+    )
+    return _extract_response_text(response).strip(), model
 
 
 def extract_stock_names_from_image(image_data_url: str) -> Dict[str, Any]:
@@ -1135,7 +1119,6 @@ def extract_stock_names_from_image(image_data_url: str) -> Dict[str, Any]:
 
     model = _normalize_text(runtime_ai_config.get("model")) or get_default_model()
     api_base = _normalize_text(runtime_ai_config.get("base_url")) or get_default_base_url()
-    wire_api = _normalize_text(runtime_ai_config.get("wire_api")) or get_default_wire_api()
     reasoning_effort = get_summary_reasoning_effort()
     prompt = (
         "请从这张图片中提取出现的 A 股股票名称。"
@@ -1146,36 +1129,20 @@ def extract_stock_names_from_image(image_data_url: str) -> Dict[str, Any]:
     )
 
     client = OpenAI(api_key=api_key, base_url=api_base, timeout=120)
-    if wire_api.strip().lower() == "responses":
-        response = client.responses.create(
-            model=model,
-            input=[
-                {
-                    "role": "user",
-                    "content": [
-                        {"type": "input_text", "text": prompt},
-                        {"type": "input_image", "image_url": normalized_data_url},
-                    ],
-                }
-            ],
-            reasoning={"effort": reasoning_effort},
-        )
-        text = _extract_response_text(response)
-    else:
-        response = client.chat.completions.create(
-            model=model,
-            messages=[
-                {
-                    "role": "user",
-                    "content": [
-                        {"type": "text", "text": prompt},
-                        {"type": "image_url", "image_url": {"url": normalized_data_url}},
-                    ],
-                }
-            ],
-            stream=False,
-        )
-        text = _normalize_text(response.choices[0].message.content)
+    response = client.responses.create(
+        model=model,
+        input=[
+            {
+                "role": "user",
+                "content": [
+                    {"type": "input_text", "text": prompt},
+                    {"type": "input_image", "image_url": normalized_data_url},
+                ],
+            }
+        ],
+        reasoning={"effort": reasoning_effort},
+    )
+    text = _extract_response_text(response)
 
     parsed = _extract_json_object(text)
     if parsed:
