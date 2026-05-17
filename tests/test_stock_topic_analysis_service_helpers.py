@@ -403,12 +403,14 @@ class StockTopicAnalysisServiceHelperTests(unittest.TestCase):
             "updated_at": "2026-05-10T10:01:00",
             "analyzed_topic_ids": ["101", "102"],
         }
+        conn = Mock()
 
         with (
             patch("backend.services.stock_topic_analysis_service.search_stock_topics", return_value=search_result),
             patch("backend.services.stock_topic_analysis_service.get_latest_stock_topic_analysis", return_value=latest),
             patch("backend.services.stock_topic_analysis_service._build_analysis_topic_payload") as build_payload,
             patch("backend.services.stock_topic_analysis_service._call_stock_analysis_ai") as call_ai,
+            patch("backend.services.stock_topic_analysis_service.connect", return_value=conn),
         ):
             result = analyze_stock_topics("51111112855254", "宁德时代")
 
@@ -417,6 +419,52 @@ class StockTopicAnalysisServiceHelperTests(unittest.TestCase):
         self.assertEqual(0, result["new_topic_count"])
         build_payload.assert_not_called()
         call_ai.assert_not_called()
+        conn.execute.assert_not_called()
+
+    @unittest.skipUnless(HAS_SERVICE_DEPS, "stock topic analysis service dependencies are not installed")
+    def test_analyze_stock_topics_saves_new_processed_ids_without_ai_topics(self):
+        from backend.services.stock_topic_analysis_service import analyze_stock_topics
+
+        search_result = {
+            "group_id": "51111112855254",
+            "stock_name": "宁德时代",
+            "stock_code": "300750",
+            "market": "SZ",
+            "topics": [],
+            "concepts": ["固态电池"],
+            "topic_count": 0,
+            "recommendation_count": 3,
+            "processed_topic_ids": ["101", "102", "103"],
+            "analyzed_topic_ids": ["101", "102", "103"],
+        }
+        latest = {
+            **search_result,
+            "processed_topic_ids": ["101", "102"],
+            "analyzed_topic_ids": ["101", "102"],
+            "summary_markdown": "saved summary",
+            "model": "test-model",
+            "status": "completed",
+            "error": "",
+            "created_at": "2026-05-10T10:00:00",
+            "updated_at": "2026-05-10T10:01:00",
+        }
+        conn = Mock()
+
+        with (
+            patch("backend.services.stock_topic_analysis_service.search_stock_topics", return_value=search_result),
+            patch("backend.services.stock_topic_analysis_service.get_latest_stock_topic_analysis", return_value=latest),
+            patch("backend.services.stock_topic_analysis_service._build_analysis_topic_payload") as build_payload,
+            patch("backend.services.stock_topic_analysis_service._call_stock_analysis_ai") as call_ai,
+            patch("backend.services.stock_topic_analysis_service.connect", return_value=conn),
+        ):
+            result = analyze_stock_topics("51111112855254", "宁德时代")
+
+        self.assertEqual("saved summary", result["summary_markdown"])
+        self.assertEqual("up_to_date", result["analysis_mode"])
+        self.assertEqual(["101", "102", "103"], result["processed_topic_ids"])
+        build_payload.assert_not_called()
+        call_ai.assert_not_called()
+        conn.commit.assert_called_once()
 
     @unittest.skipUnless(HAS_SERVICE_DEPS, "stock topic analysis service dependencies are not installed")
     def test_analyze_stock_topics_only_sends_new_topics_to_ai(self):

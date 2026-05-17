@@ -1162,6 +1162,7 @@ def analyze_stock_topics(
     current_topic_ids = _topic_ids_from_result(search_result)
     processed_topic_ids = _merge_topic_ids(saved_topic_ids, search_result.get("processed_topic_ids") or current_topic_ids)
     new_topic_ids = [topic_id for topic_id in current_topic_ids if topic_id not in _topic_id_set(saved_topic_ids)]
+    has_new_processed_topic_ids = len(_topic_id_set(processed_topic_ids)) > len(_topic_id_set(saved_topic_ids))
     has_existing_summary = bool((latest or {}).get("summary_markdown"))
 
     if has_existing_summary and not new_topic_ids:
@@ -1178,6 +1179,12 @@ def analyze_stock_topics(
             "new_topic_count": 0,
             "analysis_mode": "up_to_date",
         }
+        if has_new_processed_topic_ids:
+            conn = connect()
+            try:
+                _upsert_stock_topic_analysis(conn, result=result, status="completed", analyzed_topic_ids=processed_topic_ids)
+            finally:
+                conn.close()
         _log(log_callback, "✅ 没有新话题，沿用已保存的个股分析结果")
         return result
 
