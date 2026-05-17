@@ -295,6 +295,74 @@ class AShareAnalysisServiceHelperTests(unittest.TestCase):
         openai_client.assert_not_called()
         log_debug.assert_called_once()
 
+    def test_topic_stock_ai_prefilter_skips_attachment_and_no_stock_name(self):
+        from backend.services import a_share_analysis_service as service
+
+        self.assertEqual((True, "content only contains attachment placeholder"), service._should_skip_topic_stock_ai_extraction("「图片」", ()))
+        self.assertEqual(
+            (True, "content does not mention known A-share stock names"),
+            service._should_skip_topic_stock_ai_extraction("这是一个讨论海外数据中心电力瓶颈的行业观点，没有明确提到任何股票。", ("宁德时代",)),
+        )
+        self.assertEqual(
+            (False, ""),
+            service._should_skip_topic_stock_ai_extraction("宁德有望受益于钠电池产业链进展，这是明确提到股票简称的推荐内容。", ("宁德",)),
+        )
+
+    def test_aggregate_daily_prefilter_marks_skipped_topics_without_ai_call(self):
+        from backend.services import a_share_analysis_service as service
+
+        items = [
+            {
+                "topic_id": 1,
+                "title": "attachment",
+                "text": "「文件」",
+                "create_time": "2026-05-10T10:00:00+0800",
+                "day": "2026-05-10",
+                "source": "topics",
+                "group_id": "511",
+            },
+            {
+                "topic_id": 2,
+                "title": "industry",
+                "text": "这是一段长度超过二十字的行业观点，但是没有任何明确A股公司名称。",
+                "create_time": "2026-05-10T10:00:00+0800",
+                "day": "2026-05-10",
+                "source": "topics",
+                "group_id": "511",
+            },
+            {
+                "topic_id": 3,
+                "title": "stock",
+                "text": "宁德时代有望受益于钠电池产业链进展，这是一个明确提到股票的推荐池话题。",
+                "create_time": "2026-05-10T10:00:00+0800",
+                "day": "2026-05-10",
+                "source": "topics",
+                "group_id": "511",
+            },
+        ]
+        success_keys = []
+
+        with patch.object(service, "_load_a_share_stock_name_candidates", return_value=("宁德时代",)), patch.object(
+            service,
+            "call_openai_extract_topic_stocks",
+            return_value=[{"stock_name": "宁德时代", "concepts": ["钠电池"], "excerpt": "宁德时代有望受益", "reason": "", "confidence": 0.9}],
+        ) as extract:
+            daily, succeeded_keys, failed_items, extractions = service.aggregate_daily(
+                items,
+                api_key="key",
+                model="model",
+                api_base=None,
+                concurrency=1,
+                success_callback=lambda item_key, _day, _stocks, _companies: success_keys.append(item_key),
+            )
+
+        extract.assert_called_once()
+        self.assertEqual({"2026-05-10": {"宁德时代": 1}}, daily)
+        self.assertEqual(3, len(succeeded_keys))
+        self.assertEqual(3, len(success_keys))
+        self.assertEqual([], failed_items)
+        self.assertEqual(1, len(extractions))
+
     def test_backfill_topic_stock_extractions_uses_recent_seven_day_reset_range(self):
         from backend.services import a_share_analysis_service as service
 
@@ -321,7 +389,7 @@ class AShareAnalysisServiceHelperTests(unittest.TestCase):
             {
                 "topic_id": index,
                 "title": f"title {index}",
-                "text": f"这是一个长度超过二十个字的推荐池测试话题内容 {index}",
+                "text": f"宁德时代这是一个长度超过二十个字的推荐池测试话题内容 {index}",
                 "create_time": "2026-05-10T10:00:00+0800",
                 "day": "2026-05-10",
                 "source": "topics",
@@ -355,6 +423,8 @@ class AShareAnalysisServiceHelperTests(unittest.TestCase):
         ), patch.object(service, "load_state", return_value=set()), patch.object(
             service, "read_topics_last_days", return_value=items
         ), patch.object(service, "should_use_db_storage", return_value=True), patch.object(
+            service, "_load_a_share_stock_name_candidates", return_value=("宁德时代",)
+        ), patch.object(
             service, "call_openai_extract_topic_stocks", side_effect=fake_extract
         ), patch.object(service, "save_recommendation_pool_checkpoint", side_effect=fake_checkpoint), patch.object(
             service, "write_csv"

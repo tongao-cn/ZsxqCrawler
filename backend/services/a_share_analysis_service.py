@@ -23,6 +23,7 @@ from backend.services.a_share_analysis_db_storage import (
     get_storage_health,
     load_daily_mentions as load_daily_mentions_from_db,
     load_processed_state as load_processed_state_from_db,
+    load_stock_basic_records,
     reset_a_share_analysis_range as reset_a_share_analysis_range_to_db,
     save_recommendation_pool_checkpoint,
     save_topic_stock_extractions,
@@ -100,6 +101,32 @@ A_SHARE_COMPANY_EXTRACTION_SCHEMA: Dict[str, Any] = {
 LogCallback = Optional[Callable[[str], None]]
 AggregateSuccessCallback = Optional[Callable[[str, str, List[Dict[str, Any]], List[str]], None]]
 _db_storage_available: Optional[bool] = None
+_a_share_stock_name_candidates: Optional[Tuple[str, ...]] = None
+GENERIC_STOCK_NAME_ALIASES = {
+    "中国",
+    "上海",
+    "北京",
+    "深圳",
+    "广东",
+    "江苏",
+    "浙江",
+    "山东",
+    "河南",
+    "河北",
+    "山西",
+    "四川",
+    "云南",
+    "贵州",
+    "西藏",
+    "新疆",
+    "海南",
+    "重庆",
+    "天津",
+    "南京",
+    "杭州",
+    "苏州",
+    "宁波",
+}
 
 
 def _emit_log(message: str, callback: LogCallback = None, level: str = "info"):
@@ -138,6 +165,82 @@ def normalize_group_id(group_id: Optional[str]) -> Optional[str]:
         return None
     normalized = str(group_id).strip()
     return normalized or None
+
+
+def _normalize_a_share_stock_name(name: str) -> str:
+    text = str(name or "").strip()
+    for suffix in ("-U", "-W", "-B", "Ａ", "A", "B"):
+        if text.endswith(suffix):
+            text = text[: -len(suffix)]
+            break
+    return text.strip()
+
+
+def _a_share_stock_name_aliases(name: str) -> Set[str]:
+    normalized = _normalize_a_share_stock_name(name)
+    aliases = {normalized} if len(normalized) >= 2 else set()
+    for suffix in (
+        "股份",
+        "科技",
+        "集团",
+        "电子",
+        "光电",
+        "智能",
+        "新材",
+        "材料",
+        "能源",
+        "电气",
+        "通信",
+        "证券",
+        "银行",
+        "生物",
+        "医疗",
+        "软件",
+        "信息",
+    ):
+        if normalized.endswith(suffix) and len(normalized) > len(suffix) + 1:
+            short_name = normalized[: -len(suffix)]
+            if short_name not in GENERIC_STOCK_NAME_ALIASES:
+                aliases.add(short_name)
+            break
+    return aliases
+
+
+def _load_a_share_stock_name_candidates() -> Tuple[str, ...]:
+    global _a_share_stock_name_candidates
+    if _a_share_stock_name_candidates is not None:
+        return _a_share_stock_name_candidates
+
+    try:
+        records = load_stock_basic_records()
+    except Exception as exc:
+        log_warning(f"load A-share stock names for prefilter failed: {exc}")
+        _a_share_stock_name_candidates = ()
+        return _a_share_stock_name_candidates
+
+    names: Set[str] = set()
+    for record in records:
+        names.update(_a_share_stock_name_aliases(str(record.get("name") or "")))
+    _a_share_stock_name_candidates = tuple(sorted(names, key=len, reverse=True))
+    return _a_share_stock_name_candidates
+
+
+def _looks_like_attachment_only_topic(content: str) -> bool:
+    normalized = str(content or "").strip()
+    return normalized in {"「图片」", "「文件」", "[图片]", "[文件]", "图片", "文件"}
+
+
+def _should_skip_topic_stock_ai_extraction(content: str, stock_names: Optional[Tuple[str, ...]] = None) -> Tuple[bool, str]:
+    text = str(content or "").strip()
+    if _looks_like_attachment_only_topic(text):
+        return True, "content only contains attachment placeholder"
+    if len(text) < 20:
+        return True, "content is empty or shorter than 20 chars"
+
+    candidates = stock_names if stock_names is not None else _load_a_share_stock_name_candidates()
+    if candidates and not any(name in text for name in candidates):
+        return True, "content does not mention known A-share stock names"
+    return False, ""
 
 
 def get_group_analysis_paths(group_id: str) -> Dict[str, str]:
@@ -752,13 +855,16 @@ def aggregate_daily(
     succeeded_item_keys: Set[str] = set()
     failed_items: List[Dict[str, Any]] = []
     topic_stock_extractions: List[Dict[str, Any]] = []
+    prefilter_skipped = 0
+    stock_name_candidates = _load_a_share_stock_name_candidates()
 
     def _work(item: Dict[str, Any]):
         log_debug(f"process item topic_id={item.get('topic_id')} day={item.get('day')}")
         item_key = make_item_key(item)
         content = str(item.get("text") or "").strip()
-        if len(content) < 20:
-            log_debug(f"skip topic_id={item.get('topic_id')} because content is empty or shorter than 20 chars")
+        should_skip, skip_reason = _should_skip_topic_stock_ai_extraction(content, stock_name_candidates)
+        if should_skip:
+            log_debug(f"skip topic_id={item.get('topic_id')} because {skip_reason}")
             return item.get("day"), [], item.get("topic_id"), item_key
         stocks = call_openai_extract_topic_stocks(
             content,
@@ -792,8 +898,27 @@ def aggregate_daily(
         return item.get("day"), list(unique_stocks.values()), item.get("topic_id"), item_key
 
     max_workers = max(1, int(concurrency or 1))
+    items_to_submit: List[Dict[str, Any]] = []
+    for item in items:
+        item_key = make_item_key(item)
+        should_skip, skip_reason = _should_skip_topic_stock_ai_extraction(str(item.get("text") or ""), stock_name_candidates)
+        if should_skip:
+            prefilter_skipped += 1
+            succeeded_item_keys.add(item_key)
+            if success_callback:
+                success_callback(item_key, str(item.get("day") or ""), [], [])
+            _emit_log(
+                f"skipped topic_id={item.get('topic_id')} before AI extraction: {skip_reason}",
+                log_callback,
+                level="debug",
+            )
+            continue
+        items_to_submit.append(item)
+    if prefilter_skipped:
+        _emit_log(f"prefilter skipped {prefilter_skipped} topics before AI extraction", log_callback)
+
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        future_to_item = {executor.submit(_work, item): item for item in items}
+        future_to_item = {executor.submit(_work, item): item for item in items_to_submit}
         for future in as_completed(future_to_item):
             item = future_to_item[future]
             item_key = make_item_key(item)
