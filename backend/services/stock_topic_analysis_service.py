@@ -617,13 +617,22 @@ def search_stock_topics(group_id: str, stock_name: str, *, limit: int = MAX_MATC
             if topic_id in processed_topic_id_set:
                 continue
             processed_topic_ids.append(topic_id)
+            topic_body = "\n".join(
+                part for part in (row["talk_text"], row["question_text"], row["answer_text"]) if _normalize_text(part)
+            )
             extracted_content, mode, matched_terms = _extract_relevant_topic_content(
                 row["title"],
-                "\n".join(
-                    part for part in (row["talk_text"], row["question_text"], row["answer_text"]) if _normalize_text(part)
-                ),
+                topic_body,
                 alias_terms,
             )
+            if not extracted_content and _normalize_text(row["stock_name"]):
+                extracted_content = "\n".join(
+                    part
+                    for part in (row["title"], topic_body, row["reason"])
+                    if _normalize_text(part)
+                )
+                mode = "extraction_full"
+                matched_terms = [_normalize_text(row["stock_name"])]
             if not extracted_content:
                 continue
             topic = topics_by_id.setdefault(
@@ -867,7 +876,6 @@ def _build_stock_analysis_prompt(
     topics: List[Dict[str, Any]],
     *,
     existing_summary: str = "",
-    analyzed_topic_ids: Iterable[Any] | None = None,
 ) -> str:
     payload = {
         "group_id": search_result["group_id"],
@@ -877,7 +885,6 @@ def _build_stock_analysis_prompt(
         "recommendation_count": search_result.get("recommendation_count") or 0,
         "concepts": search_result.get("concepts") or [],
         "existing_summary_markdown": existing_summary,
-        "analyzed_topic_ids": list(analyzed_topic_ids or []),
         "new_topic_count": len(topics),
         "new_topics": topics,
     }
@@ -1215,11 +1222,30 @@ def analyze_stock_topics(
                     search_result,
                     topic_batch,
                     existing_summary=summary,
-                    analyzed_topic_ids=processed_topic_ids,
                 ),
                 incremental=bool(summary),
             )
             processed_topic_ids = _merge_topic_ids(processed_topic_ids, (topic.get("topic_id") for topic in topic_batch))
+            checkpoint_result = {
+                **search_result,
+                "summary_markdown": summary or "",
+                "model": model,
+                "status": "running" if batch_index < len(topic_batches) else "completed",
+                "processed_topic_ids": processed_topic_ids,
+                "analyzed_topic_ids": processed_topic_ids,
+                "new_topic_count": len(topics),
+                "analysis_mode": analysis_mode,
+            }
+            conn = connect()
+            try:
+                _upsert_stock_topic_analysis(
+                    conn,
+                    result=checkpoint_result,
+                    status=checkpoint_result["status"],
+                    analyzed_topic_ids=processed_topic_ids,
+                )
+            finally:
+                conn.close()
     except Exception as exc:
         failed_result = {
             **search_result,
@@ -1238,7 +1264,7 @@ def analyze_stock_topics(
                 result=failed_result,
                 status="failed",
                 error=str(exc),
-                analyzed_topic_ids=saved_topic_ids,
+                analyzed_topic_ids=processed_topic_ids,
             )
         finally:
             conn.close()

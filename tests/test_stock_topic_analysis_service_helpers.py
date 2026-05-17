@@ -466,8 +466,9 @@ class StockTopicAnalysisServiceHelperTests(unittest.TestCase):
         self.assertIn('"new_topic_count": 1', call_ai.call_args.args[0])
         self.assertIn('"topic_id": "103"', call_ai.call_args.args[0])
         self.assertNotIn('"content": "old-1"', call_ai.call_args.args[0])
+        self.assertNotIn("analyzed_topic_ids", call_ai.call_args.args[0])
         self.assertIn("old summary", call_ai.call_args.args[0])
-        conn.commit.assert_called_once()
+        self.assertEqual(2, conn.commit.call_count)
 
     @unittest.skipUnless(HAS_SERVICE_DEPS, "stock topic analysis service dependencies are not installed")
     def test_analyze_stock_topics_processes_new_topics_in_batches(self):
@@ -515,8 +516,9 @@ class StockTopicAnalysisServiceHelperTests(unittest.TestCase):
         self.assertEqual(80, search.call_args.kwargs["limit"])
         self.assertIn('"new_topic_count": 10', call_ai.call_args_list[0].args[0])
         self.assertIn('"new_topic_count": 5', call_ai.call_args_list[6].args[0])
+        self.assertNotIn("analyzed_topic_ids", call_ai.call_args_list[0].args[0])
         self.assertIn("summary batch 1", call_ai.call_args_list[1].args[0])
-        conn.commit.assert_called_once()
+        self.assertEqual(8, conn.commit.call_count)
 
 
 if __name__ == "__main__":
