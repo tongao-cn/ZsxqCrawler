@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useState, useEffect, type KeyboardEvent } from 'react';
+import { useCallback, useState, useEffect, useRef, type KeyboardEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -23,11 +23,14 @@ export default function GroupSelector() {
   const [retryCount, setRetryCount] = useState(0);
   const [isRetrying, setIsRetrying] = useState(false);
   const [deletingGroups, setDeletingGroups] = useState<Set<number>>(new Set());
+  const hasLoadedGroupsRef = useRef(false);
 
   const loadGroups = useCallback(async (currentRetryCount = 0) => {
     try {
       if (currentRetryCount === 0) {
-        setLoading(true);
+        if (!hasLoadedGroupsRef.current) {
+          setLoading(true);
+        }
         setError(null);
         setRetryCount(0);
         setIsRetrying(false);
@@ -41,32 +44,35 @@ export default function GroupSelector() {
       // 检查返回数据（允许为空，显示空态，不再抛错）
 
       setGroups(data.groups);
+      hasLoadedGroupsRef.current = true;
+      setGroupStats({});
 
-      // 加载每个群组的统计信息
-      const statsPromises = data.groups.map(async (group: Group) => {
-        try {
-          const stats = await apiClient.getGroupStats(group.group_id);
-          return { groupId: group.group_id, stats };
-        } catch (error) {
-          console.warn(`获取群组 ${group.group_id} 统计信息失败:`, error);
-          return { groupId: group.group_id, stats: null };
-        }
-      });
-
-      const statsResults = await Promise.all(statsPromises);
-      const statsMap: Record<number, GroupStats> = {};
-      statsResults.forEach(({ groupId, stats }) => {
-        if (stats) {
-          statsMap[groupId] = stats;
-        }
-      });
-      setGroupStats(statsMap);
-
-      // 成功获取数据，重置状态
+      // 群组列表先展示出来，统计信息后台补齐；避免某个 stats 慢导致首页一直停在加载态。
       setError(null);
       setRetryCount(0);
       setIsRetrying(false);
       setLoading(false);
+
+      void (async () => {
+        const statsPromises = data.groups.map(async (group: Group) => {
+          try {
+            const stats = await apiClient.getGroupStats(group.group_id);
+            return { groupId: group.group_id, stats };
+          } catch (error) {
+            console.warn(`获取群组 ${group.group_id} 统计信息失败:`, error);
+            return { groupId: group.group_id, stats: null };
+          }
+        });
+
+        const statsResults = await Promise.all(statsPromises);
+        const statsMap: Record<number, GroupStats> = {};
+        statsResults.forEach(({ groupId, stats }) => {
+          if (stats) {
+            statsMap[groupId] = stats;
+          }
+        });
+        setGroupStats(statsMap);
+      })();
 
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : '加载群组列表失败';
