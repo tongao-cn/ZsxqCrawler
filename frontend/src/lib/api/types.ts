@@ -89,6 +89,51 @@ export interface StockTopicAnalysisResponse {
   error?: string;
   created_at?: string;
   updated_at?: string;
+  processed_topic_ids?: string[];
+  analyzed_topic_ids?: string[];
+  new_topic_count?: number;
+  analysis_mode?: 'saved' | 'initialize' | 'incremental' | 'up_to_date' | string;
+}
+
+export interface StockTopicBatchAnalysisResponse {
+  group_id: string;
+  stocks: StockTopicAnalysisResponse[];
+  summary?: {
+    total: number;
+    success: number;
+    failed: number;
+    no_topics: number;
+  };
+}
+
+export interface StockTopicImageExtractResponse {
+  stockNames: string[];
+  model?: string;
+  mime_type?: string;
+  image_bytes?: number;
+}
+
+export interface StockQuestionTopicMatch {
+  topic_id: string;
+  title: string;
+  create_time: string;
+  likes_count: number;
+  comments_count: number;
+  reading_count: number;
+  content_preview: string;
+  matched_keywords: string[];
+}
+
+export interface StockQuestionResponse {
+  group_id: string;
+  question: string;
+  keywords: string[];
+  keyword_model?: string;
+  topics: StockQuestionTopicMatch[];
+  topic_count: number;
+  summary_markdown?: string;
+  model?: string;
+  status?: string;
 }
 
 export interface TaskCreateResponse {
@@ -215,6 +260,8 @@ export interface AShareAnalysisRunPayload {
   api_base?: string;
   wire_api?: string;
   reasoning_effort?: string;
+  start_date?: string;
+  end_date?: string;
   reset_start_date?: string;
   reset_end_date?: string;
 }
