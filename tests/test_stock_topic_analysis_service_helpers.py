@@ -182,6 +182,63 @@ class StockTopicAnalysisServiceHelperTests(unittest.TestCase):
         conn.close.assert_called_once()
 
     @unittest.skipUnless(HAS_SERVICE_DEPS, "stock topic analysis service dependencies are not installed")
+    def test_search_stock_topics_tracks_only_skipped_new_topics_as_processed(self):
+        from backend.services.stock_topic_analysis_service import search_stock_topics
+
+        conn = Mock()
+        state_cursor = Mock()
+        state_cursor.fetchall.return_value = []
+        latest_cursor = Mock()
+        latest_cursor.fetchone.return_value = None
+        search_cursor = Mock()
+        search_cursor.fetchall.return_value = [
+            {
+                "topic_id": "101",
+                "title": "宁德时代业绩交流",
+                "create_time": "2026-05-10T09:00:00",
+                "likes_count": 1,
+                "comments_count": 2,
+                "reading_count": 3,
+                "talk_text": "宁德时代储能需求增长。",
+                "question_text": "",
+                "answer_text": "",
+                "stock_name": "",
+                "stock_code": "",
+                "market": "",
+                "concepts_json": '["储能"]',
+                "reason": "",
+                "confidence": 0,
+            },
+            {
+                "topic_id": "102",
+                "title": "多公司交流",
+                "create_time": "2026-05-09T09:00:00",
+                "likes_count": 1,
+                "comments_count": 2,
+                "reading_count": 3,
+                "talk_text": "A公司订单增长，B公司扩产。",
+                "question_text": "",
+                "answer_text": "",
+                "stock_name": "",
+                "stock_code": "",
+                "market": "",
+                "concepts_json": "[]",
+                "reason": "",
+                "confidence": 0,
+            },
+        ]
+        counts_cursor = Mock()
+        counts_cursor.fetchall.return_value = []
+        conn.execute.side_effect = [state_cursor, latest_cursor, search_cursor, counts_cursor]
+
+        with patch("backend.services.stock_topic_analysis_service.connect", return_value=conn):
+            result = search_stock_topics("51111112855254", "宁德时代")
+
+        self.assertEqual(["101"], [topic["topic_id"] for topic in result["topics"]])
+        self.assertEqual(["102"], result["processed_topic_ids"])
+        self.assertEqual(["102"], result["skipped_topic_ids"])
+
+    @unittest.skipUnless(HAS_SERVICE_DEPS, "stock topic analysis service dependencies are not installed")
     def test_load_processed_state_uses_only_completed_statuses(self):
         from backend.services.stock_topic_analysis_service import _load_stock_topic_processed_state_ids
 
@@ -218,6 +275,7 @@ class StockTopicAnalysisServiceHelperTests(unittest.TestCase):
             result=result,
             status="completed",
             analyzed_topic_ids=["101", "102"],
+            processed_state_topic_ids=["102"],
             processed_topic_status="analyzed",
             extract_mode="snippet",
         )
@@ -225,11 +283,39 @@ class StockTopicAnalysisServiceHelperTests(unittest.TestCase):
         self.assertIn("INSERT INTO stock_topic_processed_states", conn.executemany.call_args.args[0])
         self.assertEqual(
             [
-                ("51111112855254", "宁德时代", "101", "analyzed", "snippet", "test-model", ""),
                 ("51111112855254", "宁德时代", "102", "analyzed", "snippet", "test-model", ""),
             ],
             conn.executemany.call_args.args[1],
         )
+        self.assertIn("INSERT INTO stock_topic_analyses", conn.execute.call_args.args[0])
+        conn.commit.assert_called_once()
+
+    @unittest.skipUnless(HAS_SERVICE_DEPS, "stock topic analysis service dependencies are not installed")
+    def test_upsert_stock_topic_analysis_can_skip_processed_state_write(self):
+        from backend.services.stock_topic_analysis_service import _upsert_stock_topic_analysis
+
+        conn = Mock()
+        result = {
+            "group_id": "51111112855254",
+            "stock_name": "宁德时代",
+            "stock_code": "300750",
+            "market": "SZ",
+            "topics": [],
+            "concepts": [],
+            "recommendation_count": 0,
+            "summary_markdown": "summary",
+            "model": "test-model",
+        }
+
+        _upsert_stock_topic_analysis(
+            conn,
+            result=result,
+            status="completed",
+            analyzed_topic_ids=["101", "102"],
+            write_processed_state=False,
+        )
+
+        conn.executemany.assert_not_called()
         self.assertIn("INSERT INTO stock_topic_analyses", conn.execute.call_args.args[0])
         conn.commit.assert_called_once()
 
@@ -459,6 +545,7 @@ class StockTopicAnalysisServiceHelperTests(unittest.TestCase):
             "error": "",
             "created_at": "2026-05-10T10:00:00",
             "updated_at": "2026-05-10T10:01:00",
+            "processed_topic_ids": ["101", "102"],
             "analyzed_topic_ids": ["101", "102"],
         }
         conn = Mock()
@@ -494,6 +581,7 @@ class StockTopicAnalysisServiceHelperTests(unittest.TestCase):
             "recommendation_count": 3,
             "processed_topic_ids": ["101", "102", "103"],
             "analyzed_topic_ids": ["101", "102", "103"],
+            "skipped_topic_ids": ["103"],
         }
         latest = {
             **search_result,
@@ -523,6 +611,10 @@ class StockTopicAnalysisServiceHelperTests(unittest.TestCase):
         build_payload.assert_not_called()
         call_ai.assert_not_called()
         conn.commit.assert_called_once()
+        self.assertEqual(
+            [("51111112855254", "宁德时代", "103", "skipped", "", "test-model", "")],
+            conn.executemany.call_args.args[1],
+        )
 
     @unittest.skipUnless(HAS_SERVICE_DEPS, "stock topic analysis service dependencies are not installed")
     def test_analyze_stock_topics_only_sends_new_topics_to_ai(self):
@@ -537,6 +629,8 @@ class StockTopicAnalysisServiceHelperTests(unittest.TestCase):
             "concepts": ["固态电池", "储能"],
             "topic_count": 3,
             "recommendation_count": 4,
+            "processed_topic_ids": ["101", "102"],
+            "skipped_topic_ids": [],
         }
         latest = {
             **search_result,
@@ -547,6 +641,7 @@ class StockTopicAnalysisServiceHelperTests(unittest.TestCase):
             "error": "",
             "created_at": "2026-05-10T10:00:00",
             "updated_at": "2026-05-10T10:01:00",
+            "processed_topic_ids": ["101", "102"],
             "analyzed_topic_ids": ["101", "102"],
         }
         payload_topics = [
@@ -575,6 +670,8 @@ class StockTopicAnalysisServiceHelperTests(unittest.TestCase):
         self.assertNotIn("analyzed_topic_ids", call_ai.call_args.args[0])
         self.assertIn("old summary", call_ai.call_args.args[0])
         self.assertEqual(2, conn.commit.call_count)
+        first_state_write = conn.executemany.call_args_list[0].args[1]
+        self.assertEqual([("51111112855254", "宁德时代", "103", "analyzed", "", "new-model", "")], first_state_write)
 
     @unittest.skipUnless(HAS_SERVICE_DEPS, "stock topic analysis service dependencies are not installed")
     def test_analyze_stock_topics_processes_new_topics_in_batches(self):
@@ -590,6 +687,8 @@ class StockTopicAnalysisServiceHelperTests(unittest.TestCase):
             "concepts": ["固态电池"],
             "topic_count": len(search_topics),
             "recommendation_count": 10,
+            "processed_topic_ids": [],
+            "skipped_topic_ids": [],
         }
         payload_topics = [
             {"topic_id": topic["topic_id"], "content": f"content-{topic['topic_id']}"}

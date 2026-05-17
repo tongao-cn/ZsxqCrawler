@@ -164,6 +164,7 @@ def _empty_search_result(group_id: str, stock_name: str) -> Dict[str, Any]:
         "recommendation_count": 0,
         "processed_topic_ids": [],
         "analyzed_topic_ids": [],
+        "skipped_topic_ids": [],
     }
 
 
@@ -192,6 +193,11 @@ def _merge_topic_ids(*groups: Iterable[Any]) -> List[str]:
     for group in groups:
         merged.extend(list(group or []))
     return _ordered_unique(merged, limit=MAX_TRACKED_TOPIC_IDS)
+
+
+def _exclude_topic_ids(values: Iterable[Any], excluded: Iterable[Any]) -> List[str]:
+    excluded_set = _topic_id_set(excluded)
+    return _ordered_unique((value for value in values if str(value) not in excluded_set), limit=MAX_TRACKED_TOPIC_IDS)
 
 
 def _topic_id_set(values: Iterable[Any]) -> set[str]:
@@ -545,20 +551,24 @@ def _upsert_stock_topic_analysis(
     status: str,
     error: str = "",
     analyzed_topic_ids: Iterable[Any] | None = None,
+    processed_state_topic_ids: Iterable[Any] | None = None,
     processed_topic_status: str = "analyzed",
     extract_mode: str = "",
+    write_processed_state: bool = True,
 ) -> None:
     topic_ids = list(analyzed_topic_ids) if analyzed_topic_ids is not None else _topic_ids_from_result(result)
-    _upsert_stock_topic_processed_states(
-        conn,
-        group_id=result["group_id"],
-        stock_name=result["stock_name"],
-        topic_ids=topic_ids,
-        status=processed_topic_status,
-        extract_mode=extract_mode,
-        model=result.get("model", ""),
-        error=error,
-    )
+    if write_processed_state:
+        state_topic_ids = list(processed_state_topic_ids) if processed_state_topic_ids is not None else topic_ids
+        _upsert_stock_topic_processed_states(
+            conn,
+            group_id=result["group_id"],
+            stock_name=result["stock_name"],
+            topic_ids=state_topic_ids,
+            status=processed_topic_status,
+            extract_mode=extract_mode,
+            model=result.get("model", ""),
+            error=error,
+        )
     conn.execute(
         """
         INSERT INTO stock_topic_analyses (
@@ -676,6 +686,7 @@ def search_stock_topics(group_id: str, stock_name: str, *, limit: int | None = N
     try:
         processed_topic_ids = _load_latest_processed_topic_ids(conn, group_id_text, query)
         processed_topic_id_set = set(processed_topic_ids)
+        skipped_topic_ids: List[str] = []
         rows = conn.execute(
             _build_topic_search_sql(recent_cutoff=recent_cutoff),
             (like, group_id_text, like, like, like, like, recent_cutoff, MAX_SEARCH_CANDIDATE_TOPICS),
@@ -695,7 +706,6 @@ def search_stock_topics(group_id: str, stock_name: str, *, limit: int | None = N
             topic_id = str(row["topic_id"])
             if topic_id in processed_topic_id_set:
                 continue
-            processed_topic_ids.append(topic_id)
             topic_body = "\n".join(
                 part for part in (row["talk_text"], row["question_text"], row["answer_text"]) if _normalize_text(part)
             )
@@ -713,6 +723,8 @@ def search_stock_topics(group_id: str, stock_name: str, *, limit: int | None = N
                 mode = "extraction_full"
                 matched_terms = [_normalize_text(row["stock_name"])]
             if not extracted_content:
+                processed_topic_ids.append(topic_id)
+                skipped_topic_ids.append(topic_id)
                 continue
             topic = topics_by_id.setdefault(
                 topic_id,
@@ -785,6 +797,7 @@ def search_stock_topics(group_id: str, stock_name: str, *, limit: int | None = N
             "recommendation_count": recommendation_count,
             "processed_topic_ids": _ordered_unique(processed_topic_ids, limit=MAX_TRACKED_TOPIC_IDS),
             "analyzed_topic_ids": _ordered_unique(processed_topic_ids, limit=MAX_TRACKED_TOPIC_IDS),
+            "skipped_topic_ids": _ordered_unique(skipped_topic_ids, limit=MAX_TRACKED_TOPIC_IDS),
         }
     finally:
         conn.close()
@@ -1241,8 +1254,9 @@ def analyze_stock_topics(
     latest = get_latest_stock_topic_analysis(group_id, stock_name)
     saved_topic_ids = list((latest or {}).get("processed_topic_ids") or (latest or {}).get("analyzed_topic_ids") or [])
     current_topic_ids = _topic_ids_from_result(search_result)
-    processed_topic_ids = _merge_topic_ids(saved_topic_ids, search_result.get("processed_topic_ids") or current_topic_ids)
     new_topic_ids = [topic_id for topic_id in current_topic_ids if topic_id not in _topic_id_set(saved_topic_ids)]
+    new_skipped_topic_ids = _exclude_topic_ids(search_result.get("skipped_topic_ids") or [], saved_topic_ids)
+    processed_topic_ids = _merge_topic_ids(saved_topic_ids, search_result.get("processed_topic_ids") or [], new_skipped_topic_ids)
     has_new_processed_topic_ids = len(_topic_id_set(processed_topic_ids)) > len(_topic_id_set(saved_topic_ids))
     has_existing_summary = bool((latest or {}).get("summary_markdown"))
 
@@ -1268,6 +1282,7 @@ def analyze_stock_topics(
                     result=result,
                     status="completed",
                     analyzed_topic_ids=processed_topic_ids,
+                    processed_state_topic_ids=new_skipped_topic_ids,
                     processed_topic_status="skipped",
                 )
             finally:
@@ -1299,6 +1314,7 @@ def analyze_stock_topics(
                 result=result,
                 status="completed",
                 analyzed_topic_ids=processed_topic_ids,
+                processed_state_topic_ids=new_skipped_topic_ids,
                 processed_topic_status="skipped",
             )
         finally:
@@ -1315,8 +1331,10 @@ def analyze_stock_topics(
         summary = (latest or {}).get("summary_markdown") or ""
         model = (latest or {}).get("model") or ""
         processed_topic_ids = list(processed_topic_ids)
+        current_batch_topic_ids: List[str] = []
         for batch_index, topic_batch in enumerate(topic_batches, start=1):
             _log(log_callback, f"🤖 AI 分析批次 {batch_index}/{len(topic_batches)}，话题 {len(topic_batch)} 条")
+            current_batch_topic_ids = [str(topic.get("topic_id") or "") for topic in topic_batch]
             summary, model = _call_stock_analysis_ai(
                 _build_stock_analysis_prompt(
                     search_result,
@@ -1325,7 +1343,7 @@ def analyze_stock_topics(
                 ),
                 incremental=bool(summary),
             )
-            processed_topic_ids = _merge_topic_ids(processed_topic_ids, (topic.get("topic_id") for topic in topic_batch))
+            processed_topic_ids = _merge_topic_ids(processed_topic_ids, current_batch_topic_ids)
             checkpoint_result = {
                 **search_result,
                 "summary_markdown": summary or "",
@@ -1343,11 +1361,13 @@ def analyze_stock_topics(
                     result=checkpoint_result,
                     status=checkpoint_result["status"],
                     analyzed_topic_ids=processed_topic_ids,
+                    processed_state_topic_ids=current_batch_topic_ids,
                     processed_topic_status="analyzed",
                 )
             finally:
                 conn.close()
     except Exception as exc:
+        failed_topic_ids = current_batch_topic_ids or new_topic_ids
         failed_result = {
             **search_result,
             "topics": search_result["topics"][: len(topics)],
@@ -1366,6 +1386,7 @@ def analyze_stock_topics(
                 status="failed",
                 error=str(exc),
                 analyzed_topic_ids=processed_topic_ids,
+                processed_state_topic_ids=failed_topic_ids,
                 processed_topic_status="failed",
             )
         finally:
@@ -1390,7 +1411,7 @@ def analyze_stock_topics(
             result=result,
             status="completed",
             analyzed_topic_ids=processed_topic_ids,
-            processed_topic_status="analyzed",
+            write_processed_state=False,
         )
     finally:
         conn.close()

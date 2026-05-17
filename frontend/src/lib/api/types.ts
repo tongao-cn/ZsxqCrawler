@@ -91,6 +91,7 @@ export interface StockTopicAnalysisResponse {
   updated_at?: string;
   processed_topic_ids?: string[];
   analyzed_topic_ids?: string[];
+  skipped_topic_ids?: string[];
   new_topic_count?: number;
   analysis_mode?: 'saved' | 'initialize' | 'incremental' | 'up_to_date' | string;
 }
