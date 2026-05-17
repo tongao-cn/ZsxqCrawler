@@ -33,7 +33,7 @@ import {
   TrendingUp,
 } from 'lucide-react';
 
-import { Calendar as CalendarPicker } from '@/components/ui/calendar';
+import { DatePickerButton, MonthPickerButton } from '@/components/ui/date-picker-button';
 
 const CrawlSettingsDialog = dynamic(() => import('./CrawlSettingsDialog'), {
   ssr: false,
@@ -153,19 +153,9 @@ export default function GroupActionPanel({
   actions,
 }: GroupActionPanelProps) {
   const [advancedCrawlOpen, setAdvancedCrawlOpen] = useState(false);
-  const [rangeStartOpen, setRangeStartOpen] = useState(false);
-  const [rangeEndOpen, setRangeEndOpen] = useState(false);
   const hasTopics = crawl.topicsCount > 0;
   const hasLocalFiles = download.localFileCount > 0;
   const sourceFileCount = download.sourceFileCount ?? '?';
-
-  const formatDateLabel = (value?: string) => value?.replaceAll('-', '/') || '选择日期';
-  const formatSelectedDate = (date: Date) => {
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const day = String(date.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
-  };
 
   const handleSelectIncremental = () => {
     if (!hasTopics) {
@@ -272,12 +262,10 @@ export default function GroupActionPanel({
                                   </Button>
                                 </div>
                                 <div className="text-xs text-gray-600">选择月份</div>
-                                <div className="flex items-center gap-2 max-w-[180px]">
-                                  <Input
-                                    type="month"
+                                <div className="max-w-[180px]">
+                                  <MonthPickerButton
                                     value={crawl.crawlMonth}
-                                    onChange={(event) => crawl.onCrawlMonthChange(event.target.value)}
-                                    className="h-7 text-xs"
+                                    onChange={crawl.onCrawlMonthChange}
                                   />
                                 </div>
                               </div>
@@ -634,73 +622,19 @@ export default function GroupActionPanel({
                               </div>
                               <div className="text-[10px] text-gray-400">或 自定义日期范围</div>
                               <div className="grid gap-3 sm:grid-cols-2">
-                                <div className="space-y-2">
+                                <div className="flex flex-col gap-2">
                                   <div className="text-[10px] text-gray-500">开始日期</div>
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    className="h-9 w-full justify-between text-xs"
-                                    onClick={() => {
-                                      setRangeEndOpen(false);
-                                      setRangeStartOpen((open) => !open);
-                                    }}
-                                  >
-                                    {formatDateLabel(download.rangeStartDate)}
-                                    <Calendar className="h-3.5 w-3.5 text-gray-400" />
-                                  </Button>
-                                  {rangeStartOpen && (
-                                    <div className="rounded-md border bg-white shadow-sm">
-                                      <CalendarPicker
-                                        mode="single"
-                                        selected={
-                                          download.rangeStartDate
-                                            ? new Date(`${download.rangeStartDate}T00:00:00`)
-                                            : undefined
-                                        }
-                                        onSelect={(date) => {
-                                          if (!date) {
-                                            return;
-                                          }
-                                          download.onRangeStartDateChange(formatSelectedDate(date));
-                                          setRangeStartOpen(false);
-                                        }}
-                                      />
-                                    </div>
-                                  )}
+                                  <DatePickerButton
+                                    value={download.rangeStartDate}
+                                    onChange={download.onRangeStartDateChange}
+                                  />
                                 </div>
-                                <div className="space-y-2">
+                                <div className="flex flex-col gap-2">
                                   <div className="text-[10px] text-gray-500">结束日期</div>
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    className="h-9 w-full justify-between text-xs"
-                                    onClick={() => {
-                                      setRangeStartOpen(false);
-                                      setRangeEndOpen((open) => !open);
-                                    }}
-                                  >
-                                    {formatDateLabel(download.rangeEndDate)}
-                                    <Calendar className="h-3.5 w-3.5 text-gray-400" />
-                                  </Button>
-                                  {rangeEndOpen && (
-                                    <div className="rounded-md border bg-white shadow-sm">
-                                      <CalendarPicker
-                                        mode="single"
-                                        selected={
-                                          download.rangeEndDate
-                                            ? new Date(`${download.rangeEndDate}T00:00:00`)
-                                            : undefined
-                                        }
-                                        onSelect={(date) => {
-                                          if (!date) {
-                                            return;
-                                          }
-                                          download.onRangeEndDateChange(formatSelectedDate(date));
-                                          setRangeEndOpen(false);
-                                        }}
-                                      />
-                                    </div>
-                                  )}
+                                  <DatePickerButton
+                                    value={download.rangeEndDate}
+                                    onChange={download.onRangeEndDateChange}
+                                  />
                                 </div>
                               </div>
                             </div>

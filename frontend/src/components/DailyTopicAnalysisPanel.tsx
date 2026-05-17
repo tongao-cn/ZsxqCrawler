@@ -10,8 +10,8 @@ import { apiClient, DailyStockConcept, DailyStockConceptResponse, DailyTopicRepo
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { DatePickerButton } from '@/components/ui/date-picker-button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -814,11 +814,9 @@ export default function DailyTopicAnalysisPanel({
               <CardContent className="flex flex-col gap-4">
                 <div className="flex flex-col gap-2">
                   <Label htmlFor="daily-stock-concepts-date">报告日期</Label>
-                  <Input
-                    id="daily-stock-concepts-date"
-                    type="date"
+                  <DatePickerButton
                     value={reportDate}
-                    onChange={(event) => setReportDate(event.target.value || getTodayText())}
+                    onChange={(value) => setReportDate(value || getTodayText())}
                   />
                 </div>
 
@@ -954,11 +952,9 @@ export default function DailyTopicAnalysisPanel({
               <CardContent className="flex flex-col gap-4">
                 <div className="flex flex-col gap-2">
                   <Label htmlFor="daily-topic-report-date">报告日期</Label>
-                  <Input
-                    id="daily-topic-report-date"
-                    type="date"
+                  <DatePickerButton
                     value={reportDate}
-                    onChange={(event) => setReportDate(event.target.value || getTodayText())}
+                    onChange={(value) => setReportDate(value || getTodayText())}
                   />
                 </div>
 
