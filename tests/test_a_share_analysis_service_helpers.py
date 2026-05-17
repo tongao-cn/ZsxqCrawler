@@ -278,6 +278,23 @@ class AShareAnalysisServiceHelperTests(unittest.TestCase):
         self.assertIn("业绩下修", messages[1]["content"])
         self.assertIn("营收利润重算后大幅下滑", messages[1]["content"])
 
+    def test_call_openai_extract_topic_stocks_skips_empty_or_too_short_content(self):
+        from backend.services import a_share_analysis_service as service
+
+        with patch.object(service, "log_debug") as log_debug, patch("openai.OpenAI") as openai_client:
+            self.assertEqual(
+                [],
+                service.call_openai_extract_topic_stocks(
+                    "短内容不够长",
+                    api_key="test-key",
+                    model="test-model",
+                    wire_api="responses",
+                ),
+            )
+
+        openai_client.assert_not_called()
+        log_debug.assert_called_once()
+
     def test_backfill_topic_stock_extractions_uses_recent_seven_day_reset_range(self):
         from backend.services import a_share_analysis_service as service
 
@@ -304,7 +321,7 @@ class AShareAnalysisServiceHelperTests(unittest.TestCase):
             {
                 "topic_id": index,
                 "title": f"title {index}",
-                "text": f"text {index}",
+                "text": f"这是一个长度超过二十个字的推荐池测试话题内容 {index}",
                 "create_time": "2026-05-10T10:00:00+0800",
                 "day": "2026-05-10",
                 "source": "topics",
@@ -354,6 +371,50 @@ class AShareAnalysisServiceHelperTests(unittest.TestCase):
         self.assertEqual(45, result["items_succeeded"])
         self.assertEqual(45, result["topic_stock_extractions"])
 
+    def test_run_analysis_marks_short_items_processed_without_extractions(self):
+        from backend.services import a_share_analysis_service as service
+
+        items = [
+            {
+                "topic_id": 1,
+                "title": "title 1",
+                "text": "too short",
+                "create_time": "2026-05-10T10:00:00+0800",
+                "day": "2026-05-10",
+                "source": "topics",
+                "group_id": "511",
+            }
+        ]
+        saved_state = []
+        checkpoint_calls = []
+
+        def fake_checkpoint(**kwargs):
+            checkpoint_calls.append(kwargs)
+            return {"daily_mentions": 0, "topic_stock_extractions": 0, "processed_state": len(set(kwargs["processed_keys"]))}
+
+        with patch.object(service, "get_openai_compatible_config", return_value={"api_key": "key"}), patch.object(
+            service, "read_existing_csv", return_value={}
+        ), patch.object(service, "load_state", return_value=set()), patch.object(
+            service, "read_topics_last_days", return_value=items
+        ), patch.object(service, "should_use_db_storage", return_value=True), patch.object(
+            service, "call_openai_extract_topic_stocks", return_value=[]
+        ) as extract, patch.object(service, "save_recommendation_pool_checkpoint", side_effect=fake_checkpoint), patch.object(
+            service, "write_csv"
+        ), patch.object(
+            service, "save_state", side_effect=lambda _path, keys=None, **_kwargs: saved_state.append(set(keys or set()))
+        ), patch.object(
+            service,
+            "get_analysis_summary",
+            return_value={"date_count": 1, "output_path": "db.daily", "state_path": "db.state"},
+        ):
+            result = service.run_analysis(group_id="511", days=1, concurrency=1)
+
+        extract.assert_not_called()
+        self.assertEqual(1, result["items_succeeded"])
+        self.assertEqual(0, result["topic_stock_extractions"])
+        self.assertEqual(1, len(saved_state[0]))
+        self.assertEqual(1, len(checkpoint_calls[0]["processed_keys"]))
+
     def test_run_analysis_checkpoint_failure_stops_final_writes(self):
         from backend.services import a_share_analysis_service as service
 
@@ -361,7 +422,7 @@ class AShareAnalysisServiceHelperTests(unittest.TestCase):
             {
                 "topic_id": index,
                 "title": f"title {index}",
-                "text": f"text {index}",
+                "text": f"这是一个长度超过二十个字的推荐池测试话题内容 {index}",
                 "create_time": "2026-05-10T10:00:00+0800",
                 "day": "2026-05-10",
                 "source": "topics",

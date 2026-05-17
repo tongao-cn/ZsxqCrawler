@@ -628,13 +628,18 @@ def call_openai_extract_topic_stocks(
         log_warning("openai-compatible api key missing")
         return []
 
+    content = str(text or "").strip()
+    if len(content) < 20:
+        log_debug("skip topic stock extraction because content is empty or shorter than 20 chars")
+        return []
+
     try:
         from openai import OpenAI
     except ImportError as exc:
         raise RuntimeError("缺少 openai 依赖，请先安装后再运行分析") from exc
 
     prompt = _build_topic_stock_extraction_prompt()
-    content = text if len(text) <= 8000 else text[:8000]
+    content = content if len(content) <= 8000 else content[:8000]
     messages = [
         {
             "role": "system",
@@ -750,8 +755,12 @@ def aggregate_daily(
     def _work(item: Dict[str, Any]):
         log_debug(f"process item topic_id={item.get('topic_id')} day={item.get('day')}")
         item_key = make_item_key(item)
+        content = str(item.get("text") or "").strip()
+        if len(content) < 20:
+            log_debug(f"skip topic_id={item.get('topic_id')} because content is empty or shorter than 20 chars")
+            return item.get("day"), [], item.get("topic_id"), item_key
         stocks = call_openai_extract_topic_stocks(
-            item["text"],
+            content,
             api_key,
             model,
             api_base,
