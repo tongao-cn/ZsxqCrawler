@@ -795,7 +795,7 @@ export default function DailyTopicAnalysisPanel({
             </div>
           ) : (
             <div className="flex h-40 items-center justify-center rounded-md border border-dashed border-gray-300 text-sm text-muted-foreground">
-              还没有当天股票概念视图，请先运行 A股分析，或点击右侧按钮从已有结果生成
+              还没有当天股票概念视图，请先运行股票推荐池，或点击右侧按钮从已有结果生成
             </div>
           )}
           {stockConcepts?.updated_at && (

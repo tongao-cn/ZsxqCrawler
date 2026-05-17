@@ -52,7 +52,13 @@ function getTaskTypeLabel(type: string) {
     case 'columns_fetch':
       return '专栏采集';
     case 'a_share_analysis':
-      return 'A股分析';
+      return '股票推荐池';
+    case 'stock_topic_analysis':
+      return '个股分析';
+    case 'stock_topic_analysis_batch':
+      return '批量个股分析';
+    case 'stock_question_analysis':
+      return 'A股问答';
     default:
       return type;
   }

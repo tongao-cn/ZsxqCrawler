@@ -9,7 +9,10 @@ import type {
   DailyStockConceptResponse,
   DailyTopicAnalysisPayload,
   DailyTopicReport,
+  StockTopicBatchAnalysisResponse,
   StockTopicAnalysisResponse,
+  StockTopicImageExtractResponse,
+  StockQuestionResponse,
   TaskCreateResponse,
 } from './types';
 import type { ApiRequestOptions } from './client';
@@ -168,11 +171,45 @@ export class AnalysisApiClient extends TasksApiClient {
     });
   }
 
+  async analyzeStockTopicsBatch(groupId: number | string, stockNames: string[]): Promise<TaskCreateResponse> {
+    return this.request(`/api/analysis/stock-topics/${groupId}/analyze-batch`, {
+      method: 'POST',
+      body: JSON.stringify({ stockNames }),
+    });
+  }
+
+  async extractStockTopicsFromImage(imageDataUrl: string): Promise<StockTopicImageExtractResponse> {
+    return this.request('/api/analysis/stock-topics/extract-stocks-from-image', {
+      method: 'POST',
+      body: JSON.stringify({ imageDataUrl }),
+    });
+  }
+
   async getLatestStockTopicAnalysis(groupId: number | string, stockName: string, options: ApiRequestOptions = {}): Promise<StockTopicAnalysisResponse> {
     const search = new URLSearchParams({ stock_name: stockName });
     return this.request(`/api/analysis/stock-topics/${groupId}/latest?${search}`, {
       signal: options.signal,
     });
   }
-}
 
+  async getLatestStockTopicAnalyses(groupId: number | string, stockNames: string[], options: ApiRequestOptions = {}): Promise<StockTopicBatchAnalysisResponse> {
+    const search = new URLSearchParams({ stock_names: stockNames.join('、') });
+    return this.request(`/api/analysis/stock-topics/${groupId}/latest-batch?${search}`, {
+      signal: options.signal,
+    });
+  }
+
+  async searchStockQuestionTopics(groupId: number | string, question: string, options: ApiRequestOptions = {}): Promise<StockQuestionResponse> {
+    const search = new URLSearchParams({ question });
+    return this.request(`/api/analysis/stock-topics/${groupId}/questions?${search}`, {
+      signal: options.signal,
+    });
+  }
+
+  async analyzeStockQuestion(groupId: number | string, question: string): Promise<TaskCreateResponse> {
+    return this.request(`/api/analysis/stock-topics/${groupId}/questions/analyze`, {
+      method: 'POST',
+      body: JSON.stringify({ question }),
+    });
+  }
+}

@@ -2,7 +2,9 @@
 
 ## Goal
 
-Add a group-page tab where the user can enter a stock name, review matched topics, concepts, recommendation count, and trigger an AI summary based only on the matched topic content.
+Add a group-page tab where the user can enter one or more stock names, review matched topics, concepts, recommendation count, and trigger AI summaries based only on the matched topic content.
+
+Add a sibling A-share Q&A tab where the user can enter a free-form question, let AI extract topic-search keywords, search matched topics, and trigger an AI summary based only on matched topic content.
 
 ## Scope
 
@@ -10,7 +12,12 @@ Add a group-page tab where the user can enter a stock name, review matched topic
 - Read-only topic search against existing PostgreSQL data.
 - Read-only use of existing A-share topic extractions and daily recommendation mentions.
 - One task-based AI analysis action over the searched topic payload.
+- Batch stock-topic analysis with one row per stock and one saved latest result per group and stock.
+- Image-assisted stock-name extraction that fills the multi-stock input box before search or analysis.
 - Persist the latest analysis result per group and stock.
+- Free-form A-share Q&A over existing group topics without adding a new persistence table.
+- A-share Q&A keyword extraction should use AI first, not hard-coded Chinese question suffix rules.
+- Incremental stock analysis: one saved result per group and stock, with analyzed topic IDs recorded so later runs only send newly discovered topics to AI and merge the new evidence into the saved result.
 
 ## Constraints
 
@@ -34,6 +41,10 @@ Add a group-page tab where the user can enter a stock name, review matched topic
 5. Run targeted backend tests and frontend build.
 6. Convert one-click analysis to a background task and save the latest analysis result.
 7. Refresh the panel from the saved result when the task completes.
+8. Upgrade the tab to support multi-stock input, batch preview, batch background analysis, and a per-stock result dialog.
+9. Add an image extraction action that sends one uploaded image to AI and merges extracted stock names back into the input.
+10. Add an A-share Q&A tab that uses AI to extract keywords from the question, previews matched topics, and runs a background AI summary task.
+11. Upgrade stock analysis persistence so latest-result reads include the analyzed topic list, and analysis tasks initialize missing rows or incrementally update existing rows only when new topics are found.
 
 ## Progress
 
@@ -44,6 +55,16 @@ Add a group-page tab where the user can enter a stock name, review matched topic
 - Group page now includes a separate `个股话题` tab with search, topic table, concept badges, recommendation count, and one-click AI analysis.
 - One-click analysis now creates a `stock_topic_analysis` task.
 - Latest analysis results are persisted in `stock_topic_analyses` and loaded after task completion.
+- Multi-stock input now supports whitespace, comma, Chinese comma, semicolon, and dunhao separators, dedupes names, and caps each batch at 20 stocks.
+- Batch analysis now creates a `stock_topic_analysis_batch` task and saves each stock into the existing `stock_topic_analyses` table.
+- The results area now renders a table with status per stock and a dialog for the saved Markdown summary.
+- The tab now accepts one JPG/PNG/WebP image up to 4MB and uses the configured AI provider to extract stock names into the input box.
+- A sibling `A股问答` tab now accepts a free-form question, uses AI to extract search keywords, searches group topics, and creates a `stock_question_analysis` task for AI summary.
+- The stock-topic AI summary prompt now uses a company-summary structure covering one-line intro, concepts, business mix, customers, event drivers, forward market cap/revenue/profit by time and sell-side/source, risks, and source topic indexes.
+- Incremental stock analysis now reuses `stock_topic_analyses.topic_ids_json` as the analyzed-topic ledger, keeps one row per group and stock, returns the saved topic list from latest-result reads, skips AI when there are no new topics, and sends only new topic payloads when updating an existing summary.
+- Stock analysis now searches up to 80 matched topics, then processes all newly discovered topics in AI chunks of up to 30 topics per call so older-but-unanalyzed matches do not get stranded behind a hard first-30 cap.
+- Stock analysis now performs a local first-pass relevance screen on all candidate topic text, keeps only company-relevant snippets or full-coverage topics, and feeds the screened set into the 80-topic cap and subsequent 30/topic AI batches.
+- The frontend now distinguishes saved-query, initialization, incremental-update, and up-to-date states with new-topic counts.
 
 ## Changed Files
 
@@ -53,6 +74,7 @@ Add a group-page tab where the user can enter a stock name, review matched topic
 - `backend/storage/postgres_core_schema.py`
 - `frontend/src/app/groups/[groupId]/page.tsx`
 - `frontend/src/components/StockTopicAnalysisPanel.tsx`
+- `frontend/src/components/StockQuestionPanel.tsx`
 - `frontend/src/lib/api.ts`
 - `tests/test_stock_topic_analysis_routes_helpers.py`
 - `tests/test_stock_topic_analysis_service_helpers.py`
@@ -70,3 +92,20 @@ Add a group-page tab where the user can enter a stock name, review matched topic
 - `cd frontend; npx tsc --noEmit --pretty false`: passed after task/persistence conversion.
 - `uv run manage-postgres-core-schema --apply`: timed out while waiting on PostgreSQL locks.
 - Targeted DDL for `stock_topic_analyses`: also timed out waiting on locks. `pg_stat_activity` showed existing idle-in-transaction sessions on account reads and blocked DDL sessions; the blocked DDL sessions were cancelled with `pg_cancel_backend`. Runtime table creation still needs to be retried after the blocking sessions are released.
+- A-share Q&A pass: `uv run python -m unittest tests.test_stock_topic_analysis_service_helpers tests.test_stock_topic_analysis_routes_helpers`: passed.
+- A-share Q&A pass: `uv run python -m py_compile backend\services\stock_topic_analysis_service.py backend\routes\stock_topic_analysis_routes.py backend\main.py`: passed.
+- A-share Q&A pass: `cd frontend; npx tsc --noEmit --pretty false`: passed.
+- A-share Q&A pass: `cd frontend; npm run build`: passed.
+- A-share Q&A AI-keyword pass: `uv run python -m unittest tests.test_stock_topic_analysis_service_helpers tests.test_stock_topic_analysis_routes_helpers`: passed.
+- A-share Q&A AI-keyword pass: `uv run python -m py_compile backend\services\stock_topic_analysis_service.py backend\routes\stock_topic_analysis_routes.py`: passed.
+- A-share Q&A AI-keyword pass: `cd frontend; npx tsc --noEmit --pretty false`: passed.
+- A-share Q&A AI-keyword pass: `cd frontend; npm run build`: passed.
+- Incremental stock-analysis pass: `uv run python -m py_compile backend\services\stock_topic_analysis_service.py backend\routes\stock_topic_analysis_routes.py backend\storage\postgres_core_schema.py`: passed.
+- Incremental stock-analysis pass: `uv run python -m unittest tests.test_stock_topic_analysis_service_helpers tests.test_stock_topic_analysis_routes_helpers tests.test_postgres_core_schema`: passed.
+- Incremental stock-analysis pass: `cd frontend; npx tsc --noEmit --pretty false`: passed.
+- Incremental stock-analysis chunking pass: `uv run python -m py_compile backend\services\stock_topic_analysis_service.py backend\routes\stock_topic_analysis_routes.py backend\storage\postgres_core_schema.py`: passed.
+- Incremental stock-analysis chunking pass: `uv run python -m unittest tests.test_stock_topic_analysis_service_helpers tests.test_stock_topic_analysis_routes_helpers tests.test_postgres_core_schema`: passed.
+- Incremental stock-analysis chunking pass: `cd frontend; npx tsc --noEmit --pretty false`: passed.
+- Incremental stock-analysis screening pass: `uv run python -m py_compile backend\services\stock_topic_analysis_service.py backend\routes\stock_topic_analysis_routes.py backend\storage\postgres_core_schema.py`: passed.
+- Incremental stock-analysis screening pass: `uv run python -m unittest tests.test_stock_topic_analysis_service_helpers tests.test_stock_topic_analysis_routes_helpers tests.test_postgres_core_schema`: passed.
+- Incremental stock-analysis screening pass: `cd frontend; npx tsc --noEmit --pretty false`: passed.

@@ -76,7 +76,13 @@ export default function TaskPanel() {
       case 'crawl_time_range':
         return '🗓️ 按时间区间爬取';
       case 'a_share_analysis':
-        return '📈 A股公司分析';
+        return '📈 股票推荐池';
+      case 'stock_topic_analysis':
+        return '个股分析';
+      case 'stock_topic_analysis_batch':
+        return '批量个股分析';
+      case 'stock_question_analysis':
+        return 'A股问答';
       default:
         return type;
     }
