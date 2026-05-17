@@ -304,12 +304,13 @@ def _empty_topic_summary(topic_id: Any) -> Dict[str, Any]:
         "content_preview": "",
         "concepts": [],
         "reasons": [],
+        "excerpt": "",
         "confidence": 0.0,
         "recommendation_count": 0,
     }
 
 
-def _load_topic_summaries(conn: Any, group_id: str, topic_ids: List[str]) -> List[Dict[str, Any]]:
+def _load_topic_summaries(conn: Any, group_id: str, topic_ids: List[str], stock_name: str = "") -> List[Dict[str, Any]]:
     if not topic_ids:
         return []
     placeholders = ",".join("?" for _ in topic_ids)
@@ -324,16 +325,21 @@ def _load_topic_summaries(conn: Any, group_id: str, topic_ids: List[str]) -> Lis
             t.reading_count,
             tk.text AS talk_text,
             q.text AS question_text,
-            a.text AS answer_text
+            a.text AS answer_text,
+            e.excerpt
         FROM topics t
         LEFT JOIN talks tk ON t.topic_id = tk.topic_id
         LEFT JOIN questions q ON t.topic_id = q.topic_id
         LEFT JOIN answers a ON t.topic_id = a.topic_id
+        LEFT JOIN zsxq_a_share_topic_stock_extractions e
+          ON e.group_id = t.group_id::text
+         AND e.topic_id = t.topic_id::text
+         AND e.stock_name ILIKE ?
         WHERE t.group_id::text = ?
           AND t.topic_id::text IN ({placeholders})
         ORDER BY t.create_time DESC
         """,
-        [group_id, *topic_ids],
+        [f"%{_normalize_company_name(stock_name)}%", group_id, *topic_ids],
     ).fetchall()
     summaries = [
         {
@@ -343,7 +349,8 @@ def _load_topic_summaries(conn: Any, group_id: str, topic_ids: List[str]) -> Lis
             "likes_count": int(row["likes_count"] or 0),
             "comments_count": int(row["comments_count"] or 0),
             "reading_count": int(row["reading_count"] or 0),
-            "content_preview": _clip(_topic_content(row), 260),
+            "excerpt": _normalize_text(row["excerpt"]),
+            "content_preview": _clip(_normalize_text(row["excerpt"]) or _topic_content(row), 260),
             "concepts": [],
             "reasons": [],
             "confidence": 0.0,
@@ -466,6 +473,7 @@ def _build_topic_search_sql(*, recent_cutoff: str | None = None) -> str:
             e.stock_code,
             e.market,
             e.concepts_json,
+            e.excerpt,
             e.reason,
             e.confidence,
             e.topic_date::text AS topic_date
@@ -630,7 +638,7 @@ def get_latest_stock_topic_analysis(group_id: str, stock_name: str) -> Dict[str,
             return None
         topic_ids = _parse_json_list(row["topic_ids_json"])
         try:
-            topics = _load_topic_summaries(conn, _normalize_text(row["group_id"]), topic_ids)
+            topics = _load_topic_summaries(conn, _normalize_text(row["group_id"]), topic_ids, row["stock_name"])
         except Exception:
             topics = [_empty_topic_summary(topic_id) for topic_id in topic_ids]
         return {
@@ -709,11 +717,17 @@ def search_stock_topics(group_id: str, stock_name: str, *, limit: int | None = N
             topic_body = "\n".join(
                 part for part in (row["talk_text"], row["question_text"], row["answer_text"]) if _normalize_text(part)
             )
-            extracted_content, mode, matched_terms = _extract_relevant_topic_content(
-                row["title"],
-                topic_body,
-                alias_terms,
-            )
+            stored_excerpt = _normalize_text(row["excerpt"])
+            if stored_excerpt:
+                extracted_content = "\n".join(part for part in (row["title"], stored_excerpt) if _normalize_text(part))
+                mode = "stored_excerpt"
+                matched_terms = _ordered_unique([_normalize_text(row["stock_name"]), *alias_terms], limit=10)
+            else:
+                extracted_content, mode, matched_terms = _extract_relevant_topic_content(
+                    row["title"],
+                    topic_body,
+                    alias_terms,
+                )
             if not extracted_content and _normalize_text(row["stock_name"]):
                 extracted_content = "\n".join(
                     part
@@ -875,16 +889,21 @@ def _build_analysis_topic_payload(search_result: Dict[str, Any]) -> List[Dict[st
                 t.reading_count,
                 tk.text AS talk_text,
                 q.text AS question_text,
-                a.text AS answer_text
+                a.text AS answer_text,
+                e.excerpt
             FROM topics t
             LEFT JOIN talks tk ON t.topic_id = tk.topic_id
             LEFT JOIN questions q ON t.topic_id = q.topic_id
             LEFT JOIN answers a ON t.topic_id = a.topic_id
+            LEFT JOIN zsxq_a_share_topic_stock_extractions e
+              ON e.group_id = t.group_id::text
+             AND e.topic_id = t.topic_id::text
+             AND e.stock_name ILIKE ?
             WHERE t.group_id::text = ?
               AND t.topic_id::text IN ({placeholders})
             ORDER BY t.create_time DESC
             """,
-            [search_result["group_id"], *topic_ids],
+            [f"%{_normalize_company_name(search_result.get('stock_name'))}%", search_result["group_id"], *topic_ids],
         ).fetchall()
     finally:
         conn.close()
@@ -901,8 +920,12 @@ def _build_analysis_topic_payload(search_result: Dict[str, Any]) -> List[Dict[st
                 "reading_count": int(row["reading_count"] or 0),
             },
             "concepts": list(topic_map.get(str(row["topic_id"]), {}).get("concepts") or []),
+            "excerpt": _normalize_text(topic_map.get(str(row["topic_id"]), {}).get("excerpt")) or _normalize_text(row["excerpt"]),
             "content": _clip(
-                _normalize_text(topic_map.get(str(row["topic_id"]), {}).get("analysis_content")) or _topic_content(row),
+                _normalize_text(topic_map.get(str(row["topic_id"]), {}).get("analysis_content"))
+                or _normalize_text(topic_map.get(str(row["topic_id"]), {}).get("excerpt"))
+                or _normalize_text(row["excerpt"])
+                or _topic_content(row),
                 MAX_TOPIC_TEXT_CHARS,
             ),
         }
@@ -1027,6 +1050,7 @@ def _call_stock_analysis_ai(prompt_payload: str, *, incremental: bool = False) -
         "要求：\n"
         "- 这是卖方调研社群材料，请按专业公司研究报告的风格输出，突出公司研究主线、催化、估值与跟踪点。\n"
         "- 只基于输入话题内容，不要补充外部行情、财报或未出现的信息。\n"
+        "- 输入的 new_topics.content / excerpt 是针对当前股票从原话题抽取的证据片段；全文都讲该股票时可能是全文，多股票分段时通常只保留当前股票相关段落。\n"
         "- 重点提炼可用于后续跟踪的结论、驱动因素、数据变化和事件进展。\n"
         "- 如果输入中出现数字或预测值，请在“关键数据与预测”中整理；没有明确数值时直接写未提及。\n"
         "- 如果输入中包含 existing_summary_markdown，请把新增话题自然融合进对应章节，并输出更新后的完整报告，不要只输出差异或单独列新章节。\n"

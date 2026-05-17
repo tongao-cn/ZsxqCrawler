@@ -233,6 +233,8 @@ class AShareAnalysisDbStorageHelperTests(unittest.TestCase):
                         "topic_date": "2026-05-10",
                         "stock_name": "宁德时代",
                         "concepts": ["电池"],
+                        "excerpt": "原文关键证据",
+                        "reason": "提到电池。",
                     }
                 ],
                 group_id="511",
@@ -243,6 +245,7 @@ class AShareAnalysisDbStorageHelperTests(unittest.TestCase):
         self.assertIn("ON CONFLICT (group_id, mention_date, company)", joined_sql)
         self.assertIn("mentions_count = \"zsxq_core\".\"zsxq_a_share_daily_mentions\".mentions_count + excluded.mentions_count", joined_sql)
         self.assertIn("ON CONFLICT (group_id, source, topic_id, day) DO UPDATE SET", joined_sql)
+        self.assertIn("excerpt", joined_sql)
         self.assertNotIn("DELETE FROM", joined_sql)
         self.assertTrue(conn.committed)
         self.assertFalse(conn.rolled_back)
@@ -278,6 +281,8 @@ class AShareAnalysisDbStorageHelperTests(unittest.TestCase):
                             "topic_id": "1001",
                             "topic_date": "2026-05-10",
                             "stock_name": "宁德时代",
+                            "excerpt": "原文关键证据",
+                            "reason": "提到电池。",
                         }
                     ],
                     group_id="511",
@@ -285,6 +290,39 @@ class AShareAnalysisDbStorageHelperTests(unittest.TestCase):
 
         self.assertFalse(conn.committed)
         self.assertTrue(conn.rolled_back)
+
+    @unittest.skipUnless(HAS_STORAGE_DEPS, "PostgreSQL storage dependencies are not installed")
+    def test_load_topic_stock_extractions_includes_excerpt(self):
+        from backend.services import a_share_analysis_db_storage as storage
+
+        conn = _FakeStorageConnection(_FakeStorageCursor())
+        conn.cursor_obj.fetchall = lambda: [
+            (
+                "511",
+                "1001",
+                datetime(2026, 5, 10),
+                "宁德时代",
+                "",
+                "",
+                '["电池"]',
+                "原文关键证据",
+                "提到电池。",
+                0.8,
+                "test-model",
+                "v1",
+                datetime(2026, 5, 10, 10, 0, 0),
+            )
+        ]
+
+        @contextmanager
+        def fake_connection(env_path=storage.DEFAULT_KNOW_ACTION_ENV_PATH):
+            yield conn
+
+        with patch.object(storage, "get_connection", fake_connection):
+            rows = storage.load_topic_stock_extractions(group_id="511")
+
+        self.assertEqual("原文关键证据", rows[0]["excerpt"])
+        self.assertEqual("提到电池。", rows[0]["reason"])
 
 
 if __name__ == "__main__":

@@ -83,10 +83,11 @@ A_SHARE_COMPANY_EXTRACTION_SCHEMA: Dict[str, Any] = {
                 "properties": {
                     "stock_name": {"type": "string"},
                     "concepts": {"type": "array", "items": {"type": "string"}},
+                    "excerpt": {"type": "string"},
                     "reason": {"type": "string"},
                     "confidence": {"type": "number"},
                 },
-                "required": ["stock_name", "concepts", "reason", "confidence"],
+                "required": ["stock_name", "concepts", "excerpt", "reason", "confidence"],
                 "additionalProperties": False,
             },
         },
@@ -521,11 +522,13 @@ def _parse_topic_stock_extraction_output(message: str) -> List[Dict[str, Any]]:
         if isinstance(raw, dict):
             company = _clean_company_name(raw.get("stock_name") or raw.get("company") or raw.get("name"))
             concepts = _safe_text_list(raw.get("concepts"), limit=10)
+            excerpt = str(raw.get("excerpt") or "").strip()[:2000]
             reason = str(raw.get("reason") or "").strip()[:1000]
             confidence = _safe_float(raw.get("confidence"))
         else:
             company = _clean_company_name(raw)
             concepts = []
+            excerpt = ""
             reason = ""
             confidence = 0.7
 
@@ -535,6 +538,7 @@ def _parse_topic_stock_extraction_output(message: str) -> List[Dict[str, Any]]:
             {
                 "stock_name": company,
                 "concepts": concepts,
+                "excerpt": excerpt,
                 "reason": reason,
                 "confidence": confidence,
             }
@@ -590,6 +594,7 @@ def _build_topic_stock_extraction_prompt() -> str:
         "请从下面内容中提取明确具有正向推荐或受益语义的中国A股上市公司，并给出上下文中的投资概念。\n"
         "这里的推荐池只收录被看好、被推荐、可能受益、作为投资主线或机会提及的股票；"
         "不要仅因为公司名称出现就输出。\n"
+        "你必须同时输出每只股票对应的 excerpt，excerpt 是从原文中直接摘出的证据片段，不要改写成摘要。\n"
         "要求：\n"
         "1. 只保留可以明确判断为A股上市公司的公司名称。\n"
         "2. 只有当上下文对该股票是正向推荐、重点关注、买入/增持、受益、催化、业绩改善、困境反转、弹性向上等语义时才输出。\n"
@@ -598,7 +603,12 @@ def _build_topic_stock_extraction_prompt() -> str:
         "5. 如果只是业务、产品、子公司、老板姓名，且无法唯一映射到A股上市公司，不要猜。\n"
         "6. 同一家公司如果同时出现全称和简称，只输出一个更常见的A股证券简称。\n"
         "7. concepts 必须来自上下文，例如固态电池、机器人、算力、低空经济等；没有明确概念可给空数组。\n"
-        "8. reason 简要说明该股票被推荐或受益的原因；如果只有负面或风险语义，应直接不输出，而不是降低 confidence。"
+        "8. excerpt 规则：\n"
+        "   - 如果全文都在讲一个股票，返回全文。\n"
+        "   - 如果分段讲多个股票，只返回当前股票对应的那一段。\n"
+        "   - 如果一段里同时讲多个股票，这一段要对每个相关股票都返回同一段 excerpt。\n"
+        "   - 如果同一股票在全文多处出现，只保留最能说明其被推荐或受益的那一段，尽量保留原文，不要改写。\n"
+        "9. reason 简要说明该股票被推荐或受益的原因；如果只有负面或风险语义，应直接不输出，而不是降低 confidence。"
     )
 
 
@@ -763,6 +773,7 @@ def aggregate_daily(
                 "stock_code": "",
                 "market": "",
                 "concepts": list(stock.get("concepts") or []),
+                "excerpt": str(stock.get("excerpt") or ""),
                 "reason": str(stock.get("reason") or ""),
                 "confidence": float(stock.get("confidence") or 0),
                 "model": model,

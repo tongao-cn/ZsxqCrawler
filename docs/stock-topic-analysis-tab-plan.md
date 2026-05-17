@@ -65,6 +65,7 @@ Add a sibling A-share Q&A tab where the user can enter a free-form question, let
 - Stock analysis now searches recent one-year candidate topics without the previous 80 matched-topic cap, then processes newly discovered topics in AI chunks of up to 10 topics per call.
 - Stock analysis now extracts or trims current-stock content from candidate topics before AI analysis, and records per-topic processed state in `stock_topic_processed_states` with statuses such as `analyzed`, `skipped`, and `failed`.
 - The frontend now distinguishes saved-query, initialization, incremental-update, and up-to-date states with new-topic counts.
+- Recommendation-pool topic extraction now stores a per-stock `excerpt`; individual stock analysis prefers this stored evidence excerpt for search previews and AI report payloads, falling back to the older local text trimming only when no excerpt exists.
 
 ## Changed Files
 
@@ -109,3 +110,5 @@ Add a sibling A-share Q&A tab where the user can enter a free-form question, let
 - Incremental stock-analysis screening pass: `uv run python -m py_compile backend\services\stock_topic_analysis_service.py backend\routes\stock_topic_analysis_routes.py backend\storage\postgres_core_schema.py`: passed.
 - Incremental stock-analysis screening pass: `uv run python -m unittest tests.test_stock_topic_analysis_service_helpers tests.test_stock_topic_analysis_routes_helpers tests.test_postgres_core_schema`: passed.
 - Incremental stock-analysis screening pass: `cd frontend; npx tsc --noEmit --pretty false`: passed.
+- Recommendation-pool excerpt integration pass: `python -m unittest tests.test_stock_topic_analysis_service_helpers tests.test_a_share_analysis_service_helpers tests.test_a_share_analysis_db_storage_helpers tests.test_postgres_core_schema`: passed.
+- Recommendation-pool excerpt integration pass: `python -m py_compile backend/services/stock_topic_analysis_service.py backend/services/a_share_analysis_service.py backend/services/a_share_analysis_db_storage.py backend/storage/postgres_core_schema.py`: passed.

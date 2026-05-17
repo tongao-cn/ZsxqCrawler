@@ -226,7 +226,7 @@ def save_topic_stock_extractions(
                 f"""
                 INSERT INTO {_core_table_ref(TOPIC_STOCK_EXTRACTIONS_TABLE)} (
                     group_id, topic_id, topic_date, stock_name, stock_code, market,
-                    concepts_json, reason, confidence, model, prompt_version, updated_at
+                    concepts_json, excerpt, reason, confidence, model, prompt_version, updated_at
                 )
                 VALUES %s
                 ON CONFLICT (group_id, topic_id, stock_name) DO UPDATE SET
@@ -234,6 +234,7 @@ def save_topic_stock_extractions(
                     stock_code = excluded.stock_code,
                     market = excluded.market,
                     concepts_json = excluded.concepts_json,
+                    excerpt = excluded.excerpt,
                     reason = excluded.reason,
                     confidence = excluded.confidence,
                     model = excluded.model,
@@ -252,7 +253,7 @@ def _build_topic_stock_extraction_rows(
     now: datetime,
 ) -> List[Tuple[str, str, str, str, str, str, str, str, float, str, str, datetime]]:
     normalized_group_id = _normalize_group_id(group_id)
-    rows: List[Tuple[str, str, str, str, str, str, str, str, float, str, str, datetime]] = []
+    rows: List[Tuple[str, str, str, str, str, str, str, str, str, float, str, str, datetime]] = []
     for item in extractions:
         stock_name = str(item.get("stock_name") or "").strip()
         topic_id = str(item.get("topic_id") or "").strip()
@@ -268,6 +269,7 @@ def _build_topic_stock_extraction_rows(
                 str(item.get("stock_code") or ""),
                 str(item.get("market") or ""),
                 json.dumps(list(item.get("concepts") or []), ensure_ascii=False),
+                str(item.get("excerpt") or ""),
                 str(item.get("reason") or ""),
                 float(item.get("confidence") or 0),
                 str(item.get("model") or ""),
@@ -326,7 +328,7 @@ def save_recommendation_pool_checkpoint(
                     f"""
                     INSERT INTO {_core_table_ref(TOPIC_STOCK_EXTRACTIONS_TABLE)} (
                         group_id, topic_id, topic_date, stock_name, stock_code, market,
-                        concepts_json, reason, confidence, model, prompt_version, updated_at
+                        concepts_json, excerpt, reason, confidence, model, prompt_version, updated_at
                     )
                     VALUES %s
                     ON CONFLICT (group_id, topic_id, stock_name) DO UPDATE SET
@@ -334,6 +336,7 @@ def save_recommendation_pool_checkpoint(
                         stock_code = excluded.stock_code,
                         market = excluded.market,
                         concepts_json = excluded.concepts_json,
+                        excerpt = excluded.excerpt,
                         reason = excluded.reason,
                         confidence = excluded.confidence,
                         model = excluded.model,
@@ -409,7 +412,7 @@ def load_topic_stock_extractions(
             cur.execute(
                 f"""
                 SELECT group_id, topic_id, topic_date::text, stock_name, stock_code, market,
-                       concepts_json, reason, confidence, model, prompt_version, updated_at
+                       concepts_json, excerpt, reason, confidence, model, prompt_version, updated_at
                 FROM {_core_table_ref(TOPIC_STOCK_EXTRACTIONS_TABLE)}
                 WHERE {" AND ".join(conditions)}
                 ORDER BY topic_date ASC, topic_id ASC, stock_name ASC
@@ -425,11 +428,12 @@ def load_topic_stock_extractions(
                     "stock_code": str(row[4] or ""),
                     "market": str(row[5] or ""),
                     "concepts": [str(item) for item in _parse_json_list(row[6]) if str(item).strip()],
-                    "reason": str(row[7] or ""),
-                    "confidence": float(row[8] or 0),
-                    "model": str(row[9] or ""),
-                    "prompt_version": str(row[10] or ""),
-                    "updated_at": row[11].isoformat() if hasattr(row[11], "isoformat") else str(row[11] or ""),
+                    "excerpt": str(row[7] or ""),
+                    "reason": str(row[8] or ""),
+                    "confidence": float(row[9] or 0),
+                    "model": str(row[10] or ""),
+                    "prompt_version": str(row[11] or ""),
+                    "updated_at": row[12].isoformat() if hasattr(row[12], "isoformat") else str(row[12] or ""),
                 }
                 for row in cur.fetchall()
             ]

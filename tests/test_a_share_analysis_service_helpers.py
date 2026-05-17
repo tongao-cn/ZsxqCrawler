@@ -218,6 +218,7 @@ class AShareAnalysisServiceHelperTests(unittest.TestCase):
                 {
                     "stock_name": "宁德时代",
                     "concepts": ["固态电池", "储能"],
+                    "excerpt": "",
                     "reason": "话题明确讨论宁德时代电池链。",
                     "confidence": 0.86,
                 }
@@ -232,7 +233,7 @@ class AShareAnalysisServiceHelperTests(unittest.TestCase):
         stocks = _parse_topic_stock_extraction_output('{"companies": ["宁德时代", "中信证券"]}')
 
         self.assertEqual(
-            [{"stock_name": "宁德时代", "concepts": [], "reason": "", "confidence": 0.7}],
+            [{"stock_name": "宁德时代", "concepts": [], "excerpt": "", "reason": "", "confidence": 0.7}],
             stocks,
         )
 
@@ -247,6 +248,8 @@ class AShareAnalysisServiceHelperTests(unittest.TestCase):
         self.assertEqual("a-share-topic-stock-extraction-v2", TOPIC_STOCK_EXTRACTION_PROMPT_VERSION)
         self.assertIn("正向推荐或受益语义", prompt)
         self.assertIn("不要仅因为公司名称出现就输出", prompt)
+        self.assertIn("excerpt 是从原文中直接摘出的证据片段", prompt)
+        self.assertIn("如果全文都在讲一个股票，返回全文", prompt)
         self.assertIn("风险、暴雷、利空、业绩下修", prompt)
         self.assertIn("如果只有负面或风险语义，应直接不输出", prompt)
         self.assertIn("重点关注、买入/增持、受益", prompt)
@@ -271,6 +274,7 @@ class AShareAnalysisServiceHelperTests(unittest.TestCase):
         self.assertIn("正向推荐或明确受益", messages[0]["content"])
         self.assertIn("负面风险、暴雷、利空、避雷、跌幅归因", messages[0]["content"])
         self.assertIn("不要仅因为公司名称出现就输出", messages[1]["content"])
+        self.assertIn("excerpt 规则", messages[1]["content"])
         self.assertIn("业绩下修", messages[1]["content"])
         self.assertIn("营收利润重算后大幅下滑", messages[1]["content"])
 
