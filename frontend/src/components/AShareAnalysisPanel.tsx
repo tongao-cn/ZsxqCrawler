@@ -29,6 +29,7 @@ import { useTaskStatus } from '@/hooks/useTaskStatus';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { DatePickerButton } from '@/components/ui/date-picker-button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
@@ -68,6 +69,13 @@ function formatDateRange(start?: string | null, end?: string | null) {
     return end;
   }
   return '全范围';
+}
+
+function formatInputDate(value?: string | null) {
+  if (!value) {
+    return '';
+  }
+  return value.slice(0, 10);
 }
 
 function getTaskStatusBadge(task?: Task | null) {
@@ -180,10 +188,20 @@ interface AnalysisResultsSectionProps {
   emptyStateHint: string | null;
   emptyStateMessage: string;
   hasChartData: boolean;
+  loadingChart: boolean;
+  loadingStatus: boolean;
+  onApplyFilters: () => void;
+  onRefresh: () => void;
   rankingWindows: number[];
   renderedLineSeries: AShareAnalysisSeries[];
   scopeName: string;
-  sortedSeries: AShareAnalysisSeries[];
+  selectedEndDate: string;
+  selectedStartDate: string;
+  setSelectedEndDate: (value: string) => void;
+  setSelectedStartDate: (value: string) => void;
+  setTopN: (value: number) => void;
+  summary?: AShareAnalysisSummary;
+  topN: number;
 }
 
 function AnalysisResultsSection({
@@ -191,20 +209,44 @@ function AnalysisResultsSection({
   emptyStateHint,
   emptyStateMessage,
   hasChartData,
+  loadingChart,
+  loadingStatus,
+  onApplyFilters,
+  onRefresh,
   rankingWindows,
   renderedLineSeries,
   scopeName,
-  sortedSeries,
+  selectedEndDate,
+  selectedStartDate,
+  setSelectedEndDate,
+  setSelectedStartDate,
+  setTopN,
+  summary,
+  topN,
 }: AnalysisResultsSectionProps) {
   return (
     <Card className="border border-gray-200 shadow-none">
       <CardHeader>
         <div className="space-y-1">
-          <CardTitle>A股分析结果</CardTitle>
+          <CardTitle>股票推荐池结果</CardTitle>
           <CardDescription>{scopeName} 的独立分析结果，可按当前群组同步到通达信</CardDescription>
         </div>
       </CardHeader>
       <CardContent className="space-y-5">
+        <ChartFilterControls
+          loadingChart={loadingChart}
+          loadingStatus={loadingStatus}
+          onApplyFilters={onApplyFilters}
+          onRefresh={onRefresh}
+          selectedEndDate={selectedEndDate}
+          selectedStartDate={selectedStartDate}
+          setSelectedEndDate={setSelectedEndDate}
+          setSelectedStartDate={setSelectedStartDate}
+          setTopN={setTopN}
+          summary={summary}
+          topN={topN}
+        />
+
         <div className="text-sm text-muted-foreground">
           当前范围内公司数: {chart?.total_companies_in_range || 0}，折线展示 Top {chart?.company_count || 0}
         </div>
@@ -239,10 +281,6 @@ function AnalysisResultsSection({
           )}
         </div>
 
-        <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_360px] gap-4">
-          <SeriesRankingList sortedSeries={sortedSeries} />
-        </div>
-
         <RankingWindowGrid
           chart={chart}
           rankingWindows={rankingWindows}
@@ -252,32 +290,73 @@ function AnalysisResultsSection({
   );
 }
 
-function SeriesRankingList({ sortedSeries }: { sortedSeries: AShareAnalysisSeries[] }) {
-  if (sortedSeries.length === 0) {
-    return (
-      <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 text-sm text-muted-foreground">
-        图表公司排序暂无数据
-      </div>
-    );
-  }
+interface ChartFilterControlsProps {
+  loadingChart: boolean;
+  loadingStatus: boolean;
+  onApplyFilters: () => void;
+  onRefresh: () => void;
+  selectedEndDate: string;
+  selectedStartDate: string;
+  setSelectedEndDate: (value: string) => void;
+  setSelectedStartDate: (value: string) => void;
+  setTopN: (value: number) => void;
+  summary?: AShareAnalysisSummary;
+  topN: number;
+}
 
+function ChartFilterControls({
+  loadingChart,
+  loadingStatus,
+  onApplyFilters,
+  onRefresh,
+  selectedEndDate,
+  selectedStartDate,
+  setSelectedEndDate,
+  setSelectedStartDate,
+  setTopN,
+  summary,
+  topN,
+}: ChartFilterControlsProps) {
   return (
     <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
-      <div className="text-sm font-medium mb-3">图表公司排序</div>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-2">
-        {sortedSeries.map((series, index) => (
-          <div key={`legend-${series.key}`} className="flex items-center gap-2 text-sm min-w-0">
-            <span className="text-muted-foreground tabular-nums w-6">{index + 1}</span>
-            <span
-              className="h-2.5 w-2.5 rounded-full shrink-0"
-              style={{ backgroundColor: series.color }}
-            />
-            <span className="truncate" title={series.label}>
-              {series.label}
-            </span>
-            <span className="ml-auto font-medium tabular-nums">{series.total}</span>
-          </div>
-        ))}
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-[minmax(150px,1fr)_minmax(150px,1fr)_minmax(120px,0.7fr)_auto_auto] xl:items-end">
+        <div className="space-y-2">
+          <Label htmlFor="a-share-start-date">开始日期</Label>
+          <DatePickerButton
+            value={selectedStartDate}
+            min={summary?.available_start_date || undefined}
+            max={summary?.available_end_date || undefined}
+            onChange={setSelectedStartDate}
+          />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="a-share-end-date">结束日期</Label>
+          <DatePickerButton
+            value={selectedEndDate}
+            min={summary?.available_start_date || undefined}
+            max={summary?.available_end_date || undefined}
+            onChange={setSelectedEndDate}
+            align="end"
+          />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="a-share-top-n">图表公司数</Label>
+          <Input
+            id="a-share-top-n"
+            type="number"
+            min={1}
+            max={100}
+            value={topN}
+            onChange={(e) => setTopN(Number(e.target.value) || DEFAULT_TOP_N)}
+          />
+        </div>
+        <Button variant="outline" onClick={onRefresh} disabled={loadingStatus || loadingChart}>
+          <RefreshCw className={`h-4 w-4 ${loadingStatus || loadingChart ? 'animate-spin' : ''}`} />
+          刷新
+        </Button>
+        <Button onClick={onApplyFilters} disabled={loadingChart}>
+          {loadingChart ? '加载中' : '更新图表'}
+        </Button>
       </div>
     </div>
   );
@@ -346,31 +425,25 @@ interface AShareActionPanelProps {
   concurrency: number;
   exportingTdx: boolean;
   latestExport?: AShareAnalysisLatestTdxExport | null;
-  loadingChart: boolean;
-  loadingStatus: boolean;
-  onApplyFilters: () => void;
   onExportToTdx: () => void;
-  onRefresh: () => void;
   onResetOnly: () => void;
   onRunAnalysis: () => void;
   resetEndDate: string;
   resetStartDate: string;
+  runEndDate: string;
+  runStartDate: string;
   resetting: boolean;
   runDays: number;
   running: boolean;
   scopeName: string;
-  selectedEndDate: string;
-  selectedStartDate: string;
   setAdvancedOpen: (open: boolean) => void;
   setConcurrency: (value: number) => void;
   setResetEndDate: (value: string) => void;
   setResetStartDate: (value: string) => void;
+  setRunEndDate: (value: string) => void;
   setRunDays: (value: number) => void;
-  setSelectedEndDate: (value: string) => void;
-  setSelectedStartDate: (value: string) => void;
-  setTopN: (value: number) => void;
+  setRunStartDate: (value: string) => void;
   summary?: AShareAnalysisSummary;
-  topN: number;
 }
 
 function AShareActionPanel({
@@ -378,31 +451,25 @@ function AShareActionPanel({
   concurrency,
   exportingTdx,
   latestExport,
-  loadingChart,
-  loadingStatus,
-  onApplyFilters,
   onExportToTdx,
-  onRefresh,
   onResetOnly,
   onRunAnalysis,
   resetEndDate,
   resetStartDate,
+  runEndDate,
+  runStartDate,
   resetting,
   runDays,
   running,
   scopeName,
-  selectedEndDate,
-  selectedStartDate,
   setAdvancedOpen,
   setConcurrency,
   setResetEndDate,
   setResetStartDate,
+  setRunEndDate,
   setRunDays,
-  setSelectedEndDate,
-  setSelectedStartDate,
-  setTopN,
+  setRunStartDate,
   summary,
-  topN,
 }: AShareActionPanelProps) {
   return (
     <aside className="w-full 2xl:w-80 flex-shrink-0 2xl:sticky 2xl:top-0 h-fit 2xl:max-h-screen">
@@ -411,63 +478,36 @@ function AShareActionPanel({
           <div className="space-y-1">
             <div className="flex items-center gap-2 text-sm font-medium text-gray-900">
               <TrendingUp className="h-4 w-4" />
-              A股分析策略栏
+              股票推荐池策略栏
             </div>
             <p className="text-xs text-muted-foreground">
-              查看结果、生成推荐池、发布到通达信和维护数据。
+              生成推荐池、发布到通达信和维护数据。
             </p>
           </div>
 
           <div className="space-y-3">
-            <div className="text-sm font-medium text-gray-900">查看结果</div>
-            <div className="grid grid-cols-2 gap-2">
-              <div className="space-y-2">
-                <Label htmlFor="a-share-start-date">开始日期</Label>
-                <Input
-                  id="a-share-start-date"
-                  type="date"
-                  value={selectedStartDate}
-                  min={summary?.available_start_date || undefined}
-                  max={summary?.available_end_date || undefined}
-                  onChange={(e) => setSelectedStartDate(e.target.value)}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="a-share-end-date">结束日期</Label>
-                <Input
-                  id="a-share-end-date"
-                  type="date"
-                  value={selectedEndDate}
-                  min={summary?.available_start_date || undefined}
-                  max={summary?.available_end_date || undefined}
-                  onChange={(e) => setSelectedEndDate(e.target.value)}
-                />
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="a-share-top-n">图表公司数</Label>
-              <Input
-                id="a-share-top-n"
-                type="number"
-                min={1}
-                max={100}
-                value={topN}
-                onChange={(e) => setTopN(Number(e.target.value) || DEFAULT_TOP_N)}
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              <Button variant="outline" onClick={onRefresh} disabled={loadingStatus || loadingChart}>
-                <RefreshCw className={`h-4 w-4 ${loadingStatus || loadingChart ? 'animate-spin' : ''}`} />
-                刷新
-              </Button>
-              <Button onClick={onApplyFilters} disabled={loadingChart}>
-                {loadingChart ? '加载中' : '更新图表'}
-              </Button>
-            </div>
-          </div>
-
-          <div className="space-y-3 border-t border-gray-200 pt-4">
             <div className="text-sm font-medium text-gray-900">生成结果</div>
+            <div className="grid grid-cols-2 gap-2">
+              <div className="space-y-2">
+                <Label htmlFor="a-share-run-start">开始日期</Label>
+                <DatePickerButton
+                  value={runStartDate}
+                  min={summary?.source_oldest_topic_time ? formatInputDate(summary.source_oldest_topic_time) : undefined}
+                  max={summary?.source_latest_topic_time ? formatInputDate(summary.source_latest_topic_time) : undefined}
+                  onChange={setRunStartDate}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="a-share-run-end">结束日期</Label>
+                <DatePickerButton
+                  value={runEndDate}
+                  min={summary?.source_oldest_topic_time ? formatInputDate(summary.source_oldest_topic_time) : undefined}
+                  max={summary?.source_latest_topic_time ? formatInputDate(summary.source_latest_topic_time) : undefined}
+                  onChange={setRunEndDate}
+                  align="end"
+                />
+              </div>
+            </div>
             <div className="grid grid-cols-2 gap-2">
               <div className="space-y-2">
                 <Label htmlFor="a-share-run-days">扫描</Label>
@@ -497,7 +537,7 @@ function AShareActionPanel({
               {running ? '创建任务中...' : '生成/更新推荐池'}
             </Button>
             <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 text-xs text-muted-foreground">
-              当前只处理 {scopeName} 的数据；任务会逐话题抽取 A 股股票和概念，并更新推荐池。
+              当前只处理 {scopeName} 的数据；填写开始和结束日期时按日期区间运行，否则按最近 N 天运行。
             </div>
           </div>
 
@@ -522,24 +562,21 @@ function AShareActionPanel({
                 <div className="grid grid-cols-2 gap-2">
                   <div className="space-y-2">
                     <Label htmlFor="a-share-reset-start">删除开始</Label>
-                    <Input
-                      id="a-share-reset-start"
-                      type="date"
+                    <DatePickerButton
                       value={resetStartDate}
                       min={summary?.available_start_date || undefined}
                       max={summary?.available_end_date || undefined}
-                      onChange={(e) => setResetStartDate(e.target.value)}
+                      onChange={setResetStartDate}
                     />
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="a-share-reset-end">删除结束</Label>
-                    <Input
-                      id="a-share-reset-end"
-                      type="date"
+                    <DatePickerButton
                       value={resetEndDate}
                       min={summary?.available_start_date || undefined}
                       max={summary?.available_end_date || undefined}
-                      onChange={(e) => setResetEndDate(e.target.value)}
+                      onChange={setResetEndDate}
+                      align="end"
                     />
                   </div>
                 </div>
@@ -646,6 +683,8 @@ export default function AShareAnalysisPanel({
   const [selectedEndDate, setSelectedEndDate] = useState('');
   const [runDays, setRunDays] = useState(21);
   const [concurrency, setConcurrency] = useState(10);
+  const [runStartDate, setRunStartDate] = useState('');
+  const [runEndDate, setRunEndDate] = useState('');
   const [resetStartDate, setResetStartDate] = useState('');
   const [resetEndDate, setResetEndDate] = useState('');
   const [initialized, setInitialized] = useState(false);
@@ -689,12 +728,14 @@ export default function AShareAnalysisPanel({
         setConcurrency(statusData.defaults.concurrency);
         setSelectedStartDate(statusData.summary.available_start_date || '');
         setSelectedEndDate(statusData.summary.available_end_date || '');
+        setRunStartDate('');
+        setRunEndDate('');
         setResetStartDate('');
         setResetEndDate('');
         setInitialized(true);
       } catch (error) {
         if (!cancelled) {
-          toast.error(`加载A股分析状态失败: ${error instanceof Error ? error.message : '未知错误'}`);
+          toast.error(`加载股票推荐池状态失败: ${error instanceof Error ? error.message : '未知错误'}`);
         }
       } finally {
         if (!cancelled) {
@@ -713,7 +754,7 @@ export default function AShareAnalysisPanel({
         }
       } catch (error) {
         if (!cancelled) {
-          toast.error(`加载A股分析图表失败: ${error instanceof Error ? error.message : '未知错误'}`);
+          toast.error(`加载股票推荐池图表失败: ${error instanceof Error ? error.message : '未知错误'}`);
         }
       } finally {
         if (!cancelled) {
@@ -742,12 +783,14 @@ export default function AShareAnalysisPanel({
           setConcurrency(data.defaults.concurrency);
           setSelectedStartDate(data.summary.available_start_date || '');
           setSelectedEndDate(data.summary.available_end_date || '');
+          setRunStartDate('');
+          setRunEndDate('');
           setResetStartDate('');
           setResetEndDate('');
           setInitialized(true);
         }
       } catch (error) {
-        toast.error(`加载A股分析状态失败: ${error instanceof Error ? error.message : '未知错误'}`);
+        toast.error(`加载股票推荐池状态失败: ${error instanceof Error ? error.message : '未知错误'}`);
       } finally {
         setLoadingStatus(false);
       }
@@ -776,7 +819,7 @@ export default function AShareAnalysisPanel({
         });
         setChart(data);
       } catch (error) {
-        toast.error(`加载A股分析图表失败: ${error instanceof Error ? error.message : '未知错误'}`);
+        toast.error(`加载股票推荐池图表失败: ${error instanceof Error ? error.message : '未知错误'}`);
       } finally {
         setLoadingChart(false);
       }
@@ -836,6 +879,15 @@ export default function AShareAnalysisPanel({
     }
 
     const hasResetRange = Boolean(resetStartDate && resetEndDate);
+    const hasRunRange = Boolean(runStartDate && runEndDate);
+    if ((runStartDate && !runEndDate) || (!runStartDate && runEndDate)) {
+      toast.error('生成推荐池时，开始日期和结束日期需要同时填写');
+      return;
+    }
+    if (hasRunRange && runStartDate > runEndDate) {
+      toast.error('生成推荐池的开始日期不能晚于结束日期');
+      return;
+    }
     if ((resetStartDate && !resetEndDate) || (!resetStartDate && resetEndDate)) {
       toast.error('删除并重跑时，开始日期和结束日期需要同时填写');
       return;
@@ -847,6 +899,12 @@ export default function AShareAnalysisPanel({
         group_id: selectedGroup.group_id,
         days: runDays,
         concurrency: concurrency,
+        ...(hasRunRange
+          ? {
+              start_date: runStartDate,
+              end_date: runEndDate,
+            }
+          : {}),
         ...(hasResetRange
           ? {
               reset_start_date: resetStartDate,
@@ -854,7 +912,7 @@ export default function AShareAnalysisPanel({
             }
           : {}),
       });
-      toast.success('A股分析任务已创建，结果会在完成后自动刷新');
+      toast.success('股票推荐池任务已创建，结果会在完成后自动刷新');
       const taskId = (response as { task_id?: string })?.task_id;
       if (taskId) {
         setActiveRunTaskId(taskId);
@@ -862,7 +920,7 @@ export default function AShareAnalysisPanel({
       }
       await loadStatus(false, selectedGroup.group_id);
     } catch (error) {
-      toast.error(`创建A股分析任务失败: ${error instanceof Error ? error.message : '未知错误'}`);
+      toast.error(`创建股票推荐池任务失败: ${error instanceof Error ? error.message : '未知错误'}`);
     } finally {
       setRunning(false);
     }
@@ -998,7 +1056,7 @@ export default function AShareAnalysisPanel({
     return (
       <Card className="border border-gray-200 shadow-none">
         <CardHeader>
-          <CardTitle>A股分析</CardTitle>
+          <CardTitle>股票推荐池</CardTitle>
           <CardDescription>请先选择群组，再查看该群的推荐池分析和排序。</CardDescription>
         </CardHeader>
       </Card>
@@ -1021,10 +1079,20 @@ export default function AShareAnalysisPanel({
           emptyStateHint={emptyStateHint}
           emptyStateMessage={emptyStateMessage}
           hasChartData={hasChartData}
+          loadingChart={loadingChart}
+          loadingStatus={loadingStatus}
+          onApplyFilters={() => void handleApplyFilters()}
+          onRefresh={() => void refreshAll(false, selectedGroup.group_id)}
           rankingWindows={rankingWindows}
           renderedLineSeries={renderedLineSeries}
           scopeName={scopeName}
-          sortedSeries={sortedSeries}
+          selectedEndDate={selectedEndDate}
+          selectedStartDate={selectedStartDate}
+          setSelectedEndDate={setSelectedEndDate}
+          setSelectedStartDate={setSelectedStartDate}
+          setTopN={setTopN}
+          summary={summary}
+          topN={topN}
         />
       </div>
 
@@ -1033,31 +1101,25 @@ export default function AShareAnalysisPanel({
         concurrency={concurrency}
         exportingTdx={exportingTdx}
         latestExport={latestExport}
-        loadingChart={loadingChart}
-        loadingStatus={loadingStatus}
-        onApplyFilters={() => void handleApplyFilters()}
         onExportToTdx={() => void handleExportToTdx()}
-        onRefresh={() => void refreshAll(false, selectedGroup.group_id)}
         onResetOnly={() => void handleResetOnly()}
         onRunAnalysis={() => void handleRunAnalysis()}
         resetEndDate={resetEndDate}
         resetStartDate={resetStartDate}
+        runEndDate={runEndDate}
+        runStartDate={runStartDate}
         resetting={resetting}
         runDays={runDays}
         running={running}
         scopeName={scopeName}
-        selectedEndDate={selectedEndDate}
-        selectedStartDate={selectedStartDate}
         setAdvancedOpen={setAdvancedOpen}
         setConcurrency={setConcurrency}
         setResetEndDate={setResetEndDate}
         setResetStartDate={setResetStartDate}
+        setRunEndDate={setRunEndDate}
         setRunDays={setRunDays}
-        setSelectedEndDate={setSelectedEndDate}
-        setSelectedStartDate={setSelectedStartDate}
-        setTopN={setTopN}
+        setRunStartDate={setRunStartDate}
         summary={summary}
-        topN={topN}
       />
     </div>
   );

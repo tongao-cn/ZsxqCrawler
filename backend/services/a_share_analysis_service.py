@@ -230,6 +230,12 @@ def get_last_days_range(days: int) -> Tuple[datetime, datetime]:
     return now - timedelta(days=days), now
 
 
+def get_date_range_bounds(start_date: str, end_date: str) -> Tuple[datetime, datetime]:
+    start = datetime.strptime(start_date, "%Y-%m-%d")
+    end = datetime.strptime(end_date, "%Y-%m-%d") + timedelta(days=1)
+    return start, end
+
+
 def get_required_days_for_start_date(start_date: str) -> int:
     start_dt = datetime.strptime(start_date, "%Y-%m-%d")
     delta = datetime.now().date() - start_dt.date()
@@ -253,6 +259,39 @@ def _extract_day_from_state_key(key: str) -> Optional[str]:
 
 
 def read_topics_last_days(group_id: str, days: int, log_callback: LogCallback = None) -> List[Dict[str, Any]]:
+    start, end = get_last_days_range(days)
+    return read_topics_in_time_range(
+        group_id,
+        start,
+        end,
+        f"last {days} days",
+        log_callback,
+    )
+
+
+def read_topics_in_date_range(
+    group_id: str,
+    start_date: str,
+    end_date: str,
+    log_callback: LogCallback = None,
+) -> List[Dict[str, Any]]:
+    start, end = get_date_range_bounds(start_date, end_date)
+    return read_topics_in_time_range(
+        group_id,
+        start,
+        end,
+        f"{start_date} ~ {end_date}",
+        log_callback,
+    )
+
+
+def read_topics_in_time_range(
+    group_id: str,
+    start: datetime,
+    end: datetime,
+    range_label: str,
+    log_callback: LogCallback = None,
+) -> List[Dict[str, Any]]:
     items: List[Dict[str, Any]] = []
     normalized_group_id = str(group_id or "").strip()
     query_group_id: Any = int(normalized_group_id) if normalized_group_id.isdigit() else normalized_group_id
@@ -267,7 +306,6 @@ def read_topics_last_days(group_id: str, days: int, log_callback: LogCallback = 
         rows = cur.fetchall()
         log_debug(f"loaded topics rows: {len(rows)} from zsxq_core for group {normalized_group_id}")
 
-        start, end = get_last_days_range(days)
         filtered_rows = []
         for topic_id, title, create_time in rows:
             dt = parse_time(create_time)
@@ -309,7 +347,7 @@ def read_topics_last_days(group_id: str, days: int, log_callback: LogCallback = 
         conn.close()
 
     _emit_log(
-        f"filtered topics items: {len(items)} for last {days} days in group {normalized_group_id}",
+        f"filtered topics items: {len(items)} for {range_label} in group {normalized_group_id}",
         log_callback,
     )
     return items
@@ -1231,6 +1269,8 @@ def run_analysis(
     wire_api: str = DEFAULT_WIRE_API,
     reasoning_effort: str = DEFAULT_REASONING_EFFORT,
     concurrency: int = DEFAULT_CONCURRENCY,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
     reset_start_date: Optional[str] = None,
     reset_end_date: Optional[str] = None,
     log_callback: LogCallback = None,
@@ -1243,6 +1283,18 @@ def run_analysis(
     resolved_output_path, resolved_state_path = resolve_analysis_paths(output_path, state_path, normalized_group_id)
     existing_daily = read_existing_csv(resolved_output_path, group_id=normalized_group_id)
     processed_keys = load_state(resolved_state_path, group_id=normalized_group_id)
+
+    run_date_range = None
+    if start_date or end_date:
+        if not start_date or not end_date:
+            raise ValueError("start_date 和 end_date 需要同时提供")
+        run_date_range = _normalize_date_range(
+            start_date,
+            end_date,
+            "start_date",
+            "end_date",
+            "start_date 不能晚于 end_date",
+        )
 
     reset_summary = None
     if reset_start_date or reset_end_date:
@@ -1298,7 +1350,10 @@ def run_analysis(
 
     all_items: List[Dict[str, Any]] = []
     for group_id in groups:
-        all_items.extend(read_topics_last_days(group_id, days, log_callback))
+        if run_date_range:
+            all_items.extend(read_topics_in_date_range(group_id, run_date_range[0], run_date_range[1], log_callback))
+        else:
+            all_items.extend(read_topics_last_days(group_id, days, log_callback))
 
     _emit_log(f"discovered items total={len(all_items)}", log_callback)
     items_to_process = [item for item in all_items if make_item_key(item) not in processed_keys]

@@ -470,6 +470,82 @@ class AShareAnalysisServiceHelperTests(unittest.TestCase):
             items,
         )
 
+    def test_read_topics_in_date_range_filters_topics_and_talks_by_group_scope(self):
+        from backend.services import a_share_analysis_service as service
+
+        fake_conn = _FakeAShareConnection()
+
+        with patch.object(service, "connect", return_value=fake_conn):
+            items = service.read_topics_in_date_range("51111112855254", "2026-05-07", "2026-05-07")
+
+        topic_sql, topic_params = fake_conn.cursor_obj.calls[0]
+        talk_sql, talk_params = fake_conn.cursor_obj.calls[1]
+
+        self.assertIn("WHERE t.group_id = ?", topic_sql)
+        self.assertEqual((51111112855254,), topic_params)
+        self.assertIn("WHERE topic_id IN (?, ?)", talk_sql)
+        self.assertEqual((1001, 1002), talk_params)
+        self.assertTrue(fake_conn.closed)
+        self.assertEqual(["2026-05-07", "2026-05-07"], [item["day"] for item in items])
+
+    def test_run_analysis_uses_explicit_date_range_when_provided(self):
+        from backend.services import a_share_analysis_service as service
+
+        item = {
+            "topic_id": 1001,
+            "title": "title",
+            "text": "text",
+            "create_time": "2026-05-07T10:00:00+0800",
+            "day": "2026-05-07",
+            "source": "topics",
+            "group_id": "511",
+        }
+
+        with patch.object(service, "get_openai_compatible_config", return_value={"api_key": "key"}), patch.object(
+            service, "read_existing_csv", return_value={}
+        ), patch.object(service, "load_state", return_value=set()), patch.object(
+            service, "read_topics_last_days"
+        ) as read_last_days, patch.object(
+            service, "read_topics_in_date_range", return_value=[item]
+        ) as read_date_range, patch.object(
+            service, "should_use_db_storage", return_value=False
+        ), patch.object(
+            service,
+            "call_openai_extract_topic_stocks",
+            return_value=[{"stock_name": "宁德时代", "concepts": [], "reason": "", "confidence": 0.8}],
+        ), patch.object(
+            service, "write_csv"
+        ), patch.object(
+            service, "save_state"
+        ), patch.object(
+            service,
+            "get_analysis_summary",
+            return_value={"date_count": 1, "output_path": "file.csv", "state_path": "state.json"},
+        ):
+            result = service.run_analysis(
+                group_id="511",
+                days=21,
+                start_date="2026-05-07",
+                end_date="2026-05-07",
+                concurrency=1,
+            )
+
+        read_last_days.assert_not_called()
+        read_date_range.assert_called_once_with("511", "2026-05-07", "2026-05-07", None)
+        self.assertEqual(1, result["items_succeeded"])
+
+    def test_run_analysis_rejects_partial_or_reversed_date_range(self):
+        from backend.services import a_share_analysis_service as service
+
+        with patch.object(service, "read_existing_csv", return_value={}), patch.object(
+            service, "load_state", return_value=set()
+        ):
+            with self.assertRaisesRegex(ValueError, "start_date 和 end_date 需要同时提供"):
+                service.run_analysis(group_id="511", start_date="2026-05-07")
+
+            with self.assertRaisesRegex(ValueError, "start_date 不能晚于 end_date"):
+                service.run_analysis(group_id="511", start_date="2026-05-08", end_date="2026-05-07")
+
     def test_get_source_topics_summary_filters_by_group_scope(self):
         from backend.services import a_share_analysis_service as service
 

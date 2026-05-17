@@ -60,6 +60,34 @@ class AShareRoutesHelperTests(unittest.TestCase):
         self.assertEqual({"success": True, "deleted": 3}, _success_payload({"deleted": 3}))
         self.assertEqual({"success": False, "error": "kept"}, _success_payload({"success": False, "error": "kept"}))
 
+    @unittest.skipUnless(HAS_A_SHARE_ROUTE_DEPS, "a-share route dependencies are not installed")
+    def test_run_range_text_supports_explicit_date_range(self):
+        from backend.routes.a_share_routes import AShareAnalysisRunRequest, _run_range_text
+
+        self.assertEqual("最近 21 天", _run_range_text(AShareAnalysisRunRequest(days=21)))
+        self.assertEqual(
+            "2026-05-01 ~ 2026-05-07",
+            _run_range_text(
+                AShareAnalysisRunRequest(
+                    days=21,
+                    start_date="2026-05-01",
+                    end_date="2026-05-07",
+                )
+            ),
+        )
+
+        with self.assertRaisesRegex(ValueError, "start_date 和 end_date 需要同时提供"):
+            _run_range_text(AShareAnalysisRunRequest(days=21, start_date="2026-05-01"))
+
+        with self.assertRaisesRegex(ValueError, "start_date 不能晚于 end_date"):
+            _run_range_text(
+                AShareAnalysisRunRequest(
+                    days=21,
+                    start_date="2026-05-08",
+                    end_date="2026-05-07",
+                )
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

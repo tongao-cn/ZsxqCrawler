@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from datetime import datetime
 from typing import Optional
 
 import requests
@@ -48,6 +49,8 @@ class AShareAnalysisRunRequest(BaseModel):
     api_base: str = Field(default=A_SHARE_DEFAULT_API_BASE, description="OpenAI兼容API地址")
     wire_api: str = Field(default=A_SHARE_DEFAULT_WIRE_API, description="OpenAI接口类型：responses 或 chat_completions")
     reasoning_effort: str = Field(default=A_SHARE_DEFAULT_REASONING_EFFORT, description="Responses API 的 reasoning effort")
+    start_date: Optional[str] = Field(default=None, description="本次运行的开始日期 YYYY-MM-DD")
+    end_date: Optional[str] = Field(default=None, description="本次运行的结束日期 YYYY-MM-DD")
     reset_start_date: Optional[str] = Field(default=None, description="删除并重跑的开始日期 YYYY-MM-DD")
     reset_end_date: Optional[str] = Field(default=None, description="删除并重跑的结束日期 YYYY-MM-DD")
 
@@ -91,6 +94,21 @@ def _success_payload(result: dict) -> dict:
     return {"success": True, **result}
 
 
+def _run_range_text(request: AShareAnalysisRunRequest) -> str:
+    if request.start_date or request.end_date:
+        if not request.start_date or not request.end_date:
+            raise ValueError("start_date 和 end_date 需要同时提供")
+        try:
+            start_day = datetime.strptime(request.start_date.strip(), "%Y-%m-%d").strftime("%Y-%m-%d")
+            end_day = datetime.strptime(request.end_date.strip(), "%Y-%m-%d").strftime("%Y-%m-%d")
+        except ValueError as exc:
+            raise ValueError("start_date 和 end_date 必须是 YYYY-MM-DD 格式") from exc
+        if start_day > end_day:
+            raise ValueError("start_date 不能晚于 end_date")
+        return f"{start_day} ~ {end_day}"
+    return f"最近 {request.days} 天"
+
+
 def run_a_share_analysis_task(task_id: str, request: AShareAnalysisRunRequest):
     """后台执行A股公司提及分析任务"""
     try:
@@ -104,7 +122,8 @@ def run_a_share_analysis_task(task_id: str, request: AShareAnalysisRunRequest):
             return
 
         normalized_group_id, scope_text = _normalize_group_scope(request.group_id)
-        description = f"开始A股公司分析（{scope_text}），扫描最近 {request.days} 天数据"
+        run_range_text = _run_range_text(request)
+        description = f"开始A股公司分析（{scope_text}），扫描{run_range_text}数据"
         update_task(task_id, "running", description)
         add_task_log(task_id, f"🚀 {description}")
         add_task_log(
@@ -131,6 +150,8 @@ def run_a_share_analysis_task(task_id: str, request: AShareAnalysisRunRequest):
             wire_api=request.wire_api,
             reasoning_effort=request.reasoning_effort,
             concurrency=request.concurrency,
+            start_date=request.start_date,
+            end_date=request.end_date,
             reset_start_date=request.reset_start_date,
             reset_end_date=request.reset_end_date,
             log_callback=log_callback,
@@ -227,13 +248,16 @@ async def start_a_share_analysis(request: AShareAnalysisRunRequest, background_t
             )
 
         normalized_group_id, scope_text = _normalize_group_scope(request.group_id)
+        run_range_text = _run_range_text(request)
         task_id = create_task(
             "a_share_analysis",
-            f"A股公司分析（{scope_text}，最近 {request.days} 天）",
+            f"A股公司分析（{scope_text}，{run_range_text}）",
             metadata={"group_id": normalized_group_id},
         )
         enqueue_runtime_task(run_a_share_analysis_task, task_id, request)
         return {"task_id": task_id, "message": "任务已创建，正在后台执行"}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"创建A股分析任务失败: {str(e)}")
 
