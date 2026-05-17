@@ -295,17 +295,20 @@ class AShareAnalysisServiceHelperTests(unittest.TestCase):
         openai_client.assert_not_called()
         log_debug.assert_called_once()
 
-    def test_topic_stock_ai_prefilter_skips_attachment_and_no_stock_name(self):
+    def test_topic_stock_ai_prefilter_only_skips_attachment_or_short_text(self):
         from backend.services import a_share_analysis_service as service
 
-        self.assertEqual((True, "content only contains attachment placeholder"), service._should_skip_topic_stock_ai_extraction("「图片」", ()))
         self.assertEqual(
-            (True, "content does not mention known A-share stock names"),
-            service._should_skip_topic_stock_ai_extraction("这是一个讨论海外数据中心电力瓶颈的行业观点，没有明确提到任何股票。", ("宁德时代",)),
+            (True, "content only contains attachment placeholder"),
+            service._should_skip_topic_stock_ai_extraction("「图片」"),
+        )
+        self.assertEqual(
+            (True, "content is empty or shorter than 20 chars"),
+            service._should_skip_topic_stock_ai_extraction("短内容不够长"),
         )
         self.assertEqual(
             (False, ""),
-            service._should_skip_topic_stock_ai_extraction("宁德有望受益于钠电池产业链进展，这是明确提到股票简称的推荐内容。", ("宁德",)),
+            service._should_skip_topic_stock_ai_extraction("这是一个讨论海外数据中心电力瓶颈的行业观点，没有明确提到任何股票。"),
         )
 
     def test_aggregate_daily_prefilter_marks_skipped_topics_without_ai_call(self):
@@ -324,7 +327,7 @@ class AShareAnalysisServiceHelperTests(unittest.TestCase):
             {
                 "topic_id": 2,
                 "title": "industry",
-                "text": "这是一段长度超过二十字的行业观点，但是没有任何明确A股公司名称。",
+                "text": "短内容",
                 "create_time": "2026-05-10T10:00:00+0800",
                 "day": "2026-05-10",
                 "source": "topics",
@@ -342,7 +345,7 @@ class AShareAnalysisServiceHelperTests(unittest.TestCase):
         ]
         success_keys = []
 
-        with patch.object(service, "_load_a_share_stock_name_candidates", return_value=("宁德时代",)), patch.object(
+        with patch.object(
             service,
             "call_openai_extract_topic_stocks",
             return_value=[{"stock_name": "宁德时代", "concepts": ["钠电池"], "excerpt": "宁德时代有望受益", "reason": "", "confidence": 0.9}],
@@ -423,8 +426,6 @@ class AShareAnalysisServiceHelperTests(unittest.TestCase):
         ), patch.object(service, "load_state", return_value=set()), patch.object(
             service, "read_topics_last_days", return_value=items
         ), patch.object(service, "should_use_db_storage", return_value=True), patch.object(
-            service, "_load_a_share_stock_name_candidates", return_value=("宁德时代",)
-        ), patch.object(
             service, "call_openai_extract_topic_stocks", side_effect=fake_extract
         ), patch.object(service, "save_recommendation_pool_checkpoint", side_effect=fake_checkpoint), patch.object(
             service, "write_csv"
