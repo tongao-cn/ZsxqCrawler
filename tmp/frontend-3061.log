@@ -1,0 +1,10 @@
+   ▲ Next.js 15.3.5
+   - Local:        http://localhost:3061
+   - Network:      http://192.168.50.168:3061
+
+ ✓ Starting...
+ ✓ Ready in 2.9s
+ ○ Compiling /groups/[groupId] ...
+ ✓ Compiled /groups/[groupId] in 3.7s (2580 modules)
+ GET /groups/51111112855254 200 in 4565ms
+[?25h

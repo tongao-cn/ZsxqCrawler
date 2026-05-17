@@ -1,0 +1,10 @@
+
+> frontend@0.1.0 start
+> next start -p 3062
+
+   ▲ Next.js 15.3.5
+   - Local:        http://localhost:3062
+   - Network:      http://192.168.50.168:3062
+
+ ✓ Starting...
+ ✓ Ready in 402ms
