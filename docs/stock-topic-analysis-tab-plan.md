@@ -62,8 +62,8 @@ Add a sibling A-share Q&A tab where the user can enter a free-form question, let
 - A sibling `A股问答` tab now accepts a free-form question, uses AI to extract search keywords, searches group topics, and creates a `stock_question_analysis` task for AI summary.
 - The stock-topic AI summary prompt now uses a company-summary structure covering one-line intro, concepts, business mix, customers, event drivers, forward market cap/revenue/profit by time and sell-side/source, risks, and source topic indexes.
 - Incremental stock analysis now reuses `stock_topic_analyses.topic_ids_json` as the analyzed-topic ledger, keeps one row per group and stock, returns the saved topic list from latest-result reads, skips AI when there are no new topics, and sends only new topic payloads when updating an existing summary.
-- Stock analysis now searches up to 80 matched topics, then processes all newly discovered topics in AI chunks of up to 30 topics per call so older-but-unanalyzed matches do not get stranded behind a hard first-30 cap.
-- Stock analysis now performs a local first-pass relevance screen on all candidate topic text, keeps only company-relevant snippets or full-coverage topics, and feeds the screened set into the 80-topic cap and subsequent 30/topic AI batches.
+- Stock analysis now searches recent one-year candidate topics without the previous 80 matched-topic cap, then processes newly discovered topics in AI chunks of up to 10 topics per call.
+- Stock analysis now extracts or trims current-stock content from candidate topics before AI analysis, and records per-topic processed state in `stock_topic_processed_states` with statuses such as `analyzed`, `skipped`, and `failed`.
 - The frontend now distinguishes saved-query, initialization, incremental-update, and up-to-date states with new-topic counts.
 
 ## Changed Files

@@ -20,7 +20,6 @@ from backend.services.daily_topic_analysis_service import _clip, _extract_respon
 from backend.storage.db_compat import connect
 
 
-MAX_MATCHED_TOPICS = 80
 MAX_SEARCH_CANDIDATE_TOPICS = 500
 MAX_ANALYSIS_TOPICS = 30
 MAX_ANALYSIS_TOPICS_PER_CALL = 10
@@ -32,6 +31,7 @@ MAX_QUESTION_KEYWORDS = 8
 MAX_QUESTION_TOPICS = 60
 MAX_EXTRACT_IMAGE_BYTES = 4 * 1024 * 1024
 STOCK_TOPIC_ANALYSIS_TABLE = "stock_topic_analyses"
+PROCESSED_TOPIC_STATUSES = {"analyzed", "skipped"}
 SUPPORTED_EXTRACT_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp"}
 
 
@@ -354,6 +354,9 @@ def _load_latest_processed_topic_ids(conn: Any, group_id: str, stock_name: str) 
     query = _normalize_company_name(stock_name)
     if not query:
         return []
+    state_ids = _load_stock_topic_processed_state_ids(conn, group_id, query)
+    if state_ids:
+        return state_ids
     try:
         row = conn.execute(
             """
@@ -374,6 +377,70 @@ def _load_latest_processed_topic_ids(conn: Any, group_id: str, stock_name: str) 
         return _parse_json_list(row["topic_ids_json"])
     except Exception:
         return []
+
+
+def _load_stock_topic_processed_state_ids(conn: Any, group_id: str, stock_name: str) -> List[str]:
+    placeholders = ",".join("?" for _ in PROCESSED_TOPIC_STATUSES)
+    try:
+        rows = conn.execute(
+            f"""
+            SELECT topic_id
+            FROM stock_topic_processed_states
+            WHERE group_id = ?
+              AND stock_name ILIKE ?
+              AND status IN ({placeholders})
+            ORDER BY updated_at ASC
+            """,
+            [_normalize_text(group_id), f"%{_normalize_company_name(stock_name)}%", *sorted(PROCESSED_TOPIC_STATUSES)],
+        ).fetchall()
+    except Exception:
+        return []
+    return _ordered_unique((row["topic_id"] for row in rows), limit=MAX_TRACKED_TOPIC_IDS)
+
+
+def _upsert_stock_topic_processed_states(
+    conn: Any,
+    *,
+    group_id: str,
+    stock_name: str,
+    topic_ids: Iterable[Any],
+    status: str,
+    extract_mode: str = "",
+    model: str = "",
+    error: str = "",
+) -> None:
+    normalized_topic_ids = _ordered_unique(topic_ids, limit=MAX_TRACKED_TOPIC_IDS)
+    if not normalized_topic_ids:
+        return
+    params = [
+        (
+            _normalize_text(group_id),
+            _normalize_company_name(stock_name),
+            topic_id,
+            status,
+            extract_mode,
+            model,
+            error,
+        )
+        for topic_id in normalized_topic_ids
+    ]
+    conn.executemany(
+        """
+        INSERT INTO stock_topic_processed_states (
+            group_id, stock_name, topic_id, status, extract_mode, model,
+            error, processed_at, updated_at
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        ON CONFLICT(group_id, stock_name, topic_id) DO UPDATE SET
+            status = excluded.status,
+            extract_mode = excluded.extract_mode,
+            model = excluded.model,
+            error = excluded.error,
+            processed_at = excluded.processed_at,
+            updated_at = CURRENT_TIMESTAMP
+        """,
+        params,
+    )
 
 
 def _build_topic_search_sql(*, recent_cutoff: str | None = None) -> str:
@@ -478,8 +545,20 @@ def _upsert_stock_topic_analysis(
     status: str,
     error: str = "",
     analyzed_topic_ids: Iterable[Any] | None = None,
+    processed_topic_status: str = "analyzed",
+    extract_mode: str = "",
 ) -> None:
     topic_ids = list(analyzed_topic_ids) if analyzed_topic_ids is not None else _topic_ids_from_result(result)
+    _upsert_stock_topic_processed_states(
+        conn,
+        group_id=result["group_id"],
+        stock_name=result["stock_name"],
+        topic_ids=topic_ids,
+        status=processed_topic_status,
+        extract_mode=extract_mode,
+        model=result.get("model", ""),
+        error=error,
+    )
     conn.execute(
         """
         INSERT INTO stock_topic_analyses (
@@ -583,7 +662,7 @@ def get_latest_stock_topic_analyses(group_id: str, stock_names: Any) -> Dict[str
     }
 
 
-def search_stock_topics(group_id: str, stock_name: str, *, limit: int = MAX_MATCHED_TOPICS) -> Dict[str, Any]:
+def search_stock_topics(group_id: str, stock_name: str, *, limit: int | None = None) -> Dict[str, Any]:
     query = _normalize_company_name(stock_name)
     if not query:
         raise ValueError("stock_name 不能为空")
@@ -684,7 +763,9 @@ def search_stock_topics(group_id: str, stock_name: str, *, limit: int = MAX_MATC
                 str(item["create_time"] or ""),
             ),
             reverse=True,
-        )[: max(1, min(int(limit), MAX_MATCHED_TOPICS))]
+        )
+        if limit is not None:
+            topics = topics[: max(1, int(limit))]
         concepts = _ordered_unique(
             concept
             for topic in topics
@@ -1151,7 +1232,7 @@ def analyze_stock_topics(
     group_id: str,
     stock_name: str,
     *,
-    limit: int = MAX_MATCHED_TOPICS,
+    limit: int | None = None,
     log_callback: Callable[[str], None] | None = None,
 ) -> Dict[str, Any]:
     _log(log_callback, "📚 搜索股票相关话题...")
@@ -1182,7 +1263,13 @@ def analyze_stock_topics(
         if has_new_processed_topic_ids:
             conn = connect()
             try:
-                _upsert_stock_topic_analysis(conn, result=result, status="completed", analyzed_topic_ids=processed_topic_ids)
+                _upsert_stock_topic_analysis(
+                    conn,
+                    result=result,
+                    status="completed",
+                    analyzed_topic_ids=processed_topic_ids,
+                    processed_topic_status="skipped",
+                )
             finally:
                 conn.close()
         _log(log_callback, "✅ 没有新话题，沿用已保存的个股分析结果")
@@ -1207,7 +1294,13 @@ def analyze_stock_topics(
         }
         conn = connect()
         try:
-            _upsert_stock_topic_analysis(conn, result=result, status="completed", analyzed_topic_ids=processed_topic_ids)
+            _upsert_stock_topic_analysis(
+                conn,
+                result=result,
+                status="completed",
+                analyzed_topic_ids=processed_topic_ids,
+                processed_topic_status="skipped",
+            )
         finally:
             conn.close()
         return result
@@ -1250,6 +1343,7 @@ def analyze_stock_topics(
                     result=checkpoint_result,
                     status=checkpoint_result["status"],
                     analyzed_topic_ids=processed_topic_ids,
+                    processed_topic_status="analyzed",
                 )
             finally:
                 conn.close()
@@ -1272,6 +1366,7 @@ def analyze_stock_topics(
                 status="failed",
                 error=str(exc),
                 analyzed_topic_ids=processed_topic_ids,
+                processed_topic_status="failed",
             )
         finally:
             conn.close()
@@ -1290,7 +1385,13 @@ def analyze_stock_topics(
     }
     conn = connect()
     try:
-        _upsert_stock_topic_analysis(conn, result=result, status="completed", analyzed_topic_ids=processed_topic_ids)
+        _upsert_stock_topic_analysis(
+            conn,
+            result=result,
+            status="completed",
+            analyzed_topic_ids=processed_topic_ids,
+            processed_topic_status="analyzed",
+        )
     finally:
         conn.close()
     _log(log_callback, "✅ 个股分析结果已保存")
@@ -1317,7 +1418,7 @@ def analyze_stock_topics_batch(
 
     for index, stock_name in enumerate(names, start=1):
         try:
-            preview = search_stock_topics(group_id_text, stock_name, limit=MAX_MATCHED_TOPICS)
+            preview = search_stock_topics(group_id_text, stock_name)
             if preview["topic_count"] <= 0:
                 _log(log_callback, f"{index}/{total} {stock_name}: 未命中话题，保存空结果")
             else:
@@ -1326,7 +1427,6 @@ def analyze_stock_topics_batch(
             result = analyze_stock_topics(
                 group_id_text,
                 stock_name,
-                limit=MAX_MATCHED_TOPICS,
                 log_callback=log_callback,
             )
             results.append(result)

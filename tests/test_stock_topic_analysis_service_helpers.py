@@ -164,7 +164,13 @@ class StockTopicAnalysisServiceHelperTests(unittest.TestCase):
         from backend.services.stock_topic_analysis_service import search_stock_topics
 
         conn = Mock()
-        conn.execute.return_value.fetchall.return_value = []
+        state_cursor = Mock()
+        state_cursor.fetchall.return_value = []
+        search_cursor = Mock()
+        search_cursor.fetchall.return_value = []
+        latest_cursor = Mock()
+        latest_cursor.fetchone.return_value = None
+        conn.execute.side_effect = [state_cursor, latest_cursor, search_cursor]
 
         with patch("backend.services.stock_topic_analysis_service.connect", return_value=conn):
             result = search_stock_topics("51111112855254", "宁德时代")
@@ -174,6 +180,58 @@ class StockTopicAnalysisServiceHelperTests(unittest.TestCase):
         self.assertEqual([], result["topics"])
         self.assertEqual(0, result["recommendation_count"])
         conn.close.assert_called_once()
+
+    @unittest.skipUnless(HAS_SERVICE_DEPS, "stock topic analysis service dependencies are not installed")
+    def test_load_processed_state_uses_only_completed_statuses(self):
+        from backend.services.stock_topic_analysis_service import _load_stock_topic_processed_state_ids
+
+        conn = Mock()
+        cursor = Mock()
+        cursor.fetchall.return_value = [{"topic_id": "101"}, {"topic_id": "102"}]
+        conn.execute.return_value = cursor
+
+        result = _load_stock_topic_processed_state_ids(conn, "51111112855254", "宁德时代")
+
+        self.assertEqual(["101", "102"], result)
+        self.assertIn("status IN", conn.execute.call_args.args[0])
+        self.assertEqual(["51111112855254", "%宁德时代%", "analyzed", "skipped"], conn.execute.call_args.args[1])
+
+    @unittest.skipUnless(HAS_SERVICE_DEPS, "stock topic analysis service dependencies are not installed")
+    def test_upsert_stock_topic_analysis_records_processed_state(self):
+        from backend.services.stock_topic_analysis_service import _upsert_stock_topic_analysis
+
+        conn = Mock()
+        result = {
+            "group_id": "51111112855254",
+            "stock_name": "宁德时代",
+            "stock_code": "300750",
+            "market": "SZ",
+            "topics": [],
+            "concepts": ["固态电池"],
+            "recommendation_count": 3,
+            "summary_markdown": "summary",
+            "model": "test-model",
+        }
+
+        _upsert_stock_topic_analysis(
+            conn,
+            result=result,
+            status="completed",
+            analyzed_topic_ids=["101", "102"],
+            processed_topic_status="analyzed",
+            extract_mode="snippet",
+        )
+
+        self.assertIn("INSERT INTO stock_topic_processed_states", conn.executemany.call_args.args[0])
+        self.assertEqual(
+            [
+                ("51111112855254", "宁德时代", "101", "analyzed", "snippet", "test-model", ""),
+                ("51111112855254", "宁德时代", "102", "analyzed", "snippet", "test-model", ""),
+            ],
+            conn.executemany.call_args.args[1],
+        )
+        self.assertIn("INSERT INTO stock_topic_analyses", conn.execute.call_args.args[0])
+        conn.commit.assert_called_once()
 
     @unittest.skipUnless(HAS_SERVICE_DEPS, "stock topic analysis service dependencies are not installed")
     def test_search_stock_question_topics_builds_keyword_query(self):
@@ -339,7 +397,7 @@ class StockTopicAnalysisServiceHelperTests(unittest.TestCase):
     def test_analyze_stock_topics_batch_continues_after_single_failure(self):
         from backend.services.stock_topic_analysis_service import analyze_stock_topics_batch
 
-        def fake_search(group_id, stock_name, *, limit):
+        def fake_search(group_id, stock_name, *, limit=None):
             return {
                 "group_id": group_id,
                 "stock_name": stock_name,
@@ -351,7 +409,7 @@ class StockTopicAnalysisServiceHelperTests(unittest.TestCase):
                 "recommendation_count": 0,
             }
 
-        def fake_analyze(group_id, stock_name, *, limit, log_callback=None):
+        def fake_analyze(group_id, stock_name, *, limit=None, log_callback=None):
             if stock_name == "失败股":
                 raise RuntimeError("AI失败")
             return {
@@ -561,7 +619,7 @@ class StockTopicAnalysisServiceHelperTests(unittest.TestCase):
         self.assertEqual([topic["topic_id"] for topic in search_topics], result["processed_topic_ids"])
         self.assertEqual([topic["topic_id"] for topic in search_topics], result["analyzed_topic_ids"])
         search.assert_called_once()
-        self.assertEqual(80, search.call_args.kwargs["limit"])
+        self.assertIsNone(search.call_args.kwargs["limit"])
         self.assertIn('"new_topic_count": 10', call_ai.call_args_list[0].args[0])
         self.assertIn('"new_topic_count": 5', call_ai.call_args_list[6].args[0])
         self.assertNotIn("analyzed_topic_ids", call_ai.call_args_list[0].args[0])
