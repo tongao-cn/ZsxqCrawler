@@ -611,6 +611,31 @@ class AShareAnalysisServiceHelperTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "start_date 不能晚于 end_date"):
                 service.run_analysis(group_id="511", start_date="2026-05-08", end_date="2026-05-07")
 
+    def test_reset_analysis_range_uses_db_reset_for_db_storage(self):
+        from backend.services import a_share_analysis_service as service
+
+        with patch.object(service, "should_use_db_storage", return_value=True), patch.object(
+            service, "reset_a_share_analysis_range_to_db", return_value={
+                "daily_mentions": 2,
+                "processed_state": 3,
+                "topic_stock_extractions": 4,
+                "stock_topic_processed_states": 5,
+                "stock_topic_analyses": 6,
+            }
+        ) as reset_db, patch.object(service, "get_analysis_summary", return_value={"date_count": 0}), patch.object(
+            service, "read_existing_csv", return_value={"2026-05-01": {"A": 1}}
+        ) as read_csv, patch.object(service, "load_state", return_value={"topics:1:2026-05-01"}) as load_state:
+            result = service.reset_analysis_range("2026-05-01", "2026-05-07", group_id="511")
+
+        reset_db.assert_called_once_with("2026-05-01", "2026-05-07", group_id="511")
+        read_csv.assert_called_once()
+        load_state.assert_called_once()
+        self.assertEqual(2, result["removed_rows"])
+        self.assertEqual(3, result["removed_state_keys"])
+        self.assertEqual(4, result["removed_topic_stock_extractions"])
+        self.assertEqual(5, result["removed_stock_topic_processed_states"])
+        self.assertEqual(6, result["removed_stock_topic_analyses"])
+
     def test_get_source_topics_summary_filters_by_group_scope(self):
         from backend.services import a_share_analysis_service as service
 

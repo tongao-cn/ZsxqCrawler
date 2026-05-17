@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { createPortal } from "react-dom"
 import { CalendarDays, ChevronLeft, ChevronRight } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
@@ -52,6 +53,8 @@ export function DatePickerButton({
   const selectedDate = parseDate(value)
   const [viewMonth, setViewMonth] = React.useState(selectedDate || new Date())
   const rootRef = React.useRef<HTMLDivElement>(null)
+  const popupRef = React.useRef<HTMLDivElement>(null)
+  const [popupStyle, setPopupStyle] = React.useState<React.CSSProperties>({})
 
   React.useEffect(() => {
     const nextSelectedDate = parseDate(value)
@@ -66,7 +69,7 @@ export function DatePickerButton({
     }
 
     const closeOnOutside = (event: PointerEvent) => {
-      if (!rootRef.current?.contains(event.target as Node)) {
+      if (!rootRef.current?.contains(event.target as Node) && !popupRef.current?.contains(event.target as Node)) {
         setOpen(false)
       }
     }
@@ -83,6 +86,42 @@ export function DatePickerButton({
       document.removeEventListener("keydown", closeOnEscape)
     }
   }, [open])
+
+  React.useEffect(() => {
+    if (!open) {
+      return
+    }
+
+    const updatePosition = () => {
+      const trigger = rootRef.current?.querySelector("button")
+      if (!trigger) {
+        return
+      }
+
+      const rect = trigger.getBoundingClientRect()
+      const popupWidth = 304
+      const popupHeight = 420
+      const spaceBelow = window.innerHeight - rect.bottom
+      const placeAbove = spaceBelow < popupHeight && rect.top > spaceBelow
+      const left = align === "end" ? rect.right - popupWidth : rect.left
+      setPopupStyle({
+        position: "fixed",
+        top: placeAbove ? undefined : rect.bottom + 6,
+        bottom: placeAbove ? window.innerHeight - rect.top + 6 : undefined,
+        left,
+        maxHeight: "calc(100vh - 1rem)",
+        overflowY: "auto",
+      })
+    }
+
+    updatePosition()
+    window.addEventListener("resize", updatePosition)
+    window.addEventListener("scroll", updatePosition, true)
+    return () => {
+      window.removeEventListener("resize", updatePosition)
+      window.removeEventListener("scroll", updatePosition, true)
+    }
+  }, [align, open])
 
   const jumpYear = (offset: number) => {
     setViewMonth(new Date(viewMonth.getFullYear() + offset, viewMonth.getMonth(), 1))
@@ -103,64 +142,65 @@ export function DatePickerButton({
         {value ? formatDateLabel(value) : placeholder}
         <CalendarDays className="h-3.5 w-3.5 text-muted-foreground" />
       </Button>
-      {open && (
-        <div
-          className={cn(
-            "absolute top-[calc(100%+0.375rem)] z-50 w-[19rem] rounded-md border bg-background p-3 shadow-lg",
-            align === "end" ? "right-0" : "left-0"
-          )}
-        >
-          <div className="mb-3 flex items-center justify-between">
-            <Button
-              type="button"
-              variant="outline"
-              size="icon"
-              className="h-7 w-7"
-              onClick={() => jumpYear(-1)}
-            >
-              <ChevronLeft className="h-4 w-4" />
-            </Button>
-            <div className="text-sm font-medium">{viewMonth.getFullYear()}</div>
-            <Button
-              type="button"
-              variant="outline"
-              size="icon"
-              className="h-7 w-7"
-              onClick={() => jumpYear(1)}
-            >
-              <ChevronRight className="h-4 w-4" />
-            </Button>
-          </div>
-          <div className="mb-3 grid grid-cols-6 gap-1">
-            {MONTH_LABELS.map((label, index) => (
+      {open && typeof document !== "undefined" &&
+        createPortal(
+          <div
+            ref={popupRef}
+            className="z-50 w-[19rem] rounded-md border bg-background p-3 shadow-lg"
+            style={popupStyle}
+          >
+            <div className="mb-3 flex items-center justify-between">
               <Button
-                key={label}
                 type="button"
-                variant={viewMonth.getMonth() === index ? "secondary" : "ghost"}
-                size="sm"
-                className="h-7 px-1 text-xs"
-                onClick={() => jumpMonth(index)}
+                variant="outline"
+                size="icon"
+                className="h-7 w-7"
+                onClick={() => jumpYear(-1)}
               >
-                {label}
+                <ChevronLeft className="h-4 w-4" />
               </Button>
-            ))}
-          </div>
-          <Calendar
-            mode="single"
-            month={viewMonth}
-            onMonthChange={setViewMonth}
-            selected={selectedDate}
-            disabled={(date) => isDateDisabled(date, min, max)}
-            onSelect={(date) => {
-              if (!date) {
-                return
-              }
-              onChange(formatDate(date))
-              setOpen(false)
-            }}
-          />
-        </div>
-      )}
+              <div className="text-sm font-medium">{viewMonth.getFullYear()}</div>
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                className="h-7 w-7"
+                onClick={() => jumpYear(1)}
+              >
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            </div>
+            <div className="mb-3 grid grid-cols-6 gap-1">
+              {MONTH_LABELS.map((label, index) => (
+                <Button
+                  key={label}
+                  type="button"
+                  variant={viewMonth.getMonth() === index ? "secondary" : "ghost"}
+                  size="sm"
+                  className="h-7 px-1 text-xs"
+                  onClick={() => jumpMonth(index)}
+                >
+                  {label}
+                </Button>
+              ))}
+            </div>
+            <Calendar
+              mode="single"
+              month={viewMonth}
+              onMonthChange={setViewMonth}
+              selected={selectedDate}
+              disabled={(date) => isDateDisabled(date, min, max)}
+              onSelect={(date) => {
+                if (!date) {
+                  return
+                }
+                onChange(formatDate(date))
+                setOpen(false)
+              }}
+            />
+          </div>,
+          document.body
+        )}
     </div>
   )
 }

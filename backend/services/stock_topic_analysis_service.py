@@ -332,12 +332,14 @@ def _load_latest_processed_topic_ids(conn: Any, group_id: str, stock_name: str) 
             (_normalize_text(group_id), f"%{query}%"),
         ).fetchone()
     except Exception:
+        conn.rollback()
         return []
     if not row:
         return []
     try:
         return _parse_json_list(row["topic_ids_json"])
     except Exception:
+        conn.rollback()
         return []
 
 
@@ -356,6 +358,7 @@ def _load_stock_topic_processed_state_ids(conn: Any, group_id: str, stock_name: 
             [_normalize_text(group_id), f"%{_normalize_company_name(stock_name)}%", *sorted(PROCESSED_TOPIC_STATUSES)],
         ).fetchall()
     except Exception:
+        conn.rollback()
         return []
     return _ordered_unique((row["topic_id"] for row in rows), limit=MAX_TRACKED_TOPIC_IDS)
 
@@ -386,23 +389,24 @@ def _upsert_stock_topic_processed_states(
         )
         for topic_id in normalized_topic_ids
     ]
-    conn.executemany(
-        """
-        INSERT INTO stock_topic_processed_states (
-            group_id, stock_name, topic_id, status, extract_mode, model,
-            error, processed_at, updated_at
+    for row in params:
+        conn.execute(
+            """
+            INSERT INTO stock_topic_processed_states (
+                group_id, stock_name, topic_id, status, extract_mode, model,
+                error, processed_at, updated_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+            ON CONFLICT(group_id, stock_name, topic_id) DO UPDATE SET
+                status = excluded.status,
+                extract_mode = excluded.extract_mode,
+                model = excluded.model,
+                error = excluded.error,
+                processed_at = excluded.processed_at,
+                updated_at = CURRENT_TIMESTAMP
+            """,
+            row,
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-        ON CONFLICT(group_id, stock_name, topic_id) DO UPDATE SET
-            status = excluded.status,
-            extract_mode = excluded.extract_mode,
-            model = excluded.model,
-            error = excluded.error,
-            processed_at = excluded.processed_at,
-            updated_at = CURRENT_TIMESTAMP
-        """,
-        params,
-    )
 
 
 def _build_topic_search_sql(*, recent_cutoff: str | None = None) -> str:
@@ -435,13 +439,8 @@ def _build_topic_search_sql(*, recent_cutoff: str | None = None) -> str:
          AND e.topic_id = t.topic_id::text
          AND e.stock_name ILIKE ?
         WHERE t.group_id::text = ?
-          AND (
-            e.stock_name IS NOT NULL
-            OR t.title ILIKE ?
-            OR tk.text ILIKE ?
-            OR q.text ILIKE ?
-            OR a.text ILIKE ?
-          )
+          AND e.stock_name IS NOT NULL
+          AND COALESCE(e.excerpt, '') <> ''
           {cutoff_clause}
         ORDER BY t.create_time DESC
         LIMIT ?
@@ -642,7 +641,7 @@ def search_stock_topics(group_id: str, stock_name: str, *, limit: int | None = N
         processed_topic_id_set = set(processed_topic_ids)
         rows = conn.execute(
             _build_topic_search_sql(recent_cutoff=recent_cutoff),
-            (like, group_id_text, like, like, like, like, recent_cutoff, MAX_SEARCH_CANDIDATE_TOPICS),
+            (like, group_id_text, recent_cutoff, MAX_SEARCH_CANDIDATE_TOPICS),
         ).fetchall()
         if not rows:
             empty_result = _empty_search_result(group_id_text, query)

@@ -13,6 +13,7 @@ class _FakeStorageCursor:
         self.executed = []
         self.execute_values_calls = []
         self.fail_on_execute_values_call = fail_on_execute_values_call
+        self.fetchall_rows = []
 
     def __enter__(self):
         return self
@@ -22,6 +23,9 @@ class _FakeStorageCursor:
 
     def execute(self, sql, params=None):
         self.executed.append((sql, params))
+
+    def fetchall(self):
+        return self.fetchall_rows
 
 
 class _FakeStorageConnection:
@@ -251,6 +255,54 @@ class AShareAnalysisDbStorageHelperTests(unittest.TestCase):
         self.assertFalse(conn.rolled_back)
 
     @unittest.skipUnless(HAS_STORAGE_DEPS, "PostgreSQL storage dependencies are not installed")
+    def test_save_topic_stock_extractions_uses_excerpt_column(self):
+        from backend.services import a_share_analysis_db_storage as storage
+
+        cursor = _FakeStorageCursor()
+        conn = _FakeStorageConnection(cursor)
+
+        @contextmanager
+        def fake_connection(env_path=storage.DEFAULT_KNOW_ACTION_ENV_PATH):
+            try:
+                yield conn
+                conn.commit()
+            except Exception:
+                conn.rollback()
+                raise
+            finally:
+                conn.close()
+
+        with patch.object(storage, "get_connection", fake_connection), patch.object(
+            storage, "execute_values", side_effect=_fake_execute_values
+        ):
+            result = storage.save_topic_stock_extractions(
+                [
+                    {
+                        "group_id": "511",
+                        "topic_id": "1001",
+                        "topic_date": "2026-05-10",
+                        "stock_name": "钧达股份",
+                        "stock_code": "",
+                        "market": "",
+                        "concepts": ["商业航天"],
+                        "excerpt": "原文证据",
+                        "reason": "推荐逻辑。",
+                        "confidence": 0.98,
+                        "model": "test-model",
+                        "prompt_version": "v1",
+                    }
+                ],
+                group_id="511",
+            )
+
+        self.assertEqual(1, result)
+        sql, rows, template = cursor.execute_values_calls[0]
+        self.assertIn("excerpt", sql)
+        self.assertEqual(13, len(rows[0]))
+        self.assertEqual("(%s, %s, %s::date, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)", template)
+        self.assertTrue(conn.committed)
+
+    @unittest.skipUnless(HAS_STORAGE_DEPS, "PostgreSQL storage dependencies are not installed")
     def test_checkpoint_rolls_back_when_any_write_fails(self):
         from backend.services import a_share_analysis_db_storage as storage
 
@@ -323,6 +375,43 @@ class AShareAnalysisDbStorageHelperTests(unittest.TestCase):
 
         self.assertEqual("原文关键证据", rows[0]["excerpt"])
         self.assertEqual("提到电池。", rows[0]["reason"])
+
+    @unittest.skipUnless(HAS_STORAGE_DEPS, "PostgreSQL storage dependencies are not installed")
+    def test_reset_a_share_analysis_range_deletes_recommendation_and_analysis_rows(self):
+        from backend.services import a_share_analysis_db_storage as storage
+
+        cursor = _FakeStorageCursor()
+        cursor.fetchall_rows = [("1001",), ("1002",)]
+        conn = _FakeStorageConnection(cursor)
+
+        @contextmanager
+        def fake_connection(env_path=storage.DEFAULT_KNOW_ACTION_ENV_PATH):
+            try:
+                yield conn
+                conn.commit()
+            except Exception:
+                conn.rollback()
+                raise
+            finally:
+                conn.close()
+
+        with patch.object(storage, "get_connection", fake_connection):
+            result = storage.reset_a_share_analysis_range("2026-05-01", "2026-05-07", group_id="511")
+
+        self.assertEqual(
+            {"daily_mentions": 0, "processed_state": 0, "topic_stock_extractions": 0, "stock_topic_processed_states": 0, "stock_topic_analyses": 0},
+            result,
+        )
+        joined_sql = "\n".join(sql for sql, _params in cursor.executed)
+        self.assertIn("DELETE FROM", joined_sql)
+        self.assertIn("zsxq_a_share_topic_stock_extractions", joined_sql)
+        self.assertIn("stock_topic_processed_states", joined_sql)
+        self.assertIn("stock_topic_analyses", joined_sql)
+        self.assertIn("SELECT DISTINCT topic_id", joined_sql)
+        self.assertIn("topic_id = ANY", joined_sql)
+        self.assertIn("?|", joined_sql)
+        self.assertTrue(conn.committed)
+        self.assertFalse(conn.rolled_back)
 
 
 if __name__ == "__main__":

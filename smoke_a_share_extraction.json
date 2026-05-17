@@ -1,0 +1,751 @@
+{
+  "config": {
+    "model": "gpt-5.5",
+    "wire_api": "responses",
+    "extraction_reasoning_effort": "low"
+  },
+  "daily": {
+    "2026-05-16": {
+      "京仪装备": 1,
+      "北方华创": 1,
+      "华海清科": 1,
+      "太极实业": 1,
+      "富创精密": 1,
+      "正帆科技": 1,
+      "神工股份": 1,
+      "至纯科技": 1,
+      "芯源微": 1
+    },
+    "2026-05-15": {
+      "中微公司": 1,
+      "中芯国际": 1,
+      "仕佳光子": 1,
+      "兆易创新": 1,
+      "华勤技术": 1,
+      "天孚通信": 1,
+      "寒武纪": 1,
+      "广合科技": 1,
+      "德邦科技": 1,
+      "拓荆科技": 1,
+      "日联科技": 1,
+      "普冉股份": 1,
+      "水晶光电": 1,
+      "永鼎股份": 1,
+      "浪潮信息": 1,
+      "海光信息": 1,
+      "海泰新光": 1,
+      "源杰科技": 1,
+      "澜起科技": 1,
+      "炬光科技": 1,
+      "申菱环境": 1,
+      "精智达": 1,
+      "英维克": 1,
+      "通富微电": 1,
+      "领益智造": 1,
+      "高澜股份": 1
+    }
+  },
+  "succeeded_item_keys": [
+    "topics:22255844552811241:2026-05-16",
+    "topics:22255844582581111:2026-05-16",
+    "topics:45544825151588248:2026-05-15"
+  ],
+  "failed_items": [],
+  "topic_stock_extractions_count": 35,
+  "samples": [
+    {
+      "kind": "single_company_full",
+      "topic_id": "22255844552811241",
+      "title": "【zx电子】#设备板块再次大涨...",
+      "day": "2026-05-16",
+      "text_len": 319,
+      "text_preview": "【zx电子】<e type=\"hashtag\" hid=\"48551254115858\" title=\"%23%E8%AE%BE%E5%A4%87%E6%9D%BF%E5%9D%97%E5%86%8D%E6%AC%A1%E5%A4%A7%E6%B6%A8%EF%BC%81%F0%9F%93%88%23\" />    \n各位领导，zw上调全年订单预期，如我们之前推荐，随着两存的订单加速落地，#未来两年各家设备公司订单预期会不断超预期！\n\n我们推荐的存储链及国产化率提升链持续领涨",
+      "detected_hits_for_sampling": [
+        "北方华创"
+      ],
+      "succeeded": true,
+      "extractions_count": 9,
+      "extractions": [
+        {
+          "group_id": "51111112855254",
+          "topic_id": "22255844552811241",
+          "topic_date": "2026-05-16",
+          "stock_name": "北方华创",
+          "stock_code": "",
+          "market": "",
+          "concepts": [
+            "存储链",
+            "国产化率提升链",
+            "设备",
+            "订单预期"
+          ],
+          "excerpt": "我们推荐的存储链及国产化率提升链持续领涨！继续推荐#zwds、北方华创、富创精密、京仪装备、华海清科、芯源微，同时关注相对底部的设备、零部件、材料标的，如#至纯科技、正帆科技、神工股份、太极实业等。",
+          "reason": "文中明确使用“推荐”“继续推荐”“同时关注”等正向表述，属于设备和国产化率提升链的受益标的。",
+          "confidence": 0.98,
+          "model": "gpt-5.5",
+          "prompt_version": "a-share-topic-stock-extraction-v2"
+        },
+        {
+          "group_id": "51111112855254",
+          "topic_id": "22255844552811241",
+          "topic_date": "2026-05-16",
+          "stock_name": "富创精密",
+          "stock_code": "",
+          "market": "",
+          "concepts": [
+            "存储链",
+            "国产化率提升链",
+            "设备",
+            "订单预期"
+          ],
+          "excerpt": "我们推荐的存储链及国产化率提升链持续领涨！继续推荐#zwds、北方华创、富创精密、京仪装备、华海清科、芯源微，同时关注相对底部的设备、零部件、材料标的，如#至纯科技、正帆科技、神工股份、太极实业等。",
+          "reason": "被明确列入“继续推荐”的设备链条标的，受益于订单预期上调和国产化率提升。",
+          "confidence": 0.96,
+          "model": "gpt-5.5",
+          "prompt_version": "a-share-topic-stock-extraction-v2"
+        },
+        {
+          "group_id": "51111112855254",
+          "topic_id": "22255844552811241",
+          "topic_date": "2026-05-16",
+          "stock_name": "京仪装备",
+          "stock_code": "",
+          "market": "",
+          "concepts": [
+            "存储链",
+            "国产化率提升链",
+            "设备",
+            "订单预期"
+          ],
+          "excerpt": "我们推荐的存储链及国产化率提升链持续领涨！继续推荐#zwds、北方华创、富创精密、京仪装备、华海清科、芯源微，同时关注相对底部的设备、零部件、材料标的，如#至纯科技、正帆科技、神工股份、太极实业等。",
+          "reason": "被明确列入“继续推荐”的设备链条标的，属于存储链受益方向。",
+          "confidence": 0.96,
+          "model": "gpt-5.5",
+          "prompt_version": "a-share-topic-stock-extraction-v2"
+        },
+        {
+          "group_id": "51111112855254",
+          "topic_id": "22255844552811241",
+          "topic_date": "2026-05-16",
+          "stock_name": "华海清科",
+          "stock_code": "",
+          "market": "",
+          "concepts": [
+            "存储链",
+            "国产化率提升链",
+            "设备",
+            "订单预期"
+          ],
+          "excerpt": "我们推荐的存储链及国产化率提升链持续领涨！继续推荐#zwds、北方华创、富创精密、京仪装备、华海清科、芯源微，同时关注相对底部的设备、零部件、材料标的，如#至纯科技、正帆科技、神工股份、太极实业等。",
+          "reason": "文中明确推荐，且位于存储链、国产化率提升链景气上行的受益标的中。",
+          "confidence": 0.97,
+          "model": "gpt-5.5",
+          "prompt_version": "a-share-topic-stock-extraction-v2"
+        },
+        {
+          "group_id": "51111112855254",
+          "topic_id": "22255844552811241",
+          "topic_date": "2026-05-16",
+          "stock_name": "芯源微",
+          "stock_code": "",
+          "market": "",
+          "concepts": [
+            "存储链",
+            "国产化率提升链",
+            "设备",
+            "订单预期"
+          ],
+          "excerpt": "我们推荐的存储链及国产化率提升链持续领涨！继续推荐#zwds、北方华创、富创精密、京仪装备、华海清科、芯源微，同时关注相对底部的设备、零部件、材料标的，如#至纯科技、正帆科技、神工股份、太极实业等。",
+          "reason": "被明确列入“继续推荐”的标的，受益于存储链景气和订单落地。",
+          "confidence": 0.96,
+          "model": "gpt-5.5",
+          "prompt_version": "a-share-topic-stock-extraction-v2"
+        },
+        {
+          "group_id": "51111112855254",
+          "topic_id": "22255844552811241",
+          "topic_date": "2026-05-16",
+          "stock_name": "至纯科技",
+          "stock_code": "",
+          "market": "",
+          "concepts": [
+            "存储链",
+            "国产化率提升链",
+            "设备",
+            "零部件",
+            "材料"
+          ],
+          "excerpt": "我们推荐的存储链及国产化率提升链持续领涨！继续推荐#zwds、北方华创、富创精密、京仪装备、华海清科、芯源微，同时关注相对底部的设备、零部件、材料标的，如#至纯科技、正帆科技、神工股份、太极实业等。",
+          "reason": "文中明确将其列为“相对底部”的设备、零部件、材料关注标的，具备受益和关注语义。",
+          "confidence": 0.94,
+          "model": "gpt-5.5",
+          "prompt_version": "a-share-topic-stock-extraction-v2"
+        },
+        {
+          "group_id": "51111112855254",
+          "topic_id": "22255844552811241",
+          "topic_date": "2026-05-16",
+          "stock_name": "正帆科技",
+          "stock_code": "",
+          "market": "",
+          "concepts": [
+            "存储链",
+            "国产化率提升链",
+            "设备",
+            "零部件",
+            "材料"
+          ],
+          "excerpt": "我们推荐的存储链及国产化率提升链持续领涨！继续推荐#zwds、北方华创、富创精密、京仪装备、华海清科、芯源微，同时关注相对底部的设备、零部件、材料标的，如#至纯科技、正帆科技、神工股份、太极实业等。",
+          "reason": "被作为“相对底部”的关注标的明确提及，属于正向关注对象。",
+          "confidence": 0.93,
+          "model": "gpt-5.5",
+          "prompt_version": "a-share-topic-stock-extraction-v2"
+        },
+        {
+          "group_id": "51111112855254",
+          "topic_id": "22255844552811241",
+          "topic_date": "2026-05-16",
+          "stock_name": "神工股份",
+          "stock_code": "",
+          "market": "",
+          "concepts": [
+            "存储链",
+            "国产化率提升链",
+            "材料"
+          ],
+          "excerpt": "我们推荐的存储链及国产化率提升链持续领涨！继续推荐#zwds、北方华创、富创精密、京仪装备、华海清科、芯源微，同时关注相对底部的设备、零部件、材料标的，如#至纯科技、正帆科技、神工股份、太极实业等。",
+          "reason": "被列为设备/零部件/材料板块中值得关注的标的，带有受益和关注语义。",
+          "confidence": 0.92,
+          "model": "gpt-5.5",
+          "prompt_version": "a-share-topic-stock-extraction-v2"
+        },
+        {
+          "group_id": "51111112855254",
+          "topic_id": "22255844552811241",
+          "topic_date": "2026-05-16",
+          "stock_name": "太极实业",
+          "stock_code": "",
+          "market": "",
+          "concepts": [
+            "存储链",
+            "国产化率提升链",
+            "设备",
+            "零部件",
+            "材料"
+          ],
+          "excerpt": "我们推荐的存储链及国产化率提升链持续领涨！继续推荐#zwds、北方华创、富创精密、京仪装备、华海清科、芯源微，同时关注相对底部的设备、零部件、材料标的，如#至纯科技、正帆科技、神工股份、太极实业等。",
+          "reason": "文中明确作为“相对底部”的关注标的，属于正向推荐语境。",
+          "confidence": 0.91,
+          "model": "gpt-5.5",
+          "prompt_version": "a-share-topic-stock-extraction-v2"
+        }
+      ]
+    },
+    {
+      "kind": "multi_company_mix",
+      "topic_id": "45544825151588248",
+      "title": "继续拥抱AI算力\n\n核心观点与...",
+      "day": "2026-05-15",
+      "text_len": 2467,
+      "text_preview": "<e type=\"text_bold\" title=\"%E7%BB%A7%E7%BB%AD%E6%8B%A5%E6%8A%B1AI%E7%AE%97%E5%8A%9B\" />\n\n<e type=\"text_bold\" title=\"%E6%A0%B8%E5%BF%83%E8%A7%82%E7%82%B9%E4%B8%8E%E5%B8%82%E5%9C%BA%E7%8E%B0%E7%8A%B6\" />\n尽管科技板块近期轮动加速、情绪焦虑，但三个核心判断不变：海内外AI共振的叙事",
+      "detected_hits_for_sampling": [
+        "寒武纪",
+        "中芯国际",
+        "海光信息",
+        "澜起科技",
+        "通富微电"
+      ],
+      "succeeded": true,
+      "extractions_count": 26,
+      "extractions": [
+        {
+          "group_id": "51111112855254",
+          "topic_id": "45544825151588248",
+          "topic_date": "2026-05-15",
+          "stock_name": "源杰科技",
+          "stock_code": "",
+          "market": "",
+          "concepts": [
+            "光模块",
+            "光芯片",
+            "CPO",
+            "OCS",
+            "光产链"
+          ],
+          "excerpt": "光模块及光产业链：核心升级路径为800G→1.6T→CPO/OCS。强调“光之通胀”方向——光芯片（源杰、永鼎、仕佳、长光等）、M-Sub PCB（鹏鼎控股、深南电路等）、锡膏等材料（唯特偶）、光设备（联讯仪器）。面向未来的CPO/OCS（天孚、炬光、海泰新光、水晶光电等）有较大预期差和催化。",
+          "reason": "文中明确将相关公司作为光模块/光产业链升级主线标的，并指出存在预期差和催化。",
+          "confidence": 0.95,
+          "model": "gpt-5.5",
+          "prompt_version": "a-share-topic-stock-extraction-v2"
+        },
+        {
+          "group_id": "51111112855254",
+          "topic_id": "45544825151588248",
+          "topic_date": "2026-05-15",
+          "stock_name": "永鼎股份",
+          "stock_code": "",
+          "market": "",
+          "concepts": [
+            "光模块",
+            "光芯片",
+            "CPO",
+            "OCS",
+            "光产链"
+          ],
+          "excerpt": "光模块及光产业链：核心升级路径为800G→1.6T→CPO/OCS。强调“光之通胀”方向——光芯片（源杰、永鼎、仕佳、长光等）、M-Sub PCB（鹏鼎控股、深南电路等）、锡膏等材料（唯特偶）、光设备（联讯仪器）。面向未来的CPO/OCS（天孚、炬光、海泰新光、水晶光电等）有较大预期差和催化。",
+          "reason": "文中明确将相关公司作为光模块/光产业链升级主线标的，并指出存在预期差和催化。",
+          "confidence": 0.95,
+          "model": "gpt-5.5",
+          "prompt_version": "a-share-topic-stock-extraction-v2"
+        },
+        {
+          "group_id": "51111112855254",
+          "topic_id": "45544825151588248",
+          "topic_date": "2026-05-15",
+          "stock_name": "仕佳光子",
+          "stock_code": "",
+          "market": "",
+          "concepts": [
+            "光模块",
+            "光芯片",
+            "CPO",
+            "OCS",
+            "光产链"
+          ],
+          "excerpt": "光模块及光产业链：核心升级路径为800G→1.6T→CPO/OCS。强调“光之通胀”方向——光芯片（源杰、永鼎、仕佳、长光等）、M-Sub PCB（鹏鼎控股、深南电路等）、锡膏等材料（唯特偶）、光设备（联讯仪器）。面向未来的CPO/OCS（天孚、炬光、海泰新光、水晶光电等）有较大预期差和催化。",
+          "reason": "文中明确将相关公司作为光模块/光产业链升级主线标的，并指出存在预期差和催化。",
+          "confidence": 0.95,
+          "model": "gpt-5.5",
+          "prompt_version": "a-share-topic-stock-extraction-v2"
+        },
+        {
+          "group_id": "51111112855254",
+          "topic_id": "45544825151588248",
+          "topic_date": "2026-05-15",
+          "stock_name": "天孚通信",
+          "stock_code": "",
+          "market": "",
+          "concepts": [
+            "光模块",
+            "CPO",
+            "OCS",
+            "光产链"
+          ],
+          "excerpt": "光模块及光产业链：核心升级路径为800G→1.6T→CPO/OCS。强调“光之通胀”方向——光芯片（源杰、永鼎、仕佳、长光等）、M-Sub PCB（鹏鼎控股、深南电路等）、锡膏等材料（唯特偶）、光设备（联讯仪器）。面向未来的CPO/OCS（天孚、炬光、海泰新光、水晶光电等）有较大预期差和催化。",
+          "reason": "文中将其放在面向未来的CPO/OCS受益标的中，明确偏正向推荐。",
+          "confidence": 0.93,
+          "model": "gpt-5.5",
+          "prompt_version": "a-share-topic-stock-extraction-v2"
+        },
+        {
+          "group_id": "51111112855254",
+          "topic_id": "45544825151588248",
+          "topic_date": "2026-05-15",
+          "stock_name": "炬光科技",
+          "stock_code": "",
+          "market": "",
+          "concepts": [
+            "光模块",
+            "CPO",
+            "OCS",
+            "光产链"
+          ],
+          "excerpt": "光模块及光产业链：核心升级路径为800G→1.6T→CPO/OCS。强调“光之通胀”方向——光芯片（源杰、永鼎、仕佳、长光等）、M-Sub PCB（鹏鼎控股、深南电路等）、锡膏等材料（唯特偶）、光设备（联讯仪器）。面向未来的CPO/OCS（天孚、炬光、海泰新光、水晶光电等）有较大预期差和催化。",
+          "reason": "文中将其放在面向未来的CPO/OCS受益标的中，明确偏正向推荐。",
+          "confidence": 0.93,
+          "model": "gpt-5.5",
+          "prompt_version": "a-share-topic-stock-extraction-v2"
+        },
+        {
+          "group_id": "51111112855254",
+          "topic_id": "45544825151588248",
+          "topic_date": "2026-05-15",
+          "stock_name": "海泰新光",
+          "stock_code": "",
+          "market": "",
+          "concepts": [
+            "光模块",
+            "CPO",
+            "OCS",
+            "光产链"
+          ],
+          "excerpt": "光模块及光产业链：核心升级路径为800G→1.6T→CPO/OCS。强调“光之通胀”方向——光芯片（源杰、永鼎、仕佳、长光等）、M-Sub PCB（鹏鼎控股、深南电路等）、锡膏等材料（唯特偶）、光设备（联讯仪器）。面向未来的CPO/OCS（天孚、炬光、海泰新光、水晶光电等）有较大预期差和催化。",
+          "reason": "文中明确指出其在CPO/OCS方向存在较大预期差和催化，属于受益标的。",
+          "confidence": 0.92,
+          "model": "gpt-5.5",
+          "prompt_version": "a-share-topic-stock-extraction-v2"
+        },
+        {
+          "group_id": "51111112855254",
+          "topic_id": "45544825151588248",
+          "topic_date": "2026-05-15",
+          "stock_name": "水晶光电",
+          "stock_code": "",
+          "market": "",
+          "concepts": [
+            "光模块",
+            "CPO",
+            "OCS",
+            "光产链"
+          ],
+          "excerpt": "光模块及光产业链：核心升级路径为800G→1.6T→CPO/OCS。强调“光之通胀”方向——光芯片（源杰、永鼎、仕佳、长光等）、M-Sub PCB（鹏鼎控股、深南电路等）、锡膏等材料（唯特偶）、光设备（联讯仪器）。面向未来的CPO/OCS（天孚、炬光、海泰新光、水晶光电等）有较大预期差和催化。",
+          "reason": "文中明确指出其在CPO/OCS方向存在较大预期差和催化，属于受益标的。",
+          "confidence": 0.92,
+          "model": "gpt-5.5",
+          "prompt_version": "a-share-topic-stock-extraction-v2"
+        },
+        {
+          "group_id": "51111112855254",
+          "topic_id": "45544825151588248",
+          "topic_date": "2026-05-15",
+          "stock_name": "澜起科技",
+          "stock_code": "",
+          "market": "",
+          "concepts": [
+            "CPU",
+            "Agent",
+            "AI推理"
+          ],
+          "excerpt": "CPU：Agent时代推理需求拉动CPU用量显著提升（GPU:CPU从8:1向1:2演化），A股关注澜起科技、海光信息，产业链关注通富微电、广合科技等。当前CPU的投资机遇类似一年前的存储启动节点。",
+          "reason": "文中明确把其列为Agent时代CPU需求提升下的A股关注标的。",
+          "confidence": 0.96,
+          "model": "gpt-5.5",
+          "prompt_version": "a-share-topic-stock-extraction-v2"
+        },
+        {
+          "group_id": "51111112855254",
+          "topic_id": "45544825151588248",
+          "topic_date": "2026-05-15",
+          "stock_name": "海光信息",
+          "stock_code": "",
+          "market": "",
+          "concepts": [
+            "CPU",
+            "Agent",
+            "AI推理"
+          ],
+          "excerpt": "CPU：Agent时代推理需求拉动CPU用量显著提升（GPU:CPU从8:1向1:2演化），A股关注澜起科技、海光信息，产业链关注通富微电、广合科技等。当前CPU的投资机遇类似一年前的存储启动节点。",
+          "reason": "文中明确把其列为Agent时代CPU需求提升下的A股关注标的。",
+          "confidence": 0.96,
+          "model": "gpt-5.5",
+          "prompt_version": "a-share-topic-stock-extraction-v2"
+        },
+        {
+          "group_id": "51111112855254",
+          "topic_id": "45544825151588248",
+          "topic_date": "2026-05-15",
+          "stock_name": "通富微电",
+          "stock_code": "",
+          "market": "",
+          "concepts": [
+            "CPU",
+            "Agent",
+            "AI推理",
+            "封测"
+          ],
+          "excerpt": "CPU：Agent时代推理需求拉动CPU用量显著提升（GPU:CPU从8:1向1:2演化），A股关注澜起科技、海光信息，产业链关注通富微电、广合科技等。当前CPU的投资机遇类似一年前的存储启动节点。",
+          "reason": "文中将其作为CPU需求提升带动的产业链受益标的。",
+          "confidence": 0.9,
+          "model": "gpt-5.5",
+          "prompt_version": "a-share-topic-stock-extraction-v2"
+        },
+        {
+          "group_id": "51111112855254",
+          "topic_id": "45544825151588248",
+          "topic_date": "2026-05-15",
+          "stock_name": "广合科技",
+          "stock_code": "",
+          "market": "",
+          "concepts": [
+            "CPU",
+            "Agent",
+            "AI推理",
+            "PCB"
+          ],
+          "excerpt": "CPU：Agent时代推理需求拉动CPU用量显著提升（GPU:CPU从8:1向1:2演化），A股关注澜起科技、海光信息，产业链关注通富微电、广合科技等。当前CPU的投资机遇类似一年前的存储启动节点。",
+          "reason": "文中将其作为CPU需求提升带动的产业链受益标的。",
+          "confidence": 0.9,
+          "model": "gpt-5.5",
+          "prompt_version": "a-share-topic-stock-extraction-v2"
+        },
+        {
+          "group_id": "51111112855254",
+          "topic_id": "45544825151588248",
+          "topic_date": "2026-05-15",
+          "stock_name": "兆易创新",
+          "stock_code": "",
+          "market": "",
+          "concepts": [
+            "存储",
+            "IC设计"
+          ],
+          "excerpt": "存储：持续强势，关注IC设计（兆易、普冉）和设备（中微、拓荆、精智达），长鑫长存上市有望催化。国内存储逐步切入海外供应链。",
+          "reason": "文中明确称存储持续强势，并点名关注其在IC设计方向的受益机会。",
+          "confidence": 0.95,
+          "model": "gpt-5.5",
+          "prompt_version": "a-share-topic-stock-extraction-v2"
+        },
+        {
+          "group_id": "51111112855254",
+          "topic_id": "45544825151588248",
+          "topic_date": "2026-05-15",
+          "stock_name": "普冉股份",
+          "stock_code": "",
+          "market": "",
+          "concepts": [
+            "存储",
+            "IC设计"
+          ],
+          "excerpt": "存储：持续强势，关注IC设计（兆易、普冉）和设备（中微、拓荆、精智达），长鑫长存上市有望催化。国内存储逐步切入海外供应链。",
+          "reason": "文中明确称存储持续强势，并点名关注其在IC设计方向的受益机会。",
+          "confidence": 0.95,
+          "model": "gpt-5.5",
+          "prompt_version": "a-share-topic-stock-extraction-v2"
+        },
+        {
+          "group_id": "51111112855254",
+          "topic_id": "45544825151588248",
+          "topic_date": "2026-05-15",
+          "stock_name": "中微公司",
+          "stock_code": "",
+          "market": "",
+          "concepts": [
+            "存储设备",
+            "半导体设备"
+          ],
+          "excerpt": "存储：持续强势，关注IC设计（兆易、普冉）和设备（中微、拓荆、精智达），长鑫长存上市有望催化。国内存储逐步切入海外供应链。",
+          "reason": "文中明确将其列为存储设备方向的关注标的。",
+          "confidence": 0.94,
+          "model": "gpt-5.5",
+          "prompt_version": "a-share-topic-stock-extraction-v2"
+        },
+        {
+          "group_id": "51111112855254",
+          "topic_id": "45544825151588248",
+          "topic_date": "2026-05-15",
+          "stock_name": "拓荆科技",
+          "stock_code": "",
+          "market": "",
+          "concepts": [
+            "存储设备",
+            "半导体设备"
+          ],
+          "excerpt": "存储：持续强势，关注IC设计（兆易、普冉）和设备（中微、拓荆、精智达），长鑫长存上市有望催化。国内存储逐步切入海外供应链。",
+          "reason": "文中明确将其列为存储设备方向的关注标的。",
+          "confidence": 0.94,
+          "model": "gpt-5.5",
+          "prompt_version": "a-share-topic-stock-extraction-v2"
+        },
+        {
+          "group_id": "51111112855254",
+          "topic_id": "45544825151588248",
+          "topic_date": "2026-05-15",
+          "stock_name": "精智达",
+          "stock_code": "",
+          "market": "",
+          "concepts": [
+            "存储设备",
+            "半导体设备"
+          ],
+          "excerpt": "存储：持续强势，关注IC设计（兆易、普冉）和设备（中微、拓荆、精智达），长鑫长存上市有望催化。国内存储逐步切入海外供应链。",
+          "reason": "文中明确将其列为存储设备方向的关注标的。",
+          "confidence": 0.94,
+          "model": "gpt-5.5",
+          "prompt_version": "a-share-topic-stock-extraction-v2"
+        },
+        {
+          "group_id": "51111112855254",
+          "topic_id": "45544825151588248",
+          "topic_date": "2026-05-15",
+          "stock_name": "寒武纪",
+          "stock_code": "",
+          "market": "",
+          "concepts": [
+            "国产算力",
+            "AI芯片",
+            "超节点"
+          ],
+          "excerpt": "供给端华为、中芯国际等出现积极变化，AI芯片（寒武纪）和超节点（华勤、浪潮）等方向受益。互联网大厂资本开支持续加码（阿里超3800亿目标、腾讯Q1 AI资本开支已达去年全年40%），AI收入正循环加速（阿里AI收入占比有望突破50%），国内AI回报周期已开始。",
+          "reason": "文中明确说AI芯片方向受益，并点名寒武纪。",
+          "confidence": 0.95,
+          "model": "gpt-5.5",
+          "prompt_version": "a-share-topic-stock-extraction-v2"
+        },
+        {
+          "group_id": "51111112855254",
+          "topic_id": "45544825151588248",
+          "topic_date": "2026-05-15",
+          "stock_name": "华勤技术",
+          "stock_code": "",
+          "market": "",
+          "concepts": [
+            "国产算力",
+            "超节点",
+            "AI服务器"
+          ],
+          "excerpt": "供给端华为、中芯国际等出现积极变化，AI芯片（寒武纪）和超节点（华勤、浪潮）等方向受益。互联网大厂资本开支持续加码（阿里超3800亿目标、腾讯Q1 AI资本开支已达去年全年40%），AI收入正循环加速（阿里AI收入占比有望突破50%），国内AI回报周期已开始。",
+          "reason": "文中明确把其列为超节点方向的受益标的。",
+          "confidence": 0.9,
+          "model": "gpt-5.5",
+          "prompt_version": "a-share-topic-stock-extraction-v2"
+        },
+        {
+          "group_id": "51111112855254",
+          "topic_id": "45544825151588248",
+          "topic_date": "2026-05-15",
+          "stock_name": "浪潮信息",
+          "stock_code": "",
+          "market": "",
+          "concepts": [
+            "国产算力",
+            "超节点",
+            "AI服务器"
+          ],
+          "excerpt": "供给端华为、中芯国际等出现积极变化，AI芯片（寒武纪）和超节点（华勤、浪潮）等方向受益。互联网大厂资本开支持续加码（阿里超3800亿目标、腾讯Q1 AI资本开支已达去年全年40%），AI收入正循环加速（阿里AI收入占比有望突破50%），国内AI回报周期已开始。",
+          "reason": "文中明确把其列为超节点方向的受益标的。",
+          "confidence": 0.9,
+          "model": "gpt-5.5",
+          "prompt_version": "a-share-topic-stock-extraction-v2"
+        },
+        {
+          "group_id": "51111112855254",
+          "topic_id": "45544825151588248",
+          "topic_date": "2026-05-15",
+          "stock_name": "中芯国际",
+          "stock_code": "",
+          "market": "",
+          "concepts": [
+            "国产算力",
+            "半导体制造"
+          ],
+          "excerpt": "供给端华为、中芯国际等出现积极变化，AI芯片（寒武纪）和超节点（华勤、浪潮）等方向受益。互联网大厂资本开支持续加码（阿里超3800亿目标、腾讯Q1 AI资本开支已达去年全年40%），AI收入正循环加速（阿里AI收入占比有望突破50%），国内AI回报周期已开始。",
+          "reason": "文中提到其供给端出现积极变化，属于国产算力/半导体链条正向背景。",
+          "confidence": 0.86,
+          "model": "gpt-5.5",
+          "prompt_version": "a-share-topic-stock-extraction-v2"
+        },
+        {
+          "group_id": "51111112855254",
+          "topic_id": "45544825151588248",
+          "topic_date": "2026-05-15",
+          "stock_name": "英维克",
+          "stock_code": "",
+          "market": "",
+          "concepts": [
+            "液冷",
+            "国产算力",
+            "海外ASIC/GPU"
+          ],
+          "excerpt": "液冷：受益于国产算力和海外ASIC/GPU需求，液冷放量在即（Rubin 9月、谷歌Q3出货）。选股注重核心卡位能力（英维克、领益智造、申菱环境、远东、高澜、德邦科技等），边际增量还包括光模块液冷、交换机液冷、inner manifold等。",
+          "reason": "文中明确指出液冷放量在即，并将其列为核心卡位受益标的。",
+          "confidence": 0.95,
+          "model": "gpt-5.5",
+          "prompt_version": "a-share-topic-stock-extraction-v2"
+        },
+        {
+          "group_id": "51111112855254",
+          "topic_id": "45544825151588248",
+          "topic_date": "2026-05-15",
+          "stock_name": "领益智造",
+          "stock_code": "",
+          "market": "",
+          "concepts": [
+            "液冷",
+            "国产算力",
+            "海外ASIC/GPU"
+          ],
+          "excerpt": "液冷：受益于国产算力和海外ASIC/GPU需求，液冷放量在即（Rubin 9月、谷歌Q3出货）。选股注重核心卡位能力（英维克、领益智造、申菱环境、远东、高澜、德邦科技等），边际增量还包括光模块液冷、交换机液冷、inner manifold等。",
+          "reason": "文中明确指出其受益于液冷放量和相关需求增长。",
+          "confidence": 0.93,
+          "model": "gpt-5.5",
+          "prompt_version": "a-share-topic-stock-extraction-v2"
+        },
+        {
+          "group_id": "51111112855254",
+          "topic_id": "45544825151588248",
+          "topic_date": "2026-05-15",
+          "stock_name": "申菱环境",
+          "stock_code": "",
+          "market": "",
+          "concepts": [
+            "液冷",
+            "国产算力",
+            "海外ASIC/GPU"
+          ],
+          "excerpt": "液冷：受益于国产算力和海外ASIC/GPU需求，液冷放量在即（Rubin 9月、谷歌Q3出货）。选股注重核心卡位能力（英维克、领益智造、申菱环境、远东、高澜、德邦科技等），边际增量还包括光模块液冷、交换机液冷、inner manifold等。",
+          "reason": "文中明确指出其受益于液冷放量和相关需求增长。",
+          "confidence": 0.93,
+          "model": "gpt-5.5",
+          "prompt_version": "a-share-topic-stock-extraction-v2"
+        },
+        {
+          "group_id": "51111112855254",
+          "topic_id": "45544825151588248",
+          "topic_date": "2026-05-15",
+          "stock_name": "高澜股份",
+          "stock_code": "",
+          "market": "",
+          "concepts": [
+            "液冷",
+            "国产算力",
+            "海外ASIC/GPU"
+          ],
+          "excerpt": "液冷：受益于国产算力和海外ASIC/GPU需求，液冷放量在即（Rubin 9月、谷歌Q3出货）。选股注重核心卡位能力（英维克、领益智造、申菱环境、远东、高澜、德邦科技等），边际增量还包括光模块液冷、交换机液冷、inner manifold等。",
+          "reason": "文中将其列为液冷受益标的之一。",
+          "confidence": 0.9,
+          "model": "gpt-5.5",
+          "prompt_version": "a-share-topic-stock-extraction-v2"
+        },
+        {
+          "group_id": "51111112855254",
+          "topic_id": "45544825151588248",
+          "topic_date": "2026-05-15",
+          "stock_name": "德邦科技",
+          "stock_code": "",
+          "market": "",
+          "concepts": [
+            "液冷",
+            "国产算力",
+            "海外ASIC/GPU"
+          ],
+          "excerpt": "液冷：受益于国产算力和海外ASIC/GPU需求，液冷放量在即（Rubin 9月、谷歌Q3出货）。选股注重核心卡位能力（英维克、领益智造、申菱环境、远东、高澜、德邦科技等），边际增量还包括光模块液冷、交换机液冷、inner manifold等。",
+          "reason": "文中将其列为液冷受益标的之一。",
+          "confidence": 0.9,
+          "model": "gpt-5.5",
+          "prompt_version": "a-share-topic-stock-extraction-v2"
+        },
+        {
+          "group_id": "51111112855254",
+          "topic_id": "45544825151588248",
+          "topic_date": "2026-05-15",
+          "stock_name": "日联科技",
+          "stock_code": "",
+          "market": "",
+          "concepts": [
+            "半导体检测",
+            "X射线检测",
+            "老化测试",
+            "失效分析"
+          ],
+          "excerpt": "日联科技：X射线检测龙头，通过并购SSTI（失效分析）和飞籁（老化测试龙头）完善布局，主业稳健增长，子公司明后年贡献利润，保守测算市值翻倍空间（400-500亿以上），优先推荐。",
+          "reason": "文中直接写明“优先推荐”，且预期市值翻倍空间，属于明确正向推荐。",
+          "confidence": 0.97,
+          "model": "gpt-5.5",
+          "prompt_version": "a-share-topic-stock-extraction-v2"
+        }
+      ]
+    },
+    {
+      "kind": "short_skip",
+      "topic_id": "22255844582581111",
+      "title": "「图片」",
+      "day": "2026-05-16",
+      "text_len": 4,
+      "text_preview": "「图片」",
+      "detected_hits_for_sampling": [],
+      "succeeded": true,
+      "extractions_count": 0,
+      "extractions": []
+    }
+  ]
+}

@@ -269,14 +269,34 @@ class StockTopicAnalysisServiceHelperTests(unittest.TestCase):
             extract_mode="snippet",
         )
 
-        self.assertIn("INSERT INTO stock_topic_processed_states", conn.executemany.call_args.args[0])
+        state_calls = [
+            call.args
+            for call in conn.execute.call_args_list
+            if "INSERT INTO stock_topic_processed_states" in call.args[0]
+        ]
         self.assertEqual(
             [
-                ("51111112855254", "宁德时代", "102", "analyzed", "snippet", "test-model", ""),
+                (
+                    """
+            INSERT INTO stock_topic_processed_states (
+                group_id, stock_name, topic_id, status, extract_mode, model,
+                error, processed_at, updated_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+            ON CONFLICT(group_id, stock_name, topic_id) DO UPDATE SET
+                status = excluded.status,
+                extract_mode = excluded.extract_mode,
+                model = excluded.model,
+                error = excluded.error,
+                processed_at = excluded.processed_at,
+                updated_at = CURRENT_TIMESTAMP
+            """,
+                    ("51111112855254", "宁德时代", "102", "analyzed", "snippet", "test-model", ""),
+                )
             ],
-            conn.executemany.call_args.args[1],
+            state_calls,
         )
-        self.assertIn("INSERT INTO stock_topic_analyses", conn.execute.call_args.args[0])
+        self.assertIn("INSERT INTO stock_topic_analyses", conn.execute.call_args_list[-1].args[0])
         conn.commit.assert_called_once()
 
     @unittest.skipUnless(HAS_SERVICE_DEPS, "stock topic analysis service dependencies are not installed")
@@ -681,9 +701,10 @@ class StockTopicAnalysisServiceHelperTests(unittest.TestCase):
         build_payload.assert_not_called()
         call_ai.assert_not_called()
         conn.commit.assert_called_once()
-        self.assertEqual(
-            [("51111112855254", "宁德时代", "103", "skipped", "", "test-model", "")],
-            conn.executemany.call_args.args[1],
+        self.assertTrue(any("INSERT INTO stock_topic_processed_states" in call.args[0] for call in conn.execute.call_args_list))
+        self.assertIn(
+            ("51111112855254", "宁德时代", "103", "skipped", "", "test-model", ""),
+            [call.args[1] for call in conn.execute.call_args_list if "INSERT INTO stock_topic_processed_states" in call.args[0]],
         )
 
     @unittest.skipUnless(HAS_SERVICE_DEPS, "stock topic analysis service dependencies are not installed")
@@ -740,8 +761,12 @@ class StockTopicAnalysisServiceHelperTests(unittest.TestCase):
         self.assertNotIn("analyzed_topic_ids", call_ai.call_args.args[0])
         self.assertIn("old summary", call_ai.call_args.args[0])
         self.assertEqual(2, conn.commit.call_count)
-        first_state_write = conn.executemany.call_args_list[0].args[1]
-        self.assertEqual([("51111112855254", "宁德时代", "103", "analyzed", "", "new-model", "")], first_state_write)
+        state_writes = [
+            call.args[1]
+            for call in conn.execute.call_args_list
+            if "INSERT INTO stock_topic_processed_states" in call.args[0]
+        ]
+        self.assertEqual([("51111112855254", "宁德时代", "103", "analyzed", "", "new-model", "")], state_writes)
 
     @unittest.skipUnless(HAS_SERVICE_DEPS, "stock topic analysis service dependencies are not installed")
     def test_analyze_stock_topics_processes_new_topics_in_batches(self):

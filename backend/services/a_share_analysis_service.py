@@ -23,6 +23,7 @@ from backend.services.a_share_analysis_db_storage import (
     get_storage_health,
     load_daily_mentions as load_daily_mentions_from_db,
     load_processed_state as load_processed_state_from_db,
+    reset_a_share_analysis_range as reset_a_share_analysis_range_to_db,
     save_recommendation_pool_checkpoint,
     save_topic_stock_extractions,
     save_daily_mentions as save_daily_mentions_to_db,
@@ -1004,6 +1005,23 @@ def reset_analysis_range(
     resolved_output_path, resolved_state_path = resolve_analysis_paths(output_path, state_path, group_id)
     daily = read_existing_csv(resolved_output_path, group_id=group_id)
     processed_keys = load_state(resolved_state_path, group_id=group_id)
+
+    if should_use_db_storage(group_id):
+        removed = reset_a_share_analysis_range_to_db(start_date, end_date, group_id=group_id)
+        summary = get_analysis_summary(resolved_output_path, resolved_state_path, group_id=group_id)
+        return {
+            "group_id": normalize_group_id(group_id),
+            "start_date": start_date,
+            "end_date": end_date,
+            "removed_days": 0,
+            "removed_rows": removed.get("daily_mentions", 0),
+            "removed_mentions": 0,
+            "removed_state_keys": removed.get("processed_state", 0),
+            "removed_topic_stock_extractions": removed.get("topic_stock_extractions", 0),
+            "removed_stock_topic_processed_states": removed.get("stock_topic_processed_states", 0),
+            "removed_stock_topic_analyses": removed.get("stock_topic_analyses", 0),
+            "summary": summary,
+        }
 
     daily, removed_daily = remove_daily_range(daily, start_date, end_date)
     processed_keys, removed_state_keys = remove_state_range(processed_keys, start_date, end_date)

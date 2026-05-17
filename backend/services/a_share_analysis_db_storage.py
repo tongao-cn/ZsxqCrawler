@@ -242,7 +242,7 @@ def save_topic_stock_extractions(
                     updated_at = excluded.updated_at
                 """,
                 rows,
-                template="(%s, %s, %s::date, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
+                template="(%s, %s, %s::date, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
             )
     return len(rows)
 
@@ -251,7 +251,7 @@ def _build_topic_stock_extraction_rows(
     extractions: Sequence[Dict[str, Any]],
     group_id: Optional[str],
     now: datetime,
-) -> List[Tuple[str, str, str, str, str, str, str, str, float, str, str, datetime]]:
+) -> List[Tuple[str, str, str, str, str, str, str, str, str, float, str, str, datetime]]:
     normalized_group_id = _normalize_group_id(group_id)
     rows: List[Tuple[str, str, str, str, str, str, str, str, str, float, str, str, datetime]] = []
     for item in extractions:
@@ -344,7 +344,7 @@ def save_recommendation_pool_checkpoint(
                         updated_at = excluded.updated_at
                     """,
                     extraction_rows,
-                    template="(%s, %s, %s::date, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
+                    template="(%s, %s, %s::date, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
                 )
             if mention_rows:
                 execute_values(
@@ -502,6 +502,67 @@ def save_processed_state(
                     rows,
                     template="(%s, %s, %s, %s::date, %s)",
                 )
+
+
+def reset_a_share_analysis_range(
+    start_date: str,
+    end_date: str,
+    env_path: Path = DEFAULT_KNOW_ACTION_ENV_PATH,
+    group_id: Optional[str] = None,
+) -> Dict[str, int]:
+    normalized_group_id = _normalize_group_id(group_id)
+    with get_connection(env_path) as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                f"""
+                SELECT DISTINCT topic_id
+                FROM {_core_table_ref(TOPIC_STOCK_EXTRACTIONS_TABLE)}
+                WHERE group_id = %s
+                  AND topic_date BETWEEN %s::date AND %s::date
+                """,
+                (normalized_group_id, start_date, end_date),
+            )
+            topic_ids = [str(row[0]).strip() for row in cur.fetchall() if row and str(row[0]).strip()]
+            cur.execute(
+                f"DELETE FROM {_core_table_ref(DAILY_MENTIONS_TABLE)} WHERE group_id = %s AND mention_date BETWEEN %s::date AND %s::date",
+                (normalized_group_id, start_date, end_date),
+            )
+            daily_deleted = int(getattr(cur, "rowcount", 0) or 0)
+            cur.execute(
+                f"DELETE FROM {_core_table_ref(PROCESSED_STATE_TABLE)} WHERE group_id = %s AND day BETWEEN %s::date AND %s::date",
+                (normalized_group_id, start_date, end_date),
+            )
+            processed_deleted = int(getattr(cur, "rowcount", 0) or 0)
+            cur.execute(
+                f"DELETE FROM {_core_table_ref(TOPIC_STOCK_EXTRACTIONS_TABLE)} WHERE group_id = %s AND topic_date BETWEEN %s::date AND %s::date",
+                (normalized_group_id, start_date, end_date),
+            )
+            extractions_deleted = int(getattr(cur, "rowcount", 0) or 0)
+            stock_states_deleted = 0
+            if topic_ids:
+                cur.execute(
+                    f"DELETE FROM {_core_table_ref('stock_topic_processed_states')} WHERE group_id = %s AND topic_id = ANY(%s::text[])",
+                    (normalized_group_id, topic_ids),
+                )
+                stock_states_deleted = int(getattr(cur, "rowcount", 0) or 0)
+            stock_analyses_deleted = 0
+            if topic_ids:
+                cur.execute(
+                    f"""
+                    DELETE FROM {_core_table_ref('stock_topic_analyses')}
+                    WHERE group_id = %s
+                      AND COALESCE(NULLIF(topic_ids_json, ''), '[]')::jsonb ?| %s::text[]
+                    """,
+                    (normalized_group_id, topic_ids),
+                )
+                stock_analyses_deleted = int(getattr(cur, "rowcount", 0) or 0)
+    return {
+        "daily_mentions": daily_deleted,
+        "processed_state": processed_deleted,
+        "topic_stock_extractions": extractions_deleted,
+        "stock_topic_processed_states": stock_states_deleted,
+        "stock_topic_analyses": stock_analyses_deleted,
+    }
 
 
 def load_stock_basic_records(env_path: Path = DEFAULT_KNOW_ACTION_ENV_PATH) -> List[Dict[str, str]]:
