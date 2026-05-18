@@ -1,4 +1,6 @@
 import unittest
+import tempfile
+from unittest.mock import patch
 
 from backend.crawlers.zsxq_file_downloader import ZSXQFileDownloader
 
@@ -26,6 +28,34 @@ class FailingImportFileDb:
     def get_database_stats(self):
         self.stats_calls += 1
         return {"files": 0}
+
+
+class FakeDownloadFileDb:
+    def __init__(self):
+        self.status_updates = []
+
+    def update_file_download_status(self, file_id, status, local_path=None):
+        self.status_updates.append((file_id, status, local_path))
+
+
+class FakeDownloadResponse:
+    def __init__(self, status_code, chunks=b""):
+        self.status_code = status_code
+        self._chunks = chunks
+        self.headers = {"content-length": str(len(chunks))} if chunks else {}
+
+    def iter_content(self, chunk_size=8192):
+        yield self._chunks
+
+
+class FakeDownloadSession:
+    def __init__(self, responses):
+        self.responses = list(responses)
+        self.get_calls = []
+
+    def get(self, url, timeout=None, stream=False):
+        self.get_calls.append((url, timeout, stream))
+        return self.responses.pop(0)
 
 
 class FileDownloaderPaginationTests(unittest.TestCase):
@@ -68,6 +98,57 @@ class FileDownloaderPaginationTests(unittest.TestCase):
         self.assertEqual(1, len(downloader.fetch_calls))
         self.assertEqual(1, downloader.file_db.import_calls)
         self.assertEqual(0, stats["files"])
+
+
+class FileDownloaderDownloadTests(unittest.TestCase):
+    def _downloader_for_download(self, temp_dir, session):
+        downloader = object.__new__(ZSXQFileDownloader)
+        downloader.download_dir = temp_dir
+        downloader.file_db = FakeDownloadFileDb()
+        downloader.session = session
+        downloader.logs = []
+        downloader.log = downloader.logs.append
+        downloader.check_stop = lambda: False
+        downloader.get_download_url = lambda file_id: f"https://download.test/{file_id}"
+        downloader.download_count = 0
+        downloader.current_batch_count = 0
+        downloader.files_per_batch = 10
+        downloader.download_interval = 0
+        downloader.long_sleep_interval = 0
+        return downloader
+
+    def test_download_file_accepts_raw_file_id_payload(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            session = FakeDownloadSession([FakeDownloadResponse(200, b"memo")])
+            downloader = self._downloader_for_download(temp_dir, session)
+
+            result = ZSXQFileDownloader.download_file(
+                downloader,
+                {"file": {"file_id": 101, "name": "memo.pdf", "size": 4, "download_count": 0}},
+            )
+
+            self.assertTrue(result)
+            self.assertTrue(session.get_calls)
+            self.assertEqual("https://download.test/101", session.get_calls[0][0])
+            self.assertEqual((101, "completed"), downloader.file_db.status_updates[-1][:2])
+
+    def test_download_file_retries_body_download_once(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            session = FakeDownloadSession([
+                FakeDownloadResponse(500),
+                FakeDownloadResponse(200, b"memo"),
+            ])
+            downloader = self._downloader_for_download(temp_dir, session)
+
+            with patch("backend.crawlers.zsxq_file_downloader.time.sleep"):
+                result = ZSXQFileDownloader.download_file(
+                    downloader,
+                    {"file": {"id": 101, "name": "memo.pdf", "size": 4, "download_count": 0}},
+                )
+
+            self.assertTrue(result)
+            self.assertEqual(2, len(session.get_calls))
+            self.assertEqual((101, "completed"), downloader.file_db.status_updates[-1][:2])
 
 
 if __name__ == "__main__":

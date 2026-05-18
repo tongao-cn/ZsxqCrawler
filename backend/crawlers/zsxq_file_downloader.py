@@ -583,7 +583,7 @@ class ZSXQFileDownloader:
     def download_file(self, file_info: Dict[str, Any]) -> bool:
         """下载单个文件"""
         file_data = file_info.get('file', {})
-        file_id = file_data.get('id')
+        file_id = file_data.get('id') or file_data.get('file_id')
         file_name = file_data.get('name', 'Unknown')
         file_size = file_data.get('size', 0)
         download_count = file_data.get('download_count', 0)
@@ -592,6 +592,9 @@ class ZSXQFileDownloader:
         self.log(f"   📄 名称: {file_name}")
         self.log(f"   📊 大小: {file_size:,} bytes ({file_size/1024/1024:.2f} MB)")
         self.log(f"   📈 下载次数: {download_count}")
+        if not file_id:
+            self.log("   ❌ 文件缺少 file_id，无法下载")
+            return False
 
         # 检查是否需要停止
         if self.check_stop():
@@ -621,82 +624,92 @@ class ZSXQFileDownloader:
             self.log(f"   ❌ 无法获取下载链接")
             return False
 
-        try:
-            # 下载文件
-            self.log(f"   🚀 开始下载...")
-            response = self.session.get(download_url, timeout=300, stream=True)
+        download_retries = 3
+        last_error = None
 
-            # 如果文件名是默认的，尝试从响应头获取真实文件名
-            if file_name.startswith('file_') and 'content-disposition' in response.headers:
-                content_disposition = response.headers['content-disposition']
-                if 'filename=' in content_disposition:
-                    # 提取文件名
-                    import re
-                    filename_match = re.search(r'filename[*]?=([^;]+)', content_disposition)
-                    if filename_match:
-                        real_filename = filename_match.group(1).strip('"\'')
-                        if real_filename:
-                            file_name = real_filename
-                            safe_filename = "".join(c for c in file_name if c.isalnum() or c in '._-（）()[]{}')
-                            if not safe_filename:
-                                safe_filename = f"file_{file_id}"
-                            file_path = os.path.join(self.download_dir, safe_filename)
-                            self.log(f"   📝 从响应头获取到真实文件名: {file_name}")
-            
-            if response.status_code == 200:
-                total_size = int(response.headers.get('content-length', 0))
-                downloaded_size = 0
-                
-                with open(file_path, 'wb') as f:
-                    for chunk in response.iter_content(chunk_size=8192):
-                        if chunk:
-                            f.write(chunk)
-                            downloaded_size += len(chunk)
-                            
-                            # 显示进度（每10MB显示一次）
-                            if downloaded_size % (10 * 1024 * 1024) == 0 or downloaded_size == total_size:
-                                if total_size > 0:
-                                    progress = (downloaded_size / total_size) * 100
-                                    self.log(f"   📊 进度: {progress:.1f}% ({downloaded_size:,}/{total_size:,} bytes)")
+        for attempt in range(download_retries):
+            try:
+                if attempt > 0:
+                    retry_delay = 2 * attempt
+                    self.log(f"   🔄 文件下载重试 {attempt + 1}/{download_retries}，等待 {retry_delay} 秒...")
+                    time.sleep(retry_delay)
 
-                            # 检查是否需要停止
-                            if self.check_stop():
-                                self.log("🛑 下载过程中被停止")
-                                self.file_db.update_file_download_status(file_id, 'failed')
-                                return False
+                self.log(f"   🚀 开始下载...")
+                response = self.session.get(download_url, timeout=300, stream=True)
 
-                            if downloaded_size % (10 * 1024 * 1024) != 0 and downloaded_size != total_size:
-                                if total_size == 0:
-                                    self.log(f"   📊 已下载: {downloaded_size:,} bytes")
-                
-                # 验证文件大小
-                final_size = os.path.getsize(file_path)
-                if file_size > 0 and final_size != file_size:
-                    self.log(f"   ⚠️ 文件大小不匹配: 预期{file_size:,}, 实际{final_size:,}")
+                # 如果文件名是默认的，尝试从响应头获取真实文件名
+                if file_name.startswith('file_') and 'content-disposition' in response.headers:
+                    content_disposition = response.headers['content-disposition']
+                    if 'filename=' in content_disposition:
+                        # 提取文件名
+                        import re
+                        filename_match = re.search(r'filename[*]?=([^;]+)', content_disposition)
+                        if filename_match:
+                            real_filename = filename_match.group(1).strip('"\'')
+                            if real_filename:
+                                file_name = real_filename
+                                safe_filename = "".join(c for c in file_name if c.isalnum() or c in '._-（）()[]{}')
+                                if not safe_filename:
+                                    safe_filename = f"file_{file_id}"
+                                file_path = os.path.join(self.download_dir, safe_filename)
+                                self.log(f"   📝 从响应头获取到真实文件名: {file_name}")
 
-                self.log(f"   ✅ 下载完成: {safe_filename}")
-                self.log(f"   💾 保存路径: {file_path}")
-                self.file_db.update_file_download_status(file_id, 'completed', file_path)
+                if response.status_code == 200:
+                    total_size = int(response.headers.get('content-length', 0))
+                    downloaded_size = 0
 
-                self.download_count += 1
-                self.current_batch_count += 1
+                    with open(file_path, 'wb') as f:
+                        for chunk in response.iter_content(chunk_size=8192):
+                            if chunk:
+                                f.write(chunk)
+                                downloaded_size += len(chunk)
 
-                # 下载间隔控制
-                self._apply_download_intervals()
+                                # 显示进度（每10MB显示一次）
+                                if downloaded_size % (10 * 1024 * 1024) == 0 or downloaded_size == total_size:
+                                    if total_size > 0:
+                                        progress = (downloaded_size / total_size) * 100
+                                        self.log(f"   📊 进度: {progress:.1f}% ({downloaded_size:,}/{total_size:,} bytes)")
 
-                return True
-            else:
-                self.log(f"   ❌ 下载失败: HTTP {response.status_code}")
-                self.file_db.update_file_download_status(file_id, 'failed')
-                return False
+                                # 检查是否需要停止
+                                if self.check_stop():
+                                    self.log("🛑 下载过程中被停止")
+                                    self.file_db.update_file_download_status(file_id, 'failed')
+                                    return False
 
-        except Exception as e:
-            self.log(f"   ❌ 下载异常: {e}")
-            if os.path.exists(file_path):
-                os.remove(file_path)
-                self.log(f"   🗑️ 删除不完整文件")
-            self.file_db.update_file_download_status(file_id, 'failed')
-            return False
+                                if downloaded_size % (10 * 1024 * 1024) != 0 and downloaded_size != total_size:
+                                    if total_size == 0:
+                                        self.log(f"   📊 已下载: {downloaded_size:,} bytes")
+
+                    # 验证文件大小
+                    final_size = os.path.getsize(file_path)
+                    if file_size > 0 and final_size != file_size:
+                        self.log(f"   ⚠️ 文件大小不匹配: 预期{file_size:,}, 实际{final_size:,}")
+
+                    self.log(f"   ✅ 下载完成: {safe_filename}")
+                    self.log(f"   💾 保存路径: {file_path}")
+                    self.file_db.update_file_download_status(file_id, 'completed', file_path)
+
+                    self.download_count += 1
+                    self.current_batch_count += 1
+
+                    # 下载间隔控制
+                    self._apply_download_intervals()
+
+                    return True
+
+                last_error = f"HTTP {response.status_code}"
+                self.log(f"   ❌ 下载失败: {last_error}")
+
+            except Exception as e:
+                last_error = str(e)
+                self.log(f"   ❌ 下载异常: {e}")
+                if os.path.exists(file_path):
+                    os.remove(file_path)
+                    self.log(f"   🗑️ 删除不完整文件")
+
+        self.log(f"   🚫 文件下载重试{download_retries}次仍失败: {last_error}")
+        self.file_db.update_file_download_status(file_id, 'failed')
+        return False
 
     def _apply_download_intervals(self):
         """应用下载间隔控制"""
