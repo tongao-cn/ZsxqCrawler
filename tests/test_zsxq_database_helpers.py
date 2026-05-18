@@ -5,6 +5,7 @@ from backend.storage.zsxq_database import (
     _format_tag_row,
     _format_tag_topic_row,
     _group_id_param,
+    _nullable_group_id_param,
     _replace_file_topic_relation,
     _topic_file_payload_from_row,
     _upsert_core_file,
@@ -175,6 +176,12 @@ class ZSXQDatabaseHelperTests(unittest.TestCase):
         self.assertEqual(155, _group_id_param("155"))
         self.assertEqual("group-x", _group_id_param("group-x"))
         self.assertEqual("", _group_id_param(None))
+
+    def test_nullable_group_id_param_uses_none_for_unscoped_queries(self):
+        self.assertIsNone(_nullable_group_id_param(None))
+        self.assertIsNone(_nullable_group_id_param(""))
+        self.assertEqual(155, _nullable_group_id_param("155"))
+        self.assertEqual("group-x", _nullable_group_id_param("group-x"))
 
     def test_upsert_comment_writes_group_id_from_runtime_scope(self):
         from backend.storage.zsxq_database import ZSXQDatabase

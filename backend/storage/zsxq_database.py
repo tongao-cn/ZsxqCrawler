@@ -448,7 +448,7 @@ class ZSXQDatabase:
                 WHERE (? IS NULL OR group_id = ?)
                   AND create_time IS NOT NULL AND create_time != ''
                 ORDER BY create_time DESC LIMIT 1
-            ''', (_group_id_param(self.group_id), _group_id_param(self.group_id)))
+            ''', (_nullable_group_id_param(self.group_id), _nullable_group_id_param(self.group_id)))
             newest_result = self.cursor.fetchone()
             newest_time = newest_result[0] if newest_result else None
             
@@ -458,14 +458,14 @@ class ZSXQDatabase:
                 WHERE (? IS NULL OR group_id = ?)
                   AND create_time IS NOT NULL AND create_time != ''
                 ORDER BY create_time ASC LIMIT 1
-            ''', (_group_id_param(self.group_id), _group_id_param(self.group_id)))
+            ''', (_nullable_group_id_param(self.group_id), _nullable_group_id_param(self.group_id)))
             oldest_result = self.cursor.fetchone()
             oldest_time = oldest_result[0] if oldest_result else None
             
             # 获取话题总数
             self.cursor.execute(
                 'SELECT COUNT(*) FROM topics WHERE (? IS NULL OR group_id = ?)',
-                (_group_id_param(self.group_id), _group_id_param(self.group_id)),
+                (_nullable_group_id_param(self.group_id), _nullable_group_id_param(self.group_id)),
             )
             total_topics = self.cursor.fetchone()[0]
             
