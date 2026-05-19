@@ -410,18 +410,15 @@ def _upsert_stock_topic_processed_states(
 
 
 def _build_topic_search_sql(*, recent_cutoff: str | None = None) -> str:
-    cutoff_clause = "AND t.create_time >= ?" if recent_cutoff else ""
+    cutoff_clause = "AND e.topic_date >= ?" if recent_cutoff else ""
     return """
         SELECT
-            t.topic_id,
-            t.title,
-            t.create_time,
-            t.likes_count,
-            t.comments_count,
-            t.reading_count,
-            tk.text AS talk_text,
-            q.text AS question_text,
-            a.text AS answer_text,
+            e.topic_id,
+            COALESCE(t.title, '') AS title,
+            COALESCE(t.create_time, e.topic_date::text) AS create_time,
+            COALESCE(t.likes_count, 0) AS likes_count,
+            COALESCE(t.comments_count, 0) AS comments_count,
+            COALESCE(t.reading_count, 0) AS reading_count,
             e.stock_name,
             e.stock_code,
             e.market,
@@ -430,19 +427,15 @@ def _build_topic_search_sql(*, recent_cutoff: str | None = None) -> str:
             e.reason,
             e.confidence,
             e.topic_date::text AS topic_date
-        FROM topics t
-        LEFT JOIN talks tk ON t.topic_id = tk.topic_id
-        LEFT JOIN questions q ON t.topic_id = q.topic_id
-        LEFT JOIN answers a ON t.topic_id = a.topic_id
-        LEFT JOIN zsxq_a_share_topic_stock_extractions e
-          ON e.group_id = t.group_id::text
-         AND e.topic_id = t.topic_id::text
-         AND e.stock_name ILIKE ?
-        WHERE t.group_id::text = ?
-          AND e.stock_name IS NOT NULL
+        FROM zsxq_a_share_topic_stock_extractions e
+        LEFT JOIN topics t
+          ON t.group_id::text = e.group_id
+         AND t.topic_id::text = e.topic_id
+        WHERE e.stock_name ILIKE ?
+          AND e.group_id = ?
           AND COALESCE(e.excerpt, '') <> ''
           {cutoff_clause}
-        ORDER BY t.create_time DESC
+        ORDER BY e.topic_date DESC, e.topic_id DESC
         LIMIT ?
     """.format(cutoff_clause=cutoff_clause)
 
@@ -794,63 +787,25 @@ def search_stock_question_topics(group_id: str, question: str, *, limit: int = M
 
 
 def _build_analysis_topic_payload(search_result: Dict[str, Any]) -> List[Dict[str, Any]]:
-    topic_ids = [str(topic.get("topic_id") or "") for topic in search_result.get("topics", [])]
-    if not topic_ids:
-        return []
-
-    conn = connect()
-    try:
-        placeholders = ",".join("?" for _ in topic_ids)
-        rows = conn.execute(
-            f"""
-            SELECT
-                t.topic_id,
-                t.title,
-                t.create_time,
-                t.likes_count,
-                t.comments_count,
-                t.reading_count,
-                tk.text AS talk_text,
-                q.text AS question_text,
-                a.text AS answer_text,
-                e.excerpt
-            FROM topics t
-            LEFT JOIN talks tk ON t.topic_id = tk.topic_id
-            LEFT JOIN questions q ON t.topic_id = q.topic_id
-            LEFT JOIN answers a ON t.topic_id = a.topic_id
-            LEFT JOIN zsxq_a_share_topic_stock_extractions e
-              ON e.group_id = t.group_id::text
-             AND e.topic_id = t.topic_id::text
-             AND e.stock_name ILIKE ?
-            WHERE t.group_id::text = ?
-              AND t.topic_id::text IN ({placeholders})
-            ORDER BY t.create_time DESC
-            """,
-            [f"%{_normalize_company_name(search_result.get('stock_name'))}%", search_result["group_id"], *topic_ids],
-        ).fetchall()
-    finally:
-        conn.close()
-
-    topic_map = {str(topic.get("topic_id")): topic for topic in search_result.get("topics", [])}
     payload: List[Dict[str, Any]] = []
-    for row in rows:
-        topic_id = str(row["topic_id"])
+    for topic in search_result.get("topics", []):
+        topic_id = str(topic.get("topic_id") or "")
         excerpt = _require_topic_excerpt(
-            topic_map.get(topic_id, {}).get("excerpt") or row["excerpt"],
+            topic.get("excerpt"),
             topic_id=topic_id,
             stock_name=search_result.get("stock_name"),
         )
         payload.append(
             {
-                "topic_id": str(row["topic_id"]),
-                "title": row["title"] or "",
-                "create_time": row["create_time"] or "",
+                "topic_id": topic_id,
+                "title": topic.get("title") or "",
+                "create_time": topic.get("create_time") or "",
                 "metrics": {
-                    "likes_count": int(row["likes_count"] or 0),
-                    "comments_count": int(row["comments_count"] or 0),
-                    "reading_count": int(row["reading_count"] or 0),
+                    "likes_count": int(topic.get("likes_count") or 0),
+                    "comments_count": int(topic.get("comments_count") or 0),
+                    "reading_count": int(topic.get("reading_count") or 0),
                 },
-                "concepts": list(topic_map.get(topic_id, {}).get("concepts") or []),
+                "concepts": list(topic.get("concepts") or []),
                 "excerpt": excerpt,
                 "content": _clip(excerpt, MAX_TOPIC_TEXT_CHARS),
             }

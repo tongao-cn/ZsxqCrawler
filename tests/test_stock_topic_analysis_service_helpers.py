@@ -163,9 +163,6 @@ class StockTopicAnalysisServiceHelperTests(unittest.TestCase):
                 "likes_count": 1,
                 "comments_count": 2,
                 "reading_count": 3,
-                "talk_text": "宁德时代储能需求增长。",
-                "question_text": "",
-                "answer_text": "",
                 "stock_name": "宁德时代",
                 "stock_code": "",
                 "market": "",
@@ -201,9 +198,6 @@ class StockTopicAnalysisServiceHelperTests(unittest.TestCase):
                 "likes_count": 1,
                 "comments_count": 2,
                 "reading_count": 3,
-                "talk_text": "很长的原始内容里有很多公司。",
-                "question_text": "",
-                "answer_text": "",
                 "stock_name": "宁德时代",
                 "stock_code": "300750",
                 "market": "SZ",
@@ -504,38 +498,31 @@ class StockTopicAnalysisServiceHelperTests(unittest.TestCase):
                 get_latest_stock_topic_analysis("51111112855254", "宁德时代")
 
     @unittest.skipUnless(HAS_SERVICE_DEPS, "stock topic analysis service dependencies are not installed")
-    def test_build_analysis_topic_payload_prefers_stored_excerpt(self):
+    def test_build_analysis_topic_payload_uses_search_result_excerpt(self):
         from backend.services.stock_topic_analysis_service import _build_analysis_topic_payload
 
         search_result = {
             "group_id": "51111112855254",
             "stock_name": "宁德时代",
-            "topics": [{"topic_id": "101", "concepts": ["储能"]}],
+            "topics": [
+                {
+                    "topic_id": "101",
+                    "title": "topic 101",
+                    "create_time": "2026-05-10T09:00:00",
+                    "likes_count": 1,
+                    "comments_count": 2,
+                    "reading_count": 3,
+                    "concepts": ["储能"],
+                    "excerpt": "宁德时代储能订单持续增长。",
+                }
+            ],
         }
-        cursor = Mock()
-        cursor.fetchall.return_value = [
-            {
-                "topic_id": "101",
-                "title": "topic 101",
-                "create_time": "2026-05-10T09:00:00",
-                "likes_count": 1,
-                "comments_count": 2,
-                "reading_count": 3,
-                "talk_text": "完整原文",
-                "question_text": "",
-                "answer_text": "",
-                "excerpt": "宁德时代储能订单持续增长。",
-            }
-        ]
-        conn = Mock()
-        conn.execute.return_value = cursor
-
-        with patch("backend.services.stock_topic_analysis_service.connect", return_value=conn):
+        with patch("backend.services.stock_topic_analysis_service.connect") as connect:
             payload = _build_analysis_topic_payload(search_result)
 
         self.assertEqual("宁德时代储能订单持续增长。", payload[0]["excerpt"])
         self.assertEqual("宁德时代储能订单持续增长。", payload[0]["content"])
-        self.assertIn("zsxq_a_share_topic_stock_extractions", conn.execute.call_args.args[0])
+        connect.assert_not_called()
 
     @unittest.skipUnless(HAS_SERVICE_DEPS, "stock topic analysis service dependencies are not installed")
     def test_get_latest_stock_topic_analyses_returns_missing_rows(self):

@@ -2,7 +2,7 @@
 
 ## Goal
 
-Add a group-page tab where the user can enter one or more stock names, review matched topics, concepts, recommendation count, and trigger AI summaries based only on the matched topic content.
+Add a group-page tab where the user can enter one or more stock names, review saved report status, recommendation counts, and trigger AI summaries based on recommendation-pool excerpts.
 
 Add a sibling A-share Q&A tab where the user can enter a free-form question, let AI extract topic-search keywords, search matched topics, and trigger an AI summary based only on matched topic content.
 
@@ -66,6 +66,7 @@ Add a sibling A-share Q&A tab where the user can enter a free-form question, let
 - Stock analysis now extracts or trims current-stock content from candidate topics before AI analysis, and records per-topic processed state in `stock_topic_processed_states` with statuses such as `analyzed`, `skipped`, and `failed`.
 - The frontend now distinguishes saved-query, initialization, incremental-update, and up-to-date states with new-topic counts.
 - Recommendation-pool topic extraction now stores a per-stock `excerpt`; individual stock analysis uses this stored evidence excerpt for search previews and AI report payloads, and reports an error when a matched topic has no excerpt.
+- Stock analysis now treats recommendation-pool excerpts as the primary search and analysis source. The frontend focuses on report/status/counts instead of exposing topic details, while the backend keeps topic IDs for counting and incremental processed-state tracking.
 
 ## Changed Files
 
@@ -112,3 +113,6 @@ Add a sibling A-share Q&A tab where the user can enter a free-form question, let
 - Incremental stock-analysis screening pass: `cd frontend; npx tsc --noEmit --pretty false`: passed.
 - Recommendation-pool excerpt integration pass: `python -m unittest tests.test_stock_topic_analysis_service_helpers tests.test_a_share_analysis_service_helpers tests.test_a_share_analysis_db_storage_helpers tests.test_postgres_core_schema`: passed.
 - Recommendation-pool excerpt integration pass: `python -m py_compile backend/services/stock_topic_analysis_service.py backend/services/a_share_analysis_service.py backend/services/a_share_analysis_db_storage.py backend/storage/postgres_core_schema.py`: passed.
+- Excerpt-first stock analysis pass: `python -m unittest tests.test_stock_topic_analysis_service_helpers`: passed.
+- Excerpt-first stock analysis pass: `python -m py_compile backend\services\stock_topic_analysis_service.py`: passed.
+- Excerpt-first stock analysis pass: `cd frontend; npx tsc --noEmit --pretty false`: passed.

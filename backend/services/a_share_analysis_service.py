@@ -637,7 +637,7 @@ def call_openai_extract_topic_stocks(
     max_retries: int = DEFAULT_OPENAI_MAX_RETRIES,
     item_context: Optional[str] = None,
     log_callback: LogCallback = None,
-    timeout: int = 120,
+    timeout: int = 200,
 ) -> List[Dict[str, Any]]:
     if not api_key:
         log_warning("openai-compatible api key missing")
@@ -730,7 +730,7 @@ def call_openai_extract_companies(
     max_retries: int = DEFAULT_OPENAI_MAX_RETRIES,
     item_context: Optional[str] = None,
     log_callback: LogCallback = None,
-    timeout: int = 120,
+    timeout: int = 200,
 ) -> List[str]:
     return [
         stock["stock_name"]

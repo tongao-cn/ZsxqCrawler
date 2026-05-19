@@ -128,7 +128,7 @@ function mergeSearchAndLatestResult(
   latestResult: StockTopicAnalysisResponse | null,
 ): StockTopicAnalysisResponse {
   const latestTopicIds = new Set(
-    (latestResult?.processed_topic_ids || latestResult?.analyzed_topic_ids || latestResult?.topics.map((topic) => topic.topic_id) || []).map(String),
+    (latestResult?.processed_topic_ids || latestResult?.analyzed_topic_ids || []).map(String),
   );
   const newTopicCount = searchResult.topics.filter((topic) => !latestTopicIds.has(String(topic.topic_id))).length;
   if (!latestResult || latestResult.status === 'missing') {
