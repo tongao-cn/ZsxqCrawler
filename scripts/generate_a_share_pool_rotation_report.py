@@ -14,6 +14,7 @@ DEFAULT_CANDIDATES = (
     ("rank_bucket", "rank21_40", 30, "均衡默认: rank21-40 / 30日"),
     ("rank_bucket", "rank21_30", 22, "中等换手: rank21-30 / 22日"),
     ("rank_bucket", "rank56_60", 29, "高收益高换手: rank56-60 / 29日"),
+    ("rank_bucket", "rank56_60", 39, "扩展观察: rank56-60 / 39日"),
     ("topn", "top50", 26, "TopN保守: Top50 / 26日"),
 )
 
@@ -116,7 +117,7 @@ def _render_heatmap(
     high: float,
 ) -> str:
     lookup = {(row["bucket"], row["window_days"]): row for row in rows}
-    windows = list(range(1, 31))
+    windows = sorted({row["window_days"] for row in rows}) or list(range(1, 31))
     head = "".join(f"<th>{day}</th>" for day in windows)
     body: list[str] = []
     for bucket in bucket_order:
@@ -341,6 +342,8 @@ def _render_report(summary_path: Path, period_path: Path, output_path: Path, tit
     topn_order = ["top5", "top10", "top20", "top35", "top50", "top100", "all"]
     rank_rows = [row for row in rows if row["family"] == "rank_bucket"]
     topn_rows = [row for row in rows if row["family"] == "topn"]
+    windows = sorted({row["window_days"] for row in rows})
+    window_label = f"{windows[0]}-{windows[-1]}日" if windows else "-"
 
     top_rows = sorted(rows, key=lambda row: row["compound_after_10bps"], reverse=True)[:15]
     low_turnover_rows = sorted(
@@ -526,7 +529,7 @@ def _render_report(summary_path: Path, period_path: Path, output_path: Path, tit
     <div class="summary">
       <div class="metric"><b>{len(rows)}</b><span>参数组合</span></div>
       <div class="metric"><b>{_display_bucket(best_row['bucket'])} / {best_row['window_days']}日</b><span>10bp后收益最高: {_pct(best_row['compound_after_10bps'], 2)}</span></div>
-      <div class="metric"><b>1-30日</b><span>推荐池日数横向对比</span></div>
+      <div class="metric"><b>{html.escape(window_label)}</b><span>推荐池日数横向对比</span></div>
       <div class="metric"><b>10bp</b><span>主图按单边换手成本后收益着色</span></div>
     </div>
 

@@ -70,6 +70,24 @@ Re-run the A-share recommendation-pool rotation backtest after the recommendatio
 python scripts\generate_a_share_pool_rotation_report.py --summary output\a_share_research\51111112855254_pool_rotation_rebuilt_20250801_20260519_20260519_200011_summary.csv --period output\a_share_research\51111112855254_pool_rotation_rebuilt_20250801_20260519_20260519_200011_period.csv --output output\a_share_research\51111112855254_pool_rotation_rebuilt_20250801_20260519_20260519_200011_report.html --title "51111112855254 A股推荐池轮动回测图表报告"
 ```
 
+## Extended Window Check
+
+- Because `rank21_40 / 30日` sat on the original `1..30` upper bound, a focused `1..60` rerun was generated for `rank21_40`, `rank21_30`, `rank56_60`, and `Top50`.
+- Extended artifacts:
+  - `output\a_share_research\51111112855254_pool_rotation_extended_20250801_20260519_20260519_1_60_focused_summary.csv`
+  - `output\a_share_research\51111112855254_pool_rotation_extended_20250801_20260519_20260519_1_60_focused_daily.csv`
+  - `output\a_share_research\51111112855254_pool_rotation_extended_20250801_20260519_20260519_1_60_focused_period.csv`
+  - `output\a_share_research\51111112855254_pool_rotation_extended_20250801_20260519_20260519_1_60_focused_contribution.csv`
+  - `output\a_share_research\51111112855254_pool_rotation_extended_20250801_20260519_20260519_1_60_focused_report.html`
+- Extended run shape: `240` summary rows, `45,600` daily rows, `12,240` period rows, and `2,400` contribution rows; every parameter point has `188` completed trading rows.
+- In the focused extended run, `rank21_40` still peaks at `30日`: after `10bp` `140.9121%`, raw `151.8566%`, average turnover `23.7752%`, max drawdown after `10bp` `-11.0514%`.
+- `rank21_40 / 31日` remains close but lower: after `10bp` `133.9418%`, raw `144.1338%`, average turnover `22.7926%`, max drawdown after `10bp` `-12.7579%`.
+- The high-return `rank56_60` bucket remains strongest around the original region: `rank56_60 / 29日` is the focused extended best point, after `10bp` `221.7891%`, raw `271.7250%`, average turnover `77.2163%`, max drawdown after `10bp` `-23.2725%`.
+- The longer `rank56_60 / 39日` point is still useful as a lower-drawdown neighbor: after `10bp` `209.3565%`, raw `254.6918%`, average turnover `73.2181%`, max drawdown after `10bp` `-14.3947%`.
+- `Top50` does not improve in the longer-window region: the best `31..60日` point is `Top50 / 35日`, after `10bp` `91.7457%`, average turnover `6.9468%`.
+- Overlap note: the focused script reruns from the current DB state and explicitly slices by source rank. Old `1..30` rebuilt CSVs remain the prior baseline, but the new extended CSV is the better artifact for studying `31..60日` behavior and carries `source_rank` in holdings for future audits.
+- Regenerate the focused extended grid with `python scripts\run_a_share_pool_rotation_grid.py --group-id 51111112855254 --start-date 2025-08-01 --end-date 2026-05-19 --windows 1-60 --buckets "rank21_40,rank21_30,rank56_60,top50" --output-prefix output\a_share_research\51111112855254_pool_rotation_extended_20250801_20260519_20260519_1_60_focused`.
+
 ## Findings
 
 - The old `50~80` conclusion is no longer the main conclusion after extending history back to `2025-08-01`.
