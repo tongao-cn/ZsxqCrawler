@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 import json
 import mimetypes
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date, datetime, time, timedelta, timezone
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
@@ -26,6 +27,7 @@ from backend.storage.db_compat import connect
 MAX_TOPIC_CHARS = 5000
 MAX_PROMPT_CHARS = 60000
 REPORT_CHUNK_PROMPT_CHARS = 45000
+MAX_REPORT_CHUNK_WORKERS = 3
 MAX_IMAGES_PER_REPORT = 12
 MAX_IMAGES_PER_TOPIC = 2
 MAX_IMAGE_BYTES = 4 * 1024 * 1024
@@ -584,6 +586,43 @@ def _generate_final_report_from_chunks_with_ai(
     )
 
 
+def _generate_chunk_summaries_concurrently(
+    chunks: List[List[Dict[str, Any]]],
+    report_date: str,
+    *,
+    group_id: str,
+    log_callback: Optional[Callable[[str], None]] = None,
+) -> Tuple[List[str], str, int]:
+    chunk_summaries = [""] * len(chunks)
+    models = [""] * len(chunks)
+    max_workers = min(MAX_REPORT_CHUNK_WORKERS, len(chunks))
+    _log(log_callback, f"⚙️ 并发生成分块摘要，并发度 {max_workers}")
+
+    def run_chunk(index: int, chunk_topics: List[Dict[str, Any]]) -> Tuple[int, str, str]:
+        prompt_payload = _build_prompt_payload_unclipped(group_id, report_date, chunk_topics)
+        chunk_summary, chunk_model = _generate_chunk_summary_with_ai(
+            prompt_payload,
+            report_date,
+            group_id=group_id,
+            chunk_index=index + 1,
+            chunk_count=len(chunks),
+        )
+        return index, chunk_summary, chunk_model
+
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = [executor.submit(run_chunk, index, chunk_topics) for index, chunk_topics in enumerate(chunks)]
+        for future in as_completed(futures):
+            index, chunk_summary, chunk_model = future.result()
+            if not chunk_summary:
+                raise RuntimeError(f"AI 返回分块摘要为空: {index + 1}/{len(chunks)}")
+            chunk_summaries[index] = chunk_summary
+            models[index] = chunk_model
+            _log(log_callback, f"✅ 日报分块摘要完成 {index + 1}/{len(chunks)}，话题 {len(chunks[index])} 个")
+
+    model = next((item for item in reversed(models) if item), "")
+    return chunk_summaries, model, max_workers
+
+
 def _write_report_file(group_id: str, report_date: str, summary_markdown: str) -> str:
     group_dir = Path(get_db_path_manager().get_group_dir(group_id))
     report_dir = group_dir / "daily_reports"
@@ -635,22 +674,12 @@ def _generate_daily_report_summary(
 
     chunks = _split_topics_for_report_chunks(group_id, report_date, topics)
     _log(log_callback, f"🧩 日报输入较长，拆分为 {len(chunks)} 个分块摘要后汇总")
-    chunk_summaries: List[str] = []
-    model = ""
-    for index, chunk_topics in enumerate(chunks, start=1):
-        prompt_payload = _build_prompt_payload_unclipped(group_id, report_date, chunk_topics)
-        _log(log_callback, f"🤖 正在生成日报分块摘要 {index}/{len(chunks)}，话题 {len(chunk_topics)} 个")
-        chunk_summary, chunk_model = _generate_chunk_summary_with_ai(
-            prompt_payload,
-            report_date,
-            group_id=group_id,
-            chunk_index=index,
-            chunk_count=len(chunks),
-        )
-        if not chunk_summary:
-            raise RuntimeError(f"AI 返回分块摘要为空: {index}/{len(chunks)}")
-        chunk_summaries.append(chunk_summary)
-        model = chunk_model or model
+    chunk_summaries, model, chunk_workers = _generate_chunk_summaries_concurrently(
+        chunks,
+        report_date,
+        group_id=group_id,
+        log_callback=log_callback,
+    )
 
     _log(log_callback, "🤖 正在合并分块摘要生成最终日报...")
     summary, final_model = _generate_final_report_from_chunks_with_ai(
@@ -663,6 +692,7 @@ def _generate_daily_report_summary(
         "prompt_chars": len(full_prompt_payload),
         "chunk_count": len(chunks),
         "chunk_topic_counts": [len(chunk) for chunk in chunks],
+        "chunk_workers": chunk_workers,
     }
 
 

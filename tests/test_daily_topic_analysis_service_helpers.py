@@ -138,11 +138,11 @@ class DailyTopicAnalysisServiceHelperTests(unittest.TestCase):
             service,
             "_split_topics_for_report_chunks",
             return_value=[[topics[0]], [topics[1]]],
-        ), patch.object(
-            service,
-            "_generate_chunk_summary_with_ai",
-            side_effect=[("chunk-1", "model-a"), ("chunk-2", "model-a")],
         ) as generate_chunk, patch.object(
+            service,
+            "_generate_chunk_summaries_concurrently",
+            return_value=(["chunk-1", "chunk-2"], "model-a", 2),
+        ) as generate_chunks, patch.object(
             service,
             "_generate_final_report_from_chunks_with_ai",
             return_value=("# final", "model-a"),
@@ -158,8 +158,40 @@ class DailyTopicAnalysisServiceHelperTests(unittest.TestCase):
         self.assertEqual("chunked", meta["generation_mode"])
         self.assertEqual(2, meta["chunk_count"])
         self.assertEqual([1, 1], meta["chunk_topic_counts"])
-        self.assertEqual(2, generate_chunk.call_count)
+        self.assertEqual(2, meta["chunk_workers"])
+        generate_chunk.assert_called_once()
+        generate_chunks.assert_called_once()
         generate_final.assert_called_once_with(["chunk-1", "chunk-2"], "2026-05-07", group_id="group-1")
+
+    @unittest.skipUnless(HAS_DAILY_SERVICE_DEPS, "daily topic analysis service dependencies are not installed")
+    def test_generate_chunk_summaries_concurrently_preserves_chunk_order(self):
+        from backend.services import daily_topic_analysis_service as service
+
+        chunks = [
+            [{"topic_id": "1", "talk_text": "a", "comments": [], "images": []}],
+            [{"topic_id": "2", "talk_text": "b", "comments": [], "images": []}],
+            [{"topic_id": "3", "talk_text": "c", "comments": [], "images": []}],
+        ]
+
+        def fake_generate(_payload, _report_date, *, group_id, chunk_index, chunk_count):
+            self.assertEqual("group-1", group_id)
+            self.assertEqual(3, chunk_count)
+            return f"chunk-{chunk_index}", f"model-{chunk_index}"
+
+        with patch.object(service, "MAX_REPORT_CHUNK_WORKERS", 2), patch.object(
+            service,
+            "_generate_chunk_summary_with_ai",
+            side_effect=fake_generate,
+        ):
+            summaries, model, workers = service._generate_chunk_summaries_concurrently(
+                chunks,
+                "2026-05-07",
+                group_id="group-1",
+            )
+
+        self.assertEqual(["chunk-1", "chunk-2", "chunk-3"], summaries)
+        self.assertEqual("model-3", model)
+        self.assertEqual(2, workers)
 
     @unittest.skipUnless(HAS_DAILY_SERVICE_DEPS, "daily topic analysis service dependencies are not installed")
     def test_fetch_topics_for_date_scopes_child_queries_by_group(self):
