@@ -57,6 +57,18 @@ Re-run the A-share recommendation-pool rotation backtest after the recommendatio
 - `output\a_share_research\51111112855254_pool_rotation_rebuilt_20250801_20260519_20260519_200011_daily.csv`
 - `output\a_share_research\51111112855254_pool_rotation_rebuilt_20250801_20260519_20260519_200011_period.csv`
 - `output\a_share_research\51111112855254_pool_rotation_rebuilt_20250801_20260519_20260519_200011_contribution.csv`
+- `output\a_share_research\51111112855254_pool_rotation_rebuilt_20250801_20260519_20260519_200011_report.html`
+
+## Visualization
+
+- Generated a static HTML report with rank/day heatmaps, TopN heatmap, return-turnover scatter, candidate monthly lines, and quick-ranking tables.
+- The main heatmaps and scatter use `summary.csv` `compound_after_10bps`.
+- The monthly chart uses `period.csv` raw monthly `compound_return`; it is a stability view and is not cost-adjusted because `period.csv` does not carry turnover/cost columns.
+- Regenerate with:
+
+```powershell
+python scripts\generate_a_share_pool_rotation_report.py --summary output\a_share_research\51111112855254_pool_rotation_rebuilt_20250801_20260519_20260519_200011_summary.csv --period output\a_share_research\51111112855254_pool_rotation_rebuilt_20250801_20260519_20260519_200011_period.csv --output output\a_share_research\51111112855254_pool_rotation_rebuilt_20250801_20260519_20260519_200011_report.html --title "51111112855254 A股推荐池轮动回测图表报告"
+```
 
 ## Findings
 
