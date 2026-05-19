@@ -808,6 +808,33 @@ class StockTopicAnalysisServiceHelperTests(unittest.TestCase):
         self.assertIn('"existing_summary_markdown": "summary batch 1"', call_ai.call_args_list[1].args[0])
         self.assertEqual(8, conn.commit.call_count)
 
+    @unittest.skipUnless(HAS_SERVICE_DEPS, "stock topic analysis service dependencies are not installed")
+    def test_stock_analysis_prompt_uses_excerpt_and_incremental_dedupe_guidance(self):
+        from backend.services.stock_topic_analysis_service import _call_stock_analysis_ai
+
+        class FakeClient:
+            def __init__(self, *args, **kwargs):
+                pass
+
+            class responses:
+                @staticmethod
+                def create(**kwargs):
+                    FakeClient.kwargs = kwargs
+                    return type("Response", (), {"output_text": "summary"})()
+
+        with (
+            patch("backend.services.stock_topic_analysis_service.OpenAI", FakeClient),
+            patch("backend.services.stock_topic_analysis_service.get_openai_compatible_config", return_value={"api_key": "test-key", "model": "test-model", "base_url": "http://test"}),
+        ):
+            _call_stock_analysis_ai('{"new_topics":[]}')
+
+        prompt = FakeClient.kwargs["input"][1]["content"]
+        self.assertIn("输入证据片段", prompt)
+        self.assertIn("new_topics.excerpt", prompt)
+        self.assertIn("可能来自历史保存报告，也可能来自本次初始化分析的上一批结果", prompt)
+        self.assertIn("不要为了增量而强行扩写", prompt)
+        self.assertIn("如输入中有估值、目标价或市值空间等信息，再进行整理", prompt)
+
 
 if __name__ == "__main__":
     unittest.main()
