@@ -119,3 +119,12 @@ python scripts\generate_a_share_pool_rotation_report.py --summary output\a_share
 - Higher-return moderate-turnover candidate: `rank21_30 / 22日`.
 - High-return/high-friction candidate: `rank56_60 / 29日`.
 - Conservative TopN fallback: `Top50 / 26日`.
+
+## Product Strategy Update
+
+- Frontend recommendation-pool defaults now reflect the research direction:
+  - Main recommendation pool: `30日 Top40`.
+  - Short-cycle observation pools: `7日 Top40` and `14日 Top40`.
+  - `3日` is removed from the default main view to avoid steering users toward high-turnover short-cycle behavior.
+- Tongdaxin export defaults to the main recommendation pool only: `30日 Top40`.
+- The frontend still keeps date filtering and chart TopN controls separate from the recommendation-pool strategy; chart TopN controls line visibility, not the exported pool size.

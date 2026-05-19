@@ -2,6 +2,7 @@ import unittest
 from pathlib import Path
 
 from backend.services.tdx_a_share_export_service import (
+    DEFAULT_TDX_EXPORT_WINDOWS,
     _build_block_export_result,
     _build_export_result,
     _build_pending_block_write,
@@ -16,6 +17,10 @@ class TdxAShareExportServiceHelperTests(unittest.TestCase):
 
     def test_build_ranking_block_name_keeps_legacy_name_without_group_name(self):
         self.assertEqual(_build_ranking_block_name(3), "3日推荐池")
+        self.assertEqual(_build_ranking_block_name(30), "30日推荐池")
+
+    def test_default_tdx_export_only_uses_main_pool(self):
+        self.assertEqual((30,), DEFAULT_TDX_EXPORT_WINDOWS)
 
     def test_collect_ranking_companies_preserves_existing_filtering(self):
         rankings = {

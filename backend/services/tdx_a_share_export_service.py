@@ -14,7 +14,6 @@ import requests
 
 from backend.services.a_share_analysis_service import (
     DEFAULT_RANKING_TOP_N,
-    DEFAULT_RANKING_WINDOWS,
     build_chart_payload,
     get_group_analysis_paths,
     normalize_group_id,
@@ -58,7 +57,9 @@ RANKING_BLOCK_NAMES = {
     7: "7日推荐池",
     14: "14日推荐池",
     21: "21日推荐池",
+    30: "30日推荐池",
 }
+DEFAULT_TDX_EXPORT_WINDOWS = (30,)
 
 
 def _normalize_tdx_group_name(group_name: Optional[str]) -> Optional[str]:
@@ -556,7 +557,7 @@ def export_a_share_rankings_to_tdx(
     group_id: Optional[str] = None,
     group_name: Optional[str] = None,
     tdx_root: Optional[str] = None,
-    ranking_windows: Sequence[int] = DEFAULT_RANKING_WINDOWS,
+    ranking_windows: Sequence[int] = DEFAULT_TDX_EXPORT_WINDOWS,
     ranking_top_n: int = DEFAULT_RANKING_TOP_N,
     env_path: Path = DEFAULT_KNOW_ACTION_ENV_PATH,
 ) -> Dict[str, Any]:
@@ -671,6 +672,7 @@ def export_a_share_rankings_to_tdx(
 __all__ = [
     "DEFAULT_TDX_ROOT",
     "RANKING_BLOCK_NAMES",
+    "DEFAULT_TDX_EXPORT_WINDOWS",
     "TDX_BLOCK_DIR_REL",
     "TDX_CFG_NAME",
     "export_a_share_rankings_to_tdx",

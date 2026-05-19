@@ -189,6 +189,12 @@ class AShareAnalysisServiceHelperTests(unittest.TestCase):
             _empty_chart_payload(" 12345 ", ["2026-05-01"], "2026-05-02", "2026-05-03", 20, 35),
         )
 
+    def test_default_recommendation_pool_strategy_is_main_30_day_top40(self):
+        from backend.services.a_share_analysis_service import DEFAULT_RANKING_TOP_N, DEFAULT_RANKING_WINDOWS
+
+        self.assertEqual((30, 7, 14), DEFAULT_RANKING_WINDOWS)
+        self.assertEqual(40, DEFAULT_RANKING_TOP_N)
+
     def test_parse_topic_stock_extraction_output_supports_new_schema(self):
         from backend.services.a_share_analysis_service import _parse_company_extraction_output, _parse_topic_stock_extraction_output
 

@@ -35,6 +35,7 @@ import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
 
 const DEFAULT_TOP_N = 12;
+const MAIN_RANKING_WINDOW = 30;
 
 interface AShareAnalysisPanelProps {
   onTaskCreated?: (taskId: string) => void;
@@ -371,26 +372,56 @@ function RankingWindowGrid({
   chart,
   rankingWindows,
 }: RankingWindowGridProps) {
+  const mainWindow = rankingWindows.includes(MAIN_RANKING_WINDOW) ? MAIN_RANKING_WINDOW : rankingWindows[0];
+  const observationWindows = rankingWindows.filter((windowDays) => windowDays !== mainWindow);
+  const mainRows = chart?.rankings?.[String(mainWindow)] || [];
+
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
-      {rankingWindows.map((windowDays) => {
-        const rankingRows = chart?.rankings?.[String(windowDays)] || [];
-        return (
-          <Card key={windowDays} className="border border-gray-200 shadow-none">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base">{windowDays} 日推荐池排序</CardTitle>
-              <CardDescription>Top {chart?.ranking_top_n || 35}</CardDescription>
-            </CardHeader>
-            <CardContent>
-              {rankingRows.length === 0 ? (
-                <div className="text-sm text-muted-foreground">暂无数据</div>
-              ) : (
-                <RankingRows rows={rankingRows} windowDays={windowDays} />
-              )}
-            </CardContent>
-          </Card>
-        );
-      })}
+    <div className="space-y-4">
+      <Card className="border border-green-200 bg-green-50/40 shadow-none">
+        <CardHeader className="pb-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <CardTitle className="text-base">主推荐池：{mainWindow}日 Top {chart?.ranking_top_n || 40}</CardTitle>
+              <CardDescription>默认用于通达信导出的稳定观察池</CardDescription>
+            </div>
+            <Badge className="bg-green-100 text-green-800">主池</Badge>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {mainRows.length === 0 ? (
+            <div className="text-sm text-muted-foreground">暂无数据</div>
+          ) : (
+            <RankingRows rows={mainRows} windowDays={mainWindow} />
+          )}
+        </CardContent>
+      </Card>
+
+      {observationWindows.length > 0 ? (
+        <div className="space-y-3">
+          <div className="text-sm font-medium text-gray-900">短周期观察</div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {observationWindows.map((windowDays) => {
+              const rankingRows = chart?.rankings?.[String(windowDays)] || [];
+              return (
+                <Card key={windowDays} className="border border-gray-200 shadow-none">
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-base">{windowDays}日 Top {chart?.ranking_top_n || 40}</CardTitle>
+                    <CardDescription>只做短周期热度观察，不作为默认导出池</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    {rankingRows.length === 0 ? (
+                      <div className="text-sm text-muted-foreground">暂无数据</div>
+                    ) : (
+                      <RankingRows rows={rankingRows} windowDays={windowDays} />
+                    )}
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -613,7 +644,7 @@ function LatestExportSummary({
       <div className="text-sm font-medium text-gray-900">发布到通达信</div>
       <Button variant="outline" className="w-full" onClick={onExportToTdx} disabled={exportingTdx}>
         <Upload className={`h-4 w-4 ${exportingTdx ? 'animate-pulse' : ''}`} />
-        {exportingTdx ? '导入中...' : '导入到通达信'}
+        {exportingTdx ? '导入中...' : '导入30日主推荐池'}
       </Button>
       <div className="grid grid-cols-2 gap-2 text-xs">
         <div className="rounded border border-gray-200 bg-white p-2">

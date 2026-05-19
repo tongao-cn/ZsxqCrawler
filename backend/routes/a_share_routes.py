@@ -288,6 +288,7 @@ async def export_a_share_analysis_to_tdx(request: AShareAnalysisExportTdxRequest
             request.start_date,
             request.end_date,
             group_id=normalize_group_id(request.group_id),
+            group_name=request.group_name,
         )
         return _success_payload(result)
     except ValueError as e:

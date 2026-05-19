@@ -1,5 +1,6 @@
 import unittest
 from importlib.util import find_spec
+from unittest.mock import patch
 
 
 HAS_A_SHARE_ROUTE_DEPS = (
@@ -42,6 +43,37 @@ class AShareRoutesHelperTests(unittest.TestCase):
                 "ranking_windows": list(A_SHARE_DEFAULT_RANKING_WINDOWS),
             },
             _analysis_defaults_payload(),
+        )
+
+    @unittest.skipUnless(HAS_A_SHARE_ROUTE_DEPS, "a-share route dependencies are not installed")
+    def test_export_tdx_passes_group_name_to_service(self):
+        from backend.routes import a_share_routes
+        from backend.routes.a_share_routes import AShareAnalysisExportTdxRequest
+
+        with patch.object(
+            a_share_routes,
+            "export_a_share_rankings_to_tdx",
+            return_value={"group_id": "123", "blocks": []},
+        ) as export_mock:
+            import asyncio
+
+            result = asyncio.run(
+                a_share_routes.export_a_share_analysis_to_tdx(
+                    AShareAnalysisExportTdxRequest(
+                        group_id="123",
+                        group_name="纪要又要",
+                        start_date="2026-05-01",
+                        end_date="2026-05-19",
+                    )
+                )
+            )
+
+        self.assertTrue(result["success"])
+        export_mock.assert_called_once_with(
+            "2026-05-01",
+            "2026-05-19",
+            group_id="123",
+            group_name="纪要又要",
         )
 
     @unittest.skipUnless(HAS_A_SHARE_ROUTE_DEPS, "a-share route dependencies are not installed")
