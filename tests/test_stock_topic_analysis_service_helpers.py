@@ -829,11 +829,11 @@ class StockTopicAnalysisServiceHelperTests(unittest.TestCase):
             _call_stock_analysis_ai('{"new_topics":[]}')
 
         prompt = FakeClient.kwargs["input"][1]["content"]
-        self.assertIn("输入摘要片段", prompt)
+        self.assertIn("输入原文摘录", prompt)
         self.assertIn("new_topics.excerpt", prompt)
         self.assertIn("关键数据、预测与口径", prompt)
         self.assertIn("可能来自历史保存报告，也可能来自本次初始化分析的上一批结果", prompt)
-        self.assertIn("先判断新增摘要片段是否提供实质新增信息", prompt)
+        self.assertIn("先判断新增原文摘录是否提供实质新增信息", prompt)
         self.assertIn("不要为了增量而强行扩写", prompt)
         self.assertIn("不要为了完整而扩写", prompt)
         self.assertIn("不输出未由材料支持的投资评级或操作建议", prompt)
