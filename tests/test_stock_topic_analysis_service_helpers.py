@@ -745,7 +745,8 @@ class StockTopicAnalysisServiceHelperTests(unittest.TestCase):
         self.assertIn('"new_topic_count": 1', call_ai.call_args.args[0])
         self.assertIn('"topic_id": "103"', call_ai.call_args.args[0])
         self.assertNotIn('"excerpt": "old-1"', call_ai.call_args.args[0])
-        self.assertNotIn("analyzed_topic_ids", call_ai.call_args.args[0])
+        self.assertIn('"existing_summary_markdown": "old summary"', call_ai.call_args.args[0])
+        self.assertNotIn('"analyzed_topic_ids"', call_ai.call_args.args[0])
         self.assertIn("old summary", call_ai.call_args.args[0])
         self.assertEqual(2, conn.commit.call_count)
         state_writes = [
@@ -804,7 +805,7 @@ class StockTopicAnalysisServiceHelperTests(unittest.TestCase):
         self.assertIn('"new_topic_count": 10', call_ai.call_args_list[0].args[0])
         self.assertIn('"new_topic_count": 5', call_ai.call_args_list[6].args[0])
         self.assertNotIn("analyzed_topic_ids", call_ai.call_args_list[0].args[0])
-        self.assertIn("summary batch 1", call_ai.call_args_list[1].args[0])
+        self.assertIn('"existing_summary_markdown": "summary batch 1"', call_ai.call_args_list[1].args[0])
         self.assertEqual(8, conn.commit.call_count)
 
 
