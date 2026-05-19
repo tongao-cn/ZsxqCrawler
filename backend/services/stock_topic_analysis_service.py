@@ -807,7 +807,6 @@ def _build_analysis_topic_payload(search_result: Dict[str, Any]) -> List[Dict[st
                 },
                 "concepts": list(topic.get("concepts") or []),
                 "excerpt": excerpt,
-                "content": _clip(excerpt, MAX_TOPIC_TEXT_CHARS),
             }
         )
     return payload
@@ -929,7 +928,7 @@ def _call_stock_analysis_ai(prompt_payload: str, *, incremental: bool = False) -
         "要求：\n"
         "- 这是卖方调研社群材料，请按专业公司研究报告的风格输出，突出公司研究主线、催化、估值与跟踪点。\n"
         "- 只基于输入话题内容，不要补充外部行情、财报或未出现的信息。\n"
-        "- 输入的 new_topics.content / excerpt 是针对当前股票从原话题抽取的证据片段；全文都讲该股票时可能是全文，多股票分段时通常只保留当前股票相关段落。\n"
+        "- 输入的 new_topics.excerpt 是针对当前股票从原话题抽取的证据片段；全文都讲该股票时可能是全文，多股票分段时通常只保留当前股票相关段落。\n"
         "- 重点提炼可用于后续跟踪的结论、驱动因素、数据变化和事件进展。\n"
         "- 如果输入中出现数字或预测值，请在“关键数据与预测”中整理；没有明确数值时直接写未提及。\n"
         "- 如果输入中包含 existing_summary_markdown，请把新增话题自然融合进对应章节，并输出更新后的完整报告，不要只输出差异或单独列新章节。\n"

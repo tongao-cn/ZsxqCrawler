@@ -521,7 +521,7 @@ class StockTopicAnalysisServiceHelperTests(unittest.TestCase):
             payload = _build_analysis_topic_payload(search_result)
 
         self.assertEqual("宁德时代储能订单持续增长。", payload[0]["excerpt"])
-        self.assertEqual("宁德时代储能订单持续增长。", payload[0]["content"])
+        self.assertNotIn("content", payload[0])
         connect.assert_not_called()
 
     @unittest.skipUnless(HAS_SERVICE_DEPS, "stock topic analysis service dependencies are not installed")
@@ -723,9 +723,9 @@ class StockTopicAnalysisServiceHelperTests(unittest.TestCase):
             "analyzed_topic_ids": ["101", "102"],
         }
         payload_topics = [
-            {"topic_id": "101", "content": "old-1"},
-            {"topic_id": "102", "content": "old-2"},
-            {"topic_id": "103", "content": "new"},
+            {"topic_id": "101", "excerpt": "old-1"},
+            {"topic_id": "102", "excerpt": "old-2"},
+            {"topic_id": "103", "excerpt": "new"},
         ]
         conn = Mock()
 
@@ -744,7 +744,7 @@ class StockTopicAnalysisServiceHelperTests(unittest.TestCase):
         self.assertEqual(["101", "102", "103"], result["analyzed_topic_ids"])
         self.assertIn('"new_topic_count": 1', call_ai.call_args.args[0])
         self.assertIn('"topic_id": "103"', call_ai.call_args.args[0])
-        self.assertNotIn('"content": "old-1"', call_ai.call_args.args[0])
+        self.assertNotIn('"excerpt": "old-1"', call_ai.call_args.args[0])
         self.assertNotIn("analyzed_topic_ids", call_ai.call_args.args[0])
         self.assertIn("old summary", call_ai.call_args.args[0])
         self.assertEqual(2, conn.commit.call_count)
@@ -773,7 +773,7 @@ class StockTopicAnalysisServiceHelperTests(unittest.TestCase):
             "skipped_topic_ids": [],
         }
         payload_topics = [
-            {"topic_id": topic["topic_id"], "content": f"content-{topic['topic_id']}"}
+            {"topic_id": topic["topic_id"], "excerpt": f"excerpt-{topic['topic_id']}"}
             for topic in search_topics
         ]
         conn = Mock()
