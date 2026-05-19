@@ -933,6 +933,7 @@ def _call_stock_analysis_ai(prompt_payload: str, *, incremental: bool = False) -
         "- 如果输入中出现数字或预测值，请在“关键数据与预测”中整理；没有明确数值时直接写未提及。\n"
         "- 如果输入中包含 existing_summary_markdown，请沿用原有章节结构，只在对应章节内补充新增话题，不要只输出差异或单独列新章节。\n"
         "- 如果输入中出现新的观点或更新，只把它合并进最相关的既有章节，不要新增流水账段落。\n"
+        "- 如果旧报告里已经写过相同或相近意思的内容，不要重复添加，优先去重和保留原有表述。\n"
         f"输入数据：\n{prompt_payload}"
     )
     messages = [
