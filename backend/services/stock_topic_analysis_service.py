@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import re
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date, timedelta
 from typing import Any, Callable, Dict, Iterable, List, Tuple
 
@@ -26,6 +27,7 @@ MAX_TRACKED_TOPIC_IDS = 5000
 MAX_TOPIC_TEXT_CHARS = 1800
 MAX_ANALYSIS_PROMPT_CHARS = 50000
 MAX_BATCH_STOCKS = 20
+MAX_BATCH_STOCK_ANALYSIS_WORKERS = 2
 MAX_QUESTION_KEYWORDS = 8
 MAX_QUESTION_TOPICS = 60
 MAX_EXTRACT_IMAGE_BYTES = 4 * 1024 * 1024
@@ -1310,9 +1312,10 @@ def analyze_stock_topics_batch(
     success_count = 0
     failed_count = 0
     no_topic_count = 0
-    _log(log_callback, f"开始批量分析，共 {total} 只股票")
+    max_workers = min(MAX_BATCH_STOCK_ANALYSIS_WORKERS, total)
+    _log(log_callback, f"开始批量分析，共 {total} 只股票，并发 {max_workers}")
 
-    for index, stock_name in enumerate(names, start=1):
+    def analyze_one(index: int, stock_name: str) -> Tuple[int, Dict[str, Any], str]:
         try:
             preview = search_stock_topics(group_id_text, stock_name)
             if preview["topic_count"] <= 0:
@@ -1325,23 +1328,36 @@ def analyze_stock_topics_batch(
                 stock_name,
                 log_callback=log_callback,
             )
-            results.append(result)
-            if result.get("topic_count", 0) <= 0:
-                no_topic_count += 1
-            else:
-                success_count += 1
             _log(log_callback, f"{index}/{total} {result.get('stock_name') or stock_name}: 完成并保存")
+            status = "no_topics" if result.get("topic_count", 0) <= 0 else "success"
+            return index, result, status
         except Exception as exc:
-            failed_count += 1
             latest = get_latest_stock_topic_analysis(group_id_text, stock_name) or _empty_latest_result(group_id_text, stock_name)
             failed_result = {
                 **latest,
                 "status": "failed",
                 "error": str(exc),
             }
-            results.append(failed_result)
             _log(log_callback, f"{index}/{total} {stock_name}: 失败 - {str(exc)}")
+            return index, failed_result, "failed"
 
+    ordered_results: List[Dict[str, Any] | None] = [None] * total
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = [
+            executor.submit(analyze_one, index, stock_name)
+            for index, stock_name in enumerate(names, start=1)
+        ]
+        for future in as_completed(futures):
+            index, result, status = future.result()
+            ordered_results[index - 1] = result
+            if status == "no_topics":
+                no_topic_count += 1
+            elif status == "failed":
+                failed_count += 1
+            else:
+                success_count += 1
+
+    results = [result for result in ordered_results if result is not None]
     _log(log_callback, f"批量分析完成：成功 {success_count}，失败 {failed_count}，无话题 {no_topic_count}")
     return {
         "group_id": group_id_text,

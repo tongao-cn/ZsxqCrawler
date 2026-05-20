@@ -1,5 +1,7 @@
 import unittest
 import base64
+import threading
+import time
 from importlib.util import find_spec
 from unittest.mock import Mock, patch
 
@@ -599,6 +601,57 @@ class StockTopicAnalysisServiceHelperTests(unittest.TestCase):
         self.assertEqual(2, result["summary"]["success"])
         self.assertEqual(1, result["summary"]["failed"])
         self.assertEqual("failed", result["stocks"][1]["status"])
+
+    @unittest.skipUnless(HAS_SERVICE_DEPS, "stock topic analysis service dependencies are not installed")
+    def test_analyze_stock_topics_batch_runs_stocks_concurrently_and_keeps_order(self):
+        from backend.services.stock_topic_analysis_service import analyze_stock_topics_batch
+
+        entered = threading.Barrier(2)
+        release = threading.Event()
+        started = []
+
+        def fake_search(group_id, stock_name, *, limit=None):
+            return {
+                "group_id": group_id,
+                "stock_name": stock_name,
+                "stock_code": "",
+                "market": "",
+                "topics": [{"topic_id": f"{stock_name}-1"}],
+                "concepts": [],
+                "topic_count": 1,
+                "recommendation_count": 0,
+            }
+
+        def fake_analyze(group_id, stock_name, *, limit=None, log_callback=None):
+            started.append(stock_name)
+            entered.wait(timeout=2)
+            release.wait(timeout=2)
+            return {
+                "group_id": group_id,
+                "stock_name": stock_name,
+                "stock_code": "",
+                "market": "",
+                "topics": [{"topic_id": f"{stock_name}-1"}],
+                "concepts": [],
+                "topic_count": 1,
+                "recommendation_count": 0,
+                "summary_markdown": "summary",
+                "model": "test",
+                "status": "completed",
+            }
+
+        with (
+            patch("backend.services.stock_topic_analysis_service.search_stock_topics", side_effect=fake_search),
+            patch("backend.services.stock_topic_analysis_service.analyze_stock_topics", side_effect=fake_analyze),
+        ):
+            start_time = time.monotonic()
+            release.set()
+            result = analyze_stock_topics_batch("51111112855254", ["宁德时代", "德龙激光"])
+
+        self.assertLess(time.monotonic() - start_time, 1.5)
+        self.assertCountEqual(["宁德时代", "德龙激光"], started)
+        self.assertEqual(["宁德时代", "德龙激光"], [stock["stock_name"] for stock in result["stocks"]])
+        self.assertEqual(2, result["summary"]["success"])
 
     @unittest.skipUnless(HAS_SERVICE_DEPS, "stock topic analysis service dependencies are not installed")
     def test_analyze_stock_topics_skips_ai_when_saved_result_is_current(self):
