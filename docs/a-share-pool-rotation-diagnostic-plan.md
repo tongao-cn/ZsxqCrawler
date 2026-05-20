@@ -123,8 +123,9 @@ python scripts\generate_a_share_pool_rotation_report.py --summary output\a_share
 ## Product Strategy Update
 
 - Frontend recommendation-pool defaults now reflect the research direction:
-  - The main operating view is now a single `30日 Top100` pool.
-  - Each stock row shows rank movement against the previous data day's same-window Top100: new entry, moved up, moved down, or unchanged.
+  - The main operating view is now coverage-first: `30日 Top300 + 7日 Top100补集 + 14日 Top150补集`.
+  - The table uses 30-day ranking as the primary layer: `核心1-50`, `主池51-100`, `扩展101-200`, `长尾201-300`, and `短周期补充`.
+  - Each stock row shows 30-day rank movement plus 7-day / 14-day short-cycle activity tags.
   - `3日` is removed from the default main view to avoid steering users toward high-turnover short-cycle behavior.
 - Tongdaxin export defaults to the single `30日 Top100` pool.
 - Tongdaxin export now creates missing custom blocks in `blocknew.cfg` automatically before writing `.blk` files, so users no longer need to pre-create the board names manually.
@@ -143,6 +144,22 @@ python scripts\generate_a_share_pool_rotation_report.py --summary output\a_share
   - `python -m unittest tests.test_tdx_a_share_export_service_helpers`
   - `python -m unittest tests.test_a_share_analysis_service_helpers`
   - `npm run lint`
+
+## Coverage-First Display Update
+
+- The frontend display is no longer limited to one visible `30日 Top100` table.
+- Backend chart payload now includes `coverage_pool`, built from:
+  - `30日 Top300` as the main coverage axis.
+  - `7日 Top100` and `14日 Top150` as short-cycle supplements.
+- The frontend renders a single coverage table with filters for:
+  - 全部
+  - 核心1-50
+  - 主池51-100
+  - 扩展101-200
+  - 长尾201-300
+  - 短周期补充
+  - 7/14日活跃
+- Tongdaxin export is intentionally unchanged for this slice; it still uses the current export baseline until a separate export-selection UI is added.
 
 ## Refreshed Backtest 2025-05-01 Baseline
 

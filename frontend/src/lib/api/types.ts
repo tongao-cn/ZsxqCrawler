@@ -242,6 +242,23 @@ export interface AShareAnalysisRankingItem {
   trend?: 'new' | 'up' | 'down' | 'flat';
 }
 
+export interface AShareAnalysisCoverageItem {
+  company: string;
+  layer: 'core' | 'main' | 'extended' | 'long_tail' | 'short_active';
+  layer_label: string;
+  layer_order: number;
+  rank_30?: number | null;
+  count_30?: number | null;
+  previous_rank_30?: number | null;
+  rank_change_30?: number | null;
+  trend_30?: 'new' | 'up' | 'down' | 'flat' | null;
+  rank_7?: number | null;
+  count_7?: number | null;
+  rank_14?: number | null;
+  count_14?: number | null;
+  tags: string[];
+}
+
 export interface AShareAnalysisChart {
   group_id?: string | null;
   available_dates: string[];
@@ -250,6 +267,7 @@ export interface AShareAnalysisChart {
   chart_data: Array<Record<string, string | number>>;
   series: AShareAnalysisSeries[];
   rankings: Record<string, AShareAnalysisRankingItem[]>;
+  coverage_pool?: AShareAnalysisCoverageItem[];
   date_count: number;
   company_count: number;
   total_companies_in_range: number;

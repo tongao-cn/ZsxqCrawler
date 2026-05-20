@@ -180,6 +180,7 @@ class AShareAnalysisServiceHelperTests(unittest.TestCase):
                 "chart_data": [],
                 "series": [],
                 "rankings": {},
+                "coverage_pool": [],
                 "date_count": 0,
                 "company_count": 0,
                 "total_companies_in_range": 0,
@@ -240,6 +241,33 @@ class AShareAnalysisServiceHelperTests(unittest.TestCase):
             ],
             payload["rankings"]["2"],
         )
+        self.assertEqual(3, len(payload["coverage_pool"]))
+
+    def test_build_chart_payload_includes_coverage_pool_short_cycle_supplements(self):
+        from backend.services import a_share_analysis_service as service
+
+        daily = {
+            "2026-05-01": {"核心A": 10, "主池B": 9, "扩展C": 8},
+            "2026-05-02": {"核心A": 8, "主池B": 7, "扩展C": 6},
+            "2026-05-03": {"核心A": 6, "短期D": 20},
+        }
+
+        with patch.object(service, "read_existing_csv", return_value=daily):
+            payload = service.build_chart_payload(
+                start_date="2026-05-01",
+                end_date="2026-05-03",
+            )
+
+        coverage_by_company = {
+            item["company"]: item
+            for item in payload["coverage_pool"]
+        }
+
+        self.assertEqual("核心1-50", coverage_by_company["核心A"]["layer_label"])
+        self.assertEqual(1, coverage_by_company["核心A"]["rank_30"])
+        self.assertEqual(2, coverage_by_company["短期D"]["rank_30"])
+        self.assertEqual(2, coverage_by_company["短期D"]["rank_7"])
+        self.assertEqual("new", coverage_by_company["短期D"]["trend_30"])
 
     def test_parse_topic_stock_extraction_output_supports_new_schema(self):
         from backend.services.a_share_analysis_service import _parse_company_extraction_output, _parse_topic_stock_extraction_output
