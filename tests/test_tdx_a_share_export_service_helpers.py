@@ -12,6 +12,8 @@ from backend.services.tdx_a_share_export_service import (
     _collect_ranking_companies,
     _ensure_tdx_cfg_records,
     _next_tdx_block_code,
+    _normalize_tdx_code,
+    resolve_company_codes,
 )
 
 
@@ -81,6 +83,36 @@ class TdxAShareExportServiceHelperTests(unittest.TestCase):
 
         self.assertEqual(_collect_ranking_companies(rankings, [3, 7]), ["平安银行", "万科A"])
 
+    def test_resolve_company_codes_handles_a_share_name_markers_and_short_names(self):
+        records = [
+            {"ts_code": "688702.SH", "name": "盛科通信-U"},
+            {"ts_code": "688387.SH", "name": "信科移动-U"},
+            {"ts_code": "688498.SH", "name": "DR源杰科"},
+            {"ts_code": "603083.SH", "name": "XD剑桥科"},
+            {"ts_code": "603228.SH", "name": "XD景旺电"},
+        ]
+
+        resolved, unresolved, ambiguous = resolve_company_codes(
+            ["盛科通信", "信科移动", "源杰科技", "剑桥科技", "景旺电子"],
+            records,
+        )
+
+        self.assertEqual(
+            resolved,
+            {
+                "盛科通信": "688702.SH",
+                "信科移动": "688387.SH",
+                "源杰科技": "688498.SH",
+                "剑桥科技": "603083.SH",
+                "景旺电子": "603228.SH",
+            },
+        )
+        self.assertEqual([], unresolved)
+        self.assertEqual({}, ambiguous)
+
+    def test_normalize_tdx_code_supports_beijing_market(self):
+        self.assertEqual("2920522", _normalize_tdx_code("920522.BJ"))
+
     def test_build_pending_block_write_converts_and_dedupes_codes_and_skips(self):
         rankings = {
             "3": [
@@ -95,7 +127,7 @@ class TdxAShareExportServiceHelperTests(unittest.TestCase):
         resolved_codes = {
             "平安银行": "000001.SZ",
             "招商银行": "600036.SH",
-            "坏代码": "123456.BJ",
+            "坏代码": "123456.HK",
         }
         cfg_by_name = {
             "纪要又要-3日Top100": {

@@ -163,6 +163,10 @@ python scripts\generate_a_share_pool_rotation_report.py --summary output\a_share
   - `群名-30日Top300`
   - `群名-14日Top150`
   - `群名-7日Top100`
+- Tongdaxin export name/code matching now handles common market display variants from `stock_basic`:
+  - A-share name markers such as `-U`, `XD`, `XR`, and `DR`.
+  - Short exchange display names when they are an unambiguous prefix match, such as `DR源杰科` for `源杰科技`.
+  - Beijing market `BJ` codes, written with Tongdaxin prefix `2` such as `920522.BJ -> 2920522`.
 
 ## Refreshed Backtest 2025-05-01 Baseline
 

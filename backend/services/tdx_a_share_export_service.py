@@ -45,10 +45,11 @@ TDX_CFG_NAME = "blocknew.cfg"
 TDX_RECORD_SIZE = 120
 TDX_NAME_SIZE = 50
 TDX_CODE_SIZE = 64
-TS_CODE_PATTERN = re.compile(r"^(?P<code>\d{6})\.(?P<market>SH|SZ)$", re.IGNORECASE)
+TS_CODE_PATTERN = re.compile(r"^(?P<code>\d{6})\.(?P<market>SH|SZ|BJ)$", re.IGNORECASE)
 MARKET_PREFIX_MAP = {
     "SH": "1",
     "SZ": "0",
+    "BJ": "2",
 }
 
 RANKING_BLOCK_NAMES = {
@@ -168,6 +169,26 @@ def _strip_st_prefix(value: str) -> str:
         if upper.startswith(prefix):
             return stripped[len(prefix):].strip()
     return stripped
+
+
+def _strip_a_share_name_markers(value: str) -> str:
+    stripped = str(value or "").strip()
+    upper = stripped.upper().replace(" ", "")
+    for prefix in ("XD", "XR", "DR"):
+        if upper.startswith(prefix):
+            stripped = stripped[len(prefix):].strip()
+            break
+    return re.sub(r"(?:[-\s]*(?:U|W|V|B))+$", "", stripped, flags=re.IGNORECASE).strip()
+
+
+def _build_company_name_aliases(name: str) -> Set[str]:
+    candidates = {
+        name,
+        _strip_st_prefix(name),
+        _strip_a_share_name_markers(name),
+        _strip_a_share_name_markers(_strip_st_prefix(name)),
+    }
+    return {alias for candidate in candidates if (alias := _normalize_company_name(candidate))}
 
 
 def _normalize_tdx_code(ts_code: str) -> Optional[str]:
@@ -425,17 +446,24 @@ def _build_company_name_index(records: List[Dict[str, str]]) -> Dict[str, Set[st
         if not ts_code or not name:
             continue
 
-        aliases = {
-            _normalize_company_name(name),
-            _normalize_company_name(_strip_st_prefix(name)),
-        }
-
-        for alias in aliases:
-            if not alias:
-                continue
+        for alias in _build_company_name_aliases(name):
             index.setdefault(alias, set()).add(ts_code)
 
     return index
+
+
+def _find_prefix_matched_codes(normalized: str, name_index: Mapping[str, Set[str]]) -> List[str]:
+    if len(normalized) < 4:
+        return []
+
+    matched_codes: Set[str] = set()
+    for alias, codes in name_index.items():
+        common_length = min(len(normalized), len(alias))
+        if common_length < 3:
+            continue
+        if normalized[:common_length] == alias[:common_length]:
+            matched_codes.update(codes)
+    return sorted(matched_codes)
 
 
 def resolve_company_codes(
@@ -451,6 +479,8 @@ def resolve_company_codes(
     for company in _dedupe_keep_order(company_names):
         normalized = _normalize_company_name(company)
         matched_codes = sorted(name_index.get(normalized) or [])
+        if not matched_codes:
+            matched_codes = _find_prefix_matched_codes(normalized, name_index)
         if len(matched_codes) == 1:
             resolved[company] = matched_codes[0]
             continue
