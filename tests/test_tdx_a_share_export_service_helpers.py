@@ -2,8 +2,10 @@ import unittest
 from pathlib import Path
 
 from backend.services.tdx_a_share_export_service import (
+    DEFAULT_TDX_EXPORT_SPECS,
     DEFAULT_TDX_EXPORT_WINDOWS,
     _build_block_export_result,
+    _build_export_block_name,
     _build_export_result,
     _build_pending_block_write,
     _build_ranking_block_name,
@@ -21,8 +23,13 @@ class TdxAShareExportServiceHelperTests(unittest.TestCase):
         self.assertEqual(_build_ranking_block_name(3), "3日推荐池")
         self.assertEqual(_build_ranking_block_name(30), "30日推荐池")
 
-    def test_default_tdx_export_only_uses_30_day_pool(self):
-        self.assertEqual((30,), DEFAULT_TDX_EXPORT_WINDOWS)
+    def test_default_tdx_export_uses_coverage_pool_specs(self):
+        self.assertEqual(((30, 300), (14, 150), (7, 100)), DEFAULT_TDX_EXPORT_SPECS)
+        self.assertEqual((30, 14, 7), DEFAULT_TDX_EXPORT_WINDOWS)
+
+    def test_build_export_block_name_includes_top_n(self):
+        self.assertEqual(_build_export_block_name(30, 300, "纪要又要"), "纪要又要-30日Top300")
+        self.assertEqual(_build_export_block_name(14, 150), "14日Top150")
 
     def test_next_tdx_block_code_uses_next_available_zx_number(self):
         records = [
@@ -91,14 +98,15 @@ class TdxAShareExportServiceHelperTests(unittest.TestCase):
             "坏代码": "123456.BJ",
         }
         cfg_by_name = {
-            "纪要又要-3日": {
-                "name": "纪要又要-3日",
+            "纪要又要-3日Top100": {
+                "name": "纪要又要-3日Top100",
                 "code": "ZX001",
             }
         }
 
         pending = _build_pending_block_write(
             3,
+            100,
             rankings,
             resolved_codes,
             cfg_by_name,
@@ -110,7 +118,7 @@ class TdxAShareExportServiceHelperTests(unittest.TestCase):
             pending,
             (
                 3,
-                "纪要又要-3日",
+                "纪要又要-3日Top100",
                 "ZX001",
                 Path("blocknew") / "ZX001.blk",
                 ["0000001", "1600036"],

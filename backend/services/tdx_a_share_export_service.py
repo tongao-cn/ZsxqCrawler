@@ -13,7 +13,6 @@ from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Set, 
 import requests
 
 from backend.services.a_share_analysis_service import (
-    DEFAULT_RANKING_TOP_N,
     build_chart_payload,
     get_group_analysis_paths,
     normalize_group_id,
@@ -59,7 +58,8 @@ RANKING_BLOCK_NAMES = {
     21: "21日推荐池",
     30: "30日推荐池",
 }
-DEFAULT_TDX_EXPORT_WINDOWS = (30,)
+DEFAULT_TDX_EXPORT_SPECS = ((30, 300), (14, 150), (7, 100))
+DEFAULT_TDX_EXPORT_WINDOWS = tuple(window for window, _top_n in DEFAULT_TDX_EXPORT_SPECS)
 TDX_BLOCK_CODE_PATTERN = re.compile(r"^ZX(?P<number>\d+)$", re.IGNORECASE)
 
 
@@ -73,6 +73,21 @@ def _build_ranking_block_name(window: int, group_name: Optional[str] = None) -> 
     if normalized_group_name:
         return f"{normalized_group_name}-{int(window)}日"
     return RANKING_BLOCK_NAMES.get(int(window), f"{int(window)}日推荐池")
+
+
+def _build_export_block_name(window: int, top_n: int, group_name: Optional[str] = None) -> str:
+    normalized_group_name = _normalize_tdx_group_name(group_name)
+    prefix = normalized_group_name or RANKING_BLOCK_NAMES.get(int(window), f"{int(window)}日推荐池")
+    return f"{prefix}-{int(window)}日Top{int(top_n)}" if normalized_group_name else f"{int(window)}日Top{int(top_n)}"
+
+
+def _normalize_export_specs(
+    ranking_windows: Sequence[int],
+    ranking_top_n: Optional[int],
+) -> Tuple[Tuple[int, int], ...]:
+    if ranking_top_n is None:
+        return tuple((int(window), top_n) for window, top_n in DEFAULT_TDX_EXPORT_SPECS if int(window) in {int(item) for item in ranking_windows})
+    return tuple((int(window), int(ranking_top_n)) for window in ranking_windows)
 
 
 def _get_group_latest_export_path(group_id: str) -> Path:
@@ -461,13 +476,14 @@ def _collect_ranking_companies(rankings: Mapping[str, Any], ranking_windows: Seq
 
 def _build_pending_block_write(
     window: int,
+    top_n: int,
     rankings: Mapping[str, Any],
     resolved_codes: Mapping[str, str],
     cfg_by_name: Mapping[str, Mapping[str, str]],
     block_dir: Path,
     group_name: Optional[str] = None,
 ) -> Tuple[int, str, str, Path, List[str], List[str]]:
-    block_name = _build_ranking_block_name(window, group_name)
+    block_name = _build_export_block_name(window, top_n, group_name)
     cfg_record = cfg_by_name[block_name]
     block_code = str(cfg_record.get("code") or "").strip()
     if not block_code:
@@ -598,20 +614,26 @@ def export_a_share_rankings_to_tdx(
     group_name: Optional[str] = None,
     tdx_root: Optional[str] = None,
     ranking_windows: Sequence[int] = DEFAULT_TDX_EXPORT_WINDOWS,
-    ranking_top_n: int = DEFAULT_RANKING_TOP_N,
+    ranking_top_n: Optional[int] = None,
     env_path: Path = DEFAULT_KNOW_ACTION_ENV_PATH,
 ) -> Dict[str, Any]:
     normalized_group_id = normalize_group_id(group_id)
+    export_specs = _normalize_export_specs(ranking_windows, ranking_top_n)
+    max_ranking_top_n = max((top_n for _window, top_n in export_specs), default=0)
     chart_payload = build_chart_payload(
         start_date=start_date,
         end_date=end_date,
-        ranking_windows=ranking_windows,
-        ranking_top_n=ranking_top_n,
+        ranking_windows=tuple(window for window, _top_n in export_specs),
+        ranking_top_n=max_ranking_top_n,
         group_id=normalized_group_id,
     )
 
     rankings = chart_payload.get("rankings") or {}
-    all_companies = _collect_ranking_companies(rankings, ranking_windows)
+    sliced_rankings = {
+        str(window): list(rankings.get(str(window)) or [])[:top_n]
+        for window, top_n in export_specs
+    }
+    all_companies = _collect_ranking_companies(sliced_rankings, [window for window, _top_n in export_specs])
 
     stock_records, stock_basic_source, source_detail = load_stock_basic_records(env_path=env_path)
     resolved_codes, unresolved_companies, ambiguous_companies = resolve_company_codes(all_companies, stock_records)
@@ -623,15 +645,15 @@ def export_a_share_rankings_to_tdx(
         raise RuntimeError(f"未找到通达信板块配置文件: {cfg_path}")
 
     expected_block_names = [
-        _build_ranking_block_name(int(window), group_name)
-        for window in ranking_windows
+        _build_export_block_name(window, top_n, group_name)
+        for window, top_n in export_specs
     ]
     cfg_records = read_tdx_cfg(cfg_path)
     cfg_by_name, created_cfg_records = _ensure_tdx_cfg_records(cfg_records, expected_block_names)
 
     pending_writes = [
-        _build_pending_block_write(int(window), rankings, resolved_codes, cfg_by_name, block_dir, group_name)
-        for window in ranking_windows
+        _build_pending_block_write(window, top_n, sliced_rankings, resolved_codes, cfg_by_name, block_dir, group_name)
+        for window, top_n in export_specs
     ]
 
     backup_dir = block_dir / f"backup_a_share_export_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
@@ -670,7 +692,7 @@ def export_a_share_rankings_to_tdx(
                 start_date=chart_payload.get("selected_start_date"),
                 end_date=chart_payload.get("selected_end_date"),
                 tdx_root=str(resolved_root),
-                ranking_top_n=ranking_top_n,
+                ranking_top_n=max_ranking_top_n,
                 total_written=total_written,
                 unresolved_companies=_dedupe_keep_order(aggregate_skipped),
                 backup_files=backup_files,
@@ -689,7 +711,7 @@ def export_a_share_rankings_to_tdx(
         normalized_group_id=normalized_group_id,
         resolved_root=resolved_root,
         chart_payload=chart_payload,
-        ranking_top_n=ranking_top_n,
+        ranking_top_n=max_ranking_top_n,
         stock_basic_source=stock_basic_source,
         source_detail=source_detail,
         backup_files=backup_files,
@@ -709,6 +731,7 @@ def export_a_share_rankings_to_tdx(
 __all__ = [
     "DEFAULT_TDX_ROOT",
     "RANKING_BLOCK_NAMES",
+    "DEFAULT_TDX_EXPORT_SPECS",
     "DEFAULT_TDX_EXPORT_WINDOWS",
     "TDX_BLOCK_DIR_REL",
     "TDX_CFG_NAME",

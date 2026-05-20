@@ -127,7 +127,7 @@ python scripts\generate_a_share_pool_rotation_report.py --summary output\a_share
   - The table uses 30-day ranking as the primary layer: `核心1-50`, `主池51-100`, `扩展101-200`, `长尾201-300`, and `短周期补充`.
   - Each stock row shows 30-day rank movement plus 7-day / 14-day short-cycle activity tags.
   - `3日` is removed from the default main view to avoid steering users toward high-turnover short-cycle behavior.
-- Tongdaxin export defaults to the single `30日 Top100` pool.
+- Tongdaxin export defaults to the three coverage boards: `30日 Top300`, `14日 Top150`, and `7日 Top100`.
 - Tongdaxin export now creates missing custom blocks in `blocknew.cfg` automatically before writing `.blk` files, so users no longer need to pre-create the board names manually.
 - The frontend still keeps date filtering and chart TopN controls separate from the recommendation-pool strategy; chart TopN controls line visibility, not the exported pool size.
 
@@ -159,7 +159,10 @@ python scripts\generate_a_share_pool_rotation_report.py --summary output\a_share
   - 长尾201-300
   - 短周期补充
   - 7/14日活跃
-- Tongdaxin export is intentionally unchanged for this slice; it still uses the current export baseline until a separate export-selection UI is added.
+- Tongdaxin export now matches the coverage-first display baseline and writes three boards by default:
+  - `群名-30日Top300`
+  - `群名-14日Top150`
+  - `群名-7日Top100`
 
 ## Refreshed Backtest 2025-05-01 Baseline
 

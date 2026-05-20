@@ -802,7 +802,7 @@ function LatestExportSummary({
       <div className="text-sm font-medium text-gray-900">发布到通达信</div>
       <Button variant="outline" className="w-full" onClick={onExportToTdx} disabled={exportingTdx}>
         <Upload className={`h-4 w-4 ${exportingTdx ? 'animate-pulse' : ''}`} />
-        {exportingTdx ? '导入中...' : '导入30日Top100'}
+        {exportingTdx ? '导入中...' : '导入覆盖三板块'}
       </Button>
       <div className="grid grid-cols-2 gap-2 text-xs">
         <div className="rounded border border-gray-200 bg-white p-2">
