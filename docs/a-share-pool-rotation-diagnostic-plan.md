@@ -123,19 +123,23 @@ python scripts\generate_a_share_pool_rotation_report.py --summary output\a_share
 ## Product Strategy Update
 
 - Frontend recommendation-pool defaults now reflect the research direction:
-  - `30日 Top40`, `7日 Top40`, and `14日 Top40` are displayed in one row, with `30日` marked as the main pool and `7日` / `14日` kept as short-cycle observation pools.
+  - The main operating view is now a single `30日 Top100` pool.
+  - Each stock row shows rank movement against the previous data day's same-window Top100: new entry, moved up, moved down, or unchanged.
   - `3日` is removed from the default main view to avoid steering users toward high-turnover short-cycle behavior.
-- Tongdaxin export defaults to the same three pools together: `30日 Top40`, `7日 Top40`, and `14日 Top40`.
+- Tongdaxin export defaults to the single `30日 Top100` pool.
 - Tongdaxin export now creates missing custom blocks in `blocknew.cfg` automatically before writing `.blk` files, so users no longer need to pre-create the board names manually.
 - The frontend still keeps date filtering and chart TopN controls separate from the recommendation-pool strategy; chart TopN controls line visibility, not the exported pool size.
 
 ## Implementation Update 2026-05-20
 
-- Scope: align the frontend display and Tongdaxin export behavior with the `30日 / 7日 / 14日 Top40` operating view.
+- Scope: align the frontend display and Tongdaxin export behavior with the single `30日 Top100` operating view.
 - Changed files:
-  - `frontend/src/components/AShareAnalysisPanel.tsx`: render the three recommendation windows in one row and relabel the export action as a combined import.
-  - `backend/services/tdx_a_share_export_service.py`: export `30/7/14` by default and auto-create missing Tongdaxin custom block records with the next `ZX###` code.
-  - `tests/test_tdx_a_share_export_service_helpers.py`: add regression coverage for default windows and missing-block cfg creation.
+  - `frontend/src/components/AShareAnalysisPanel.tsx`: render one `30日 Top100` recommendation table and show rank-movement badges.
+  - `frontend/src/lib/api/types.ts`: expose rank movement fields on recommendation rows.
+  - `backend/services/a_share_analysis_service.py`: default to `30日 Top100` and attach rank movement by comparing with the previous data day.
+  - `backend/services/tdx_a_share_export_service.py`: export only the 30-day pool by default while keeping automatic Tongdaxin block creation.
+  - `tests/test_a_share_analysis_service_helpers.py` and `tests/test_tdx_a_share_export_service_helpers.py`: add regression coverage for defaults, movement calculation, and TDX export windows.
 - Verification:
   - `python -m unittest tests.test_tdx_a_share_export_service_helpers`
+  - `python -m unittest tests.test_a_share_analysis_service_helpers`
   - `npm run lint`

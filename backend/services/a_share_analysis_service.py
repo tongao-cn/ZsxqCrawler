@@ -5,7 +5,7 @@ import os
 import time
 from collections import defaultdict
 from datetime import datetime, timedelta
-from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Set, Tuple
+from typing import Any, Callable, Dict, Iterable, List, Mapping, Optional, Sequence, Set, Tuple
 
 from backend.core.db_path_manager import get_db_path_manager
 from backend.core.local_group_runtime import get_cached_local_group_ids
@@ -66,8 +66,8 @@ DEFAULT_API_BASE = get_default_base_url()
 DEFAULT_WIRE_API = get_default_wire_api()
 DEFAULT_REASONING_EFFORT = get_extraction_reasoning_effort()
 DEFAULT_CONCURRENCY = 10
-DEFAULT_RANKING_WINDOWS = (30, 7, 14)
-DEFAULT_RANKING_TOP_N = 40
+DEFAULT_RANKING_WINDOWS = (30,)
+DEFAULT_RANKING_TOP_N = 100
 DEFAULT_CHECKPOINT_BATCH_SIZE = 20
 DEFAULT_OPENAI_MAX_RETRIES = max(1, int(os.environ.get("OPENAI_MAX_RETRIES", "4")))
 GROUP_ANALYSIS_DIRNAME = "a_share_analysis"
@@ -1242,6 +1242,66 @@ def _empty_chart_payload(
     }
 
 
+def _build_ranking_rows(
+    daily: Mapping[str, Mapping[str, int]],
+    available_dates: Sequence[str],
+    from_index: int,
+    end_index: int,
+    ranking_top_n: int,
+) -> List[Dict[str, Any]]:
+    totals: Dict[str, int] = defaultdict(int)
+    for index in range(from_index, end_index + 1):
+        day = available_dates[index]
+        for company, count in daily.get(day, {}).items():
+            totals[company] += count
+
+    return [
+        {"company": company, "count": count, "rank": rank}
+        for rank, (company, count) in enumerate(
+            sorted(totals.items(), key=lambda item: (-item[1], item[0]))[:ranking_top_n],
+            start=1,
+        )
+    ]
+
+
+def _attach_rank_movement(
+    current_rows: List[Dict[str, Any]],
+    previous_rows: Sequence[Mapping[str, Any]],
+) -> List[Dict[str, Any]]:
+    previous_ranks = {
+        str(row.get("company") or ""): int(row.get("rank") or 0)
+        for row in previous_rows
+        if str(row.get("company") or "").strip() and int(row.get("rank") or 0) > 0
+    }
+
+    enriched_rows: List[Dict[str, Any]] = []
+    for row in current_rows:
+        company = str(row.get("company") or "")
+        rank = int(row.get("rank") or 0)
+        previous_rank = previous_ranks.get(company)
+        if previous_rank is None:
+            rank_change = None
+            trend = "new"
+        else:
+            rank_change = previous_rank - rank
+            if rank_change > 0:
+                trend = "up"
+            elif rank_change < 0:
+                trend = "down"
+            else:
+                trend = "flat"
+
+        enriched_rows.append(
+            {
+                **row,
+                "previous_rank": previous_rank,
+                "rank_change": rank_change,
+                "trend": trend,
+            }
+        )
+    return enriched_rows
+
+
 def build_chart_payload(
     output_path: str = DEFAULT_OUTPUT_PATH,
     start_date: Optional[str] = None,
@@ -1306,15 +1366,21 @@ def build_chart_payload(
     end_index = available_dates.index(range_dates[-1])
     for window in ranking_windows:
         from_index = max(start_index, end_index - int(window) + 1)
-        totals: Dict[str, int] = defaultdict(int)
-        for index in range(from_index, end_index + 1):
-            day = available_dates[index]
-            for company, count in daily.get(day, {}).items():
-                totals[company] += count
-        rankings[str(window)] = [
-            {"company": company, "count": count}
-            for company, count in sorted(totals.items(), key=lambda item: (-item[1], item[0]))[:ranking_top_n]
-        ]
+        current_rows = _build_ranking_rows(daily, available_dates, from_index, end_index, ranking_top_n)
+
+        previous_rows: List[Dict[str, Any]] = []
+        previous_end_index = end_index - 1
+        if previous_end_index >= start_index:
+            previous_from_index = max(start_index, previous_end_index - int(window) + 1)
+            previous_rows = _build_ranking_rows(
+                daily,
+                available_dates,
+                previous_from_index,
+                previous_end_index,
+                ranking_top_n,
+            )
+
+        rankings[str(window)] = _attach_rank_movement(current_rows, previous_rows)
 
     return {
         "group_id": normalize_group_id(group_id),

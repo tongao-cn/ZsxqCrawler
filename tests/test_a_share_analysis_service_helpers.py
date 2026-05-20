@@ -189,11 +189,57 @@ class AShareAnalysisServiceHelperTests(unittest.TestCase):
             _empty_chart_payload(" 12345 ", ["2026-05-01"], "2026-05-02", "2026-05-03", 20, 35),
         )
 
-    def test_default_recommendation_pool_strategy_is_main_30_day_top40(self):
+    def test_default_recommendation_pool_strategy_is_single_30_day_top100(self):
         from backend.services.a_share_analysis_service import DEFAULT_RANKING_TOP_N, DEFAULT_RANKING_WINDOWS
 
-        self.assertEqual((30, 7, 14), DEFAULT_RANKING_WINDOWS)
-        self.assertEqual(40, DEFAULT_RANKING_TOP_N)
+        self.assertEqual((30,), DEFAULT_RANKING_WINDOWS)
+        self.assertEqual(100, DEFAULT_RANKING_TOP_N)
+
+    def test_build_chart_payload_includes_rank_movement(self):
+        from backend.services import a_share_analysis_service as service
+
+        daily = {
+            "2026-05-01": {"宁德时代": 3, "贵州茅台": 2},
+            "2026-05-02": {"宁德时代": 1, "贵州茅台": 4, "新易盛": 5},
+        }
+
+        with patch.object(service, "read_existing_csv", return_value=daily):
+            payload = service.build_chart_payload(
+                start_date="2026-05-01",
+                end_date="2026-05-02",
+                ranking_windows=(2,),
+                ranking_top_n=3,
+            )
+
+        self.assertEqual(
+            [
+                {
+                    "company": "贵州茅台",
+                    "count": 6,
+                    "rank": 1,
+                    "previous_rank": 2,
+                    "rank_change": 1,
+                    "trend": "up",
+                },
+                {
+                    "company": "新易盛",
+                    "count": 5,
+                    "rank": 2,
+                    "previous_rank": None,
+                    "rank_change": None,
+                    "trend": "new",
+                },
+                {
+                    "company": "宁德时代",
+                    "count": 4,
+                    "rank": 3,
+                    "previous_rank": 1,
+                    "rank_change": -2,
+                    "trend": "down",
+                },
+            ],
+            payload["rankings"]["2"],
+        )
 
     def test_parse_topic_stock_extraction_output_supports_new_schema(self):
         from backend.services.a_share_analysis_service import _parse_company_extraction_output, _parse_topic_stock_extraction_output

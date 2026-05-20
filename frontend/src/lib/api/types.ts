@@ -236,6 +236,10 @@ export interface AShareAnalysisSeries {
 export interface AShareAnalysisRankingItem {
   company: string;
   count: number;
+  rank: number;
+  previous_rank?: number | null;
+  rank_change?: number | null;
+  trend?: 'new' | 'up' | 'down' | 'flat';
 }
 
 export interface AShareAnalysisChart {

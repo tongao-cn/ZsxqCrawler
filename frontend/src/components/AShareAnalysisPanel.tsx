@@ -10,7 +10,7 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
-import { RefreshCw, Play, Eraser, TrendingUp, Database, Activity, Upload } from 'lucide-react';
+import { ArrowDown, ArrowUp, Minus, RefreshCw, Play, Eraser, TrendingUp, Database, Activity, Upload } from 'lucide-react';
 
 import {
   apiClient,
@@ -36,7 +36,6 @@ import { toast } from 'sonner';
 
 const DEFAULT_TOP_N = 12;
 const MAIN_RANKING_WINDOW = 30;
-const DISPLAY_RANKING_WINDOWS = [30, 7, 14];
 
 interface AShareAnalysisPanelProps {
   onTaskCreated?: (taskId: string) => void;
@@ -373,45 +372,56 @@ function RankingWindowGrid({
   chart,
   rankingWindows,
 }: RankingWindowGridProps) {
-  const displayWindows = DISPLAY_RANKING_WINDOWS.filter((windowDays) => rankingWindows.includes(windowDays));
-  const visibleWindows = displayWindows.length > 0 ? displayWindows : rankingWindows;
+  const windowDays = rankingWindows.includes(MAIN_RANKING_WINDOW) ? MAIN_RANKING_WINDOW : rankingWindows[0];
+  const rankingRows = chart?.rankings?.[String(windowDays)] || [];
 
   return (
-    <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-      {visibleWindows.map((windowDays) => {
-        const rankingRows = chart?.rankings?.[String(windowDays)] || [];
-        const isMainWindow = windowDays === MAIN_RANKING_WINDOW;
-        return (
-          <Card
-            key={windowDays}
-            className={`border shadow-none ${
-              isMainWindow ? 'border-green-200 bg-green-50/40' : 'border-gray-200'
-            }`}
-          >
-            <CardHeader className="pb-3">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div>
-                  <CardTitle className="text-base">{windowDays}日 Top {chart?.ranking_top_n || 40}</CardTitle>
-                  <CardDescription>
-                    {isMainWindow ? '主推荐池，随短周期一起导入通达信' : '短周期观察，随主推荐池一起导入'}
-                  </CardDescription>
-                </div>
-                <Badge className={isMainWindow ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-700'}>
-                  {isMainWindow ? '主池' : '观察'}
-                </Badge>
-              </div>
-            </CardHeader>
-            <CardContent>
-              {rankingRows.length === 0 ? (
-                <div className="text-sm text-muted-foreground">暂无数据</div>
-              ) : (
-                <RankingRows rows={rankingRows} windowDays={windowDays} />
-              )}
-            </CardContent>
-          </Card>
-        );
-      })}
-    </div>
+    <Card className="border border-green-200 bg-green-50/40 shadow-none">
+      <CardHeader className="pb-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <CardTitle className="text-base">{windowDays}日 Top {chart?.ranking_top_n || 100}</CardTitle>
+            <CardDescription>单一主推荐池，排名变化按上一数据日的同窗口 Top100 对比</CardDescription>
+          </div>
+          <Badge className="bg-green-100 text-green-800">主池</Badge>
+        </div>
+      </CardHeader>
+      <CardContent>
+        {rankingRows.length === 0 ? (
+          <div className="text-sm text-muted-foreground">暂无数据</div>
+        ) : (
+          <RankingRows rows={rankingRows} windowDays={windowDays} />
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function RankTrendBadge({ item }: { item: AShareAnalysisRankingItem }) {
+  if (item.trend === 'new') {
+    return <Badge className="bg-blue-100 text-blue-800">新进</Badge>;
+  }
+  if (item.trend === 'up') {
+    return (
+      <Badge className="gap-1 bg-red-100 text-red-800">
+        <ArrowUp className="h-3 w-3" />
+        {Math.abs(item.rank_change ?? 0)}
+      </Badge>
+    );
+  }
+  if (item.trend === 'down') {
+    return (
+      <Badge className="gap-1 bg-green-100 text-green-800">
+        <ArrowDown className="h-3 w-3" />
+        {Math.abs(item.rank_change ?? 0)}
+      </Badge>
+    );
+  }
+  return (
+    <Badge variant="outline" className="gap-1 bg-white text-gray-600">
+      <Minus className="h-3 w-3" />
+      持平
+    </Badge>
   );
 }
 
@@ -423,17 +433,26 @@ function RankingRows({
   windowDays: number;
 }) {
   return (
-    <div className="space-y-2">
+    <div className="max-h-[760px] overflow-y-auto pr-1">
+      <div className="grid grid-cols-[52px_minmax(0,1fr)_80px_84px] gap-3 border-b border-green-100 pb-2 text-xs font-medium text-muted-foreground">
+        <span>排名</span>
+        <span>股票</span>
+        <span className="text-right">提及</span>
+        <span className="text-right">变化</span>
+      </div>
       {rows.map((item, index) => (
         <div
           key={`${windowDays}-${item.company}`}
-          className="grid grid-cols-[28px_minmax(0,1fr)_auto] gap-2 text-sm items-center border-b border-dashed pb-2 last:border-b-0"
+          className="grid grid-cols-[52px_minmax(0,1fr)_80px_84px] items-center gap-3 border-b border-dashed py-2 text-sm last:border-b-0"
         >
-          <span className="text-muted-foreground">{index + 1}</span>
+          <span className="font-medium tabular-nums text-gray-900">{item.rank ?? index + 1}</span>
           <span className="truncate" title={item.company}>
             {item.company}
           </span>
-          <span className="font-medium tabular-nums">{item.count}</span>
+          <span className="text-right font-medium tabular-nums">{item.count}</span>
+          <span className="flex justify-end">
+            <RankTrendBadge item={item} />
+          </span>
         </div>
       ))}
     </div>
@@ -633,7 +652,7 @@ function LatestExportSummary({
       <div className="text-sm font-medium text-gray-900">发布到通达信</div>
       <Button variant="outline" className="w-full" onClick={onExportToTdx} disabled={exportingTdx}>
         <Upload className={`h-4 w-4 ${exportingTdx ? 'animate-pulse' : ''}`} />
-        {exportingTdx ? '导入中...' : '导入30/7/14推荐池'}
+        {exportingTdx ? '导入中...' : '导入30日Top100'}
       </Button>
       <div className="grid grid-cols-2 gap-2 text-xs">
         <div className="rounded border border-gray-200 bg-white p-2">
@@ -712,7 +731,7 @@ export default function AShareAnalysisPanel({
   const [activeRunTaskId, setActiveRunTaskId] = useState<string | null>(null);
 
   const rankingWindows = useMemo(
-    () => status?.defaults.ranking_windows ?? [3, 7, 14, 21],
+    () => status?.defaults.ranking_windows ?? [30],
     [status]
   );
   const sortedSeries = useMemo(

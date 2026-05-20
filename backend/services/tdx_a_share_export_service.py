@@ -59,7 +59,7 @@ RANKING_BLOCK_NAMES = {
     21: "21日推荐池",
     30: "30日推荐池",
 }
-DEFAULT_TDX_EXPORT_WINDOWS = (30, 7, 14)
+DEFAULT_TDX_EXPORT_WINDOWS = (30,)
 TDX_BLOCK_CODE_PATTERN = re.compile(r"^ZX(?P<number>\d+)$", re.IGNORECASE)
 
 

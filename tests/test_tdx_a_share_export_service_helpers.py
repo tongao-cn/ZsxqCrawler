@@ -21,8 +21,8 @@ class TdxAShareExportServiceHelperTests(unittest.TestCase):
         self.assertEqual(_build_ranking_block_name(3), "3日推荐池")
         self.assertEqual(_build_ranking_block_name(30), "30日推荐池")
 
-    def test_default_tdx_export_uses_main_and_observation_pools(self):
-        self.assertEqual((30, 7, 14), DEFAULT_TDX_EXPORT_WINDOWS)
+    def test_default_tdx_export_only_uses_30_day_pool(self):
+        self.assertEqual((30,), DEFAULT_TDX_EXPORT_WINDOWS)
 
     def test_next_tdx_block_code_uses_next_available_zx_number(self):
         records = [
