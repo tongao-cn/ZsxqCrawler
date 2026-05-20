@@ -143,3 +143,39 @@ python scripts\generate_a_share_pool_rotation_report.py --summary output\a_share
   - `python -m unittest tests.test_tdx_a_share_export_service_helpers`
   - `python -m unittest tests.test_a_share_analysis_service_helpers`
   - `npm run lint`
+
+## Refreshed Backtest 2025-05-01 Baseline
+
+- Source coverage after the latest data refill:
+  - `381` natural recommendation dates from `2025-05-01` to `2026-05-19`.
+  - `83,780` stock-day records and `112,517` mention counts.
+- Product baseline tested: `30日 Top100`.
+- Execution model remains unchanged: signal day `T`, buy at next KnowAction open, sell at the following KnowAction open.
+- Main result:
+  - Daily rows: `253`; completed rows: `252`; skipped rows: `1`.
+  - Raw compound return: `113.3493%`.
+  - Compound after `10bp`: `109.4812%`.
+  - Compound after `20bp`: `105.6812%`.
+  - Compound after `50bp`: `94.6865%`.
+  - Mean daily return: `0.3276%`; win rate: `57.5397%`.
+  - Average turnover: `7.2839%`.
+  - Max drawdown raw: `-13.3850%`; max drawdown after `10bp`: `-13.6194%`.
+- Monthly stability:
+  - `10 / 13` months were positive.
+  - Strongest months: `2025-08` `21.7561%`, `2026-04` `17.9186%`, `2025-12` `16.1962%`.
+  - Weakest months: `2026-03` `-9.4103%`, `2025-11` `-7.3789%`, `2025-05` `-2.6852%`.
+- Leading contributors in the refreshed `30日 Top100` run include `中际旭创`, `新易盛`, `仕佳光子`, `天孚通信`, `胜宏科技`, `宏和科技`, `德福科技`, `东山精密`, `兆易创新`, and `英维克`.
+- Artifacts:
+  - `output\a_share_research\51111112855254_pool_rotation_top100_30d_20250501_20260519_daily.csv`
+  - `output\a_share_research\51111112855254_pool_rotation_top100_30d_20250501_20260519_period.csv`
+  - `output\a_share_research\51111112855254_pool_rotation_top100_30d_cost_20250501_20260519_summary.csv`
+  - `output\a_share_research\51111112855254_pool_rotation_top100_30d_cost_20250501_20260519_daily.csv`
+  - `output\a_share_research\51111112855254_pool_rotation_top100_30d_cost_20250501_20260519_period.csv`
+  - `output\a_share_research\51111112855254_pool_rotation_top100_30d_cost_20250501_20260519_contribution.csv`
+- Commands:
+
+```powershell
+$env:PYTHONPATH='.'
+python scripts\run_a_share_recommendation_pool_rotation.py --group-id 51111112855254 --start-date 2025-05-01 --end-date 2026-05-19 --windows 30 --top-n 100 --daily-output output\a_share_research\51111112855254_pool_rotation_top100_30d_20250501_20260519_daily.csv --period-output output\a_share_research\51111112855254_pool_rotation_top100_30d_20250501_20260519_period.csv
+python scripts\run_a_share_pool_rotation_grid.py --group-id 51111112855254 --start-date 2025-05-01 --end-date 2026-05-19 --windows 30 --buckets top100 --output-prefix output\a_share_research\51111112855254_pool_rotation_top100_30d_cost_20250501_20260519
+```
