@@ -36,6 +36,7 @@ import { toast } from 'sonner';
 
 const DEFAULT_TOP_N = 12;
 const MAIN_RANKING_WINDOW = 30;
+const DISPLAY_RANKING_WINDOWS = [30, 7, 14];
 
 interface AShareAnalysisPanelProps {
   onTaskCreated?: (taskId: string) => void;
@@ -372,56 +373,44 @@ function RankingWindowGrid({
   chart,
   rankingWindows,
 }: RankingWindowGridProps) {
-  const mainWindow = rankingWindows.includes(MAIN_RANKING_WINDOW) ? MAIN_RANKING_WINDOW : rankingWindows[0];
-  const observationWindows = rankingWindows.filter((windowDays) => windowDays !== mainWindow);
-  const mainRows = chart?.rankings?.[String(mainWindow)] || [];
+  const displayWindows = DISPLAY_RANKING_WINDOWS.filter((windowDays) => rankingWindows.includes(windowDays));
+  const visibleWindows = displayWindows.length > 0 ? displayWindows : rankingWindows;
 
   return (
-    <div className="space-y-4">
-      <Card className="border border-green-200 bg-green-50/40 shadow-none">
-        <CardHeader className="pb-3">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div>
-              <CardTitle className="text-base">主推荐池：{mainWindow}日 Top {chart?.ranking_top_n || 40}</CardTitle>
-              <CardDescription>默认用于通达信导出的稳定观察池</CardDescription>
-            </div>
-            <Badge className="bg-green-100 text-green-800">主池</Badge>
-          </div>
-        </CardHeader>
-        <CardContent>
-          {mainRows.length === 0 ? (
-            <div className="text-sm text-muted-foreground">暂无数据</div>
-          ) : (
-            <RankingRows rows={mainRows} windowDays={mainWindow} />
-          )}
-        </CardContent>
-      </Card>
-
-      {observationWindows.length > 0 ? (
-        <div className="space-y-3">
-          <div className="text-sm font-medium text-gray-900">短周期观察</div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {observationWindows.map((windowDays) => {
-              const rankingRows = chart?.rankings?.[String(windowDays)] || [];
-              return (
-                <Card key={windowDays} className="border border-gray-200 shadow-none">
-                  <CardHeader className="pb-3">
-                    <CardTitle className="text-base">{windowDays}日 Top {chart?.ranking_top_n || 40}</CardTitle>
-                    <CardDescription>只做短周期热度观察，不作为默认导出池</CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    {rankingRows.length === 0 ? (
-                      <div className="text-sm text-muted-foreground">暂无数据</div>
-                    ) : (
-                      <RankingRows rows={rankingRows} windowDays={windowDays} />
-                    )}
-                  </CardContent>
-                </Card>
-              );
-            })}
-          </div>
-        </div>
-      ) : null}
+    <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+      {visibleWindows.map((windowDays) => {
+        const rankingRows = chart?.rankings?.[String(windowDays)] || [];
+        const isMainWindow = windowDays === MAIN_RANKING_WINDOW;
+        return (
+          <Card
+            key={windowDays}
+            className={`border shadow-none ${
+              isMainWindow ? 'border-green-200 bg-green-50/40' : 'border-gray-200'
+            }`}
+          >
+            <CardHeader className="pb-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <CardTitle className="text-base">{windowDays}日 Top {chart?.ranking_top_n || 40}</CardTitle>
+                  <CardDescription>
+                    {isMainWindow ? '主推荐池，随短周期一起导入通达信' : '短周期观察，随主推荐池一起导入'}
+                  </CardDescription>
+                </div>
+                <Badge className={isMainWindow ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-700'}>
+                  {isMainWindow ? '主池' : '观察'}
+                </Badge>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {rankingRows.length === 0 ? (
+                <div className="text-sm text-muted-foreground">暂无数据</div>
+              ) : (
+                <RankingRows rows={rankingRows} windowDays={windowDays} />
+              )}
+            </CardContent>
+          </Card>
+        );
+      })}
     </div>
   );
 }
@@ -644,7 +633,7 @@ function LatestExportSummary({
       <div className="text-sm font-medium text-gray-900">发布到通达信</div>
       <Button variant="outline" className="w-full" onClick={onExportToTdx} disabled={exportingTdx}>
         <Upload className={`h-4 w-4 ${exportingTdx ? 'animate-pulse' : ''}`} />
-        {exportingTdx ? '导入中...' : '导入30日主推荐池'}
+        {exportingTdx ? '导入中...' : '导入30/7/14推荐池'}
       </Button>
       <div className="grid grid-cols-2 gap-2 text-xs">
         <div className="rounded border border-gray-200 bg-white p-2">

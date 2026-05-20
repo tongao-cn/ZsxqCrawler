@@ -8,6 +8,8 @@ from backend.services.tdx_a_share_export_service import (
     _build_pending_block_write,
     _build_ranking_block_name,
     _collect_ranking_companies,
+    _ensure_tdx_cfg_records,
+    _next_tdx_block_code,
 )
 
 
@@ -19,8 +21,43 @@ class TdxAShareExportServiceHelperTests(unittest.TestCase):
         self.assertEqual(_build_ranking_block_name(3), "3日推荐池")
         self.assertEqual(_build_ranking_block_name(30), "30日推荐池")
 
-    def test_default_tdx_export_only_uses_main_pool(self):
-        self.assertEqual((30,), DEFAULT_TDX_EXPORT_WINDOWS)
+    def test_default_tdx_export_uses_main_and_observation_pools(self):
+        self.assertEqual((30, 7, 14), DEFAULT_TDX_EXPORT_WINDOWS)
+
+    def test_next_tdx_block_code_uses_next_available_zx_number(self):
+        records = [
+            {"name": "已有1", "code": "ZX001"},
+            {"name": "已有2", "code": "ZX009"},
+            {"name": "其他", "code": "OTHER"},
+        ]
+
+        self.assertEqual("ZX010", _next_tdx_block_code(records))
+
+    def test_ensure_tdx_cfg_records_creates_missing_blocks(self):
+        records = [
+            {"name": "纪要又要-30日", "code": "ZX001"},
+        ]
+
+        cfg_by_name, created_records = _ensure_tdx_cfg_records(
+            records,
+            ["纪要又要-30日", "纪要又要-7日", "纪要又要-14日"],
+        )
+
+        self.assertEqual(
+            created_records,
+            [
+                {"name": "纪要又要-7日", "code": "ZX002"},
+                {"name": "纪要又要-14日", "code": "ZX003"},
+            ],
+        )
+        self.assertEqual(cfg_by_name["纪要又要-30日"]["code"], "ZX001")
+        self.assertEqual(cfg_by_name["纪要又要-7日"]["code"], "ZX002")
+        self.assertEqual(cfg_by_name["纪要又要-14日"]["code"], "ZX003")
+        self.assertEqual(records, [
+            {"name": "纪要又要-30日", "code": "ZX001"},
+            {"name": "纪要又要-7日", "code": "ZX002"},
+            {"name": "纪要又要-14日", "code": "ZX003"},
+        ])
 
     def test_collect_ranking_companies_preserves_existing_filtering(self):
         rankings = {

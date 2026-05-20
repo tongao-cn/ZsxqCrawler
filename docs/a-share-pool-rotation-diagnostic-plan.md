@@ -123,8 +123,19 @@ python scripts\generate_a_share_pool_rotation_report.py --summary output\a_share
 ## Product Strategy Update
 
 - Frontend recommendation-pool defaults now reflect the research direction:
-  - Main recommendation pool: `30日 Top40`.
-  - Short-cycle observation pools: `7日 Top40` and `14日 Top40`.
+  - `30日 Top40`, `7日 Top40`, and `14日 Top40` are displayed in one row, with `30日` marked as the main pool and `7日` / `14日` kept as short-cycle observation pools.
   - `3日` is removed from the default main view to avoid steering users toward high-turnover short-cycle behavior.
-- Tongdaxin export defaults to the main recommendation pool only: `30日 Top40`.
+- Tongdaxin export defaults to the same three pools together: `30日 Top40`, `7日 Top40`, and `14日 Top40`.
+- Tongdaxin export now creates missing custom blocks in `blocknew.cfg` automatically before writing `.blk` files, so users no longer need to pre-create the board names manually.
 - The frontend still keeps date filtering and chart TopN controls separate from the recommendation-pool strategy; chart TopN controls line visibility, not the exported pool size.
+
+## Implementation Update 2026-05-20
+
+- Scope: align the frontend display and Tongdaxin export behavior with the `30日 / 7日 / 14日 Top40` operating view.
+- Changed files:
+  - `frontend/src/components/AShareAnalysisPanel.tsx`: render the three recommendation windows in one row and relabel the export action as a combined import.
+  - `backend/services/tdx_a_share_export_service.py`: export `30/7/14` by default and auto-create missing Tongdaxin custom block records with the next `ZX###` code.
+  - `tests/test_tdx_a_share_export_service_helpers.py`: add regression coverage for default windows and missing-block cfg creation.
+- Verification:
+  - `python -m unittest tests.test_tdx_a_share_export_service_helpers`
+  - `npm run lint`

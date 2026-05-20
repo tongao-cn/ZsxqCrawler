@@ -59,7 +59,8 @@ RANKING_BLOCK_NAMES = {
     21: "21日推荐池",
     30: "30日推荐池",
 }
-DEFAULT_TDX_EXPORT_WINDOWS = (30,)
+DEFAULT_TDX_EXPORT_WINDOWS = (30, 7, 14)
+TDX_BLOCK_CODE_PATTERN = re.compile(r"^ZX(?P<number>\d+)$", re.IGNORECASE)
 
 
 def _normalize_tdx_group_name(group_name: Optional[str]) -> Optional[str]:
@@ -208,6 +209,45 @@ def write_tdx_cfg(cfg_path: Path, records: List[Dict[str, str]]) -> None:
         payload.extend(_encode_ascii_fixed(record["code"], TDX_CODE_SIZE))
         payload.extend(b"\x00" * (TDX_RECORD_SIZE - TDX_NAME_SIZE - TDX_CODE_SIZE))
     cfg_path.write_bytes(bytes(payload))
+
+
+def _next_tdx_block_code(records: Sequence[Mapping[str, str]]) -> str:
+    used_codes = {str(record.get("code") or "").strip().upper() for record in records}
+    max_number = 0
+    for code in used_codes:
+        match = TDX_BLOCK_CODE_PATTERN.fullmatch(code)
+        if match is not None:
+            max_number = max(max_number, int(match.group("number")))
+
+    next_number = max_number + 1
+    while f"ZX{next_number:03d}" in used_codes:
+        next_number += 1
+    return f"ZX{next_number:03d}"
+
+
+def _ensure_tdx_cfg_records(
+    records: List[Dict[str, str]],
+    block_names: Sequence[str],
+) -> Tuple[Dict[str, Dict[str, str]], List[Dict[str, str]]]:
+    cfg_by_name = {
+        str(record.get("name") or "").strip(): record
+        for record in records
+        if str(record.get("name") or "").strip()
+    }
+    created_records: List[Dict[str, str]] = []
+
+    for block_name in block_names:
+        if block_name in cfg_by_name:
+            continue
+        record = {
+            "name": block_name,
+            "code": _next_tdx_block_code(records),
+        }
+        records.append(record)
+        cfg_by_name[block_name] = record
+        created_records.append(record)
+
+    return cfg_by_name, created_records
 
 
 def _write_blk(path: Path, codes: List[str]) -> None:
@@ -582,19 +622,12 @@ def export_a_share_rankings_to_tdx(
     if not cfg_path.exists():
         raise RuntimeError(f"未找到通达信板块配置文件: {cfg_path}")
 
-    cfg_records = read_tdx_cfg(cfg_path)
-    cfg_by_name = {str(record.get("name") or "").strip(): record for record in cfg_records}
-
     expected_block_names = [
         _build_ranking_block_name(int(window), group_name)
         for window in ranking_windows
     ]
-    missing_block_names = [name for name in expected_block_names if name not in cfg_by_name]
-    if missing_block_names:
-        raise RuntimeError(
-            "通达信中未找到以下板块，请先在通达信里创建后再导入: "
-            + "、".join(missing_block_names)
-        )
+    cfg_records = read_tdx_cfg(cfg_path)
+    cfg_by_name, created_cfg_records = _ensure_tdx_cfg_records(cfg_records, expected_block_names)
 
     pending_writes = [
         _build_pending_block_write(int(window), rankings, resolved_codes, cfg_by_name, block_dir, group_name)
@@ -604,12 +637,16 @@ def export_a_share_rankings_to_tdx(
     backup_dir = block_dir / f"backup_a_share_export_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
     backup_files = _backup_targets(
         backup_dir,
-        [blk_path for _, _, _, blk_path, _, _ in pending_writes],
+        ([cfg_path] if created_cfg_records else [])
+        + [blk_path for _, _, _, blk_path, _, _ in pending_writes],
     )
 
     block_results: List[Dict[str, Any]] = []
     total_written = 0
     aggregate_skipped: List[str] = list(unresolved_companies)
+
+    if created_cfg_records:
+        write_tdx_cfg(cfg_path, cfg_records)
 
     for window, block_name, block_code, blk_path, converted_codes, skipped_companies in pending_writes:
         _write_blk(blk_path, converted_codes)
