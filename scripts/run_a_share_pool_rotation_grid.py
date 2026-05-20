@@ -128,6 +128,9 @@ def _parse_windows(value: str) -> tuple[int, ...]:
 
 def _parse_bucket(value: str) -> tuple[str, str, int, int]:
     bucket = value.strip().lower()
+    if bucket == "all":
+        return "topn", "all", 1, 1_000_000
+
     top_match = re.fullmatch(r"top(\d+)", bucket)
     if top_match:
         top_n = int(top_match.group(1))
