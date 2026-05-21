@@ -152,6 +152,10 @@ const CONCEPT_ALIAS_GROUPS: Array<{ concept: string; aliases: string[] }> = [
     aliases: ['光模块', '光通信', '光互联', '光互连', 'CPO', '光芯片', '硅光', 'Micro LED光互联', '短距光互联', 'MPO', 'NPO', 'OCS'],
   },
   {
+    concept: 'PCB/CCL',
+    aliases: ['PCB', 'AI PCB', '光模块mSAP PCB', 'PCB钻针', 'AI PCB钻针', 'PCB高端钻针', 'PCB高端铣刀', '金刚石涂层PCB钻针', 'PCB专用设备', 'PCB曝光设备', 'PCB高端设备', 'CCL', '高端CCL', 'CCL上游材料', '铜箔', '高端铜箔', '载体铜箔', 'HVLP4/5铜箔', 'HVLP5铜箔', 'RCC铜箔', '铜箔设备'],
+  },
+  {
     concept: '商业航天/卫星',
     aliases: ['商业航天', '空天行业', '低轨卫星星座', '卫星', '太空算力', '太空光伏', 'SpaceX产业链', 'SpaceX IPO催化', '火箭'],
   },
