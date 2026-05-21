@@ -129,7 +129,11 @@ const CONCEPT_ALIAS_GROUPS: Array<{ concept: string; aliases: string[] }> = [
   },
   {
     concept: 'CPU产业链',
-    aliases: ['CPU', '国产CPU', 'CPU涨价', '服务器CPU', '数据中心CPU', 'x86'],
+    aliases: ['CPU', '国产CPU', 'CPU涨价', '服务器CPU', '数据中心CPU', 'CPU算力', 'x86'],
+  },
+  {
+    concept: 'AI芯片/GPU',
+    aliases: ['GPU', '合封GPU', 'ASIC', 'AI芯片', '国产GPU'],
   },
   {
     concept: '存储产业链',
@@ -157,7 +161,11 @@ const CONCEPT_ALIAS_GROUPS: Array<{ concept: string; aliases: string[] }> = [
   },
   {
     concept: '储能',
-    aliases: ['储能', '户储', '光储', '大储', '储能逆变器', '逆变器'],
+    aliases: ['储能', '户储', '光储', '大储', '工商储', '储能逆变器', '逆变器'],
+  },
+  {
+    concept: '绿电',
+    aliases: ['绿电'],
   },
   {
     concept: '光伏/HJT',
@@ -165,7 +173,7 @@ const CONCEPT_ALIAS_GROUPS: Array<{ concept: string; aliases: string[] }> = [
   },
   {
     concept: '锂电/电池',
-    aliases: ['锂电', '锂电材料', '电池', '固态电池'],
+    aliases: ['锂电', '锂电材料', '电池', '固态电池', '磷酸铁锂'],
   },
   {
     concept: '光通信/CPO',
@@ -181,7 +189,7 @@ const CONCEPT_ALIAS_GROUPS: Array<{ concept: string; aliases: string[] }> = [
   },
   {
     concept: 'CCL',
-    aliases: ['CCL', '高端CCL', 'CCL上游材料'],
+    aliases: ['CCL', '高端CCL', 'CCL上游材料', '电子布', 'Q布', '正交背板'],
   },
   {
     concept: '铜箔',
@@ -189,7 +197,11 @@ const CONCEPT_ALIAS_GROUPS: Array<{ concept: string; aliases: string[] }> = [
   },
   {
     concept: '商业航天/卫星',
-    aliases: ['商业航天', '空天行业', '低轨卫星星座', '卫星', '太空算力', '太空光伏', 'SpaceX产业链', 'SpaceX IPO催化', '火箭'],
+    aliases: ['商业航天', '空天行业', '低轨卫星星座', '卫星', '卫星互联网', '太空算力', '太空光伏', 'SpaceX', 'SpaceX产业链', 'SpaceX IPO催化', '火箭'],
+  },
+  {
+    concept: '燃机/SOFC',
+    aliases: ['SOFC', '燃气轮机', '燃机', '固体氧化物燃料电池'],
   },
 ];
 
