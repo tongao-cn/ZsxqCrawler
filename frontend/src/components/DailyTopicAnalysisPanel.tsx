@@ -113,11 +113,15 @@ const DEFAULT_VISIBLE_CONCEPT_COUNT = 30;
 const CONCEPT_ALIAS_GROUPS: Array<{ concept: string; aliases: string[] }> = [
   {
     concept: '机器人',
-    aliases: ['人形机器人', '具身智能', '物理AI', '物理ai', 'Optimus', 'Optimus V3', '特斯拉Optimus', 'T链', 't链', 'T/S链', '机器人零部件', '机器人整机', '汽车零部件', '减速器', '谐波减速器'],
+    aliases: ['人形机器人', '具身智能', 'Optimus', 'Optimus V3', '特斯拉Optimus', 'T链', 't链', 'T/S链', '机器人零部件', '机器人整机', '汽车零部件', '减速器', '谐波减速器'],
+  },
+  {
+    concept: '物理AI',
+    aliases: ['物理AI', '物理ai'],
   },
   {
     concept: 'AI算力/数据中心',
-    aliases: ['AI', '算力', 'AI算力', '国产算力', '算力基建', 'AI基建', 'AIDC', 'AI数据中心', '数据中心', 'AI服务器', 'AI电源', '液冷', '中压UPS'],
+    aliases: ['AI', '算力', 'AI算力', '算力基建', 'AI基建', 'AIDC', 'AI数据中心', '数据中心', 'AI服务器'],
   },
   {
     concept: 'CPU产业链',
@@ -132,8 +136,12 @@ const CONCEPT_ALIAS_GROUPS: Array<{ concept: string; aliases: string[] }> = [
     aliases: ['半导体设备', '先进封装', '先进封测', '半导体先进封装', 'CoWoS'],
   },
   {
-    concept: '储能/锂电',
-    aliases: ['储能', '锂电', '锂电材料', '电池', '固态电池', '户储', '光储', '大储', '储能逆变器'],
+    concept: '储能',
+    aliases: ['储能', '户储', '光储', '大储', '储能逆变器'],
+  },
+  {
+    concept: '锂电/电池',
+    aliases: ['锂电', '锂电材料', '电池', '固态电池'],
   },
   {
     concept: '光通信/CPO',
