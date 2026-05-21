@@ -80,6 +80,7 @@ function normalizeReportMarkdown(value?: string | null) {
 
 interface ConceptStat {
   concept: string;
+  aliases: string[];
   stockNames: string[];
   stockCount: number;
   topicIds: Array<string | number>;
@@ -107,7 +108,49 @@ interface ConceptQualityTag {
   className: string;
 }
 
-const DEFAULT_VISIBLE_CONCEPT_COUNT = 20;
+const DEFAULT_VISIBLE_CONCEPT_COUNT = 30;
+
+const CONCEPT_ALIAS_GROUPS: Array<{ concept: string; aliases: string[] }> = [
+  {
+    concept: '机器人',
+    aliases: ['人形机器人', '具身智能', '物理AI', '物理ai', 'Optimus', 'Optimus V3', '特斯拉Optimus', 'T链', 't链', 'T/S链', '机器人零部件', '机器人整机', '减速器', '谐波减速器'],
+  },
+  {
+    concept: 'AI算力/数据中心',
+    aliases: ['AI', '算力', 'AI算力', '国产算力', '算力基建', 'AI基建', 'AIDC', 'AI数据中心', '数据中心', 'AI服务器', 'AI电源', '液冷', '中压UPS'],
+  },
+  {
+    concept: 'CPU产业链',
+    aliases: ['CPU', '国产CPU', 'CPU涨价', '服务器CPU', '数据中心CPU', 'x86'],
+  },
+  {
+    concept: '存储产业链',
+    aliases: ['存储', '存储产业链', '长江存储产业链', '长江存储上市', '存储扩产', '存储链', '利基存储'],
+  },
+  {
+    concept: '半导体设备/先进封装',
+    aliases: ['半导体设备', '先进封装', '先进封测', '半导体先进封装', 'CoWoS'],
+  },
+  {
+    concept: '储能/锂电',
+    aliases: ['储能', '锂电', '锂电材料', '电池', '固态电池', '户储', '光储', '大储', '储能逆变器'],
+  },
+  {
+    concept: '光通信/CPO',
+    aliases: ['光模块', '光通信', '光互联', '光互连', 'CPO', '光芯片', '硅光', 'Micro LED光互联', '短距光互联', 'MPO', 'NPO', 'OCS'],
+  },
+  {
+    concept: '商业航天/卫星',
+    aliases: ['商业航天', '空天行业', '低轨卫星星座', '卫星', '太空算力', '太空光伏', 'SpaceX产业链', 'SpaceX IPO催化', '火箭'],
+  },
+];
+
+const CONCEPT_ALIAS_MAP = new Map<string, string>(
+  CONCEPT_ALIAS_GROUPS.flatMap((group) => [
+    [group.concept.toLocaleLowerCase(), group.concept] as [string, string],
+    ...group.aliases.map((alias) => [alias.toLocaleLowerCase(), group.concept] as [string, string]),
+  ])
+);
 
 function getDateText(offsetDays = 0, baseDate?: string) {
   const date = baseDate ? new Date(`${baseDate}T00:00:00`) : new Date();
@@ -126,6 +169,11 @@ function normalizeCompanyName(value?: string | null) {
   return (value || '')
     .replace(/\s+/g, '')
     .replace(/股份有限公司|有限责任公司|有限公司|集团/g, '');
+}
+
+function normalizeConceptName(value?: string | null) {
+  const concept = (value || '').trim();
+  return CONCEPT_ALIAS_MAP.get(concept.toLocaleLowerCase()) || concept;
 }
 
 function isRisingTrend(counts: number[]) {
@@ -164,7 +212,7 @@ export default function DailyTopicAnalysisPanel({
   const [onlyRecommendationHits, setOnlyRecommendationHits] = useState(false);
 
   const conceptStats = useMemo<ConceptStat[]>(() => {
-    const conceptMap = new Map<string, { stocks: Set<string>; topics: Set<string>; recommendedStocks: Set<string> }>();
+    const conceptMap = new Map<string, { aliases: Set<string>; stocks: Set<string>; topics: Set<string>; recommendedStocks: Set<string> }>();
     for (const stock of stockConcepts?.stocks || []) {
       const stockName = stock.stock_name?.trim();
       if (!stockName) {
@@ -172,18 +220,21 @@ export default function DailyTopicAnalysisPanel({
       }
       const normalizedStockName = normalizeCompanyName(stockName);
       for (const rawConcept of stock.concepts || []) {
-        const concept = rawConcept.trim();
-        if (!concept) {
+        const alias = rawConcept.trim();
+        if (!alias) {
           continue;
         }
+        const concept = normalizeConceptName(alias);
         if (!conceptMap.has(concept)) {
           conceptMap.set(concept, {
+            aliases: new Set(),
             stocks: new Set(),
             topics: new Set(),
             recommendedStocks: new Set(),
           });
         }
         const item = conceptMap.get(concept);
+        item?.aliases.add(alias);
         item?.stocks.add(stockName);
         stock.topic_ids.forEach((topicId) => item?.topics.add(String(topicId)));
         if (recommendedCompanies.has(normalizedStockName)) {
@@ -195,6 +246,7 @@ export default function DailyTopicAnalysisPanel({
     return Array.from(conceptMap.entries())
       .map(([concept, value]) => ({
         concept,
+        aliases: Array.from(value.aliases).sort((a, b) => a.localeCompare(b, 'zh-CN')),
         stockNames: Array.from(value.stocks).sort((a, b) => a.localeCompare(b, 'zh-CN')),
         stockCount: value.stocks.size,
         topicIds: Array.from(value.topics).sort((a, b) => a.localeCompare(b, 'zh-CN')),
@@ -243,7 +295,7 @@ export default function DailyTopicAnalysisPanel({
   const filteredStocks = useMemo(() => {
     const stocks = stockConcepts?.stocks || [];
     return stocks.filter((stock) => {
-      if (selectedConcept && !stock.concepts.some((concept) => concept === selectedConcept)) {
+      if (selectedConcept && !stock.concepts.some((concept) => normalizeConceptName(concept) === selectedConcept)) {
         return false;
       }
       if (onlyRecommendationHits && !recommendedCompanies.has(normalizeCompanyName(stock.stock_name))) {
@@ -346,7 +398,11 @@ export default function DailyTopicAnalysisPanel({
       const conceptMap = new Map<string, { topics: Array<Set<string>>; stocks: Array<Set<string>> }>();
       results.forEach((result, dateIndex) => {
         for (const stock of result?.stocks || []) {
-          const uniqueConcepts = new Set((stock.concepts || []).map((concept) => concept.trim()).filter(Boolean));
+          const uniqueConcepts = new Set(
+            (stock.concepts || [])
+              .map((concept) => normalizeConceptName(concept))
+              .filter(Boolean)
+          );
           uniqueConcepts.forEach((concept) => {
             if (!conceptMap.has(concept)) {
               conceptMap.set(concept, {
@@ -601,6 +657,12 @@ export default function DailyTopicAnalysisPanel({
                                 <div className="truncate text-sm font-medium" title={item.concept}>
                                   {item.concept}
                                 </div>
+                                {item.aliases.length > 1 && (
+                                  <div className="mt-1 truncate text-xs text-muted-foreground" title={item.aliases.join(' / ')}>
+                                    含 {item.aliases.slice(0, 3).join(' / ')}
+                                    {item.aliases.length > 3 ? ` 等 ${item.aliases.length} 个` : ''}
+                                  </div>
+                                )}
                                 <div className="mt-2 flex flex-wrap gap-1">
                                   <Badge variant="secondary">话题 {item.topicCount}</Badge>
                                   <Badge variant="outline">股 {item.stockCount}</Badge>
@@ -654,6 +716,18 @@ export default function DailyTopicAnalysisPanel({
                             ))}
                           </div>
                         </div>
+                        {selectedConceptStat.aliases.length > 1 && (
+                          <div>
+                            <div className="mb-2 text-sm font-medium">合并概念</div>
+                            <div className="flex flex-wrap gap-1">
+                              {selectedConceptStat.aliases.map((alias) => (
+                                <Badge key={`${selectedConceptStat.concept}-alias-${alias}`} variant="outline">
+                                  {alias}
+                                </Badge>
+                              ))}
+                            </div>
+                          </div>
+                        )}
                         <div className="grid gap-3 md:grid-cols-4">
                           <div className="rounded-md border border-gray-200 bg-gray-50 p-3">
                             <div className="text-xs text-muted-foreground">来源话题</div>
@@ -766,16 +840,21 @@ export default function DailyTopicAnalysisPanel({
                             </TableCell>
                             <TableCell className="max-w-xs whitespace-normal">
                               <div className="flex flex-wrap gap-1">
-                                {stock.concepts.map((concept) => (
-                                  <Badge
-                                    key={concept}
-                                    variant={concept === selectedConcept ? 'default' : 'secondary'}
-                                    className="cursor-pointer"
-                                    onClick={() => openConceptDetail(concept)}
-                                  >
-                                    {concept}
-                                  </Badge>
-                                ))}
+                                {stock.concepts.map((concept) => {
+                                  const normalizedConcept = normalizeConceptName(concept);
+                                  return (
+                                    <Badge
+                                      key={concept}
+                                      variant={normalizedConcept === selectedConcept ? 'default' : 'secondary'}
+                                      className="cursor-pointer"
+                                      onClick={() => openConceptDetail(normalizedConcept)}
+                                      title={normalizedConcept !== concept ? `已合并到：${normalizedConcept}` : concept}
+                                    >
+                                      {concept}
+                                      {normalizedConcept !== concept ? ` -> ${normalizedConcept}` : ''}
+                                    </Badge>
+                                  );
+                                })}
                               </div>
                             </TableCell>
                             <TableCell className="max-w-[180px] whitespace-normal">
