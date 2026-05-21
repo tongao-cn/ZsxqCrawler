@@ -622,6 +622,58 @@ export default function DailyTopicAnalysisPanel({
     </div>
   );
 
+  const renderConceptList = () => (
+    <div className="flex flex-col gap-2 p-3">
+      {visibleConceptStats.map((item, index) => {
+        const selected = selectedConcept === item.concept;
+        const qualityTags = getConceptQualityTags(item);
+        return (
+          <button
+            key={item.concept}
+            type="button"
+            onClick={() => openConceptDetail(item.concept)}
+            className={`w-full rounded-md border p-3 text-left transition-colors ${
+              selected
+                ? 'border-blue-300 bg-blue-50'
+                : 'border-gray-200 bg-white hover:bg-gray-50'
+            }`}
+          >
+            <div className="flex items-start gap-2">
+              <span className="mt-0.5 w-6 text-sm text-muted-foreground">{index + 1}</span>
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-sm font-medium" title={item.concept}>
+                  {item.concept}
+                </div>
+                {item.aliases.length > 1 && (
+                  <div className="mt-1 truncate text-xs text-muted-foreground" title={item.aliases.join(' / ')}>
+                    含 {item.aliases.slice(0, 3).join(' / ')}
+                    {item.aliases.length > 3 ? ` 等 ${item.aliases.length} 个` : ''}
+                  </div>
+                )}
+                <div className="mt-2 flex flex-wrap gap-1">
+                  <Badge variant="secondary">话题 {item.topicCount}</Badge>
+                  <Badge variant="outline">股 {item.stockCount}</Badge>
+                  {item.recommendationHitCount > 0 && (
+                    <Badge className="bg-emerald-100 text-emerald-800">推 {item.recommendationHitCount}</Badge>
+                  )}
+                </div>
+                {qualityTags.length > 0 && (
+                  <div className="mt-2 flex flex-wrap gap-1">
+                    {qualityTags.slice(0, 2).map((tag) => (
+                      <Badge key={`${item.concept}-${tag.label}`} className={tag.className}>
+                        {tag.label}
+                      </Badge>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </button>
+        );
+      })}
+    </div>
+  );
+
   return (
     <div className="flex flex-col gap-4 p-1">
       {mode === 'stock-concepts' ? (
@@ -651,57 +703,9 @@ export default function DailyTopicAnalysisPanel({
                       按去重来源话题数排序，共 {conceptStats.length} 个概念
                     </div>
                   </div>
-                  <ScrollArea className="h-[640px]">
-                    <div className="flex flex-col gap-2 p-3">
-                      {visibleConceptStats.map((item, index) => {
-                        const selected = selectedConcept === item.concept;
-                        const qualityTags = getConceptQualityTags(item);
-                        return (
-                          <button
-                            key={item.concept}
-                            type="button"
-                            onClick={() => openConceptDetail(item.concept)}
-                            className={`w-full rounded-md border p-3 text-left transition-colors ${
-                              selected
-                                ? 'border-blue-300 bg-blue-50'
-                                : 'border-gray-200 bg-white hover:bg-gray-50'
-                            }`}
-                          >
-                            <div className="flex items-start gap-2">
-                              <span className="mt-0.5 w-6 text-sm text-muted-foreground">{index + 1}</span>
-                              <div className="min-w-0 flex-1">
-                                <div className="truncate text-sm font-medium" title={item.concept}>
-                                  {item.concept}
-                                </div>
-                                {item.aliases.length > 1 && (
-                                  <div className="mt-1 truncate text-xs text-muted-foreground" title={item.aliases.join(' / ')}>
-                                    含 {item.aliases.slice(0, 3).join(' / ')}
-                                    {item.aliases.length > 3 ? ` 等 ${item.aliases.length} 个` : ''}
-                                  </div>
-                                )}
-                                <div className="mt-2 flex flex-wrap gap-1">
-                                  <Badge variant="secondary">话题 {item.topicCount}</Badge>
-                                  <Badge variant="outline">股 {item.stockCount}</Badge>
-                                  {item.recommendationHitCount > 0 && (
-                                    <Badge className="bg-emerald-100 text-emerald-800">推 {item.recommendationHitCount}</Badge>
-                                  )}
-                                </div>
-                                {qualityTags.length > 0 && (
-                                  <div className="mt-2 flex flex-wrap gap-1">
-                                    {qualityTags.slice(0, 2).map((tag) => (
-                                      <Badge key={`${item.concept}-${tag.label}`} className={tag.className}>
-                                        {tag.label}
-                                      </Badge>
-                                    ))}
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </ScrollArea>
+                  <div className="xl:max-h-[640px] xl:overflow-y-auto">
+                    {renderConceptList()}
+                  </div>
                 </div>
 
                 <div className="flex min-w-0 flex-col gap-4">
