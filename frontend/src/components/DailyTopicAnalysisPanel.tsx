@@ -124,6 +124,10 @@ const CONCEPT_ALIAS_GROUPS: Array<{ concept: string; aliases: string[] }> = [
     aliases: ['AI', '算力', 'AI算力', '算力基建', 'AI基建', 'AIDC', 'AI数据中心', '数据中心', 'AI服务器'],
   },
   {
+    concept: '电源/HVDC',
+    aliases: ['AI电源', 'AIDC电源', '中压UPS', 'HVDC', 'SST', '高压直流'],
+  },
+  {
     concept: 'CPU产业链',
     aliases: ['CPU', '国产CPU', 'CPU涨价', '服务器CPU', '数据中心CPU', 'x86'],
   },
