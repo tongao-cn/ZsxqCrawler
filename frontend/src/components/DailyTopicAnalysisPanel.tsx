@@ -125,7 +125,7 @@ const CONCEPT_ALIAS_GROUPS: Array<{ concept: string; aliases: string[] }> = [
   },
   {
     concept: '电源/HVDC',
-    aliases: ['AI电源', 'AIDC电源', '中压UPS', 'HVDC', 'SST', '高压直流'],
+    aliases: ['AI电源', 'AIDC电源', '中压UPS', 'UPS', 'HVDC', 'SST', '高压直流', '服务器电源', '电源', 'AIDC供配电', '供配电'],
   },
   {
     concept: 'CPU产业链',
@@ -133,11 +133,15 @@ const CONCEPT_ALIAS_GROUPS: Array<{ concept: string; aliases: string[] }> = [
   },
   {
     concept: '存储产业链',
-    aliases: ['存储', '存储产业链', '长江存储产业链', '长江存储上市', '存储扩产', '存储链', '利基存储'],
+    aliases: ['存储', '存储产业链', '长江存储产业链', '长江存储上市', '存储扩产', '存储链', '利基存储', '长鑫存储', '长鑫', '国产存储', '长存产业链', '存储芯片', 'DRAM', 'HBM', 'MRDIMM'],
   },
   {
     concept: '半导体设备/先进封装',
     aliases: ['半导体设备', '先进封装', '先进封测', '半导体先进封装', 'CoWoS'],
+  },
+  {
+    concept: '玻璃基板/载板',
+    aliases: ['玻璃基板', '玻璃基载板', '玻璃载板', '玻璃基封装基板', '玻璃基封装载板', '玻璃基板TGV', 'TGV玻璃基板', 'TGV玻璃基板设备', 'ABF载板', 'IC载板', '封装基板', '载板'],
   },
   {
     concept: '储能',
@@ -149,7 +153,11 @@ const CONCEPT_ALIAS_GROUPS: Array<{ concept: string; aliases: string[] }> = [
   },
   {
     concept: '光通信/CPO',
-    aliases: ['光模块', '光通信', '光互联', '光互连', 'CPO', '光芯片', '硅光', 'Micro LED光互联', '短距光互联', 'MPO', 'NPO', 'OCS'],
+    aliases: ['光模块', '光通信', '光互联', '光互连', 'CPO', '光芯片', '硅光', 'Micro LED光互联', '短距光互联', 'MPO', 'NPO', 'OCS', '1.6T', '1.6T光模块', '800G', '3.2T', '光器件', '光模块设备', 'DSP', 'EML', '光纤', '通信'],
+  },
+  {
+    concept: '液冷/热管理',
+    aliases: ['液冷', 'AI液冷', 'AIDC液冷', '数据中心液冷', '液冷板', '液冷散热', '液冷产业链', '热管理', '冷却塔'],
   },
   {
     concept: 'PCB',
