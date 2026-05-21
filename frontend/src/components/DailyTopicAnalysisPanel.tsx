@@ -141,7 +141,7 @@ const CONCEPT_ALIAS_GROUPS: Array<{ concept: string; aliases: string[] }> = [
   },
   {
     concept: '储能',
-    aliases: ['储能', '户储', '光储', '大储', '储能逆变器'],
+    aliases: ['储能', '户储', '光储', '大储', '储能逆变器', '逆变器'],
   },
   {
     concept: '锂电/电池',
