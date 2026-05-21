@@ -113,7 +113,7 @@ const DEFAULT_VISIBLE_CONCEPT_COUNT = 30;
 const CONCEPT_ALIAS_GROUPS: Array<{ concept: string; aliases: string[] }> = [
   {
     concept: '机器人',
-    aliases: ['人形机器人', '具身智能', '物理AI', '物理ai', 'Optimus', 'Optimus V3', '特斯拉Optimus', 'T链', 't链', 'T/S链', '机器人零部件', '机器人整机', '减速器', '谐波减速器'],
+    aliases: ['人形机器人', '具身智能', '物理AI', '物理ai', 'Optimus', 'Optimus V3', '特斯拉Optimus', 'T链', 't链', 'T/S链', '机器人零部件', '机器人整机', '汽车零部件', '减速器', '谐波减速器'],
   },
   {
     concept: 'AI算力/数据中心',
