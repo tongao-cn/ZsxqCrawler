@@ -556,12 +556,24 @@ def reset_a_share_analysis_range(
                     (normalized_group_id, topic_ids),
                 )
                 stock_analyses_deleted = int(getattr(cur, "rowcount", 0) or 0)
+            stock_analysis_versions_deleted = 0
+            if topic_ids:
+                cur.execute(
+                    f"""
+                    DELETE FROM {_core_table_ref('stock_topic_analysis_versions')}
+                    WHERE group_id = %s
+                      AND COALESCE(NULLIF(topic_ids_json, ''), '[]')::jsonb ?| %s::text[]
+                    """,
+                    (normalized_group_id, topic_ids),
+                )
+                stock_analysis_versions_deleted = int(getattr(cur, "rowcount", 0) or 0)
     return {
         "daily_mentions": daily_deleted,
         "processed_state": processed_deleted,
         "topic_stock_extractions": extractions_deleted,
         "stock_topic_processed_states": stock_states_deleted,
         "stock_topic_analyses": stock_analyses_deleted,
+        "stock_topic_analysis_versions": stock_analysis_versions_deleted,
     }
 
 

@@ -506,6 +506,7 @@ def _upsert_stock_topic_analysis(
     processed_topic_status: str = "analyzed",
     extract_mode: str = "",
     write_processed_state: bool = True,
+    commit: bool = True,
 ) -> None:
     topic_ids = list(analyzed_topic_ids) if analyzed_topic_ids is not None else _topic_ids_from_result(result)
     if write_processed_state:
@@ -554,7 +555,46 @@ def _upsert_stock_topic_analysis(
             error,
         ),
     )
-    conn.commit()
+    if commit:
+        conn.commit()
+
+
+def _insert_stock_topic_analysis_version(
+    conn: Any,
+    *,
+    result: Dict[str, Any],
+    status: str,
+    error: str = "",
+    analyzed_topic_ids: Iterable[Any] | None = None,
+) -> None:
+    topic_ids = list(analyzed_topic_ids) if analyzed_topic_ids is not None else _topic_ids_from_result(result)
+    conn.execute(
+        """
+        INSERT INTO stock_topic_analysis_versions (
+            group_id, stock_name, stock_code, market, topic_ids_json,
+            concepts_json, recommendation_count, summary_markdown, model,
+            status, error, analysis_mode, new_topic_count, analysis_date,
+            created_at
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+        """,
+        (
+            result["group_id"],
+            result["stock_name"],
+            result.get("stock_code", ""),
+            result.get("market", ""),
+            _serialize_json_list(topic_ids),
+            _serialize_json_list(result.get("concepts", [])),
+            int(result.get("recommendation_count") or 0),
+            result.get("summary_markdown", ""),
+            result.get("model", ""),
+            status,
+            error,
+            result.get("analysis_mode", ""),
+            int(result.get("new_topic_count") or 0),
+            date.today().isoformat(),
+        ),
+    )
 
 
 def get_latest_stock_topic_analysis(group_id: str, stock_name: str) -> Dict[str, Any] | None:
@@ -877,6 +917,7 @@ def _build_stock_analysis_prompt(
 ) -> str:
     payload = {
         "group_id": search_result["group_id"],
+        "analysis_date": date.today().isoformat(),
         "stock_name": search_result["stock_name"],
         "stock_code": search_result.get("stock_code") or "",
         "market": search_result.get("market") or "",
@@ -920,7 +961,7 @@ def _call_stock_analysis_ai(prompt_payload: str, *, incremental: bool = False) -
         "### 3. 核心逻辑与成长驱动\n"
         "总结卖方/调研材料中反复出现的主线，例如需求增长、国产替代、技术升级、产能释放、订单变化、价格变化等。\n\n"
         "### 4. 关键数据、预测与口径\n"
-        "整理原文摘录中出现的收入、利润、订单、产能、出货量、目标价、市值空间等数字及其口径；没有明确数值时写未提及。\n\n"
+        "整理原文摘录中仍有效的收入、利润、订单、产能、出货量、价格、财务预测等经营数字及其口径。\n\n"
         "### 5. 催化事件\n"
         "总结近期或未来可能影响公司认知变化的事件，包括新品、订单、客户、政策、行业景气、财报节点等。\n\n"
         "### 6. 后续跟踪要点\n"
@@ -928,17 +969,32 @@ def _call_stock_analysis_ai(prompt_payload: str, *, incremental: bool = False) -
         "### 7. 结论\n"
         "用 1-2 段收束当前报告，概括整体判断和最重要的后续观察点。\n"
         "要求：\n"
-        "- 这是卖方调研社群材料，请按专业公司研究报告的风格输出，突出公司研究主线、催化和跟踪点；如输入中有估值、目标价或市值空间等信息，再进行整理。\n"
-        "- 只基于输入原文摘录，不要补充外部行情、财报或未出现的信息。\n"
-        "- 输入的 new_topics.excerpt 是针对当前股票从原话题抽取的原文摘录；全文都讲该股票时可能是全文，多股票分段时通常只保留当前股票相关段落。\n"
-        "- 重点提炼可用于后续跟踪的结论、驱动因素、数据变化和事件进展。\n"
-        "- 如果输入中出现数字或预测值，请在“关键数据、预测与口径”中整理；没有明确数值时直接写未提及。\n"
-        "- 如果某章节缺少原文摘录支撑，直接写未提及或保持简短，不要为了完整而扩写。\n"
-        "- existing_summary_markdown 可能来自历史保存报告，也可能来自本次初始化分析的上一批结果；如果输入中包含它，请沿用原有章节结构，不要只输出差异或单独列新章节。\n"
-        "- 增量分析时，先判断新增原文摘录是否提供实质新增信息；如果没有，只做必要的小幅修正或保持原章节内容，不要为了增量而强行扩写。\n"
-        "- 如果输入中出现新的观点或更新，只把它合并进最相关的既有章节，不要新增流水账段落。\n"
-        "- 如果旧报告里已经写过相同或相近意思的内容，不要重复添加，优先去重和保留原有表述。\n"
-        "- 结论只总结原文摘录中的研究判断和跟踪变量，不输出未由材料支持的投资评级或操作建议。\n"
+        "- 总原则：这是卖方调研社群材料，请按专业公司研究报告的风格输出；只基于输入原文摘录和已保存报告内容，不要补充外部行情、财报或未出现的信息。\n"
+        "- 输入说明：输入中的 excerpt 是针对当前股票从原话题抽取的原文摘录；全文都讲该股票时可能是全文，多股票分段时通常只保留当前股票相关段落。\n"
+        "- 报告基准日：输入中的 analysis_date 是报告生成日期；所有时间相关判断都必须以该日期为基准。\n"
+        "- 时间口径：遇到 Q1/Q2/Q3/Q4、季度、上半年、下半年、全年、今年、明年、去年、年内等相对时间，必须结合话题 create_time/topic_date 和上下文确定年份；无法确定年份时，标注为年份未明或不作为当前结论。\n"
+        "- 成稿前先做内部清洗：先识别并删除已经过期的预测、评级、目标价、催化事件、旧季度/旧年度业绩主结论、旧报告里的增量痕迹，再输出最终报告。这个清洗过程不要写进报告。\n"
+        "- 过期内容删除标准：预测期或事件期早于 analysis_date 的并网、发货、订单、利润、收入、目标价、评级、二季报/中报/年报预期等，不进入任何章节；旧报告中已有的也要删除，不要降级保留为历史口径。\n"
+        "- 删除后不要解释：最终报告不要出现“历史口径”“已过期”“不纳入本表”“输入主要集中于某年/某季度”“阶段性业绩预告”等对被删除材料的说明；如果有效数据有限，只写“当前有效数据披露有限”。\n"
+        "- 历史业绩处理：明显早于 analysis_date 的季度或年度业绩，不作为投资摘要、核心逻辑、催化事件或结论，也不要放进关键数据表；只有当输入中出现更新材料证明该趋势仍在延续时，才可改写为当前仍需验证的业务变量。\n"
+        "- 投资摘要时间要求：投资摘要只写截至报告基准日仍可能有效的业务主线、订单/客户/产能/价格/政策/行业景气和待验证变量。任何收入预测、利润预测、出货预测、财务预测、目标价、评级、估值倍数及其具体数值都不得作为摘要 bullet；如果输入几乎都是历史材料，只说明当前有效信息有限、后续需看实际兑现，不要把历史高增写成当前亮点。\n"
+        "- 内容重点：提炼公司研究主线、核心驱动、数据变化、催化事件和后续跟踪变量，避免复述无关背景。\n"
+        "- 核心逻辑写法：标题和主句应写成需求持续性、订单验证、业务结构延续、产能释放、客户导入等仍需跟踪的逻辑；不得用已过季度或年度的高增、改善、超预期、业绩拐点等历史结果做标题或主句。\n"
+        "- 表达风格：用研究报告式归纳表达，不要频繁用“材料显示”“材料提到”“材料强调”“原文称”等摘录整理式起句；需要说明口径时，用“按原文口径”简短标注。\n"
+        "- 数据边界：“关键数据、预测与口径”只收仍有效或面向未来的公司经营、行业景气、订单、产能、出货、价格、财务预测等与研究判断直接相关的数据；评级、目标价、估值倍数、市值空间、已过期预测、旧季度/旧年度业绩数据不要进入数据表。数据表不得超过 10 行，优先保留最关键的 6-10 项，同一期间或同一指标的数值、同比、口径必须合并在同一行，不要拆成多行。\n"
+        "- 催化与跟踪分工：“催化事件”只写可能改变市场认知的事件节点；“后续跟踪要点”写需要验证的经营指标或变量，不要与催化事件重复同一句。\n"
+        "- 不要为了凑表格罗列大量“未提及”。如果关键数据披露有限，用一句话说明即可。\n"
+        "- 禁止输出内部字段名或系统统计口径，包括 recommendation_count、new_topic_count、existing_summary_markdown、analysis_date、group_id、stock_code、topic_count、topics、输入字段、输入数据字段等。\n"
+        "- 禁止把推荐次数、提及次数、话题数量、命中话题数量作为公司经营数据或关键数据写入报告；这些只用于内部检索排序。\n"
+        "- 每个指定章节都要输出。如果某章节缺少原文摘录支撑，保持简短并说明披露有限，不要为了完整而扩写。\n"
+        "- 增量融合：如果输入中包含已保存报告，请输出清洗后的完整报告，不要只输出差异；新信息自然合并进最相关章节，旧报告里的违规表达必须删除或改写。\n"
+        "- 旧报告清洗：如果已保存报告中存在已过期的预测、目标价、评级、催化事件、旧季度/旧年度业绩主结论或未兑现判断，且新输入没有继续支持，必须从报告中删除；如果新输入提供实际结果，用实际结果替代旧预测。\n"
+        "- 如果新输入没有实质新增信息，只做必要的小幅修正或保持原章节内容；不要为了增量而强行扩写。\n"
+        "- 输出应是一份沉淀后的完整公司调研报告，不要出现“本次新增”“新增摘录”“新增材料”“新增话题”“增量更新”“旧报告”“历史报告”等过程性表述。\n"
+        "- 如果报告中已有相同或相近意思的内容，不要重复添加，优先去重和保留更清晰的表述。\n"
+        "- 如果输入中出现目标价、估值、市值空间或评级，最终报告中不要保留这些市场观点；不要自行推导目标价、评级、买卖建议或投资建议。\n"
+        "- 对出处未知、传闻、审厂、潜在订单、客户导入等未落地信息，不要写成确定结论；放入“后续跟踪要点”，表达为后续需要验证的变量。\n"
+        "- 结论只收束核心主线和 1-2 个最重要的后续观察点，不重复投资摘要，不输出免责声明。\n"
         f"输入数据：\n{prompt_payload}"
     )
     messages = [
@@ -1289,7 +1345,15 @@ def analyze_stock_topics(
             status="completed",
             analyzed_topic_ids=processed_topic_ids,
             write_processed_state=False,
+            commit=False,
         )
+        _insert_stock_topic_analysis_version(
+            conn,
+            result=result,
+            status="completed",
+            analyzed_topic_ids=processed_topic_ids,
+        )
+        conn.commit()
     finally:
         conn.close()
     _log(log_callback, "✅ 个股分析结果已保存")

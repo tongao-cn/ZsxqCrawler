@@ -399,7 +399,14 @@ class AShareAnalysisDbStorageHelperTests(unittest.TestCase):
             result = storage.reset_a_share_analysis_range("2026-05-01", "2026-05-07", group_id="511")
 
         self.assertEqual(
-            {"daily_mentions": 0, "processed_state": 0, "topic_stock_extractions": 0, "stock_topic_processed_states": 0, "stock_topic_analyses": 0},
+            {
+                "daily_mentions": 0,
+                "processed_state": 0,
+                "topic_stock_extractions": 0,
+                "stock_topic_processed_states": 0,
+                "stock_topic_analyses": 0,
+                "stock_topic_analysis_versions": 0,
+            },
             result,
         )
         joined_sql = "\n".join(sql for sql, _params in cursor.executed)
@@ -407,6 +414,7 @@ class AShareAnalysisDbStorageHelperTests(unittest.TestCase):
         self.assertIn("zsxq_a_share_topic_stock_extractions", joined_sql)
         self.assertIn("stock_topic_processed_states", joined_sql)
         self.assertIn("stock_topic_analyses", joined_sql)
+        self.assertIn("stock_topic_analysis_versions", joined_sql)
         self.assertIn("SELECT DISTINCT topic_id", joined_sql)
         self.assertIn("topic_id = ANY", joined_sql)
         self.assertIn("?|", joined_sql)

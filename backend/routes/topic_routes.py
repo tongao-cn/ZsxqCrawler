@@ -1,15 +1,14 @@
 from __future__ import annotations
 
-import gc
-import json
-import os
-import time
 from typing import Optional
 
-import requests
 from fastapi import APIRouter, HTTPException
 
-from backend.core.crawler_runtime import get_crawler, get_crawler_for_group
+from backend.crawlers.official_topic_client import (
+    OfficialTopicClient,
+    normalize_official_topic,
+    official_payload_topic,
+)
 from backend.services.topic_workflow_service import (
     GROUP_TOPIC_TABLES,
     TOPIC_DETAIL_TABLES,
@@ -17,6 +16,7 @@ from backend.services.topic_workflow_service import (
     _delete_group_topic_rows,
     _delete_single_topic_rows,
 )
+from backend.storage.zsxq_database import ZSXQDatabase
 
 router = APIRouter(prefix="/api", tags=["topics"])
 
@@ -24,20 +24,26 @@ router = APIRouter(prefix="/api", tags=["topics"])
 def _log_topic_event(level: str, message: str) -> None:
     print(f"[{level}] {message}")
 
-def _close_crawler_databases(crawler) -> None:
-    if hasattr(crawler, "db") and crawler.db:
-        crawler.db.close()
-    if hasattr(crawler, "file_downloader") and crawler.file_downloader:
-        if hasattr(crawler.file_downloader, "file_db") and crawler.file_downloader.file_db:
-            crawler.file_downloader.file_db.close()
 
-
-def _rollback_crawler_db(crawler) -> None:
+def _close_topic_db(db) -> None:
     try:
-        if crawler and hasattr(crawler, "db") and crawler.db:
-            crawler.db.conn.rollback()
+        if db:
+            db.close()
     except Exception:
         pass
+
+
+def _rollback_topic_db(db) -> None:
+    try:
+        if db and getattr(db, "conn", None):
+            db.conn.rollback()
+    except Exception:
+        pass
+
+
+def _query_group_id(group_id: int | str) -> int | str:
+    return int(group_id) if str(group_id).isdigit() else str(group_id)
+
 
 def _build_single_topic_response(topic_id: int, group_id: str, imported: str, comments_fetched: int, message: Optional[str] = None) -> dict:
     response = {
@@ -58,15 +64,15 @@ def _validate_topic_group(topic: dict, group_id: str) -> None:
         raise HTTPException(status_code=400, detail="该话题不属于当前群组")
 
 
-def _fetch_and_import_topic_comments(crawler, topic_id: int, comments_count: int) -> int:
+def _fetch_and_import_topic_comments(db, topic_id: int, comments_count: int, client: Optional[OfficialTopicClient] = None) -> int:
     if comments_count <= 0:
         return 0
 
     try:
-        additional_comments = crawler.fetch_all_comments(topic_id, comments_count)
+        additional_comments = (client or OfficialTopicClient()).get_topic_comments(topic_id)
         if additional_comments:
-            crawler.db.import_additional_comments(topic_id, additional_comments)
-            crawler.db.conn.commit()
+            db.import_additional_comments(topic_id, additional_comments)
+            db.conn.commit()
             return len(additional_comments)
     except Exception as e:
         _log_topic_event("WARN", f"单话题评论获取失败: {e}")
@@ -76,17 +82,6 @@ def _fetch_and_import_topic_comments(crawler, topic_id: int, comments_count: int
 
 def _build_refresh_topic_failure(message: str) -> dict:
     return {"success": False, "message": message}
-
-
-def _parse_refresh_topic_response(response) -> tuple[Optional[dict], Optional[dict]]:
-    if response.status_code != 200:
-        return None, _build_refresh_topic_failure(f"API请求失败: {response.status_code}")
-
-    data = response.json()
-    if data.get("succeeded") and data.get("resp_data"):
-        return data["resp_data"]["topic"], None
-
-    return None, _build_refresh_topic_failure("API返回数据格式错误")
 
 
 def _build_refresh_topic_success(topic_data: dict) -> dict:
@@ -122,13 +117,13 @@ def _build_fetch_comments_skip_response(comments_count: int) -> dict:
     )
 
 
-def _import_more_comments(crawler, topic_id: int, comments_count: int) -> int:
-    additional_comments = crawler.fetch_all_comments(topic_id, comments_count)
+def _import_more_comments(db, topic_id: int, comments_count: int, client: Optional[OfficialTopicClient] = None) -> int:
+    additional_comments = (client or OfficialTopicClient()).get_topic_comments(topic_id)
     if not additional_comments:
         return 0
 
-    crawler.db.import_additional_comments(topic_id, additional_comments)
-    crawler.db.conn.commit()
+    db.import_additional_comments(topic_id, additional_comments)
+    db.conn.commit()
     return len(additional_comments)
 
 
@@ -268,11 +263,12 @@ def _fetch_rows_and_total(cursor, query: str, params: tuple, count_query: str, c
 @router.get("/topics")
 async def get_topics(page: int = 1, per_page: int = 20, search: Optional[str] = None):
     """获取话题列表"""
+    db = None
     try:
-        crawler = get_crawler()
+        db = ZSXQDatabase()
 
         query, params, count_query, count_params = _build_topics_query(page, per_page, search)
-        topics, total = _fetch_rows_and_total(crawler.db.cursor, query, params, count_query, count_params)
+        topics, total = _fetch_rows_and_total(db.cursor, query, params, count_query, count_params)
 
         return {
             "topics": [_format_topic_row(topic) for topic in topics],
@@ -280,16 +276,19 @@ async def get_topics(page: int = 1, per_page: int = 20, search: Optional[str] = 
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"获取话题列表失败: {str(e)}")
+    finally:
+        _close_topic_db(db)
 
 
 @router.get("/groups/{group_id}/topics")
 async def get_group_topics(group_id: int, page: int = 1, per_page: int = 20, search: Optional[str] = None):
     """获取指定群组的话题列表"""
+    db = None
     try:
-        crawler = get_crawler_for_group(str(group_id))
+        db = ZSXQDatabase(str(group_id))
 
         query, params, count_query, count_params = _build_group_topics_query(group_id, page, per_page, search)
-        topics, total = _fetch_rows_and_total(crawler.db.cursor, query, params, count_query, count_params)
+        topics, total = _fetch_rows_and_total(db.cursor, query, params, count_query, count_params)
 
         return {
             "topics": [_format_group_topic_row(topic) for topic in topics],
@@ -297,22 +296,14 @@ async def get_group_topics(group_id: int, page: int = 1, per_page: int = 20, sea
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"获取群组话题失败: {str(e)}")
+    finally:
+        _close_topic_db(db)
 
 
 @router.post("/topics/clear/{group_id}")
 async def clear_topic_database(group_id: str):
     """删除指定群组的 PostgreSQL 话题数据"""
     try:
-        try:
-            crawler = get_crawler_for_group(group_id)
-            _close_crawler_databases(crawler)
-            _log_topic_event("INFO", "已关闭爬虫实例的数据库连接")
-        except Exception as e:
-            _log_topic_event("WARN", f"关闭爬虫数据库连接时出错: {e}")
-
-        gc.collect()
-        time.sleep(0.1)
-
         deleted_counts = _clear_group_topic_data(group_id)
         try:
             from backend.core.image_cache_manager import clear_group_cache_manager, get_image_cache_manager
@@ -338,9 +329,10 @@ async def clear_topic_database(group_id: str):
 @router.get("/topics/{topic_id}/{group_id}")
 async def get_topic_detail(topic_id: int, group_id: str):
     """获取话题详情（仅从本地数据库读取，不主动爬取）"""
+    db = None
     try:
-        crawler = get_crawler_for_group(group_id)
-        topic_detail = crawler.db.get_topic_detail(topic_id)
+        db = ZSXQDatabase(group_id)
+        topic_detail = db.get_topic_detail(topic_id)
 
         if not topic_detail:
             raise HTTPException(status_code=404, detail="话题不存在")
@@ -350,38 +342,43 @@ async def get_topic_detail(topic_id: int, group_id: str):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"获取话题详情失败: {str(e)}")
+    finally:
+        _close_topic_db(db)
 
 
 @router.post("/topics/{topic_id}/{group_id}/refresh")
 async def refresh_topic(topic_id: int, group_id: str):
     """实时更新单个话题信息"""
+    db = None
     try:
-        crawler = get_crawler_for_group(group_id)
+        db = ZSXQDatabase(group_id)
+        payload = OfficialTopicClient().get_topic_info(topic_id)
+        topic = official_payload_topic(payload)
+        if not topic:
+            return _build_refresh_topic_failure("MCP返回数据格式错误")
 
-        url = f"https://api.zsxq.com/v2/topics/{topic_id}/info"
-        headers = crawler.get_stealth_headers()
-        response = requests.get(url, headers=headers, timeout=30)
+        _validate_topic_group(topic, group_id)
+        topic_data = normalize_official_topic(topic, group_id)
 
-        topic_data, error_response = _parse_refresh_topic_response(response)
-        if error_response:
-            return error_response
-
-        success = crawler.db.update_topic_stats(topic_data)
+        success = db.update_topic_stats(topic_data)
         if not success:
             return _build_refresh_topic_failure("话题不存在或更新失败")
 
-        crawler.db.conn.commit()
+        db.conn.commit()
         return _build_refresh_topic_success(topic_data)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"更新话题失败: {str(e)}")
+    finally:
+        _close_topic_db(db)
 
 
 @router.post("/topics/{topic_id}/{group_id}/fetch-comments")
 async def fetch_more_comments(topic_id: int, group_id: str):
     """手动获取话题的更多评论（在已存在本地话题记录的前提下）"""
+    db = None
     try:
-        crawler = get_crawler_for_group(group_id)
-        topic_detail = crawler.db.get_topic_detail(topic_id)
+        db = ZSXQDatabase(group_id)
+        topic_detail = db.get_topic_detail(topic_id)
         if not topic_detail:
             raise HTTPException(status_code=404, detail="话题不存在")
 
@@ -390,7 +387,7 @@ async def fetch_more_comments(topic_id: int, group_id: str):
             return _build_fetch_comments_skip_response(comments_count)
 
         try:
-            comments_fetched = _import_more_comments(crawler, topic_id, comments_count)
+            comments_fetched = _import_more_comments(db, topic_id, comments_count)
             if comments_fetched:
                 return _build_fetch_comments_response(
                     True,
@@ -404,121 +401,131 @@ async def fetch_more_comments(topic_id: int, group_id: str):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"获取更多评论失败: {str(e)}")
+    finally:
+        _close_topic_db(db)
 
 
 @router.delete("/topics/{topic_id}/{group_id}")
 async def delete_single_topic(topic_id: int, group_id: int):
     """删除单个话题及其所有关联数据"""
-    crawler = None
+    db = None
     try:
-        crawler = get_crawler_for_group(str(group_id))
-        crawler.db.cursor.execute(
+        db = ZSXQDatabase(str(group_id))
+        db.cursor.execute(
             "SELECT COUNT(*) FROM topics WHERE topic_id = ? AND group_id = ?",
             (topic_id, group_id),
         )
-        exists = crawler.db.cursor.fetchone()[0] > 0
+        exists = db.cursor.fetchone()[0] > 0
         if not exists:
             return {"success": False, "message": "话题不存在"}
 
-        deleted = _delete_single_topic_rows(crawler.db, topic_id, group_id)
-        crawler.db.conn.commit()
+        deleted = _delete_single_topic_rows(db, topic_id, group_id)
+        db.conn.commit()
 
         return {"success": True, "deleted_topic_id": topic_id, "deleted": deleted}
     except Exception as e:
-        _rollback_crawler_db(crawler)
+        _rollback_topic_db(db)
         raise HTTPException(status_code=500, detail=f"删除话题失败: {str(e)}")
+    finally:
+        _close_topic_db(db)
 
 
 @router.post("/topics/fetch-single/{group_id}/{topic_id}")
 async def fetch_single_topic(group_id: str, topic_id: int, fetch_comments: bool = True):
     """爬取并导入单个话题（用于特殊话题测试），可选拉取完整评论"""
+    db = None
     try:
-        crawler = get_crawler_for_group(str(group_id))
+        db = ZSXQDatabase(str(group_id))
+        client = OfficialTopicClient()
 
-        crawler.db.cursor.execute(
+        db.cursor.execute(
             "SELECT 1 FROM topics WHERE topic_id = ? AND group_id = ? LIMIT 1",
-            (topic_id, group_id),
+            (topic_id, _query_group_id(group_id)),
         )
-        if crawler.db.cursor.fetchone():
+        if db.cursor.fetchone():
             return _build_single_topic_response(topic_id, group_id, "skipped", 0, "话题已存在，跳过采集")
 
-        url = f"https://api.zsxq.com/v2/topics/{topic_id}/info"
-        headers = crawler.get_stealth_headers()
-        response = requests.get(url, headers=headers, timeout=30)
-
-        if response.status_code != 200:
-            raise HTTPException(status_code=response.status_code, detail="API请求失败")
-
-        data = response.json()
-        if not data.get("succeeded") or not data.get("resp_data"):
-            raise HTTPException(status_code=400, detail="API返回失败")
-
-        topic = (data.get("resp_data", {}) or {}).get("topic", {}) or {}
+        topic = official_payload_topic(client.get_topic_info(topic_id))
         if not topic:
             raise HTTPException(status_code=404, detail="未获取到有效话题数据")
 
         _validate_topic_group(topic, group_id)
 
-        crawler.db.import_topic_data(topic)
-        crawler.db.conn.commit()
+        topic_data = normalize_official_topic(topic, group_id)
 
         comments_fetched = 0
         if fetch_comments:
-            comments_count = topic.get("comments_count", 0) or 0
-            comments_fetched = _fetch_and_import_topic_comments(crawler, topic_id, comments_count)
+            comments_count = topic_data.get("comments_count", 0) or 0
+            comments = client.get_topic_comments(topic_id) if comments_count > 0 else []
+            if comments:
+                topic_data["show_comments"] = comments
+                comments_fetched = len(comments)
+
+        db.import_topic_data(topic_data)
+        db.conn.commit()
 
         return _build_single_topic_response(topic_id, group_id, "created", comments_fetched)
     except HTTPException:
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"单个话题采集失败: {str(e)}")
+    finally:
+        _close_topic_db(db)
 
 
 @router.get("/groups/{group_id}/tags")
 async def get_group_tags(group_id: str):
     """获取指定群组的所有标签"""
+    db = None
     try:
-        crawler = get_crawler_for_group(group_id)
-        tags = crawler.db.get_tags_by_group(int(group_id))
+        db = ZSXQDatabase(group_id)
+        tags = db.get_tags_by_group(int(group_id))
         return {"tags": tags, "total": len(tags)}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"获取标签列表失败: {str(e)}")
+    finally:
+        _close_topic_db(db)
 
 
 @router.get("/groups/{group_id}/tags/{tag_id}/topics")
 async def get_topics_by_tag(group_id: int, tag_id: int, page: int = 1, per_page: int = 20):
     """根据标签获取指定群组的话题列表"""
+    db = None
     try:
-        crawler = get_crawler_for_group(str(group_id))
-        crawler.db.cursor.execute(
+        db = ZSXQDatabase(str(group_id))
+        db.cursor.execute(
             "SELECT COUNT(*) FROM tags WHERE tag_id = ? AND group_id = ?",
             (tag_id, group_id),
         )
-        tag_count = crawler.db.cursor.fetchone()[0]
+        tag_count = db.cursor.fetchone()[0]
 
         if tag_count == 0:
             raise HTTPException(status_code=404, detail="标签在该群组中不存在")
 
-        result = crawler.db.get_topics_by_tag(tag_id, page, per_page)
+        result = db.get_topics_by_tag(tag_id, page, per_page)
         return result
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"根据标签获取话题失败: {str(e)}")
+    finally:
+        _close_topic_db(db)
 
 
 @router.delete("/groups/{group_id}/topics")
 async def delete_group_topics(group_id: int):
     """删除指定群组的所有话题数据"""
-    crawler = None
+    db = None
     try:
-        crawler = get_crawler_for_group(str(group_id))
-        crawler.db.cursor.execute("SELECT COUNT(*) FROM topics WHERE group_id = ?", (group_id,))
-        topics_count = crawler.db.cursor.fetchone()[0]
+        db = ZSXQDatabase(str(group_id))
+        db.cursor.execute("SELECT COUNT(*) FROM topics WHERE group_id = ?", (group_id,))
+        topics_count = db.cursor.fetchone()[0]
 
         if topics_count == 0:
             return {"message": "该群组没有话题数据", "deleted_count": 0}
 
-        deleted_counts = _delete_group_topic_rows(crawler.db, group_id)
-        crawler.db.conn.commit()
+        deleted_counts = _delete_group_topic_rows(db, group_id)
+        db.conn.commit()
 
         return {
             "message": f"成功删除群组 {group_id} 的所有话题数据",
@@ -526,5 +533,7 @@ async def delete_group_topics(group_id: int):
             "deleted_details": deleted_counts,
         }
     except Exception as e:
-        _rollback_crawler_db(crawler)
+        _rollback_topic_db(db)
         raise HTTPException(status_code=500, detail=f"删除话题数据失败: {str(e)}")
+    finally:
+        _close_topic_db(db)

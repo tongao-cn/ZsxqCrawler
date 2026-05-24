@@ -1,8 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import gc
-import time
 from typing import Optional
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException
@@ -13,7 +11,6 @@ from backend.services.a_share_analysis_service import (
     DEFAULT_WIRE_API as A_SHARE_DEFAULT_WIRE_API,
 )
 from backend.core.ai_provider_config import has_openai_api_key
-from backend.core.crawler_runtime import get_crawler_for_group
 from backend.schemas.files import FileAIAnalysisRequest, FileCollectRequest, FileDownloadRequest
 from backend.services.file_ai_analysis_service import (
     DEFAULT_FILE_ANALYSIS_REASONING_EFFORT,
@@ -25,7 +22,6 @@ from backend.services.file_workflow_service import (
     _build_file_status_response,
     _build_sync_files_response,
     _clear_group_file_data,
-    _close_crawler_file_databases,
     _enqueue_file_task,
     _file_db,
     _get_download_file_status,
@@ -235,15 +231,6 @@ async def get_file_stats(group_id: str):
 async def clear_file_database(group_id: str):
     """删除指定群组的 PostgreSQL 文件数据"""
     try:
-        try:
-            crawler = get_crawler_for_group(group_id)
-            _close_crawler_file_databases(crawler)
-            _log_file_route_event("INFO", "已关闭爬虫实例的数据库连接")
-        except Exception as e:
-            _log_file_route_event("WARN", f"关闭爬虫数据库连接时出错: {e}")
-
-        gc.collect()
-        time.sleep(0.1)
         deleted_counts = _clear_group_file_data(group_id)
 
         try:

@@ -1,9 +1,15 @@
 from __future__ import annotations
 
+import os
 from datetime import time, datetime, timedelta, timezone
 from typing import Any, Callable, Optional
 
 from backend.core.account_context import get_cookie_for_group
+from backend.crawlers.official_topic_client import (
+    OfficialTopicClient,
+    normalize_official_topic,
+    official_payload_topics,
+)
 from backend.crawlers.topic_crawler import ZSXQTopicCrawler
 from backend.schemas.crawl import CrawlTimeRangeRequest
 from backend.services.task_runtime import (
@@ -13,11 +19,14 @@ from backend.services.task_runtime import (
     unregister_task_crawler,
     update_task,
 )
+from backend.storage.zsxq_database import ZSXQDatabase
 
 
 INIT_STOPPED_MESSAGE = "🛑 任务在初始化过程中被停止"
 
 CRAWLER_STARTUP_LOGS = ("📡 连接到知识星球API...", "🔍 检查数据库状态...")
+OFFICIAL_TOPIC_SOURCE_ALIASES = {"official", "cli", "mcp"}
+LEGACY_TOPIC_SOURCE_ALIASES = {"legacy", "crawler", "cookie"}
 
 def _should_stop_task(task_id: str) -> bool:
     return is_task_stopped(task_id)
@@ -58,6 +67,23 @@ def _apply_crawl_settings(crawler: Any, crawl_settings: Any, require_overrides: 
 
     crawler.set_custom_intervals(**_crawl_interval_kwargs(crawl_settings))
     return True
+
+def _normalize_topic_source(value: Optional[str]) -> Optional[str]:
+    text = (value or "").strip().lower()
+    if not text:
+        return None
+    if text in OFFICIAL_TOPIC_SOURCE_ALIASES:
+        return "official"
+    if text in LEGACY_TOPIC_SOURCE_ALIASES:
+        return "legacy"
+    return None
+
+def _resolve_topic_source(request: Any) -> str:
+    return (
+        _normalize_topic_source(getattr(request, "topicSource", None))
+        or _normalize_topic_source(os.getenv("ZSXQ_TOPIC_SOURCE"))
+        or "official"
+    )
 
 def _mark_expired_task(task_id: str, result: dict[str, Any], default_message: str = "成员体验已到期") -> None:
     message = result.get("message", default_message)
@@ -122,6 +148,247 @@ def _create_task_crawler(task_id: str, group_id: str, log_callback: Callable[[st
     register_task_crawler(task_id, crawler)
     return crawler
 
+def _topic_time(topic: dict[str, Any]) -> Optional[datetime]:
+    ts = topic.get("create_time")
+    if not ts:
+        return None
+    try:
+        ts_fixed = ts.replace("+0800", "+08:00") if ts.endswith("+0800") else ts
+        return datetime.fromisoformat(ts_fixed)
+    except Exception:
+        return None
+
+def _query_group_id(group_id: str) -> Any:
+    value = str(group_id or "").strip()
+    return int(value) if value.isdigit() else value
+
+def _official_import_topic(db: ZSXQDatabase, group_id: str, topic_data: dict[str, Any]) -> str:
+    topic_id = topic_data.get("topic_id")
+    db.cursor.execute(
+        "SELECT topic_id FROM topics WHERE topic_id = ? AND group_id = ?",
+        (topic_id, _query_group_id(group_id)),
+    )
+    exists = db.cursor.fetchone()
+    if not db.import_topic_data(topic_data):
+        return "error"
+    return "updated" if exists else "new"
+
+def _official_topic_exists(db: ZSXQDatabase, group_id: str, topic_id: int) -> bool:
+    db.cursor.execute(
+        "SELECT topic_id FROM topics WHERE topic_id = ? AND group_id = ?",
+        (topic_id, _query_group_id(group_id)),
+    )
+    return db.cursor.fetchone() is not None
+
+def _fetch_official_comments(
+    client: OfficialTopicClient,
+    topic_id: int,
+    comments_count: int,
+    task_id: str,
+) -> list[dict[str, Any]]:
+    if comments_count <= 0:
+        return []
+    try:
+        comments = client.get_topic_comments(topic_id)
+        add_task_log(task_id, f"📝 话题 {topic_id} 官方评论拉取 {len(comments)}/{comments_count} 条")
+        return comments
+    except Exception as exc:
+        add_task_log(task_id, f"⚠️ 话题 {topic_id} 官方评论拉取失败: {exc}")
+        return []
+
+def _official_import_topics(
+    db: ZSXQDatabase,
+    client: OfficialTopicClient,
+    group_id: str,
+    topics: list[dict[str, Any]],
+    task_id: str,
+) -> dict[str, int]:
+    stats = {"new_topics": 0, "updated_topics": 0, "errors": 0}
+    for topic in topics:
+        topic_id = int(topic.get("topic_id") or 0)
+        comments_count = int((topic.get("counts") or {}).get("comments") or 0)
+        comments = _fetch_official_comments(client, topic_id, comments_count, task_id)
+        normalized = normalize_official_topic(topic, group_id, comments=comments if comments_count else None)
+        imported = _official_import_topic(db, group_id, normalized)
+        if imported == "new":
+            stats["new_topics"] += 1
+        elif imported == "updated":
+            stats["updated_topics"] += 1
+        else:
+            stats["errors"] += 1
+    db.conn.commit()
+    return stats
+
+def _official_page_cursor(payload: dict[str, Any], current_cursor: Optional[str]) -> Optional[str]:
+    next_cursor = payload.get("next_end_time")
+    if not next_cursor or next_cursor == current_cursor:
+        return None
+    return next_cursor
+
+def _official_start_cursor_from_oldest(db: ZSXQDatabase, task_id: str, allow_empty: bool) -> Optional[str]:
+    timestamp_info = db.get_timestamp_range_info()
+    if not timestamp_info["has_data"]:
+        if allow_empty:
+            add_task_log(task_id, "📊 数据库为空，将从最新数据开始")
+            return None
+        add_task_log(task_id, "❌ 数据库中没有话题数据，请先采集最新或全量")
+        return ""
+
+    oldest_timestamp = timestamp_info["oldest_timestamp"]
+    add_task_log(task_id, f"📊 当前最老时间戳: {oldest_timestamp}")
+    try:
+        dt = datetime.fromisoformat(oldest_timestamp.replace("+0800", "+08:00"))
+        return _format_zsxq_time(dt - timedelta(milliseconds=1))
+    except Exception:
+        return oldest_timestamp
+
+def _run_official_crawl_time_range_task(
+    task_id: str,
+    group_id: str,
+    request: Any,
+    start_dt: datetime,
+    end_dt: datetime,
+) -> None:
+    add_task_log(task_id, "🔁 使用官方话题采集流程（MCP HTTP）")
+    client = OfficialTopicClient(log_callback=lambda message: add_task_log(task_id, message))
+    db = ZSXQDatabase(group_id)
+    per_page = min(request.perPage or 20, 30)
+    if request.perPage and request.perPage > 30:
+        add_task_log(task_id, "ℹ️ 官方接口单页上限按 30 处理")
+
+    cursor = _format_zsxq_time(end_dt)
+    seen_topic_ids: set[int] = set()
+    total_stats = {
+        "new_topics": 0,
+        "updated_topics": 0,
+        "errors": 0,
+        "pages": 0,
+        "duplicates": 0,
+        "source": "official",
+    }
+
+    while True:
+        if is_task_stopped(task_id):
+            add_task_log(task_id, "🛑 任务已停止")
+            break
+
+        payload = client.get_group_topics(group_id, limit=per_page, scope="all", end_time=cursor)
+        topics = official_payload_topics(payload)
+        if not topics:
+            add_task_log(task_id, "📭 无更多数据，任务结束")
+            break
+
+        filtered: list[dict[str, Any]] = []
+        oldest_dt = None
+        for topic in topics:
+            topic_id = int(topic.get("topic_id") or 0)
+            if topic_id in seen_topic_ids:
+                total_stats["duplicates"] += 1
+                continue
+            seen_topic_ids.add(topic_id)
+
+            dt = _topic_time(topic)
+            if dt:
+                oldest_dt = dt
+                if start_dt <= dt <= end_dt:
+                    filtered.append(topic)
+
+        add_task_log(task_id, f"📄 官方本页获取 {len(topics)} 个话题，区间内 {len(filtered)} 个")
+
+        page_stats = _official_import_topics(db, client, group_id, filtered, task_id)
+        total_stats["new_topics"] += page_stats["new_topics"]
+        total_stats["updated_topics"] += page_stats["updated_topics"]
+        total_stats["errors"] += page_stats["errors"]
+        total_stats["pages"] += 1
+
+        next_cursor = _official_page_cursor(payload, cursor)
+        if not payload.get("has_more") or not next_cursor:
+            add_task_log(task_id, "✅ 官方分页已无更多数据")
+            break
+        cursor = next_cursor
+
+        if oldest_dt and oldest_dt < start_dt:
+            add_task_log(task_id, "✅ 已到达起始时间之前，任务结束")
+            break
+
+    update_task(task_id, "completed", "官方时间区间采集完成", total_stats)
+
+def _run_official_crawl_pages_task(
+    task_id: str,
+    group_id: str,
+    pages: Optional[int],
+    per_page: int,
+    mode: str,
+    start_cursor: Optional[str] = None,
+) -> None:
+    client = OfficialTopicClient(log_callback=lambda message: add_task_log(task_id, message))
+    db = ZSXQDatabase(group_id)
+    per_page = min(per_page or 20, 30)
+    cursor = start_cursor
+    total_stats = {
+        "new_topics": 0,
+        "updated_topics": 0,
+        "errors": 0,
+        "pages": 0,
+        "duplicates": 0,
+        "source": "official",
+    }
+    seen_topic_ids: set[int] = set()
+
+    while pages is None or total_stats["pages"] < pages:
+        if is_task_stopped(task_id):
+            add_task_log(task_id, "🛑 任务已停止")
+            break
+
+        payload = client.get_group_topics(group_id, limit=per_page, scope="all", end_time=cursor)
+        topics = official_payload_topics(payload)
+        if not topics:
+            add_task_log(task_id, "📭 无更多数据，任务结束")
+            break
+
+        unique_topics = []
+        for topic in topics:
+            topic_id = int(topic.get("topic_id") or 0)
+            if topic_id in seen_topic_ids:
+                total_stats["duplicates"] += 1
+                continue
+            seen_topic_ids.add(topic_id)
+            unique_topics.append(topic)
+
+        topics_to_import = unique_topics
+        if mode == "latest":
+            new_topics = [
+                topic
+                for topic in unique_topics
+                if not _official_topic_exists(db, group_id, int(topic.get("topic_id") or 0))
+            ]
+            add_task_log(task_id, f"📊 官方页面分析: {len(unique_topics)} 个话题，{len(new_topics)} 个新话题")
+            if not new_topics:
+                add_task_log(task_id, "✅ 本页话题均已存在，最新采集完成")
+                break
+            topics_to_import = new_topics
+        else:
+            add_task_log(task_id, f"📄 官方本页获取 {len(unique_topics)} 个话题")
+
+        page_stats = _official_import_topics(db, client, group_id, topics_to_import, task_id)
+        total_stats["new_topics"] += page_stats["new_topics"]
+        total_stats["updated_topics"] += page_stats["updated_topics"]
+        total_stats["errors"] += page_stats["errors"]
+        total_stats["pages"] += 1
+
+        next_cursor = _official_page_cursor(payload, cursor)
+        if not payload.get("has_more") or not next_cursor:
+            add_task_log(task_id, "✅ 官方分页已无更多数据")
+            break
+        cursor = next_cursor
+
+    message = {
+        "latest": "官方最新采集完成",
+        "incremental": "官方增量采集完成",
+        "all": "官方全量采集完成",
+    }.get(mode, "官方采集完成")
+    update_task(task_id, "completed", message, total_stats)
+
 def run_crawl_historical_task(
     task_id: str,
     group_id: str,
@@ -137,6 +404,16 @@ def run_crawl_historical_task(
 
         update_task(task_id, "running", f"开始爬取历史数据 {pages} 页...")
         add_task_log(task_id, f"🚀 开始获取历史数据，{pages} 页，每页 {per_page} 条")
+
+        if _resolve_topic_source(crawl_settings) == "official":
+            add_task_log(task_id, "🔁 使用官方历史增量采集流程（MCP HTTP）")
+            db = ZSXQDatabase(group_id)
+            start_cursor = _official_start_cursor_from_oldest(db, task_id, allow_empty=False)
+            if start_cursor == "":
+                update_task(task_id, "failed", "官方历史增量采集失败: 数据库为空")
+                return
+            _run_official_crawl_pages_task(task_id, group_id, pages, per_page, "incremental", start_cursor=start_cursor)
+            return
 
         if is_task_stopped(task_id):
             return
@@ -180,6 +457,13 @@ def run_crawl_all_task(task_id: str, group_id: str, crawl_settings: Any = None):
         update_task(task_id, "running", "开始全量爬取...")
         add_task_log(task_id, "🚀 开始全量爬取...")
         add_task_log(task_id, "⚠️ 警告：此模式将持续爬取直到没有数据，可能需要很长时间")
+
+        if _resolve_topic_source(crawl_settings) == "official":
+            add_task_log(task_id, "🔁 使用官方全量采集流程（MCP HTTP）")
+            db = ZSXQDatabase(group_id)
+            start_cursor = _official_start_cursor_from_oldest(db, task_id, allow_empty=True)
+            _run_official_crawl_pages_task(task_id, group_id, None, 20, "all", start_cursor=start_cursor)
+            return
 
         log_callback, stop_check = _build_task_callbacks(task_id)
 
@@ -233,6 +517,16 @@ def run_crawl_incremental_task(
 
         update_task(task_id, "running", "开始增量爬取...")
 
+        if _resolve_topic_source(crawl_settings) == "official":
+            add_task_log(task_id, "🔁 使用官方增量采集流程（MCP HTTP）")
+            db = ZSXQDatabase(group_id)
+            start_cursor = _official_start_cursor_from_oldest(db, task_id, allow_empty=False)
+            if start_cursor == "":
+                update_task(task_id, "failed", "官方增量采集失败: 数据库为空")
+                return
+            _run_official_crawl_pages_task(task_id, group_id, pages, per_page, "incremental", start_cursor=start_cursor)
+            return
+
         log_callback, stop_check = _build_task_callbacks(task_id)
 
         crawler = _create_task_crawler(task_id, group_id, log_callback, stop_check)
@@ -263,6 +557,11 @@ def run_crawl_latest_task(task_id: str, group_id: str, crawl_settings: Any = Non
     try:
 
         update_task(task_id, "running", "开始获取最新记录...")
+
+        if _resolve_topic_source(crawl_settings) == "official":
+            add_task_log(task_id, "🔁 使用官方最新采集流程（MCP HTTP）")
+            _run_official_crawl_pages_task(task_id, group_id, None, 20, "latest")
+            return
 
         log_callback, stop_check = _build_task_callbacks(task_id)
 
@@ -303,6 +602,10 @@ def run_crawl_time_range_task(task_id: str, group_id: str, request: Any):
 
         update_task(task_id, "running", "开始按时间区间爬取...")
         add_task_log(task_id, f"🗓️ 时间范围: {start_dt.isoformat()} ~ {end_dt.isoformat()}")
+
+        if _resolve_topic_source(request) == "official":
+            _run_official_crawl_time_range_task(task_id, group_id, request, start_dt, end_dt)
+            return
 
         log_callback, stop_check = _build_task_callbacks(task_id)
 

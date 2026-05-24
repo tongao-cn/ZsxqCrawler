@@ -57,6 +57,7 @@ export function useCrawlActions({
   const [crawlLongSleepIntervalMax, setCrawlLongSleepIntervalMax] = useState<number>(300);
   const [quickLastDays, setQuickLastDays] = useState<number>(30);
   const [crawlMonth, setCrawlMonth] = useState<string>(getCurrentMonth);
+  const [topicSource, setTopicSource] = useState<'legacy' | 'official'>('official');
   const [latestDialogOpen, setLatestDialogOpen] = useState<boolean>(false);
   const [singleTopicId, setSingleTopicId] = useState<string>('');
   const [fetchingSingle, setFetchingSingle] = useState<boolean>(false);
@@ -69,6 +70,7 @@ export function useCrawlActions({
   }, [loadGroupStats, loadTopics]);
 
   const buildCrawlSettings = useCallback(() => ({
+    topicSource,
     crawlIntervalMin,
     crawlIntervalMax,
     longSleepIntervalMin: crawlLongSleepIntervalMin,
@@ -80,6 +82,7 @@ export function useCrawlActions({
     crawlLongSleepIntervalMax,
     crawlLongSleepIntervalMin,
     crawlPagesPerBatch,
+    topicSource,
   ]);
 
   const handleTaskCreateError = useCallback((error: unknown, fallback: string) => {
@@ -253,6 +256,8 @@ export function useCrawlActions({
     setQuickLastDays,
     crawlMonth,
     setCrawlMonth,
+    topicSource,
+    setTopicSource,
     latestDialogOpen,
     setLatestDialogOpen,
     singleTopicId,

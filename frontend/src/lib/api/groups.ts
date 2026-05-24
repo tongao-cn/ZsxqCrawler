@@ -3,6 +3,7 @@ import type { Account, AccountSelf, FetchMoreCommentsResponse, Group, GroupStats
 
 export class GroupsApiClient extends FilesApiClient {
   async crawlHistorical(groupId: number, pages: number = 10, perPage: number = 20, crawlSettings?: {
+    topicSource?: 'legacy' | 'official';
     crawlIntervalMin?: number;
     crawlIntervalMax?: number;
     longSleepIntervalMin?: number;
@@ -20,6 +21,7 @@ export class GroupsApiClient extends FilesApiClient {
   }
 
   async crawlAll(groupId: number, crawlSettings?: {
+    topicSource?: 'legacy' | 'official';
     crawlIntervalMin?: number;
     crawlIntervalMax?: number;
     longSleepIntervalMin?: number;
@@ -33,6 +35,7 @@ export class GroupsApiClient extends FilesApiClient {
   }
 
   async crawlIncremental(groupId: number, pages: number = 10, perPage: number = 20, crawlSettings?: {
+    topicSource?: 'legacy' | 'official';
     crawlIntervalMin?: number;
     crawlIntervalMax?: number;
     longSleepIntervalMin?: number;
@@ -50,6 +53,7 @@ export class GroupsApiClient extends FilesApiClient {
   }
 
   async crawlLatestUntilComplete(groupId: number, crawlSettings?: {
+    topicSource?: 'legacy' | 'official';
     crawlIntervalMin?: number;
     crawlIntervalMax?: number;
     longSleepIntervalMin?: number;
@@ -69,6 +73,7 @@ export class GroupsApiClient extends FilesApiClient {
       endTime?: string;
       lastDays?: number;
       perPage?: number;
+      topicSource?: 'legacy' | 'official';
       crawlIntervalMin?: number;
       crawlIntervalMax?: number;
       longSleepIntervalMin?: number;

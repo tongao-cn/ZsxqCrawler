@@ -325,6 +325,68 @@ class StockTopicAnalysisServiceHelperTests(unittest.TestCase):
         conn.commit.assert_called_once()
 
     @unittest.skipUnless(HAS_SERVICE_DEPS, "stock topic analysis service dependencies are not installed")
+    def test_upsert_stock_topic_analysis_can_defer_commit(self):
+        from backend.services.stock_topic_analysis_service import _upsert_stock_topic_analysis
+
+        conn = Mock()
+        result = {
+            "group_id": "51111112855254",
+            "stock_name": "宁德时代",
+            "stock_code": "300750",
+            "market": "SZ",
+            "topics": [],
+            "concepts": [],
+            "recommendation_count": 0,
+            "summary_markdown": "summary",
+            "model": "test-model",
+        }
+
+        _upsert_stock_topic_analysis(
+            conn,
+            result=result,
+            status="completed",
+            analyzed_topic_ids=["101"],
+            write_processed_state=False,
+            commit=False,
+        )
+
+        self.assertIn("INSERT INTO stock_topic_analyses", conn.execute.call_args.args[0])
+        conn.commit.assert_not_called()
+
+    @unittest.skipUnless(HAS_SERVICE_DEPS, "stock topic analysis service dependencies are not installed")
+    def test_insert_stock_topic_analysis_version_records_snapshot(self):
+        from backend.services.stock_topic_analysis_service import _insert_stock_topic_analysis_version
+
+        conn = Mock()
+        result = {
+            "group_id": "51111112855254",
+            "stock_name": "宁德时代",
+            "stock_code": "300750",
+            "market": "SZ",
+            "concepts": ["固态电池"],
+            "recommendation_count": 3,
+            "summary_markdown": "summary",
+            "model": "test-model",
+            "analysis_mode": "incremental",
+            "new_topic_count": 1,
+        }
+
+        _insert_stock_topic_analysis_version(
+            conn,
+            result=result,
+            status="completed",
+            analyzed_topic_ids=["101", "102"],
+        )
+
+        self.assertIn("INSERT INTO stock_topic_analysis_versions", conn.execute.call_args.args[0])
+        params = conn.execute.call_args.args[1]
+        self.assertEqual("51111112855254", params[0])
+        self.assertEqual("宁德时代", params[1])
+        self.assertEqual('["101", "102"]', params[4])
+        self.assertEqual("incremental", params[11])
+        self.assertEqual(1, params[12])
+
+    @unittest.skipUnless(HAS_SERVICE_DEPS, "stock topic analysis service dependencies are not installed")
     def test_search_stock_question_topics_builds_keyword_query(self):
         from backend.services.stock_topic_analysis_service import search_stock_question_topics
 
@@ -802,6 +864,7 @@ class StockTopicAnalysisServiceHelperTests(unittest.TestCase):
         self.assertNotIn('"analyzed_topic_ids"', call_ai.call_args.args[0])
         self.assertIn("old summary", call_ai.call_args.args[0])
         self.assertEqual(2, conn.commit.call_count)
+        self.assertTrue(any("INSERT INTO stock_topic_analysis_versions" in call.args[0] for call in conn.execute.call_args_list))
         state_writes = [
             call.args[1]
             for call in conn.execute.call_args_list
@@ -860,6 +923,40 @@ class StockTopicAnalysisServiceHelperTests(unittest.TestCase):
         self.assertNotIn("analyzed_topic_ids", call_ai.call_args_list[0].args[0])
         self.assertIn('"existing_summary_markdown": "summary batch 1"', call_ai.call_args_list[1].args[0])
         self.assertEqual(8, conn.commit.call_count)
+        self.assertEqual(
+            1,
+            sum(1 for call in conn.execute.call_args_list if "INSERT INTO stock_topic_analysis_versions" in call.args[0]),
+        )
+
+    @unittest.skipUnless(HAS_SERVICE_DEPS, "stock topic analysis service dependencies are not installed")
+    def test_build_analysis_topic_payload_does_not_truncate_stock_excerpts(self):
+        from backend.services.stock_topic_analysis_service import _build_analysis_topic_payload
+
+        topics = [
+            {
+                "topic_id": str(1000 + index),
+                "title": f"title-{index}",
+                "create_time": "2026-05-01T00:00:00+0800",
+                "likes_count": 0,
+                "comments_count": 0,
+                "reading_count": 0,
+                "concepts": [],
+                "excerpt": f"excerpt-{index}",
+            }
+            for index in range(65)
+        ]
+
+        payload = _build_analysis_topic_payload(
+            {
+                "group_id": "51111112855254",
+                "stock_name": "宁德时代",
+                "topics": topics,
+            }
+        )
+
+        self.assertEqual(65, len(payload))
+        self.assertEqual("1000", payload[0]["topic_id"])
+        self.assertEqual("1064", payload[-1]["topic_id"])
 
     @unittest.skipUnless(HAS_SERVICE_DEPS, "stock topic analysis service dependencies are not installed")
     def test_stock_analysis_prompt_uses_excerpt_and_incremental_dedupe_guidance(self):
@@ -883,14 +980,35 @@ class StockTopicAnalysisServiceHelperTests(unittest.TestCase):
 
         prompt = FakeClient.kwargs["input"][1]["content"]
         self.assertIn("输入原文摘录", prompt)
-        self.assertIn("new_topics.excerpt", prompt)
+        self.assertIn("输入中的 excerpt", prompt)
         self.assertIn("关键数据、预测与口径", prompt)
-        self.assertIn("可能来自历史保存报告，也可能来自本次初始化分析的上一批结果", prompt)
-        self.assertIn("先判断新增原文摘录是否提供实质新增信息", prompt)
+        self.assertIn("报告基准日", prompt)
+        self.assertIn("历史业绩", prompt)
+        self.assertIn("成稿前先做内部清洗", prompt)
+        self.assertIn("过期内容删除标准", prompt)
+        self.assertIn("投资摘要时间要求", prompt)
+        self.assertIn("任何收入预测、利润预测、出货预测、财务预测、目标价、评级、估值倍数及其具体数值都不得作为摘要 bullet", prompt)
+        self.assertIn("不要把历史高增写成当前亮点", prompt)
+        self.assertIn("不进入任何章节", prompt)
+        self.assertIn("旧报告中已有的也要删除", prompt)
+        self.assertIn("不要降级保留为历史口径", prompt)
+        self.assertIn("删除后不要解释", prompt)
+        self.assertIn("当前有效数据披露有限", prompt)
+        self.assertIn("不要放进关键数据表", prompt)
+        self.assertIn("核心逻辑写法", prompt)
+        self.assertIn("不得用已过季度或年度的高增", prompt)
+        self.assertIn("数据表不得超过 10 行", prompt)
+        self.assertIn("旧季度/旧年度业绩数据不要进入数据表", prompt)
+        self.assertIn("评级、目标价、估值倍数、市值空间", prompt)
+        self.assertIn("必须合并在同一行", prompt)
+        self.assertIn("催化与跟踪分工", prompt)
+        self.assertIn("增量融合", prompt)
+        self.assertIn("旧报告清洗", prompt)
+        self.assertIn("用实际结果替代旧预测", prompt)
         self.assertIn("不要为了增量而强行扩写", prompt)
         self.assertIn("不要为了完整而扩写", prompt)
-        self.assertIn("不输出未由材料支持的投资评级或操作建议", prompt)
-        self.assertIn("如输入中有估值、目标价或市值空间等信息，再进行整理", prompt)
+        self.assertIn("最终报告中不要保留这些市场观点", prompt)
+        self.assertIn("禁止输出内部字段名或系统统计口径", prompt)
 
 
 if __name__ == "__main__":

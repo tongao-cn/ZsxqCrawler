@@ -5,12 +5,12 @@ from backend.routes.file_routes import (
     _build_check_local_file_status_response,
     _build_file_status_response,
     _build_sync_files_response,
-    _close_crawler_file_databases,
     _enqueue_file_task,
     _get_download_file_status,
     _query_group_id,
     _resolve_download_record_status,
 )
+from backend.services.file_workflow_service import _close_crawler_file_databases
 
 
 class FakeBackgroundTasks:
@@ -252,6 +252,18 @@ class FileRoutesHelperTests(unittest.TestCase):
 
         self.assertTrue(crawler.downloader.file_db.closed)
         self.assertTrue(crawler.db.closed)
+
+    def test_clear_file_database_does_not_construct_legacy_crawler(self):
+        from backend.routes.file_routes import clear_file_database
+
+        with (
+            patch("backend.routes.file_routes._clear_group_file_data", return_value={"files": 0}) as clear_data,
+            patch("backend.core.crawler_runtime.get_crawler_for_group", side_effect=AssertionError("legacy crawler used")),
+        ):
+            response = self._run_async(clear_file_database("group-1"))
+
+        clear_data.assert_called_once_with("group-1")
+        self.assertEqual({"message": "群组 group-1 的文件数据和图片缓存已删除", "deleted": {"files": 0}}, response)
 
     def test_query_group_id_casts_numeric_ids_for_sql_filters(self):
         self.assertEqual(123, _query_group_id("123"))

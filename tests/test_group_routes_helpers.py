@@ -6,7 +6,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 
-HAS_GROUP_ROUTE_DEPS = find_spec("fastapi") is not None and find_spec("requests") is not None
+HAS_GROUP_ROUTE_DEPS = find_spec("fastapi") is not None
 
 if HAS_GROUP_ROUTE_DEPS:
     from backend.routes import group_routes
@@ -61,21 +61,22 @@ class FakeFileCursor:
 
 
 class FakeFileDb:
+    last_instance = None
+
     def __init__(self):
+        self.group_id = None
         self.cursor = FakeFileCursor()
+        self.closed = False
+        FakeFileDb.last_instance = self
+
+    def close(self):
+        self.closed = True
 
 
-class FakeDownloader:
-    def __init__(self):
-        self.file_db = FakeFileDb()
-
-
-class FakeCrawler:
-    def __init__(self):
-        self.downloader = FakeDownloader()
-
-    def get_file_downloader(self):
-        return self.downloader
+class FakeScopedFileDb(FakeFileDb):
+    def __init__(self, group_id=None):
+        super().__init__()
+        self.group_id = group_id
 
 
 @unittest.skipUnless(HAS_GROUP_ROUTE_DEPS, "group route dependencies are not installed")
@@ -166,19 +167,56 @@ class GroupRoutesHelperTests(unittest.TestCase):
         self.assertNotIn("note", result)
 
     def test_count_group_files_returns_zero_when_crawler_fails(self):
-        with patch.object(group_routes, "get_crawler_for_group", side_effect=RuntimeError("boom")):
+        with patch.object(group_routes, "ZSXQFileDatabase", side_effect=RuntimeError("boom")):
             self.assertEqual(group_routes._count_group_files("123"), 0)
 
     def test_count_group_files_filters_by_group_id(self):
-        crawler = FakeCrawler()
-
-        with patch.object(group_routes, "get_crawler_for_group", return_value=crawler):
+        with patch.object(group_routes, "ZSXQFileDatabase", FakeScopedFileDb):
             self.assertEqual(group_routes._count_group_files("123"), 7)
 
+        file_db = FakeScopedFileDb.last_instance
+
         self.assertEqual(
-            crawler.downloader.file_db.cursor.calls,
-            [("SELECT COUNT(*) FROM files WHERE group_id = ?", ("123",))],
+            file_db.cursor.calls,
+            [("SELECT COUNT(*) FROM files WHERE group_id = ?", (123,))],
         )
+        self.assertEqual(file_db.group_id, "123")
+        self.assertTrue(file_db.closed)
+
+    def test_build_official_group_entry_maps_supported_fields(self):
+        entry = group_routes._build_official_group_entry(
+            {
+                "group_id": "123",
+                "name": "官方群",
+                "type": "paid",
+                "background_url": "bg.png",
+                "owner": {"user_id": "1"},
+                "statistics": {"topics_count": 2},
+                "description": "desc",
+            },
+            account={"id": "acc"},
+        )
+
+        self.assertEqual(123, entry["group_id"])
+        self.assertEqual("官方群", entry["name"])
+        self.assertEqual("account", entry["source"])
+        self.assertEqual({"id": "acc"}, entry["account"])
+        self.assertIsNone(entry["expiry_time"])
+
+    def test_build_official_group_entry_skips_invalid_group_id(self):
+        self.assertIsNone(group_routes._build_official_group_entry({"group_id": "abc"}))
+
+    def test_fetch_official_groups_uses_self_user_id(self):
+        class FakeOfficialClient:
+            def get_self_info(self):
+                return {"user": {"user_id": "u1"}}
+
+            def get_user_groups(self, user_id, limit=200, scope="all"):
+                return {"groups": [{"group_id": "123"}], "count": 1}
+
+        groups = group_routes._fetch_official_groups(FakeOfficialClient())
+
+        self.assertEqual([{"group_id": "123"}], groups)
 
 
 if __name__ == "__main__":

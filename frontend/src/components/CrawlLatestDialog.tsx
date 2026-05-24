@@ -13,6 +13,13 @@ import { Button } from '@/components/ui/button';
 import { MonthPickerButton } from '@/components/ui/date-picker-button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 
 interface CrawlLatestDialogProps {
   open: boolean;
@@ -23,10 +30,12 @@ interface CrawlLatestDialogProps {
     endTime?: string;
     lastDays?: number;
     perPage?: number;
+    topicSource?: 'legacy' | 'official';
   }) => void;
   submitting?: boolean;
   defaultLastDays?: number;
   defaultPerPage?: number;
+  topicSource?: 'legacy' | 'official';
 }
 
 function getCurrentMonth() {
@@ -56,11 +65,13 @@ export default function CrawlLatestDialog({
   submitting = false,
   defaultLastDays = 7,
   defaultPerPage = 20,
+  topicSource: controlledTopicSource,
 }: CrawlLatestDialogProps) {
   const [mode, setMode] = useState<'latest' | 'range'>('latest');
   const [lastDays, setLastDays] = useState<number | ''>(defaultLastDays);
   const [month, setMonth] = useState(getCurrentMonth);
   const [perPage, setPerPage] = useState<number | ''>(defaultPerPage);
+  const [topicSource, setTopicSource] = useState<'legacy' | 'official'>('official');
 
   useEffect(() => {
     if (open) {
@@ -68,14 +79,16 @@ export default function CrawlLatestDialog({
       setLastDays(defaultLastDays);
       setMonth(getCurrentMonth());
       setPerPage(defaultPerPage);
+      setTopicSource(controlledTopicSource || 'official');
     }
-  }, [open, defaultLastDays, defaultPerPage]);
+  }, [open, defaultLastDays, defaultPerPage, controlledTopicSource]);
 
   const buildLastDaysPayload = () => {
     const payload: {
       mode: 'latest' | 'range';
       lastDays?: number;
       perPage?: number;
+      topicSource?: 'legacy' | 'official';
     } = { mode: 'range' };
 
     if (lastDays !== '' && !Number.isNaN(Number(lastDays))) {
@@ -84,6 +97,7 @@ export default function CrawlLatestDialog({
     if (perPage !== '' && !Number.isNaN(Number(perPage))) {
       payload.perPage = Number(perPage);
     }
+    payload.topicSource = topicSource;
 
     return payload;
   };
@@ -95,6 +109,7 @@ export default function CrawlLatestDialog({
       startTime?: string;
       endTime?: string;
       perPage?: number;
+      topicSource?: 'legacy' | 'official';
     } = { mode: 'range' };
 
     if (range) {
@@ -104,6 +119,7 @@ export default function CrawlLatestDialog({
     if (perPage !== '' && !Number.isNaN(Number(perPage))) {
       payload.perPage = Number(perPage);
     }
+    payload.topicSource = topicSource;
 
     return payload;
   };
@@ -205,6 +221,19 @@ export default function CrawlLatestDialog({
                 <p className="text-xs text-muted-foreground">
                   用于月份采集的每页数量，默认 {defaultPerPage}。
                 </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label>范围采集来源</Label>
+                <Select value={topicSource} onValueChange={(value) => setTopicSource(value as 'legacy' | 'official')}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="official">官方流程</SelectItem>
+                    <SelectItem value="legacy">旧 crawler</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
             </div>
           ) : (

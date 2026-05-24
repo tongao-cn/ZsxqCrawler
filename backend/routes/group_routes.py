@@ -6,18 +6,18 @@ from contextlib import closing
 from pathlib import Path
 from typing import Any, Dict, List
 
-import requests
 from fastapi import APIRouter, HTTPException
 
+from backend.crawlers.official_topic_client import (
+    OfficialTopicClient,
+    official_payload_groups,
+    official_payload_user,
+)
 from backend.core.db_path_manager import get_db_path_manager
 from backend.core.account_context import (
     build_account_group_detection,
-    fetch_groups_from_api,
     get_account_summary_for_group_auto,
-    get_cookie_for_group,
-    get_primary_cookie,
 )
-from backend.core.crawler_runtime import get_crawler_for_group
 from backend.core.local_group_runtime import (
     get_cached_local_group_ids,
     delete_group_local as delete_group_local_data,
@@ -209,14 +209,10 @@ def _coerce_group_id(group_id: str) -> int | str:
 
 def _count_group_files(group_id: str) -> int:
     try:
-        crawler = get_crawler_for_group(group_id)
-        downloader = crawler.get_file_downloader()
-        try:
-            downloader.file_db.cursor.execute("SELECT COUNT(*) FROM files WHERE group_id = ?", (group_id,))
-            row = downloader.file_db.cursor.fetchone()
+        with closing(ZSXQFileDatabase(group_id)) as files_db:
+            files_db.cursor.execute("SELECT COUNT(*) FROM files WHERE group_id = ?", (_coerce_group_id(group_id),))
+            row = files_db.cursor.fetchone()
             return (row[0] or 0) if row else 0
-        except Exception:
-            return 0
     except Exception:
         return 0
 
@@ -242,6 +238,44 @@ def _build_group_info_fallback(
     return result
 
 
+def _fetch_official_groups(client: OfficialTopicClient | None = None) -> List[dict]:
+    client = client or OfficialTopicClient()
+    user = official_payload_user(client.get_self_info())
+    user_id = user.get("user_id")
+    if not user_id:
+        return []
+    return official_payload_groups(client.get_user_groups(user_id, limit=200, scope="all"))
+
+
+def _build_official_group_entry(group: Dict[str, Any], account: Any = None) -> Dict[str, Any] | None:
+    gid = group.get("group_id")
+    try:
+        gid = int(gid)
+    except Exception:
+        return None
+
+    return {
+        "group_id": gid,
+        "name": group.get("name", ""),
+        "type": group.get("type", ""),
+        "background_url": group.get("background_url", ""),
+        "owner": group.get("owner", {}) or {},
+        "statistics": group.get("statistics", {}) or {},
+        "status": None,
+        "create_time": group.get("create_time"),
+        "subscription_time": None,
+        "expiry_time": None,
+        "join_time": None,
+        "last_active_time": None,
+        "description": group.get("description", ""),
+        "is_trial": False,
+        "trial_end_time": None,
+        "membership_end_time": None,
+        "account": account,
+        "source": "account",
+    }
+
+
 @router.get("/groups")
 async def get_groups():
     """获取群组列表：账号群 ∪ 本地目录群（去重合并）"""
@@ -253,71 +287,20 @@ async def get_groups():
         # 获取“当前账号”的群列表（优先账号默认账号，其次config.toml；若未配置则视为空集合）
         groups_data: List[dict] = []
         try:
-            primary_cookie = get_primary_cookie()
-            if primary_cookie:
-                groups_data = fetch_groups_from_api(primary_cookie)
+            groups_data = _fetch_official_groups()
         except Exception as e:
             # 不阻断，记录告警
-            _warn(f"获取账号群失败，降级为本地集合: {e}")
+            _warn(f"获取官方群组失败，降级为本地集合: {e}")
             groups_data = []
 
         # 组装账号侧群为字典（id -> info）
         by_id: Dict[int, dict] = {}
 
         for group in groups_data or []:
-            # 提取用户特定信息
-            user_specific = group.get("user_specific", {}) or {}
-            validity = user_specific.get("validity", {}) or {}
-            trial = user_specific.get("trial", {}) or {}
-
-            # 过期信息与状态
-            actual_expiry_time = trial.get("end_time") or validity.get("end_time")
-            is_trial = bool(trial.get("end_time"))
-
-            status = None
-            if actual_expiry_time:
-                from datetime import datetime, timezone
-
-                try:
-                    end_time = datetime.fromisoformat(actual_expiry_time.replace("Z", "+00:00"))
-                    now = datetime.now(timezone.utc)
-                    days_until_expiry = (end_time - now).days
-                    if days_until_expiry < 0:
-                        status = "expired"
-                    elif days_until_expiry <= 7:
-                        status = "expiring_soon"
-                    else:
-                        status = "active"
-                except Exception:
-                    pass
-
-            gid = group.get("group_id")
-            try:
-                gid = int(gid)
-            except Exception:
+            info = _build_official_group_entry(group, account=group_account_map.get(str(group.get("group_id"))))
+            if not info:
                 continue
-
-            info = {
-                "group_id": gid,
-                "name": group.get("name", ""),
-                "type": group.get("type", ""),
-                "background_url": group.get("background_url", ""),
-                "owner": group.get("owner", {}) or {},
-                "statistics": group.get("statistics", {}) or {},
-                "status": status,
-                "create_time": group.get("create_time"),
-                "subscription_time": validity.get("begin_time"),
-                "expiry_time": actual_expiry_time,
-                "join_time": user_specific.get("join_time"),
-                "last_active_time": user_specific.get("last_active_time"),
-                "description": group.get("description", ""),
-                "is_trial": is_trial,
-                "trial_end_time": trial.get("end_time"),
-                "membership_end_time": validity.get("end_time"),
-                "account": group_account_map.get(str(gid)),
-                "source": "account",
-            }
-            by_id[gid] = info
+            by_id[info["group_id"]] = info
 
         # 合并本地目录群
         for gid in local_ids or []:
@@ -327,9 +310,9 @@ async def get_groups():
                 continue
             if gid_int in by_id:
                 # 标注来源为 account|local，并持久化一份元信息到本地
-                src = by_id[gid_int].get("source", "account")
+                src = by_id[gid_int].get("source", "official")
                 if "local" not in src:
-                    by_id[gid_int]["source"] = "account|local"
+                    by_id[gid_int]["source"] = f"{src}|local"
                 _persist_group_meta_local(gid_int, by_id[gid_int])
             else:
                 # 仅存在于本地：优先从 group_meta.json 读取元信息，其次从本地数据库补全
@@ -363,26 +346,8 @@ async def get_group_info(group_id: str):
                 note=note,
             )
 
-        # 自动匹配该群组所属账号，获取对应Cookie
-        cookie = get_cookie_for_group(group_id)
-
-        # 若没有可用 Cookie，直接返回本地回退，避免抛 400/500
-        if not cookie:
-            return build_fallback(note="no_cookie")
-
-        # 调用官方接口
-        url = f"https://api.zsxq.com/v2/groups/{group_id}"
-        headers = {
-            "Cookie": cookie,
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-        }
-
-        response = requests.get(url, headers=headers, timeout=30)
-
-        if response.status_code == 200:
-            data = response.json()
-            if data.get("succeeded"):
-                group_data = data.get("resp_data", {}).get("group", {})
+        for group_data in _fetch_official_groups():
+            if str(group_data.get("group_id")) == str(group_id):
                 return {
                     "group_id": group_data.get("group_id"),
                     "name": group_data.get("name"),
@@ -390,16 +355,10 @@ async def get_group_info(group_id: str):
                     "statistics": group_data.get("statistics", {}),
                     "background_url": group_data.get("background_url"),
                     "account": get_account_summary_for_group_auto(group_id),
-                    "source": "remote",
+                    "source": "official",
                 }
-            # 官方返回非 succeeded，也走回退
-            return build_fallback(note="remote_response_failed")
-        else:
-            # 授权失败/权限不足 → 使用本地回退（200返回，减少前端告警）
-            if response.status_code in (401, 403):
-                return build_fallback(note=f"remote_api_{response.status_code}")
-            # 其他状态码也回退
-            return build_fallback(note=f"remote_api_{response.status_code}")
+
+        return build_fallback(note="official_group_not_found")
 
     except Exception:
         # 任何异常都回退为本地信息，避免 500
@@ -410,45 +369,44 @@ async def get_group_info(group_id: str):
 async def get_group_stats(group_id: int):
     """获取指定群组的统计信息"""
     try:
-        # 使用指定群组的爬虫实例
-        crawler = get_crawler_for_group(str(group_id))
-        cursor = crawler.db.cursor
+        with closing(ZSXQDatabase(str(group_id))) as db:
+            cursor = db.cursor
 
-        # 获取话题统计
-        cursor.execute("SELECT COUNT(*) FROM topics WHERE group_id = ?", (group_id,))
-        topics_count = cursor.fetchone()[0]
+            # 获取话题统计
+            cursor.execute("SELECT COUNT(*) FROM topics WHERE group_id = ?", (group_id,))
+            topics_count = cursor.fetchone()[0]
 
-        # 获取用户统计 - 从talks表获取，因为topics表没有user_id字段
-        cursor.execute(
-            """
-            SELECT COUNT(DISTINCT t.owner_user_id)
-            FROM talks t
-            JOIN topics tp ON t.topic_id = tp.topic_id
-            WHERE tp.group_id = ?
-        """,
-            (group_id,),
-        )
-        users_count = cursor.fetchone()[0]
+            # 获取用户统计 - 从talks表获取，因为topics表没有user_id字段
+            cursor.execute(
+                """
+                SELECT COUNT(DISTINCT t.owner_user_id)
+                FROM talks t
+                JOIN topics tp ON t.topic_id = tp.topic_id
+                WHERE tp.group_id = ?
+            """,
+                (group_id,),
+            )
+            users_count = cursor.fetchone()[0]
 
-        # 获取最新话题时间
-        cursor.execute("SELECT MAX(create_time) FROM topics WHERE group_id = ?", (group_id,))
-        latest_topic_time = cursor.fetchone()[0]
+            # 获取最新话题时间
+            cursor.execute("SELECT MAX(create_time) FROM topics WHERE group_id = ?", (group_id,))
+            latest_topic_time = cursor.fetchone()[0]
 
-        # 获取最早话题时间
-        cursor.execute("SELECT MIN(create_time) FROM topics WHERE group_id = ?", (group_id,))
-        earliest_topic_time = cursor.fetchone()[0]
+            # 获取最早话题时间
+            cursor.execute("SELECT MIN(create_time) FROM topics WHERE group_id = ?", (group_id,))
+            earliest_topic_time = cursor.fetchone()[0]
 
-        # 获取总点赞数
-        cursor.execute("SELECT SUM(likes_count) FROM topics WHERE group_id = ?", (group_id,))
-        total_likes = cursor.fetchone()[0] or 0
+            # 获取总点赞数
+            cursor.execute("SELECT SUM(likes_count) FROM topics WHERE group_id = ?", (group_id,))
+            total_likes = cursor.fetchone()[0] or 0
 
-        # 获取总评论数
-        cursor.execute("SELECT SUM(comments_count) FROM topics WHERE group_id = ?", (group_id,))
-        total_comments = cursor.fetchone()[0] or 0
+            # 获取总评论数
+            cursor.execute("SELECT SUM(comments_count) FROM topics WHERE group_id = ?", (group_id,))
+            total_comments = cursor.fetchone()[0] or 0
 
-        # 获取总阅读数
-        cursor.execute("SELECT SUM(reading_count) FROM topics WHERE group_id = ?", (group_id,))
-        total_readings = cursor.fetchone()[0] or 0
+            # 获取总阅读数
+            cursor.execute("SELECT SUM(reading_count) FROM topics WHERE group_id = ?", (group_id,))
+            total_readings = cursor.fetchone()[0] or 0
 
         return {
             "group_id": group_id,

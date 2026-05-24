@@ -68,6 +68,9 @@ Add a sibling A-share Q&A tab where the user can enter a free-form question, let
 - Recommendation-pool topic extraction now stores a per-stock `excerpt`; individual stock analysis uses this stored evidence excerpt for search previews and AI report payloads, and reports an error when a matched topic has no excerpt.
 - Stock analysis now treats recommendation-pool excerpts as the primary search and analysis source. The frontend focuses on report/status/counts instead of exposing topic details, while the backend keeps topic IDs for counting and incremental processed-state tracking.
 - Batch stock analysis now runs different stocks concurrently with a bounded worker count while keeping each stock's internal topic batches sequential and preserving result order.
+- Stock analysis prompt now uses a strict research-report cleanup pass: expired forecasts, old ratings/target prices, old quarterly/yearly performance conclusions, valuation views, and incremental-process wording are removed before the final report is written.
+- Stock analysis payload building keeps all matched stock excerpts and relies on 10-topic AI batches, avoiding a stock-report-level 30-topic truncation.
+- Representative no-write smokes passed after prompt hardening: 四方光电, 金风科技, 科士达, 水晶光电. The final checks found complete report sections with no obvious incremental wording, internal-field leakage, stale-history explanations, target-price/rating/valuation residue, or forecast figures in the investment summary.
 
 ## Changed Files
 
@@ -119,3 +122,6 @@ Add a sibling A-share Q&A tab where the user can enter a free-form question, let
 - Excerpt-first stock analysis pass: `cd frontend; npx tsc --noEmit --pretty false`: passed.
 - Batch stock concurrency pass: `python -m unittest tests.test_stock_topic_analysis_service_helpers`: passed.
 - Batch stock concurrency pass: `python -m py_compile backend\services\stock_topic_analysis_service.py`: passed.
+- Research-report cleanup pass: `python -m unittest tests.test_stock_topic_analysis_service_helpers`: passed.
+- Research-report cleanup pass: `python -m py_compile backend\services\stock_topic_analysis_service.py`: passed.
+- Research-report cleanup smoke: no-write AI checks on 四方光电, 金风科技, 科士达, 水晶光电 passed the report-quality rules.

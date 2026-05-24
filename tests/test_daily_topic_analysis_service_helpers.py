@@ -144,8 +144,8 @@ class DailyTopicAnalysisServiceHelperTests(unittest.TestCase):
             return_value=(["chunk-1", "chunk-2"], "model-a", 2),
         ) as generate_chunks, patch.object(
             service,
-            "_generate_final_report_from_chunks_with_ai",
-            return_value=("# final", "model-a"),
+            "_generate_final_report_from_chunks_with_retry",
+            return_value=("# final", "model-a", False, False),
         ) as generate_final:
             summary, model, meta = service._generate_daily_report_summary(
                 group_id="group-1",
@@ -159,9 +159,43 @@ class DailyTopicAnalysisServiceHelperTests(unittest.TestCase):
         self.assertEqual(2, meta["chunk_count"])
         self.assertEqual([1, 1], meta["chunk_topic_counts"])
         self.assertEqual(2, meta["chunk_workers"])
+        self.assertFalse(meta["final_summaries_clipped"])
+        self.assertFalse(meta["final_retry_short"])
         generate_chunk.assert_called_once()
         generate_chunks.assert_called_once()
-        generate_final.assert_called_once_with(["chunk-1", "chunk-2"], "2026-05-07", group_id="group-1")
+        generate_final.assert_called_once_with(["chunk-1", "chunk-2"], "2026-05-07", group_id="group-1", log_callback=None)
+
+    @unittest.skipUnless(HAS_DAILY_SERVICE_DEPS, "daily topic analysis service dependencies are not installed")
+    def test_generate_final_report_from_chunks_retries_with_shorter_summaries(self):
+        from backend.services import daily_topic_analysis_service as service
+
+        prompts = []
+
+        def fake_call(prompt, *, group_id, image_inputs):
+            prompts.append(prompt)
+            self.assertEqual("group-1", group_id)
+            self.assertEqual([], image_inputs)
+            if len(prompts) == 1:
+                raise RuntimeError("upstream failed")
+            return "# final", "model-a"
+
+        with patch.object(service, "MAX_FINAL_CHUNK_SUMMARY_CHARS", 20), patch.object(
+            service,
+            "MAX_FINAL_RETRY_CHUNK_SUMMARY_CHARS",
+            8,
+        ), patch.object(service, "_call_report_ai", side_effect=fake_call):
+            summary, model, clipped, retried = service._generate_final_report_from_chunks_with_retry(
+                ["a" * 40, "b" * 40],
+                "2026-05-07",
+                group_id="group-1",
+            )
+
+        self.assertEqual("# final", summary)
+        self.assertEqual("model-a", model)
+        self.assertTrue(clipped)
+        self.assertTrue(retried)
+        self.assertEqual(2, len(prompts))
+        self.assertLess(len(prompts[1]), len(prompts[0]))
 
     @unittest.skipUnless(HAS_DAILY_SERVICE_DEPS, "daily topic analysis service dependencies are not installed")
     def test_generate_chunk_summaries_concurrently_preserves_chunk_order(self):

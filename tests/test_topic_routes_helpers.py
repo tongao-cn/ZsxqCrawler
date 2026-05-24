@@ -2,7 +2,7 @@ import unittest
 from importlib.util import find_spec
 
 
-HAS_TOPIC_ROUTE_DEPS = find_spec("fastapi") is not None and find_spec("requests") is not None
+HAS_TOPIC_ROUTE_DEPS = find_spec("fastapi") is not None
 
 
 class FakeDb:
@@ -31,24 +31,6 @@ class FakeTopicDb(FakeDb):
         self.imported_comments.append((topic_id, comments))
 
 
-class FakeCommentCrawler:
-    def __init__(self, comments):
-        self.db = FakeTopicDb()
-        self.comments = comments
-
-    def fetch_all_comments(self, topic_id, comments_count):
-        return self.comments
-
-
-class FakeResponse:
-    def __init__(self, status_code, data=None):
-        self.status_code = status_code
-        self.data = data or {}
-
-    def json(self):
-        return self.data
-
-
 class FakeCursor:
     def __init__(self, rows=None, total=0):
         self.calls = []
@@ -71,55 +53,40 @@ class FakeSqlDb:
         self.cursor = FakeCursor(rows=rows, total=total)
 
 
-class FakeDownloader:
-    def __init__(self):
-        self.file_db = FakeDb()
+class FakeCommentClient:
+    def __init__(self, comments):
+        self.comments = comments
 
-
-class FakeCrawler:
-    def __init__(self, with_downloader=True):
-        self.db = FakeDb()
-        if with_downloader:
-            self.file_downloader = FakeDownloader()
+    def get_topic_comments(self, topic_id):
+        return self.comments
 
 
 class TopicRoutesHelperTests(unittest.TestCase):
     @unittest.skipUnless(HAS_TOPIC_ROUTE_DEPS, "topic route dependencies are not installed")
-    def test_close_crawler_databases_closes_topic_and_file_databases(self):
-        from backend.routes.topic_routes import _close_crawler_databases
+    def test_close_topic_db_closes_database(self):
+        from backend.routes.topic_routes import _close_topic_db
 
-        crawler = FakeCrawler()
+        db = FakeDb()
 
-        _close_crawler_databases(crawler)
+        _close_topic_db(db)
 
-        self.assertTrue(crawler.db.closed)
-        self.assertTrue(crawler.file_downloader.file_db.closed)
-
-    @unittest.skipUnless(HAS_TOPIC_ROUTE_DEPS, "topic route dependencies are not installed")
-    def test_close_crawler_databases_allows_missing_downloader(self):
-        from backend.routes.topic_routes import _close_crawler_databases
-
-        crawler = FakeCrawler(with_downloader=False)
-
-        _close_crawler_databases(crawler)
-
-        self.assertTrue(crawler.db.closed)
+        self.assertTrue(db.closed)
 
     @unittest.skipUnless(HAS_TOPIC_ROUTE_DEPS, "topic route dependencies are not installed")
-    def test_rollback_crawler_db_rolls_back_when_available(self):
-        from backend.routes.topic_routes import _rollback_crawler_db
+    def test_rollback_topic_db_rolls_back_when_available(self):
+        from backend.routes.topic_routes import _rollback_topic_db
 
-        crawler = FakeCrawler()
+        db = FakeDb()
 
-        _rollback_crawler_db(crawler)
+        _rollback_topic_db(db)
 
-        self.assertTrue(crawler.db.rolled_back)
+        self.assertTrue(db.rolled_back)
 
     @unittest.skipUnless(HAS_TOPIC_ROUTE_DEPS, "topic route dependencies are not installed")
-    def test_rollback_crawler_db_allows_missing_crawler(self):
-        from backend.routes.topic_routes import _rollback_crawler_db
+    def test_rollback_topic_db_allows_missing_db(self):
+        from backend.routes.topic_routes import _rollback_topic_db
 
-        _rollback_crawler_db(None)
+        _rollback_topic_db(None)
 
     @unittest.skipUnless(HAS_TOPIC_ROUTE_DEPS, "topic route dependencies are not installed")
     def test_delete_single_topic_rows_deletes_detail_tables_and_topic(self):
@@ -181,43 +148,13 @@ class TopicRoutesHelperTests(unittest.TestCase):
         from backend.routes.topic_routes import _fetch_and_import_topic_comments
 
         comments = [{"comment_id": 1}]
-        crawler = FakeCommentCrawler(comments)
+        db = FakeTopicDb()
 
-        fetched = _fetch_and_import_topic_comments(crawler, 10, 1)
+        fetched = _fetch_and_import_topic_comments(db, 10, 1, FakeCommentClient(comments))
 
         self.assertEqual(1, fetched)
-        self.assertEqual([(10, comments)], crawler.db.imported_comments)
-        self.assertTrue(crawler.db.committed)
-
-    @unittest.skipUnless(HAS_TOPIC_ROUTE_DEPS, "topic route dependencies are not installed")
-    def test_parse_refresh_topic_response_returns_topic_data(self):
-        from backend.routes.topic_routes import _parse_refresh_topic_response
-
-        topic = {"topic_id": 10, "likes_count": 3}
-        response = FakeResponse(200, {"succeeded": True, "resp_data": {"topic": topic}})
-
-        topic_data, error_response = _parse_refresh_topic_response(response)
-
-        self.assertEqual(topic, topic_data)
-        self.assertIsNone(error_response)
-
-    @unittest.skipUnless(HAS_TOPIC_ROUTE_DEPS, "topic route dependencies are not installed")
-    def test_parse_refresh_topic_response_returns_status_failure(self):
-        from backend.routes.topic_routes import _parse_refresh_topic_response
-
-        topic_data, error_response = _parse_refresh_topic_response(FakeResponse(403))
-
-        self.assertIsNone(topic_data)
-        self.assertEqual({"success": False, "message": "API请求失败: 403"}, error_response)
-
-    @unittest.skipUnless(HAS_TOPIC_ROUTE_DEPS, "topic route dependencies are not installed")
-    def test_parse_refresh_topic_response_returns_format_failure(self):
-        from backend.routes.topic_routes import _parse_refresh_topic_response
-
-        topic_data, error_response = _parse_refresh_topic_response(FakeResponse(200, {"succeeded": False}))
-
-        self.assertIsNone(topic_data)
-        self.assertEqual({"success": False, "message": "API返回数据格式错误"}, error_response)
+        self.assertEqual([(10, comments)], db.imported_comments)
+        self.assertTrue(db.committed)
 
     @unittest.skipUnless(HAS_TOPIC_ROUTE_DEPS, "topic route dependencies are not installed")
     def test_build_refresh_topic_success_defaults_missing_counts(self):
@@ -263,26 +200,26 @@ class TopicRoutesHelperTests(unittest.TestCase):
     def test_import_more_comments_returns_zero_when_fetch_empty(self):
         from backend.routes.topic_routes import _import_more_comments
 
-        crawler = FakeCommentCrawler([])
+        db = FakeTopicDb()
 
-        fetched = _import_more_comments(crawler, 10, 9)
+        fetched = _import_more_comments(db, 10, 9, FakeCommentClient([]))
 
         self.assertEqual(0, fetched)
-        self.assertEqual([], crawler.db.imported_comments)
-        self.assertFalse(crawler.db.committed)
+        self.assertEqual([], db.imported_comments)
+        self.assertFalse(db.committed)
 
     @unittest.skipUnless(HAS_TOPIC_ROUTE_DEPS, "topic route dependencies are not installed")
     def test_import_more_comments_imports_and_commits(self):
         from backend.routes.topic_routes import _import_more_comments
 
         comments = [{"comment_id": 1}, {"comment_id": 2}]
-        crawler = FakeCommentCrawler(comments)
+        db = FakeTopicDb()
 
-        fetched = _import_more_comments(crawler, 10, 9)
+        fetched = _import_more_comments(db, 10, 9, FakeCommentClient(comments))
 
         self.assertEqual(2, fetched)
-        self.assertEqual([(10, comments)], crawler.db.imported_comments)
-        self.assertTrue(crawler.db.committed)
+        self.assertEqual([(10, comments)], db.imported_comments)
+        self.assertTrue(db.committed)
 
     @unittest.skipUnless(HAS_TOPIC_ROUTE_DEPS, "topic route dependencies are not installed")
     def test_build_pagination_calculates_pages(self):

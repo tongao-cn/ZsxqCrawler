@@ -28,6 +28,8 @@ MAX_TOPIC_CHARS = 5000
 MAX_PROMPT_CHARS = 60000
 REPORT_CHUNK_PROMPT_CHARS = 45000
 MAX_REPORT_CHUNK_WORKERS = 3
+MAX_FINAL_CHUNK_SUMMARY_CHARS = 6000
+MAX_FINAL_RETRY_CHUNK_SUMMARY_CHARS = 2500
 MAX_IMAGES_PER_REPORT = 12
 MAX_IMAGES_PER_TOPIC = 2
 MAX_IMAGE_BYTES = 4 * 1024 * 1024
@@ -466,6 +468,11 @@ def _build_chunk_summary_user_prompt(
     )
 
 
+def _clip_chunk_summaries_for_final(chunk_summaries: List[str], limit: int) -> Tuple[List[str], bool]:
+    clipped = [_clip(summary, limit) for summary in chunk_summaries]
+    return clipped, any(clipped_summary != original for clipped_summary, original in zip(clipped, chunk_summaries))
+
+
 def _build_final_report_user_prompt(chunk_summaries: List[str], report_date: str) -> str:
     joined = "\n\n".join(
         f"<!-- chunk {index + 1} -->\n{summary}"
@@ -579,11 +586,41 @@ def _generate_final_report_from_chunks_with_ai(
     *,
     group_id: str,
 ) -> Tuple[str, str]:
+    clipped_summaries, _clipped = _clip_chunk_summaries_for_final(chunk_summaries, MAX_FINAL_CHUNK_SUMMARY_CHARS)
     return _call_report_ai(
-        _build_final_report_user_prompt(chunk_summaries, report_date),
+        _build_final_report_user_prompt(clipped_summaries, report_date),
         group_id=group_id,
         image_inputs=[],
     )
+
+
+def _generate_final_report_from_chunks_with_retry(
+    chunk_summaries: List[str],
+    report_date: str,
+    *,
+    group_id: str,
+    log_callback: Optional[Callable[[str], None]] = None,
+) -> Tuple[str, str, bool, bool]:
+    clipped_summaries, clipped = _clip_chunk_summaries_for_final(chunk_summaries, MAX_FINAL_CHUNK_SUMMARY_CHARS)
+    try:
+        summary, model = _call_report_ai(
+            _build_final_report_user_prompt(clipped_summaries, report_date),
+            group_id=group_id,
+            image_inputs=[],
+        )
+        return summary, model, clipped, False
+    except Exception as exc:
+        retry_summaries, retry_clipped = _clip_chunk_summaries_for_final(
+            chunk_summaries,
+            MAX_FINAL_RETRY_CHUNK_SUMMARY_CHARS,
+        )
+        _log(log_callback, f"⚠️ 合并分块摘要失败，改用更短摘要重试: {exc}")
+        summary, model = _call_report_ai(
+            _build_final_report_user_prompt(retry_summaries, report_date),
+            group_id=group_id,
+            image_inputs=[],
+        )
+        return summary, model, clipped or retry_clipped, True
 
 
 def _generate_chunk_summaries_concurrently(
@@ -674,6 +711,7 @@ def _generate_daily_report_summary(
 
     chunks = _split_topics_for_report_chunks(group_id, report_date, topics)
     _log(log_callback, f"🧩 日报输入较长，拆分为 {len(chunks)} 个分块摘要后汇总")
+    _log(log_callback, "🛡️ 最终合并启用短摘要重试保护")
     chunk_summaries, model, chunk_workers = _generate_chunk_summaries_concurrently(
         chunks,
         report_date,
@@ -682,10 +720,11 @@ def _generate_daily_report_summary(
     )
 
     _log(log_callback, "🤖 正在合并分块摘要生成最终日报...")
-    summary, final_model = _generate_final_report_from_chunks_with_ai(
+    summary, final_model, final_summaries_clipped, final_retry_short = _generate_final_report_from_chunks_with_retry(
         chunk_summaries,
         report_date,
         group_id=group_id,
+        log_callback=log_callback,
     )
     return summary, final_model or model, {
         "generation_mode": "chunked",
@@ -693,6 +732,8 @@ def _generate_daily_report_summary(
         "chunk_count": len(chunks),
         "chunk_topic_counts": [len(chunk) for chunk in chunks],
         "chunk_workers": chunk_workers,
+        "final_summaries_clipped": final_summaries_clipped,
+        "final_retry_short": final_retry_short,
     }
 
 

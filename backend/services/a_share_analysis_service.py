@@ -1058,6 +1058,7 @@ def reset_analysis_range(
             "removed_topic_stock_extractions": removed.get("topic_stock_extractions", 0),
             "removed_stock_topic_processed_states": removed.get("stock_topic_processed_states", 0),
             "removed_stock_topic_analyses": removed.get("stock_topic_analyses", 0),
+            "removed_stock_topic_analysis_versions": removed.get("stock_topic_analysis_versions", 0),
             "summary": summary,
         }
 

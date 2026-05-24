@@ -772,6 +772,7 @@ class AShareAnalysisServiceHelperTests(unittest.TestCase):
                 "topic_stock_extractions": 4,
                 "stock_topic_processed_states": 5,
                 "stock_topic_analyses": 6,
+                "stock_topic_analysis_versions": 7,
             }
         ) as reset_db, patch.object(service, "get_analysis_summary", return_value={"date_count": 0}), patch.object(
             service, "read_existing_csv", return_value={"2026-05-01": {"A": 1}}
@@ -786,6 +787,7 @@ class AShareAnalysisServiceHelperTests(unittest.TestCase):
         self.assertEqual(4, result["removed_topic_stock_extractions"])
         self.assertEqual(5, result["removed_stock_topic_processed_states"])
         self.assertEqual(6, result["removed_stock_topic_analyses"])
+        self.assertEqual(7, result["removed_stock_topic_analysis_versions"])
 
     def test_get_source_topics_summary_filters_by_group_scope(self):
         from backend.services import a_share_analysis_service as service

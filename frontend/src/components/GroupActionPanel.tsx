@@ -9,6 +9,13 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
@@ -93,6 +100,8 @@ export interface GroupActionPanelProps {
     onQuickLastDaysChange: (days: number) => void;
     crawlMonth: string;
     onCrawlMonthChange: (month: string) => void;
+    topicSource: 'legacy' | 'official';
+    onTopicSourceChange: (source: 'legacy' | 'official') => void;
     latestDialogOpen: boolean;
     onLatestDialogOpenChange: (open: boolean) => void;
     settingsOpen: boolean;
@@ -301,6 +310,22 @@ export default function GroupActionPanel({
                           </AlertDialog>
                         )}
                       </div>
+                    </div>
+
+                    <div className="rounded-lg border border-gray-200 p-3">
+                      <div className="mb-2 text-xs font-medium text-gray-600">话题采集来源</div>
+                      <Select
+                        value={crawl.topicSource}
+                        onValueChange={(value) => crawl.onTopicSourceChange(value as 'legacy' | 'official')}
+                      >
+                        <SelectTrigger size="sm" className="h-8 w-full text-xs">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="official">官方流程</SelectItem>
+                          <SelectItem value="legacy">旧 crawler</SelectItem>
+                        </SelectContent>
+                      </Select>
                     </div>
 
                     <div className="space-y-2 border-t border-gray-200 pt-3">

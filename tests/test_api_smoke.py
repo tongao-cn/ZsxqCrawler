@@ -45,8 +45,7 @@ class ApiSmokeTests(unittest.TestCase):
         with (
             patch("backend.routes.group_routes.build_account_group_detection", return_value={}),
             patch("backend.routes.group_routes.get_cached_local_group_ids", return_value=set()),
-            patch("backend.routes.group_routes.get_primary_cookie", return_value="cookie"),
-            patch("backend.routes.group_routes.fetch_groups_from_api", side_effect=RuntimeError("boom")),
+            patch("backend.routes.group_routes._fetch_official_groups", side_effect=RuntimeError("boom")),
         ):
             response = TestClient(create_app()).get("/api/groups")
 

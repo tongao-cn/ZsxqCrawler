@@ -144,6 +144,67 @@ class CrawlRoutesHelperTests(unittest.TestCase):
         )
 
     @unittest.skipUnless(HAS_CRAWL_ROUTE_DEPS, "crawl route dependencies are not installed")
+    def test_resolve_topic_source_prefers_request_then_env_then_official(self):
+        from backend.routes.crawl_routes import CrawlSettingsRequest, CrawlTimeRangeRequest
+        from backend.services.crawl_service import _resolve_topic_source
+
+        with patch.dict("os.environ", {"ZSXQ_TOPIC_SOURCE": ""}):
+            self.assertEqual("official", _resolve_topic_source(CrawlTimeRangeRequest()))
+
+        with patch.dict("os.environ", {"ZSXQ_TOPIC_SOURCE": "legacy"}):
+            self.assertEqual("legacy", _resolve_topic_source(CrawlTimeRangeRequest()))
+            self.assertEqual("official", _resolve_topic_source(CrawlTimeRangeRequest(topicSource="official")))
+
+        with patch.dict("os.environ", {"ZSXQ_TOPIC_SOURCE": "official"}):
+            self.assertEqual("legacy", _resolve_topic_source(CrawlTimeRangeRequest(topicSource="legacy")))
+
+        self.assertEqual("official", _resolve_topic_source(CrawlTimeRangeRequest(topicSource="official")))
+        self.assertEqual("official", _resolve_topic_source(CrawlSettingsRequest(topicSource="official")))
+
+    @unittest.skipUnless(HAS_CRAWL_ROUTE_DEPS, "crawl route dependencies are not installed")
+    def test_official_latest_branch_skips_legacy_crawler(self):
+        from backend.routes.crawl_routes import CrawlSettingsRequest
+        from backend.services.crawl_service import run_crawl_latest_task
+
+        with (
+            patch("backend.services.crawl_service._run_official_crawl_pages_task") as official_runner,
+            patch("backend.services.crawl_service.ZSXQTopicCrawler") as legacy_crawler,
+            patch("backend.services.crawl_service.update_task"),
+            patch("backend.services.crawl_service.add_task_log"),
+            patch("backend.services.crawl_service.unregister_task_crawler"),
+        ):
+            run_crawl_latest_task("task-1", "group-1", CrawlSettingsRequest(topicSource="official"))
+
+        official_runner.assert_called_once_with("task-1", "group-1", None, 20, "latest")
+        legacy_crawler.assert_not_called()
+
+    @unittest.skipUnless(HAS_CRAWL_ROUTE_DEPS, "crawl route dependencies are not installed")
+    def test_official_incremental_empty_database_fails_without_legacy_crawler(self):
+        from backend.routes.crawl_routes import CrawlHistoricalRequest
+        from backend.services.crawl_service import run_crawl_incremental_task
+
+        with (
+            patch("backend.services.crawl_service._official_start_cursor_from_oldest", return_value=""),
+            patch("backend.services.crawl_service._run_official_crawl_pages_task") as official_runner,
+            patch("backend.services.crawl_service.ZSXQDatabase"),
+            patch("backend.services.crawl_service.ZSXQTopicCrawler") as legacy_crawler,
+            patch("backend.services.crawl_service.update_task") as update_task,
+            patch("backend.services.crawl_service.add_task_log"),
+            patch("backend.services.crawl_service.unregister_task_crawler"),
+        ):
+            run_crawl_incremental_task(
+                "task-1",
+                "group-1",
+                10,
+                20,
+                CrawlHistoricalRequest(topicSource="official"),
+            )
+
+        official_runner.assert_not_called()
+        legacy_crawler.assert_not_called()
+        update_task.assert_any_call("task-1", "failed", "官方增量采集失败: 数据库为空")
+
+    @unittest.skipUnless(HAS_CRAWL_ROUTE_DEPS, "crawl route dependencies are not installed")
     def test_time_range_crawl_stops_after_empty_page(self):
         from backend.routes.crawl_routes import CrawlTimeRangeRequest
         from backend.services.crawl_service import run_crawl_time_range_task
@@ -160,7 +221,12 @@ class CrawlRoutesHelperTests(unittest.TestCase):
             run_crawl_time_range_task(
                 "task-1",
                 "group-1",
-                CrawlTimeRangeRequest(startTime="2026-02-01", endTime="2026-02-01", perPage=20),
+                CrawlTimeRangeRequest(
+                    startTime="2026-02-01",
+                    endTime="2026-02-01",
+                    perPage=20,
+                    topicSource="legacy",
+                ),
             )
 
         self.assertEqual(1, len(crawler.fetch_calls))

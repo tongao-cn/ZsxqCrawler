@@ -6,7 +6,6 @@ from typing import Any, Dict, Optional
 
 from fastapi import HTTPException
 
-from backend.core.crawler_runtime import get_crawler_for_group
 from backend.core.db_path_manager import get_db_path_manager
 from backend.core.image_cache_manager import clear_group_cache_manager, get_image_cache_manager
 from backend.storage.db_compat import connect
@@ -127,24 +126,6 @@ async def delete_group_local(group_id: str):
             "images_cache_removed": False,
             "group_dir_removed": False,
         }
-
-        try:
-            crawler = get_crawler_for_group(group_id)
-            try:
-                if hasattr(crawler, "file_downloader") and crawler.file_downloader:
-                    if hasattr(crawler.file_downloader, "file_db") and crawler.file_downloader.file_db:
-                        crawler.file_downloader.file_db.close()
-                        print(f"✅ 已关闭文件数据库连接（群 {group_id}）")
-            except Exception as e:
-                print(f"⚠️ 关闭文件数据库连接时出错: {e}")
-            try:
-                if hasattr(crawler, "db") and crawler.db:
-                    crawler.db.close()
-                    print(f"✅ 已关闭话题数据库连接（群 {group_id}）")
-            except Exception as e:
-                print(f"⚠️ 关闭话题数据库连接时出错: {e}")
-        except Exception as e:
-            print(f"⚠️ 获取爬虫实例以关闭连接失败: {e}")
 
         import gc
         import shutil

@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { Settings } from 'lucide-react';
 import { apiClient, Group } from '@/lib/api';
@@ -33,6 +34,7 @@ export default function CrawlPanel({ onStatsUpdate, selectedGroup }: CrawlPanelP
   const [crawlIntervalMax, setCrawlIntervalMax] = useState<number>(5);
   const [longSleepIntervalMin, setLongSleepIntervalMin] = useState<number>(180);
   const [longSleepIntervalMax, setLongSleepIntervalMax] = useState<number>(300);
+  const [topicSource, setTopicSource] = useState<'legacy' | 'official'>('official');
 
   const handleCrawlHistorical = async () => {
     if (!selectedGroup) {
@@ -42,7 +44,7 @@ export default function CrawlPanel({ onStatsUpdate, selectedGroup }: CrawlPanelP
 
     try {
       setLoading('historical');
-      const response = await apiClient.crawlHistorical(selectedGroup.group_id, historicalPages, historicalPerPage);
+      const response = await apiClient.crawlHistorical(selectedGroup.group_id, historicalPages, historicalPerPage, { topicSource });
       toast.success(`任务已创建: ${response.task_id}`);
       onStatsUpdate();
     } catch (error) {
@@ -66,7 +68,8 @@ export default function CrawlPanel({ onStatsUpdate, selectedGroup }: CrawlPanelP
         crawlIntervalMax,
         longSleepIntervalMin,
         longSleepIntervalMax,
-        pagesPerBatch: Math.max(pagesPerBatch, 5)
+        pagesPerBatch: Math.max(pagesPerBatch, 5),
+        topicSource,
       };
 
       const response = await apiClient.crawlAll(selectedGroup.group_id, crawlSettings);
@@ -85,6 +88,7 @@ export default function CrawlPanel({ onStatsUpdate, selectedGroup }: CrawlPanelP
     endTime?: string;
     lastDays?: number;
     perPage?: number;
+    topicSource?: 'legacy' | 'official';
   }) => {
     if (!selectedGroup) {
       toast.error('请先选择一个群组');
@@ -101,6 +105,7 @@ export default function CrawlPanel({ onStatsUpdate, selectedGroup }: CrawlPanelP
         longSleepIntervalMin,
         longSleepIntervalMax,
         pagesPerBatch: Math.max(pagesPerBatch, 5),
+        topicSource,
       };
 
       let response: any;
@@ -113,6 +118,7 @@ export default function CrawlPanel({ onStatsUpdate, selectedGroup }: CrawlPanelP
           endTime: params.endTime,
           lastDays: params.lastDays,
           perPage: params.perPage,
+          topicSource: params.topicSource || topicSource,
           crawlIntervalMin,
           crawlIntervalMax,
           longSleepIntervalMin,
@@ -185,6 +191,19 @@ export default function CrawlPanel({ onStatsUpdate, selectedGroup }: CrawlPanelP
           <Settings className="h-4 w-4" />
           爬取设置
         </Button>
+      </div>
+
+      <div className="max-w-xs space-y-2">
+        <Label>话题采集来源</Label>
+        <Select value={topicSource} onValueChange={(value) => setTopicSource(value as 'legacy' | 'official')}>
+          <SelectTrigger>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="official">官方流程</SelectItem>
+            <SelectItem value="legacy">旧 crawler</SelectItem>
+          </SelectContent>
+        </Select>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -368,6 +387,7 @@ export default function CrawlPanel({ onStatsUpdate, selectedGroup }: CrawlPanelP
         onConfirm={handleCrawlLatestConfirm}
         defaultLastDays={7}
         defaultPerPage={20}
+        topicSource={topicSource}
       />
       {/* 爬取设置对话框 */}
       <CrawlSettingsDialog
