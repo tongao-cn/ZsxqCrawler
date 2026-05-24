@@ -29,6 +29,7 @@ Support choosing a date range when running "生成/更新推荐池" so the task 
 - [x] Backend date-range run support
 - [x] Frontend date-range controls
 - [x] Tests and verification
+- [x] Default chart view uses the latest available one-month window instead of the full available history.
 
 ## Changed Files
 
@@ -45,3 +46,4 @@ Support choosing a date range when running "生成/更新推荐池" so the task 
 - `python -m unittest tests.test_a_share_analysis_service_helpers tests.test_a_share_routes_helpers`: passed.
 - `python -m py_compile backend\services\a_share_analysis_service.py backend\routes\a_share_routes.py`: passed.
 - `npm run lint -- --file src/components/AShareAnalysisPanel.tsx`: passed.
+- `npm run lint -- --file src/components/AShareAnalysisPanel.tsx`: passed after changing the default chart display range.

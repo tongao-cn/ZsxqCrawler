@@ -36,6 +36,7 @@ import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
 
 const DEFAULT_TOP_N = 12;
+const DEFAULT_CHART_RANGE_MONTHS = 1;
 const MAIN_RANKING_WINDOW = 30;
 const COVERAGE_FILTERS = [
   { key: 'all', label: '全部' },
@@ -87,6 +88,41 @@ function formatInputDate(value?: string | null) {
     return '';
   }
   return value.slice(0, 10);
+}
+
+function formatLocalDate(date: Date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function subtractMonthsClamped(date: Date, months: number) {
+  const targetYear = date.getFullYear();
+  const targetMonth = date.getMonth() - months;
+  const lastDay = new Date(targetYear, targetMonth + 1, 0).getDate();
+  return new Date(targetYear, targetMonth, Math.min(date.getDate(), lastDay));
+}
+
+function getDefaultChartDateRange(summary?: AShareAnalysisSummary) {
+  const availableStartDate = formatInputDate(summary?.available_start_date);
+  const availableEndDate = formatInputDate(summary?.available_end_date);
+  if (!availableEndDate) {
+    return { startDate: availableStartDate, endDate: '' };
+  }
+
+  const [year, month, day] = availableEndDate.split('-').map(Number);
+  if (!year || !month || !day) {
+    return { startDate: availableStartDate, endDate: availableEndDate };
+  }
+
+  const defaultStartDate = formatLocalDate(
+    subtractMonthsClamped(new Date(year, month - 1, day), DEFAULT_CHART_RANGE_MONTHS)
+  );
+  return {
+    startDate: availableStartDate && availableStartDate > defaultStartDate ? availableStartDate : defaultStartDate,
+    endDate: availableEndDate,
+  };
 }
 
 function getTaskStatusBadge(task?: Task | null) {
@@ -902,6 +938,7 @@ export default function AShareAnalysisPanel({
     }
 
     let cancelled = false;
+    let defaultChartRange = { startDate: '', endDate: '' };
     setInitialized(false);
     setTopN(DEFAULT_TOP_N);
     void (async () => {
@@ -915,8 +952,9 @@ export default function AShareAnalysisPanel({
         setStatus(statusData);
         setRunDays(statusData.defaults.days);
         setConcurrency(statusData.defaults.concurrency);
-        setSelectedStartDate(statusData.summary.available_start_date || '');
-        setSelectedEndDate(statusData.summary.available_end_date || '');
+        defaultChartRange = getDefaultChartDateRange(statusData.summary);
+        setSelectedStartDate(defaultChartRange.startDate);
+        setSelectedEndDate(defaultChartRange.endDate);
         setRunStartDate('');
         setRunEndDate('');
         setResetStartDate('');
@@ -936,6 +974,8 @@ export default function AShareAnalysisPanel({
         setLoadingChart(true);
         const chartData = await apiClient.getAShareAnalysisChart({
           groupId: selectedGroupId,
+          startDate: defaultChartRange?.startDate || undefined,
+          endDate: defaultChartRange?.endDate || undefined,
           topN: DEFAULT_TOP_N,
         });
         if (!cancelled) {
@@ -960,7 +1000,7 @@ export default function AShareAnalysisPanel({
   const loadStatus = useCallback(
     async (bootstrap: boolean = false, groupId?: number) => {
       if (!groupId) {
-        return;
+        return null;
       }
       try {
         setLoadingStatus(true);
@@ -970,16 +1010,19 @@ export default function AShareAnalysisPanel({
         if (!initialized || bootstrap) {
           setRunDays(data.defaults.days);
           setConcurrency(data.defaults.concurrency);
-          setSelectedStartDate(data.summary.available_start_date || '');
-          setSelectedEndDate(data.summary.available_end_date || '');
+          const defaultChartRange = getDefaultChartDateRange(data.summary);
+          setSelectedStartDate(defaultChartRange.startDate);
+          setSelectedEndDate(defaultChartRange.endDate);
           setRunStartDate('');
           setRunEndDate('');
           setResetStartDate('');
           setResetEndDate('');
           setInitialized(true);
         }
+        return data;
       } catch (error) {
         toast.error(`加载股票推荐池状态失败: ${error instanceof Error ? error.message : '未知错误'}`);
+        return null;
       } finally {
         setLoadingStatus(false);
       }
@@ -1022,11 +1065,12 @@ export default function AShareAnalysisPanel({
       if (!activeGroupId) {
         return;
       }
-      await loadStatus(bootstrap, activeGroupId);
+      const refreshedStatus = await loadStatus(bootstrap, activeGroupId);
+      const defaultChartRange = bootstrap ? getDefaultChartDateRange(refreshedStatus?.summary) : null;
       await loadChart({
         groupId: activeGroupId,
-        startDate: bootstrap ? undefined : selectedStartDate || undefined,
-        endDate: bootstrap ? undefined : selectedEndDate || undefined,
+        startDate: bootstrap ? defaultChartRange?.startDate || undefined : selectedStartDate || undefined,
+        endDate: bootstrap ? defaultChartRange?.endDate || undefined : selectedEndDate || undefined,
         topN,
         bootstrap,
       });
