@@ -71,6 +71,7 @@ Add a sibling A-share Q&A tab where the user can enter a free-form question, let
 - Stock analysis prompt now uses a strict research-report cleanup pass: expired forecasts, old ratings/target prices, old quarterly/yearly performance conclusions, valuation views, and incremental-process wording are removed before the final report is written.
 - Stock analysis payload building keeps all matched stock excerpts and relies on 10-topic AI batches, avoiding a stock-report-level 30-topic truncation.
 - Representative no-write smokes passed after prompt hardening: 四方光电, 金风科技, 科士达, 水晶光电. The final checks found complete report sections with no obvious incremental wording, internal-field leakage, stale-history explanations, target-price/rating/valuation residue, or forecast figures in the investment summary.
+- The stock result table now supports row selection, selected-stock batch analysis/initialization, and per-row analysis for one chosen stock.
 
 ## Changed Files
 
@@ -125,3 +126,6 @@ Add a sibling A-share Q&A tab where the user can enter a free-form question, let
 - Research-report cleanup pass: `python -m unittest tests.test_stock_topic_analysis_service_helpers`: passed.
 - Research-report cleanup pass: `python -m py_compile backend\services\stock_topic_analysis_service.py`: passed.
 - Research-report cleanup smoke: no-write AI checks on 四方光电, 金风科技, 科士达, 水晶光电 passed the report-quality rules.
+- Row-selection UI pass: `cd frontend; npm run build`: passed.
+- Row-selection UI pass: `cd frontend; npx tsc --noEmit --pretty false`: passed after `next build` regenerated `.next/types`.
+- Row-selection UI browser smoke: limited by local dev-server state. The existing `18080` dev server showed a Next overlay after `next build` rewrote `.next` (`Cannot find module './vendor-chunks/sonner.js`), and a temporary `18081` dev server loaded but was blocked by backend CORS because only `localhost:18080` is allowed.
