@@ -6,7 +6,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { toast } from 'sonner';
 
-import { apiClient, DailyStockConcept, DailyStockConceptResponse, DailyTopicReport } from '@/lib/api';
+import { apiClient, DailyStockConcept } from '@/lib/api';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -15,6 +15,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Label } from '@/components/ui/label';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { useDailyTopicAnalysisData } from '@/hooks/useDailyTopicAnalysisData';
 import { createSafeHtml, extractPlainText } from '@/lib/zsxq-content-renderer';
 
 interface DailyTopicAnalysisPanelProps {
@@ -36,10 +37,6 @@ function formatDateTime(value?: string | null) {
     return '暂无';
   }
   return new Date(value).toLocaleString('zh-CN');
-}
-
-function isAbortError(error: unknown) {
-  return error instanceof DOMException && error.name === 'AbortError';
 }
 
 function getReportStatusBadge(status?: string) {
@@ -93,14 +90,6 @@ interface StockTrendDay {
   concepts: string[];
   topicCount: number;
   present: boolean;
-}
-
-interface ConceptTrendItem {
-  concept: string;
-  counts: number[];
-  stockCounts: number[];
-  total: number;
-  stockTotal: number;
 }
 
 interface ConceptQualityTag {
@@ -253,10 +242,6 @@ export default function DailyTopicAnalysisPanel({
   const [reportDate, setReportDate] = useState(getTodayText);
   const [submitting, setSubmitting] = useState(false);
   const [extractingStocks, setExtractingStocks] = useState(false);
-  const [loadingReport, setLoadingReport] = useState(false);
-  const [loadingStockConcepts, setLoadingStockConcepts] = useState(false);
-  const [report, setReport] = useState<DailyTopicReport | null>(null);
-  const [stockConcepts, setStockConcepts] = useState<DailyStockConceptResponse | null>(null);
   const [selectedStock, setSelectedStock] = useState<DailyStockConcept | null>(null);
   const [stockTrend, setStockTrend] = useState<StockTrendDay[]>([]);
   const [loadingStockTrend, setLoadingStockTrend] = useState(false);
@@ -265,13 +250,27 @@ export default function DailyTopicAnalysisPanel({
   const [loadingTopicDetail, setLoadingTopicDetail] = useState(false);
   const [selectedConcept, setSelectedConcept] = useState<string | null>(null);
   const [selectedConceptDetail, setSelectedConceptDetail] = useState<string | null>(null);
-  const [conceptTrendDates, setConceptTrendDates] = useState<string[]>([]);
-  const [conceptTrendItems, setConceptTrendItems] = useState<ConceptTrendItem[]>([]);
-  const [recommendedCompanies, setRecommendedCompanies] = useState<Set<string>>(new Set());
-  const [loadingRecommendations, setLoadingRecommendations] = useState(false);
   const [onlyRecommendationHits, setOnlyRecommendationHits] = useState(false);
   const topicDetailRequestRef = useRef(0);
   const stockTrendRequestRef = useRef(0);
+  const {
+    conceptTrendDates,
+    conceptTrendItems,
+    loadReport,
+    loadStockConcepts,
+    loadingRecommendations,
+    loadingReport,
+    loadingStockConcepts,
+    recommendedCompanies,
+    report,
+    stockConcepts,
+  } = useDailyTopicAnalysisData({
+    groupId,
+    mode,
+    normalizeCompanyName,
+    normalizeConceptName,
+    reportDate,
+  });
 
   const conceptStats = useMemo<ConceptStat[]>(() => {
     const conceptMap = new Map<string, { aliases: Set<string>; stocks: Set<string>; topics: Set<string>; recommendedStocks: Set<string> }>();
@@ -379,189 +378,14 @@ export default function DailyTopicAnalysisPanel({
     [conceptTrendItems, selectedConceptDetail]
   );
 
-  const loadReport = useCallback(async (signal?: AbortSignal) => {
-    try {
-      setLoadingReport(true);
-      const data = await apiClient.getDailyTopicReport(groupId, reportDate, { signal });
-      setReport(data);
-    } catch (error) {
-      if (isAbortError(error)) {
-        return;
-      }
-      setReport(null);
-    } finally {
-      if (!signal?.aborted) {
-        setLoadingReport(false);
-      }
-    }
-  }, [groupId, reportDate]);
-
-  useEffect(() => {
-    if (mode !== 'report') {
-      setReport(null);
-      setLoadingReport(false);
-      return;
-    }
-    const controller = new AbortController();
-    void loadReport(controller.signal);
-    return () => controller.abort();
-  }, [loadReport, mode]);
-
-  const loadStockConcepts = useCallback(async (signal?: AbortSignal) => {
-    try {
-      setLoadingStockConcepts(true);
-      const data = await apiClient.getDailyStockConcepts(groupId, reportDate, { signal });
-      setStockConcepts(data);
-    } catch (error) {
-      if (isAbortError(error)) {
-        return;
-      }
-      setStockConcepts(null);
-    } finally {
-      if (!signal?.aborted) {
-        setLoadingStockConcepts(false);
-      }
-    }
-  }, [groupId, reportDate]);
-
   useEffect(() => {
     if (mode !== 'stock-concepts') {
-      setStockConcepts(null);
       setSelectedStock(null);
       setStockTrend([]);
       setSelectedTopicId(null);
       setTopicDetail(null);
-      setLoadingStockConcepts(false);
-      return;
     }
-    const controller = new AbortController();
-    void loadStockConcepts(controller.signal);
-    return () => controller.abort();
-  }, [loadStockConcepts, mode]);
-
-  const loadConceptTrend = useCallback(async (signal?: AbortSignal) => {
-    const dates = Array.from({ length: 7 }, (_, index) => getDateText(index - 6, reportDate));
-    try {
-      const results = await Promise.all(
-        dates.map(async (date) => {
-          try {
-            return await apiClient.getDailyStockConcepts(groupId, date, { signal });
-          } catch (error) {
-            if (isAbortError(error)) {
-              throw error;
-            }
-            return null;
-          }
-        })
-      );
-      if (signal?.aborted) {
-        return;
-      }
-      const conceptMap = new Map<string, { topics: Array<Set<string>>; stocks: Array<Set<string>> }>();
-      results.forEach((result, dateIndex) => {
-        for (const stock of result?.stocks || []) {
-          const uniqueConcepts = new Set(
-            (stock.concepts || [])
-              .map((concept) => normalizeConceptName(concept))
-              .filter(Boolean)
-          );
-          uniqueConcepts.forEach((concept) => {
-            if (!conceptMap.has(concept)) {
-              conceptMap.set(concept, {
-                topics: Array.from({ length: dates.length }, () => new Set<string>()),
-                stocks: Array.from({ length: dates.length }, () => new Set<string>()),
-              });
-            }
-            const item = conceptMap.get(concept);
-            item?.stocks[dateIndex]?.add(stock.stock_name);
-            stock.topic_ids.forEach((topicId) => item?.topics[dateIndex]?.add(String(topicId)));
-          });
-        }
-      });
-      const items = Array.from(conceptMap.entries())
-        .map(([concept, value]) => {
-          const counts = value.topics.map((topics) => topics.size);
-          const stockCounts = value.stocks.map((stocks) => stocks.size);
-          return {
-            concept,
-            counts,
-            stockCounts,
-            total: counts.reduce((sum, count) => sum + count, 0),
-            stockTotal: stockCounts.reduce((sum, count) => sum + count, 0),
-          };
-        })
-        .sort((a, b) => {
-          if (b.total !== a.total) {
-            return b.total - a.total;
-          }
-          if (b.stockTotal !== a.stockTotal) {
-            return b.stockTotal - a.stockTotal;
-          }
-          return a.concept.localeCompare(b.concept, 'zh-CN');
-        })
-        .slice(0, 12);
-      setConceptTrendDates(dates);
-      setConceptTrendItems(items);
-    } catch (error) {
-      if (!isAbortError(error)) {
-        setConceptTrendDates(dates);
-        setConceptTrendItems([]);
-      }
-    }
-  }, [groupId, reportDate]);
-
-  useEffect(() => {
-    if (mode !== 'stock-concepts') {
-      setConceptTrendDates([]);
-      setConceptTrendItems([]);
-      return;
-    }
-    const controller = new AbortController();
-    void loadConceptTrend(controller.signal);
-    return () => controller.abort();
-  }, [loadConceptTrend, mode]);
-
-  const loadRecommendationHits = useCallback(async (signal?: AbortSignal) => {
-    try {
-      setLoadingRecommendations(true);
-      const chart = await apiClient.getAShareAnalysisChart({
-        groupId,
-        startDate: reportDate,
-        endDate: reportDate,
-        topN: 100,
-      }, {
-        signal,
-      });
-      if (signal?.aborted) {
-        return;
-      }
-      const companies = new Set<string>();
-      Object.values(chart.rankings || {}).forEach((rows) => {
-        rows.forEach((item) => companies.add(normalizeCompanyName(item.company)));
-      });
-      setRecommendedCompanies(companies);
-    } catch (error) {
-      if (isAbortError(error)) {
-        return;
-      }
-      setRecommendedCompanies(new Set());
-    } finally {
-      if (!signal?.aborted) {
-        setLoadingRecommendations(false);
-      }
-    }
-  }, [groupId, reportDate]);
-
-  useEffect(() => {
-    if (mode !== 'stock-concepts') {
-      setRecommendedCompanies(new Set());
-      setLoadingRecommendations(false);
-      return;
-    }
-    const controller = new AbortController();
-    void loadRecommendationHits(controller.signal);
-    return () => controller.abort();
-  }, [loadRecommendationHits, mode]);
+  }, [mode]);
 
   const handleRunToday = async () => {
     try {
