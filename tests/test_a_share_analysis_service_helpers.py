@@ -72,6 +72,33 @@ class _FakeOpenAIClient:
 
 
 class AShareAnalysisServiceHelperTests(unittest.TestCase):
+    def test_db_storage_enabled_rechecks_after_transient_failure(self):
+        from backend.services import a_share_analysis_service as service
+
+        service._db_storage_available = None
+        try:
+            with patch.object(service, "get_storage_health", side_effect=[RuntimeError("temporary"), {"enabled": True}]):
+                self.assertFalse(service._db_storage_enabled())
+                self.assertTrue(service._db_storage_enabled())
+
+            self.assertTrue(service._db_storage_available)
+        finally:
+            service._db_storage_available = None
+
+    def test_db_storage_enabled_caches_success_until_forced_recheck(self):
+        from backend.services import a_share_analysis_service as service
+
+        service._db_storage_available = None
+        try:
+            with patch.object(service, "get_storage_health", return_value={"enabled": True}) as get_health:
+                self.assertTrue(service._db_storage_enabled())
+                self.assertTrue(service._db_storage_enabled())
+                self.assertTrue(service._db_storage_enabled(force_recheck=True))
+
+            self.assertEqual(2, get_health.call_count)
+        finally:
+            service._db_storage_available = None
+
     def test_db_storage_reads_empty_db_without_local_file_fallback(self):
         from backend.services import a_share_analysis_service as service
 

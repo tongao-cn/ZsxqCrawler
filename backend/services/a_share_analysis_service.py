@@ -125,7 +125,7 @@ def _emit_log(message: str, callback: LogCallback = None, level: str = "info"):
 def _db_storage_enabled(log_callback: LogCallback = None, force_recheck: bool = False) -> bool:
     global _db_storage_available
 
-    if _db_storage_available is not None and not force_recheck:
+    if _db_storage_available is True and not force_recheck:
         return _db_storage_available
 
     try:
