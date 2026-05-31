@@ -2,9 +2,11 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 
+import type { TopicCardProps } from '@/components/TopicCard';
 import { apiClient } from '@/lib/api';
 
-type TopicDetailsMap = Map<string, any>;
+type TopicDetail = NonNullable<TopicCardProps['topicDetail']>;
+type TopicDetailsMap = Map<string, TopicDetail>;
 
 interface UseTopicDetailsCacheOptions {
   groupId: number;
@@ -15,7 +17,7 @@ export function useTopicDetailsCache({
 }: UseTopicDetailsCacheOptions) {
   const [topicDetails, setTopicDetails] = useState<TopicDetailsMap>(new Map());
   const topicDetailsRef = useRef<TopicDetailsMap>(new Map());
-  const inFlightRef = useRef<Map<string, Promise<any>>>(new Map());
+  const inFlightRef = useRef<Map<string, Promise<TopicDetail>>>(new Map());
 
   useEffect(() => {
     topicDetailsRef.current = topicDetails;
@@ -43,7 +45,7 @@ export function useTopicDetailsCache({
       return existing;
     }
 
-    const request = apiClient.getTopicDetail(topicId, groupId);
+    const request = apiClient.getTopicDetail(topicId, groupId) as Promise<TopicDetail>;
     inFlightRef.current.set(key, request);
 
     try {
