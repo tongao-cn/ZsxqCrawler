@@ -25,7 +25,10 @@ from backend.storage.zsxq_database import ZSXQDatabase
 INIT_STOPPED_MESSAGE = "🛑 任务在初始化过程中被停止"
 
 CRAWLER_STARTUP_LOGS = ("📡 连接到知识星球API...", "🔍 检查数据库状态...")
+# official means the MCP HTTP flow; "cli" is accepted only as an old spelling
+# and does not shell out to zsxq-cli.
 OFFICIAL_TOPIC_SOURCE_ALIASES = {"official", "cli", "mcp"}
+# legacy means the cookie-based ZSXQTopicCrawler fallback.
 LEGACY_TOPIC_SOURCE_ALIASES = {"legacy", "crawler", "cookie"}
 
 def _should_stop_task(task_id: str) -> bool:

@@ -272,6 +272,8 @@ def _build_official_group_entry(group: Dict[str, Any], account: Any = None) -> D
         "trial_end_time": None,
         "membership_end_time": None,
         "account": account,
+        # The UI uses "account" for remote/network groups; this data is fetched
+        # through the official MCP client, not the cookie crawler.
         "source": "account",
     }
 
