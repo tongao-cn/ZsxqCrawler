@@ -6,10 +6,13 @@ import { apiClient, Task } from '@/lib/api';
 
 interface UseTaskListOptions {
   autoRefresh?: boolean;
+  errorThrottleMs?: number;
   groupId?: string | number | null;
   onError?: (error: unknown) => void;
   refreshIntervalMs?: number;
 }
+
+const DEFAULT_ERROR_THROTTLE_MS = 15000;
 
 function normalizeGroupId(value?: string | number | null) {
   if (value === undefined || value === null) {
@@ -21,12 +24,14 @@ function normalizeGroupId(value?: string | number | null) {
 
 export function useTaskList({
   autoRefresh = true,
+  errorThrottleMs = DEFAULT_ERROR_THROTTLE_MS,
   groupId,
   onError,
   refreshIntervalMs = 3000,
 }: UseTaskListOptions = {}) {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(false);
+  const lastErrorAtRef = useRef(0);
   const loadingRef = useRef(false);
   const onErrorRef = useRef(onError);
   const normalizedGroupId = normalizeGroupId(groupId);
@@ -45,13 +50,18 @@ export function useTaskList({
       setLoading(true);
       const data = await apiClient.getTasks(normalizedGroupId);
       setTasks(data);
+      lastErrorAtRef.current = 0;
     } catch (error) {
-      onErrorRef.current?.(error);
+      const now = Date.now();
+      if (!lastErrorAtRef.current || now - lastErrorAtRef.current >= errorThrottleMs) {
+        lastErrorAtRef.current = now;
+        onErrorRef.current?.(error);
+      }
     } finally {
       loadingRef.current = false;
       setLoading(false);
     }
-  }, [normalizedGroupId]);
+  }, [errorThrottleMs, normalizedGroupId]);
 
   useEffect(() => {
     void loadTasks();
