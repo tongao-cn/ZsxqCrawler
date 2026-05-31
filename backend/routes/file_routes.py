@@ -48,6 +48,80 @@ from backend.services.file_workflow_service import (
 router = APIRouter(prefix="/api/files", tags=["files"])
 
 
+def _get_file_status_response(group_id: str, file_id: int) -> dict:
+    with _file_db(group_id) as file_db:
+        file_db.cursor.execute(
+            """
+            SELECT name, size, download_status
+            FROM files
+            WHERE file_id = ? AND group_id = ?
+        """,
+            (file_id, _query_group_id(group_id)),
+        )
+
+        result = file_db.cursor.fetchone()
+
+        if not result:
+            return _build_file_status_response(file_id, result)
+
+        file_name, file_size, _download_status = result
+        local_status = _get_download_file_status(group_id, file_name, file_size, f"file_{file_id}")
+        return _build_file_status_response(file_id, result, local_status)
+
+
+def _check_local_file_status_response(group_id: str, file_name: str, file_size: int) -> dict:
+    local_status = _get_download_file_status(group_id, file_name, file_size, file_name)
+    return _build_check_local_file_status_response(file_name, file_size, local_status)
+
+
+def _get_file_stats_response(group_id: str) -> dict:
+    with _file_db(group_id) as file_db:
+        stats = file_db.get_database_stats()
+
+        file_db.cursor.execute(
+            """
+            SELECT
+                COUNT(*) as total_files,
+                COUNT(CASE WHEN download_status IN ('completed', 'downloaded', 'skipped') THEN 1 END) as downloaded,
+                COUNT(CASE WHEN download_status = 'pending' THEN 1 END) as pending,
+                COUNT(CASE WHEN download_status = 'failed' THEN 1 END) as failed
+            FROM files
+            WHERE group_id = ?
+            """,
+            (_query_group_id(group_id),),
+        )
+        download_stats = file_db.cursor.fetchone()
+
+        return {
+            "database_stats": stats,
+            "download_stats": {
+                "total_files": download_stats[0] if download_stats else 0,
+                "downloaded": download_stats[1] if download_stats else 0,
+                "pending": download_stats[2] if download_stats else 0,
+                "failed": download_stats[3] if download_stats else 0,
+            },
+        }
+
+
+def _clear_file_database_response(group_id: str) -> dict:
+    deleted_counts = _clear_group_file_data(group_id)
+
+    try:
+        from backend.core.image_cache_manager import clear_group_cache_manager, get_image_cache_manager
+
+        cache_manager = get_image_cache_manager(group_id)
+        success, message = cache_manager.clear_cache()
+        if success:
+            _log_file_route_event("INFO", f"图片缓存已清空: {message}")
+        else:
+            _log_file_route_event("WARN", f"清空图片缓存失败: {message}")
+        clear_group_cache_manager(group_id)
+    except Exception as cache_error:
+        _log_file_route_event("WARN", f"清空图片缓存时出错: {cache_error}")
+
+    return {"message": f"群组 {group_id} 的文件数据和图片缓存已删除", "deleted": deleted_counts}
+
+
 @router.post("/collect/{group_id}")
 async def collect_files(group_id: str, request: FileCollectRequest, background_tasks: BackgroundTasks):
     """收集文件列表"""
@@ -175,25 +249,7 @@ async def download_filtered_files(
 async def get_file_status(group_id: str, file_id: int):
     """获取文件下载状态"""
     try:
-        with _file_db(group_id) as file_db:
-            file_db.cursor.execute(
-                """
-                SELECT name, size, download_status
-                FROM files
-                WHERE file_id = ? AND group_id = ?
-            """,
-                (file_id, _query_group_id(group_id)),
-            )
-
-            result = file_db.cursor.fetchone()
-
-            if not result:
-                return _build_file_status_response(file_id, result)
-
-            file_name, file_size, download_status = result
-
-            local_status = _get_download_file_status(group_id, file_name, file_size, f"file_{file_id}")
-            return _build_file_status_response(file_id, result, local_status)
+        return await asyncio.to_thread(_get_file_status_response, group_id, file_id)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"获取文件状态失败: {str(e)}")
 
@@ -202,8 +258,7 @@ async def get_file_status(group_id: str, file_id: int):
 async def check_local_file_status(group_id: str, file_name: str, file_size: int):
     """检查本地文件状态（不依赖数据库）"""
     try:
-        local_status = _get_download_file_status(group_id, file_name, file_size, file_name)
-        return _build_check_local_file_status_response(file_name, file_size, local_status)
+        return await asyncio.to_thread(_check_local_file_status_response, group_id, file_name, file_size)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"检查本地文件失败: {str(e)}")
 
@@ -312,32 +367,7 @@ async def create_selected_file_analysis_task(
 async def get_file_stats(group_id: str):
     """获取指定群组的文件统计信息"""
     try:
-        with _file_db(group_id) as file_db:
-            stats = file_db.get_database_stats()
-
-            file_db.cursor.execute(
-                """
-                SELECT
-                    COUNT(*) as total_files,
-                    COUNT(CASE WHEN download_status IN ('completed', 'downloaded', 'skipped') THEN 1 END) as downloaded,
-                    COUNT(CASE WHEN download_status = 'pending' THEN 1 END) as pending,
-                    COUNT(CASE WHEN download_status = 'failed' THEN 1 END) as failed
-                FROM files
-                WHERE group_id = ?
-                """,
-                (_query_group_id(group_id),),
-            )
-            download_stats = file_db.cursor.fetchone()
-
-            return {
-                "database_stats": stats,
-                "download_stats": {
-                    "total_files": download_stats[0] if download_stats else 0,
-                    "downloaded": download_stats[1] if download_stats else 0,
-                    "pending": download_stats[2] if download_stats else 0,
-                    "failed": download_stats[3] if download_stats else 0,
-                },
-            }
+        return await asyncio.to_thread(_get_file_stats_response, group_id)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"获取文件统计失败: {str(e)}")
 
@@ -346,22 +376,7 @@ async def get_file_stats(group_id: str):
 async def clear_file_database(group_id: str):
     """删除指定群组的 PostgreSQL 文件数据"""
     try:
-        deleted_counts = _clear_group_file_data(group_id)
-
-        try:
-            from backend.core.image_cache_manager import clear_group_cache_manager, get_image_cache_manager
-
-            cache_manager = get_image_cache_manager(group_id)
-            success, message = cache_manager.clear_cache()
-            if success:
-                _log_file_route_event("INFO", f"图片缓存已清空: {message}")
-            else:
-                _log_file_route_event("WARN", f"清空图片缓存失败: {message}")
-            clear_group_cache_manager(group_id)
-        except Exception as cache_error:
-            _log_file_route_event("WARN", f"清空图片缓存时出错: {cache_error}")
-
-        return {"message": f"群组 {group_id} 的文件数据和图片缓存已删除", "deleted": deleted_counts}
+        return await asyncio.to_thread(_clear_file_database_response, group_id)
     except HTTPException:
         raise
     except Exception as e:

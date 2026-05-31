@@ -405,6 +405,47 @@ class FileRoutesHelperTests(unittest.TestCase):
 
         self.assertEqual({"success": True, "group_id": "group-1", "stats": stats}, response)
 
+    def test_file_status_routes_offload_sync_work_to_thread(self):
+        from backend.routes import file_routes
+
+        calls = []
+
+        async def fake_to_thread(func, *args):
+            calls.append((func, args))
+            return {"called": func.__name__, "args": args}
+
+        with patch("backend.routes.file_routes.asyncio.to_thread", side_effect=fake_to_thread):
+            file_status = self._run_async(file_routes.get_file_status("group-1", 123))
+            local_status = self._run_async(file_routes.check_local_file_status("group-1", "file.pdf", 456))
+            stats = self._run_async(file_routes.get_file_stats("group-1"))
+
+        self.assertEqual(
+            [
+                (file_routes._get_file_status_response, ("group-1", 123)),
+                (file_routes._check_local_file_status_response, ("group-1", "file.pdf", 456)),
+                (file_routes._get_file_stats_response, ("group-1",)),
+            ],
+            calls,
+        )
+        self.assertEqual({"called": "_get_file_status_response", "args": ("group-1", 123)}, file_status)
+        self.assertEqual({"called": "_check_local_file_status_response", "args": ("group-1", "file.pdf", 456)}, local_status)
+        self.assertEqual({"called": "_get_file_stats_response", "args": ("group-1",)}, stats)
+
+    def test_clear_file_database_offloads_sync_work_to_thread(self):
+        from backend.routes import file_routes
+
+        calls = []
+
+        async def fake_to_thread(func, *args):
+            calls.append((func, args))
+            return {"message": "ok", "deleted": {"files": 1}}
+
+        with patch("backend.routes.file_routes.asyncio.to_thread", side_effect=fake_to_thread):
+            response = self._run_async(file_routes.clear_file_database("group-1"))
+
+        self.assertEqual([(file_routes._clear_file_database_response, ("group-1",))], calls)
+        self.assertEqual({"message": "ok", "deleted": {"files": 1}}, response)
+
     def test_close_crawler_file_databases_closes_file_and_topic_dbs(self):
         crawler = FakeCrawler()
 
@@ -414,13 +455,13 @@ class FileRoutesHelperTests(unittest.TestCase):
         self.assertTrue(crawler.db.closed)
 
     def test_clear_file_database_does_not_construct_legacy_crawler(self):
-        from backend.routes.file_routes import clear_file_database
+        from backend.routes.file_routes import _clear_file_database_response
 
         with (
             patch("backend.routes.file_routes._clear_group_file_data", return_value={"files": 0}) as clear_data,
             patch("backend.core.crawler_runtime.get_crawler_for_group", side_effect=AssertionError("legacy crawler used")),
         ):
-            response = self._run_async(clear_file_database("group-1"))
+            response = _clear_file_database_response("group-1")
 
         clear_data.assert_called_once_with("group-1")
         self.assertEqual({"message": "群组 group-1 的文件数据和图片缓存已删除", "deleted": {"files": 0}}, response)
