@@ -9,13 +9,11 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ArrowLeft, MessageSquare, BarChart3, File, Sparkles, TrendingUp, Search, HelpCircle } from 'lucide-react';
 import { apiClient } from '@/lib/api';
 import { toast } from 'sonner';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import GroupSidebar from '@/components/GroupSidebar';
-import TopicCard from '@/components/TopicCard';
 import GroupActionPanel from '@/components/GroupActionPanel';
 import GroupTopBar from '@/components/GroupTopBar';
+import GroupTopicsTab from '@/components/GroupTopicsTab';
 import TaskDock from '@/components/TaskDock';
-import TopicPagination from '@/components/TopicPagination';
 import { useTopicDetailsCache } from '@/hooks/useTopicDetailsPrefetch';
 import { useDebouncedSearch } from '@/hooks/useDebouncedSearch';
 import { useTopicFileActions } from '@/hooks/useTopicFileActions';
@@ -370,7 +368,7 @@ export default function GroupDetailPage() {
       crawl={{
         selectedOption: selectedCrawlOption || 'all',
         onSelectedOptionChange: setSelectedCrawlOption,
-        loading: crawlLoading as any,
+        loading: crawlLoading,
         topicsCount: groupStats?.topics_count || 0,
         singleTopicId,
         onSingleTopicIdChange: setSingleTopicId,
@@ -393,7 +391,7 @@ export default function GroupDetailPage() {
       download={{
         selectedOption: selectedDownloadOption || 'time',
         onSelectedOptionChange: setSelectedDownloadOption,
-        loading: fileLoading as any,
+        loading: fileLoading,
         localFileCount,
         localFileStats,
         sourceFileCount: groupInfo?.statistics?.files?.count,
@@ -510,65 +508,36 @@ export default function GroupDetailPage() {
 
             {/* 话题内容区域 */}
             <TabsContent value="topics" className="flex-1 min-h-0">
-              <div className="flex h-full min-h-0 gap-4">
-              {/* 可滚动的话题列表区域 */}
-              <div className="flex-1 flex flex-col min-h-0">
-                {topicsLoading ? (
-                  <div className="flex-1 flex items-center justify-center">
-                    <p className="text-muted-foreground">加载中...</p>
-                  </div>
-                ) : topics.length === 0 ? (
-                  <div className="flex-1 flex items-center justify-center">
-                    <p className="text-muted-foreground">
-                      {searchTerm ? '没有找到匹配的话题' : '暂无话题数据，请先进行数据采集'}
-                    </p>
-                  </div>
-                ) : (
-                  <>
-                    {/* 使用ScrollArea组件实现美化的滚动条 */}
-                    <ScrollArea ref={scrollAreaRef} className="flex-1 w-full">
-                      <div className="topic-cards-container space-y-3 pr-4 max-w-full" style={{width: '100%', maxWidth: '100%', boxSizing: 'border-box'}}>
-                        {topics.map((topic: any) => (
-                          <div key={topic.topic_id} style={{width: '100%', maxWidth: '100%', boxSizing: 'border-box'}}>
-                            <TopicCard
-                              topic={topic}
-                              searchTerm={deferredSearchTerm}
-                              // 这里同样使用字符串形式的 topic_id 作为索引
-                              topicDetail={topicDetails.get(String((topic as any).topic_id || ''))}
-                              groupId={groupId}
-                              expandedContent={expandedContent}
-                              expandedComments={expandedComments}
-                              refreshingTopics={refreshingTopics}
-                              deletingTopics={deletingTopics}
-                              fetchingComments={fetchingComments}
-                              fileStatuses={fileStatuses}
-                              downloadingFiles={downloadingFiles}
-                              onRefreshTopic={refreshSingleTopic}
-                              onDeleteTopic={deleteSingleTopicConfirmed}
-                              onToggleContent={toggleContent}
-                              onFetchMoreComments={fetchMoreComments}
-                              onToggleComments={toggleComments}
-                              onLoadTopicDetail={loadTopicDetail}
-                              onGetFileStatus={getFileStatus}
-                              onDownloadFile={downloadSingleFile}
-                              formatDateTime={formatDateTime}
-                              formatImportedTime={formatImportedTime}
-                            />
-                          </div>
-                        ))}
-                      </div>
-                    </ScrollArea>
-
-                    <TopicPagination
-                      currentPage={currentPage}
-                      totalPages={totalPages}
-                      onPageChange={setCurrentPage}
-                    />
-                  </>
-                )}
-              </div>
-              {contextActionPanel}
-              </div>
+              <GroupTopicsTab
+                contextActionPanel={contextActionPanel}
+                currentPage={currentPage}
+                deferredSearchTerm={deferredSearchTerm}
+                deletingTopics={deletingTopics}
+                downloadingFiles={downloadingFiles}
+                expandedComments={expandedComments}
+                expandedContent={expandedContent}
+                fetchingComments={fetchingComments}
+                fileStatuses={fileStatuses}
+                formatDateTime={formatDateTime}
+                formatImportedTime={formatImportedTime}
+                groupId={groupId}
+                loadTopicDetail={loadTopicDetail}
+                onDeleteTopic={deleteSingleTopicConfirmed}
+                onDownloadFile={downloadSingleFile}
+                onFetchMoreComments={fetchMoreComments}
+                onGetFileStatus={getFileStatus}
+                onPageChange={setCurrentPage}
+                onRefreshTopic={refreshSingleTopic}
+                onToggleComments={toggleComments}
+                onToggleContent={toggleContent}
+                refreshingTopics={refreshingTopics}
+                scrollAreaRef={scrollAreaRef}
+                searchTerm={searchTerm}
+                topicDetails={topicDetails}
+                topics={topics}
+                topicsLoading={topicsLoading}
+                totalPages={totalPages}
+              />
             </TabsContent>
 
             <TabsContent value="files" className="flex-1 min-h-0">
