@@ -1,16 +1,16 @@
 import unittest
 from unittest.mock import patch
 
-from backend.routes.file_routes import (
+from backend.services.file_workflow_service import (
     _build_check_local_file_status_response,
     _build_file_status_response,
     _build_sync_files_response,
+    _close_crawler_file_databases,
     _enqueue_file_task,
     _get_download_file_status,
     _query_group_id,
     _resolve_download_record_status,
 )
-from backend.services.file_workflow_service import _close_crawler_file_databases
 
 
 class FakeBackgroundTasks:
@@ -478,10 +478,10 @@ class FileRoutesHelperTests(unittest.TestCase):
         self.assertTrue(crawler.db.closed)
 
     def test_clear_file_database_does_not_construct_legacy_crawler(self):
-        from backend.routes.file_routes import _clear_file_database_response
+        from backend.services.file_workflow_service import _clear_file_database_response
 
         with (
-            patch("backend.routes.file_routes._clear_group_file_data", return_value={"files": 0}) as clear_data,
+            patch("backend.services.file_workflow_service._clear_group_file_data", return_value={"files": 0}) as clear_data,
             patch("backend.core.crawler_runtime.get_crawler_for_group", side_effect=AssertionError("legacy crawler used")),
         ):
             response = _clear_file_database_response("group-1")
