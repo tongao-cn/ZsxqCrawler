@@ -1,6 +1,6 @@
 'use client';
 
-import { ReactNode, useCallback, useEffect, useMemo, useState } from 'react';
+import { ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   CartesianGrid,
   Line,
@@ -915,6 +915,8 @@ export default function AShareAnalysisPanel({
   const [initialized, setInitialized] = useState(false);
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [activeRunTaskId, setActiveRunTaskId] = useState<string | null>(null);
+  const statusRequestRef = useRef(0);
+  const chartRequestRef = useRef(0);
 
   const rankingWindows = useMemo(
     () => status?.defaults.ranking_windows ?? [30],
@@ -931,6 +933,8 @@ export default function AShareAnalysisPanel({
 
   useEffect(() => {
     if (!selectedGroupId) {
+      statusRequestRef.current += 1;
+      chartRequestRef.current += 1;
       setStatus(null);
       setChart(null);
       setInitialized(false);
@@ -939,13 +943,17 @@ export default function AShareAnalysisPanel({
 
     let cancelled = false;
     let defaultChartRange = { startDate: '', endDate: '' };
+    const statusRequestId = statusRequestRef.current + 1;
+    const chartRequestId = chartRequestRef.current + 1;
+    statusRequestRef.current = statusRequestId;
+    chartRequestRef.current = chartRequestId;
     setInitialized(false);
     setTopN(DEFAULT_TOP_N);
     void (async () => {
       try {
         setLoadingStatus(true);
         const statusData = await apiClient.getAShareAnalysisStatus(selectedGroupId);
-        if (cancelled) {
+        if (cancelled || statusRequestRef.current !== statusRequestId) {
           return;
         }
 
@@ -961,11 +969,11 @@ export default function AShareAnalysisPanel({
         setResetEndDate('');
         setInitialized(true);
       } catch (error) {
-        if (!cancelled) {
+        if (!cancelled && statusRequestRef.current === statusRequestId) {
           toast.error(`加载股票推荐池状态失败: ${error instanceof Error ? error.message : '未知错误'}`);
         }
       } finally {
-        if (!cancelled) {
+        if (!cancelled && statusRequestRef.current === statusRequestId) {
           setLoadingStatus(false);
         }
       }
@@ -978,15 +986,15 @@ export default function AShareAnalysisPanel({
           endDate: defaultChartRange?.endDate || undefined,
           topN: DEFAULT_TOP_N,
         });
-        if (!cancelled) {
+        if (!cancelled && chartRequestRef.current === chartRequestId) {
           setChart(chartData);
         }
       } catch (error) {
-        if (!cancelled) {
+        if (!cancelled && chartRequestRef.current === chartRequestId) {
           toast.error(`加载股票推荐池图表失败: ${error instanceof Error ? error.message : '未知错误'}`);
         }
       } finally {
-        if (!cancelled) {
+        if (!cancelled && chartRequestRef.current === chartRequestId) {
           setLoadingChart(false);
         }
       }
@@ -1002,9 +1010,14 @@ export default function AShareAnalysisPanel({
       if (!groupId) {
         return null;
       }
+      const requestId = statusRequestRef.current + 1;
+      statusRequestRef.current = requestId;
       try {
         setLoadingStatus(true);
         const data = await apiClient.getAShareAnalysisStatus(groupId);
+        if (statusRequestRef.current !== requestId) {
+          return null;
+        }
         setStatus(data);
 
         if (!initialized || bootstrap) {
@@ -1021,10 +1034,14 @@ export default function AShareAnalysisPanel({
         }
         return data;
       } catch (error) {
-        toast.error(`加载股票推荐池状态失败: ${error instanceof Error ? error.message : '未知错误'}`);
+        if (statusRequestRef.current === requestId) {
+          toast.error(`加载股票推荐池状态失败: ${error instanceof Error ? error.message : '未知错误'}`);
+        }
         return null;
       } finally {
-        setLoadingStatus(false);
+        if (statusRequestRef.current === requestId) {
+          setLoadingStatus(false);
+        }
       }
     },
     [initialized]
@@ -1041,6 +1058,8 @@ export default function AShareAnalysisPanel({
       if (!options?.groupId) {
         return;
       }
+      const requestId = chartRequestRef.current + 1;
+      chartRequestRef.current = requestId;
       try {
         setLoadingChart(true);
         const data = await apiClient.getAShareAnalysisChart({
@@ -1049,11 +1068,18 @@ export default function AShareAnalysisPanel({
           endDate: options?.endDate,
           topN: options?.topN ?? topN,
         });
+        if (chartRequestRef.current !== requestId) {
+          return;
+        }
         setChart(data);
       } catch (error) {
-        toast.error(`加载股票推荐池图表失败: ${error instanceof Error ? error.message : '未知错误'}`);
+        if (chartRequestRef.current === requestId) {
+          toast.error(`加载股票推荐池图表失败: ${error instanceof Error ? error.message : '未知错误'}`);
+        }
       } finally {
-        setLoadingChart(false);
+        if (chartRequestRef.current === requestId) {
+          setLoadingChart(false);
+        }
       }
     },
     [topN]
