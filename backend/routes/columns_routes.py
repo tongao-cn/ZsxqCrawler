@@ -13,7 +13,6 @@ from pydantic import BaseModel, Field
 from backend.core.account_context import build_stealth_headers, get_cookie_for_group
 from backend.core.db_path_manager import get_db_path_manager
 from backend.core.image_cache_manager import get_image_cache_manager
-from backend.core.log_redaction import redact_response_text
 from backend.core.logger_config import log_debug, log_error, log_exception, log_info, log_warning
 from backend.services.columns_fetch_summary import (
     ColumnFetchStats,
@@ -22,6 +21,13 @@ from backend.services.columns_fetch_summary import (
     combined_column_stats as _combined_column_stats,
     resolve_columns_fetch_config as _resolve_columns_fetch_config,
 )
+from backend.services.columns_remote_service import (
+    fetch_column_topics as _service_fetch_column_topics,
+    fetch_columns_catalog as _service_fetch_columns_catalog,
+    fetch_topic_detail as _service_fetch_topic_detail,
+    redact_response_for_log as _redact_response_for_log,
+    retry_wait_seconds as _retry_wait_seconds,
+)
 from backend.services.columns_summary_service import get_columns_summary
 from backend.routes.ingestion_helpers import create_ingestion_task_or_raise
 from backend.services.task_runtime import add_task_log, enqueue_runtime_task, is_task_stopped, update_task
@@ -29,12 +35,6 @@ from backend.storage.accounts_sql_manager import get_accounts_sql_manager
 from backend.storage.zsxq_columns_database import ZSXQColumnsDatabase
 
 router = APIRouter(prefix="/api", tags=["columns"])
-
-
-def _redact_response_for_log(text: str | None, limit: int = 500) -> str:
-    if not text:
-        return "empty"
-    return redact_response_text(text, limit=limit)
 
 
 class ColumnsSettingsRequest(BaseModel):
@@ -350,71 +350,18 @@ def _columns_db(group_id: str) -> Iterator[ZSXQColumnsDatabase]:
         db.close()
 
 
-def _retry_wait_seconds(retry: int) -> int:
-    return 2 if retry < 3 else (5 if retry < 6 else 10)
-
-
 async def _fetch_columns_catalog(task_id: str, group_id: str, headers: Dict[str, str]) -> tuple[List[Dict[str, Any]], int]:
-    columns_url = f"https://api.zsxq.com/v2/groups/{group_id}/columns"
-    max_retries = 10
-    request_count = 0
-
-    for retry in range(max_retries):
-        if is_task_stopped(task_id):
-            break
-
-        try:
-            resp = requests.get(columns_url, headers=headers, timeout=30)
-            request_count += 1
-        except Exception as req_err:
-            log_exception(f"获取专栏目录请求异常: group_id={group_id}, url={columns_url}")
-            if retry < max_retries - 1:
-                wait_time = _retry_wait_seconds(retry)
-                add_task_log(task_id, f"   ⚠️ 请求异常，等待{wait_time}秒后重试 ({retry+1}/{max_retries})")
-                await asyncio.sleep(wait_time)
-                continue
-            raise Exception(f"获取专栏目录请求异常: {req_err}")
-
-        if resp.status_code != 200:
-            log_error(f"获取专栏目录失败: group_id={group_id}, HTTP {resp.status_code}, response={_redact_response_for_log(resp.text)}")
-            if retry < max_retries - 1:
-                wait_time = _retry_wait_seconds(retry)
-                add_task_log(task_id, f"   ⚠️ HTTP {resp.status_code}，等待{wait_time}秒后重试 ({retry+1}/{max_retries})")
-                await asyncio.sleep(wait_time)
-                continue
-            raise Exception(f"获取专栏目录失败: HTTP {resp.status_code}")
-
-        try:
-            data = resp.json()
-        except Exception as json_err:
-            log_exception(f"解析专栏目录JSON失败: group_id={group_id}, response={_redact_response_for_log(resp.text)}")
-            raise Exception(f"解析专栏目录失败: {json_err}")
-
-        if not data.get("succeeded"):
-            error_code = data.get("code")
-            error_msg = data.get("error_message", "未知错误")
-
-            if "expired" in error_msg.lower() or data.get("resp_data", {}).get("expired"):
-                raise Exception(f"会员已过期: {error_msg}")
-
-            if error_code == 1059:
-                if retry < max_retries - 1:
-                    wait_time = _retry_wait_seconds(retry)
-                    add_task_log(task_id, f"   ⚠️ 遇到反爬机制 (错误码1059)，等待{wait_time}秒后重试 ({retry+1}/{max_retries})")
-                    await asyncio.sleep(wait_time)
-                    continue
-                log_error(f"获取专栏目录重试{max_retries}次后仍失败: group_id={group_id}, code={error_code}")
-                raise Exception(f"获取专栏目录失败，重试{max_retries}次后仍遇到反爬限制")
-
-            log_error(f"获取专栏目录API失败: group_id={group_id}, code={error_code}, message={error_msg}, response={json.dumps(data, ensure_ascii=False)[:500]}")
-            raise Exception(f"API返回失败: {error_msg} (code={error_code})")
-
-        columns = data.get("resp_data", {}).get("columns", [])
-        if retry > 0:
-            add_task_log(task_id, f"   ✅ 重试成功 (第{retry+1}次尝试)")
-        return columns, request_count
-
-    raise Exception("获取专栏目录失败")
+    return await _service_fetch_columns_catalog(
+        task_id,
+        group_id,
+        headers,
+        request_get=requests.get,
+        is_task_stopped=is_task_stopped,
+        add_task_log=add_task_log,
+        log_error=log_error,
+        log_exception=log_exception,
+        sleep=asyncio.sleep,
+    )
 
 
 def _fetch_column_topics(
@@ -423,38 +370,16 @@ def _fetch_column_topics(
     topics_url: str,
     headers: Dict[str, str],
 ) -> tuple[Optional[List[Dict[str, Any]]], int]:
-    request_count = 0
-
-    try:
-        topics_resp = requests.get(topics_url, headers=headers, timeout=30)
-        request_count += 1
-    except Exception as req_err:
-        log_exception(f"获取专栏文章列表请求异常: column_id={column_id}, url={topics_url}")
-        add_task_log(task_id, f"   ⚠️ 获取文章列表请求异常: {req_err}")
-        return None, request_count
-
-    if topics_resp.status_code != 200:
-        log_error(f"获取专栏文章列表失败: column_id={column_id}, HTTP {topics_resp.status_code}, response={_redact_response_for_log(topics_resp.text)}")
-        add_task_log(task_id, f"   ⚠️ 获取文章列表失败: HTTP {topics_resp.status_code}")
-        return None, request_count
-
-    try:
-        topics_data = topics_resp.json()
-    except Exception as json_err:
-        log_exception(f"解析专栏文章列表JSON失败: column_id={column_id}, response={_redact_response_for_log(topics_resp.text)}")
-        add_task_log(task_id, f"   ⚠️ 解析文章列表失败: {json_err}")
-        return None, request_count
-
-    if not topics_data.get("succeeded"):
-        error_code = topics_data.get("code", "unknown")
-        error_message = topics_data.get("error_message", "未知错误")
-        log_error(f"获取专栏文章列表失败: column_id={column_id}, code={error_code}, message={error_message}")
-        add_task_log(task_id, f"   ⚠️ 获取文章列表失败: {error_message} (code={error_code})")
-        return None, request_count
-
-    topics_list = topics_data.get("resp_data", {}).get("topics", [])
-    add_task_log(task_id, f"   📝 获取到 {len(topics_list)} 篇文章")
-    return topics_list, request_count
+    return _service_fetch_column_topics(
+        task_id,
+        column_id,
+        topics_url,
+        headers,
+        request_get=requests.get,
+        add_task_log=add_task_log,
+        log_error=log_error,
+        log_exception=log_exception,
+    )
 
 
 async def _fetch_topic_detail(
@@ -468,52 +393,24 @@ async def _fetch_topic_detail(
     crawl_interval_min: float,
     crawl_interval_max: float,
 ) -> tuple[Optional[Dict[str, Any]], int]:
-    max_retries = 10
-    request_count = current_request_count
-    requests_made = 0
-
-    for _ in range(max_retries):
-        if is_task_stopped(task_id):
-            break
-
-        if request_count > 0 and request_count % items_per_batch == 0:
-            sleep_time = random.uniform(long_sleep_min, long_sleep_max)
-            add_task_log(task_id, f"      😴 已完成 {request_count} 次请求，休眠 {sleep_time:.1f} 秒...")
-            await asyncio.sleep(sleep_time)
-
-        delay = random.uniform(crawl_interval_min, crawl_interval_max)
-        await asyncio.sleep(delay)
-
-        detail_url = f"https://api.zsxq.com/v2/topics/{topic_id}/info"
-        try:
-            detail_resp = requests.get(detail_url, headers=headers, timeout=30)
-            request_count += 1
-            requests_made += 1
-        except Exception as req_err:
-            log_exception(f"获取文章详情请求异常: topic_id={topic_id}, url={detail_url}")
-            add_task_log(task_id, f"      ⚠️ 获取详情请求异常: {req_err}")
-            continue
-
-        if detail_resp.status_code != 200:
-            log_error(f"获取文章详情失败: topic_id={topic_id}, HTTP {detail_resp.status_code}, response={_redact_response_for_log(detail_resp.text)}")
-            add_task_log(task_id, f"      ⚠️ 获取详情失败: HTTP {detail_resp.status_code}")
-            continue
-
-        try:
-            topic_detail = detail_resp.json()
-        except Exception as json_err:
-            log_exception(f"解析文章详情JSON失败: topic_id={topic_id}, response={_redact_response_for_log(detail_resp.text)}")
-            add_task_log(task_id, f"      ⚠️ 解析详情失败: {json_err}")
-            continue
-
-        if topic_detail and topic_detail.get("succeeded"):
-            return topic_detail, requests_made
-
-        error_msg = (topic_detail or {}).get("error_message", "未知错误")
-        log_error(f"获取文章详情API失败: topic_id={topic_id}, message={error_msg}")
-        add_task_log(task_id, f"      ⚠️ 获取详情API失败: {error_msg}")
-
-    return None, requests_made
+    return await _service_fetch_topic_detail(
+        task_id,
+        topic_id,
+        headers,
+        current_request_count,
+        items_per_batch,
+        long_sleep_min,
+        long_sleep_max,
+        crawl_interval_min,
+        crawl_interval_max,
+        request_get=requests.get,
+        is_task_stopped=is_task_stopped,
+        add_task_log=add_task_log,
+        log_error=log_error,
+        log_exception=log_exception,
+        sleep=asyncio.sleep,
+        random_uniform=random.uniform,
+    )
 
 
 def _collect_topic_files(topic_detail: Dict[str, Any]) -> List[Dict[str, Any]]:
