@@ -205,6 +205,22 @@ class ColumnsRoutesHelperTests(unittest.TestCase):
         update.assert_called_once_with("task-1", "completed", "该群组没有专栏内容")
 
     @unittest.skipUnless(HAS_COLUMNS_ROUTE_DEPS, "columns route dependencies are not installed")
+    def test_get_column_topic_full_comments_runs_service_in_thread(self):
+        from backend.routes import columns_routes
+
+        calls = []
+
+        async def fake_to_thread(func, *args):
+            calls.append((func, args))
+            return {"success": True, "comments": [], "total": 0}
+
+        with patch("backend.routes.columns_routes.asyncio.to_thread", side_effect=fake_to_thread):
+            result = asyncio.run(columns_routes.get_column_topic_full_comments("123", 456))
+
+        self.assertEqual({"success": True, "comments": [], "total": 0}, result)
+        self.assertEqual([(columns_routes._service_fetch_column_topic_full_comments, ("123", 456))], calls)
+
+    @unittest.skipUnless(HAS_COLUMNS_ROUTE_DEPS, "columns route dependencies are not installed")
     def test_save_topic_detail_inserts_topic_with_unescaped_json(self):
         from backend.routes.columns_routes import _save_topic_detail
 

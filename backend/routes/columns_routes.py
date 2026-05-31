@@ -13,7 +13,7 @@ from pydantic import BaseModel, Field
 from backend.core.account_context import build_stealth_headers, get_cookie_for_group
 from backend.core.db_path_manager import get_db_path_manager
 from backend.core.image_cache_manager import get_image_cache_manager
-from backend.core.logger_config import log_debug, log_error, log_exception, log_info, log_warning
+from backend.core.logger_config import log_error, log_exception, log_info, log_warning
 from backend.services.columns_fetch_summary import (
     ColumnFetchStats,
     build_columns_fetch_result as _build_columns_fetch_result,
@@ -25,6 +25,7 @@ from backend.services.columns_column_service import (
     process_column as _service_process_column,
     process_column_topic as _service_process_column_topic,
 )
+from backend.services.columns_comment_service import fetch_column_topic_full_comments as _service_fetch_column_topic_full_comments
 from backend.services.columns_file_download_service import download_column_file as _service_download_column_file
 from backend.services.columns_media_cache_service import (
     cache_topic_images as _service_cache_topic_images,
@@ -34,7 +35,6 @@ from backend.services.columns_remote_service import (
     fetch_column_topics as _service_fetch_column_topics,
     fetch_columns_catalog as _service_fetch_columns_catalog,
     fetch_topic_detail as _service_fetch_topic_detail,
-    redact_response_for_log as _redact_response_for_log,
     retry_wait_seconds as _retry_wait_seconds,
 )
 from backend.services.columns_resource_service import (
@@ -53,7 +53,6 @@ from backend.services.columns_topic_persistence_service import (
 from backend.services.columns_video_download_service import download_column_video as _service_download_column_video
 from backend.routes.ingestion_helpers import create_ingestion_task_or_raise
 from backend.services.task_runtime import add_task_log, enqueue_runtime_task, is_task_stopped, update_task
-from backend.storage.accounts_sql_manager import get_accounts_sql_manager
 from backend.storage.zsxq_columns_database import ZSXQColumnsDatabase
 
 router = APIRouter(prefix="/api", tags=["columns"])
@@ -698,82 +697,7 @@ async def delete_all_columns(group_id: str):
 async def get_column_topic_full_comments(group_id: str, topic_id: int):
     """获取专栏文章的完整评论列表（从API实时获取并持久化到数据库）"""
     try:
-        manager = get_accounts_sql_manager()
-        account = manager.get_account_for_group(group_id, mask_cookie=False)
-        if not account or not account.get("cookie"):
-            raise HTTPException(status_code=400, detail="No valid account found for this group")
-
-        cookie = account["cookie"]
-        headers = build_stealth_headers(cookie)
-
-        comments_url = f"https://api.zsxq.com/v2/topics/{topic_id}/comments?sort=asc&count=30&with_sticky=true"
-        log_info(f"Fetching comments from: {comments_url}")
-        resp = requests.get(comments_url, headers=headers, timeout=30)
-
-        if resp.status_code != 200:
-            log_error(f"Failed to fetch comments: HTTP {resp.status_code}, response={_redact_response_for_log(resp.text)}")
-            raise HTTPException(status_code=resp.status_code, detail=f"Failed to fetch comments: HTTP {resp.status_code}")
-
-        data = resp.json()
-        log_debug(f"Comments API response: succeeded={data.get('succeeded')}, resp_data keys={list(data.get('resp_data', {}).keys()) if data.get('resp_data') else 'None'}")
-
-        if not data.get("succeeded"):
-            resp_data = data.get("resp_data", {})
-            error_msg = resp_data.get("message") or resp_data.get("error_msg") or data.get("error_msg") or data.get("message")
-            error_code = resp_data.get("code") or resp_data.get("error_code") or data.get("code")
-            log_error(f"Comments API failed: code={error_code}, message={error_msg}, full_response={json.dumps(data, ensure_ascii=False)[:500]}")
-            raise HTTPException(status_code=400, detail=f"API error: {error_msg or 'Request failed'} (code: {error_code})")
-
-        comments = data.get("resp_data", {}).get("comments", [])
-
-        processed_comments = []
-        for comment in comments:
-            processed = {
-                "comment_id": comment.get("comment_id"),
-                "parent_comment_id": comment.get("parent_comment_id"),
-                "text": comment.get("text", ""),
-                "create_time": comment.get("create_time"),
-                "likes_count": comment.get("likes_count", 0),
-                "rewards_count": comment.get("rewards_count", 0),
-                "replies_count": comment.get("replies_count", 0),
-                "sticky": comment.get("sticky", False),
-                "owner": comment.get("owner"),
-                "repliee": comment.get("repliee"),
-                "images": comment.get("images", []),
-            }
-
-            replied_comments = comment.get("replied_comments", [])
-            if replied_comments:
-                processed["replied_comments"] = [
-                    {
-                        "comment_id": rc.get("comment_id"),
-                        "parent_comment_id": rc.get("parent_comment_id"),
-                        "text": rc.get("text", ""),
-                        "create_time": rc.get("create_time"),
-                        "likes_count": rc.get("likes_count", 0),
-                        "owner": rc.get("owner"),
-                        "repliee": rc.get("repliee"),
-                        "images": rc.get("images", []),
-                    }
-                    for rc in replied_comments
-                ]
-
-            processed_comments.append(processed)
-
-        try:
-            with _columns_db(group_id) as db:
-                saved_count = db.import_comments(topic_id, processed_comments)
-            log_info(f"Saved {saved_count} comments to database for topic {topic_id}")
-        except Exception as e:
-            log_error(f"Failed to save comments to database: {e}")
-
-        total_count = sum(1 + len(c.get("replied_comments", [])) for c in processed_comments)
-
-        return {
-            "success": True,
-            "comments": processed_comments,
-            "total": total_count,
-        }
+        return await asyncio.to_thread(_service_fetch_column_topic_full_comments, group_id, topic_id)
     except HTTPException:
         raise
     except Exception as e:
