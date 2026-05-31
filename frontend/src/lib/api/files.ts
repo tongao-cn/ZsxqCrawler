@@ -146,7 +146,14 @@ export class FilesApiClient extends AnalysisApiClient {
     return this.request(`/api/files/check-local/${groupId}?${params}`);
   }
 
-  async getFiles(groupId: number, page: number = 1, perPage: number = 20, status?: string, search?: string): Promise<PaginatedResponse<FileItem>> {
+  async getFiles(
+    groupId: number,
+    page: number = 1,
+    perPage: number = 20,
+    status?: string,
+    search?: string,
+    analysisStatus?: string,
+  ): Promise<PaginatedResponse<FileItem>> {
     const params = new URLSearchParams({
       page: page.toString(),
       per_page: perPage.toString(),
@@ -158,6 +165,10 @@ export class FilesApiClient extends AnalysisApiClient {
 
     if (search) {
       params.append('search', search);
+    }
+
+    if (analysisStatus) {
+      params.append('analysis_status', analysisStatus);
     }
 
     const response = await this.request<{files: FileItem[], pagination: any}>(`/api/files/${groupId}?${params}`);

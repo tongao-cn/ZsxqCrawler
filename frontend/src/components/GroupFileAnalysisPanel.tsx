@@ -142,19 +142,10 @@ export default function GroupFileAnalysisPanel({
   const [batchAnalysisFileIds, setBatchAnalysisFileIds] = useState<number[]>([]);
   const [batchAnalyzing, setBatchAnalyzing] = useState(false);
 
-  const displayedFiles = files.filter((file) => {
-    if (analysisStatusFilter === 'analyzed') {
-      return file.has_ai_analysis;
-    }
-    if (analysisStatusFilter === 'pending') {
-      return !file.has_ai_analysis;
-    }
-    return true;
-  });
   const downloadedFiles = files.filter(isFileDownloaded);
   const failedFiles = files.filter((file) => !isFileDownloaded(file) && file.download_status === 'failed');
-  const pendingAnalysisFiles = displayedFiles.filter((file) => isFileDownloaded(file) && !file.has_ai_analysis);
-  const downloadableFiles = displayedFiles.filter((file) => !isFileDownloaded(file) && !downloadingFiles.has(file.file_id));
+  const pendingAnalysisFiles = files.filter((file) => isFileDownloaded(file) && !file.has_ai_analysis);
+  const downloadableFiles = files.filter((file) => !isFileDownloaded(file) && !downloadingFiles.has(file.file_id));
   const hasActiveFilters = Boolean(searchQuery) || statusFilter !== 'all' || analysisStatusFilter !== 'all';
   const downloadStatusLabel = {
     all: '全部获取状态',
@@ -173,12 +164,14 @@ export default function GroupFileAnalysisPanel({
     try {
       setLoading(true);
       const status = statusFilter === 'all' ? undefined : statusFilter;
+      const analysisStatus = analysisStatusFilter === 'all' ? undefined : analysisStatusFilter;
       const data: PaginatedResponse<FileItem> = await apiClient.getFiles(
         groupId,
         targetPage,
         20,
         status,
         searchQuery || undefined,
+        analysisStatus,
       );
       setFiles(data.data || []);
       setPage(data.pagination.page);
@@ -189,7 +182,7 @@ export default function GroupFileAnalysisPanel({
     } finally {
       setLoading(false);
     }
-  }, [groupId, searchQuery, statusFilter]);
+  }, [analysisStatusFilter, groupId, searchQuery, statusFilter]);
 
   useEffect(() => {
     void loadFiles(1);
@@ -574,11 +567,11 @@ export default function GroupFileAnalysisPanel({
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
         <div className="rounded-lg border border-gray-200 bg-white p-3">
-          <div className="text-xs text-muted-foreground">当前结果</div>
-          <div className="mt-1 text-xl font-semibold">{displayedFiles.length}</div>
+          <div className="text-xs text-muted-foreground">当前页</div>
+          <div className="mt-1 text-xl font-semibold">{files.length}</div>
         </div>
         <div className="rounded-lg border border-gray-200 bg-white p-3">
-          <div className="text-xs text-muted-foreground">全群文件</div>
+          <div className="text-xs text-muted-foreground">匹配总数</div>
           <div className="mt-1 text-xl font-semibold">{totalFiles}</div>
         </div>
         <div className="rounded-lg border border-gray-200 bg-white p-3">
@@ -713,7 +706,7 @@ export default function GroupFileAnalysisPanel({
       <div className="min-h-0 flex-1 overflow-auto">
         {loading ? (
           <div className="rounded-lg border border-dashed p-10 text-center text-muted-foreground">文件列表加载中...</div>
-        ) : displayedFiles.length === 0 ? (
+        ) : files.length === 0 ? (
           <div className="rounded-lg border border-dashed p-10 text-center text-muted-foreground">
             {hasActiveFilters
               ? '没有匹配的文件记录'
@@ -734,7 +727,7 @@ export default function GroupFileAnalysisPanel({
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {displayedFiles.map((file) => {
+                {files.map((file) => {
                   const downloaded = isFileDownloaded(file);
                   const creatingTask = downloadingFiles.has(file.file_id);
                   const analyzing = analyzingFileIds.has(file.file_id);

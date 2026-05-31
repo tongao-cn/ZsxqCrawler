@@ -332,9 +332,10 @@ async def get_files(
     per_page: int = 20,
     status: Optional[str] = None,
     search: Optional[str] = None,
+    analysis_status: Optional[str] = None,
 ):
     """获取指定群组的文件列表"""
     try:
-        return await asyncio.to_thread(_get_files_response, group_id, page, per_page, status, search)
+        return await asyncio.to_thread(_get_files_response, group_id, page, per_page, status, search, analysis_status)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"获取文件列表失败: {str(e)}")

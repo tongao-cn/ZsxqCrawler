@@ -463,11 +463,51 @@ class FileRoutesHelperTests(unittest.TestCase):
                     per_page=5,
                     status="completed",
                     search="pdf",
+                    analysis_status="pending",
                 )
             )
 
-        self.assertEqual([(file_routes._get_files_response, ("group-1", 2, 5, "completed", "pdf"))], calls)
+        self.assertEqual([(file_routes._get_files_response, ("group-1", 2, 5, "completed", "pdf", "pending"))], calls)
         self.assertEqual({"files": [], "pagination": {"page": 2, "per_page": 5, "total": 0, "pages": 0}}, response)
+
+    def test_get_files_response_filters_analysis_status_in_database_query(self):
+        from backend.services import file_workflow_service
+
+        class FakeCursor:
+            def __init__(self):
+                self.executed = []
+
+            def execute(self, sql, params=()):
+                self.executed.append((sql, params))
+
+            def fetchall(self):
+                return []
+
+            def fetchone(self):
+                return (0,)
+
+        class FakeFileDb:
+            def __init__(self):
+                self.cursor = FakeCursor()
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+        fake_db = FakeFileDb()
+        with patch("backend.services.file_workflow_service._file_db", return_value=fake_db):
+            response = file_workflow_service._get_files_response("group-1", analysis_status="analyzed")
+
+        self.assertEqual([], response["files"])
+        self.assertTrue(any("faa.updated_at IS NOT NULL" in sql for sql, _params in fake_db.cursor.executed))
+
+        fake_db = FakeFileDb()
+        with patch("backend.services.file_workflow_service._file_db", return_value=fake_db):
+            file_workflow_service._get_files_response("group-1", analysis_status="pending")
+
+        self.assertTrue(any("faa.updated_at IS NULL" in sql for sql, _params in fake_db.cursor.executed))
 
     def test_close_crawler_file_databases_closes_file_and_topic_dbs(self):
         crawler = FakeCrawler()

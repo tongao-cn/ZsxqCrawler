@@ -264,6 +264,7 @@ def _get_files_response(
     per_page: int = 20,
     status: Optional[str] = None,
     search: Optional[str] = None,
+    analysis_status: Optional[str] = None,
 ) -> dict:
     with _file_db(group_id) as file_db:
         offset = (page - 1) * per_page
@@ -279,6 +280,11 @@ def _get_files_response(
             else:
                 conditions.append("f.download_status = ?")
                 params_prefix.append(status)
+
+        if analysis_status == "analyzed":
+            conditions.append("faa.updated_at IS NOT NULL")
+        elif analysis_status == "pending":
+            conditions.append("faa.updated_at IS NULL")
 
         search_text = (search or "").strip()
         if search_text:
