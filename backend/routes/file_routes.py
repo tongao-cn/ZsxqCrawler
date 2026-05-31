@@ -122,6 +122,140 @@ def _clear_file_database_response(group_id: str) -> dict:
     return {"message": f"群组 {group_id} 的文件数据和图片缓存已删除", "deleted": deleted_counts}
 
 
+def _get_files_response(
+    group_id: str,
+    page: int = 1,
+    per_page: int = 20,
+    status: Optional[str] = None,
+    search: Optional[str] = None,
+) -> dict:
+    with _file_db(group_id) as file_db:
+        offset = (page - 1) * per_page
+
+        conditions = []
+        params_prefix = [_query_group_id(group_id)]
+        conditions.append("f.group_id = ?")
+
+        if status:
+            if status == "completed":
+                conditions.append("f.download_status IN (?, ?, ?)")
+                params_prefix.extend(["completed", "downloaded", "skipped"])
+            else:
+                conditions.append("f.download_status = ?")
+                params_prefix.append(status)
+
+        search_text = (search or "").strip()
+        if search_text:
+            search_pattern = f"%{search_text.lower()}%"
+            conditions.append(
+                """
+                (
+                    LOWER(COALESCE(f.name, '')) LIKE ?
+                    OR EXISTS (
+                        SELECT 1
+                        FROM file_topic_relations fr
+                        LEFT JOIN topics t ON t.topic_id = fr.topic_id
+                        LEFT JOIN talks tk ON tk.topic_id = fr.topic_id
+                        LEFT JOIN articles ar ON ar.topic_id = fr.topic_id
+                        WHERE fr.file_id = f.file_id
+                          AND (
+                              LOWER(COALESCE(t.title, '')) LIKE ?
+                              OR LOWER(COALESCE(t.annotation, '')) LIKE ?
+                              OR LOWER(COALESCE(tk.text, '')) LIKE ?
+                              OR LOWER(COALESCE(ar.title, '')) LIKE ?
+                          )
+                    )
+                    OR EXISTS (
+                        SELECT 1
+                        FROM topic_files tf
+                        LEFT JOIN topics t2 ON t2.topic_id = tf.topic_id
+                        WHERE tf.file_id = f.file_id
+                          AND (
+                              LOWER(COALESCE(tf.name, '')) LIKE ?
+                              OR LOWER(COALESCE(t2.title, '')) LIKE ?
+                              OR LOWER(COALESCE(t2.annotation, '')) LIKE ?
+                          )
+                    )
+                )
+                """
+            )
+            params_prefix.extend([search_pattern] * 8)
+
+        where_clause = f"WHERE {' AND '.join(conditions)}" if conditions else ""
+
+        query = f"""
+            SELECT
+                f.file_id,
+                f.name,
+                f.size,
+                f.download_count,
+                f.create_time,
+                f.download_status,
+                f.local_path,
+                f.download_error_code,
+                f.download_error_message,
+                f.last_download_attempt_at,
+                faa.updated_at
+            FROM files f
+            LEFT JOIN file_ai_analyses faa ON faa.file_id = f.file_id
+            {where_clause}
+            ORDER BY f.create_time DESC
+            LIMIT ? OFFSET ?
+        """
+        params = (*params_prefix, per_page, offset)
+
+        file_db.cursor.execute(query, params)
+        files = file_db.cursor.fetchall()
+
+        count_query = f"SELECT COUNT(*) FROM files f {where_clause}"
+        file_db.cursor.execute(count_query, tuple(params_prefix))
+        total = file_db.cursor.fetchone()[0]
+
+        normalized_files = []
+        for file in files:
+            file_id = file[0]
+            file_name = file[1]
+            file_size = file[2]
+            stored_status = file[5] if len(file) > 5 else "unknown"
+            stored_local_path = file[6] if len(file) > 6 else None
+
+            local_status = _resolve_download_record_status(
+                group_id,
+                file_id,
+                file_name,
+                stored_status,
+                stored_local_path,
+            )
+
+            normalized_files.append(
+                {
+                    "file_id": file_id,
+                    "name": file_name,
+                    "size": file_size,
+                    "download_count": file[3],
+                    "create_time": file[4],
+                    "download_status": local_status["download_status"],
+                    "local_exists": local_status["local_exists"],
+                    "local_path": local_status["local_path"],
+                    "download_error_code": file[7] if len(file) > 7 else None,
+                    "download_error_message": file[8] if len(file) > 8 else None,
+                    "last_download_attempt_at": file[9] if len(file) > 9 else None,
+                    "has_ai_analysis": bool(file[10]) if len(file) > 10 and file[10] else False,
+                    "analysis_updated_at": file[10] if len(file) > 10 else None,
+                }
+            )
+
+        return {
+            "files": normalized_files,
+            "pagination": {
+                "page": page,
+                "per_page": per_page,
+                "total": total,
+                "pages": (total + per_page - 1) // per_page,
+            },
+        }
+
+
 @router.post("/collect/{group_id}")
 async def collect_files(group_id: str, request: FileCollectRequest, background_tasks: BackgroundTasks):
     """收集文件列表"""
@@ -413,130 +547,6 @@ async def get_files(
 ):
     """获取指定群组的文件列表"""
     try:
-        with _file_db(group_id) as file_db:
-            offset = (page - 1) * per_page
-
-            conditions = []
-            params_prefix = [_query_group_id(group_id)]
-            conditions.append("f.group_id = ?")
-
-            if status:
-                if status == "completed":
-                    conditions.append("f.download_status IN (?, ?, ?)")
-                    params_prefix.extend(["completed", "downloaded", "skipped"])
-                else:
-                    conditions.append("f.download_status = ?")
-                    params_prefix.append(status)
-
-            search_text = (search or "").strip()
-            if search_text:
-                search_pattern = f"%{search_text.lower()}%"
-                conditions.append(
-                    """
-                    (
-                        LOWER(COALESCE(f.name, '')) LIKE ?
-                        OR EXISTS (
-                            SELECT 1
-                            FROM file_topic_relations fr
-                            LEFT JOIN topics t ON t.topic_id = fr.topic_id
-                            LEFT JOIN talks tk ON tk.topic_id = fr.topic_id
-                            LEFT JOIN articles ar ON ar.topic_id = fr.topic_id
-                            WHERE fr.file_id = f.file_id
-                              AND (
-                                  LOWER(COALESCE(t.title, '')) LIKE ?
-                                  OR LOWER(COALESCE(t.annotation, '')) LIKE ?
-                                  OR LOWER(COALESCE(tk.text, '')) LIKE ?
-                                  OR LOWER(COALESCE(ar.title, '')) LIKE ?
-                              )
-                        )
-                        OR EXISTS (
-                            SELECT 1
-                            FROM topic_files tf
-                            LEFT JOIN topics t2 ON t2.topic_id = tf.topic_id
-                            WHERE tf.file_id = f.file_id
-                              AND (
-                                  LOWER(COALESCE(tf.name, '')) LIKE ?
-                                  OR LOWER(COALESCE(t2.title, '')) LIKE ?
-                                  OR LOWER(COALESCE(t2.annotation, '')) LIKE ?
-                              )
-                        )
-                    )
-                    """
-                )
-                params_prefix.extend([search_pattern] * 8)
-
-            where_clause = f"WHERE {' AND '.join(conditions)}" if conditions else ""
-
-            query = f"""
-                SELECT
-                    f.file_id,
-                    f.name,
-                    f.size,
-                    f.download_count,
-                    f.create_time,
-                    f.download_status,
-                    f.local_path,
-                    f.download_error_code,
-                    f.download_error_message,
-                    f.last_download_attempt_at,
-                    faa.updated_at
-                FROM files f
-                LEFT JOIN file_ai_analyses faa ON faa.file_id = f.file_id
-                {where_clause}
-                ORDER BY f.create_time DESC
-                LIMIT ? OFFSET ?
-            """
-            params = (*params_prefix, per_page, offset)
-
-            file_db.cursor.execute(query, params)
-            files = file_db.cursor.fetchall()
-
-            count_query = f"SELECT COUNT(*) FROM files f {where_clause}"
-            file_db.cursor.execute(count_query, tuple(params_prefix))
-            total = file_db.cursor.fetchone()[0]
-
-            normalized_files = []
-            for file in files:
-                file_id = file[0]
-                file_name = file[1]
-                file_size = file[2]
-                stored_status = file[5] if len(file) > 5 else "unknown"
-                stored_local_path = file[6] if len(file) > 6 else None
-
-                local_status = _resolve_download_record_status(
-                    group_id,
-                    file_id,
-                    file_name,
-                    stored_status,
-                    stored_local_path,
-                )
-
-                normalized_files.append(
-                    {
-                        "file_id": file_id,
-                        "name": file_name,
-                        "size": file_size,
-                        "download_count": file[3],
-                        "create_time": file[4],
-                        "download_status": local_status["download_status"],
-                        "local_exists": local_status["local_exists"],
-                        "local_path": local_status["local_path"],
-                        "download_error_code": file[7] if len(file) > 7 else None,
-                        "download_error_message": file[8] if len(file) > 8 else None,
-                        "last_download_attempt_at": file[9] if len(file) > 9 else None,
-                        "has_ai_analysis": bool(file[10]) if len(file) > 10 and file[10] else False,
-                        "analysis_updated_at": file[10] if len(file) > 10 else None,
-                    }
-                )
-
-            return {
-                "files": normalized_files,
-                "pagination": {
-                    "page": page,
-                    "per_page": per_page,
-                    "total": total,
-                    "pages": (total + per_page - 1) // per_page,
-                },
-            }
+        return await asyncio.to_thread(_get_files_response, group_id, page, per_page, status, search)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"获取文件列表失败: {str(e)}")

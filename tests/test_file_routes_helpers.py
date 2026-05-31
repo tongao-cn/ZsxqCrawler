@@ -446,6 +446,29 @@ class FileRoutesHelperTests(unittest.TestCase):
         self.assertEqual([(file_routes._clear_file_database_response, ("group-1",))], calls)
         self.assertEqual({"message": "ok", "deleted": {"files": 1}}, response)
 
+    def test_get_files_offloads_sync_work_to_thread(self):
+        from backend.routes import file_routes
+
+        calls = []
+
+        async def fake_to_thread(func, *args):
+            calls.append((func, args))
+            return {"files": [], "pagination": {"page": args[1], "per_page": args[2], "total": 0, "pages": 0}}
+
+        with patch("backend.routes.file_routes.asyncio.to_thread", side_effect=fake_to_thread):
+            response = self._run_async(
+                file_routes.get_files(
+                    "group-1",
+                    page=2,
+                    per_page=5,
+                    status="completed",
+                    search="pdf",
+                )
+            )
+
+        self.assertEqual([(file_routes._get_files_response, ("group-1", 2, 5, "completed", "pdf"))], calls)
+        self.assertEqual({"files": [], "pagination": {"page": 2, "per_page": 5, "total": 0, "pages": 0}}, response)
+
     def test_close_crawler_file_databases_closes_file_and_topic_dbs(self):
         crawler = FakeCrawler()
 
