@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { DatabaseZap, Download, Loader2, ListChecks, RefreshCw, Sparkles } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -48,12 +48,36 @@ export default function DataPanel({ selectedGroup }: DataPanelProps) {
   const [analysisLoading, setAnalysisLoading] = useState(false);
   const [selectedFile, setSelectedFile] = useState<FileItem | null>(null);
   const [analysis, setAnalysis] = useState<FileAIAnalysis | null>(null);
+  const filePollTimeoutsRef = useRef<Map<number, number>>(new Map());
+  const filePollGenerationRef = useRef(0);
+
+  const clearFilePolling = useCallback((fileId?: number) => {
+    if (fileId !== undefined) {
+      const timeoutId = filePollTimeoutsRef.current.get(fileId);
+      if (timeoutId !== undefined) {
+        window.clearTimeout(timeoutId);
+        filePollTimeoutsRef.current.delete(fileId);
+      }
+      return;
+    }
+
+    filePollTimeoutsRef.current.forEach((timeoutId) => window.clearTimeout(timeoutId));
+    filePollTimeoutsRef.current.clear();
+    filePollGenerationRef.current += 1;
+  }, []);
 
   useEffect(() => {
+    clearFilePolling();
     setTopicsPage(1);
     setFilesPage(1);
     setSelectedFileIds(new Set());
-  }, [selectedGroupId]);
+    setDownloadingFiles(new Set());
+    setFileTasks(new Map());
+  }, [clearFilePolling, selectedGroupId]);
+
+  useEffect(() => {
+    return () => clearFilePolling();
+  }, [clearFilePolling]);
 
   useEffect(() => {
     const loadTopics = async () => {
@@ -151,9 +175,15 @@ export default function DataPanel({ selectedGroup }: DataPanelProps) {
   };
 
   const pollFileTask = useCallback((fileId: number, taskId: string, attempt: number = 0) => {
-    window.setTimeout(async () => {
+    clearFilePolling(fileId);
+    const generation = filePollGenerationRef.current;
+    const timeoutId = window.setTimeout(async () => {
+      filePollTimeoutsRef.current.delete(fileId);
       try {
         const task = await apiClient.getTask(taskId);
+        if (filePollGenerationRef.current !== generation) {
+          return;
+        }
         setFileTasks(prev => {
           const next = new Map(prev);
           next.set(fileId, {
@@ -194,6 +224,9 @@ export default function DataPanel({ selectedGroup }: DataPanelProps) {
           return next;
         });
       } catch (error) {
+        if (filePollGenerationRef.current !== generation) {
+          return;
+        }
         console.error('轮询文件下载任务失败:', error);
         if (attempt < 12) {
           pollFileTask(fileId, taskId, attempt + 1);
@@ -207,7 +240,8 @@ export default function DataPanel({ selectedGroup }: DataPanelProps) {
         });
       }
     }, 1500);
-  }, [loadFiles]);
+    filePollTimeoutsRef.current.set(fileId, timeoutId);
+  }, [clearFilePolling, loadFiles]);
 
   const handleSyncFilesFromTopics = async () => {
     if (selectedGroupId === undefined || syncingFiles) {
