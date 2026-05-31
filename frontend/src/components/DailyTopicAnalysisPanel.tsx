@@ -6,7 +6,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { toast } from 'sonner';
 
-import { apiClient, DailyStockConcept } from '@/lib/api';
+import { apiClient, DailyStockConcept, TopicDetail } from '@/lib/api';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -246,7 +246,7 @@ export default function DailyTopicAnalysisPanel({
   const [stockTrend, setStockTrend] = useState<StockTrendDay[]>([]);
   const [loadingStockTrend, setLoadingStockTrend] = useState(false);
   const [selectedTopicId, setSelectedTopicId] = useState<string | null>(null);
-  const [topicDetail, setTopicDetail] = useState<any | null>(null);
+  const [topicDetail, setTopicDetail] = useState<TopicDetail | null>(null);
   const [loadingTopicDetail, setLoadingTopicDetail] = useState(false);
   const [selectedConcept, setSelectedConcept] = useState<string | null>(null);
   const [selectedConceptDetail, setSelectedConceptDetail] = useState<string | null>(null);

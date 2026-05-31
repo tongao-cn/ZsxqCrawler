@@ -357,6 +357,36 @@ export interface Topic {
   imported_at?: string;
 }
 
+export interface TopicOwner {
+  avatar_url?: string | null;
+  location?: string | null;
+  name?: string | null;
+}
+
+export interface TopicDetail {
+  topic_id?: string | number;
+  type?: string | null;
+  title?: string | null;
+  create_time?: string | null;
+  reading_count?: number | null;
+  likes_count?: number | null;
+  comments_count?: number | null;
+  talk?: {
+    text?: string | null;
+    owner?: TopicOwner | null;
+  } | null;
+  question?: {
+    text?: string | null;
+    anonymous?: boolean | null;
+    owner?: TopicOwner | null;
+    owner_location?: string | null;
+  } | null;
+  answer?: {
+    text?: string | null;
+    owner?: TopicOwner | null;
+  } | null;
+}
+
 export interface FetchMoreCommentsResponse {
   success: boolean;
   message: string;

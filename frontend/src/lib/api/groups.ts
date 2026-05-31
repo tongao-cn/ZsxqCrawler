@@ -1,5 +1,5 @@
 import { FilesApiClient } from './files';
-import type { Account, AccountSelf, FetchMoreCommentsResponse, Group, GroupStats, PaginatedResponse, Topic } from './types';
+import type { Account, AccountSelf, FetchMoreCommentsResponse, Group, GroupStats, PaginatedResponse, Topic, TopicDetail } from './types';
 
 export class GroupsApiClient extends FilesApiClient {
   async crawlHistorical(groupId: number, pages: number = 10, perPage: number = 20, crawlSettings?: {
@@ -87,7 +87,7 @@ export class GroupsApiClient extends FilesApiClient {
     });
   }
 
-  async getTopicDetail(topicId: number | string, groupId: number) {
+  async getTopicDetail(topicId: number | string, groupId: number): Promise<TopicDetail> {
     const id = String(topicId);
     return this.request(`/api/topics/${id}/${groupId}`);
   }
