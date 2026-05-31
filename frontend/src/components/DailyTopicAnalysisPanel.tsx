@@ -11,7 +11,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { DatePickerButton } from '@/components/ui/date-picker-button';
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import DailyStockDetailDialog, { type StockTrendDay } from '@/components/DailyStockDetailDialog';
 import DailyTopicDetailDialog from '@/components/DailyTopicDetailDialog';
 import { Label } from '@/components/ui/label';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -83,13 +83,6 @@ interface ConceptStat {
   topicIds: Array<string | number>;
   topicCount: number;
   recommendationHitCount: number;
-}
-
-interface StockTrendDay {
-  date: string;
-  concepts: string[];
-  topicCount: number;
-  present: boolean;
 }
 
 interface ConceptQualityTag {
@@ -1000,89 +993,14 @@ export default function DailyTopicAnalysisPanel({
         </div>
       )}
 
-      <Dialog open={Boolean(selectedStock)} onOpenChange={(open) => !open && closeStockDetail()}>
-        <DialogContent className="max-h-[85vh] overflow-auto sm:max-w-4xl">
-          <DialogHeader>
-            <DialogTitle>{selectedStock?.stock_name || '股票详情'}</DialogTitle>
-            <DialogDescription>当天概念、来源话题和最近 7 天已提取结果</DialogDescription>
-          </DialogHeader>
-          {selectedStock && (
-            <div className="flex flex-col gap-4">
-              <div className="grid gap-3 md:grid-cols-3">
-                <div className="rounded-md border border-gray-200 p-3">
-                  <div className="text-sm text-muted-foreground">代码</div>
-                  <div className="mt-1 font-medium">
-                    {selectedStock.stock_code ? `${selectedStock.stock_code}${selectedStock.market ? `.${selectedStock.market}` : ''}` : '未匹配'}
-                  </div>
-                </div>
-                <div className="rounded-md border border-gray-200 p-3">
-                  <div className="text-sm text-muted-foreground">置信度</div>
-                  <div className="mt-1 font-medium">{Math.round((selectedStock.confidence || 0) * 100)}%</div>
-                </div>
-                <div className="rounded-md border border-gray-200 p-3">
-                  <div className="text-sm text-muted-foreground">来源话题</div>
-                  <div className="mt-1">{renderTopicButtons(selectedStock.topic_ids)}</div>
-                </div>
-              </div>
-              <div>
-                <div className="mb-2 text-sm font-medium">当天概念</div>
-                <div className="flex flex-wrap gap-1">
-                  {selectedStock.concepts.map((concept) => (
-                    <Badge key={concept} variant="secondary">
-                      {concept}
-                    </Badge>
-                  ))}
-                </div>
-              </div>
-              <div>
-                <div className="mb-2 text-sm font-medium">提取理由</div>
-                <div className="rounded-md bg-gray-50 p-3 text-sm leading-6 text-muted-foreground">
-                  {selectedStock.reason || '暂无'}
-                </div>
-              </div>
-              <div>
-                <div className="mb-2 text-sm font-medium">最近 7 天趋势</div>
-                {loadingStockTrend ? (
-                  <div className="text-sm text-muted-foreground">加载中...</div>
-                ) : (
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>日期</TableHead>
-                        <TableHead>是否出现</TableHead>
-                        <TableHead>来源话题数</TableHead>
-                        <TableHead>概念</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {stockTrend.map((item) => (
-                        <TableRow key={item.date}>
-                          <TableCell>{item.date}</TableCell>
-                          <TableCell>{item.present ? '是' : '否'}</TableCell>
-                          <TableCell>{item.topicCount}</TableCell>
-                          <TableCell className="whitespace-normal">
-                            <div className="flex flex-wrap gap-1">
-                              {item.concepts.length > 0 ? (
-                                item.concepts.map((concept) => (
-                                  <Badge key={concept} variant="outline">
-                                    {concept}
-                                  </Badge>
-                                ))
-                              ) : (
-                                <span className="text-muted-foreground">-</span>
-                              )}
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                )}
-              </div>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
+      <DailyStockDetailDialog
+        loadingStockTrend={loadingStockTrend}
+        onOpenChange={(open) => !open && closeStockDetail()}
+        onOpenTopicDetail={(topicId) => void openTopicDetail(topicId)}
+        open={Boolean(selectedStock)}
+        selectedStock={selectedStock}
+        stockTrend={stockTrend}
+      />
 
       <DailyTopicDetailDialog
         loading={loadingTopicDetail}
