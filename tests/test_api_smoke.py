@@ -83,7 +83,10 @@ class ApiSmokeTests(unittest.TestCase):
             " ".join(str(arg) for arg in args).encode("gbk")
 
         with (
-            patch("backend.routes.file_routes._clear_group_file_data", return_value={"files": 0}),
+            patch(
+                "backend.routes.file_routes._clear_file_database_response",
+                return_value={"message": "群组 group-1 的文件数据和图片缓存已删除", "deleted": {"files": 0}},
+            ),
             patch("builtins.print", side_effect=gbk_print),
         ):
             response = TestClient(create_app()).post("/api/files/clear/group-1")
