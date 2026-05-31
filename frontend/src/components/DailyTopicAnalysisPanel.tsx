@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { CalendarDays, FileText, RefreshCw, Sparkles, TrendingUp } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -270,6 +270,8 @@ export default function DailyTopicAnalysisPanel({
   const [recommendedCompanies, setRecommendedCompanies] = useState<Set<string>>(new Set());
   const [loadingRecommendations, setLoadingRecommendations] = useState(false);
   const [onlyRecommendationHits, setOnlyRecommendationHits] = useState(false);
+  const topicDetailRequestRef = useRef(0);
+  const stockTrendRequestRef = useRef(0);
 
   const conceptStats = useMemo<ConceptStat[]>(() => {
     const conceptMap = new Map<string, { aliases: Set<string>; stocks: Set<string>; topics: Set<string>; recommendedStocks: Set<string> }>();
@@ -599,22 +601,34 @@ export default function DailyTopicAnalysisPanel({
 
   const openTopicDetail = async (topicId: string | number) => {
     const id = String(topicId);
+    const requestId = topicDetailRequestRef.current + 1;
+    topicDetailRequestRef.current = requestId;
     try {
       setSelectedTopicId(id);
       setTopicDetail(null);
       setLoadingTopicDetail(true);
       const detail = await apiClient.getTopicDetail(id, groupId);
+      if (topicDetailRequestRef.current !== requestId) {
+        return;
+      }
       setTopicDetail(detail);
     } catch (error) {
+      if (topicDetailRequestRef.current !== requestId) {
+        return;
+      }
       toast.error(`加载话题详情失败: ${error instanceof Error ? error.message : '未知错误'}`);
     } finally {
-      setLoadingTopicDetail(false);
+      if (topicDetailRequestRef.current === requestId) {
+        setLoadingTopicDetail(false);
+      }
     }
   };
 
   const openStockDetail = async (stock: DailyStockConcept) => {
     const selectedReportDate = reportDate;
     const targetKey = stockKey(stock);
+    const requestId = stockTrendRequestRef.current + 1;
+    stockTrendRequestRef.current = requestId;
     setSelectedStock(stock);
     setStockTrend([]);
     setLoadingStockTrend(true);
@@ -629,6 +643,9 @@ export default function DailyTopicAnalysisPanel({
           }
         })
       );
+      if (stockTrendRequestRef.current !== requestId) {
+        return;
+      }
       setStockTrend(
         dates.map((date, index) => {
           const matched = results[index]?.stocks.find((item) => stockKey(item) === targetKey);
@@ -642,8 +659,24 @@ export default function DailyTopicAnalysisPanel({
         })
       );
     } finally {
-      setLoadingStockTrend(false);
+      if (stockTrendRequestRef.current === requestId) {
+        setLoadingStockTrend(false);
+      }
     }
+  };
+
+  const closeTopicDetail = () => {
+    topicDetailRequestRef.current += 1;
+    setSelectedTopicId(null);
+    setTopicDetail(null);
+    setLoadingTopicDetail(false);
+  };
+
+  const closeStockDetail = () => {
+    stockTrendRequestRef.current += 1;
+    setSelectedStock(null);
+    setStockTrend([]);
+    setLoadingStockTrend(false);
   };
 
   const renderTopicButtons = (topicIds: Array<string | number>) => (
@@ -1143,7 +1176,7 @@ export default function DailyTopicAnalysisPanel({
         </div>
       )}
 
-      <Dialog open={Boolean(selectedStock)} onOpenChange={(open) => !open && setSelectedStock(null)}>
+      <Dialog open={Boolean(selectedStock)} onOpenChange={(open) => !open && closeStockDetail()}>
         <DialogContent className="max-h-[85vh] overflow-auto sm:max-w-4xl">
           <DialogHeader>
             <DialogTitle>{selectedStock?.stock_name || '股票详情'}</DialogTitle>
@@ -1227,7 +1260,7 @@ export default function DailyTopicAnalysisPanel({
         </DialogContent>
       </Dialog>
 
-      <Dialog open={Boolean(selectedTopicId)} onOpenChange={(open) => !open && setSelectedTopicId(null)}>
+      <Dialog open={Boolean(selectedTopicId)} onOpenChange={(open) => !open && closeTopicDetail()}>
         <DialogContent className="max-h-[85vh] overflow-auto sm:max-w-4xl">
           <DialogHeader>
             <DialogTitle>来源话题 {selectedTopicId}</DialogTitle>
