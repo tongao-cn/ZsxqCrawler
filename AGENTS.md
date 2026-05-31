@@ -92,6 +92,7 @@ Test hygiene:
 
 ## 7. Git And Multi-Agent Hygiene
 
+- Work directly on `main` for future changes. Do not create or continue feature branches unless the user explicitly asks for one.
 - Commit after each logically coherent and verified change.
 - Stage and commit only your own changes; leave unrelated user or other-agent work untouched.
 - Never overwrite, revert, delete, or move user/other-agent changes unless explicitly asked.

@@ -1,6 +1,6 @@
 'use client';
 
-import { ChangeEvent, ClipboardEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ChangeEvent, ClipboardEvent, KeyboardEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Eye, ImagePlus, RefreshCw, Search, Sparkles } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -369,6 +369,14 @@ export default function StockTopicAnalysisPanel({ groupId, onTaskCreated }: Stoc
     await extractStocksFromImageFile(imageFile);
   };
 
+  const handleStockInputKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (event.key !== 'Enter' || event.shiftKey || event.nativeEvent.isComposing) {
+      return;
+    }
+    event.preventDefault();
+    void handleSearch();
+  };
+
   useTaskStatus(activeBatchAnalysis?.taskId, {
     enabled: Boolean(activeBatchAnalysis),
     onTerminal: async (task) => {
@@ -403,6 +411,7 @@ export default function StockTopicAnalysisPanel({ groupId, onTaskCreated }: Stoc
               value={stockInput}
               onChange={(event) => setStockInput(event.target.value)}
               onPaste={(event) => void handleStockInputPaste(event)}
+              onKeyDown={handleStockInputKeyDown}
               placeholder={'例如：德龙激光、宁德时代\n中际旭创 贵州茅台'}
               className="min-h-24 resize-y"
             />
