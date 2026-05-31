@@ -5,6 +5,8 @@ import argparse
 import asyncio
 import sys
 import time
+from dataclasses import dataclass, field
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -24,10 +26,27 @@ from backend.routes.crawl_routes import crawl_latest_until_complete
 from backend.routes.daily_analysis_routes import DailyAnalysisRequest, create_daily_report
 from backend.routes.daily_stock_concept_routes import DailyStockConceptRequest, create_daily_stock_concepts
 from backend.schemas.crawl import CrawlSettingsRequest
+from backend.services.a_share_research_return_smoke_service import load_knowaction_trade_dates
 from backend.services.task_runtime import get_task_logs_state, get_task_state, request_runtime_shutdown
 
 
 TERMINAL_STATUSES = {"completed", "failed", "cancelled"}
+SHANGHAI_TZ = timezone(timedelta(hours=8))
+
+
+@dataclass
+class WorkflowSummary:
+    tasks: list[tuple[str, dict[str, Any]]] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
+    tdx_result: dict[str, Any] | None = None
+    tdx_skipped_reason: str | None = None
+
+    def add_task(self, label: str, task: dict[str, Any]) -> None:
+        self.tasks.append((label, task))
+
+    def warn(self, message: str) -> None:
+        self.warnings.append(message)
+        print(f"WARNING: {message}")
 
 
 def _task_summary(task: dict[str, Any]) -> str:
@@ -144,12 +163,87 @@ async def _export_tdx(group_id: str, group_name: str | None) -> dict[str, Any]:
     )
 
 
+def _result_int(task: dict[str, Any], key: str) -> int:
+    try:
+        return int((task.get("result") or {}).get(key) or 0)
+    except Exception:
+        return 0
+
+
+def _has_new_recommendation_work(a_share_task: dict[str, Any]) -> bool:
+    return _result_int(a_share_task, "added_mentions") > 0 or _result_int(a_share_task, "topic_stock_extractions") > 0
+
+
+def _is_weekday(now: datetime | None = None) -> bool:
+    current = now or datetime.now(SHANGHAI_TZ)
+    return current.weekday() < 5
+
+
+def _is_trade_calendar_open(now: datetime | None = None) -> bool:
+    current = now or datetime.now(SHANGHAI_TZ)
+    day = current.date()
+    return day.isoformat() in load_knowaction_trade_dates(day - timedelta(days=1), day + timedelta(days=1))
+
+
+def _should_export_tdx(policy: str, summary: WorkflowSummary) -> bool:
+    if policy == "always":
+        return True
+    if policy == "never":
+        summary.tdx_skipped_reason = "tdx export policy is never"
+        return False
+    if policy == "weekday":
+        if _is_weekday():
+            return True
+        summary.tdx_skipped_reason = "today is not a weekday"
+        return False
+    if policy == "trade-calendar":
+        try:
+            if _is_trade_calendar_open():
+                return True
+            summary.tdx_skipped_reason = "today is not open in KnowAction trade_calendar"
+            return False
+        except Exception as exc:
+            summary.warn(f"trade-calendar check failed, falling back to weekday policy: {exc}")
+            if _is_weekday():
+                return True
+            summary.tdx_skipped_reason = "trade-calendar unavailable and today is not a weekday"
+            return False
+    raise ValueError(f"Unsupported TDX export policy: {policy}")
+
+
+def _print_health_summary(summary: WorkflowSummary) -> None:
+    print("--- health summary ---")
+    for label, task in summary.tasks:
+        print(f"{label}: task_id={task.get('task_id')}, status={task.get('status')}, {_task_summary(task)}")
+
+    if summary.tdx_result:
+        blocks = summary.tdx_result.get("blocks") or []
+        block_text = ", ".join(
+            f"{block.get('block_name')}={block.get('written_count')}"
+            for block in blocks
+        )
+        print(
+            "tdx: "
+            f"status=exported, total_written={summary.tdx_result.get('total_written')}, "
+            f"date={summary.tdx_result.get('selected_start_date')}~{summary.tdx_result.get('selected_end_date')}, "
+            f"blocks={block_text}"
+        )
+    elif summary.tdx_skipped_reason:
+        print(f"tdx: status=skipped, reason={summary.tdx_skipped_reason}")
+
+    if summary.warnings:
+        print("warnings:")
+        for warning in summary.warnings:
+            print(f"- {warning}")
+
+
 def _raise_for_task(task: dict[str, Any], label: str) -> None:
     if task.get("status") != "completed":
         raise RuntimeError(f"{label} task did not complete: {task.get('status')} {task.get('message')}")
 
 
 async def _run(args: argparse.Namespace) -> None:
+    summary = WorkflowSummary()
     print(f"Refreshing group_id={args.group_id}")
     crawl_task_id = await _create_crawl_task(args.group_id)
     print(f"crawl_task_id={crawl_task_id}")
@@ -159,6 +253,7 @@ async def _run(args: argparse.Namespace) -> None:
         timeout_seconds=args.crawl_timeout_seconds,
         log_tail=args.log_tail,
     )
+    summary.add_task("crawl", crawl_task)
     _raise_for_task(crawl_task, "crawl")
 
     a_share_task_id = await _create_a_share_task(args.group_id, args.days, args.concurrency)
@@ -169,34 +264,50 @@ async def _run(args: argparse.Namespace) -> None:
         timeout_seconds=args.analysis_timeout_seconds,
         log_tail=args.log_tail,
     )
+    summary.add_task("a-share", a_share_task)
     _raise_for_task(a_share_task, "a-share")
 
     if args.daily_stock_concepts:
-        daily_stock_task_id = await _create_daily_stock_concept_task(args.group_id, args.comments_per_topic)
-        print(f"daily_stock_concepts_task_id={daily_stock_task_id}")
-        daily_stock_task = _wait_task(
-            daily_stock_task_id,
-            poll_seconds=args.poll_seconds,
-            timeout_seconds=args.daily_timeout_seconds,
-            log_tail=args.log_tail,
-        )
-        _raise_for_task(daily_stock_task, "daily stock concepts")
+        try:
+            daily_stock_task_id = await _create_daily_stock_concept_task(args.group_id, args.comments_per_topic)
+            print(f"daily_stock_concepts_task_id={daily_stock_task_id}")
+            daily_stock_task = _wait_task(
+                daily_stock_task_id,
+                poll_seconds=args.poll_seconds,
+                timeout_seconds=args.daily_timeout_seconds,
+                log_tail=args.log_tail,
+            )
+            summary.add_task("daily stock concepts", daily_stock_task)
+            _raise_for_task(daily_stock_task, "daily stock concepts")
+        except Exception as exc:
+            summary.warn(f"daily stock concepts failed: {exc}")
 
     if args.daily_topic_report:
-        daily_report_task_id = await _create_daily_topic_report_task(args.group_id, args.comments_per_topic)
-        print(f"daily_topic_report_task_id={daily_report_task_id}")
-        daily_report_task = _wait_task(
-            daily_report_task_id,
-            poll_seconds=args.poll_seconds,
-            timeout_seconds=args.daily_timeout_seconds,
-            log_tail=args.log_tail,
-        )
-        _raise_for_task(daily_report_task, "daily topic report")
+        try:
+            daily_report_task_id = await _create_daily_topic_report_task(args.group_id, args.comments_per_topic)
+            print(f"daily_topic_report_task_id={daily_report_task_id}")
+            daily_report_task = _wait_task(
+                daily_report_task_id,
+                poll_seconds=args.poll_seconds,
+                timeout_seconds=args.daily_timeout_seconds,
+                log_tail=args.log_tail,
+            )
+            summary.add_task("daily topic report", daily_report_task)
+            _raise_for_task(daily_report_task, "daily topic report")
+        except Exception as exc:
+            summary.warn(f"daily topic report failed: {exc}")
 
     if args.export_tdx:
-        tdx_result = await _export_tdx(args.group_id, args.group_name)
-        print(f"tdx_export={tdx_result}")
+        if args.skip_tdx_when_no_new_mentions and not _has_new_recommendation_work(a_share_task):
+            summary.tdx_skipped_reason = "recommendation analysis produced no new mentions or topic extractions"
+        elif _should_export_tdx(args.tdx_export_policy, summary):
+            try:
+                summary.tdx_result = await _export_tdx(args.group_id, args.group_name)
+                print(f"tdx_export={summary.tdx_result}")
+            except Exception as exc:
+                summary.warn(f"tdx export failed: {exc}")
 
+    _print_health_summary(summary)
     print("Refresh completed")
 
 
@@ -215,6 +326,8 @@ def main() -> None:
     parser.add_argument("--daily-stock-concepts", action="store_true")
     parser.add_argument("--daily-topic-report", action="store_true")
     parser.add_argument("--export-tdx", action="store_true")
+    parser.add_argument("--tdx-export-policy", choices=("always", "weekday", "trade-calendar", "never"), default="weekday")
+    parser.add_argument("--skip-tdx-when-no-new-mentions", action=argparse.BooleanOptionalAction, default=True)
     parser.add_argument("--group-name", default="纪要又要")
     parser.add_argument("--log-tail", type=int, default=20)
     args = parser.parse_args()
