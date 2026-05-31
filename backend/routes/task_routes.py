@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import queue
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Query
@@ -13,7 +14,8 @@ from backend.services.task_runtime import (
     get_task_logs_state,
     get_task_state,
     list_tasks,
-    sse_connections,
+    subscribe_task_logs,
+    unsubscribe_task_logs,
     stop_task,
 )
 
@@ -39,6 +41,22 @@ def _streaming_response_headers() -> dict:
         "Access-Control-Allow-Origin": "*",
         "Access-Control-Allow-Headers": "*",
     }
+
+
+def _wait_for_task_log(subscription: queue.Queue[str], timeout: float = 0.5) -> Optional[str]:
+    try:
+        return subscription.get(timeout=timeout)
+    except queue.Empty:
+        return None
+
+
+def _drain_task_logs(subscription: queue.Queue[str]) -> list[str]:
+    logs = []
+    while True:
+        try:
+            logs.append(subscription.get_nowait())
+        except queue.Empty:
+            return logs
 
 
 @router.get("")
@@ -98,35 +116,26 @@ async def get_task_logs(task_id: str):
 async def stream_task_logs(task_id: str):
     """SSE流式传输任务日志"""
     async def event_stream():
-        # 初始化连接
-        if task_id not in sse_connections:
-            sse_connections[task_id] = []
+        subscription = subscribe_task_logs(task_id)
 
-        # 发送历史日志
-        logs = get_task_logs_state(task_id) or []
-        for log in logs:
-            yield _sse_event({"type": "log", "message": log})
-
-        # 发送任务状态
-        task = get_task_state(task_id)
-        if task:
-            yield _sse_event(_task_status_payload(task))
-
-        # 记录当前日志数量，用于检测新日志
-        last_log_count = len(logs)
-
-        # 保持连接活跃
         try:
+            # 发送历史日志
+            logs = get_task_logs_state(task_id) or []
+            for log in logs:
+                yield _sse_event({"type": "log", "message": log})
+
+            # 发送任务状态
+            task = get_task_state(task_id)
+            if task:
+                yield _sse_event(_task_status_payload(task))
+
+            # 保持连接活跃
             while True:
-                # 检查是否有新日志
-                logs = get_task_logs_state(task_id) or []
-                current_log_count = len(logs)
-                if current_log_count > last_log_count:
-                    # 发送新日志
-                    new_logs = logs[last_log_count:]
-                    for log in new_logs:
-                        yield _sse_event({"type": "log", "message": log})
-                    last_log_count = current_log_count
+                log = await asyncio.to_thread(_wait_for_task_log, subscription, 0.5)
+                if log is not None:
+                    yield _sse_event({"type": "log", "message": log})
+                for queued_log in _drain_task_logs(subscription):
+                    yield _sse_event({"type": "log", "message": queued_log})
 
                 # 检查任务状态变化
                 task = get_task_state(task_id)
@@ -141,11 +150,12 @@ async def stream_task_logs(task_id: str):
 
                 # 发送心跳
                 yield _sse_event({"type": "heartbeat"})
-                await asyncio.sleep(0.5)
 
         except asyncio.CancelledError:
             # 客户端断开连接
             pass
+        finally:
+            unsubscribe_task_logs(task_id, subscription)
 
     return StreamingResponse(
         event_stream(),

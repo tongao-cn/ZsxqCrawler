@@ -1,4 +1,5 @@
 import json
+import queue
 import unittest
 from importlib.util import find_spec
 
@@ -38,6 +39,18 @@ class TaskRoutesHelperTests(unittest.TestCase):
             },
             _streaming_response_headers(),
         )
+
+    @unittest.skipUnless(HAS_TASK_ROUTE_DEPS, "task route dependencies are not installed")
+    def test_task_log_queue_helpers_wait_and_drain_messages(self):
+        from backend.routes.task_routes import _drain_task_logs, _wait_for_task_log
+
+        subscription = queue.Queue()
+        subscription.put("first")
+        subscription.put("second")
+
+        self.assertEqual("first", _wait_for_task_log(subscription, timeout=0.01))
+        self.assertEqual(["second"], _drain_task_logs(subscription))
+        self.assertIsNone(_wait_for_task_log(subscription, timeout=0.01))
 
 
 if __name__ == "__main__":

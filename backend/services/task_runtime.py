@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import threading
+import queue
 from datetime import datetime
 from typing import Any, Callable, Dict, List, Optional
 
@@ -25,7 +26,7 @@ def get_task_store() -> TaskStore:
 current_tasks: Dict[str, Dict[str, Any]] = {}
 task_counter = 0
 task_logs: Dict[str, List[str]] = {}
-sse_connections: Dict[str, List[Any]] = {}
+sse_connections: Dict[str, List[queue.Queue[str]]] = {}
 task_stop_flags: Dict[str, bool] = {}
 crawler_instances: Dict[str, Any] = {}
 file_downloader_instances: Dict[str, Any] = {}
@@ -216,8 +217,34 @@ def add_task_log(task_id: str, log_message: str) -> None:
     broadcast_log(task_id, formatted_log)
 
 
+def subscribe_task_logs(task_id: str) -> queue.Queue[str]:
+    subscriber: queue.Queue[str] = queue.Queue()
+    with _state_lock:
+        sse_connections.setdefault(task_id, []).append(subscriber)
+    return subscriber
+
+
+def unsubscribe_task_logs(task_id: str, subscriber: queue.Queue[str]) -> None:
+    with _state_lock:
+        subscribers = sse_connections.get(task_id)
+        if not subscribers:
+            return
+        try:
+            subscribers.remove(subscriber)
+        except ValueError:
+            return
+        if not subscribers:
+            sse_connections.pop(task_id, None)
+
+
 def broadcast_log(task_id: str, log_message: str) -> None:
-    pass
+    with _state_lock:
+        subscribers = list(sse_connections.get(task_id, []))
+    for subscriber in subscribers:
+        try:
+            subscriber.put_nowait(log_message)
+        except Exception:
+            pass
 
 
 def update_task(

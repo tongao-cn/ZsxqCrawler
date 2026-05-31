@@ -1,4 +1,5 @@
 import unittest
+import queue
 from threading import Event
 from unittest.mock import patch
 
@@ -178,6 +179,23 @@ class TaskRuntimeHelperTests(unittest.TestCase):
                 self.assertEqual(["first"], task_runtime.task_logs["task-1"])
             finally:
                 task_runtime.task_logs.pop("task-1", None)
+
+    def test_task_log_subscription_receives_broadcast_until_unsubscribed(self):
+        from backend.services import task_runtime
+
+        subscriber = task_runtime.subscribe_task_logs("task-1")
+        try:
+            task_runtime.broadcast_log("task-1", "first")
+            self.assertEqual("first", subscriber.get_nowait())
+
+            task_runtime.unsubscribe_task_logs("task-1", subscriber)
+            task_runtime.broadcast_log("task-1", "second")
+
+            with self.assertRaises(queue.Empty):
+                subscriber.get_nowait()
+            self.assertNotIn("task-1", task_runtime.sse_connections)
+        finally:
+            task_runtime.sse_connections.pop("task-1", None)
 
     def test_update_task_does_not_overwrite_cancelled_status(self):
         from backend.services import task_runtime
