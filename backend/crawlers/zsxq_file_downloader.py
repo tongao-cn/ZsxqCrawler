@@ -628,6 +628,7 @@ class ZSXQFileDownloader:
 
         download_retries = 3
         last_error = None
+        last_error_code = None
 
         for attempt in range(download_retries):
             try:
@@ -639,7 +640,16 @@ class ZSXQFileDownloader:
                 download_url = self.get_download_url(file_id)
                 if not download_url:
                     self.log(f"   ❌ 无法获取下载链接")
-                    self.file_db.update_file_download_status(file_id, 'failed')
+                    error_detail = self.last_download_url_error or {
+                        "code": "download_url_unavailable",
+                        "message": "无法获取下载链接",
+                    }
+                    self.file_db.update_file_download_status(
+                        file_id,
+                        'failed',
+                        error_code=str(error_detail.get("code") or "download_url_unavailable"),
+                        error_message=str(error_detail.get("message") or "无法获取下载链接"),
+                    )
                     return False
 
                 self.log(f"   🚀 开始下载...")
@@ -685,7 +695,12 @@ class ZSXQFileDownloader:
                                 # 检查是否需要停止
                                 if self.check_stop():
                                     self.log("🛑 下载过程中被停止")
-                                    self.file_db.update_file_download_status(file_id, 'failed')
+                                    self.file_db.update_file_download_status(
+                                        file_id,
+                                        'failed',
+                                        error_code='stopped',
+                                        error_message='下载过程中被停止',
+                                    )
                                     if os.path.exists(temp_path):
                                         os.remove(temp_path)
                                     return False
@@ -697,6 +712,7 @@ class ZSXQFileDownloader:
                     # 验证文件大小
                     final_size = os.path.getsize(temp_path)
                     if expected_size > 0 and final_size != expected_size:
+                        last_error_code = "size_mismatch"
                         last_error = f"文件大小不匹配: 预期{expected_size:,}, 实际{final_size:,}"
                         self.log(f"   ⚠️ {last_error}")
                         os.remove(temp_path)
@@ -716,10 +732,12 @@ class ZSXQFileDownloader:
 
                     return True
 
+                last_error_code = "http_status"
                 last_error = f"HTTP {response.status_code}"
                 self.log(f"   ❌ 下载失败: {last_error}")
 
             except Exception as e:
+                last_error_code = "download_exception"
                 last_error = str(e)
                 self.log(f"   ❌ 下载异常: {e}")
                 temp_path = f"{file_path}.part"
@@ -728,7 +746,12 @@ class ZSXQFileDownloader:
                     self.log(f"   🗑️ 删除不完整文件")
 
         self.log(f"   🚫 文件下载重试{download_retries}次仍失败: {last_error}")
-        self.file_db.update_file_download_status(file_id, 'failed')
+        self.file_db.update_file_download_status(
+            file_id,
+            'failed',
+            error_code=last_error_code or "download_failed",
+            error_message=last_error or "文件下载失败",
+        )
         return False
 
     def _apply_download_intervals(self):

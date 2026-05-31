@@ -37,8 +37,8 @@ class FakeDownloadFileDb:
     def __init__(self):
         self.status_updates = []
 
-    def update_file_download_status(self, file_id, status, local_path=None):
-        self.status_updates.append((file_id, status, local_path))
+    def update_file_download_status(self, file_id, status, local_path=None, error_code=None, error_message=None):
+        self.status_updates.append((file_id, status, local_path, error_code, error_message))
 
 
 class FakeDownloadResponse:
@@ -197,7 +197,7 @@ class FileDownloaderDownloadTests(unittest.TestCase):
 
             self.assertFalse(result)
             self.assertEqual(3, len(session.get_calls))
-            self.assertEqual((101, "failed", None), downloader.file_db.status_updates[-1])
+            self.assertEqual((101, "failed", None, "size_mismatch"), downloader.file_db.status_updates[-1][:4])
             self.assertFalse((Path(temp_dir) / "memo.pdf").exists())
             self.assertFalse((Path(temp_dir) / "memo.pdf.part").exists())
 

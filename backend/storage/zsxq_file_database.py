@@ -290,6 +290,8 @@ class ZSXQFileDatabase:
         file_id: int,
         status: str,
         local_path: Optional[str] = None,
+        error_code: Optional[str] = None,
+        error_message: Optional[str] = None,
     ):
         """更新文件下载状态"""
         self.cursor.execute('''
@@ -299,10 +301,30 @@ class ZSXQFileDatabase:
             download_time = CASE
                 WHEN ? = 'completed' THEN CURRENT_TIMESTAMP::text
                 ELSE download_time
-            END
+            END,
+            download_error_code = CASE
+                WHEN ? = 'failed' THEN ?
+                ELSE NULL
+            END,
+            download_error_message = CASE
+                WHEN ? = 'failed' THEN ?
+                ELSE NULL
+            END,
+            last_download_attempt_at = CURRENT_TIMESTAMP::text
         WHERE file_id = ?
           AND (? IS NULL OR group_id = ?)
-        ''', (status, local_path, status, file_id, _group_id_param(self.group_id), _group_id_param(self.group_id)))
+        ''', (
+            status,
+            local_path,
+            status,
+            status,
+            error_code,
+            status,
+            error_message,
+            file_id,
+            _group_id_param(self.group_id),
+            _group_id_param(self.group_id),
+        ))
         self.conn.commit()
     
     def insert_talk(self, topic_id: int, talk_data: Dict[str, Any]):

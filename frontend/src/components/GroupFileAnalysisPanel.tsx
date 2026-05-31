@@ -422,6 +422,31 @@ export default function GroupFileAnalysisPanel({
     }
   };
 
+  const handleDownloadFilteredResults = async () => {
+    if (batchDownloadTaskId) {
+      return;
+    }
+
+    try {
+      const response = await apiClient.downloadFilteredFiles(groupId, {
+        status: statusFilter === 'all' ? undefined : statusFilter,
+        search: searchQuery || undefined,
+      });
+      onTaskCreated?.(response.task_id);
+      setBatchDownloadTaskId(response.task_id);
+      setBatchDownloadFileIds([]);
+      toast.success(`筛选结果下载任务已创建: ${response.task_id}`);
+    } catch (error) {
+      const conflict = getTaskConflictDetail(error);
+      if (conflict?.task_id) {
+        toast.error(`已有任务 ${conflict.task_id} 正在运行`);
+        onTaskConflict?.(conflict.task_id);
+      } else {
+        toast.error(`筛选结果下载任务创建失败: ${error instanceof Error ? error.message : '未知错误'}`);
+      }
+    }
+  };
+
   const handleBatchAnalyzeCurrentPage = async () => {
     if (pendingAnalysisFiles.length === 0 || batchAnalyzing) {
       return;
@@ -631,6 +656,15 @@ export default function GroupFileAnalysisPanel({
         </Button>
         <Button
           size="sm"
+          variant="outline"
+          onClick={() => void handleDownloadFilteredResults()}
+          disabled={loading || Boolean(batchDownloadTaskId)}
+        >
+          <Download className="h-4 w-4 mr-2" />
+          下载筛选结果
+        </Button>
+        <Button
+          size="sm"
           onClick={() => void handleBatchAnalyzeCurrentPage()}
           disabled={pendingAnalysisFiles.length === 0 || batchAnalyzing}
         >
@@ -775,6 +809,11 @@ export default function GroupFileAnalysisPanel({
                                   : 'text-muted-foreground'
                             }`} title={fileTask.message}>
                               {fileTask.message}
+                            </div>
+                          )}
+                          {!fileTask && file.download_status === 'failed' && file.download_error_message && (
+                            <div className="max-w-48 truncate text-xs text-red-600" title={file.download_error_message}>
+                              {file.download_error_code ? `${file.download_error_code}: ` : ''}{file.download_error_message}
                             </div>
                           )}
                         </div>

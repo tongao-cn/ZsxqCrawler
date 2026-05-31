@@ -55,6 +55,9 @@ Make file download, file sync, and file AI analysis behave like durable group ta
 - File list search now includes related topic/article/talk text.
 - File list GET no longer writes download status as a side effect.
 - Task listing supports server-side group/type filters.
+- Download failures now persist `download_error_code`, `download_error_message`, and `last_download_attempt_at`.
+- File workbench can create one task for all downloadable files matching the current search/status filter.
+- Task list rows now summarize file download and file AI analysis task results.
 
 ## Changed Files
 
@@ -64,16 +67,23 @@ Make file download, file sync, and file AI analysis behave like durable group ta
 - `backend/schemas/files.py`
 - `backend/services/file_workflow_service.py`
 - `backend/services/task_runtime.py`
+- `backend/storage/postgres_core_schema.py`
+- `backend/storage/zsxq_file_database.py`
 - `frontend/src/components/DataPanel.tsx`
 - `frontend/src/components/GroupFileAnalysisPanel.tsx`
 - `frontend/src/components/TaskListCompact.tsx`
 - `frontend/src/lib/api/files.ts`
+- `frontend/src/lib/api/types.ts`
 - `frontend/src/lib/api/tasks.ts`
 - `tests/test_file_routes_helpers.py`
+- `tests/test_zsxq_file_database_helpers.py`
 - `tests/test_zsxq_file_downloader_helpers.py`
 - `docs/file-download-task-dock-plan.md`
 
 ## Verification Results
 
 - `$env:PYTHONIOENCODING='utf-8'; uv run python -m unittest tests.test_file_routes_helpers tests.test_zsxq_file_downloader_helpers tests.test_task_routes_helpers tests.test_task_runtime_helpers`: passed.
+- `$env:PYTHONIOENCODING='utf-8'; uv run python -m unittest tests.test_zsxq_file_database_helpers tests.test_file_routes_helpers tests.test_zsxq_file_downloader_helpers tests.test_task_routes_helpers tests.test_task_runtime_helpers`: passed.
+- `$env:PYTHONIOENCODING='utf-8'; uv run python -m unittest tests.test_postgres_core_schema tests.test_zsxq_file_database_helpers`: passed.
+- `$env:PYTHONIOENCODING='utf-8'; uv run manage-postgres-core-schema --apply`: passed.
 - `npm run build` in `frontend`: passed.

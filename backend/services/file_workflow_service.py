@@ -419,6 +419,127 @@ def _load_download_file_records(
     return records, missing
 
 
+def _add_file_search_condition(conditions: list[str], params: list[Any], search: Optional[str]) -> None:
+    search_text = (search or "").strip()
+    if not search_text:
+        return
+
+    search_pattern = f"%{search_text.lower()}%"
+    conditions.append(
+        """
+        (
+            LOWER(COALESCE(f.name, '')) LIKE ?
+            OR EXISTS (
+                SELECT 1
+                FROM file_topic_relations fr
+                LEFT JOIN topics t ON t.topic_id = fr.topic_id
+                LEFT JOIN talks tk ON tk.topic_id = fr.topic_id
+                LEFT JOIN articles ar ON ar.topic_id = fr.topic_id
+                WHERE fr.file_id = f.file_id
+                  AND (
+                      LOWER(COALESCE(t.title, '')) LIKE ?
+                      OR LOWER(COALESCE(t.annotation, '')) LIKE ?
+                      OR LOWER(COALESCE(tk.text, '')) LIKE ?
+                      OR LOWER(COALESCE(ar.title, '')) LIKE ?
+                  )
+            )
+            OR EXISTS (
+                SELECT 1
+                FROM topic_files tf
+                LEFT JOIN topics t2 ON t2.topic_id = tf.topic_id
+                WHERE tf.file_id = f.file_id
+                  AND (
+                      LOWER(COALESCE(tf.name, '')) LIKE ?
+                      OR LOWER(COALESCE(t2.title, '')) LIKE ?
+                      OR LOWER(COALESCE(t2.annotation, '')) LIKE ?
+                  )
+            )
+        )
+        """
+    )
+    params.extend([search_pattern] * 8)
+
+
+def _load_filtered_download_file_records(
+    downloader: ZSXQFileDownloader,
+    group_id: str,
+    *,
+    status: Optional[str] = None,
+    search: Optional[str] = None,
+    max_files: Optional[int] = None,
+) -> list[tuple[int, str, int, int]]:
+    conditions = ["f.group_id = ?"]
+    params: list[Any] = [_query_group_id(group_id)]
+    requested_status = str(status or "").strip()
+    if requested_status and requested_status != "all":
+        if requested_status == "completed":
+            conditions.append("f.download_status IN (?, ?, ?)")
+            params.extend(["completed", "downloaded", "skipped"])
+        else:
+            conditions.append("f.download_status = ?")
+            params.append(requested_status)
+    else:
+        conditions.append("(f.download_status IS NULL OR f.download_status NOT IN (?, ?, ?))")
+        params.extend(["completed", "downloaded", "skipped"])
+
+    _add_file_search_condition(conditions, params, search)
+    limit_clause = "LIMIT ?" if max_files else ""
+    if max_files:
+        params.append(int(max_files))
+
+    downloader.file_db.cursor.execute(
+        f"""
+        SELECT f.file_id, f.name, f.size, f.download_count
+        FROM files f
+        WHERE {' AND '.join(conditions)}
+        ORDER BY f.create_time DESC, f.download_count DESC
+        {limit_clause}
+        """,
+        tuple(params),
+    )
+    rows = downloader.file_db.cursor.fetchall()
+    return [
+        (
+            int(row[0]),
+            str(row[1] or f"file_{int(row[0])}"),
+            int(row[2] or 0),
+            int(row[3] or 0),
+        )
+        for row in rows
+    ]
+
+
+def _run_download_records(
+    task_id: str,
+    downloader: ZSXQFileDownloader,
+    records: Sequence[tuple[int, str, int, int]],
+    stats: Dict[str, int],
+) -> Dict[str, int]:
+    for index, (file_id, file_name, file_size, download_count) in enumerate(records, 1):
+        if is_task_stopped(task_id):
+            add_task_log(task_id, "🛑 下载任务被停止")
+            return stats
+
+        add_task_log(task_id, f"【{index}/{len(records)}】{file_name}")
+        result = downloader.download_file(
+            {
+                "file": {
+                    "id": file_id,
+                    "name": file_name,
+                    "size": file_size,
+                    "download_count": download_count,
+                }
+            }
+        )
+        if result == "skipped":
+            stats["skipped"] += 1
+        elif result:
+            stats["downloaded"] += 1
+        else:
+            stats["failed"] += 1
+    return stats
+
+
 def run_selected_file_download_task(task_id: str, group_id: str, file_ids: Sequence[int]):
     try:
         update_task(task_id, "running", f"开始下载选中的 {len(file_ids)} 个文件...")
@@ -443,28 +564,9 @@ def run_selected_file_download_task(task_id: str, group_id: str, file_ids: Seque
             update_task(task_id, "completed", "没有可下载的文件记录", {"downloaded_files": stats})
             return
 
-        for index, (file_id, file_name, file_size, download_count) in enumerate(records, 1):
-            if is_task_stopped(task_id):
-                add_task_log(task_id, "🛑 下载任务被停止")
-                return
-
-            add_task_log(task_id, f"【{index}/{len(records)}】{file_name}")
-            result = downloader.download_file(
-                {
-                    "file": {
-                        "id": file_id,
-                        "name": file_name,
-                        "size": file_size,
-                        "download_count": download_count,
-                    }
-                }
-            )
-            if result == "skipped":
-                stats["skipped"] += 1
-            elif result:
-                stats["downloaded"] += 1
-            else:
-                stats["failed"] += 1
+        _run_download_records(task_id, downloader, records, stats)
+        if is_task_stopped(task_id):
+            return
 
         update_task(task_id, "completed", "选中文件下载完成", {"downloaded_files": stats})
     except Exception as e:
@@ -472,6 +574,58 @@ def run_selected_file_download_task(task_id: str, group_id: str, file_ids: Seque
             if not is_task_stopped(task_id):
                 add_task_log(task_id, f"❌ 选中文件下载失败: {str(e)}")
                 update_task(task_id, "failed", f"选中文件下载失败: {str(e)}")
+        except Exception:
+            pass
+    finally:
+        try:
+            _remove_file_downloader(task_id)
+        except Exception:
+            pass
+
+
+def run_filtered_file_download_task(
+    task_id: str,
+    group_id: str,
+    status: Optional[str] = None,
+    search: Optional[str] = None,
+    max_files: Optional[int] = None,
+):
+    try:
+        update_task(task_id, "running", "开始下载当前筛选结果...")
+        downloader = _create_file_downloader(task_id, group_id)
+
+        if is_task_stopped(task_id):
+            add_task_log(task_id, "🛑 任务在初始化过程中被停止")
+            return
+
+        records = _load_filtered_download_file_records(
+            downloader,
+            group_id,
+            status=status,
+            search=search,
+            max_files=max_files,
+        )
+        stats = {
+            "total_files": len(records),
+            "found": len(records),
+            "missing": 0,
+            "downloaded": 0,
+            "skipped": 0,
+            "failed": 0,
+        }
+        if not records:
+            update_task(task_id, "completed", "当前筛选下没有可下载文件", {"downloaded_files": stats})
+            return
+
+        _run_download_records(task_id, downloader, records, stats)
+        if is_task_stopped(task_id):
+            return
+        update_task(task_id, "completed", "筛选结果下载完成", {"downloaded_files": stats})
+    except Exception as e:
+        try:
+            if not is_task_stopped(task_id):
+                add_task_log(task_id, f"❌ 筛选结果下载失败: {str(e)}")
+                update_task(task_id, "failed", f"筛选结果下载失败: {str(e)}")
         except Exception:
             pass
     finally:

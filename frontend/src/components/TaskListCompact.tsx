@@ -45,6 +45,8 @@ function getTaskTypeLabel(type: string) {
       return '收集文件';
     case 'download_files':
       return '下载文件';
+    case 'download_filtered_files':
+      return '筛选文件下载';
     case 'download_selected_files':
       return '选中文件下载';
     case 'download_single_file':
@@ -115,6 +117,36 @@ function formatDuration(startValue?: string, endValue?: string) {
     return `${Math.floor(seconds / 60)}分${seconds % 60}秒`;
   }
   return `${Math.floor(seconds / 3600)}小时${Math.floor((seconds % 3600) / 60)}分`;
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  if (value && typeof value === 'object' && !Array.isArray(value)) {
+    return value as Record<string, unknown>;
+  }
+  return null;
+}
+
+function numberValue(value: unknown) {
+  return typeof value === 'number' && Number.isFinite(value) ? value : 0;
+}
+
+function getTaskResultSummary(task: Task) {
+  const result = asRecord(task.result);
+  if (!result) {
+    return null;
+  }
+
+  const analysis = asRecord(result.analysis);
+  if (analysis) {
+    return `分析 ${numberValue(analysis.total_files)} 个，完成 ${numberValue(analysis.completed)}，缓存 ${numberValue(analysis.cached)}，失败 ${numberValue(analysis.failed)}`;
+  }
+
+  const downloadedFiles = asRecord(result.downloaded_files);
+  if (downloadedFiles) {
+    return `文件 ${numberValue(downloadedFiles.total_files)} 个，下载 ${numberValue(downloadedFiles.downloaded)}，跳过 ${numberValue(downloadedFiles.skipped)}，失败 ${numberValue(downloadedFiles.failed)}`;
+  }
+
+  return null;
 }
 
 export default function TaskListCompact({
@@ -230,6 +262,9 @@ export default function TaskListCompact({
           ) : (
             <div className="divide-y divide-gray-100">
               {visibleTasks.map((task) => (
+                (() => {
+                  const resultSummary = getTaskResultSummary(task);
+                  return (
                 <div
                   key={task.task_id}
                   className={`grid gap-3 p-3 text-sm md:grid-cols-[minmax(0,1.2fr)_96px_minmax(0,1.5fr)_180px_90px] ${
@@ -248,6 +283,9 @@ export default function TaskListCompact({
                   <div>{getStatusBadge(task)}</div>
                   <div className="min-w-0">
                     <div className="truncate text-gray-700" title={task.message}>{task.message}</div>
+                    {resultSummary && (
+                      <div className="truncate text-xs text-gray-600" title={resultSummary}>{resultSummary}</div>
+                    )}
                     <div className="text-xs text-gray-500">耗时 {formatDuration(task.created_at, isActiveTask(task) ? undefined : task.updated_at)}</div>
                   </div>
                   <div className="text-xs text-gray-500">
@@ -278,6 +316,8 @@ export default function TaskListCompact({
                     )}
                   </div>
                 </div>
+                  );
+                })()
               ))}
             </div>
           )}

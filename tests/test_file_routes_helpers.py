@@ -171,6 +171,35 @@ class FileRoutesHelperTests(unittest.TestCase):
             ingestion_group_id="group-1",
         )
 
+    def test_download_filtered_files_uses_one_group_ingestion_task(self):
+        from backend.routes.file_routes import download_filtered_files, run_filtered_file_download_task
+        from backend.schemas.files import FileFilteredDownloadRequest
+
+        background_tasks = FakeBackgroundTasks()
+
+        with patch("backend.routes.file_routes._enqueue_file_task", return_value={"task_id": "task-1", "message": "ok"}) as enqueue:
+            response = self._run_async(
+                download_filtered_files(
+                    "group-1",
+                    FileFilteredDownloadRequest(status="failed", search="pdf", max_files=10),
+                    background_tasks,
+                )
+            )
+
+        self.assertEqual({"task_id": "task-1", "message": "ok"}, response)
+        enqueue.assert_called_once_with(
+            background_tasks,
+            "download_filtered_files",
+            "下载筛选结果",
+            run_filtered_file_download_task,
+            "group-1",
+            "failed",
+            "pdf",
+            10,
+            message="筛选结果下载任务已创建",
+            ingestion_group_id="group-1",
+        )
+
     def test_sync_files_from_topics_is_enqueued(self):
         from backend.routes.file_routes import sync_files_from_topics, run_sync_files_from_topics_task
 

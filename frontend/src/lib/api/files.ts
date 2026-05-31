@@ -119,6 +119,21 @@ export class FilesApiClient extends AnalysisApiClient {
     });
   }
 
+  async downloadFilteredFiles(groupId: number | string, params: {
+    status?: string;
+    search?: string;
+    maxFiles?: number;
+  }): Promise<TaskCreateResponse> {
+    return this.request(`/api/files/download-filtered/${groupId}`, {
+      method: 'POST',
+      body: JSON.stringify({
+        status: params.status,
+        search: params.search,
+        max_files: params.maxFiles,
+      }),
+    });
+  }
+
   async getFileStatus(groupId: string, fileId: number) {
     return this.request(`/api/files/status/${groupId}/${fileId}`);
   }

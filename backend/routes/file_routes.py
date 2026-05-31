@@ -16,6 +16,7 @@ from backend.schemas.files import (
     FileAIAnalysisRequest,
     FileCollectRequest,
     FileDownloadRequest,
+    FileFilteredDownloadRequest,
     FileIdListRequest,
 )
 from backend.services.file_ai_analysis_service import (
@@ -36,6 +37,7 @@ from backend.services.file_workflow_service import (
     _resolve_download_record_status,
     _safe_filename,
     run_collect_files_task,
+    run_filtered_file_download_task,
     run_file_analysis_task,
     run_file_download_task,
     run_selected_file_download_task,
@@ -141,6 +143,32 @@ async def download_selected_files(group_id: str, request: FileIdListRequest, bac
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"创建选中文件下载任务失败: {str(e)}")
+
+
+@router.post("/download-filtered/{group_id}")
+async def download_filtered_files(
+    group_id: str,
+    request: FileFilteredDownloadRequest,
+    background_tasks: BackgroundTasks,
+):
+    """下载当前筛选条件匹配的文件。"""
+    try:
+        return _enqueue_file_task(
+            background_tasks,
+            "download_filtered_files",
+            "下载筛选结果",
+            run_filtered_file_download_task,
+            group_id,
+            request.status,
+            request.search,
+            request.max_files,
+            message="筛选结果下载任务已创建",
+            ingestion_group_id=group_id,
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"创建筛选结果下载任务失败: {str(e)}")
 
 
 @router.get("/status/{group_id}/{file_id}")
@@ -433,6 +461,9 @@ async def get_files(
                     f.create_time,
                     f.download_status,
                     f.local_path,
+                    f.download_error_code,
+                    f.download_error_message,
+                    f.last_download_attempt_at,
                     faa.updated_at
                 FROM files f
                 LEFT JOIN file_ai_analyses faa ON faa.file_id = f.file_id
@@ -475,8 +506,11 @@ async def get_files(
                         "download_status": local_status["download_status"],
                         "local_exists": local_status["local_exists"],
                         "local_path": local_status["local_path"],
-                        "has_ai_analysis": bool(file[7]) if len(file) > 7 and file[7] else False,
-                        "analysis_updated_at": file[7] if len(file) > 7 else None,
+                        "download_error_code": file[7] if len(file) > 7 else None,
+                        "download_error_message": file[8] if len(file) > 8 else None,
+                        "last_download_attempt_at": file[9] if len(file) > 9 else None,
+                        "has_ai_analysis": bool(file[10]) if len(file) > 10 and file[10] else False,
+                        "analysis_updated_at": file[10] if len(file) > 10 else None,
                     }
                 )
 
