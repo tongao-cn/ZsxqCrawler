@@ -14,6 +14,13 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import SafeImage from './SafeImage';
 import '../styles/group-selector.css';
 
+const MAX_AUTO_RETRIES = 5;
+const RETRYABLE_LOAD_ERROR_MARKERS = ['未知错误', '空数据', '反爬虫'];
+
+function isRetryableLoadError(message: string) {
+  return RETRYABLE_LOAD_ERROR_MARKERS.some((marker) => message.includes(marker));
+}
+
 export default function GroupSelector() {
   const router = useRouter();
   const [groups, setGroups] = useState<Group[]>([]);
@@ -24,10 +31,20 @@ export default function GroupSelector() {
   const [isRetrying, setIsRetrying] = useState(false);
   const [deletingGroups, setDeletingGroups] = useState<Set<number>>(new Set());
   const hasLoadedGroupsRef = useRef(false);
+  const retryTimerRef = useRef<number | null>(null);
+  const loadRequestRef = useRef(0);
+  const statsRequestRef = useRef(0);
 
   const loadGroups = useCallback(async (currentRetryCount = 0) => {
+    const loadRequestId = loadRequestRef.current + 1;
+    loadRequestRef.current = loadRequestId;
     try {
       if (currentRetryCount === 0) {
+        if (retryTimerRef.current) {
+          window.clearTimeout(retryTimerRef.current);
+          retryTimerRef.current = null;
+        }
+        statsRequestRef.current += 1;
         if (!hasLoadedGroupsRef.current) {
           setLoading(true);
         }
@@ -40,12 +57,17 @@ export default function GroupSelector() {
       }
 
       const data = await apiClient.getGroups();
+      if (loadRequestRef.current !== loadRequestId) {
+        return;
+      }
 
       // 检查返回数据（允许为空，显示空态，不再抛错）
 
       setGroups(data.groups);
       hasLoadedGroupsRef.current = true;
       setGroupStats({});
+      const statsRequestId = statsRequestRef.current + 1;
+      statsRequestRef.current = statsRequestId;
 
       // 群组列表先展示出来，统计信息后台补齐；避免某个 stats 慢导致首页一直停在加载态。
       setError(null);
@@ -71,25 +93,32 @@ export default function GroupSelector() {
             statsMap[groupId] = stats;
           }
         });
-        setGroupStats(statsMap);
+        if (statsRequestRef.current === statsRequestId) {
+          setGroupStats(statsMap);
+        }
       })();
 
     } catch (err) {
+      if (loadRequestRef.current !== loadRequestId) {
+        return;
+      }
       const errorMessage = err instanceof Error ? err.message : '加载群组列表失败';
 
-      // 如果是API保护机制导致的错误，持续重试
-      if (errorMessage.includes('未知错误') || errorMessage.includes('空数据') || errorMessage.includes('反爬虫')) {
+      if (isRetryableLoadError(errorMessage) && currentRetryCount < MAX_AUTO_RETRIES) {
         const nextRetryCount = currentRetryCount + 1;
         const delay = Math.min(1000 + (nextRetryCount * 500), 5000); // 递增延迟，最大5秒
 
-        setTimeout(() => {
+        if (retryTimerRef.current) {
+          window.clearTimeout(retryTimerRef.current);
+        }
+        retryTimerRef.current = window.setTimeout(() => {
+          retryTimerRef.current = null;
           void loadGroups(nextRetryCount);
         }, delay);
         return;
       }
 
-      // 其他错误，停止重试
-      setError(errorMessage);
+      setError(isRetryableLoadError(errorMessage) ? `${errorMessage}，自动重试已达上限` : errorMessage);
       setIsRetrying(false);
       setLoading(false);
     }
@@ -98,6 +127,17 @@ export default function GroupSelector() {
   useEffect(() => {
     void loadGroups();
   }, [loadGroups]);
+
+  useEffect(() => {
+    return () => {
+      if (retryTimerRef.current) {
+        window.clearTimeout(retryTimerRef.current);
+        retryTimerRef.current = null;
+      }
+      loadRequestRef.current += 1;
+      statsRequestRef.current += 1;
+    };
+  }, []);
 
   // 监听页面可见性变化和窗口焦点，返回页面时自动刷新群组列表
   // 使用节流避免频繁刷新
