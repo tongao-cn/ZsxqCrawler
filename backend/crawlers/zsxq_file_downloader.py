@@ -519,7 +519,12 @@ class ZSXQFileDownloader:
                         
                         # 只在第一次尝试或最后一次失败时显示完整响应
                         if attempt == 0 or attempt == max_retries - 1 or data.get('succeeded'):
-                            print(f"   📋 响应内容: {json.dumps(data, ensure_ascii=False, indent=2)}")
+                            display_data = data
+                            if isinstance(data.get('resp_data'), dict) and data['resp_data'].get('download_url'):
+                                display_data = dict(data)
+                                display_data['resp_data'] = dict(data['resp_data'])
+                                display_data['resp_data']['download_url'] = '<redacted>'
+                            print(f"   📋 响应内容: {json.dumps(display_data, ensure_ascii=False, indent=2)}")
                         
                         if data.get('succeeded'):
                             download_url = data.get('resp_data', {}).get('download_url')

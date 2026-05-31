@@ -1,5 +1,7 @@
 import unittest
 import tempfile
+import contextlib
+import io
 from unittest.mock import patch
 
 from backend.crawlers.zsxq_file_downloader import ZSXQFileDownloader
@@ -48,12 +50,23 @@ class FakeDownloadResponse:
         yield self._chunks
 
 
+class FakeJsonResponse:
+    status_code = 200
+    text = ""
+
+    def json(self):
+        return {
+            "succeeded": True,
+            "resp_data": {"download_url": "https://files.example/signed-token"},
+        }
+
+
 class FakeDownloadSession:
     def __init__(self, responses):
         self.responses = list(responses)
         self.get_calls = []
 
-    def get(self, url, timeout=None, stream=False):
+    def get(self, url, timeout=None, stream=False, **kwargs):
         self.get_calls.append((url, timeout, stream))
         return self.responses.pop(0)
 
@@ -149,6 +162,26 @@ class FileDownloaderDownloadTests(unittest.TestCase):
             self.assertTrue(result)
             self.assertEqual(2, len(session.get_calls))
             self.assertEqual((101, "completed"), downloader.file_db.status_updates[-1][:2])
+
+    def test_get_download_url_redacts_signed_url_in_stdout(self):
+        session = FakeDownloadSession([FakeJsonResponse()])
+        downloader = object.__new__(ZSXQFileDownloader)
+        downloader.base_url = "https://api.example"
+        downloader.session = session
+        downloader.group_id = "group-1"
+        downloader.cookie = "cookie"
+        downloader.request_count = 0
+        downloader.smart_delay = lambda: None
+        downloader.get_stealth_headers = lambda: {}
+        downloader.log = lambda message: None
+
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            result = ZSXQFileDownloader.get_download_url(downloader, 101)
+
+        self.assertEqual("https://files.example/signed-token", result)
+        self.assertIn("<redacted>", output.getvalue())
+        self.assertNotIn("signed-token", output.getvalue())
 
 
 if __name__ == "__main__":

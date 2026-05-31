@@ -239,6 +239,22 @@ class ZSXQFileDatabaseHelperTests(unittest.TestCase):
         self.assertIn("group_id = COALESCE", sql)
         self.assertEqual((101, 303, 202), params[:3])
 
+    def test_update_file_download_status_casts_timestamp_to_text(self):
+        from backend.storage.zsxq_file_database import ZSXQFileDatabase
+
+        db = object.__new__(ZSXQFileDatabase)
+        cursor = FakeCommentCursor()
+        db.cursor = cursor
+        db.conn = FakeAnalysisConnection()
+        db.group_id = "303"
+
+        db.update_file_download_status(101, "completed", r"C:\tmp\file.pdf")
+
+        sql, params = cursor.calls[-1]
+        self.assertIn("CURRENT_TIMESTAMP::text", sql)
+        self.assertEqual(("completed", r"C:\tmp\file.pdf", "completed", 101, 303, 303), params)
+        self.assertEqual(1, db.conn.commits)
+
     def test_file_ai_analysis_queries_are_scoped_by_group(self):
         from backend.storage.zsxq_file_database import ZSXQFileDatabase
 

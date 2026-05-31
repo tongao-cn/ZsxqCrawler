@@ -297,7 +297,7 @@ class ZSXQFileDatabase:
         SET download_status = ?,
             local_path = COALESCE(?, local_path),
             download_time = CASE
-                WHEN ? = 'completed' THEN CURRENT_TIMESTAMP
+                WHEN ? = 'completed' THEN CURRENT_TIMESTAMP::text
                 ELSE download_time
             END
         WHERE file_id = ?
