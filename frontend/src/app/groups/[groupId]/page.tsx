@@ -5,14 +5,15 @@ import dynamic from 'next/dynamic';
 import { useState, useRef, useCallback, useDeferredValue } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { ArrowLeft, MessageSquare, BarChart3, File, Sparkles, TrendingUp, Search, HelpCircle } from 'lucide-react';
+import { Tabs, TabsContent } from '@/components/ui/tabs';
+import { ArrowLeft } from 'lucide-react';
 import { apiClient } from '@/lib/api';
 import { toast } from 'sonner';
 import GroupSidebar from '@/components/GroupSidebar';
 import GroupActionPanel from '@/components/GroupActionPanel';
 import GroupTopBar from '@/components/GroupTopBar';
 import GroupTopicsTab from '@/components/GroupTopicsTab';
+import GroupWorkbenchTabList from '@/components/GroupWorkbenchTabList';
 import TaskDock from '@/components/TaskDock';
 import { useTopicDetailsCache } from '@/hooks/useTopicDetailsPrefetch';
 import { useDebouncedSearch } from '@/hooks/useDebouncedSearch';
@@ -472,39 +473,7 @@ export default function GroupDetailPage() {
         {/* 中间：群组内容 - 可滚动区域 */}
         <div className="flex-1 flex flex-col min-w-0 min-h-0">
           <Tabs value={activeTab} onValueChange={setActiveTab} className="flex flex-col h-full">
-            {/* 固定的标签页头部 */}
-            <div className="flex-shrink-0 mb-4">
-              <TabsList className="grid w-full grid-cols-7">
-                <TabsTrigger value="topics" className="flex items-center gap-2">
-                  <MessageSquare className="h-4 w-4" />
-                  话题列表
-                </TabsTrigger>
-                <TabsTrigger value="files" className="flex items-center gap-2">
-                  <File className="h-4 w-4" />
-                  文件
-                </TabsTrigger>
-                <TabsTrigger value="analysis" className="flex items-center gap-2">
-                  <BarChart3 className="h-4 w-4" />
-                  股票推荐池
-                </TabsTrigger>
-                <TabsTrigger value="daily-analysis" className="flex items-center gap-2">
-                  <Sparkles className="h-4 w-4" />
-                  每日总结
-                </TabsTrigger>
-                <TabsTrigger value="stock-concepts" className="flex items-center gap-2">
-                  <TrendingUp className="h-4 w-4" />
-                  股票概念
-                </TabsTrigger>
-                <TabsTrigger value="stock-topic-analysis" className="flex items-center gap-2">
-                  <Search className="h-4 w-4" />
-                  个股分析
-                </TabsTrigger>
-                <TabsTrigger value="stock-question" className="flex items-center gap-2">
-                  <HelpCircle className="h-4 w-4" />
-                  A股问答
-                </TabsTrigger>
-              </TabsList>
-            </div>
+            <GroupWorkbenchTabList />
 
             {/* 话题内容区域 */}
             <TabsContent value="topics" className="flex-1 min-h-0">
