@@ -11,7 +11,7 @@ Use judgment for trivial tasks. These guidelines bias toward correctness, clarit
 - The Next.js frontend lives under `frontend/`; run frontend commands with `npm --prefix frontend ...`.
 - Use `uv run python -m backend.main` or `uv run zsxq-api` for the backend. Root `main.py` is a compatibility entrypoint.
 - PostgreSQL schema `zsxq_core` is the structured data source of truth. Runtime code should not execute DDL by default; use `uv run manage-postgres-core-schema --apply` for schema setup.
-- Local secrets and machine-specific config belong in `.env` or `config.toml`; do not echo secret values in responses or logs.
+- Local secrets and machine-specific config belong in ignored local files such as `.env` or `config.toml`; do not echo secret values in responses or logs.
 - Operational quick start lives in `README.md`; durable architecture and workflow boundaries live in `docs/project-architecture-roadmap.md`.
 
 ## 1. Think Before Coding
@@ -65,12 +65,12 @@ For multi-step tasks, think in this format:
 
 ### 本项目验证
 
-选择验证命令时优先按改动面做最小检查；涉及架构、存储、任务运行时或工作流边界时，先查 `docs/project-architecture-roadmap.md` 的对应建议。
+选择验证命令时优先按改动面做最小检查；涉及架构、存储、任务运行时或工作流边界时，先查 `docs/project-architecture-roadmap.md` 的对应建议。本项目当前没有集中式 `docs/guides/verification-map.md`，不要照搬其他项目的文档路径。
 
 - 后端基础: `uv run python -m pytest tests/test_xxx.py -x -q`
 - 后端语法: `uv run python -m py_compile backend/path/to/file.py`
 - 前端基础: `npm --prefix frontend run build`
-- 前端开发服务: `npm --prefix frontend run dev`
+- 前端开发服务（需要本地手测时）: `npm --prefix frontend run dev`
 - PostgreSQL schema / 权限: `uv run manage-postgres-core-schema --apply`、`uv run manage-postgres-core-access --apply`
 - PostgreSQL smoke: `.\scripts\run_postgres_core_smoke.ps1` 或 `.\scripts\run_postgres_runtime_cutover_smoke.ps1`
 
@@ -102,7 +102,8 @@ For multi-step tasks, think in this format:
 ### 本项目工作区治理
 
 - 新增运行产物、临时验证文件或清理目录前，先查 `git status --short`，确认不会碰到其他 agent 或用户的未提交改动。
-- 不要在仓库根目录新增散落的临时 JSON、日志或导出文件；临时产物使用 `tmp/` 或被忽略的 `output/` 子目录，并在完成后清理或说明保留原因。
+- 不要在仓库根目录新增散落的临时 JSON、日志或导出文件；临时验证产物使用被忽略的 `output/scratch/<run-name>/`，人工导出或需短期保留的结果使用 `output/exports/<workflow>/<YYYYMMDD_HHMMSS>/`。
+- 不要把 `tmp/` 当作默认临时目录；本仓库当前未忽略根目录 `tmp/`，除非完成前删除或明确需要保留，否则会制造未跟踪文件。
 - `output/databases/{group_id}/downloads/` 可能包含真实下载文件，不要在未明确确认前清理。
 - `output/databases/{group_id}/images/` 是可再生图片缓存，但清理前仍要确认没有正在运行的任务。
 - `.pytest_cache/`、`__pycache__/`、`frontend/.next/` 是可再生临时产物；不要把这些目录加入提交。
@@ -127,7 +128,7 @@ Keep communication concise and useful.
 - Never overwrite or revert user changes unless explicitly asked.
 - Do not make destructive changes outside the requested scope.
 - When working in an existing codebase, preserve established patterns unless the user asks for a redesign.
-- Never print, copy, or modify secrets from `.env`; use `.env.example` for documentation or configuration references. If the user explicitly asks you to write local config, do not echo secret values back in the response.
+- Never print, copy, or modify secrets from `.env` or `config.toml`; use documented templates or examples when present. If the user explicitly asks you to write local config, do not echo secret values back in the response.
 - Do not reformat whole files or projects unless requested or required by the touched toolchain.
 - Do not reorder unrelated imports, update lockfiles, or clean unrelated dead code unless the task requires it.
 
@@ -144,6 +145,8 @@ Keep communication concise and useful.
 Use docs according to task risk and scope.
 
 Keep this file as an execution guide for cross-task rules and common entrypoints. Put durable module details, research conclusions, and long-lived operational notes under `docs/` instead of expanding AGENTS.md.
+
+本项目当前没有集中式 `docs/README.md`；按下面入口取上下文，不要发明不存在的文档索引。
 
 本项目文档入口:
 - 快速开始与运行入口: `README.md`
