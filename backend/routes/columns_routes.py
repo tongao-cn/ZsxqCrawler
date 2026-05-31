@@ -10,10 +10,11 @@ import requests
 from fastapi import APIRouter, BackgroundTasks, HTTPException
 from pydantic import BaseModel, Field
 
+from backend.core.account_context import build_stealth_headers, get_cookie_for_group
 from backend.core.db_path_manager import get_db_path_manager
 from backend.core.image_cache_manager import get_image_cache_manager
+from backend.core.log_redaction import redact_response_text
 from backend.core.logger_config import log_debug, log_error, log_exception, log_info, log_warning
-from backend.core.account_context import build_stealth_headers, get_cookie_for_group
 from backend.services.columns_fetch_summary import (
     ColumnFetchStats,
     build_columns_fetch_result as _build_columns_fetch_result,
@@ -28,6 +29,12 @@ from backend.storage.accounts_sql_manager import get_accounts_sql_manager
 from backend.storage.zsxq_columns_database import ZSXQColumnsDatabase
 
 router = APIRouter(prefix="/api", tags=["columns"])
+
+
+def _redact_response_for_log(text: str | None, limit: int = 500) -> str:
+    if not text:
+        return "empty"
+    return redact_response_text(text, limit=limit)
 
 
 class ColumnsSettingsRequest(BaseModel):
@@ -369,7 +376,7 @@ async def _fetch_columns_catalog(task_id: str, group_id: str, headers: Dict[str,
             raise Exception(f"获取专栏目录请求异常: {req_err}")
 
         if resp.status_code != 200:
-            log_error(f"获取专栏目录失败: group_id={group_id}, HTTP {resp.status_code}, response={resp.text[:500] if resp.text else 'empty'}")
+            log_error(f"获取专栏目录失败: group_id={group_id}, HTTP {resp.status_code}, response={_redact_response_for_log(resp.text)}")
             if retry < max_retries - 1:
                 wait_time = _retry_wait_seconds(retry)
                 add_task_log(task_id, f"   ⚠️ HTTP {resp.status_code}，等待{wait_time}秒后重试 ({retry+1}/{max_retries})")
@@ -380,7 +387,7 @@ async def _fetch_columns_catalog(task_id: str, group_id: str, headers: Dict[str,
         try:
             data = resp.json()
         except Exception as json_err:
-            log_exception(f"解析专栏目录JSON失败: group_id={group_id}, response={resp.text[:500] if resp.text else 'empty'}")
+            log_exception(f"解析专栏目录JSON失败: group_id={group_id}, response={_redact_response_for_log(resp.text)}")
             raise Exception(f"解析专栏目录失败: {json_err}")
 
         if not data.get("succeeded"):
@@ -427,14 +434,14 @@ def _fetch_column_topics(
         return None, request_count
 
     if topics_resp.status_code != 200:
-        log_error(f"获取专栏文章列表失败: column_id={column_id}, HTTP {topics_resp.status_code}, response={topics_resp.text[:500] if topics_resp.text else 'empty'}")
+        log_error(f"获取专栏文章列表失败: column_id={column_id}, HTTP {topics_resp.status_code}, response={_redact_response_for_log(topics_resp.text)}")
         add_task_log(task_id, f"   ⚠️ 获取文章列表失败: HTTP {topics_resp.status_code}")
         return None, request_count
 
     try:
         topics_data = topics_resp.json()
     except Exception as json_err:
-        log_exception(f"解析专栏文章列表JSON失败: column_id={column_id}, response={topics_resp.text[:500] if topics_resp.text else 'empty'}")
+        log_exception(f"解析专栏文章列表JSON失败: column_id={column_id}, response={_redact_response_for_log(topics_resp.text)}")
         add_task_log(task_id, f"   ⚠️ 解析文章列表失败: {json_err}")
         return None, request_count
 
@@ -488,14 +495,14 @@ async def _fetch_topic_detail(
             continue
 
         if detail_resp.status_code != 200:
-            log_error(f"获取文章详情失败: topic_id={topic_id}, HTTP {detail_resp.status_code}, response={detail_resp.text[:500] if detail_resp.text else 'empty'}")
+            log_error(f"获取文章详情失败: topic_id={topic_id}, HTTP {detail_resp.status_code}, response={_redact_response_for_log(detail_resp.text)}")
             add_task_log(task_id, f"      ⚠️ 获取详情失败: HTTP {detail_resp.status_code}")
             continue
 
         try:
             topic_detail = detail_resp.json()
         except Exception as json_err:
-            log_exception(f"解析文章详情JSON失败: topic_id={topic_id}, response={detail_resp.text[:500] if detail_resp.text else 'empty'}")
+            log_exception(f"解析文章详情JSON失败: topic_id={topic_id}, response={_redact_response_for_log(detail_resp.text)}")
             add_task_log(task_id, f"      ⚠️ 解析详情失败: {json_err}")
             continue
 
@@ -556,7 +563,7 @@ async def _download_column_file(group_id: str, file_id: int, file_name: str, fil
                 wait_time = 2 if retry < 3 else (5 if retry < 6 else 10)
                 await asyncio.sleep(wait_time)
                 continue
-            error_msg = f"获取下载链接失败: HTTP {resp.status_code}, URL={download_url}, Response={resp.text[:500] if resp.text else 'empty'}"
+            error_msg = f"获取下载链接失败: HTTP {resp.status_code}, URL={download_url}, Response={_redact_response_for_log(resp.text)}"
             log_error(error_msg)
             raise Exception(error_msg)
 
@@ -787,7 +794,7 @@ async def _download_column_video(group_id: str, video_id: int, video_size: int, 
                 wait_time = 2 if retry < 3 else (5 if retry < 6 else 10)
                 await asyncio.sleep(wait_time)
                 continue
-            error_msg = f"获取视频链接失败: HTTP {resp.status_code}, URL={video_url_api}, Response={resp.text[:500] if resp.text else 'empty'}"
+            error_msg = f"获取视频链接失败: HTTP {resp.status_code}, URL={video_url_api}, Response={_redact_response_for_log(resp.text)}"
             log_error(error_msg)
             raise Exception(error_msg)
 
@@ -1237,7 +1244,7 @@ async def get_column_topic_full_comments(group_id: str, topic_id: int):
         resp = requests.get(comments_url, headers=headers, timeout=30)
 
         if resp.status_code != 200:
-            log_error(f"Failed to fetch comments: HTTP {resp.status_code}, response={resp.text[:500] if resp.text else 'empty'}")
+            log_error(f"Failed to fetch comments: HTTP {resp.status_code}, response={_redact_response_for_log(resp.text)}")
             raise HTTPException(status_code=resp.status_code, detail=f"Failed to fetch comments: HTTP {resp.status_code}")
 
         data = resp.json()

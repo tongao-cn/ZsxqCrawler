@@ -16,6 +16,7 @@ from typing import Dict, Optional, Any, Tuple
 
 import requests
 
+from backend.core.log_redaction import redact_json_like, redact_response_text
 from backend.storage.postgres_core_schema import CORE_SCHEMA
 from backend.storage.zsxq_file_database import ZSXQFileDatabase
 
@@ -429,7 +430,7 @@ class ZSXQFileDownloader:
                         
                         # 只在第一次尝试或最后一次失败时显示完整响应
                         if attempt == 0 or attempt == max_retries - 1 or data.get('succeeded'):
-                            print(f"   📋 响应内容: {json.dumps(data, ensure_ascii=False, indent=2)}")
+                            print(f"   📋 响应内容: {json.dumps(redact_json_like(data), ensure_ascii=False, indent=2)}")
                         
                         if data.get('succeeded'):
                             files = data.get('resp_data', {}).get('files', [])
@@ -455,20 +456,20 @@ class ZSXQFileDownloader:
                                 
                     except json.JSONDecodeError as e:
                         print(f"   ❌ JSON解析失败: {e}")
-                        print(f"   📄 原始响应: {response.text[:500]}...")
+                        print(f"   📄 原始响应: {redact_response_text(response.text, limit=500)}")
                         if attempt < max_retries - 1:
                             print(f"   🔄 JSON解析失败，准备重试...")
                             continue
                         
                 elif response.status_code in [429, 500, 502, 503, 504]:  # 频率限制或服务器错误
                     print(f"   ❌ HTTP错误: {response.status_code}")
-                    print(f"   📄 响应内容: {response.text[:200]}...")
+                    print(f"   📄 响应内容: {redact_response_text(response.text, limit=200)}")
                     if attempt < max_retries - 1:
                         print(f"   🔄 服务器错误，准备重试...")
                         continue
                 else:
                     print(f"   ❌ HTTP错误: {response.status_code}")
-                    print(f"   📄 响应内容: {response.text[:200]}...")
+                    print(f"   📄 响应内容: {redact_response_text(response.text, limit=200)}")
                     print(f"   🚫 非可重试HTTP错误，停止重试")
                     return None
                     
@@ -521,11 +522,7 @@ class ZSXQFileDownloader:
                         
                         # 只在第一次尝试或最后一次失败时显示完整响应
                         if attempt == 0 or attempt == max_retries - 1 or data.get('succeeded'):
-                            display_data = data
-                            if isinstance(data.get('resp_data'), dict) and data['resp_data'].get('download_url'):
-                                display_data = dict(data)
-                                display_data['resp_data'] = dict(data['resp_data'])
-                                display_data['resp_data']['download_url'] = '<redacted>'
+                            display_data = redact_json_like(data)
                             print(f"   📋 响应内容: {json.dumps(display_data, ensure_ascii=False, indent=2)}")
                         
                         if data.get('succeeded'):
@@ -562,20 +559,20 @@ class ZSXQFileDownloader:
                                 
                     except json.JSONDecodeError as e:
                         print(f"   ❌ JSON解析失败: {e}")
-                        print(f"   📄 原始响应: {response.text[:500]}...")
+                        print(f"   📄 原始响应: {redact_response_text(response.text, limit=500)}")
                         if attempt < max_retries - 1:
                             print(f"   🔄 JSON解析失败，准备重试...")
                             continue
                         
                 elif response.status_code in [429, 500, 502, 503, 504]:  # 频率限制或服务器错误
                     print(f"   ❌ HTTP错误: {response.status_code}")
-                    print(f"   📄 响应内容: {response.text[:200]}...")
+                    print(f"   📄 响应内容: {redact_response_text(response.text, limit=200)}")
                     if attempt < max_retries - 1:
                         print(f"   🔄 服务器错误，准备重试...")
                         continue
                 else:
                     print(f"   ❌ HTTP错误: {response.status_code}")
-                    print(f"   📄 响应内容: {response.text[:200]}...")
+                    print(f"   📄 响应内容: {redact_response_text(response.text, limit=200)}")
                     print(f"   🚫 非可重试HTTP错误，停止重试")
                     return None
                     

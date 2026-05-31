@@ -7,6 +7,7 @@ from typing import Any, Dict, List, Optional
 
 import requests
 
+from backend.core.log_redaction import redact_json_like, redact_mapping, redact_response_text
 from backend.crawlers.topic_ingestion import TopicIngestionMixin
 from backend.crawlers.topic_pagination import TopicPaginationMixin
 from backend.crawlers.zsxq_file_downloader import ZSXQFileDownloader
@@ -322,14 +323,15 @@ class ZSXQTopicCrawler(TopicIngestionMixin, TopicPaginationMixin):
                 if self.debug_mode and retry == 0:  # 只在第一次尝试时输出
                     from urllib.parse import urlencode
                     full_url = f"{url}?{urlencode(params)}"
+                    redacted_headers = redact_mapping(headers)
                     print(f"🔍 评论API调试信息:")
                     print(f"   🔗 完整URL: {full_url}")
                     print(f"   📊 参数: {params}")
                     print(f"   🔧 关键认证头:")
-                    print(f"      X-Signature: {headers.get('X-Signature', 'N/A')}")
+                    print(f"      X-Signature: {redacted_headers.get('X-Signature', 'N/A')}")
                     print(f"      X-Timestamp: {headers.get('X-Timestamp', 'N/A')}")
-                    print(f"      X-Request-Id: {headers.get('X-Request-Id', 'N/A')}")
-                    print(f"      X-Aduid: {headers.get('X-Aduid', 'N/A')}")
+                    print(f"      X-Request-Id: {redacted_headers.get('X-Request-Id', 'N/A')}")
+                    print(f"      X-Aduid: {redacted_headers.get('X-Aduid', 'N/A')}")
 
                 # 发送请求
                 response = self.session.get(url, params=params, headers=headers, timeout=30)
@@ -368,7 +370,7 @@ class ZSXQTopicCrawler(TopicIngestionMixin, TopicPaginationMixin):
                     # 详细的错误日志
                     self.log(f"❌ 评论API请求失败: {response.status_code}")
                     self.log(f"🔗 请求URL: {response.url}")
-                    self.log(f"📋 响应内容: {response.text[:500]}...")
+                    self.log(f"📋 响应内容: {redact_response_text(response.text, limit=500)}")
                     return None
 
             except Exception as e:
@@ -533,7 +535,7 @@ class ZSXQTopicCrawler(TopicIngestionMixin, TopicPaginationMixin):
             print(f"   🔍 调试模式:")
             print(f"   📍 基础URL: {url}")
             print(f"   📊 所有参数: {params}")
-            print(f"   🔧 请求头: {json.dumps(headers, ensure_ascii=False, indent=4)}")
+            print(f"   🔧 请求头: {json.dumps(redact_mapping(headers), ensure_ascii=False, indent=4)}")
             print(f"   🍪 Cookie长度: {len(self.cookie)}字符")
             print(f"   ⏰ 当前时间: {time.strftime('%Y-%m-%d %H:%M:%S')}")
 
@@ -576,22 +578,22 @@ class ZSXQTopicCrawler(TopicIngestionMixin, TopicPaginationMixin):
                         # 检查是否是会员过期错误
                         if error_code == 14210:
                             print(f"   ❌ 会员已过期: {error_message}")
-                            print(f"   📋 完整响应: {json.dumps(data, ensure_ascii=False, indent=2)}")
+                            print(f"   📋 完整响应: {json.dumps(redact_json_like(data), ensure_ascii=False, indent=2)}")
                             # 设置过期标志，让调用方知道这是过期错误
                             return {"expired": True, "code": error_code, "message": error_message}
                         else:
                             print(f"   ❌ API失败: {error_message}")
-                            print(f"   📋 完整响应: {json.dumps(data, ensure_ascii=False, indent=2)}")
+                            print(f"   📋 完整响应: {json.dumps(redact_json_like(data), ensure_ascii=False, indent=2)}")
                             return None
                 except json.JSONDecodeError as e:
                     print(f"   ❌ JSON解析失败: {e}")
-                    print(f"   📄 响应内容: {response.text[:500]}...")
-                    print(f"   📋 响应头: {dict(response.headers)}")
+                    print(f"   📄 响应内容: {redact_response_text(response.text, limit=500)}")
+                    print(f"   📋 响应头: {redact_mapping(dict(response.headers))}")
                     return None
             else:
                 print(f"   ❌ HTTP错误: {response.status_code}")
-                print(f"   📄 响应内容: {response.text}")
-                print(f"   📋 响应头: {dict(response.headers)}")
+                print(f"   📄 响应内容: {redact_response_text(response.text, limit=500)}")
+                print(f"   📋 响应头: {redact_mapping(dict(response.headers))}")
                 if response.status_code == 429:
                     print("   🚨 触发频率限制，建议增加延迟时间")
                 elif response.status_code == 403:
