@@ -37,6 +37,22 @@ TERMINAL_STATUSES = {"completed", "failed", "cancelled"}
 SHANGHAI_TZ = timezone(timedelta(hours=8))
 
 
+def _safe_text(value: Any, encoding: str | None) -> str:
+    text = str(value)
+    if not encoding:
+        return text
+    return text.encode(encoding, errors="replace").decode(encoding)
+
+
+def _safe_print(*values: Any, sep: str = " ", end: str = "\n", file: Any = None, flush: bool = False) -> None:
+    stream = file or sys.stdout
+    encoding = getattr(stream, "encoding", None)
+    text = sep.join(_safe_text(value, encoding) for value in values)
+    stream.write(text + end)
+    if flush:
+        stream.flush()
+
+
 @dataclass
 class WorkflowSummary:
     started_at: str = field(default_factory=lambda: datetime.now(SHANGHAI_TZ).isoformat())
@@ -54,11 +70,11 @@ class WorkflowSummary:
 
     def warn(self, message: str) -> None:
         self.warnings.append(message)
-        print(f"WARNING: {message}")
+        _safe_print(f"WARNING: {message}")
 
     def fail(self, message: str) -> None:
         self.failures.append(message)
-        print(f"FAIL: {message}", file=sys.stderr)
+        _safe_print(f"FAIL: {message}", file=sys.stderr)
 
     @property
     def level(self) -> str:
@@ -105,9 +121,9 @@ def _print_log_tail(task_id: str, lines: int) -> None:
     logs = get_task_logs_state(task_id) or []
     if not logs:
         return
-    print(f"--- {task_id} log tail ---")
+    _safe_print(f"--- {task_id} log tail ---")
     for line in logs[-lines:]:
-        print(line)
+        _safe_print(line)
 
 
 def _wait_task(task_id: str, *, poll_seconds: float, timeout_seconds: int, log_tail: int) -> dict[str, Any]:
@@ -120,11 +136,11 @@ def _wait_task(task_id: str, *, poll_seconds: float, timeout_seconds: int, log_t
 
         status = str(task.get("status") or "")
         if status != last_status:
-            print(f"{task_id}: status={status}, message={task.get('message')}")
+            _safe_print(f"{task_id}: status={status}, message={task.get('message')}")
             last_status = status
 
         if status in TERMINAL_STATUSES:
-            print(f"{task_id}: final={status}, {_task_summary(task)}")
+            _safe_print(f"{task_id}: final={status}, {_task_summary(task)}")
             _print_log_tail(task_id, log_tail)
             return task
 
@@ -239,7 +255,7 @@ def _print_tdx_preview(preview: dict[str, Any]) -> None:
         f"{block.get('block_name')}={block.get('candidate_count')}"
         for block in preview.get("blocks") or []
     )
-    print(
+    _safe_print(
         "tdx_preview: "
         f"total_candidates={preview.get('total_candidates')}, "
         f"date={preview.get('selected_start_date')}~{preview.get('selected_end_date')}, "
@@ -296,10 +312,10 @@ def _should_export_tdx(policy: str, summary: WorkflowSummary) -> bool:
 
 
 def _print_health_summary(summary: WorkflowSummary) -> None:
-    print("--- health summary ---")
-    print(f"level={summary.level}")
+    _safe_print("--- health summary ---")
+    _safe_print(f"level={summary.level}")
     for label, task in summary.tasks:
-        print(f"{label}: task_id={task.get('task_id')}, status={task.get('status')}, {_task_summary(task)}")
+        _safe_print(f"{label}: task_id={task.get('task_id')}, status={task.get('status')}, {_task_summary(task)}")
 
     if summary.tdx_preview:
         _print_tdx_preview(summary.tdx_preview)
@@ -310,24 +326,24 @@ def _print_health_summary(summary: WorkflowSummary) -> None:
             f"{block.get('block_name')}={block.get('written_count')}"
             for block in blocks
         )
-        print(
+        _safe_print(
             "tdx: "
             f"status=exported, total_written={summary.tdx_result.get('total_written')}, "
             f"date={summary.tdx_result.get('selected_start_date')}~{summary.tdx_result.get('selected_end_date')}, "
             f"blocks={block_text}"
         )
     elif summary.tdx_skipped_reason:
-        print(f"tdx: status=skipped, reason={summary.tdx_skipped_reason}")
+        _safe_print(f"tdx: status=skipped, reason={summary.tdx_skipped_reason}")
 
     if summary.warnings:
-        print("warnings:")
+        _safe_print("warnings:")
         for warning in summary.warnings:
-            print(f"- {warning}")
+            _safe_print(f"- {warning}")
 
     if summary.failures:
-        print("failures:")
+        _safe_print("failures:")
         for failure in summary.failures:
-            print(f"- {failure}")
+            _safe_print(f"- {failure}")
 
 
 def _record_task(label: str, task: dict[str, Any]) -> dict[str, Any]:
@@ -377,7 +393,7 @@ def _write_run_record(summary: WorkflowSummary, args: argparse.Namespace) -> Non
     }
     record_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2, default=str), encoding="utf-8")
     summary.run_record_path = str(record_path)
-    print(f"run_record={record_path}")
+    _safe_print(f"run_record={record_path}")
 
 
 def _finalize(summary: WorkflowSummary, args: argparse.Namespace) -> None:
@@ -393,9 +409,9 @@ def _raise_for_task(task: dict[str, Any], label: str) -> None:
 async def _run(args: argparse.Namespace) -> None:
     summary = WorkflowSummary()
     try:
-        print(f"Refreshing group_id={args.group_id}")
+        _safe_print(f"Refreshing group_id={args.group_id}")
         crawl_task_id = await _create_crawl_task(args.group_id)
-        print(f"crawl_task_id={crawl_task_id}")
+        _safe_print(f"crawl_task_id={crawl_task_id}")
         crawl_task = _wait_task(
             crawl_task_id,
             poll_seconds=args.poll_seconds,
@@ -406,7 +422,7 @@ async def _run(args: argparse.Namespace) -> None:
         _raise_for_task(crawl_task, "crawl")
 
         a_share_task_id = await _create_a_share_task(args.group_id, args.days, args.concurrency)
-        print(f"a_share_task_id={a_share_task_id}")
+        _safe_print(f"a_share_task_id={a_share_task_id}")
         a_share_task = _wait_task(
             a_share_task_id,
             poll_seconds=args.poll_seconds,
@@ -419,7 +435,7 @@ async def _run(args: argparse.Namespace) -> None:
         if args.daily_stock_concepts:
             try:
                 daily_stock_task_id = await _create_daily_stock_concept_task(args.group_id, args.comments_per_topic)
-                print(f"daily_stock_concepts_task_id={daily_stock_task_id}")
+                _safe_print(f"daily_stock_concepts_task_id={daily_stock_task_id}")
                 daily_stock_task = _wait_task(
                     daily_stock_task_id,
                     poll_seconds=args.poll_seconds,
@@ -434,7 +450,7 @@ async def _run(args: argparse.Namespace) -> None:
         if args.daily_topic_report:
             try:
                 daily_report_task_id = await _create_daily_topic_report_task(args.group_id, args.comments_per_topic)
-                print(f"daily_topic_report_task_id={daily_report_task_id}")
+                _safe_print(f"daily_topic_report_task_id={daily_report_task_id}")
                 daily_report_task = _wait_task(
                     daily_report_task_id,
                     poll_seconds=args.poll_seconds,
@@ -459,12 +475,12 @@ async def _run(args: argparse.Namespace) -> None:
                         summary.warn(preview_skip_reason)
                     else:
                         summary.tdx_result = await _export_tdx(args.group_id, args.group_name)
-                        print(f"tdx_export={summary.tdx_result}")
+                        _safe_print(f"tdx_export={summary.tdx_result}")
                 except Exception as exc:
                     summary.warn(f"tdx export failed: {exc}")
 
         _finalize(summary, args)
-        print("Refresh completed")
+        _safe_print("Refresh completed")
     except Exception as exc:
         summary.fail(str(exc))
         _finalize(summary, args)
@@ -497,13 +513,13 @@ def main() -> None:
     try:
         asyncio.run(_run(args))
     except HTTPException as exc:
-        print(f"HTTP {exc.status_code}: {exc.detail}", file=sys.stderr)
+        _safe_print(f"HTTP {exc.status_code}: {exc.detail}", file=sys.stderr)
         sys.exit(1)
     except KeyboardInterrupt:
         request_runtime_shutdown()
         raise
     except Exception as exc:
-        print(str(exc), file=sys.stderr)
+        _safe_print(str(exc), file=sys.stderr)
         sys.exit(1)
 
 
