@@ -307,68 +307,25 @@ def _get_topic_detail_response(topic_id: int, group_id: str) -> dict:
         _close_topic_db(db)
 
 
-@router.get("/topics")
-async def get_topics(page: int = 1, per_page: int = 20, search: Optional[str] = None):
-    """获取话题列表"""
+def _clear_topic_database_response(group_id: str) -> dict:
+    deleted_counts = _clear_group_topic_data(group_id)
     try:
-        return await asyncio.to_thread(_get_topics_response, page, per_page, search)
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"获取话题列表失败: {str(e)}")
+        from backend.core.image_cache_manager import clear_group_cache_manager, get_image_cache_manager
+
+        cache_manager = get_image_cache_manager(group_id)
+        success, message = cache_manager.clear_cache()
+        if success:
+            _log_topic_event("INFO", f"图片缓存已清空: {message}")
+        else:
+            _log_topic_event("WARN", f"清空图片缓存失败: {message}")
+        clear_group_cache_manager(group_id)
+    except Exception as cache_error:
+        _log_topic_event("WARN", f"清空图片缓存时出错: {cache_error}")
+
+    return {"message": f"群组 {group_id} 的话题数据和图片缓存已删除", "deleted": deleted_counts}
 
 
-@router.get("/groups/{group_id}/topics")
-async def get_group_topics(group_id: int, page: int = 1, per_page: int = 20, search: Optional[str] = None):
-    """获取指定群组的话题列表"""
-    try:
-        return await asyncio.to_thread(_get_group_topics_response, group_id, page, per_page, search)
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"获取群组话题失败: {str(e)}")
-
-
-@router.post("/topics/clear/{group_id}")
-async def clear_topic_database(group_id: str):
-    """删除指定群组的 PostgreSQL 话题数据"""
-    try:
-        deleted_counts = _clear_group_topic_data(group_id)
-        try:
-            from backend.core.image_cache_manager import clear_group_cache_manager, get_image_cache_manager
-
-            cache_manager = get_image_cache_manager(group_id)
-            success, message = cache_manager.clear_cache()
-            if success:
-                _log_topic_event("INFO", f"图片缓存已清空: {message}")
-            else:
-                _log_topic_event("WARN", f"清空图片缓存失败: {message}")
-            clear_group_cache_manager(group_id)
-        except Exception as cache_error:
-            _log_topic_event("WARN", f"清空图片缓存时出错: {cache_error}")
-
-        return {"message": f"群组 {group_id} 的话题数据和图片缓存已删除", "deleted": deleted_counts}
-    except HTTPException:
-        raise
-    except Exception as e:
-        _log_topic_event("ERROR", f"删除话题数据库失败: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"删除话题数据库失败: {str(e)}")
-
-
-@router.get("/topics/{topic_id}/{group_id}")
-async def get_topic_detail(topic_id: int, group_id: str):
-    """获取话题详情（仅从本地数据库读取，不主动爬取）"""
-    try:
-        return await asyncio.to_thread(_get_topic_detail_response, topic_id, group_id)
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"获取话题详情失败: {str(e)}")
-
-
-@router.post("/topics/{topic_id}/{group_id}/refresh")
-async def refresh_topic(topic_id: int, group_id: str):
-    """实时更新单个话题信息"""
+def _refresh_topic_response(topic_id: int, group_id: str) -> dict:
     db = None
     try:
         db = ZSXQDatabase(group_id)
@@ -386,15 +343,11 @@ async def refresh_topic(topic_id: int, group_id: str):
 
         db.conn.commit()
         return _build_refresh_topic_success(topic_data)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"更新话题失败: {str(e)}")
     finally:
         _close_topic_db(db)
 
 
-@router.post("/topics/{topic_id}/{group_id}/fetch-comments")
-async def fetch_more_comments(topic_id: int, group_id: str):
-    """手动获取话题的更多评论（在已存在本地话题记录的前提下）"""
+def _fetch_more_comments_response(topic_id: int, group_id: str) -> dict:
     db = None
     try:
         db = ZSXQDatabase(group_id)
@@ -417,17 +370,11 @@ async def fetch_more_comments(topic_id: int, group_id: str):
             return _build_fetch_comments_response(False, "获取评论失败，可能是权限限制或网络问题", 0)
         except Exception as e:
             return _build_fetch_comments_response(False, f"获取评论时出错: {str(e)}", 0)
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"获取更多评论失败: {str(e)}")
     finally:
         _close_topic_db(db)
 
 
-@router.delete("/topics/{topic_id}/{group_id}")
-async def delete_single_topic(topic_id: int, group_id: int):
-    """删除单个话题及其所有关联数据"""
+def _delete_single_topic_response(topic_id: int, group_id: int) -> dict:
     db = None
     try:
         db = ZSXQDatabase(str(group_id))
@@ -443,16 +390,14 @@ async def delete_single_topic(topic_id: int, group_id: int):
         db.conn.commit()
 
         return {"success": True, "deleted_topic_id": topic_id, "deleted": deleted}
-    except Exception as e:
+    except Exception:
         _rollback_topic_db(db)
-        raise HTTPException(status_code=500, detail=f"删除话题失败: {str(e)}")
+        raise
     finally:
         _close_topic_db(db)
 
 
-@router.post("/topics/fetch-single/{group_id}/{topic_id}")
-async def fetch_single_topic(group_id: str, topic_id: int, fetch_comments: bool = True):
-    """爬取并导入单个话题（用于特殊话题测试），可选拉取完整评论"""
+def _fetch_single_topic_response(group_id: str, topic_id: int, fetch_comments: bool = True) -> dict:
     db = None
     try:
         db = ZSXQDatabase(str(group_id))
@@ -485,31 +430,21 @@ async def fetch_single_topic(group_id: str, topic_id: int, fetch_comments: bool 
         db.conn.commit()
 
         return _build_single_topic_response(topic_id, group_id, "created", comments_fetched)
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"单个话题采集失败: {str(e)}")
     finally:
         _close_topic_db(db)
 
 
-@router.get("/groups/{group_id}/tags")
-async def get_group_tags(group_id: str):
-    """获取指定群组的所有标签"""
+def _get_group_tags_response(group_id: str) -> dict:
     db = None
     try:
         db = ZSXQDatabase(group_id)
         tags = db.get_tags_by_group(int(group_id))
         return {"tags": tags, "total": len(tags)}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"获取标签列表失败: {str(e)}")
     finally:
         _close_topic_db(db)
 
 
-@router.get("/groups/{group_id}/tags/{tag_id}/topics")
-async def get_topics_by_tag(group_id: int, tag_id: int, page: int = 1, per_page: int = 20):
-    """根据标签获取指定群组的话题列表"""
+def _get_topics_by_tag_response(group_id: int, tag_id: int, page: int = 1, per_page: int = 20) -> dict:
     db = None
     try:
         db = ZSXQDatabase(str(group_id))
@@ -522,19 +457,12 @@ async def get_topics_by_tag(group_id: int, tag_id: int, page: int = 1, per_page:
         if tag_count == 0:
             raise HTTPException(status_code=404, detail="标签在该群组中不存在")
 
-        result = db.get_topics_by_tag(tag_id, page, per_page)
-        return result
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"根据标签获取话题失败: {str(e)}")
+        return db.get_topics_by_tag(tag_id, page, per_page)
     finally:
         _close_topic_db(db)
 
 
-@router.delete("/groups/{group_id}/topics")
-async def delete_group_topics(group_id: int):
-    """删除指定群组的所有话题数据"""
+def _delete_group_topics_response(group_id: int) -> dict:
     db = None
     try:
         db = ZSXQDatabase(str(group_id))
@@ -552,8 +480,130 @@ async def delete_group_topics(group_id: int):
             "deleted_topics_count": topics_count,
             "deleted_details": deleted_counts,
         }
-    except Exception as e:
+    except Exception:
         _rollback_topic_db(db)
-        raise HTTPException(status_code=500, detail=f"删除话题数据失败: {str(e)}")
+        raise
     finally:
         _close_topic_db(db)
+
+
+@router.get("/topics")
+async def get_topics(page: int = 1, per_page: int = 20, search: Optional[str] = None):
+    """获取话题列表"""
+    try:
+        return await asyncio.to_thread(_get_topics_response, page, per_page, search)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"获取话题列表失败: {str(e)}")
+
+
+@router.get("/groups/{group_id}/topics")
+async def get_group_topics(group_id: int, page: int = 1, per_page: int = 20, search: Optional[str] = None):
+    """获取指定群组的话题列表"""
+    try:
+        return await asyncio.to_thread(_get_group_topics_response, group_id, page, per_page, search)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"获取群组话题失败: {str(e)}")
+
+
+@router.post("/topics/clear/{group_id}")
+async def clear_topic_database(group_id: str):
+    """删除指定群组的 PostgreSQL 话题数据"""
+    try:
+        return await asyncio.to_thread(_clear_topic_database_response, group_id)
+    except HTTPException:
+        raise
+    except Exception as e:
+        _log_topic_event("ERROR", f"删除话题数据库失败: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"删除话题数据库失败: {str(e)}")
+
+
+@router.get("/topics/{topic_id}/{group_id}")
+async def get_topic_detail(topic_id: int, group_id: str):
+    """获取话题详情（仅从本地数据库读取，不主动爬取）"""
+    try:
+        return await asyncio.to_thread(_get_topic_detail_response, topic_id, group_id)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"获取话题详情失败: {str(e)}")
+
+
+@router.post("/topics/{topic_id}/{group_id}/refresh")
+async def refresh_topic(topic_id: int, group_id: str):
+    """实时更新单个话题信息"""
+    try:
+        return await asyncio.to_thread(_refresh_topic_response, topic_id, group_id)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"更新话题失败: {str(e)}")
+
+
+@router.post("/topics/{topic_id}/{group_id}/fetch-comments")
+async def fetch_more_comments(topic_id: int, group_id: str):
+    """手动获取话题的更多评论（在已存在本地话题记录的前提下）"""
+    try:
+        return await asyncio.to_thread(_fetch_more_comments_response, topic_id, group_id)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"获取更多评论失败: {str(e)}")
+
+
+@router.delete("/topics/{topic_id}/{group_id}")
+async def delete_single_topic(topic_id: int, group_id: int):
+    """删除单个话题及其所有关联数据"""
+    try:
+        return await asyncio.to_thread(_delete_single_topic_response, topic_id, group_id)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"删除话题失败: {str(e)}")
+
+
+@router.post("/topics/fetch-single/{group_id}/{topic_id}")
+async def fetch_single_topic(group_id: str, topic_id: int, fetch_comments: bool = True):
+    """爬取并导入单个话题（用于特殊话题测试），可选拉取完整评论"""
+    try:
+        return await asyncio.to_thread(_fetch_single_topic_response, group_id, topic_id, fetch_comments)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"单个话题采集失败: {str(e)}")
+
+
+@router.get("/groups/{group_id}/tags")
+async def get_group_tags(group_id: str):
+    """获取指定群组的所有标签"""
+    try:
+        return await asyncio.to_thread(_get_group_tags_response, group_id)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"获取标签列表失败: {str(e)}")
+
+
+@router.get("/groups/{group_id}/tags/{tag_id}/topics")
+async def get_topics_by_tag(group_id: int, tag_id: int, page: int = 1, per_page: int = 20):
+    """根据标签获取指定群组的话题列表"""
+    try:
+        return await asyncio.to_thread(_get_topics_by_tag_response, group_id, tag_id, page, per_page)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"根据标签获取话题失败: {str(e)}")
+
+
+@router.delete("/groups/{group_id}/topics")
+async def delete_group_topics(group_id: int):
+    """删除指定群组的所有话题数据"""
+    try:
+        return await asyncio.to_thread(_delete_group_topics_response, group_id)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"删除话题数据失败: {str(e)}")
