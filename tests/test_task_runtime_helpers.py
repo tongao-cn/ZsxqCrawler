@@ -1,4 +1,5 @@
 import unittest
+import asyncio
 import queue
 from threading import Event
 from unittest.mock import patch
@@ -265,6 +266,28 @@ class TaskRuntimeHelperTests(unittest.TestCase):
 
         self.assertEqual([("task-thread", "payload")], seen)
         self.assertNotIn("task-thread", task_runtime.runtime_task_threads)
+
+    def test_enqueue_runtime_task_awaits_coroutine_tasks(self):
+        from backend.services import task_runtime
+
+        seen = []
+        finished = Event()
+
+        async def task_func(task_id, value):
+            await asyncio.sleep(0)
+            seen.append((task_id, value))
+            finished.set()
+
+        try:
+            task_runtime.enqueue_runtime_task(task_func, "task-async", "payload")
+            thread = task_runtime.runtime_task_threads["task-async"]
+            self.assertTrue(finished.wait(2))
+            thread.join(2)
+        finally:
+            task_runtime.runtime_task_threads.pop("task-async", None)
+
+        self.assertEqual([("task-async", "payload")], seen)
+        self.assertNotIn("task-async", task_runtime.runtime_task_threads)
 
 
 if __name__ == "__main__":

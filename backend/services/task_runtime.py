@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+import inspect
 import threading
 import queue
 from datetime import datetime
@@ -355,7 +357,9 @@ def enqueue_runtime_task(task_func: Callable[..., Any], task_id: str, *args: Any
     def run_task() -> None:
         try:
             _start_task_lock_heartbeat(task_id)
-            task_func(task_id, *args)
+            result = task_func(task_id, *args)
+            if inspect.isawaitable(result):
+                asyncio.run(result)
         finally:
             _stop_task_lock_heartbeat(task_id)
             with _state_lock:
