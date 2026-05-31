@@ -10,7 +10,7 @@ import { ArrowLeft } from 'lucide-react';
 import { apiClient } from '@/lib/api';
 import { toast } from 'sonner';
 import GroupSidebar from '@/components/GroupSidebar';
-import GroupActionPanel from '@/components/GroupActionPanel';
+import GroupContextActionPanel from '@/components/GroupContextActionPanel';
 import GroupTopBar from '@/components/GroupTopBar';
 import GroupTopicsTab from '@/components/GroupTopicsTab';
 import GroupWorkbenchTabList from '@/components/GroupWorkbenchTabList';
@@ -181,68 +181,14 @@ export default function GroupDetailPage() {
   });
   const scrollAreaRef = useRef<HTMLDivElement>(null);
 
-  const {
-    fileLoading,
-    selectedDownloadOption,
-    setSelectedDownloadOption,
-    downloadInterval,
-    longSleepInterval,
-    filesPerBatch,
-    showSettingsDialog,
-    setShowSettingsDialog,
-    downloadIntervalMin,
-    downloadIntervalMax,
-    longSleepIntervalMin,
-    longSleepIntervalMax,
-    useRandomInterval,
-    downloadDialogOpen,
-    setDownloadDialogOpen,
-    downloadQuickLastDays,
-    setDownloadQuickLastDays,
-    downloadRangeStartDate,
-    setDownloadRangeStartDate,
-    downloadRangeEndDate,
-    setDownloadRangeEndDate,
-    handleDownloadByTime,
-    handleDownloadByCount,
-    handleClearFileDatabase,
-    handleSettingsChange,
-  } = useDownloadActions({
+  const downloadActions = useDownloadActions({
     groupId,
     localFileCount,
     onTaskCreated: handleTaskCreated,
     onTaskConflict: openTaskList,
     loadLocalFileCount,
   });
-  const {
-    selectedCrawlOption,
-    setSelectedCrawlOption,
-    crawlLoading,
-    crawlSettingsOpen,
-    setCrawlSettingsOpen,
-    crawlInterval,
-    crawlLongSleepInterval,
-    crawlPagesPerBatch,
-    quickLastDays,
-    setQuickLastDays,
-    crawlMonth,
-    setCrawlMonth,
-    topicSource,
-    setTopicSource,
-    latestDialogOpen,
-    setLatestDialogOpen,
-    singleTopicId,
-    setSingleTopicId,
-    fetchingSingle,
-    handleCrawlLatest,
-    handleCrawlAll,
-    handleIncrementalCrawl,
-    handleCrawlLastDays,
-    handleCrawlMonth,
-    handleFetchSingleTopic,
-    handleDeleteTopics,
-    handleCrawlSettingsChange,
-  } = useCrawlActions({
+  const crawlActions = useCrawlActions({
     groupId,
     onTaskCreated: handleTaskCreated,
     onTaskConflict: openTaskList,
@@ -362,74 +308,14 @@ export default function GroupDetailPage() {
   }
 
   const contextActionPanel = (
-    <GroupActionPanel
-      mode={{
-        activeMode: activeTab === 'files' ? 'download' : 'crawl',
-      }}
-      crawl={{
-        selectedOption: selectedCrawlOption || 'all',
-        onSelectedOptionChange: setSelectedCrawlOption,
-        loading: crawlLoading,
-        topicsCount: groupStats?.topics_count || 0,
-        singleTopicId,
-        onSingleTopicIdChange: setSingleTopicId,
-        fetchingSingle,
-        quickLastDays,
-        onQuickLastDaysChange: setQuickLastDays,
-        crawlMonth,
-        onCrawlMonthChange: setCrawlMonth,
-        topicSource,
-        onTopicSourceChange: setTopicSource,
-        latestDialogOpen,
-        onLatestDialogOpenChange: setLatestDialogOpen,
-        settingsOpen: crawlSettingsOpen,
-        onSettingsOpenChange: setCrawlSettingsOpen,
-        crawlInterval,
-        longSleepInterval: crawlLongSleepInterval,
-        pagesPerBatch: crawlPagesPerBatch,
-        onSettingsChange: handleCrawlSettingsChange,
-      }}
-      download={{
-        selectedOption: selectedDownloadOption || 'time',
-        onSelectedOptionChange: setSelectedDownloadOption,
-        loading: fileLoading,
-        localFileCount,
-        localFileStats,
-        sourceFileCount: groupInfo?.statistics?.files?.count,
-        dialogOpen: downloadDialogOpen,
-        onDialogOpenChange: setDownloadDialogOpen,
-        quickLastDays: downloadQuickLastDays,
-        onQuickLastDaysChange: setDownloadQuickLastDays,
-        rangeStartDate: downloadRangeStartDate,
-        onRangeStartDateChange: setDownloadRangeStartDate,
-        rangeEndDate: downloadRangeEndDate,
-        onRangeEndDateChange: setDownloadRangeEndDate,
-        settingsOpen: showSettingsDialog,
-        onSettingsOpenChange: setShowSettingsDialog,
-        downloadInterval,
-        longSleepInterval,
-        filesPerBatch,
-        downloadIntervalMin,
-        downloadIntervalMax,
-        longSleepIntervalMin,
-        longSleepIntervalMax,
-        useRandomInterval,
-        onSettingsChange: handleSettingsChange,
-      }}
-      actions={{
-        onFetchSingleTopic: handleFetchSingleTopic,
-        onCrawlAll: handleCrawlAll,
-        onCrawlLatest: handleCrawlLatest,
-        onCrawlLastDays: handleCrawlLastDays,
-        onCrawlMonth: handleCrawlMonth,
-        onIncrementalCrawl: handleIncrementalCrawl,
-        onDeleteTopics: handleDeleteTopics,
-        onDownloadByTime: handleDownloadByTime,
-        onDownloadByCount: handleDownloadByCount,
-        onClearFileDatabase: handleClearFileDatabase,
-        onEmptyTopicsBlocked: () => toast.error('数据库为空，请先执行全量爬取'),
-        onEmptyFilesBlocked: () => toast.error('当前没有可下载的文件记录，请先采集包含附件的话题'),
-      }}
+    <GroupContextActionPanel
+      activeTab={activeTab}
+      crawlActions={crawlActions}
+      downloadActions={downloadActions}
+      localFileCount={localFileCount}
+      localFileStats={localFileStats}
+      sourceFileCount={groupInfo?.statistics?.files?.count}
+      topicsCount={groupStats?.topics_count || 0}
     />
   );
 
