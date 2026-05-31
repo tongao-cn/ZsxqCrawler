@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { apiClient, Group } from '@/lib/api';
+import { useLatestRequestGuard } from '@/hooks/useLatestRequestGuard';
 import { toast } from 'sonner';
 
 interface FilePanelProps {
@@ -31,8 +32,17 @@ export default function FilePanel({ onStatsUpdate, selectedGroup }: FilePanelPro
   const [fileStats, setFileStats] = useState<FileStats | null>(null);
   const [maxFiles, setMaxFiles] = useState<number | undefined>(undefined);
   const [sortBy, setSortBy] = useState('download_count');
+  const {
+    isLatestRequest: isLatestStatsRequest,
+    nextRequestId: nextStatsRequestId,
+  } = useLatestRequestGuard();
+  const {
+    isLatestRequest: isLatestActionRequest,
+    nextRequestId: nextActionRequestId,
+  } = useLatestRequestGuard();
 
   const loadFileStats = useCallback(async () => {
+    const requestId = nextStatsRequestId();
     if (!selectedGroup) {
       setFileStats(null);
       return;
@@ -40,11 +50,16 @@ export default function FilePanel({ onStatsUpdate, selectedGroup }: FilePanelPro
 
     try {
       const stats = await apiClient.getFileStats(selectedGroup.group_id);
+      if (!isLatestStatsRequest(requestId)) {
+        return;
+      }
       setFileStats(stats);
     } catch (error) {
-      console.error('加载文件统计失败:', error);
+      if (isLatestStatsRequest(requestId)) {
+        console.error('加载文件统计失败:', error);
+      }
     }
-  }, [selectedGroup]);
+  }, [isLatestStatsRequest, nextStatsRequestId, selectedGroup]);
 
   useEffect(() => {
     loadFileStats();
@@ -56,16 +71,24 @@ export default function FilePanel({ onStatsUpdate, selectedGroup }: FilePanelPro
       return;
     }
 
+    const requestId = nextActionRequestId();
     try {
       setLoading('clear');
       await apiClient.clearFileDatabase(selectedGroup.group_id);
+      if (!isLatestActionRequest(requestId)) {
+        return;
+      }
       toast.success('文件数据库已清除');
       onStatsUpdate();
-      loadFileStats();
+      await loadFileStats();
     } catch (error) {
-      toast.error(`清除数据库失败: ${error instanceof Error ? error.message : '未知错误'}`);
+      if (isLatestActionRequest(requestId)) {
+        toast.error(`清除数据库失败: ${error instanceof Error ? error.message : '未知错误'}`);
+      }
     } finally {
-      setLoading(null);
+      if (isLatestActionRequest(requestId)) {
+        setLoading(null);
+      }
     }
   };
 
@@ -75,16 +98,24 @@ export default function FilePanel({ onStatsUpdate, selectedGroup }: FilePanelPro
       return;
     }
 
+    const requestId = nextActionRequestId();
     try {
       setLoading('download');
       const response = await apiClient.downloadFiles(selectedGroup.group_id, maxFiles, sortBy);
+      if (!isLatestActionRequest(requestId)) {
+        return;
+      }
       toast.success(`任务已创建: ${response.task_id}`);
       onStatsUpdate();
-      loadFileStats();
+      await loadFileStats();
     } catch (error) {
-      toast.error(`创建任务失败: ${error instanceof Error ? error.message : '未知错误'}`);
+      if (isLatestActionRequest(requestId)) {
+        toast.error(`创建任务失败: ${error instanceof Error ? error.message : '未知错误'}`);
+      }
     } finally {
-      setLoading(null);
+      if (isLatestActionRequest(requestId)) {
+        setLoading(null);
+      }
     }
   };
 
