@@ -22,6 +22,10 @@ from backend.services.columns_fetch_summary import (
     resolve_columns_fetch_config as _resolve_columns_fetch_config,
 )
 from backend.services.columns_file_download_service import download_column_file as _service_download_column_file
+from backend.services.columns_media_cache_service import (
+    cache_topic_images as _service_cache_topic_images,
+    cache_video_cover as _service_cache_video_cover,
+)
 from backend.services.columns_remote_service import (
     fetch_column_topics as _service_fetch_column_topics,
     fetch_columns_catalog as _service_fetch_columns_catalog,
@@ -506,31 +510,16 @@ async def _download_topic_files(
 
 
 def _cache_topic_images(task_id: str, group_id: str, topic_detail: Dict[str, Any], db: ZSXQColumnsDatabase) -> int:
-    cached_count = 0
-    talk = topic_detail.get("talk", {}) if "talk" in topic_detail else {}
-    topic_images = talk.get("images", [])
-
-    for image in topic_images:
-        if is_task_stopped(task_id):
-            break
-
-        original_url = image.get("original", {}).get("url")
-        image_id = image.get("image_id")
-
-        if original_url and image_id:
-            try:
-                cache_manager = get_image_cache_manager(group_id)
-                success, local_path, error_msg = cache_manager.download_and_cache(original_url)
-                if success and local_path:
-                    db.update_image_local_path(image_id, str(local_path))
-                    cached_count += 1
-                elif error_msg:
-                    add_task_log(task_id, f"      ⚠️ 图片缓存失败: {error_msg}")
-            except Exception as ie:
-                log_exception(f"图片缓存失败: image_id={image_id}, url={original_url}")
-                add_task_log(task_id, f"      ⚠️ 图片缓存失败: {ie}")
-
-    return cached_count
+    return _service_cache_topic_images(
+        add_task_log=add_task_log,
+        cache_manager_factory=get_image_cache_manager,
+        db=db,
+        group_id=group_id,
+        is_task_stopped=is_task_stopped,
+        log_exception=log_exception,
+        task_id=task_id,
+        topic_detail=topic_detail,
+    )
 
 
 def _get_topic_video(topic_detail: Dict[str, Any]) -> Optional[Dict[str, Any]]:
@@ -548,24 +537,17 @@ def _cache_video_cover(
     cover_url: Optional[str],
     db: ZSXQColumnsDatabase,
 ) -> bool:
-    if not cover_url:
-        return False
-
-    try:
-        cache_manager = get_image_cache_manager(group_id)
-        success, cover_local, error_msg = cache_manager.download_and_cache(cover_url)
-        if success and cover_local:
-            db.update_video_cover_path(video_id, str(cover_local))
-            add_task_log(task_id, f"      ✅ 视频封面缓存成功")
-            return True
-        if error_msg:
-            log_warning(f"视频封面缓存失败: video_id={video_id}, url={cover_url}, error={error_msg}")
-            add_task_log(task_id, f"      ⚠️ 视频封面缓存失败: {error_msg}")
-    except Exception as ve:
-        log_exception(f"视频封面缓存失败: video_id={video_id}, url={cover_url}")
-        add_task_log(task_id, f"      ⚠️ 视频封面缓存失败: {ve}")
-
-    return False
+    return _service_cache_video_cover(
+        add_task_log=add_task_log,
+        cache_manager_factory=get_image_cache_manager,
+        cover_url=cover_url,
+        db=db,
+        group_id=group_id,
+        log_exception=log_exception,
+        log_warning=log_warning,
+        task_id=task_id,
+        video_id=video_id,
+    )
 
 
 async def _download_column_video(group_id: str, video_id: int, video_size: int, video_duration: int,
