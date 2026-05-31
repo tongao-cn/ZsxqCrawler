@@ -32,6 +32,13 @@ interface LogMessage {
   status?: string;
 }
 
+const MAX_VISIBLE_LOGS = 2000;
+const TERMINAL_STATUSES = new Set(['completed', 'failed', 'cancelled']);
+
+function isTerminalStatus(status: string) {
+  return TERMINAL_STATUSES.has(status);
+}
+
 export default function TaskLogViewer({
   taskId,
   onClose,
@@ -55,6 +62,11 @@ export default function TaskLogViewer({
   }, [onTaskStop]);
 
   useEffect(() => {
+    setLogs([]);
+    setStatus('pending');
+    setIsConnected(false);
+    setStopping(false);
+
     if (!taskId) return;
 
     const eventSource = new EventSource(`${API_BASE_URL}/api/tasks/${taskId}/stream`);
@@ -69,7 +81,10 @@ export default function TaskLogViewer({
         const data: LogMessage = JSON.parse(event.data);
         
         if (data.type === 'log' && data.message) {
-          setLogs(prev => [...prev, data.message!]);
+          setLogs(prev => {
+            const nextLogs = [...prev, data.message!];
+            return nextLogs.length > MAX_VISIBLE_LOGS ? nextLogs.slice(-MAX_VISIBLE_LOGS) : nextLogs;
+          });
 
           // 检测过期相关的日志消息
           if (data.message.includes('会员已过期') || data.message.includes('成员体验已到期')) {
@@ -81,7 +96,7 @@ export default function TaskLogViewer({
           // 不再将状态信息添加到日志中，只更新状态
 
           // 如果任务完成或失败，关闭SSE连接
-          if (data.status === 'completed' || data.status === 'failed') {
+          if (isTerminalStatus(data.status)) {
             eventSource.close();
             setIsConnected(false);
 
@@ -109,7 +124,7 @@ export default function TaskLogViewer({
 
   // 监听状态变化，确保任务完成时关闭连接
   useEffect(() => {
-    if ((status === 'completed' || status === 'failed' || status === 'cancelled') && eventSourceRef.current) {
+    if (isTerminalStatus(status) && eventSourceRef.current) {
       eventSourceRef.current.close();
       eventSourceRef.current = null;
       setIsConnected(false);
