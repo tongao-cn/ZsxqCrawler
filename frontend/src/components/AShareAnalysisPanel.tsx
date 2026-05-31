@@ -10,11 +10,10 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
-import { ArrowDown, ArrowUp, Minus, RefreshCw, TrendingUp, Database, Activity } from 'lucide-react';
+import { RefreshCw, TrendingUp, Database, Activity } from 'lucide-react';
 
 import {
   AShareAnalysisChart,
-  AShareAnalysisRankingItem,
   AShareAnalysisSeries,
   AShareAnalysisStorageStatus,
   AShareAnalysisSummary,
@@ -26,6 +25,7 @@ import { useAShareAnalysisData } from '@/hooks/useAShareAnalysisData';
 import { useTaskStatus } from '@/hooks/useTaskStatus';
 import AShareActionPanel from '@/components/AShareActionPanel';
 import AShareCoveragePoolTable from '@/components/AShareCoveragePoolTable';
+import AShareRankingRows from '@/components/AShareRankingRows';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -379,72 +379,10 @@ function RankingWindowGrid({
         ) : rankingRows.length === 0 ? (
           <div className="text-sm text-muted-foreground">暂无数据</div>
         ) : (
-          <RankingRows rows={rankingRows} windowDays={windowDays} />
+          <AShareRankingRows rows={rankingRows} windowDays={windowDays} />
         )}
       </CardContent>
     </Card>
-  );
-}
-
-function RankTrendBadge({ item }: { item: AShareAnalysisRankingItem }) {
-  if (item.trend === 'new') {
-    return <Badge className="bg-blue-100 text-blue-800">新进</Badge>;
-  }
-  if (item.trend === 'up') {
-    return (
-      <Badge className="gap-1 bg-red-100 text-red-800">
-        <ArrowUp className="h-3 w-3" />
-        {Math.abs(item.rank_change ?? 0)}
-      </Badge>
-    );
-  }
-  if (item.trend === 'down') {
-    return (
-      <Badge className="gap-1 bg-green-100 text-green-800">
-        <ArrowDown className="h-3 w-3" />
-        {Math.abs(item.rank_change ?? 0)}
-      </Badge>
-    );
-  }
-  return (
-    <Badge variant="outline" className="gap-1 bg-white text-gray-600">
-      <Minus className="h-3 w-3" />
-      持平
-    </Badge>
-  );
-}
-
-function RankingRows({
-  rows,
-  windowDays,
-}: {
-  rows: AShareAnalysisRankingItem[];
-  windowDays: number;
-}) {
-  return (
-    <div className="max-h-[760px] overflow-y-auto pr-1">
-      <div className="grid grid-cols-[52px_minmax(0,1fr)_80px_84px] gap-3 border-b border-green-100 pb-2 text-xs font-medium text-muted-foreground">
-        <span>排名</span>
-        <span>股票</span>
-        <span className="text-right">提及</span>
-        <span className="text-right">变化</span>
-      </div>
-      {rows.map((item, index) => (
-        <div
-          key={`${windowDays}-${item.company}`}
-          className="grid grid-cols-[52px_minmax(0,1fr)_80px_84px] items-center gap-3 border-b border-dashed py-2 text-sm last:border-b-0"
-        >
-          <span className="font-medium tabular-nums text-gray-900">{item.rank ?? index + 1}</span>
-          <span className="truncate" title={item.company}>
-            {item.company}
-          </span>
-          <span className="text-right font-medium tabular-nums">{item.count}</span>
-          <span className="flex justify-end">
-            <RankTrendBadge item={item} />
-          </span>
-        </div>
-      ))}
-    </div>
   );
 }
 
