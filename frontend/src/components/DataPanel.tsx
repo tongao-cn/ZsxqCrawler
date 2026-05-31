@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { DatabaseZap, Download, Loader2, ListChecks, RefreshCw, Sparkles } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -10,7 +10,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { apiClient, Topic, FileItem, FileAIAnalysis, PaginatedResponse, Group } from '@/lib/api';
+import { apiClient, Topic, FileItem, FileAIAnalysis, PaginatedResponse, Group, Task } from '@/lib/api';
+import { useTaskStatus } from '@/hooks/useTaskStatus';
 import { toast } from 'sonner';
 
 interface DataPanelProps {
@@ -21,6 +22,27 @@ interface FileTaskState {
   taskId: string;
   status: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
   message: string;
+}
+
+interface FileDownloadTaskWatcherProps {
+  fileIds: number[];
+  onStatus: (taskId: string, fileIds: number[], task: Pick<Task, 'status' | 'message'>) => void;
+  onTerminal: (taskId: string, fileIds: number[], task: Pick<Task, 'status' | 'message'>) => void | Promise<void>;
+  taskId: string;
+}
+
+function FileDownloadTaskWatcher({
+  fileIds,
+  onStatus,
+  onTerminal,
+  taskId,
+}: FileDownloadTaskWatcherProps) {
+  useTaskStatus(taskId, {
+    onStatus: (task) => onStatus(taskId, fileIds, task),
+    onTerminal: (task) => onTerminal(taskId, fileIds, task),
+  });
+
+  return null;
 }
 
 export default function DataPanel({ selectedGroup }: DataPanelProps) {
@@ -44,40 +66,20 @@ export default function DataPanel({ selectedGroup }: DataPanelProps) {
   const [downloadingFiles, setDownloadingFiles] = useState<Set<number>>(new Set());
   const [selectedFileIds, setSelectedFileIds] = useState<Set<number>>(new Set());
   const [fileTasks, setFileTasks] = useState<Map<number, FileTaskState>>(new Map());
+  const [activeFileDownloadTasks, setActiveFileDownloadTasks] = useState<Map<string, number[]>>(new Map());
   const [analysisOpen, setAnalysisOpen] = useState(false);
   const [analysisLoading, setAnalysisLoading] = useState(false);
   const [selectedFile, setSelectedFile] = useState<FileItem | null>(null);
   const [analysis, setAnalysis] = useState<FileAIAnalysis | null>(null);
-  const filePollTimeoutsRef = useRef<Map<number, number>>(new Map());
-  const filePollGenerationRef = useRef(0);
-
-  const clearFilePolling = useCallback((fileId?: number) => {
-    if (fileId !== undefined) {
-      const timeoutId = filePollTimeoutsRef.current.get(fileId);
-      if (timeoutId !== undefined) {
-        window.clearTimeout(timeoutId);
-        filePollTimeoutsRef.current.delete(fileId);
-      }
-      return;
-    }
-
-    filePollTimeoutsRef.current.forEach((timeoutId) => window.clearTimeout(timeoutId));
-    filePollTimeoutsRef.current.clear();
-    filePollGenerationRef.current += 1;
-  }, []);
 
   useEffect(() => {
-    clearFilePolling();
     setTopicsPage(1);
     setFilesPage(1);
     setSelectedFileIds(new Set());
     setDownloadingFiles(new Set());
     setFileTasks(new Map());
-  }, [clearFilePolling, selectedGroupId]);
-
-  useEffect(() => {
-    return () => clearFilePolling();
-  }, [clearFilePolling]);
+    setActiveFileDownloadTasks(new Map());
+  }, [selectedGroupId]);
 
   useEffect(() => {
     const loadTopics = async () => {
@@ -174,74 +176,46 @@ export default function DataPanel({ selectedGroup }: DataPanelProps) {
     });
   };
 
-  const pollFileTask = useCallback((fileId: number, taskId: string, attempt: number = 0) => {
-    clearFilePolling(fileId);
-    const generation = filePollGenerationRef.current;
-    const timeoutId = window.setTimeout(async () => {
-      filePollTimeoutsRef.current.delete(fileId);
-      try {
-        const task = await apiClient.getTask(taskId);
-        if (filePollGenerationRef.current !== generation) {
-          return;
-        }
-        setFileTasks(prev => {
-          const next = new Map(prev);
-          next.set(fileId, {
-            taskId,
-            status: task.status,
-            message: task.message,
-          });
-          return next;
+  const setFileTaskStatus = useCallback((taskId: string, fileIds: number[], task: Pick<Task, 'status' | 'message'>) => {
+    setFileTasks(prev => {
+      const next = new Map(prev);
+      fileIds.forEach((fileId) => {
+        next.set(fileId, {
+          taskId,
+          status: task.status,
+          message: task.message,
         });
+      });
+      return next;
+    });
+  }, []);
 
-        if (['completed', 'failed', 'cancelled'].includes(task.status)) {
-          setDownloadingFiles(prev => {
-            const next = new Set(prev);
-            next.delete(fileId);
-            return next;
-          });
-          await loadFiles();
-          return;
-        }
+  const registerFileDownloadTask = useCallback((taskId: string, fileIds: number[]) => {
+    setActiveFileDownloadTasks(prev => {
+      const next = new Map(prev);
+      next.set(taskId, fileIds);
+      return next;
+    });
+  }, []);
 
-        if (attempt < 120) {
-          pollFileTask(fileId, taskId, attempt + 1);
-          return;
-        }
-
-        setDownloadingFiles(prev => {
-          const next = new Set(prev);
-          next.delete(fileId);
-          return next;
-        });
-        setFileTasks(prev => {
-          const next = new Map(prev);
-          next.set(fileId, {
-            taskId,
-            status: 'failed',
-            message: '任务状态刷新超时，请手动刷新',
-          });
-          return next;
-        });
-      } catch (error) {
-        if (filePollGenerationRef.current !== generation) {
-          return;
-        }
-        console.error('轮询文件下载任务失败:', error);
-        if (attempt < 12) {
-          pollFileTask(fileId, taskId, attempt + 1);
-          return;
-        }
-
-        setDownloadingFiles(prev => {
-          const next = new Set(prev);
-          next.delete(fileId);
-          return next;
-        });
-      }
-    }, 1500);
-    filePollTimeoutsRef.current.set(fileId, timeoutId);
-  }, [clearFilePolling, loadFiles]);
+  const handleFileDownloadTerminal = useCallback(async (
+    taskId: string,
+    fileIds: number[],
+    task: Pick<Task, 'status' | 'message'>,
+  ) => {
+    setFileTaskStatus(taskId, fileIds, task);
+    setDownloadingFiles(prev => {
+      const next = new Set(prev);
+      fileIds.forEach((fileId) => next.delete(fileId));
+      return next;
+    });
+    setActiveFileDownloadTasks(prev => {
+      const next = new Map(prev);
+      next.delete(taskId);
+      return next;
+    });
+    await loadFiles();
+  }, [loadFiles, setFileTaskStatus]);
 
   const handleSyncFilesFromTopics = async () => {
     if (selectedGroupId === undefined || syncingFiles) {
@@ -284,7 +258,7 @@ export default function DataPanel({ selectedGroup }: DataPanelProps) {
           });
           return next;
         });
-        pollFileTask(file.file_id, response.task_id);
+        registerFileDownloadTask(response.task_id, [file.file_id]);
       } else {
         await loadFiles();
         setDownloadingFiles(prev => {
@@ -328,7 +302,7 @@ export default function DataPanel({ selectedGroup }: DataPanelProps) {
         });
         return next;
       });
-      fileIds.forEach((fileId) => pollFileTask(fileId, response.task_id));
+      registerFileDownloadTask(response.task_id, fileIds);
       toast.success(`选中文件下载任务已创建: ${response.task_id}`);
     } catch (error) {
       toast.error(`选中文件下载任务创建失败: ${error instanceof Error ? error.message : '未知错误'}`);
@@ -417,7 +391,17 @@ export default function DataPanel({ selectedGroup }: DataPanelProps) {
     contentType?.startsWith('audio/') ? '转录原文' : '提取原文';
 
   return (
-    <Tabs defaultValue="topics" className="space-y-4">
+    <>
+      {Array.from(activeFileDownloadTasks.entries()).map(([taskId, fileIds]) => (
+        <FileDownloadTaskWatcher
+          key={taskId}
+          taskId={taskId}
+          fileIds={fileIds}
+          onStatus={setFileTaskStatus}
+          onTerminal={handleFileDownloadTerminal}
+        />
+      ))}
+      <Tabs defaultValue="topics" className="space-y-4">
       <TabsList className="grid w-full grid-cols-2">
         <TabsTrigger value="topics">话题数据</TabsTrigger>
         <TabsTrigger value="files">文件数据</TabsTrigger>
@@ -812,6 +796,7 @@ export default function DataPanel({ selectedGroup }: DataPanelProps) {
           </div>
         </DialogContent>
       </Dialog>
-    </Tabs>
+      </Tabs>
+    </>
   );
 }
