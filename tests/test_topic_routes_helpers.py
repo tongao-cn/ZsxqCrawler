@@ -1,5 +1,6 @@
 import unittest
 from importlib.util import find_spec
+from unittest.mock import patch
 
 
 HAS_TOPIC_ROUTE_DEPS = find_spec("fastapi") is not None
@@ -62,6 +63,11 @@ class FakeCommentClient:
 
 
 class TopicRoutesHelperTests(unittest.TestCase):
+    def _run_async(self, coro):
+        import asyncio
+
+        return asyncio.run(coro)
+
     @unittest.skipUnless(HAS_TOPIC_ROUTE_DEPS, "topic route dependencies are not installed")
     def test_close_topic_db_closes_database(self):
         from backend.routes.topic_routes import _close_topic_db
@@ -307,6 +313,33 @@ class TopicRoutesHelperTests(unittest.TestCase):
         self.assertEqual([("row",)], rows)
         self.assertEqual(7, total)
         self.assertEqual([("SELECT rows", ("p",)), ("SELECT count", ("c",))], cursor.calls)
+
+    @unittest.skipUnless(HAS_TOPIC_ROUTE_DEPS, "topic route dependencies are not installed")
+    def test_read_routes_offload_sync_db_work_to_thread(self):
+        from backend.routes import topic_routes
+
+        calls = []
+
+        async def fake_to_thread(func, *args):
+            calls.append((func, args))
+            return {"called": func.__name__, "args": args}
+
+        with patch("backend.routes.topic_routes.asyncio.to_thread", side_effect=fake_to_thread):
+            topics = self._run_async(topic_routes.get_topics(page=2, per_page=5, search="offer"))
+            group_topics = self._run_async(topic_routes.get_group_topics(123, page=3, per_page=10, search="alpha"))
+            detail = self._run_async(topic_routes.get_topic_detail(99, "123"))
+
+        self.assertEqual(
+            [
+                (topic_routes._get_topics_response, (2, 5, "offer")),
+                (topic_routes._get_group_topics_response, (123, 3, 10, "alpha")),
+                (topic_routes._get_topic_detail_response, (99, "123")),
+            ],
+            calls,
+        )
+        self.assertEqual({"called": "_get_topics_response", "args": (2, 5, "offer")}, topics)
+        self.assertEqual({"called": "_get_group_topics_response", "args": (123, 3, 10, "alpha")}, group_topics)
+        self.assertEqual({"called": "_get_topic_detail_response", "args": (99, "123")}, detail)
 
 
 if __name__ == "__main__":

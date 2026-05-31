@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException
@@ -260,9 +261,7 @@ def _fetch_rows_and_total(cursor, query: str, params: tuple, count_query: str, c
     return rows, total
 
 
-@router.get("/topics")
-async def get_topics(page: int = 1, per_page: int = 20, search: Optional[str] = None):
-    """获取话题列表"""
+def _get_topics_response(page: int = 1, per_page: int = 20, search: Optional[str] = None) -> dict:
     db = None
     try:
         db = ZSXQDatabase()
@@ -274,15 +273,11 @@ async def get_topics(page: int = 1, per_page: int = 20, search: Optional[str] = 
             "topics": [_format_topic_row(topic) for topic in topics],
             "pagination": _build_pagination(page, per_page, total),
         }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"获取话题列表失败: {str(e)}")
     finally:
         _close_topic_db(db)
 
 
-@router.get("/groups/{group_id}/topics")
-async def get_group_topics(group_id: int, page: int = 1, per_page: int = 20, search: Optional[str] = None):
-    """获取指定群组的话题列表"""
+def _get_group_topics_response(group_id: int, page: int = 1, per_page: int = 20, search: Optional[str] = None) -> dict:
     db = None
     try:
         db = ZSXQDatabase(str(group_id))
@@ -294,10 +289,44 @@ async def get_group_topics(group_id: int, page: int = 1, per_page: int = 20, sea
             "topics": [_format_group_topic_row(topic) for topic in topics],
             "pagination": _build_pagination(page, per_page, total),
         }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"获取群组话题失败: {str(e)}")
     finally:
         _close_topic_db(db)
+
+
+def _get_topic_detail_response(topic_id: int, group_id: str) -> dict:
+    db = None
+    try:
+        db = ZSXQDatabase(group_id)
+        topic_detail = db.get_topic_detail(topic_id)
+
+        if not topic_detail:
+            raise HTTPException(status_code=404, detail="话题不存在")
+
+        return topic_detail
+    finally:
+        _close_topic_db(db)
+
+
+@router.get("/topics")
+async def get_topics(page: int = 1, per_page: int = 20, search: Optional[str] = None):
+    """获取话题列表"""
+    try:
+        return await asyncio.to_thread(_get_topics_response, page, per_page, search)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"获取话题列表失败: {str(e)}")
+
+
+@router.get("/groups/{group_id}/topics")
+async def get_group_topics(group_id: int, page: int = 1, per_page: int = 20, search: Optional[str] = None):
+    """获取指定群组的话题列表"""
+    try:
+        return await asyncio.to_thread(_get_group_topics_response, group_id, page, per_page, search)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"获取群组话题失败: {str(e)}")
 
 
 @router.post("/topics/clear/{group_id}")
@@ -329,21 +358,12 @@ async def clear_topic_database(group_id: str):
 @router.get("/topics/{topic_id}/{group_id}")
 async def get_topic_detail(topic_id: int, group_id: str):
     """获取话题详情（仅从本地数据库读取，不主动爬取）"""
-    db = None
     try:
-        db = ZSXQDatabase(group_id)
-        topic_detail = db.get_topic_detail(topic_id)
-
-        if not topic_detail:
-            raise HTTPException(status_code=404, detail="话题不存在")
-
-        return topic_detail
+        return await asyncio.to_thread(_get_topic_detail_response, topic_id, group_id)
     except HTTPException:
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"获取话题详情失败: {str(e)}")
-    finally:
-        _close_topic_db(db)
 
 
 @router.post("/topics/{topic_id}/{group_id}/refresh")
