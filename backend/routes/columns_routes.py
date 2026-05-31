@@ -21,6 +21,7 @@ from backend.services.columns_fetch_summary import (
     combined_column_stats as _combined_column_stats,
     resolve_columns_fetch_config as _resolve_columns_fetch_config,
 )
+from backend.services.columns_file_download_service import download_column_file as _service_download_column_file
 from backend.services.columns_remote_service import (
     fetch_column_topics as _service_fetch_column_topics,
     fetch_columns_catalog as _service_fetch_columns_catalog,
@@ -425,105 +426,23 @@ def _collect_topic_files(topic_detail: Dict[str, Any]) -> List[Dict[str, Any]]:
 async def _download_column_file(group_id: str, file_id: int, file_name: str, file_size: int,
                                 topic_id: int, db: ZSXQColumnsDatabase, headers: dict, task_id: str = None) -> str:
     """下载专栏文件"""
-    import os
-
     path_manager = get_db_path_manager()
     group_dir = path_manager.get_group_dir(group_id)
-    downloads_dir = os.path.join(group_dir, "column_downloads")
-    local_path = os.path.join(downloads_dir, file_name)
-
-    if os.path.exists(local_path):
-        existing_size = os.path.getsize(local_path)
-        if existing_size == file_size or (file_size == 0 and existing_size > 0):
-            db.update_file_download_status(file_id, "completed", local_path)
-            if task_id:
-                add_task_log(task_id, f"         ⏭️ 文件已存在，跳过下载 ({existing_size/(1024*1024):.2f}MB)")
-            return "skipped"
-
-    download_url = f"https://api.zsxq.com/v2/files/{file_id}/download_url"
-    max_retries = 10
-    real_url = None
-
-    for retry in range(max_retries):
-        try:
-            resp = requests.get(download_url, headers=headers, timeout=30)
-        except Exception as req_err:
-            if retry < max_retries - 1:
-                wait_time = 2 if retry < 3 else (5 if retry < 6 else 10)
-                await asyncio.sleep(wait_time)
-                continue
-            log_exception(f"获取下载链接请求异常: file_id={file_id}")
-            raise Exception(f"获取下载链接请求异常: {req_err}")
-
-        if resp.status_code != 200:
-            if retry < max_retries - 1:
-                wait_time = 2 if retry < 3 else (5 if retry < 6 else 10)
-                await asyncio.sleep(wait_time)
-                continue
-            error_msg = f"获取下载链接失败: HTTP {resp.status_code}, URL={download_url}, Response={_redact_response_for_log(resp.text)}"
-            log_error(error_msg)
-            raise Exception(error_msg)
-
-        data = resp.json()
-        if not data.get("succeeded"):
-            error_code = data.get("code")
-            error_message = data.get("error_message", "未知错误")
-
-            if error_code == 1059:
-                if retry < max_retries - 1:
-                    wait_time = 2 if retry < 3 else (5 if retry < 6 else 10)
-                    await asyncio.sleep(wait_time)
-                    continue
-                log_error(f"获取下载链接重试{max_retries}次后仍失败: file_id={file_id}, code={error_code}")
-                raise Exception(f"获取下载链接失败，重试{max_retries}次后仍遇到反爬限制")
-
-            error_msg = f"获取下载链接失败: code={error_code}, message={error_message}, file_id={file_id}, file_name={file_name}"
-            log_error(error_msg)
-            raise Exception(f"获取下载链接失败: {error_message} (code={error_code})")
-
-        real_url = data.get("resp_data", {}).get("download_url")
-        break
-
-    if not real_url:
-        raise Exception("下载链接为空")
-
-    os.makedirs(downloads_dir, exist_ok=True)
-
-    download_retries = 3
-    last_error = None
-
-    for download_attempt in range(download_retries):
-        try:
-            file_resp = requests.get(real_url, headers=headers, stream=True, timeout=300)
-            if file_resp.status_code == 200:
-                with open(local_path, "wb") as f:
-                    for chunk in file_resp.iter_content(chunk_size=8192):
-                        if chunk:
-                            f.write(chunk)
-
-                db.update_file_download_status(file_id, "completed", local_path)
-                return "downloaded"
-
-            last_error = f"HTTP {file_resp.status_code}"
-            if download_attempt < download_retries - 1:
-                log_warning(f"文件下载失败 (尝试 {download_attempt + 1}/{download_retries}): {last_error}, file_id={file_id}")
-                await asyncio.sleep(2 * (download_attempt + 1))
-                continue
-        except requests.exceptions.SSLError as ssl_err:
-            last_error = f"SSL错误: {ssl_err}"
-            if download_attempt < download_retries - 1:
-                log_warning(f"文件下载SSL错误 (尝试 {download_attempt + 1}/{download_retries}): file_id={file_id}, error={ssl_err}")
-                await asyncio.sleep(3 * (download_attempt + 1))
-                continue
-        except requests.exceptions.RequestException as req_err:
-            last_error = f"网络错误: {req_err}"
-            if download_attempt < download_retries - 1:
-                log_warning(f"文件下载网络错误 (尝试 {download_attempt + 1}/{download_retries}): file_id={file_id}, error={req_err}")
-                await asyncio.sleep(2 * (download_attempt + 1))
-                continue
-
-    db.update_file_download_status(file_id, "failed")
-    raise Exception(f"下载失败 (重试{download_retries}次): {last_error}")
+    return await _service_download_column_file(
+        add_task_log=add_task_log,
+        db=db,
+        file_id=file_id,
+        file_name=file_name,
+        file_size=file_size,
+        group_dir=group_dir,
+        headers=headers,
+        log_error=log_error,
+        log_exception=log_exception,
+        log_warning=log_warning,
+        request_get=requests.get,
+        sleep=asyncio.sleep,
+        task_id=task_id,
+    )
 
 
 async def _download_topic_files(
