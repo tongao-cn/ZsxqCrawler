@@ -154,6 +154,14 @@ export interface GroupActionPanelProps {
   };
 }
 
+function clampPositiveDays(value: string) {
+  const days = Number.parseInt(value, 10);
+  if (!Number.isFinite(days)) {
+    return 1;
+  }
+  return Math.max(1, days);
+}
+
 export default function GroupActionPanel({
   className = '',
   mode,
@@ -256,7 +264,7 @@ export default function GroupActionPanel({
                                     type="number"
                                     min={1}
                                     value={crawl.quickLastDays}
-                                    onChange={(event) => crawl.onQuickLastDaysChange(parseInt(event.target.value || '1'))}
+                                    onChange={(event) => crawl.onQuickLastDaysChange(clampPositiveDays(event.target.value))}
                                     className="h-7 text-xs w-24"
                                   />
                                   <span className="text-xs text-gray-500">天</span>
@@ -631,7 +639,7 @@ export default function GroupActionPanel({
                                   type="number"
                                   min={1}
                                   value={download.quickLastDays}
-                                  onChange={(event) => download.onQuickLastDaysChange(parseInt(event.target.value || '1'))}
+                                  onChange={(event) => download.onQuickLastDaysChange(clampPositiveDays(event.target.value))}
                                   className="h-7 text-xs w-24"
                                 />
                                 <span className="text-xs text-gray-500">天</span>
