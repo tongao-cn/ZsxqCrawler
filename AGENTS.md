@@ -63,6 +63,12 @@ Common commands:
 
 For storage, task runtime, architecture, or workflow-boundary changes, check `docs/project-architecture-roadmap.md` before choosing verification.
 
+Test hygiene:
+
+- Prefer adding focused tests to an existing same-topic test file.
+- Do not move, rename, delete, or broadly reorganize tests just for cleanup.
+- Keep one-off probes out of permanent tests unless they protect durable behavior.
+
 ## 5. Project Boundaries
 
 - New structured data belongs in PostgreSQL `zsxq_core`; schema definitions belong in `backend/storage/postgres_core_schema.py`.
@@ -72,12 +78,14 @@ For storage, task runtime, architecture, or workflow-boundary changes, check `do
 - Keep A-share recommendation, daily stock concepts, daily topic analysis, and file AI analysis as separate product workflows even when they share helpers.
 - If the user asks to use database topics for analysis, do not crawl again.
 
-## 6. Workspace, Secrets, And Commands
+## 6. Workspace, Directories, Secrets, And Commands
 
 - Default shell is Windows PowerShell.
 - Prefer `uv run ...` for Python commands.
 - Do not use `python -` for stdin scripts; use `python -c` for short snippets or a temporary `.py` file for multiline logic.
 - Do not print, copy, or modify secrets from `.env` or `config.toml`; do not echo secret values back in responses.
+- Put new code, scripts, tests, and docs in the existing ownership directories: `backend/`, `frontend/`, `scripts/`, `tests/`, and `docs/`.
+- Do not create new top-level directories unless the task clearly needs a new durable area.
 - Do not create scattered root-level JSON, logs, or exports. Use ignored paths such as `output/scratch/<run-name>/` for temporary verification and `output/exports/<workflow>/<YYYYMMDD_HHMMSS>/` for short-lived exports.
 - Do not use root `tmp/` as a default scratch directory; it is not ignored in this repo.
 - Do not clean `output/databases/{group_id}/downloads/` unless explicitly asked. It can contain real downloaded files.
@@ -107,6 +115,8 @@ Useful entrypoints:
 Fast path is for localized changes that do not alter public APIs, durable runtime semantics, architecture boundaries, configuration semantics, research methodology, or data contracts. Read only directly relevant docs, make the smallest change, and verify.
 
 Plan path is for higher-risk work that changes public APIs, durable runtime behavior, storage contracts, crawler behavior, AI output semantics, architecture boundaries, or needs a reusable verification/rollback trail. Reuse an existing active plan when it fits; create a short kebab-case plan only when durable tracking is needed.
+
+Do not create docs for fast-path work unless the docs are the requested deliverable. Keep active plans finite; move completed or stale plans to `docs/archive/` when cleanup is in scope.
 
 If docs conflict with code or with each other, pause and surface the conflict.
 
