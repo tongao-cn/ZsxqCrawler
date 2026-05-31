@@ -16,6 +16,7 @@ from backend.core.ai_provider_config import (
     get_openai_compatible_config,
     get_summary_reasoning_effort,
 )
+from backend.services.ai_json_utils import extract_json_object
 from backend.services.daily_topic_analysis_service import _clip, _extract_response_text
 from backend.storage.db_compat import connect
 
@@ -1021,19 +1022,7 @@ def _call_stock_analysis_ai(prompt_payload: str, *, incremental: bool = False) -
 
 
 def _extract_json_object(text: str) -> Dict[str, Any]:
-    value = _normalize_text(text)
-    try:
-        parsed = json.loads(value)
-    except Exception:
-        start = value.find("{")
-        end = value.rfind("}")
-        if start < 0 or end <= start:
-            return {}
-        try:
-            parsed = json.loads(value[start : end + 1])
-        except Exception:
-            return {}
-    return parsed if isinstance(parsed, dict) else {}
+    return extract_json_object(text)
 
 
 def _call_question_keyword_ai(question: str) -> Tuple[List[str], str]:

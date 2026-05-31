@@ -15,6 +15,7 @@ from backend.core.ai_provider_config import (
     get_extraction_reasoning_effort,
     get_openai_compatible_config,
 )
+from backend.services.ai_json_utils import extract_json_object
 from backend.services.a_share_analysis_db_storage import load_stock_basic_records, load_topic_stock_extractions
 from backend.services.daily_topic_analysis_service import (
     DEFAULT_COMMENTS_PER_TOPIC,
@@ -67,25 +68,7 @@ def _log(log_callback: Optional[Callable[[str], None]], message: str) -> None:
 
 
 def _extract_json_object(text: str) -> Dict[str, Any]:
-    content = str(text or "").strip()
-    if not content:
-        return {}
-    if content.startswith("```"):
-        lines = content.splitlines()
-        if lines and lines[0].strip().startswith("```"):
-            lines = lines[1:]
-        if lines and lines[-1].strip() == "```":
-            lines = lines[:-1]
-        content = "\n".join(lines).strip()
-    try:
-        payload = json.loads(content)
-    except json.JSONDecodeError:
-        start = content.find("{")
-        end = content.rfind("}")
-        if start < 0 or end <= start:
-            return {}
-        payload = json.loads(content[start : end + 1])
-    return payload if isinstance(payload, dict) else {}
+    return extract_json_object(text)
 
 
 def _normalize_text(value: Any) -> str:

@@ -17,6 +17,7 @@ from backend.core.ai_provider_config import (
     get_extraction_reasoning_effort,
     get_openai_compatible_config,
 )
+from backend.services.ai_json_utils import extract_json_object
 from backend.services.a_share_analysis_db_storage import (
     DAILY_MENTIONS_TABLE,
     PROCESSED_STATE_TABLE,
@@ -451,28 +452,7 @@ def _format_stock_concepts_log(stocks: Sequence[Dict[str, Any]], max_chars: int 
 
 
 def _extract_json_object(text: str) -> Dict[str, Any]:
-    content = str(text or "").strip()
-    if not content:
-        return {}
-
-    if content.startswith("```"):
-        lines = content.splitlines()
-        if lines and lines[0].strip().startswith("```"):
-            lines = lines[1:]
-        if lines and lines[-1].strip() == "```":
-            lines = lines[:-1]
-        content = "\n".join(lines).strip()
-
-    try:
-        payload = json.loads(content)
-    except json.JSONDecodeError:
-        start = content.find("{")
-        end = content.rfind("}")
-        if start < 0 or end <= start:
-            return {}
-        payload = json.loads(content[start : end + 1])
-
-    return payload if isinstance(payload, dict) else {}
+    return extract_json_object(text)
 
 
 def _safe_float(value: Any, default: float = 0.0) -> float:
