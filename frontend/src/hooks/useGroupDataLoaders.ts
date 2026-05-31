@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { apiClient, Account, AccountSelf, Group, GroupStats, Topic } from '@/lib/api';
 import { useInitialLoad } from '@/hooks/useInitialLoad';
@@ -16,6 +16,13 @@ interface UseGroupDataLoadersOptions {
   groupId: number;
   currentPage: number;
   debouncedSearchTerm: string;
+}
+
+const MAX_AUTO_RETRIES = 5;
+const RETRYABLE_LOAD_ERROR_MARKERS = ['未知错误', '空数据', '反爬虫'];
+
+function isRetryableLoadError(message: string) {
+  return RETRYABLE_LOAD_ERROR_MARKERS.some((marker) => message.includes(marker));
 }
 
 export function useGroupDataLoaders({
@@ -47,10 +54,16 @@ export function useGroupDataLoaders({
   const [accountSelf, setAccountSelf] = useState<AccountSelf | null>(null);
   const [hasColumns, setHasColumns] = useState<boolean>(false);
   const [columnsTitle, setColumnsTitle] = useState<string | null>(null);
+  const groupDetailRetryTimerRef = useRef<number | null>(null);
+  const topicsRetryTimerRef = useRef<number | null>(null);
 
   const loadGroupDetail = useCallback(async (currentRetryCount = 0) => {
     try {
       if (currentRetryCount === 0) {
+        if (groupDetailRetryTimerRef.current) {
+          window.clearTimeout(groupDetailRetryTimerRef.current);
+          groupDetailRetryTimerRef.current = null;
+        }
         setLoading(true);
         setError(null);
         setRetryCount(0);
@@ -69,6 +82,10 @@ export function useGroupDataLoaders({
       const foundGroup = data.groups.find((item) => item.group_id === groupId);
 
       if (foundGroup) {
+        if (groupDetailRetryTimerRef.current) {
+          window.clearTimeout(groupDetailRetryTimerRef.current);
+          groupDetailRetryTimerRef.current = null;
+        }
         setGroup(foundGroup);
         setError(null);
         setRetryCount(0);
@@ -82,17 +99,21 @@ export function useGroupDataLoaders({
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : '加载群组详情失败';
 
-      if (errorMessage.includes('未知错误') || errorMessage.includes('空数据') || errorMessage.includes('反爬虫')) {
+      if (isRetryableLoadError(errorMessage) && currentRetryCount < MAX_AUTO_RETRIES) {
         const nextRetryCount = currentRetryCount + 1;
         const delay = Math.min(1000 + (nextRetryCount * 500), 5000);
 
-        window.setTimeout(() => {
+        if (groupDetailRetryTimerRef.current) {
+          window.clearTimeout(groupDetailRetryTimerRef.current);
+        }
+        groupDetailRetryTimerRef.current = window.setTimeout(() => {
+          groupDetailRetryTimerRef.current = null;
           loadGroupDetail(nextRetryCount);
         }, delay);
         return;
       }
 
-      setError(errorMessage);
+      setError(isRetryableLoadError(errorMessage) ? `${errorMessage}，自动重试已达上限` : errorMessage);
       setIsRetrying(false);
       setLoading(false);
     }
@@ -110,6 +131,10 @@ export function useGroupDataLoaders({
   const loadTopics = useCallback(async (currentRetryCount = 0) => {
     try {
       if (currentRetryCount === 0) {
+        if (topicsRetryTimerRef.current) {
+          window.clearTimeout(topicsRetryTimerRef.current);
+          topicsRetryTimerRef.current = null;
+        }
         setTopicsLoading(true);
       }
 
@@ -122,14 +147,22 @@ export function useGroupDataLoaders({
       setTopics(data.data);
       setTotalPages(data.pagination.pages);
       setTopicsLoading(false);
+      if (topicsRetryTimerRef.current) {
+        window.clearTimeout(topicsRetryTimerRef.current);
+        topicsRetryTimerRef.current = null;
+      }
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : '加载话题列表失败';
 
-      if (errorMessage.includes('未知错误') || errorMessage.includes('空数据') || errorMessage.includes('反爬虫')) {
+      if (isRetryableLoadError(errorMessage) && currentRetryCount < MAX_AUTO_RETRIES) {
         const nextRetryCount = currentRetryCount + 1;
         const delay = Math.min(1000 + (nextRetryCount * 300), 3000);
 
-        window.setTimeout(() => {
+        if (topicsRetryTimerRef.current) {
+          window.clearTimeout(topicsRetryTimerRef.current);
+        }
+        topicsRetryTimerRef.current = window.setTimeout(() => {
+          topicsRetryTimerRef.current = null;
           loadTopics(nextRetryCount);
         }, delay);
         return;
@@ -142,6 +175,24 @@ export function useGroupDataLoaders({
 
   useEffect(() => {
     loadTopics();
+  }, [loadTopics]);
+
+  useEffect(() => {
+    return () => {
+      if (groupDetailRetryTimerRef.current) {
+        window.clearTimeout(groupDetailRetryTimerRef.current);
+        groupDetailRetryTimerRef.current = null;
+      }
+    };
+  }, [loadGroupDetail]);
+
+  useEffect(() => {
+    return () => {
+      if (topicsRetryTimerRef.current) {
+        window.clearTimeout(topicsRetryTimerRef.current);
+        topicsRetryTimerRef.current = null;
+      }
+    };
   }, [loadTopics]);
 
   const loadGroupInfo = useCallback(async () => {
