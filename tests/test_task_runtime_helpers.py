@@ -24,6 +24,9 @@ class FakeTaskStore:
         self.logs.append((task_id, message))
         return message
 
+    def get_logs(self, task_id):
+        return []
+
     def update_task(self, task_id, status, message, result=None, updated_at=None):
         self.tasks[task_id].update({"status": status, "message": message, "result": result, "updated_at": updated_at})
         return self.tasks[task_id]
@@ -160,6 +163,21 @@ class TaskRuntimeHelperTests(unittest.TestCase):
 
         self.assertEqual("completed", store.tasks["task-1"]["status"])
         self.assertEqual([("task-1", "completed")], store.released_locks)
+
+    def test_get_task_logs_state_returns_memory_log_copy(self):
+        from backend.services import task_runtime
+
+        store = FakeTaskStore()
+        store.tasks["task-1"] = {"task_id": "task-1", "status": "running", "message": "running"}
+
+        with patch("backend.services.task_runtime.get_task_store", return_value=store):
+            task_runtime.task_logs["task-1"] = ["first"]
+            try:
+                logs = task_runtime.get_task_logs_state("task-1")
+                logs.append("mutated")
+                self.assertEqual(["first"], task_runtime.task_logs["task-1"])
+            finally:
+                task_runtime.task_logs.pop("task-1", None)
 
     def test_update_task_does_not_overwrite_cancelled_status(self):
         from backend.services import task_runtime
