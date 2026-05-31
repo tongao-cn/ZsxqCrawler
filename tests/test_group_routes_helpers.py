@@ -81,6 +81,11 @@ class FakeScopedFileDb(FakeFileDb):
 
 @unittest.skipUnless(HAS_GROUP_ROUTE_DEPS, "group route dependencies are not installed")
 class GroupRoutesHelperTests(unittest.TestCase):
+    def _run_async(self, coro):
+        import asyncio
+
+        return asyncio.run(coro)
+
     def test_default_local_group_fields_and_entry(self):
         fields = group_routes._default_local_group_fields(123)
         entry = group_routes._build_local_group_entry(123, fields)
@@ -217,6 +222,67 @@ class GroupRoutesHelperTests(unittest.TestCase):
         groups = group_routes._fetch_official_groups(FakeOfficialClient())
 
         self.assertEqual([{"group_id": "123"}], groups)
+
+    def test_get_groups_response_preserves_account_and_local_source_contract(self):
+        persisted = []
+
+        def fake_load_local_group_db_fields(group_id, fields):
+            result = dict(fields)
+            result["local_name"] = f"本地群 {group_id}"
+            return result
+
+        with (
+            patch.object(group_routes, "build_account_group_detection", return_value={"123": {"id": "acc"}}),
+            patch.object(group_routes, "get_cached_local_group_ids", return_value={"123", "456"}),
+            patch.object(
+                group_routes,
+                "_fetch_official_groups",
+                return_value=[
+                    {
+                        "group_id": "123",
+                        "name": "官方群",
+                        "type": "paid",
+                    }
+                ],
+            ),
+            patch.object(group_routes, "_persist_group_meta_local", side_effect=lambda gid, info: persisted.append((gid, info["source"]))),
+            patch.object(group_routes, "_read_local_group_meta", return_value={}),
+            patch.object(group_routes, "_load_local_group_db_fields", side_effect=fake_load_local_group_db_fields),
+        ):
+            response = group_routes._get_groups_response()
+
+        groups_by_id = {item["group_id"]: item for item in response["groups"]}
+        self.assertEqual("account|local", groups_by_id[123]["source"])
+        self.assertEqual({"id": "acc"}, groups_by_id[123]["account"])
+        self.assertEqual("local", groups_by_id[456]["source"])
+        self.assertEqual([(123, "account|local")], persisted)
+
+    def test_group_read_routes_offload_sync_work_to_thread(self):
+        calls = []
+
+        async def fake_to_thread(func, *args):
+            calls.append((func, args))
+            return {"called": func.__name__, "args": args}
+
+        with patch("backend.routes.group_routes.asyncio.to_thread", side_effect=fake_to_thread):
+            groups = self._run_async(group_routes.get_groups())
+            info = self._run_async(group_routes.get_group_info("123"))
+            stats = self._run_async(group_routes.get_group_stats(123))
+            database_info = self._run_async(group_routes.get_group_database_info(123))
+
+        self.assertEqual(
+            [
+                (group_routes._get_groups_response, ()),
+                (group_routes._get_group_info_response, ("123",)),
+                (group_routes._get_group_stats_response, (123,)),
+                (group_routes._get_group_database_info_response, (123,)),
+            ],
+            calls,
+        )
+        self.assertEqual({"called": "_get_groups_response", "args": ()}, groups)
+        self.assertEqual({"called": "_get_group_info_response", "args": ("123",)}, info)
+        self.assertEqual({"called": "_get_group_stats_response", "args": (123,)}, stats)
+        self.assertEqual({"called": "_get_group_database_info_response", "args": (123,)}, database_info)
 
 
 if __name__ == "__main__":

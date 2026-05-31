@@ -278,76 +278,60 @@ def _build_official_group_entry(group: Dict[str, Any], account: Any = None) -> D
     }
 
 
-@router.get("/groups")
-async def get_groups():
-    """获取群组列表：账号群 ∪ 本地目录群（去重合并）"""
+def _get_groups_response() -> Dict[str, Any]:
+    group_account_map = build_account_group_detection()
+    local_ids = get_cached_local_group_ids(force_refresh=False)
+
+    groups_data: List[dict] = []
     try:
-        # 自动构建群组→账号映射（多账号支持）
-        group_account_map = build_account_group_detection()
-        local_ids = get_cached_local_group_ids(force_refresh=False)
-
-        # 获取“当前账号”的群列表（优先账号默认账号，其次config.toml；若未配置则视为空集合）
-        groups_data: List[dict] = []
-        try:
-            groups_data = _fetch_official_groups()
-        except Exception as e:
-            # 不阻断，记录告警
-            _warn(f"获取官方群组失败，降级为本地集合: {e}")
-            groups_data = []
-
-        # 组装账号侧群为字典（id -> info）
-        by_id: Dict[int, dict] = {}
-
-        for group in groups_data or []:
-            info = _build_official_group_entry(group, account=group_account_map.get(str(group.get("group_id"))))
-            if not info:
-                continue
-            by_id[info["group_id"]] = info
-
-        # 合并本地目录群
-        for gid in local_ids or []:
-            try:
-                gid_int = int(gid)
-            except Exception:
-                continue
-            if gid_int in by_id:
-                # 标注来源为 account|local，并持久化一份元信息到本地
-                src = by_id[gid_int].get("source", "official")
-                if "local" not in src:
-                    by_id[gid_int]["source"] = f"{src}|local"
-                _persist_group_meta_local(gid_int, by_id[gid_int])
-            else:
-                # 仅存在于本地：优先从 group_meta.json 读取元信息，其次从本地数据库补全
-                fields = _default_local_group_fields(gid_int)
-                fields = _apply_local_group_meta(fields, _read_local_group_meta(gid_int))
-                fields = _load_local_group_db_fields(gid_int, fields)
-                by_id[gid_int] = _build_local_group_entry(gid_int, fields)
-
-        # 排序：按群ID升序；如需二级排序再按来源（账号优先）
-        merged = [by_id[k] for k in sorted(by_id.keys())]
-
-        return {
-            "groups": merged,
-            "total": len(merged),
-        }
+        groups_data = _fetch_official_groups()
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"获取群组列表失败: {str(e)}")
+        _warn(f"获取官方群组失败，降级为本地集合: {e}")
+        groups_data = []
+
+    by_id: Dict[int, dict] = {}
+
+    for group in groups_data or []:
+        info = _build_official_group_entry(group, account=group_account_map.get(str(group.get("group_id"))))
+        if not info:
+            continue
+        by_id[info["group_id"]] = info
+
+    for gid in local_ids or []:
+        try:
+            gid_int = int(gid)
+        except Exception:
+            continue
+        if gid_int in by_id:
+            src = by_id[gid_int].get("source", "official")
+            if "local" not in src:
+                by_id[gid_int]["source"] = f"{src}|local"
+            _persist_group_meta_local(gid_int, by_id[gid_int])
+        else:
+            fields = _default_local_group_fields(gid_int)
+            fields = _apply_local_group_meta(fields, _read_local_group_meta(gid_int))
+            fields = _load_local_group_db_fields(gid_int, fields)
+            by_id[gid_int] = _build_local_group_entry(gid_int, fields)
+
+    merged = [by_id[k] for k in sorted(by_id.keys())]
+
+    return {
+        "groups": merged,
+        "total": len(merged),
+    }
 
 
-@router.get("/groups/{group_id}/info")
-async def get_group_info(group_id: str):
-    """获取群组信息（带本地回退，避免401/500导致前端报错）"""
+def _get_group_info_response(group_id: str) -> Dict[str, Any]:
+    def build_fallback(source: str = "fallback", note: str = None) -> dict:
+        return _build_group_info_fallback(
+            group_id,
+            account=get_account_summary_for_group_auto(group_id),
+            files_count=_count_group_files(group_id),
+            source=source,
+            note=note,
+        )
+
     try:
-        # 本地回退数据构造（不访问官方API）
-        def build_fallback(source: str = "fallback", note: str = None) -> dict:
-            return _build_group_info_fallback(
-                group_id,
-                account=get_account_summary_for_group_auto(group_id),
-                files_count=_count_group_files(group_id),
-                source=source,
-                note=note,
-            )
-
         for group_data in _fetch_official_groups():
             if str(group_data.get("group_id")) == str(group_id):
                 return {
@@ -361,65 +345,94 @@ async def get_group_info(group_id: str):
                 }
 
         return build_fallback(note="official_group_not_found")
-
     except Exception:
-        # 任何异常都回退为本地信息，避免 500
         return build_fallback(note="exception_fallback")
+
+
+def _get_group_stats_response(group_id: int) -> Dict[str, Any]:
+    with closing(ZSXQDatabase(str(group_id))) as db:
+        cursor = db.cursor
+
+        cursor.execute("SELECT COUNT(*) FROM topics WHERE group_id = ?", (group_id,))
+        topics_count = cursor.fetchone()[0]
+
+        cursor.execute(
+            """
+            SELECT COUNT(DISTINCT t.owner_user_id)
+            FROM talks t
+            JOIN topics tp ON t.topic_id = tp.topic_id
+            WHERE tp.group_id = ?
+        """,
+            (group_id,),
+        )
+        users_count = cursor.fetchone()[0]
+
+        cursor.execute("SELECT MAX(create_time) FROM topics WHERE group_id = ?", (group_id,))
+        latest_topic_time = cursor.fetchone()[0]
+
+        cursor.execute("SELECT MIN(create_time) FROM topics WHERE group_id = ?", (group_id,))
+        earliest_topic_time = cursor.fetchone()[0]
+
+        cursor.execute("SELECT SUM(likes_count) FROM topics WHERE group_id = ?", (group_id,))
+        total_likes = cursor.fetchone()[0] or 0
+
+        cursor.execute("SELECT SUM(comments_count) FROM topics WHERE group_id = ?", (group_id,))
+        total_comments = cursor.fetchone()[0] or 0
+
+        cursor.execute("SELECT SUM(reading_count) FROM topics WHERE group_id = ?", (group_id,))
+        total_readings = cursor.fetchone()[0] or 0
+
+    return {
+        "group_id": group_id,
+        "topics_count": topics_count,
+        "users_count": users_count,
+        "latest_topic_time": latest_topic_time,
+        "earliest_topic_time": earliest_topic_time,
+        "total_likes": total_likes,
+        "total_comments": total_comments,
+        "total_readings": total_readings,
+    }
+
+
+def _get_group_database_info_response(group_id: int) -> Dict[str, Any]:
+    with closing(ZSXQDatabase(str(group_id))) as topics_db, closing(ZSXQFileDatabase(str(group_id))) as files_db:
+        db_info = {
+            "group_id": str(group_id),
+            "schema": "zsxq_core",
+            "group_dir": get_db_path_manager().get_group_dir(str(group_id)),
+            "topics": topics_db.get_database_stats(),
+            "files": files_db.get_database_stats(),
+        }
+
+    return {
+        "group_id": group_id,
+        "database_info": db_info,
+    }
+
+
+@router.get("/groups")
+async def get_groups():
+    """获取群组列表：账号群 ∪ 本地目录群（去重合并）"""
+    try:
+        return await asyncio.to_thread(_get_groups_response)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"获取群组列表失败: {str(e)}")
+
+
+@router.get("/groups/{group_id}/info")
+async def get_group_info(group_id: str):
+    """获取群组信息（带本地回退，避免401/500导致前端报错）"""
+    try:
+        return await asyncio.to_thread(_get_group_info_response, group_id)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"获取群组信息失败: {str(e)}")
 
 
 @router.get("/groups/{group_id}/stats")
 async def get_group_stats(group_id: int):
     """获取指定群组的统计信息"""
     try:
-        with closing(ZSXQDatabase(str(group_id))) as db:
-            cursor = db.cursor
-
-            # 获取话题统计
-            cursor.execute("SELECT COUNT(*) FROM topics WHERE group_id = ?", (group_id,))
-            topics_count = cursor.fetchone()[0]
-
-            # 获取用户统计 - 从talks表获取，因为topics表没有user_id字段
-            cursor.execute(
-                """
-                SELECT COUNT(DISTINCT t.owner_user_id)
-                FROM talks t
-                JOIN topics tp ON t.topic_id = tp.topic_id
-                WHERE tp.group_id = ?
-            """,
-                (group_id,),
-            )
-            users_count = cursor.fetchone()[0]
-
-            # 获取最新话题时间
-            cursor.execute("SELECT MAX(create_time) FROM topics WHERE group_id = ?", (group_id,))
-            latest_topic_time = cursor.fetchone()[0]
-
-            # 获取最早话题时间
-            cursor.execute("SELECT MIN(create_time) FROM topics WHERE group_id = ?", (group_id,))
-            earliest_topic_time = cursor.fetchone()[0]
-
-            # 获取总点赞数
-            cursor.execute("SELECT SUM(likes_count) FROM topics WHERE group_id = ?", (group_id,))
-            total_likes = cursor.fetchone()[0] or 0
-
-            # 获取总评论数
-            cursor.execute("SELECT SUM(comments_count) FROM topics WHERE group_id = ?", (group_id,))
-            total_comments = cursor.fetchone()[0] or 0
-
-            # 获取总阅读数
-            cursor.execute("SELECT SUM(reading_count) FROM topics WHERE group_id = ?", (group_id,))
-            total_readings = cursor.fetchone()[0] or 0
-
-        return {
-            "group_id": group_id,
-            "topics_count": topics_count,
-            "users_count": users_count,
-            "latest_topic_time": latest_topic_time,
-            "earliest_topic_time": earliest_topic_time,
-            "total_likes": total_likes,
-            "total_comments": total_comments,
-            "total_readings": total_readings,
-        }
+        return await asyncio.to_thread(_get_group_stats_response, group_id)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"获取群组统计失败: {str(e)}")
 
@@ -428,19 +441,7 @@ async def get_group_stats(group_id: int):
 async def get_group_database_info(group_id: int):
     """获取指定群组的数据库信息"""
     try:
-        with closing(ZSXQDatabase(str(group_id))) as topics_db, closing(ZSXQFileDatabase(str(group_id))) as files_db:
-            db_info = {
-                "group_id": str(group_id),
-                "schema": "zsxq_core",
-                "group_dir": get_db_path_manager().get_group_dir(str(group_id)),
-                "topics": topics_db.get_database_stats(),
-                "files": files_db.get_database_stats(),
-            }
-
-        return {
-            "group_id": group_id,
-            "database_info": db_info,
-        }
+        return await asyncio.to_thread(_get_group_database_info_response, group_id)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"获取数据库信息失败: {str(e)}")
 
