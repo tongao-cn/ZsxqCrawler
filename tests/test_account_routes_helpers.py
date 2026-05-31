@@ -123,5 +123,29 @@ class AccountRoutesHelperTests(unittest.TestCase):
         self.assertEqual(cookie, "group-cookie")
 
 
+@unittest.skipUnless(HAS_ACCOUNT_ROUTE_DEPS, "account route dependencies are not installed")
+class AccountRoutesAsyncTests(unittest.IsolatedAsyncioTestCase):
+    async def test_self_routes_offload_blocking_work_to_thread(self):
+        route_cases = [
+            (account_routes.get_account_self, account_routes._get_account_self_response, "acc-1"),
+            (account_routes.refresh_account_self, account_routes._refresh_account_self_response, "acc-1"),
+            (account_routes.get_group_account_self, account_routes._get_group_account_self_response, "group-1"),
+            (account_routes.refresh_group_account_self, account_routes._refresh_group_account_self_response, "group-1"),
+        ]
+
+        async def fake_to_thread(func, *args):
+            return {"self": {"called": func.__name__, "args": args}}
+
+        with patch.object(account_routes.asyncio, "to_thread", new=fake_to_thread):
+            for route_func, helper_func, identifier in route_cases:
+                with self.subTest(route=route_func.__name__):
+                    result = await route_func(identifier)
+
+                self.assertEqual(
+                    result,
+                    {"self": {"called": helper_func.__name__, "args": (identifier,)}},
+                )
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from typing import Any, Dict, Optional, Tuple
 
 import requests
@@ -79,6 +80,42 @@ def _save_self_info_response(db: Any, account_id: str, data: Dict[str, Any]) -> 
     return {"self": db.get_self_info(account_id)}
 
 
+def _get_account_self_response(account_id: str) -> Dict[str, Any]:
+    db = get_account_info_db()
+    info = db.get_self_info(account_id)
+    if info:
+        return {"self": info}
+
+    cookie = _get_account_cookie_or_raise(account_id)
+    data = _fetch_self_api_data(cookie, "API returned failure")
+    return _save_self_info_response(db, account_id, data)
+
+
+def _refresh_account_self_response(account_id: str) -> Dict[str, Any]:
+    cookie = _get_account_cookie_or_raise(account_id)
+    data = _fetch_self_api_data(cookie, "API returned failure")
+    db = get_account_info_db()
+    return _save_self_info_response(db, account_id, data)
+
+
+def _get_group_account_self_response(group_id: str) -> Dict[str, Any]:
+    account_id, cookie = _get_group_account_context_or_raise(group_id)
+    db = get_account_info_db()
+    info = db.get_self_info(account_id)
+    if info:
+        return {"self": info}
+
+    data = _fetch_self_api_data(cookie, "API返回失败")
+    return _save_self_info_response(db, account_id, data)
+
+
+def _refresh_group_account_self_response(group_id: str) -> Dict[str, Any]:
+    account_id, cookie = _get_group_account_context_or_raise(group_id)
+    data = _fetch_self_api_data(cookie, "API返回失败")
+    db = get_account_info_db()
+    return _save_self_info_response(db, account_id, data)
+
+
 @router.get("/accounts")
 async def list_accounts():
     """获取所有账号列表"""
@@ -147,14 +184,7 @@ async def get_group_account(group_id: str):
 async def get_account_self(account_id: str):
     """获取并返回指定账号的已持久化自我信息；若无则尝试抓取并保存"""
     try:
-        db = get_account_info_db()
-        info = db.get_self_info(account_id)
-        if info:
-            return {"self": info}
-
-        cookie = _get_account_cookie_or_raise(account_id)
-        data = _fetch_self_api_data(cookie, "API returned failure")
-        return _save_self_info_response(db, account_id, data)
+        return await asyncio.to_thread(_get_account_self_response, account_id)
     except HTTPException:
         raise
     except requests.RequestException as e:
@@ -167,10 +197,7 @@ async def get_account_self(account_id: str):
 async def refresh_account_self(account_id: str):
     """强制抓取 /v3/users/self 并更新持久化"""
     try:
-        cookie = _get_account_cookie_or_raise(account_id)
-        data = _fetch_self_api_data(cookie, "API returned failure")
-        db = get_account_info_db()
-        return _save_self_info_response(db, account_id, data)
+        return await asyncio.to_thread(_refresh_account_self_response, account_id)
     except HTTPException:
         raise
     except requests.RequestException as e:
@@ -183,14 +210,7 @@ async def refresh_account_self(account_id: str):
 async def get_group_account_self(group_id: str):
     """获取群组当前使用账号的自我信息（若无则尝试抓取并保存）"""
     try:
-        account_id, cookie = _get_group_account_context_or_raise(group_id)
-        db = get_account_info_db()
-        info = db.get_self_info(account_id)
-        if info:
-            return {"self": info}
-
-        data = _fetch_self_api_data(cookie, "API返回失败")
-        return _save_self_info_response(db, account_id, data)
+        return await asyncio.to_thread(_get_group_account_self_response, group_id)
     except HTTPException:
         raise
     except requests.RequestException as e:
@@ -203,10 +223,7 @@ async def get_group_account_self(group_id: str):
 async def refresh_group_account_self(group_id: str):
     """强制抓取群组当前使用账号的自我信息并持久化"""
     try:
-        account_id, cookie = _get_group_account_context_or_raise(group_id)
-        data = _fetch_self_api_data(cookie, "API返回失败")
-        db = get_account_info_db()
-        return _save_self_info_response(db, account_id, data)
+        return await asyncio.to_thread(_refresh_group_account_self_response, group_id)
     except HTTPException:
         raise
     except requests.RequestException as e:
