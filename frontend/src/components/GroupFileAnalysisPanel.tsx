@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { Download, FileText, Loader2, RefreshCw, Search, Sparkles } from 'lucide-react';
-import { apiClient, FileAIAnalysis, FileItem, PaginatedResponse } from '@/lib/api';
+import { apiClient, FileAIAnalysis, FileItem, getTaskConflictDetail, PaginatedResponse } from '@/lib/api';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -15,6 +15,8 @@ import { useTaskStatus } from '@/hooks/useTaskStatus';
 
 interface GroupFileAnalysisPanelProps {
   groupId: number;
+  onTaskCreated?: (taskId: string) => void;
+  onTaskConflict?: (taskId: string) => void;
 }
 
 interface FileTaskState {
@@ -100,7 +102,11 @@ function getAnalysisStatusBadge(file: FileItem) {
   return <Badge variant="outline">未分析</Badge>;
 }
 
-export default function GroupFileAnalysisPanel({ groupId }: GroupFileAnalysisPanelProps) {
+export default function GroupFileAnalysisPanel({
+  groupId,
+  onTaskCreated,
+  onTaskConflict,
+}: GroupFileAnalysisPanelProps) {
   const [files, setFiles] = useState<FileItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [page, setPage] = useState(1);
@@ -236,6 +242,7 @@ export default function GroupFileAnalysisPanel({ groupId }: GroupFileAnalysisPan
       toast.success(response.task_id ? `文件下载任务已创建: ${response.task_id}` : '文件下载任务已创建');
 
       if (response.task_id) {
+        onTaskCreated?.(response.task_id);
         setFileTasks(prev => {
           const next = new Map(prev);
           next.set(file.file_id, {
@@ -255,7 +262,13 @@ export default function GroupFileAnalysisPanel({ groupId }: GroupFileAnalysisPan
         });
       }
     } catch (error) {
-      toast.error(`文件下载失败: ${error instanceof Error ? error.message : '未知错误'}`);
+      const conflict = getTaskConflictDetail(error);
+      if (conflict?.task_id) {
+        toast.error(`已有任务 ${conflict.task_id} 正在运行`);
+        onTaskConflict?.(conflict.task_id);
+      } else {
+        toast.error(`文件下载失败: ${error instanceof Error ? error.message : '未知错误'}`);
+      }
       setDownloadingFiles(prev => {
         const next = new Set(prev);
         next.delete(file.file_id);
@@ -283,6 +296,7 @@ export default function GroupFileAnalysisPanel({ groupId }: GroupFileAnalysisPan
         ) as { task_id?: string };
 
         if (response.task_id) {
+          onTaskCreated?.(response.task_id);
           setFileTasks(prev => {
             const next = new Map(prev);
             next.set(file.file_id, {
@@ -301,7 +315,13 @@ export default function GroupFileAnalysisPanel({ groupId }: GroupFileAnalysisPan
           });
         }
       } catch (error) {
-        toast.error(`${file.name} 下载任务创建失败: ${error instanceof Error ? error.message : '未知错误'}`);
+        const conflict = getTaskConflictDetail(error);
+        if (conflict?.task_id) {
+          toast.error(`已有任务 ${conflict.task_id} 正在运行`);
+          onTaskConflict?.(conflict.task_id);
+        } else {
+          toast.error(`${file.name} 下载任务创建失败: ${error instanceof Error ? error.message : '未知错误'}`);
+        }
         setDownloadingFiles(prev => {
           const next = new Set(prev);
           next.delete(file.file_id);

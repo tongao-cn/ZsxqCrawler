@@ -574,7 +574,11 @@ export default function GroupDetailPage() {
             <TabsContent value="files" className="flex-1 min-h-0">
               <div className="flex h-full min-h-0 gap-4">
               <div className="flex-1 min-h-0 overflow-auto">
-                <GroupFileAnalysisPanel groupId={groupId} />
+                <GroupFileAnalysisPanel
+                  groupId={groupId}
+                  onTaskCreated={handleTaskCreated}
+                  onTaskConflict={openTaskList}
+                />
               </div>
               {contextActionPanel}
               </div>
