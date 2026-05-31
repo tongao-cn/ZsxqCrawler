@@ -45,8 +45,14 @@ function getTaskTypeLabel(type: string) {
       return '收集文件';
     case 'download_files':
       return '下载文件';
+    case 'download_selected_files':
+      return '选中文件下载';
     case 'download_single_file':
       return '单文件下载';
+    case 'analyze_file':
+      return '文件分析';
+    case 'analyze_files':
+      return '批量文件分析';
     case 'sync_files_from_topics':
       return '同步文件';
     case 'columns_fetch':
@@ -131,7 +137,7 @@ export default function TaskListCompact({
     try {
       loadingRef.current = true;
       setLoading(true);
-      const data = await apiClient.getTasks();
+      const data = await apiClient.getTasks(showAllTasks ? undefined : normalizedGroupId);
       setTasks(data);
     } catch (error) {
       toast.error(`加载任务列表失败: ${error instanceof Error ? error.message : '未知错误'}`);
@@ -139,7 +145,7 @@ export default function TaskListCompact({
       loadingRef.current = false;
       setLoading(false);
     }
-  }, []);
+  }, [normalizedGroupId, showAllTasks]);
 
   useEffect(() => {
     void loadTasks();

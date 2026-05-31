@@ -2,6 +2,7 @@ import unittest
 import tempfile
 import contextlib
 import io
+from pathlib import Path
 from unittest.mock import patch
 
 from backend.crawlers.zsxq_file_downloader import ZSXQFileDownloader
@@ -58,6 +59,22 @@ class FakeJsonResponse:
         return {
             "succeeded": True,
             "resp_data": {"download_url": "https://files.example/signed-token"},
+        }
+
+
+class FakeFailedJsonResponse:
+    status_code = 200
+    text = ""
+
+    def __init__(self, code, message):
+        self.code = code
+        self.message = message
+
+    def json(self):
+        return {
+            "succeeded": False,
+            "code": self.code,
+            "message": self.message,
         }
 
 
@@ -163,6 +180,27 @@ class FileDownloaderDownloadTests(unittest.TestCase):
             self.assertEqual(2, len(session.get_calls))
             self.assertEqual((101, "completed"), downloader.file_db.status_updates[-1][:2])
 
+    def test_download_file_retries_and_fails_on_size_mismatch(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            session = FakeDownloadSession([
+                FakeDownloadResponse(200, b"bad"),
+                FakeDownloadResponse(200, b"bad"),
+                FakeDownloadResponse(200, b"bad"),
+            ])
+            downloader = self._downloader_for_download(temp_dir, session)
+
+            with patch("backend.crawlers.zsxq_file_downloader.time.sleep"):
+                result = ZSXQFileDownloader.download_file(
+                    downloader,
+                    {"file": {"id": 101, "name": "memo.pdf", "size": 4, "download_count": 0}},
+                )
+
+            self.assertFalse(result)
+            self.assertEqual(3, len(session.get_calls))
+            self.assertEqual((101, "failed", None), downloader.file_db.status_updates[-1])
+            self.assertFalse((Path(temp_dir) / "memo.pdf").exists())
+            self.assertFalse((Path(temp_dir) / "memo.pdf.part").exists())
+
     def test_get_download_url_redacts_signed_url_in_stdout(self):
         session = FakeDownloadSession([FakeJsonResponse()])
         downloader = object.__new__(ZSXQFileDownloader)
@@ -182,6 +220,26 @@ class FileDownloaderDownloadTests(unittest.TestCase):
         self.assertEqual("https://files.example/signed-token", result)
         self.assertIn("<redacted>", output.getvalue())
         self.assertNotIn("signed-token", output.getvalue())
+
+    def test_get_download_url_1030_does_not_stop_whole_task(self):
+        session = FakeDownloadSession([FakeFailedJsonResponse(1030, "mobile only")])
+        downloader = object.__new__(ZSXQFileDownloader)
+        downloader.base_url = "https://api.example"
+        downloader.session = session
+        downloader.group_id = "group-1"
+        downloader.cookie = "cookie"
+        downloader.request_count = 0
+        downloader.smart_delay = lambda: None
+        downloader.get_stealth_headers = lambda: {}
+        downloader.logs = []
+        downloader.log = downloader.logs.append
+        downloader.stop_flag = False
+
+        result = ZSXQFileDownloader.get_download_url(downloader, 101)
+
+        self.assertIsNone(result)
+        self.assertFalse(downloader.stop_flag)
+        self.assertEqual({"code": 1030, "message": "mobile only"}, downloader.last_download_url_error)
 
 
 if __name__ == "__main__":

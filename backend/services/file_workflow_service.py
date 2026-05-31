@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 from contextlib import contextmanager
-from typing import Any, Dict, Iterator, Optional
+from typing import Any, Dict, Iterator, Optional, Sequence
 
 from fastapi import BackgroundTasks
 
@@ -11,7 +11,14 @@ from backend.core.db_path_manager import get_db_path_manager
 from backend.crawlers.zsxq_file_downloader import ZSXQFileDownloader
 from backend.routes.ingestion_helpers import create_ingestion_task_or_raise
 from backend.schemas.files import FileCollectRequest
-from backend.services.file_ai_analysis_service import resolve_local_file_path
+from backend.services.file_ai_analysis_service import (
+    DEFAULT_FILE_ANALYSIS_API_BASE,
+    DEFAULT_FILE_ANALYSIS_MODEL,
+    DEFAULT_FILE_ANALYSIS_REASONING_EFFORT,
+    DEFAULT_FILE_ANALYSIS_WIRE_API,
+    analyze_group_file,
+    resolve_local_file_path,
+)
 from backend.services.task_runtime import (
     add_task_log,
     create_task,
@@ -21,6 +28,7 @@ from backend.services.task_runtime import (
     update_task,
 )
 from backend.storage.db_compat import connect
+from backend.storage.zsxq_database import ZSXQDatabase
 from backend.storage.zsxq_file_database import ZSXQFileDatabase
 
 
@@ -219,11 +227,13 @@ def _enqueue_file_task(
     *args,
     message: str = "任务已创建，正在后台执行",
     ingestion_group_id: Optional[str] = None,
+    task_group_id: Optional[str] = None,
 ) -> Dict[str, str]:
     if ingestion_group_id is not None:
         task_id = create_ingestion_task_or_raise(task_type, description, ingestion_group_id)
     else:
-        task_id = create_task(task_type, description)
+        metadata = {"group_id": str(task_group_id)} if task_group_id is not None else None
+        task_id = create_task(task_type, description, metadata=metadata) if metadata else create_task(task_type, description)
     enqueue_runtime_task(task_func, task_id, *args)
     return {"task_id": task_id, "message": message}
 
@@ -379,6 +389,98 @@ def run_file_download_task(
             pass
 
 
+def _load_download_file_records(
+    downloader: ZSXQFileDownloader,
+    group_id: str,
+    file_ids: Sequence[int],
+) -> tuple[list[tuple[int, str, int, int]], list[int]]:
+    ordered_ids = [int(file_id) for file_id in dict.fromkeys(file_ids)]
+    placeholders = ", ".join("?" for _ in ordered_ids)
+    downloader.file_db.cursor.execute(
+        f"""
+        SELECT file_id, name, size, download_count
+        FROM files
+        WHERE group_id = ? AND file_id IN ({placeholders})
+        """,
+        (_query_group_id(group_id), *ordered_ids),
+    )
+    rows = downloader.file_db.cursor.fetchall()
+    by_file_id = {int(row[0]): row for row in rows}
+    records = [
+        (
+            int(row[0]),
+            str(row[1] or f"file_{int(row[0])}"),
+            int(row[2] or 0),
+            int(row[3] or 0),
+        )
+        for row in (by_file_id[file_id] for file_id in ordered_ids if file_id in by_file_id)
+    ]
+    missing = [file_id for file_id in ordered_ids if file_id not in by_file_id]
+    return records, missing
+
+
+def run_selected_file_download_task(task_id: str, group_id: str, file_ids: Sequence[int]):
+    try:
+        update_task(task_id, "running", f"开始下载选中的 {len(file_ids)} 个文件...")
+        downloader = _create_file_downloader(task_id, group_id)
+
+        if is_task_stopped(task_id):
+            add_task_log(task_id, "🛑 任务在初始化过程中被停止")
+            return
+
+        records, missing = _load_download_file_records(downloader, group_id, file_ids)
+        stats = {
+            "total_files": len(dict.fromkeys(int(file_id) for file_id in file_ids)),
+            "found": len(records),
+            "missing": len(missing),
+            "downloaded": 0,
+            "skipped": 0,
+            "failed": 0,
+        }
+        if missing:
+            add_task_log(task_id, f"⚠️ {len(missing)} 个文件未在文件库中找到，已跳过")
+        if not records:
+            update_task(task_id, "completed", "没有可下载的文件记录", {"downloaded_files": stats})
+            return
+
+        for index, (file_id, file_name, file_size, download_count) in enumerate(records, 1):
+            if is_task_stopped(task_id):
+                add_task_log(task_id, "🛑 下载任务被停止")
+                return
+
+            add_task_log(task_id, f"【{index}/{len(records)}】{file_name}")
+            result = downloader.download_file(
+                {
+                    "file": {
+                        "id": file_id,
+                        "name": file_name,
+                        "size": file_size,
+                        "download_count": download_count,
+                    }
+                }
+            )
+            if result == "skipped":
+                stats["skipped"] += 1
+            elif result:
+                stats["downloaded"] += 1
+            else:
+                stats["failed"] += 1
+
+        update_task(task_id, "completed", "选中文件下载完成", {"downloaded_files": stats})
+    except Exception as e:
+        try:
+            if not is_task_stopped(task_id):
+                add_task_log(task_id, f"❌ 选中文件下载失败: {str(e)}")
+                update_task(task_id, "failed", f"选中文件下载失败: {str(e)}")
+        except Exception:
+            pass
+    finally:
+        try:
+            _remove_file_downloader(task_id)
+        except Exception:
+            pass
+
+
 def run_single_file_download_task_with_info(
     task_id: str,
     group_id: str,
@@ -394,8 +496,29 @@ def run_single_file_download_task_with_info(
             add_task_log(task_id, "🛑 任务在初始化过程中被停止")
             return
 
-        if file_name and file_size:
-            add_task_log(task_id, f"📄 使用提供的文件信息: {file_name} ({file_size} bytes)")
+        downloader.file_db.cursor.execute(
+            """
+            SELECT file_id, name, size, download_count
+            FROM files
+            WHERE file_id = ? AND group_id = ?
+            """,
+            (file_id, _query_group_id(group_id)),
+        )
+
+        result = downloader.file_db.cursor.fetchone()
+        if result:
+            _, db_file_name, db_file_size, download_count = result
+            add_task_log(task_id, f"📄 从数据库获取文件信息: {db_file_name} ({db_file_size} bytes)")
+            file_info = {
+                "file": {
+                    "id": file_id,
+                    "name": db_file_name,
+                    "size": db_file_size,
+                    "download_count": download_count,
+                }
+            }
+        elif file_name and file_size is not None:
+            add_task_log(task_id, f"📄 文件库未命中，使用请求中的文件信息: {file_name} ({file_size} bytes)")
             file_info = {
                 "file": {
                     "id": file_id,
@@ -405,37 +528,15 @@ def run_single_file_download_task_with_info(
                 }
             }
         else:
-            downloader.file_db.cursor.execute(
-                """
-                SELECT file_id, name, size, download_count
-                FROM files
-                WHERE file_id = ? AND group_id = ?
-            """,
-                (file_id, _query_group_id(group_id)),
-            )
-
-            result = downloader.file_db.cursor.fetchone()
-            if result:
-                _, db_file_name, db_file_size, download_count = result
-                add_task_log(task_id, f"📄 从数据库获取文件信息: {db_file_name} ({db_file_size} bytes)")
-                file_info = {
-                    "file": {
-                        "id": file_id,
-                        "name": db_file_name,
-                        "size": db_file_size,
-                        "download_count": download_count,
-                    }
+            add_task_log(task_id, f"📄 直接下载文件 ID: {file_id}")
+            file_info = {
+                "file": {
+                    "id": file_id,
+                    "name": f"file_{file_id}",
+                    "size": 0,
+                    "download_count": 0,
                 }
-            else:
-                add_task_log(task_id, f"📄 直接下载文件 ID: {file_id}")
-                file_info = {
-                    "file": {
-                        "id": file_id,
-                        "name": f"file_{file_id}",
-                        "size": 0,
-                        "download_count": 0,
-                    }
-                }
+            }
 
         result = downloader.download_file(file_info)
 
@@ -467,5 +568,87 @@ def run_single_file_download_task_with_info(
     finally:
         try:
             _remove_file_downloader(task_id)
+        except Exception:
+            pass
+
+
+def run_sync_files_from_topics_task(task_id: str, group_id: str):
+    topics_db = None
+    try:
+        update_task(task_id, "running", "开始从话题同步文件记录...")
+        if is_task_stopped(task_id):
+            add_task_log(task_id, "🛑 任务在初始化过程中被停止")
+            return
+
+        topics_db = ZSXQDatabase(group_id)
+        stats = topics_db.backfill_topic_files_to_file_database()
+        if is_task_stopped(task_id):
+            return
+
+        update_task(task_id, "completed", "从话题同步文件记录完成", stats)
+    except Exception as e:
+        try:
+            if not is_task_stopped(task_id):
+                add_task_log(task_id, f"❌ 从话题同步文件记录失败: {str(e)}")
+                update_task(task_id, "failed", f"从话题同步文件记录失败: {str(e)}")
+        except Exception:
+            pass
+    finally:
+        if topics_db:
+            try:
+                topics_db.close()
+            except Exception:
+                pass
+
+
+def run_file_analysis_task(
+    task_id: str,
+    group_id: str,
+    file_ids: Sequence[int],
+    force: bool = False,
+):
+    unique_file_ids = [int(file_id) for file_id in dict.fromkeys(file_ids)]
+    stats = {
+        "total_files": len(unique_file_ids),
+        "completed": 0,
+        "cached": 0,
+        "failed": 0,
+    }
+    try:
+        update_task(task_id, "running", f"开始分析 {len(unique_file_ids)} 个文件...")
+        for index, file_id in enumerate(unique_file_ids, 1):
+            if is_task_stopped(task_id):
+                add_task_log(task_id, "🛑 文件分析任务被停止")
+                return
+
+            try:
+                add_task_log(task_id, f"【{index}/{len(unique_file_ids)}】分析文件 ID: {file_id}")
+                result = analyze_group_file(
+                    group_id,
+                    file_id,
+                    force=force,
+                    model=DEFAULT_FILE_ANALYSIS_MODEL,
+                    api_base=DEFAULT_FILE_ANALYSIS_API_BASE,
+                    wire_api=DEFAULT_FILE_ANALYSIS_WIRE_API,
+                    reasoning_effort=DEFAULT_FILE_ANALYSIS_REASONING_EFFORT,
+                )
+                if result.get("cached"):
+                    stats["cached"] += 1
+                else:
+                    stats["completed"] += 1
+                add_task_log(task_id, f"✅ 文件分析完成: {file_id}")
+            except Exception as exc:
+                stats["failed"] += 1
+                add_task_log(task_id, f"❌ 文件分析失败: {file_id}, {exc}")
+
+        if stats["failed"] and stats["completed"] == 0 and stats["cached"] == 0:
+            update_task(task_id, "failed", "文件分析全部失败", {"analysis": stats})
+            return
+        update_task(task_id, "completed", "文件分析完成", {"analysis": stats})
+    except Exception as e:
+        try:
+            if not is_task_stopped(task_id):
+                add_task_log(task_id, f"❌ 文件分析任务失败: {str(e)}")
+                update_task(task_id, "failed", f"文件分析任务失败: {str(e)}", {"analysis": stats})
         except Exception:
             pass

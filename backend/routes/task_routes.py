@@ -42,9 +42,19 @@ def _streaming_response_headers() -> dict:
 
 
 @router.get("")
-async def get_tasks(limit: Optional[int] = Query(default=None, ge=1, le=1000)):
+async def get_tasks(
+    limit: Optional[int] = Query(default=None, ge=1, le=1000),
+    group_id: Optional[str] = Query(default=None),
+    task_type: Optional[str] = Query(default=None, alias="type"),
+):
     """获取所有任务状态"""
-    return list_tasks(limit=limit)
+    tasks = list_tasks()
+    if group_id:
+        normalized_group_id = str(group_id).strip()
+        tasks = [task for task in tasks if str(task.get("group_id") or "").strip() == normalized_group_id]
+    if task_type:
+        tasks = [task for task in tasks if task.get("type") == task_type]
+    return tasks[:limit] if limit else tasks
 
 
 @router.post("/cleanup")

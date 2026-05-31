@@ -217,8 +217,7 @@ export default function DataPanel({ selectedGroup }: DataPanelProps) {
     try {
       setSyncingFiles(true);
       const result = await apiClient.syncFilesFromTopics(selectedGroupId);
-      toast.success(`文件记录同步完成：扫描 ${result.stats.scanned} 条，新增 ${result.stats.new_files} 个文件`);
-      await loadFiles();
+      toast.success(`文件记录同步任务已创建: ${result.task_id}`);
     } catch (error) {
       toast.error(`同步文件记录失败: ${error instanceof Error ? error.message : '未知错误'}`);
     } finally {
@@ -276,44 +275,34 @@ export default function DataPanel({ selectedGroup }: DataPanelProps) {
     }
 
     const filesToDownload = selectedDownloadableFiles.slice();
-    toast.info(`开始创建 ${filesToDownload.length} 个文件下载任务`);
-
-    for (const file of filesToDownload) {
-      try {
-        setDownloadingFiles(prev => new Set(prev).add(file.file_id));
-        const response = await apiClient.downloadSingleFile(
-          String(selectedGroupId),
-          file.file_id,
-          file.name,
-          file.size,
-        ) as { task_id?: string };
-
-        if (response.task_id) {
-          setFileTasks(prev => {
-            const next = new Map(prev);
-            next.set(file.file_id, {
-              taskId: response.task_id || '',
-              status: 'pending',
-              message: '下载任务已创建',
-            });
-            return next;
+    const fileIds = filesToDownload.map((file) => file.file_id);
+    try {
+      setDownloadingFiles(prev => {
+        const next = new Set(prev);
+        fileIds.forEach((fileId) => next.add(fileId));
+        return next;
+      });
+      const response = await apiClient.downloadSelectedFiles(selectedGroupId, fileIds);
+      setFileTasks(prev => {
+        const next = new Map(prev);
+        fileIds.forEach((fileId) => {
+          next.set(fileId, {
+            taskId: response.task_id,
+            status: 'pending',
+            message: '下载任务已创建',
           });
-          pollFileTask(file.file_id, response.task_id);
-        } else {
-          setDownloadingFiles(prev => {
-            const next = new Set(prev);
-            next.delete(file.file_id);
-            return next;
-          });
-        }
-      } catch (error) {
-        toast.error(`${file.name} 下载任务创建失败: ${error instanceof Error ? error.message : '未知错误'}`);
-        setDownloadingFiles(prev => {
-          const next = new Set(prev);
-          next.delete(file.file_id);
-          return next;
         });
-      }
+        return next;
+      });
+      fileIds.forEach((fileId) => pollFileTask(fileId, response.task_id));
+      toast.success(`选中文件下载任务已创建: ${response.task_id}`);
+    } catch (error) {
+      toast.error(`选中文件下载任务创建失败: ${error instanceof Error ? error.message : '未知错误'}`);
+      setDownloadingFiles(prev => {
+        const next = new Set(prev);
+        fileIds.forEach((fileId) => next.delete(fileId));
+        return next;
+      });
     }
 
     setSelectedFileIds(prev => {

@@ -28,3 +28,11 @@ class FileCollectRequest(BaseModel):
 
 class FileAIAnalysisRequest(BaseModel):
     force: bool = Field(default=False, description="是否强制重新分析")
+
+
+class FileIdListRequest(BaseModel):
+    file_ids: list[int] = Field(..., min_length=1, max_length=200, description="文件 ID 列表")
+
+
+class FileAIAnalysisBatchRequest(FileIdListRequest):
+    force: bool = Field(default=False, description="是否强制重新分析")

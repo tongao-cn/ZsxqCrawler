@@ -11,7 +11,13 @@ from backend.services.a_share_analysis_service import (
     DEFAULT_WIRE_API as A_SHARE_DEFAULT_WIRE_API,
 )
 from backend.core.ai_provider_config import has_openai_api_key
-from backend.schemas.files import FileAIAnalysisRequest, FileCollectRequest, FileDownloadRequest
+from backend.schemas.files import (
+    FileAIAnalysisBatchRequest,
+    FileAIAnalysisRequest,
+    FileCollectRequest,
+    FileDownloadRequest,
+    FileIdListRequest,
+)
 from backend.services.file_ai_analysis_service import (
     DEFAULT_FILE_ANALYSIS_REASONING_EFFORT,
     analyze_group_file,
@@ -30,12 +36,12 @@ from backend.services.file_workflow_service import (
     _resolve_download_record_status,
     _safe_filename,
     run_collect_files_task,
+    run_file_analysis_task,
     run_file_download_task,
+    run_selected_file_download_task,
     run_single_file_download_task_with_info,
+    run_sync_files_from_topics_task,
 )
-from backend.routes.ingestion_helpers import create_ingestion_task_or_raise
-from backend.services.task_runtime import update_task
-from backend.storage.zsxq_database import ZSXQDatabase
 
 router = APIRouter(prefix="/api/files", tags=["files"])
 
@@ -117,6 +123,26 @@ async def download_single_file(
         raise HTTPException(status_code=500, detail=f"创建单个文件下载任务失败: {str(e)}")
 
 
+@router.post("/download-selected/{group_id}")
+async def download_selected_files(group_id: str, request: FileIdListRequest, background_tasks: BackgroundTasks):
+    """下载指定文件列表。"""
+    try:
+        return _enqueue_file_task(
+            background_tasks,
+            "download_selected_files",
+            f"下载选中文件 ({len(request.file_ids)} 个)",
+            run_selected_file_download_task,
+            group_id,
+            request.file_ids,
+            message="选中文件下载任务已创建",
+            ingestion_group_id=group_id,
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"创建选中文件下载任务失败: {str(e)}")
+
+
 @router.get("/status/{group_id}/{file_id}")
 async def get_file_status(group_id: str, file_id: int):
     """获取文件下载状态"""
@@ -193,6 +219,67 @@ async def create_file_analysis(group_id: str, file_id: int, request: FileAIAnaly
         raise HTTPException(status_code=500, detail=f"文件 AI 分析失败: {str(e)}")
 
 
+@router.post("/analysis-task/{group_id}/{file_id}")
+async def create_file_analysis_task(
+    group_id: str,
+    file_id: int,
+    request: FileAIAnalysisRequest,
+    background_tasks: BackgroundTasks,
+):
+    """创建单文件 AI 分析后台任务。"""
+    try:
+        if not has_openai_api_key():
+            raise HTTPException(
+                status_code=400,
+                detail="未配置 OpenAI API Key，请设置环境变量 OPENAI_API_KEY 或 config.toml [ai].api_key",
+            )
+        return _enqueue_file_task(
+            background_tasks,
+            "analyze_file",
+            f"分析文件 (ID: {file_id})",
+            run_file_analysis_task,
+            group_id,
+            [file_id],
+            request.force,
+            message="文件 AI 分析任务已创建",
+            task_group_id=group_id,
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"创建文件 AI 分析任务失败: {str(e)}")
+
+
+@router.post("/analysis-selected/{group_id}")
+async def create_selected_file_analysis_task(
+    group_id: str,
+    request: FileAIAnalysisBatchRequest,
+    background_tasks: BackgroundTasks,
+):
+    """创建批量文件 AI 分析后台任务。"""
+    try:
+        if not has_openai_api_key():
+            raise HTTPException(
+                status_code=400,
+                detail="未配置 OpenAI API Key，请设置环境变量 OPENAI_API_KEY 或 config.toml [ai].api_key",
+            )
+        return _enqueue_file_task(
+            background_tasks,
+            "analyze_files",
+            f"批量分析文件 ({len(request.file_ids)} 个)",
+            run_file_analysis_task,
+            group_id,
+            request.file_ids,
+            request.force,
+            message="批量文件 AI 分析任务已创建",
+            task_group_id=group_id,
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"创建批量文件 AI 分析任务失败: {str(e)}")
+
+
 @router.get("/stats/{group_id}")
 async def get_file_stats(group_id: str):
     """获取指定群组的文件统计信息"""
@@ -255,35 +342,22 @@ async def clear_file_database(group_id: str):
 
 
 @router.post("/sync-from-topics/{group_id}")
-async def sync_files_from_topics(group_id: str):
+async def sync_files_from_topics(group_id: str, background_tasks: BackgroundTasks):
     """从话题库 topic_files 回填/重建文件库记录。"""
-    topics_db = None
-    task_id = None
     try:
-        task_id = create_ingestion_task_or_raise(
+        return _enqueue_file_task(
+            background_tasks,
             "sync_files_from_topics",
             f"从话题同步文件记录 (群组: {group_id})",
+            run_sync_files_from_topics_task,
             group_id,
+            message="从话题同步文件记录任务已创建",
+            ingestion_group_id=group_id,
         )
-        update_task(task_id, "running", "开始从话题同步文件记录...")
-        topics_db = ZSXQDatabase(group_id)
-        stats = topics_db.backfill_topic_files_to_file_database()
-        update_task(task_id, "completed", "从话题同步文件记录完成", stats)
-        return _build_sync_files_response(group_id, stats)
     except HTTPException:
-        if task_id:
-            update_task(task_id, "failed", "从话题同步文件记录失败")
         raise
     except Exception as e:
-        if task_id:
-            update_task(task_id, "failed", f"从话题同步文件记录失败: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"同步文件记录失败: {str(e)}")
-    finally:
-        if topics_db:
-            try:
-                topics_db.close()
-            except Exception:
-                pass
+        raise HTTPException(status_code=500, detail=f"创建同步文件记录任务失败: {str(e)}")
 
 
 @router.get("/{group_id}")
@@ -313,8 +387,40 @@ async def get_files(
 
             search_text = (search or "").strip()
             if search_text:
-                conditions.append("f.name LIKE ?")
-                params_prefix.append(f"%{search_text}%")
+                search_pattern = f"%{search_text.lower()}%"
+                conditions.append(
+                    """
+                    (
+                        LOWER(COALESCE(f.name, '')) LIKE ?
+                        OR EXISTS (
+                            SELECT 1
+                            FROM file_topic_relations fr
+                            LEFT JOIN topics t ON t.topic_id = fr.topic_id
+                            LEFT JOIN talks tk ON tk.topic_id = fr.topic_id
+                            LEFT JOIN articles ar ON ar.topic_id = fr.topic_id
+                            WHERE fr.file_id = f.file_id
+                              AND (
+                                  LOWER(COALESCE(t.title, '')) LIKE ?
+                                  OR LOWER(COALESCE(t.annotation, '')) LIKE ?
+                                  OR LOWER(COALESCE(tk.text, '')) LIKE ?
+                                  OR LOWER(COALESCE(ar.title, '')) LIKE ?
+                              )
+                        )
+                        OR EXISTS (
+                            SELECT 1
+                            FROM topic_files tf
+                            LEFT JOIN topics t2 ON t2.topic_id = tf.topic_id
+                            WHERE tf.file_id = f.file_id
+                              AND (
+                                  LOWER(COALESCE(tf.name, '')) LIKE ?
+                                  OR LOWER(COALESCE(t2.title, '')) LIKE ?
+                                  OR LOWER(COALESCE(t2.annotation, '')) LIKE ?
+                              )
+                        )
+                    )
+                    """
+                )
+                params_prefix.extend([search_pattern] * 8)
 
             where_clause = f"WHERE {' AND '.join(conditions)}" if conditions else ""
 
@@ -358,12 +464,6 @@ async def get_files(
                     stored_status,
                     stored_local_path,
                 )
-
-                if local_status["local_exists"] and (
-                    stored_status != "completed"
-                    or str(stored_local_path or "").strip() != local_status["local_path"]
-                ):
-                    file_db.update_file_download_status(file_id, "completed", local_status["local_path"])
 
                 normalized_files.append(
                     {
