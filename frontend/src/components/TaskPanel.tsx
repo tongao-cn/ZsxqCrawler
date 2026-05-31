@@ -1,48 +1,20 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useMemo, useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { apiClient, Task } from '@/lib/api';
+import { useTaskList } from '@/hooks/useTaskList';
 
 export default function TaskPanel() {
-  const [tasks, setTasks] = useState<Task[]>([]);
-  const [loading, setLoading] = useState(false);
   const [autoRefresh, setAutoRefresh] = useState(true);
-  const loadingRef = useRef(false);
-
-  useEffect(() => {
-    loadTasks();
-  }, []);
-
-  useEffect(() => {
-    if (!autoRefresh) return;
-
-    const interval = setInterval(() => {
-      loadTasks();
-    }, 3000); // 每3秒刷新一次
-
-    return () => clearInterval(interval);
-  }, [autoRefresh]);
-
-  const loadTasks = async () => {
-    if (loadingRef.current) {
-      return;
-    }
-
-    try {
-      loadingRef.current = true;
-      setLoading(true);
-      const data = await apiClient.getTasks();
-      setTasks(data.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()));
-    } catch {} finally {
-      loadingRef.current = false;
-      setLoading(false);
-    }
-  };
+  const { loadTasks, loading, tasks: rawTasks } = useTaskList({ autoRefresh });
+  const tasks = useMemo(
+    () => [...rawTasks].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()),
+    [rawTasks],
+  );
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -180,7 +152,7 @@ export default function TaskPanel() {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={loadTasks}
+                onClick={() => void loadTasks()}
                 disabled={loading}
               >
                 {loading ? '刷新中...' : '立即刷新'}

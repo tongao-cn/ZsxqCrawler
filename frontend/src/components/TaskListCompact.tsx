@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { RefreshCw, Square, ListFilter } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { apiClient, Task } from '@/lib/api';
+import { useTaskList } from '@/hooks/useTaskList';
 
 interface TaskListCompactProps {
   groupId?: number | string | null;
@@ -155,40 +156,17 @@ export default function TaskListCompact({
   onSelectTask,
   onTaskStop,
 }: TaskListCompactProps) {
-  const [tasks, setTasks] = useState<Task[]>([]);
-  const [loading, setLoading] = useState(false);
   const [showAllTasks, setShowAllTasks] = useState(false);
   const [stoppingTaskId, setStoppingTaskId] = useState<string | null>(null);
-  const loadingRef = useRef(false);
   const normalizedGroupId = normalizeGroupId(groupId);
+  const handleLoadError = useCallback((error: unknown) => {
+    toast.error(`加载任务列表失败: ${error instanceof Error ? error.message : '未知错误'}`);
+  }, []);
 
-  const loadTasks = useCallback(async () => {
-    if (loadingRef.current) {
-      return;
-    }
-    try {
-      loadingRef.current = true;
-      setLoading(true);
-      const data = await apiClient.getTasks(showAllTasks ? undefined : normalizedGroupId);
-      setTasks(data);
-    } catch (error) {
-      toast.error(`加载任务列表失败: ${error instanceof Error ? error.message : '未知错误'}`);
-    } finally {
-      loadingRef.current = false;
-      setLoading(false);
-    }
-  }, [normalizedGroupId, showAllTasks]);
-
-  useEffect(() => {
-    void loadTasks();
-  }, [loadTasks]);
-
-  useEffect(() => {
-    const interval = window.setInterval(() => {
-      void loadTasks();
-    }, 3000);
-    return () => window.clearInterval(interval);
-  }, [loadTasks]);
+  const { loadTasks, loading, tasks } = useTaskList({
+    groupId: showAllTasks ? undefined : normalizedGroupId,
+    onError: handleLoadError,
+  });
 
   const visibleTasks = useMemo(() => {
     const filtered = showAllTasks || !normalizedGroupId
