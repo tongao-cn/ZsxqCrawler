@@ -92,6 +92,28 @@ class FileRoutesHelperTests(unittest.TestCase):
         enqueue_runtime_task.assert_called_once_with(fake_task, "task-1", "group-1", "request")
         self.assertEqual([], background_tasks.calls)
 
+    def test_enqueue_file_task_can_attach_group_metadata(self):
+        background_tasks = FakeBackgroundTasks()
+
+        with (
+            patch("backend.services.file_workflow_service.create_task", return_value="task-1") as create_task,
+            patch("backend.services.file_workflow_service.enqueue_runtime_task") as enqueue_runtime_task,
+        ):
+            response = _enqueue_file_task(
+                background_tasks,
+                "analyze_files",
+                "分析文件",
+                fake_task,
+                "group-1",
+                [123],
+                task_group_id="group-1",
+            )
+
+        create_task.assert_called_once_with("analyze_files", "分析文件", metadata={"group_id": "group-1"})
+        self.assertEqual({"task_id": "task-1", "message": "任务已创建，正在后台执行"}, response)
+        enqueue_runtime_task.assert_called_once_with(fake_task, "task-1", "group-1", [123])
+        self.assertEqual([], background_tasks.calls)
+
     def test_download_single_file_uses_group_ingestion_lock(self):
         from backend.routes.file_routes import download_single_file, run_single_file_download_task_with_info
 
@@ -120,6 +142,144 @@ class FileRoutesHelperTests(unittest.TestCase):
             456,
             message="单个文件下载任务已创建",
             ingestion_group_id="group-1",
+        )
+
+    def test_download_selected_files_uses_one_group_ingestion_task(self):
+        from backend.routes.file_routes import download_selected_files, run_selected_file_download_task
+        from backend.schemas.files import FileIdListRequest
+
+        background_tasks = FakeBackgroundTasks()
+
+        with patch("backend.routes.file_routes._enqueue_file_task", return_value={"task_id": "task-1", "message": "ok"}) as enqueue:
+            response = self._run_async(
+                download_selected_files(
+                    "group-1",
+                    FileIdListRequest(file_ids=[123, 456]),
+                    background_tasks,
+                )
+            )
+
+        self.assertEqual({"task_id": "task-1", "message": "ok"}, response)
+        enqueue.assert_called_once_with(
+            background_tasks,
+            "download_selected_files",
+            "下载选中文件 (2 个)",
+            run_selected_file_download_task,
+            "group-1",
+            [123, 456],
+            message="选中文件下载任务已创建",
+            ingestion_group_id="group-1",
+        )
+
+    def test_download_filtered_files_uses_one_group_ingestion_task(self):
+        from backend.routes.file_routes import download_filtered_files, run_filtered_file_download_task
+        from backend.schemas.files import FileFilteredDownloadRequest
+
+        background_tasks = FakeBackgroundTasks()
+
+        with patch("backend.routes.file_routes._enqueue_file_task", return_value={"task_id": "task-1", "message": "ok"}) as enqueue:
+            response = self._run_async(
+                download_filtered_files(
+                    "group-1",
+                    FileFilteredDownloadRequest(status="failed", search="pdf", max_files=10),
+                    background_tasks,
+                )
+            )
+
+        self.assertEqual({"task_id": "task-1", "message": "ok"}, response)
+        enqueue.assert_called_once_with(
+            background_tasks,
+            "download_filtered_files",
+            "下载筛选结果",
+            run_filtered_file_download_task,
+            "group-1",
+            "failed",
+            "pdf",
+            10,
+            message="筛选结果下载任务已创建",
+            ingestion_group_id="group-1",
+        )
+
+    def test_sync_files_from_topics_is_enqueued(self):
+        from backend.routes.file_routes import sync_files_from_topics, run_sync_files_from_topics_task
+
+        background_tasks = FakeBackgroundTasks()
+
+        with patch("backend.routes.file_routes._enqueue_file_task", return_value={"task_id": "task-1", "message": "ok"}) as enqueue:
+            response = self._run_async(sync_files_from_topics("group-1", background_tasks))
+
+        self.assertEqual({"task_id": "task-1", "message": "ok"}, response)
+        enqueue.assert_called_once_with(
+            background_tasks,
+            "sync_files_from_topics",
+            "从话题同步文件记录 (群组: group-1)",
+            run_sync_files_from_topics_task,
+            "group-1",
+            message="从话题同步文件记录任务已创建",
+            ingestion_group_id="group-1",
+        )
+
+    def test_file_analysis_task_attaches_group_metadata(self):
+        from backend.routes.file_routes import create_file_analysis_task, run_file_analysis_task
+        from backend.schemas.files import FileAIAnalysisRequest
+
+        background_tasks = FakeBackgroundTasks()
+
+        with (
+            patch("backend.routes.file_routes.has_openai_api_key", return_value=True),
+            patch("backend.routes.file_routes._enqueue_file_task", return_value={"task_id": "task-1", "message": "ok"}) as enqueue,
+        ):
+            response = self._run_async(
+                create_file_analysis_task(
+                    "group-1",
+                    123,
+                    FileAIAnalysisRequest(force=True),
+                    background_tasks,
+                )
+            )
+
+        self.assertEqual({"task_id": "task-1", "message": "ok"}, response)
+        enqueue.assert_called_once_with(
+            background_tasks,
+            "analyze_file",
+            "分析文件 (ID: 123)",
+            run_file_analysis_task,
+            "group-1",
+            [123],
+            True,
+            message="文件 AI 分析任务已创建",
+            task_group_id="group-1",
+        )
+
+    def test_selected_file_analysis_task_attaches_group_metadata(self):
+        from backend.routes.file_routes import create_selected_file_analysis_task, run_file_analysis_task
+        from backend.schemas.files import FileAIAnalysisBatchRequest
+
+        background_tasks = FakeBackgroundTasks()
+
+        with (
+            patch("backend.routes.file_routes.has_openai_api_key", return_value=True),
+            patch("backend.routes.file_routes._enqueue_file_task", return_value={"task_id": "task-1", "message": "ok"}) as enqueue,
+        ):
+            response = self._run_async(
+                create_selected_file_analysis_task(
+                    "group-1",
+                    FileAIAnalysisBatchRequest(file_ids=[123, 456], force=False),
+                    background_tasks,
+                )
+            )
+
+        self.assertEqual({"task_id": "task-1", "message": "ok"}, response)
+        enqueue.assert_called_once_with(
+            background_tasks,
+            "analyze_files",
+            "批量分析文件 (2 个)",
+            run_file_analysis_task,
+            "group-1",
+            [123, 456],
+            False,
+            message="批量文件 AI 分析任务已创建",
+            task_group_id="group-1",
         )
 
     def test_enqueue_file_task_rejects_ingestion_conflict(self):

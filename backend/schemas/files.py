@@ -28,3 +28,17 @@ class FileCollectRequest(BaseModel):
 
 class FileAIAnalysisRequest(BaseModel):
     force: bool = Field(default=False, description="是否强制重新分析")
+
+
+class FileIdListRequest(BaseModel):
+    file_ids: list[int] = Field(..., min_length=1, max_length=200, description="文件 ID 列表")
+
+
+class FileAIAnalysisBatchRequest(FileIdListRequest):
+    force: bool = Field(default=False, description="是否强制重新分析")
+
+
+class FileFilteredDownloadRequest(BaseModel):
+    status: Optional[str] = Field(default=None, description="文件下载状态筛选")
+    search: Optional[str] = Field(default=None, description="文件搜索关键词")
+    max_files: Optional[int] = Field(default=None, ge=1, le=5000, description="最多下载多少个匹配文件")

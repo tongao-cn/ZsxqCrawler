@@ -39,6 +39,8 @@ INGESTION_LOCK_TYPES = {
     "crawl_time_range",
     "collect_files",
     "download_files",
+    "download_filtered_files",
+    "download_selected_files",
     "download_single_file",
     "sync_files_from_topics",
 }

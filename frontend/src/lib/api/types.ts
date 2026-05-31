@@ -372,6 +372,9 @@ export interface FileItem {
   download_status: string;
   local_exists?: boolean;
   local_path?: string | null;
+  download_error_code?: string | null;
+  download_error_message?: string | null;
+  last_download_attempt_at?: string | null;
   has_ai_analysis?: boolean;
   analysis_updated_at?: string | null;
 }

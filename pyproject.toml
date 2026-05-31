@@ -24,7 +24,6 @@ dependencies = [
 zsxq-api = "backend.main:run_server"
 a-share-analysis = "scripts.analyze_a_share_companies:main"
 csv-chart-server = "scripts.csv_chart_server:main"
-migrate-accounts = "scripts.migrate_accounts_to_sql:migrate_accounts"
 manage-postgres-core-schema = "scripts.manage_postgres_core_schema:main"
 backfill-postgres-core-group-ids = "scripts.backfill_postgres_core_group_ids:main"
 backfill-a-share-analysis-to-core = "scripts.backfill_a_share_analysis_to_core:main"

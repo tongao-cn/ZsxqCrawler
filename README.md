@@ -125,7 +125,6 @@ uv run python -m backend.main
 uv run zsxq-api
 uv run a-share-analysis
 uv run csv-chart-server
-uv run migrate-accounts
 uv run manage-postgres-core-schema --apply
 uv run manage-postgres-core-access --apply
 uv run generate-postgres-status-report --output docs\postgres_status_report.md

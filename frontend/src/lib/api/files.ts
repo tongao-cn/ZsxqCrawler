@@ -1,5 +1,5 @@
 import { AnalysisApiClient } from './analysis';
-import type { FileAIAnalysis, FileItem, PaginatedResponse } from './types';
+import type { FileAIAnalysis, FileItem, PaginatedResponse, TaskCreateResponse } from './types';
 
 export class FilesApiClient extends AnalysisApiClient {
   async downloadFiles(groupId: number | string, maxFiles?: number, sortBy: string = 'download_count',
@@ -95,16 +95,7 @@ export class FilesApiClient extends AnalysisApiClient {
     return this.request(`/api/files/stats/${groupId}`);
   }
 
-  async syncFilesFromTopics(groupId: number | string): Promise<{
-    success: boolean;
-    group_id: string;
-    stats: {
-      scanned: number;
-      new_files: number;
-      relations: number;
-      topic_files: number;
-    };
-  }> {
+  async syncFilesFromTopics(groupId: number | string): Promise<TaskCreateResponse> {
     return this.request(`/api/files/sync-from-topics/${groupId}`, {
       method: 'POST',
     });
@@ -118,6 +109,28 @@ export class FilesApiClient extends AnalysisApiClient {
     const url = `/api/files/download-single/${groupId}/${fileId}${params.toString() ? '?' + params.toString() : ''}`;
     return this.request(url, {
       method: 'POST',
+    });
+  }
+
+  async downloadSelectedFiles(groupId: number | string, fileIds: number[]): Promise<TaskCreateResponse> {
+    return this.request(`/api/files/download-selected/${groupId}`, {
+      method: 'POST',
+      body: JSON.stringify({ file_ids: fileIds }),
+    });
+  }
+
+  async downloadFilteredFiles(groupId: number | string, params: {
+    status?: string;
+    search?: string;
+    maxFiles?: number;
+  }): Promise<TaskCreateResponse> {
+    return this.request(`/api/files/download-filtered/${groupId}`, {
+      method: 'POST',
+      body: JSON.stringify({
+        status: params.status,
+        search: params.search,
+        max_files: params.maxFiles,
+      }),
     });
   }
 
@@ -162,6 +175,20 @@ export class FilesApiClient extends AnalysisApiClient {
     return this.request(`/api/files/analysis/${groupId}/${fileId}`, {
       method: 'POST',
       body: JSON.stringify({ force }),
+    });
+  }
+
+  async analyzeFileTask(groupId: number | string, fileId: number, force: boolean = false): Promise<TaskCreateResponse> {
+    return this.request(`/api/files/analysis-task/${groupId}/${fileId}`, {
+      method: 'POST',
+      body: JSON.stringify({ force }),
+    });
+  }
+
+  async analyzeSelectedFiles(groupId: number | string, fileIds: number[], force: boolean = false): Promise<TaskCreateResponse> {
+    return this.request(`/api/files/analysis-selected/${groupId}`, {
+      method: 'POST',
+      body: JSON.stringify({ file_ids: fileIds, force }),
     });
   }
 }

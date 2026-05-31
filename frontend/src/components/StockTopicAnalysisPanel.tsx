@@ -1,6 +1,6 @@
 'use client';
 
-import { ChangeEvent, ClipboardEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ChangeEvent, ClipboardEvent, KeyboardEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Eye, ImagePlus, RefreshCw, Search, Sparkles } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -16,7 +16,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { apiClient, StockTopicAnalysisResponse } from '@/lib/api';
 import { useTaskStatus } from '@/hooks/useTaskStatus';
 
-const MAX_STOCK_COUNT = 20;
+const MAX_STOCK_COUNT = 50;
 const MAX_IMAGE_BYTES = 4 * 1024 * 1024;
 
 interface StockTopicAnalysisPanelProps {
@@ -80,6 +80,10 @@ function formatStockCode(result: StockTopicAnalysisResponse) {
     return '-';
   }
   return result.market ? `${result.market}.${result.stock_code}` : result.stock_code;
+}
+
+function getResultKey(result: StockTopicAnalysisResponse) {
+  return result.stock_name.trim();
 }
 
 function getStatusLabel(result: StockTopicAnalysisResponse) {
@@ -190,13 +194,19 @@ export default function StockTopicAnalysisPanel({ groupId, onTaskCreated }: Stoc
   const [extractingImage, setExtractingImage] = useState(false);
   const [activeBatchAnalysis, setActiveBatchAnalysis] = useState<ActiveBatchAnalysis | null>(null);
   const [selectedResult, setSelectedResult] = useState<StockTopicAnalysisResponse | null>(null);
+  const [selectedStockNames, setSelectedStockNames] = useState<Set<string>>(() => new Set());
   const imageInputRef = useRef<HTMLInputElement | null>(null);
 
   const parsedStockNames = useMemo(() => parseStockNames(stockInput), [stockInput]);
+  const selectedResults = useMemo(
+    () => results.filter((result) => selectedStockNames.has(getResultKey(result))),
+    [results, selectedStockNames],
+  );
   const totalTopics = results.reduce((sum, result) => sum + result.topic_count, 0);
   const analyzedCount = results.filter((result) => Boolean(result.summary_markdown)).length;
   const newTopicCount = results.reduce((sum, result) => sum + (result.new_topic_count ?? 0), 0);
   const analyzeButtonLabel = getAnalyzeButtonLabel(results, parsedStockNames.length, Boolean(activeBatchAnalysis), analyzing);
+  const allResultsSelected = results.length > 0 && selectedResults.length === results.length;
 
   useEffect(() => {
     try {
@@ -237,8 +247,26 @@ export default function StockTopicAnalysisPanel({ groupId, onTaskCreated }: Stoc
       return mergeSearchAndLatestResult(searchResult, latest);
     });
     setResults(mergedResults);
+    setSelectedStockNames((current) => {
+      const available = new Set(mergedResults.map(getResultKey));
+      return new Set(Array.from(current).filter((stockName) => available.has(stockName)));
+    });
     return mergedResults;
   }, [groupId]);
+
+  const createAnalysisTask = async (stockNames: string[], successPrefix: string) => {
+    try {
+      setAnalyzing(true);
+      const response = await apiClient.analyzeStockTopicsBatch(groupId, stockNames);
+      setActiveBatchAnalysis({ taskId: response.task_id, stockNames });
+      onTaskCreated?.(response.task_id);
+      toast.success(`${successPrefix}: ${response.task_id}`);
+    } catch (error) {
+      toast.error(`创建分析任务失败: ${error instanceof Error ? error.message : '未知错误'}`);
+    } finally {
+      setAnalyzing(false);
+    }
+  };
 
   const handleSearch = async () => {
     if (parsedStockNames.length === 0) {
@@ -262,17 +290,37 @@ export default function StockTopicAnalysisPanel({ groupId, onTaskCreated }: Stoc
       toast.error('请输入至少一只股票名称');
       return;
     }
-    try {
-      setAnalyzing(true);
-      const response = await apiClient.analyzeStockTopicsBatch(groupId, parsedStockNames);
-      setActiveBatchAnalysis({ taskId: response.task_id, stockNames: parsedStockNames });
-      onTaskCreated?.(response.task_id);
-      toast.success(`批量个股分析任务已创建: ${response.task_id}`);
-    } catch (error) {
-      toast.error(`创建批量分析任务失败: ${error instanceof Error ? error.message : '未知错误'}`);
-    } finally {
-      setAnalyzing(false);
+    await createAnalysisTask(parsedStockNames, '批量个股分析任务已创建');
+  };
+
+  const handleAnalyzeSelected = async () => {
+    const stockNames = selectedResults.map((result) => result.stock_name);
+    if (stockNames.length === 0) {
+      toast.error('请先勾选要分析的股票');
+      return;
     }
+    await createAnalysisTask(stockNames, `选中 ${stockNames.length} 只股票的分析任务已创建`);
+  };
+
+  const handleAnalyzeOne = async (result: StockTopicAnalysisResponse) => {
+    await createAnalysisTask([result.stock_name], `${result.stock_name} 分析任务已创建`);
+  };
+
+  const toggleAllResults = (checked: boolean) => {
+    setSelectedStockNames(checked ? new Set(results.map(getResultKey)) : new Set());
+  };
+
+  const toggleResult = (result: StockTopicAnalysisResponse, checked: boolean) => {
+    const stockName = getResultKey(result);
+    setSelectedStockNames((current) => {
+      const next = new Set(current);
+      if (checked) {
+        next.add(stockName);
+      } else {
+        next.delete(stockName);
+      }
+      return next;
+    });
   };
 
   const extractStocksFromImageFile = async (file: File) => {
@@ -321,10 +369,18 @@ export default function StockTopicAnalysisPanel({ groupId, onTaskCreated }: Stoc
     await extractStocksFromImageFile(imageFile);
   };
 
+  const handleStockInputKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (event.key !== 'Enter' || event.shiftKey || event.nativeEvent.isComposing) {
+      return;
+    }
+    event.preventDefault();
+    void handleSearch();
+  };
+
   useTaskStatus(activeBatchAnalysis?.taskId, {
     enabled: Boolean(activeBatchAnalysis),
     onTerminal: async (task) => {
-      const stockNames = activeBatchAnalysis?.stockNames || [];
+      const stockNames = parsedStockNames.length > 0 ? parsedStockNames : activeBatchAnalysis?.stockNames || [];
       if (task.status === 'completed') {
         await loadBatchResults(stockNames);
         toast.success('批量个股分析已保存');
@@ -355,6 +411,7 @@ export default function StockTopicAnalysisPanel({ groupId, onTaskCreated }: Stoc
               value={stockInput}
               onChange={(event) => setStockInput(event.target.value)}
               onPaste={(event) => void handleStockInputPaste(event)}
+              onKeyDown={handleStockInputKeyDown}
               placeholder={'例如：德龙激光、宁德时代\n中际旭创 贵州茅台'}
               className="min-h-24 resize-y"
             />
@@ -390,15 +447,26 @@ export default function StockTopicAnalysisPanel({ groupId, onTaskCreated }: Stoc
               <CardTitle>批量结果</CardTitle>
               <CardDescription>每只股票一行；搜索查询已有结果，分析任务只处理未处理过的新话题</CardDescription>
             </div>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => void loadBatchResults(parsedStockNames)}
-              disabled={searching || parsedStockNames.length === 0}
-            >
-              <RefreshCw className="mr-2 h-4 w-4" />
-              刷新
-            </Button>
+            <div className="flex flex-wrap justify-end gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleAnalyzeSelected}
+                disabled={analyzing || Boolean(activeBatchAnalysis) || selectedResults.length === 0}
+              >
+                <Sparkles className="mr-2 h-4 w-4" />
+                分析/初始化选中 {selectedResults.length > 0 ? selectedResults.length : ''}
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => void loadBatchResults(parsedStockNames)}
+                disabled={searching || parsedStockNames.length === 0}
+              >
+                <RefreshCw className="mr-2 h-4 w-4" />
+                刷新
+              </Button>
+            </div>
           </CardHeader>
           <CardContent>
             {results.length === 0 ? (
@@ -410,22 +478,38 @@ export default function StockTopicAnalysisPanel({ groupId, onTaskCreated }: Stoc
                 <Table>
                   <TableHeader>
                     <TableRow>
+                      <TableHead className="w-10">
+                        <input
+                          type="checkbox"
+                          aria-label="选择当前结果全部股票"
+                          checked={allResultsSelected}
+                          onChange={(event) => toggleAllResults(event.target.checked)}
+                          className="h-4 w-4 rounded border-gray-300 align-middle"
+                        />
+                      </TableHead>
                       <TableHead>股票</TableHead>
-                      <TableHead>代码</TableHead>
                       <TableHead className="text-right">话题数</TableHead>
                       <TableHead className="text-right">待处理话题</TableHead>
                       <TableHead>概念</TableHead>
                       <TableHead className="text-right">推荐次数</TableHead>
                       <TableHead>状态</TableHead>
                       <TableHead>保存时间</TableHead>
-                      <TableHead className="text-right">查看</TableHead>
+                      <TableHead className="text-right">操作</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {results.map((result) => (
                       <TableRow key={`${result.stock_name}-${result.stock_code || 'no-code'}`}>
+                        <TableCell>
+                          <input
+                            type="checkbox"
+                            aria-label={`选择 ${result.stock_name}`}
+                            checked={selectedStockNames.has(getResultKey(result))}
+                            onChange={(event) => toggleResult(result, event.target.checked)}
+                            className="h-4 w-4 rounded border-gray-300 align-middle"
+                          />
+                        </TableCell>
                         <TableCell className="font-medium">{result.stock_name}</TableCell>
-                        <TableCell className="font-mono text-xs text-muted-foreground">{formatStockCode(result)}</TableCell>
                         <TableCell className="text-right">{result.topic_count}</TableCell>
                         <TableCell className="text-right">{result.new_topic_count ?? '-'}</TableCell>
                         <TableCell>
@@ -444,10 +528,21 @@ export default function StockTopicAnalysisPanel({ groupId, onTaskCreated }: Stoc
                         <TableCell>{getStatusBadge(result)}</TableCell>
                         <TableCell className="whitespace-nowrap text-xs text-muted-foreground">{formatDateTime(result.updated_at)}</TableCell>
                         <TableCell className="text-right">
-                          <Button variant="outline" size="sm" onClick={() => setSelectedResult(result)}>
-                            <Eye className="mr-2 h-4 w-4" />
-                            查看
-                          </Button>
+                          <div className="flex justify-end gap-2 whitespace-nowrap">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => void handleAnalyzeOne(result)}
+                              disabled={analyzing || Boolean(activeBatchAnalysis)}
+                            >
+                              <Sparkles className="mr-2 h-4 w-4" />
+                              分析
+                            </Button>
+                            <Button variant="outline" size="sm" onClick={() => setSelectedResult(result)}>
+                              <Eye className="mr-2 h-4 w-4" />
+                              查看
+                            </Button>
+                          </div>
                         </TableCell>
                       </TableRow>
                     ))}
@@ -472,6 +567,10 @@ export default function StockTopicAnalysisPanel({ groupId, onTaskCreated }: Stoc
           <div className="flex items-center justify-between">
             <span className="text-muted-foreground">结果行数</span>
             <span className="font-medium">{results.length}</span>
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="text-muted-foreground">已勾选</span>
+            <span className="font-medium">{selectedResults.length}</span>
           </div>
           <div className="flex items-center justify-between">
             <span className="text-muted-foreground">命中话题</span>

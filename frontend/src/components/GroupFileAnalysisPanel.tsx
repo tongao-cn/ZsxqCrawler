@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { Download, FileText, Loader2, RefreshCw, Search, Sparkles } from 'lucide-react';
-import { apiClient, FileAIAnalysis, FileItem, PaginatedResponse } from '@/lib/api';
+import { apiClient, FileAIAnalysis, FileItem, getTaskConflictDetail, PaginatedResponse } from '@/lib/api';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -15,6 +15,8 @@ import { useTaskStatus } from '@/hooks/useTaskStatus';
 
 interface GroupFileAnalysisPanelProps {
   groupId: number;
+  onTaskCreated?: (taskId: string) => void;
+  onTaskConflict?: (taskId: string) => void;
 }
 
 interface FileTaskState {
@@ -30,6 +32,11 @@ interface FileTaskWatcherProps {
   onTerminal: (fileId: number, taskId: string, status: FileTaskState['status'], message: string) => void | Promise<void>;
 }
 
+interface TaskStatusWatcherProps {
+  taskId: string;
+  onTerminal: (status: FileTaskState['status'], message: string) => void | Promise<void>;
+}
+
 function FileTaskWatcher({
   fileId,
   taskId,
@@ -39,6 +46,13 @@ function FileTaskWatcher({
   useTaskStatus(taskId, {
     onStatus: (task) => onStatus(fileId, taskId, task.status, task.message),
     onTerminal: (task) => onTerminal(fileId, taskId, task.status, task.message),
+  });
+  return null;
+}
+
+function TaskStatusWatcher({ taskId, onTerminal }: TaskStatusWatcherProps) {
+  useTaskStatus(taskId, {
+    onTerminal: (task) => onTerminal(task.status, task.message),
   });
   return null;
 }
@@ -100,7 +114,11 @@ function getAnalysisStatusBadge(file: FileItem) {
   return <Badge variant="outline">未分析</Badge>;
 }
 
-export default function GroupFileAnalysisPanel({ groupId }: GroupFileAnalysisPanelProps) {
+export default function GroupFileAnalysisPanel({
+  groupId,
+  onTaskCreated,
+  onTaskConflict,
+}: GroupFileAnalysisPanelProps) {
   const [files, setFiles] = useState<FileItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [page, setPage] = useState(1);
@@ -116,7 +134,12 @@ export default function GroupFileAnalysisPanel({ groupId }: GroupFileAnalysisPan
   const [analysis, setAnalysis] = useState<FileAIAnalysis | null>(null);
   const [downloadingFiles, setDownloadingFiles] = useState<Set<number>>(new Set());
   const [fileTasks, setFileTasks] = useState<Map<number, FileTaskState>>(new Map());
+  const [batchDownloadTaskId, setBatchDownloadTaskId] = useState<string | null>(null);
+  const [batchDownloadFileIds, setBatchDownloadFileIds] = useState<number[]>([]);
   const [analyzingFileIds, setAnalyzingFileIds] = useState<Set<number>>(new Set());
+  const [analysisTasks, setAnalysisTasks] = useState<Map<number, FileTaskState>>(new Map());
+  const [batchAnalysisTaskId, setBatchAnalysisTaskId] = useState<string | null>(null);
+  const [batchAnalysisFileIds, setBatchAnalysisFileIds] = useState<number[]>([]);
   const [batchAnalyzing, setBatchAnalyzing] = useState(false);
 
   const displayedFiles = files.filter((file) => {
@@ -220,6 +243,99 @@ export default function GroupFileAnalysisPanel({ groupId }: GroupFileAnalysisPan
     await loadFiles(page);
   }, [loadFiles, page, updateFileTaskStatus]);
 
+  const handleBatchDownloadTerminal = useCallback(async (
+    status: FileTaskState['status'],
+    message: string,
+  ) => {
+    const completedFileIds = batchDownloadFileIds.slice();
+    setDownloadingFiles(prev => {
+      const next = new Set(prev);
+      completedFileIds.forEach((fileId) => next.delete(fileId));
+      return next;
+    });
+    setBatchDownloadTaskId(null);
+    setBatchDownloadFileIds([]);
+    if (status === 'completed') {
+      toast.success(message || '当前页文件下载任务完成');
+    } else if (status === 'failed' || status === 'cancelled') {
+      toast.error(message || '当前页文件下载任务未完成');
+    }
+    await loadFiles(page);
+  }, [batchDownloadFileIds, loadFiles, page]);
+
+  const updateAnalysisTaskStatus = useCallback((
+    fileId: number,
+    taskId: string,
+    status: FileTaskState['status'],
+    message: string,
+  ) => {
+    setAnalysisTasks(prev => {
+      const next = new Map(prev);
+      next.set(fileId, { taskId, status, message });
+      return next;
+    });
+  }, []);
+
+  const handleAnalysisTaskTerminal = useCallback(async (
+    fileId: number,
+    taskId: string,
+    status: FileTaskState['status'],
+    message: string,
+  ) => {
+    updateAnalysisTaskStatus(fileId, taskId, status, message);
+    setAnalyzingFileIds(prev => {
+      const next = new Set(prev);
+      next.delete(fileId);
+      return next;
+    });
+
+    if (selectedFile?.file_id === fileId) {
+      setAnalysisLoading(false);
+      try {
+        const cached = await apiClient.getFileAIAnalysis(groupId, fileId);
+        setAnalysis(cached.analysis || {
+          file_id: fileId,
+          status,
+          error_message: status === 'completed' ? '分析结果尚未写入，请稍后刷新' : message,
+        });
+      } catch (error) {
+        setAnalysis({
+          file_id: fileId,
+          status: 'failed',
+          error_message: error instanceof Error ? error.message : '读取分析结果失败',
+        });
+      }
+    }
+
+    if (status === 'completed') {
+      toast.success('文件分析完成');
+    } else if (status === 'failed' || status === 'cancelled') {
+      toast.error(message || '文件分析未完成');
+    }
+    await loadFiles(page);
+  }, [groupId, loadFiles, page, selectedFile, updateAnalysisTaskStatus]);
+
+  const handleBatchAnalysisTerminal = useCallback(async (
+    status: FileTaskState['status'],
+    message: string,
+  ) => {
+    const completedFileIds = batchAnalysisFileIds.slice();
+    setAnalyzingFileIds(prev => {
+      const next = new Set(prev);
+      completedFileIds.forEach((fileId) => next.delete(fileId));
+      return next;
+    });
+    setBatchAnalyzing(false);
+    setBatchAnalysisTaskId(null);
+    setBatchAnalysisFileIds([]);
+    if (status === 'completed') {
+      toast.success(message || '当前页文件分析完成');
+    } else if (status === 'failed' || status === 'cancelled') {
+      toast.error(message || '当前页文件分析未完成');
+    }
+    await loadFiles(page);
+  }, [batchAnalysisFileIds, loadFiles, page]);
+
   const handleDownloadFile = async (file: FileItem) => {
     if (downloadingFiles.has(file.file_id)) {
       return;
@@ -236,6 +352,7 @@ export default function GroupFileAnalysisPanel({ groupId }: GroupFileAnalysisPan
       toast.success(response.task_id ? `文件下载任务已创建: ${response.task_id}` : '文件下载任务已创建');
 
       if (response.task_id) {
+        onTaskCreated?.(response.task_id);
         setFileTasks(prev => {
           const next = new Map(prev);
           next.set(file.file_id, {
@@ -255,7 +372,13 @@ export default function GroupFileAnalysisPanel({ groupId }: GroupFileAnalysisPan
         });
       }
     } catch (error) {
-      toast.error(`文件下载失败: ${error instanceof Error ? error.message : '未知错误'}`);
+      const conflict = getTaskConflictDetail(error);
+      if (conflict?.task_id) {
+        toast.error(`已有任务 ${conflict.task_id} 正在运行`);
+        onTaskConflict?.(conflict.task_id);
+      } else {
+        toast.error(`文件下载失败: ${error instanceof Error ? error.message : '未知错误'}`);
+      }
       setDownloadingFiles(prev => {
         const next = new Set(prev);
         next.delete(file.file_id);
@@ -270,43 +393,56 @@ export default function GroupFileAnalysisPanel({ groupId }: GroupFileAnalysisPan
     }
 
     const filesToDownload = downloadableFiles.slice();
-    toast.info(`开始创建 ${filesToDownload.length} 个文件下载任务`);
+    const fileIds = filesToDownload.map((file) => file.file_id);
+    setDownloadingFiles(prev => {
+      const next = new Set(prev);
+      fileIds.forEach((fileId) => next.add(fileId));
+      return next;
+    });
 
-    for (const file of filesToDownload) {
-      try {
-        setDownloadingFiles(prev => new Set(prev).add(file.file_id));
-        const response = await apiClient.downloadSingleFile(
-          String(groupId),
-          file.file_id,
-          file.name,
-          file.size,
-        ) as { task_id?: string };
+    try {
+      const response = await apiClient.downloadSelectedFiles(groupId, fileIds);
+      onTaskCreated?.(response.task_id);
+      setBatchDownloadTaskId(response.task_id);
+      setBatchDownloadFileIds(fileIds);
+      toast.success(`当前页下载任务已创建: ${response.task_id}`);
+    } catch (error) {
+      const conflict = getTaskConflictDetail(error);
+      if (conflict?.task_id) {
+        toast.error(`已有任务 ${conflict.task_id} 正在运行`);
+        onTaskConflict?.(conflict.task_id);
+      } else {
+        toast.error(`当前页下载任务创建失败: ${error instanceof Error ? error.message : '未知错误'}`);
+      }
+      setDownloadingFiles(prev => {
+        const next = new Set(prev);
+        fileIds.forEach((fileId) => next.delete(fileId));
+        return next;
+      });
+    }
+  };
 
-        if (response.task_id) {
-          setFileTasks(prev => {
-            const next = new Map(prev);
-            next.set(file.file_id, {
-              taskId: response.task_id || '',
-              status: 'pending',
-              message: '下载任务已创建',
-            });
-            return next;
-          });
-          updateFileTaskStatus(file.file_id, response.task_id, 'pending', '下载任务已创建');
-        } else {
-          setDownloadingFiles(prev => {
-            const next = new Set(prev);
-            next.delete(file.file_id);
-            return next;
-          });
-        }
-      } catch (error) {
-        toast.error(`${file.name} 下载任务创建失败: ${error instanceof Error ? error.message : '未知错误'}`);
-        setDownloadingFiles(prev => {
-          const next = new Set(prev);
-          next.delete(file.file_id);
-          return next;
-        });
+  const handleDownloadFilteredResults = async () => {
+    if (batchDownloadTaskId) {
+      return;
+    }
+
+    try {
+      const response = await apiClient.downloadFilteredFiles(groupId, {
+        status: statusFilter === 'all' ? undefined : statusFilter,
+        search: searchQuery || undefined,
+      });
+      onTaskCreated?.(response.task_id);
+      setBatchDownloadTaskId(response.task_id);
+      setBatchDownloadFileIds([]);
+      toast.success(`筛选结果下载任务已创建: ${response.task_id}`);
+    } catch (error) {
+      const conflict = getTaskConflictDetail(error);
+      if (conflict?.task_id) {
+        toast.error(`已有任务 ${conflict.task_id} 正在运行`);
+        onTaskConflict?.(conflict.task_id);
+      } else {
+        toast.error(`筛选结果下载任务创建失败: ${error instanceof Error ? error.message : '未知错误'}`);
       }
     }
   };
@@ -316,29 +452,29 @@ export default function GroupFileAnalysisPanel({ groupId }: GroupFileAnalysisPan
       return;
     }
 
+    const fileIds = pendingAnalysisFiles.map((file) => file.file_id);
     setBatchAnalyzing(true);
-    toast.info(`开始分析当前页 ${pendingAnalysisFiles.length} 个文件`);
+    setAnalyzingFileIds(prev => {
+      const next = new Set(prev);
+      fileIds.forEach((fileId) => next.add(fileId));
+      return next;
+    });
 
-    let successCount = 0;
-    for (const file of pendingAnalysisFiles) {
-      try {
-        setAnalyzingFileIds(prev => new Set(prev).add(file.file_id));
-        await apiClient.analyzeFile(groupId, file.file_id, false);
-        successCount += 1;
-      } catch (error) {
-        toast.error(`${file.name} 分析失败: ${error instanceof Error ? error.message : '未知错误'}`);
-      } finally {
-        setAnalyzingFileIds(prev => {
-          const next = new Set(prev);
-          next.delete(file.file_id);
-          return next;
-        });
-      }
+    try {
+      const response = await apiClient.analyzeSelectedFiles(groupId, fileIds, false);
+      onTaskCreated?.(response.task_id);
+      setBatchAnalysisTaskId(response.task_id);
+      setBatchAnalysisFileIds(fileIds);
+      toast.success(`当前页分析任务已创建: ${response.task_id}`);
+    } catch (error) {
+      toast.error(`当前页分析任务创建失败: ${error instanceof Error ? error.message : '未知错误'}`);
+      setBatchAnalyzing(false);
+      setAnalyzingFileIds(prev => {
+        const next = new Set(prev);
+        fileIds.forEach((fileId) => next.delete(fileId));
+        return next;
+      });
     }
-
-    toast.success(`当前页批量分析完成：成功 ${successCount}/${pendingAnalysisFiles.length}`);
-    await loadFiles(page);
-    setBatchAnalyzing(false);
   };
 
   const openAnalysisDialog = async (file: FileItem, force: boolean = false) => {
@@ -354,14 +490,24 @@ export default function GroupFileAnalysisPanel({ groupId }: GroupFileAnalysisPan
         if (cached.analysis) {
           setAnalysis(cached.analysis);
           setAnalysisLoading(false);
+          setAnalyzingFileIds(prev => {
+            const next = new Set(prev);
+            next.delete(file.file_id);
+            return next;
+          });
           return;
         }
       }
 
-      const result = await apiClient.analyzeFile(groupId, file.file_id, force);
-      setAnalysis(result.analysis);
-      toast.success(force ? '文件已重新分析' : '文件分析完成');
-      await loadFiles(page);
+      const activeTask = analysisTasks.get(file.file_id);
+      if (activeTask && (activeTask.status === 'pending' || activeTask.status === 'running')) {
+        return;
+      }
+
+      const response = await apiClient.analyzeFileTask(groupId, file.file_id, force);
+      onTaskCreated?.(response.task_id);
+      updateAnalysisTaskStatus(file.file_id, response.task_id, 'pending', '分析任务已创建');
+      toast.success(`文件分析任务已创建: ${response.task_id}`);
     } catch (error) {
       toast.error(`文件 AI 分析失败: ${error instanceof Error ? error.message : '未知错误'}`);
       setAnalysis({
@@ -369,7 +515,6 @@ export default function GroupFileAnalysisPanel({ groupId }: GroupFileAnalysisPan
         status: 'failed',
         error_message: error instanceof Error ? error.message : '未知错误',
       });
-    } finally {
       setAnalysisLoading(false);
       setAnalyzingFileIds(prev => {
         const next = new Set(prev);
@@ -392,6 +537,29 @@ export default function GroupFileAnalysisPanel({ groupId }: GroupFileAnalysisPan
           />
         ) : null
       ))}
+      {batchDownloadTaskId && (
+        <TaskStatusWatcher
+          taskId={batchDownloadTaskId}
+          onTerminal={handleBatchDownloadTerminal}
+        />
+      )}
+      {Array.from(analysisTasks.entries()).map(([fileId, task]) => (
+        task.status === 'pending' || task.status === 'running' ? (
+          <FileTaskWatcher
+            key={`analysis-${fileId}-${task.taskId}`}
+            fileId={fileId}
+            taskId={task.taskId}
+            onStatus={updateAnalysisTaskStatus}
+            onTerminal={handleAnalysisTaskTerminal}
+          />
+        ) : null
+      ))}
+      {batchAnalysisTaskId && (
+        <TaskStatusWatcher
+          taskId={batchAnalysisTaskId}
+          onTerminal={handleBatchAnalysisTerminal}
+        />
+      )}
       <div className="flex flex-col gap-2 lg:flex-row lg:items-end lg:justify-between">
         <div>
           <div className="text-lg font-semibold text-gray-950">文件工作台</div>
@@ -481,10 +649,19 @@ export default function GroupFileAnalysisPanel({ groupId }: GroupFileAnalysisPan
           size="sm"
           variant="outline"
           onClick={() => void handleBatchDownloadCurrentPage()}
-          disabled={downloadableFiles.length === 0 || loading}
+          disabled={downloadableFiles.length === 0 || loading || Boolean(batchDownloadTaskId)}
         >
           <Download className="h-4 w-4 mr-2" />
           下载当前页
+        </Button>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => void handleDownloadFilteredResults()}
+          disabled={loading || Boolean(batchDownloadTaskId)}
+        >
+          <Download className="h-4 w-4 mr-2" />
+          下载筛选结果
         </Button>
         <Button
           size="sm"
@@ -632,6 +809,11 @@ export default function GroupFileAnalysisPanel({ groupId }: GroupFileAnalysisPan
                                   : 'text-muted-foreground'
                             }`} title={fileTask.message}>
                               {fileTask.message}
+                            </div>
+                          )}
+                          {!fileTask && file.download_status === 'failed' && file.download_error_message && (
+                            <div className="max-w-48 truncate text-xs text-red-600" title={file.download_error_message}>
+                              {file.download_error_code ? `${file.download_error_code}: ` : ''}{file.download_error_message}
                             </div>
                           )}
                         </div>

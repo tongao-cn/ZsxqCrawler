@@ -88,6 +88,7 @@ class ZSXQFileDownloader:
         self.log_callback = None
         self.stop_check_func = None
         self.stop_flag = False  # 本地停止标志
+        self.last_download_url_error = None
 
         # 反检测设置
         self.min_delay = 2.0  # 最小延迟（秒）
@@ -489,6 +490,7 @@ class ZSXQFileDownloader:
         """
         url = f"{self.base_url}/v2/files/{file_id}/download_url"
         max_retries = 10
+        self.last_download_url_error = None
         
         self.log(f"   🔗 获取下载链接: ID={file_id}")
         self.log(f"   🌐 请求URL: {url}")
@@ -519,7 +521,12 @@ class ZSXQFileDownloader:
                         
                         # 只在第一次尝试或最后一次失败时显示完整响应
                         if attempt == 0 or attempt == max_retries - 1 or data.get('succeeded'):
-                            print(f"   📋 响应内容: {json.dumps(data, ensure_ascii=False, indent=2)}")
+                            display_data = data
+                            if isinstance(data.get('resp_data'), dict) and data['resp_data'].get('download_url'):
+                                display_data = dict(data)
+                                display_data['resp_data'] = dict(data['resp_data'])
+                                display_data['resp_data']['download_url'] = '<redacted>'
+                            print(f"   📋 响应内容: {json.dumps(display_data, ensure_ascii=False, indent=2)}")
                         
                         if data.get('succeeded'):
                             download_url = data.get('resp_data', {}).get('download_url')
@@ -536,11 +543,12 @@ class ZSXQFileDownloader:
                             error_code = data.get('code', 'N/A')
                             self.log(f"   ❌ API返回失败: {error_msg} (代码: {error_code})")
 
-                            # 检查是否是1030权限错误
-                            if error_code == 1030:
-                                self.log(f"   🚫 权限不足错误(1030)：此文件只能在手机端下载，任务将自动停止")
-                                # 设置停止标志，让整个任务停止
-                                self.set_stop_flag()
+                            if str(error_code) == "1030":
+                                self.last_download_url_error = {
+                                    "code": error_code,
+                                    "message": error_msg,
+                                }
+                                self.log("   🚫 权限不足错误(1030)：此文件可能只能在手机端下载，已跳过当前文件")
                                 return None
 
                             # 检查是否是可重试的错误
@@ -611,21 +619,16 @@ class ZSXQFileDownloader:
         # 🚀 优化：先检查本地文件，避免无意义的API请求
         if os.path.exists(file_path):
             existing_size = os.path.getsize(file_path)
-            if existing_size == file_size:
+            if existing_size == file_size or (file_size == 0 and existing_size > 0):
                 self.log(f"   ✅ 文件已存在且大小匹配，跳过下载")
                 self.file_db.update_file_download_status(file_id, 'completed', file_path)
                 return "skipped"  # 返回特殊值表示跳过
             else:
                 self.log(f"   ⚠️ 文件已存在但大小不匹配，重新下载")
-        
-        # 只有在需要下载时才获取下载链接
-        download_url = self.get_download_url(file_id)
-        if not download_url:
-            self.log(f"   ❌ 无法获取下载链接")
-            return False
 
         download_retries = 3
         last_error = None
+        last_error_code = None
 
         for attempt in range(download_retries):
             try:
@@ -633,6 +636,21 @@ class ZSXQFileDownloader:
                     retry_delay = 2 * attempt
                     self.log(f"   🔄 文件下载重试 {attempt + 1}/{download_retries}，等待 {retry_delay} 秒...")
                     time.sleep(retry_delay)
+
+                download_url = self.get_download_url(file_id)
+                if not download_url:
+                    self.log(f"   ❌ 无法获取下载链接")
+                    error_detail = self.last_download_url_error or {
+                        "code": "download_url_unavailable",
+                        "message": "无法获取下载链接",
+                    }
+                    self.file_db.update_file_download_status(
+                        file_id,
+                        'failed',
+                        error_code=str(error_detail.get("code") or "download_url_unavailable"),
+                        error_message=str(error_detail.get("message") or "无法获取下载链接"),
+                    )
+                    return False
 
                 self.log(f"   🚀 开始下载...")
                 response = self.session.get(download_url, timeout=300, stream=True)
@@ -657,8 +675,12 @@ class ZSXQFileDownloader:
                 if response.status_code == 200:
                     total_size = int(response.headers.get('content-length', 0))
                     downloaded_size = 0
+                    expected_size = file_size if file_size > 0 else total_size
+                    temp_path = f"{file_path}.part"
+                    if os.path.exists(temp_path):
+                        os.remove(temp_path)
 
-                    with open(file_path, 'wb') as f:
+                    with open(temp_path, 'wb') as f:
                         for chunk in response.iter_content(chunk_size=8192):
                             if chunk:
                                 f.write(chunk)
@@ -673,7 +695,14 @@ class ZSXQFileDownloader:
                                 # 检查是否需要停止
                                 if self.check_stop():
                                     self.log("🛑 下载过程中被停止")
-                                    self.file_db.update_file_download_status(file_id, 'failed')
+                                    self.file_db.update_file_download_status(
+                                        file_id,
+                                        'failed',
+                                        error_code='stopped',
+                                        error_message='下载过程中被停止',
+                                    )
+                                    if os.path.exists(temp_path):
+                                        os.remove(temp_path)
                                     return False
 
                                 if downloaded_size % (10 * 1024 * 1024) != 0 and downloaded_size != total_size:
@@ -681,9 +710,15 @@ class ZSXQFileDownloader:
                                         self.log(f"   📊 已下载: {downloaded_size:,} bytes")
 
                     # 验证文件大小
-                    final_size = os.path.getsize(file_path)
-                    if file_size > 0 and final_size != file_size:
-                        self.log(f"   ⚠️ 文件大小不匹配: 预期{file_size:,}, 实际{final_size:,}")
+                    final_size = os.path.getsize(temp_path)
+                    if expected_size > 0 and final_size != expected_size:
+                        last_error_code = "size_mismatch"
+                        last_error = f"文件大小不匹配: 预期{expected_size:,}, 实际{final_size:,}"
+                        self.log(f"   ⚠️ {last_error}")
+                        os.remove(temp_path)
+                        continue
+
+                    os.replace(temp_path, file_path)
 
                     self.log(f"   ✅ 下载完成: {safe_filename}")
                     self.log(f"   💾 保存路径: {file_path}")
@@ -697,18 +732,26 @@ class ZSXQFileDownloader:
 
                     return True
 
+                last_error_code = "http_status"
                 last_error = f"HTTP {response.status_code}"
                 self.log(f"   ❌ 下载失败: {last_error}")
 
             except Exception as e:
+                last_error_code = "download_exception"
                 last_error = str(e)
                 self.log(f"   ❌ 下载异常: {e}")
-                if os.path.exists(file_path):
-                    os.remove(file_path)
+                temp_path = f"{file_path}.part"
+                if os.path.exists(temp_path):
+                    os.remove(temp_path)
                     self.log(f"   🗑️ 删除不完整文件")
 
         self.log(f"   🚫 文件下载重试{download_retries}次仍失败: {last_error}")
-        self.file_db.update_file_download_status(file_id, 'failed')
+        self.file_db.update_file_download_status(
+            file_id,
+            'failed',
+            error_code=last_error_code or "download_failed",
+            error_message=last_error or "文件下载失败",
+        )
         return False
 
     def _apply_download_intervals(self):
