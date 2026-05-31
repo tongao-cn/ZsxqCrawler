@@ -258,7 +258,7 @@ export default function StockTopicAnalysisPanel({ groupId, onTaskCreated }: Stoc
     try {
       setAnalyzing(true);
       const response = await apiClient.analyzeStockTopicsBatch(groupId, stockNames);
-      setActiveBatchAnalysis({ taskId: response.task_id, stockNames });
+      setActiveBatchAnalysis({ taskId: response.task_id, stockNames: [...stockNames] });
       onTaskCreated?.(response.task_id);
       toast.success(`${successPrefix}: ${response.task_id}`);
     } catch (error) {
@@ -380,7 +380,7 @@ export default function StockTopicAnalysisPanel({ groupId, onTaskCreated }: Stoc
   useTaskStatus(activeBatchAnalysis?.taskId, {
     enabled: Boolean(activeBatchAnalysis),
     onTerminal: async (task) => {
-      const stockNames = parsedStockNames.length > 0 ? parsedStockNames : activeBatchAnalysis?.stockNames || [];
+      const stockNames = activeBatchAnalysis?.stockNames || [];
       if (task.status === 'completed') {
         await loadBatchResults(stockNames);
         toast.success('批量个股分析已保存');
