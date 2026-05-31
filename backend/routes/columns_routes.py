@@ -41,6 +41,11 @@ from backend.services.columns_resource_service import (
     process_topic_resources as _service_process_topic_resources,
 )
 from backend.services.columns_summary_service import get_columns_summary
+from backend.services.columns_topic_persistence_service import (
+    extract_topic_data as _service_extract_topic_data,
+    prepare_column_topic as _service_prepare_column_topic,
+    save_topic_detail as _service_save_topic_detail,
+)
 from backend.services.columns_video_download_service import download_column_video as _service_download_column_video
 from backend.routes.ingestion_helpers import create_ingestion_task_or_raise
 from backend.services.task_runtime import add_task_log, enqueue_runtime_task, is_task_stopped, update_task
@@ -101,9 +106,7 @@ def _complete_empty_columns_task(task_id: str) -> None:
 
 
 def _extract_topic_data(topic_detail: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-    resp_data = topic_detail.get("resp_data", {}) or {}
-    topic_data = resp_data.get("topic", {}) or {}
-    return topic_data or None
+    return _service_extract_topic_data(topic_detail)
 
 
 def _save_topic_detail(
@@ -111,12 +114,7 @@ def _save_topic_detail(
     group_id: str,
     topic_detail: Dict[str, Any],
 ) -> bool:
-    topic_data = _extract_topic_data(topic_detail)
-    if not topic_data:
-        return False
-
-    db.insert_topic_detail(int(group_id), topic_data, json.dumps(topic_detail, ensure_ascii=False))
-    return True
+    return _service_save_topic_detail(db=db, group_id=group_id, topic_detail=topic_detail)
 
 
 def _prepare_column_topic(
@@ -129,16 +127,17 @@ def _prepare_column_topic(
     total_topics: int,
     incremental_mode: bool,
 ) -> tuple[Optional[int], str, bool]:
-    topic_id = topic.get("topic_id")
-    topic_title = topic.get("title", "无标题")[:30]
-    db.insert_column_topic(column_id, int(group_id), topic)
-
-    if incremental_mode and db.topic_detail_exists(topic_id):
-        add_task_log(task_id, f"   📄 [{topic_idx}/{total_topics}] {topic_title}... ⏭️ 跳过（已存在）")
-        return topic_id, topic_title, True
-
-    add_task_log(task_id, f"   📄 [{topic_idx}/{total_topics}] {topic_title}...")
-    return topic_id, topic_title, False
+    return _service_prepare_column_topic(
+        add_task_log=add_task_log,
+        column_id=column_id,
+        db=db,
+        group_id=group_id,
+        incremental_mode=incremental_mode,
+        task_id=task_id,
+        topic=topic,
+        topic_idx=topic_idx,
+        total_topics=total_topics,
+    )
 
 
 async def _process_topic_resources(
