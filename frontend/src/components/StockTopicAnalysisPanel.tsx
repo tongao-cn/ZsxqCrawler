@@ -629,7 +629,7 @@ export default function StockTopicAnalysisPanel({ groupId, onTaskCreated }: Stoc
               )}
               <ScrollArea className="min-h-0 h-[62vh] rounded-md border p-6">
                 {selectedResult.summary_markdown ? (
-                  <div className="prose max-w-none text-base leading-7">
+                  <div className="markdown-body">
                     <ReactMarkdown remarkPlugins={[remarkGfm]}>{selectedResult.summary_markdown}</ReactMarkdown>
                   </div>
                 ) : (
