@@ -1,5 +1,6 @@
 import unittest
 import base64
+import json
 import threading
 import time
 from importlib.util import find_spec
@@ -30,7 +31,7 @@ class StockTopicAnalysisServiceHelperTests(unittest.TestCase):
 
         names = parse_stock_names("宁德时代、德龙激光\n宁德时代 贵州茅台，中际旭创")
         self.assertEqual(["宁德时代", "德龙激光", "贵州茅台", "中际旭创"], names)
-        self.assertEqual(20, len(parse_stock_names([f"股票{i}" for i in range(25)])))
+        self.assertEqual(50, len(parse_stock_names([f"股票{i}" for i in range(55)])))
 
     @unittest.skipUnless(HAS_SERVICE_DEPS, "stock topic analysis service dependencies are not installed")
     def test_normalize_question_keywords_dedupes_and_limits(self):
@@ -80,16 +81,21 @@ class StockTopicAnalysisServiceHelperTests(unittest.TestCase):
     def test_extract_stock_names_from_image_parses_ai_json(self):
         from backend.services.stock_topic_analysis_service import extract_stock_names_from_image
 
+        stock_names = [f"股票{i}" for i in range(55)]
+
         class FakeResponses:
             def create(self, **kwargs):
                 self.kwargs = kwargs
                 response = Mock()
-                response.output_text = '{"stockNames":["宁德时代","德龙激光","宁德时代"]}'
+                response.output_text = json.dumps({"stockNames": [*stock_names, stock_names[0]]}, ensure_ascii=False)
                 return response
 
         class FakeClient:
+            responses_instance = None
+
             def __init__(self, **kwargs):
                 self.responses = FakeResponses()
+                FakeClient.responses_instance = self.responses
 
         encoded = base64.b64encode(b"image-bytes").decode("ascii")
         with (
@@ -98,8 +104,10 @@ class StockTopicAnalysisServiceHelperTests(unittest.TestCase):
         ):
             result = extract_stock_names_from_image(f"data:image/png;base64,{encoded}")
 
-        self.assertEqual(["宁德时代", "德龙激光"], result["stockNames"])
+        self.assertEqual(stock_names[:50], result["stockNames"])
         self.assertEqual("test-model", result["model"])
+        prompt_text = FakeClient.responses_instance.kwargs["input"][0]["content"][0]["text"]
+        self.assertIn("最多 50 个", prompt_text)
 
     @unittest.skipUnless(HAS_SERVICE_DEPS, "stock topic analysis service dependencies are not installed")
     def test_extract_stock_names_from_image_rejects_empty_result(self):

@@ -27,7 +27,7 @@ MAX_ANALYSIS_TOPICS_PER_CALL = 10
 MAX_TRACKED_TOPIC_IDS = 5000
 MAX_TOPIC_TEXT_CHARS = 1800
 MAX_ANALYSIS_PROMPT_CHARS = 50000
-MAX_BATCH_STOCKS = 20
+MAX_BATCH_STOCKS = 50
 MAX_BATCH_STOCK_ANALYSIS_WORKERS = 10
 MAX_QUESTION_KEYWORDS = 8
 MAX_QUESTION_TOPICS = 60
@@ -1129,7 +1129,7 @@ def extract_stock_names_from_image(image_data_url: str) -> Dict[str, Any]:
         "只输出 JSON，不要 Markdown，不要解释。"
         "如果识别到股票，JSON 结构为 {\"stockNames\": [\"股票名1\", \"股票名2\"]}。"
         "如果图片中没有明确股票名称，JSON 结构为 {\"error\": \"NO_STOCKS\"}。"
-        "要求：保留图片里的股票中文简称，去重，最多 20 个。"
+        "要求：保留图片里的股票中文简称，去重，最多 50 个。"
     )
 
     client = OpenAI(api_key=api_key, base_url=api_base, timeout=120)
