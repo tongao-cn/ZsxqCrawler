@@ -10,14 +10,11 @@ from backend.services.tdx_a_share_export_service import (
     _build_export_block_name,
     _build_export_result,
     _build_pending_block_sync,
-    _build_pending_block_write,
     _build_ranking_block_name,
     _collect_ranking_companies,
     _ensure_tdx_api_blocks,
-    _ensure_tdx_cfg_records,
     _next_tdx_block_code,
     _normalize_tdx_api_code,
-    _normalize_tdx_code,
     resolve_company_codes,
 )
 
@@ -46,32 +43,6 @@ class TdxAShareExportServiceHelperTests(unittest.TestCase):
         ]
 
         self.assertEqual("ZX010", _next_tdx_block_code(records))
-
-    def test_ensure_tdx_cfg_records_creates_missing_blocks(self):
-        records = [
-            {"name": "纪要又要-30日", "code": "ZX001"},
-        ]
-
-        cfg_by_name, created_records = _ensure_tdx_cfg_records(
-            records,
-            ["纪要又要-30日", "纪要又要-7日", "纪要又要-14日"],
-        )
-
-        self.assertEqual(
-            created_records,
-            [
-                {"name": "纪要又要-7日", "code": "ZX002"},
-                {"name": "纪要又要-14日", "code": "ZX003"},
-            ],
-        )
-        self.assertEqual(cfg_by_name["纪要又要-30日"]["code"], "ZX001")
-        self.assertEqual(cfg_by_name["纪要又要-7日"]["code"], "ZX002")
-        self.assertEqual(cfg_by_name["纪要又要-14日"]["code"], "ZX003")
-        self.assertEqual(records, [
-            {"name": "纪要又要-30日", "code": "ZX001"},
-            {"name": "纪要又要-7日", "code": "ZX002"},
-            {"name": "纪要又要-14日", "code": "ZX003"},
-        ])
 
     def test_collect_ranking_companies_preserves_existing_filtering(self):
         rankings = {
@@ -115,9 +86,6 @@ class TdxAShareExportServiceHelperTests(unittest.TestCase):
         self.assertEqual([], unresolved)
         self.assertEqual({}, ambiguous)
 
-    def test_normalize_tdx_code_supports_beijing_market(self):
-        self.assertEqual("2920522", _normalize_tdx_code("920522.BJ"))
-
     def test_normalize_tdx_api_code_keeps_official_code_shape(self):
         self.assertEqual("000001.SZ", _normalize_tdx_api_code("000001.sz"))
         self.assertEqual("920522.BJ", _normalize_tdx_api_code("920522.BJ"))
@@ -134,51 +102,6 @@ class TdxAShareExportServiceHelperTests(unittest.TestCase):
         self.assertEqual(cfg_by_name["纪要又要-30日Top300"]["code"], "ZX009")
         self.assertEqual(cfg_by_name["纪要又要-7日Top100"]["code"], "ZX010")
         self.assertEqual(created_records, [{"name": "纪要又要-7日Top100", "code": "ZX010"}])
-
-    def test_build_pending_block_write_converts_and_dedupes_codes_and_skips(self):
-        rankings = {
-            "3": [
-                {"company": "平安银行"},
-                {"company": "招商银行"},
-                {"company": "平安银行"},
-                {"company": "未知公司"},
-                {"company": "坏代码"},
-                {"company": " "},
-            ]
-        }
-        resolved_codes = {
-            "平安银行": "000001.SZ",
-            "招商银行": "600036.SH",
-            "坏代码": "123456.HK",
-        }
-        cfg_by_name = {
-            "纪要又要-3日Top100": {
-                "name": "纪要又要-3日Top100",
-                "code": "ZX001",
-            }
-        }
-
-        pending = _build_pending_block_write(
-            3,
-            100,
-            rankings,
-            resolved_codes,
-            cfg_by_name,
-            Path("blocknew"),
-            "纪要又要",
-        )
-
-        self.assertEqual(
-            pending,
-            (
-                3,
-                "纪要又要-3日Top100",
-                "ZX001",
-                Path("blocknew") / "ZX001.blk",
-                ["0000001", "1600036"],
-                ["未知公司", "坏代码"],
-            ),
-        )
 
     def test_build_pending_block_sync_uses_official_api_codes(self):
         rankings = {
@@ -227,8 +150,8 @@ class TdxAShareExportServiceHelperTests(unittest.TestCase):
             7,
             "7日推荐池",
             "ZX007",
-            Path("blocknew") / "ZX007.blk",
-            ["0000001"],
+            "tdx-api://ZX007",
+            ["000001.SZ"],
             ["未知公司"],
         )
 
@@ -238,7 +161,7 @@ class TdxAShareExportServiceHelperTests(unittest.TestCase):
                 "window_days": 7,
                 "block_name": "7日推荐池",
                 "block_code": "ZX007",
-                "block_path": str(Path("blocknew") / "ZX007.blk"),
+                "block_path": "tdx-api://ZX007",
                 "written_count": 1,
                 "skipped_count": 1,
                 "skipped_companies": ["未知公司"],
@@ -302,7 +225,7 @@ class TdxAShareExportServiceHelperTests(unittest.TestCase):
                 "window_days": 3,
                 "block_name": "3日推荐池",
                 "block_code": "ZX001",
-                "block_path": "blocknew/ZX001.blk",
+                "block_path": "tdx-api://ZX001",
                 "written_count": 1,
                 "skipped_count": 0,
                 "skipped_companies": [],
@@ -319,7 +242,7 @@ class TdxAShareExportServiceHelperTests(unittest.TestCase):
             ranking_top_n=20,
             stock_basic_source="cache",
             source_detail="cache.json",
-            backup_files=["backup/ZX001.blk"],
+            backup_files=[],
             block_results=block_results,
             total_written=1,
             aggregate_skipped=["未知公司", "未知公司", "另一个未知"],
@@ -335,7 +258,7 @@ class TdxAShareExportServiceHelperTests(unittest.TestCase):
         self.assertTrue(result["used_stock_cache"])
         self.assertEqual(result["stock_basic_source"], "cache")
         self.assertEqual(result["stock_cache_path"], "cache.json")
-        self.assertEqual(result["backup_files"], ["backup/ZX001.blk"])
+        self.assertEqual(result["backup_files"], [])
         self.assertEqual(result["blocks"], block_results)
         self.assertEqual(result["total_written"], 1)
         self.assertEqual(result["unresolved_companies"], ["未知公司", "另一个未知"])

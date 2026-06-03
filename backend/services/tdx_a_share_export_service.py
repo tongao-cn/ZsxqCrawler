@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 import os
 import re
-import shutil
 import sys
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -42,18 +41,8 @@ COMMON_TDX_ROOTS = (
     Path(r"D:\通达信"),
 )
 
-TDX_BLOCK_DIR_REL = Path("T0002") / "blocknew"
-TDX_CFG_NAME = "blocknew.cfg"
-TDX_RECORD_SIZE = 120
-TDX_NAME_SIZE = 50
-TDX_CODE_SIZE = 64
 TDXQUANT_RELATIVE_PATH = Path("PYPlugins") / "user"
 TS_CODE_PATTERN = re.compile(r"^(?P<code>\d{6})\.(?P<market>SH|SZ|BJ)$", re.IGNORECASE)
-MARKET_PREFIX_MAP = {
-    "SH": "1",
-    "SZ": "0",
-    "BJ": "2",
-}
 
 RANKING_BLOCK_NAMES = {
     3: "3日推荐池",
@@ -346,67 +335,11 @@ def _build_company_name_aliases(name: str) -> Set[str]:
     return {alias for candidate in candidates if (alias := _normalize_company_name(candidate))}
 
 
-def _normalize_tdx_code(ts_code: str) -> Optional[str]:
-    match = TS_CODE_PATTERN.fullmatch(str(ts_code or "").strip())
-    if match is None:
-        return None
-    code = match.group("code")
-    market = match.group("market").upper()
-    prefix = MARKET_PREFIX_MAP.get(market)
-    if prefix is None:
-        return None
-    return f"{prefix}{code}"
-
-
 def _normalize_tdx_api_code(ts_code: str) -> Optional[str]:
     match = TS_CODE_PATTERN.fullmatch(str(ts_code or "").strip())
     if match is None:
         return None
     return f"{match.group('code')}.{match.group('market').upper()}"
-
-
-def _encode_gbk_fixed(text: str, size: int) -> bytes:
-    raw = str(text or "").encode("gbk", errors="ignore")
-    if len(raw) > size:
-        raw = raw[:size]
-        while raw and len(raw) == size and (raw[-1] & 0x80):
-            raw = raw[:-1]
-    return raw.ljust(size, b"\x00")
-
-
-def _encode_ascii_fixed(text: str, size: int) -> bytes:
-    raw = str(text or "").encode("ascii", errors="ignore")
-    return raw[:size].ljust(size, b"\x00")
-
-
-def read_tdx_cfg(cfg_path: Path) -> List[Dict[str, str]]:
-    if not cfg_path.exists():
-        return []
-
-    data = cfg_path.read_bytes()
-    if len(data) % TDX_RECORD_SIZE != 0:
-        raise ValueError(f"{cfg_path} 不是 {TDX_RECORD_SIZE} 字节的整数倍")
-
-    records: List[Dict[str, str]] = []
-    for offset in range(0, len(data), TDX_RECORD_SIZE):
-        chunk = data[offset : offset + TDX_RECORD_SIZE]
-        name = chunk[:TDX_NAME_SIZE].split(b"\x00", 1)[0].decode("gbk", errors="ignore").strip()
-        code = chunk[
-            TDX_NAME_SIZE : TDX_NAME_SIZE + TDX_CODE_SIZE
-        ].split(b"\x00", 1)[0].decode("ascii", errors="ignore").strip()
-        if not name and not code:
-            continue
-        records.append({"name": name, "code": code})
-    return records
-
-
-def write_tdx_cfg(cfg_path: Path, records: List[Dict[str, str]]) -> None:
-    payload = bytearray()
-    for record in records:
-        payload.extend(_encode_gbk_fixed(record["name"], TDX_NAME_SIZE))
-        payload.extend(_encode_ascii_fixed(record["code"], TDX_CODE_SIZE))
-        payload.extend(b"\x00" * (TDX_RECORD_SIZE - TDX_NAME_SIZE - TDX_CODE_SIZE))
-    cfg_path.write_bytes(bytes(payload))
 
 
 def _next_tdx_block_code(records: Sequence[Mapping[str, str]]) -> str:
@@ -421,31 +354,6 @@ def _next_tdx_block_code(records: Sequence[Mapping[str, str]]) -> str:
     while f"ZX{next_number:03d}" in used_codes:
         next_number += 1
     return f"ZX{next_number:03d}"
-
-
-def _ensure_tdx_cfg_records(
-    records: List[Dict[str, str]],
-    block_names: Sequence[str],
-) -> Tuple[Dict[str, Dict[str, str]], List[Dict[str, str]]]:
-    cfg_by_name = {
-        str(record.get("name") or "").strip(): record
-        for record in records
-        if str(record.get("name") or "").strip()
-    }
-    created_records: List[Dict[str, str]] = []
-
-    for block_name in block_names:
-        if block_name in cfg_by_name:
-            continue
-        record = {
-            "name": block_name,
-            "code": _next_tdx_block_code(records),
-        }
-        records.append(record)
-        cfg_by_name[block_name] = record
-        created_records.append(record)
-
-    return cfg_by_name, created_records
 
 
 def _ensure_tdx_api_blocks(
@@ -472,27 +380,6 @@ def _ensure_tdx_api_blocks(
         created_records.append(record)
 
     return cfg_by_name, created_records
-
-
-def _write_blk(path: Path, codes: List[str]) -> None:
-    text = "\n".join(codes)
-    if text:
-        text += "\n"
-    path.write_text(text, encoding="ascii", newline="")
-
-
-def _backup_targets(backup_dir: Path, targets: List[Path]) -> List[str]:
-    existing_targets = [target for target in targets if target.exists()]
-    if not existing_targets:
-        return []
-
-    backup_dir.mkdir(parents=True, exist_ok=True)
-    copied: List[str] = []
-    for target in existing_targets:
-        destination = backup_dir / target.name
-        shutil.copy2(target, destination)
-        copied.append(str(destination))
-    return copied
 
 
 def _read_stock_basic_cache(cache_path: Path = DEFAULT_STOCK_BASIC_CACHE_PATH) -> Optional[Dict[str, Any]]:
@@ -692,51 +579,6 @@ def _collect_ranking_companies(rankings: Mapping[str, Any], ranking_windows: Seq
     return all_companies
 
 
-def _build_pending_block_write(
-    window: int,
-    top_n: int,
-    rankings: Mapping[str, Any],
-    resolved_codes: Mapping[str, str],
-    cfg_by_name: Mapping[str, Mapping[str, str]],
-    block_dir: Path,
-    group_name: Optional[str] = None,
-) -> Tuple[int, str, str, Path, List[str], List[str]]:
-    block_name = _build_export_block_name(window, top_n, group_name)
-    cfg_record = cfg_by_name[block_name]
-    block_code = str(cfg_record.get("code") or "").strip()
-    if not block_code:
-        raise RuntimeError(f"板块 {block_name} 在 blocknew.cfg 中没有有效代码")
-
-    ranking_rows = rankings.get(str(window)) or []
-    converted_codes: List[str] = []
-    skipped_companies: List[str] = []
-
-    for item in ranking_rows:
-        company = str(item.get("company") or "").strip()
-        if not company:
-            continue
-
-        ts_code = resolved_codes.get(company)
-        if not ts_code:
-            skipped_companies.append(company)
-            continue
-
-        tdx_code = _normalize_tdx_code(ts_code)
-        if not tdx_code:
-            skipped_companies.append(company)
-            continue
-        converted_codes.append(tdx_code)
-
-    return (
-        int(window),
-        block_name,
-        block_code,
-        block_dir / f"{block_code}.blk",
-        _dedupe_keep_order(converted_codes),
-        _dedupe_keep_order(skipped_companies),
-    )
-
-
 def _build_pending_block_sync(
     window: int,
     top_n: int,
@@ -868,10 +710,6 @@ def _resolve_tdx_root(
         client_dll_path = candidate / "PYPlugins" / "TPythClient.dll"
         if tdxquant_path.exists() or client_dll_path.exists():
             return candidate.resolve()
-        block_dir = candidate / TDX_BLOCK_DIR_REL
-        cfg_path = block_dir / TDX_CFG_NAME
-        if cfg_path.exists() or block_dir.exists():
-            return candidate.resolve()
 
     return candidates[0].resolve()
 
@@ -1000,10 +838,6 @@ __all__ = [
     "RANKING_BLOCK_NAMES",
     "DEFAULT_TDX_EXPORT_SPECS",
     "DEFAULT_TDX_EXPORT_WINDOWS",
-    "TDX_BLOCK_DIR_REL",
-    "TDX_CFG_NAME",
     "export_a_share_rankings_to_tdx",
     "get_latest_tdx_export",
-    "read_tdx_cfg",
-    "write_tdx_cfg",
 ]
