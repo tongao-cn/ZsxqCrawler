@@ -127,7 +127,7 @@ def _print_log_tail(task_id: str, lines: int) -> None:
 
 
 def _wait_task(task_id: str, *, poll_seconds: float, timeout_seconds: int, log_tail: int) -> dict[str, Any]:
-    deadline = time.monotonic() + timeout_seconds
+    deadline = time.monotonic() + timeout_seconds if timeout_seconds > 0 else None
     last_status = None
     while True:
         task = get_task_state(task_id)
@@ -144,7 +144,7 @@ def _wait_task(task_id: str, *, poll_seconds: float, timeout_seconds: int, log_t
             _print_log_tail(task_id, log_tail)
             return task
 
-        if time.monotonic() > deadline:
+        if deadline is not None and time.monotonic() > deadline:
             _print_log_tail(task_id, log_tail)
             raise TimeoutError(f"Timed out waiting for task {task_id}")
 
@@ -495,9 +495,9 @@ def main() -> None:
     parser.add_argument("--days", type=int, default=21)
     parser.add_argument("--concurrency", type=int, default=1)
     parser.add_argument("--poll-seconds", type=float, default=5)
-    parser.add_argument("--crawl-timeout-seconds", type=int, default=30 * 60)
-    parser.add_argument("--analysis-timeout-seconds", type=int, default=3 * 60 * 60)
-    parser.add_argument("--daily-timeout-seconds", type=int, default=2 * 60 * 60)
+    parser.add_argument("--crawl-timeout-seconds", type=int, default=0)
+    parser.add_argument("--analysis-timeout-seconds", type=int, default=0)
+    parser.add_argument("--daily-timeout-seconds", type=int, default=0)
     parser.add_argument("--comments-per-topic", type=int, default=0)
     parser.add_argument("--daily-stock-concepts", action="store_true")
     parser.add_argument("--daily-topic-report", action="store_true")
