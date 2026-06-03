@@ -6,6 +6,8 @@ import json
 import os
 import re
 import shutil
+import sys
+from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Set, Tuple
@@ -45,6 +47,7 @@ TDX_CFG_NAME = "blocknew.cfg"
 TDX_RECORD_SIZE = 120
 TDX_NAME_SIZE = 50
 TDX_CODE_SIZE = 64
+TDXQUANT_RELATIVE_PATH = Path("PYPlugins") / "user"
 TS_CODE_PATTERN = re.compile(r"^(?P<code>\d{6})\.(?P<market>SH|SZ|BJ)$", re.IGNORECASE)
 MARKET_PREFIX_MAP = {
     "SH": "1",
@@ -62,6 +65,134 @@ RANKING_BLOCK_NAMES = {
 DEFAULT_TDX_EXPORT_SPECS = ((30, 300), (14, 150), (7, 100))
 DEFAULT_TDX_EXPORT_WINDOWS = tuple(window for window, _top_n in DEFAULT_TDX_EXPORT_SPECS)
 TDX_BLOCK_CODE_PATTERN = re.compile(r"^ZX(?P<number>\d+)$", re.IGNORECASE)
+
+
+@dataclass(frozen=True)
+class TdxBlock:
+    code: str
+    name: str
+
+
+class TdxBlockApiError(RuntimeError):
+    """Raised when the official TdxQuant block API cannot satisfy a request."""
+
+
+class TdxBlockClient:
+    """Thin official TdxQuant adapter for custom block operations."""
+
+    def __init__(
+        self,
+        *,
+        tdx_root: str | Path | None = None,
+        tdxquant_path: str | Path | None = None,
+        tq: Any | None = None,
+        initialize_path: str | Path | None = None,
+    ) -> None:
+        self.tdx_root = Path(tdx_root) if tdx_root is not None else DEFAULT_TDX_ROOT
+        self.tdxquant_path = (
+            Path(tdxquant_path)
+            if tdxquant_path is not None
+            else self.tdx_root / TDXQUANT_RELATIVE_PATH
+        )
+        self._tq = tq
+        self._initialize_path = Path(initialize_path) if initialize_path is not None else Path(__file__)
+
+    @property
+    def tq(self) -> Any:
+        if self._tq is None:
+            self._tq = self._load_tq()
+        return self._tq
+
+    def _load_tq(self) -> Any:
+        tqcenter_path = self.tdxquant_path / "tqcenter.py"
+        client_dll_path = self.tdx_root / "PYPlugins" / "TPythClient.dll"
+        if not tqcenter_path.exists():
+            raise TdxBlockApiError(f"tqcenter.py not found: {tqcenter_path}")
+        if not client_dll_path.exists():
+            raise TdxBlockApiError(f"TPythClient.dll not found: {client_dll_path}")
+        if str(self.tdxquant_path) not in sys.path:
+            sys.path.insert(0, str(self.tdxquant_path))
+        try:
+            from tqcenter import tq  # type: ignore
+        except Exception as exc:  # pragma: no cover - depends on local TDX install
+            raise TdxBlockApiError(f"failed to import tqcenter: {exc}") from exc
+        return tq
+
+    def initialize(self) -> None:
+        self.tq.initialize(str(self._initialize_path))
+
+    def close(self) -> None:
+        close = getattr(self.tq, "close", None)
+        if callable(close):
+            close()
+
+    def list_user_blocks(self) -> List[TdxBlock]:
+        payload = self.tq.get_user_sector()
+        if not isinstance(payload, list):
+            raise TdxBlockApiError("TdxQuant get_user_sector response is not a list")
+        blocks: List[TdxBlock] = []
+        for item in payload:
+            if not isinstance(item, Mapping):
+                continue
+            code = str(item.get("Code") or item.get("code") or "").strip().upper()
+            name = str(item.get("Name") or item.get("name") or "").strip()
+            if code and name:
+                blocks.append(TdxBlock(code=code, name=name))
+        return blocks
+
+    def get_block_stocks(self, block_code: str) -> List[Any]:
+        payload = self.tq.get_stock_list_in_sector(
+            str(block_code).strip().upper(),
+            block_type=1,
+            list_type=0,
+        )
+        if not isinstance(payload, list):
+            raise TdxBlockApiError("TdxQuant get_stock_list_in_sector response is not a list")
+        return payload
+
+    def ensure_block(self, *, block_code: str, block_name: str) -> Dict[str, Any] | None:
+        normalized_code = str(block_code or "").strip().upper()
+        normalized_name = str(block_name or "").strip()
+        if not normalized_code:
+            raise ValueError("block_code is required")
+        if not normalized_name:
+            raise ValueError("block_name is required")
+
+        existing = {block.code: block for block in self.list_user_blocks()}
+        current = existing.get(normalized_code)
+        if current is None:
+            return _require_tdx_api_success(
+                self.tq.create_sector(block_code=normalized_code, block_name=normalized_name),
+                "create_sector",
+            )
+        if current.name != normalized_name:
+            return _require_tdx_api_success(
+                self.tq.rename_sector(block_code=normalized_code, block_name=normalized_name),
+                "rename_sector",
+            )
+        return None
+
+    def replace_block_stocks(
+        self,
+        *,
+        block_code: str,
+        block_name: str,
+        ts_codes: Iterable[str],
+    ) -> Dict[str, Any]:
+        normalized_code = str(block_code or "").strip().upper()
+        self.ensure_block(block_code=normalized_code, block_name=block_name)
+        clear_result = _require_tdx_api_success(
+            self.tq.clear_sector(block_code=normalized_code),
+            "clear_sector",
+        )
+        codes = _dedupe_keep_order(ts_codes)
+        if not codes:
+            return {"clear_result": clear_result, "send_result": None}
+        send_result = _require_tdx_api_success(
+            self.tq.send_user_block(block_code=normalized_code, stocks=codes, show=False),
+            "send_user_block",
+        )
+        return {"clear_result": clear_result, "send_result": send_result}
 
 
 def _normalize_tdx_group_name(group_name: Optional[str]) -> Optional[str]:
@@ -130,6 +261,30 @@ def _dedupe_keep_order(values: Iterable[str]) -> List[str]:
         seen.add(value)
         result.append(value)
     return result
+
+
+def _parse_tdx_api_result(payload: Any) -> Dict[str, Any]:
+    if isinstance(payload, dict):
+        return dict(payload)
+    if isinstance(payload, str) and payload.strip():
+        try:
+            parsed = json.loads(payload)
+        except json.JSONDecodeError as exc:
+            raise TdxBlockApiError(f"TdxQuant block API returned invalid JSON: {payload}") from exc
+        if isinstance(parsed, dict):
+            return parsed
+    if payload in (None, ""):
+        return {}
+    raise TdxBlockApiError(f"TdxQuant block API returned unsupported payload: {payload!r}")
+
+
+def _require_tdx_api_success(payload: Any, action: str) -> Dict[str, Any]:
+    parsed = _parse_tdx_api_result(payload)
+    error_id = str(parsed.get("ErrorId", "0"))
+    if error_id != "0":
+        message = parsed.get("Error") or parsed.get("Msg") or error_id
+        raise TdxBlockApiError(f"TdxQuant {action} failed: {message}")
+    return parsed
 
 
 def _load_env_file(path: Path) -> Dict[str, str]:
@@ -203,6 +358,13 @@ def _normalize_tdx_code(ts_code: str) -> Optional[str]:
     return f"{prefix}{code}"
 
 
+def _normalize_tdx_api_code(ts_code: str) -> Optional[str]:
+    match = TS_CODE_PATTERN.fullmatch(str(ts_code or "").strip())
+    if match is None:
+        return None
+    return f"{match.group('code')}.{match.group('market').upper()}"
+
+
 def _encode_gbk_fixed(text: str, size: int) -> bytes:
     raw = str(text or "").encode("gbk", errors="ignore")
     if len(raw) > size:
@@ -269,6 +431,32 @@ def _ensure_tdx_cfg_records(
         str(record.get("name") or "").strip(): record
         for record in records
         if str(record.get("name") or "").strip()
+    }
+    created_records: List[Dict[str, str]] = []
+
+    for block_name in block_names:
+        if block_name in cfg_by_name:
+            continue
+        record = {
+            "name": block_name,
+            "code": _next_tdx_block_code(records),
+        }
+        records.append(record)
+        cfg_by_name[block_name] = record
+        created_records.append(record)
+
+    return cfg_by_name, created_records
+
+
+def _ensure_tdx_api_blocks(
+    existing_blocks: Sequence[TdxBlock],
+    block_names: Sequence[str],
+) -> Tuple[Dict[str, Dict[str, str]], List[Dict[str, str]]]:
+    records = [{"name": block.name, "code": block.code} for block in existing_blocks]
+    cfg_by_name = {
+        block.name: {"name": block.name, "code": block.code}
+        for block in existing_blocks
+        if block.name and block.code
     }
     created_records: List[Dict[str, str]] = []
 
@@ -549,15 +737,60 @@ def _build_pending_block_write(
     )
 
 
+def _build_pending_block_sync(
+    window: int,
+    top_n: int,
+    rankings: Mapping[str, Any],
+    resolved_codes: Mapping[str, str],
+    cfg_by_name: Mapping[str, Mapping[str, str]],
+    group_name: Optional[str] = None,
+) -> Tuple[int, str, str, str, List[str], List[str]]:
+    block_name = _build_export_block_name(window, top_n, group_name)
+    cfg_record = cfg_by_name[block_name]
+    block_code = str(cfg_record.get("code") or "").strip().upper()
+    if not block_code:
+        raise RuntimeError(f"板块 {block_name} 没有有效代码")
+
+    ranking_rows = rankings.get(str(window)) or []
+    converted_codes: List[str] = []
+    skipped_companies: List[str] = []
+
+    for item in ranking_rows:
+        company = str(item.get("company") or "").strip()
+        if not company:
+            continue
+
+        ts_code = resolved_codes.get(company)
+        if not ts_code:
+            skipped_companies.append(company)
+            continue
+
+        tdx_api_code = _normalize_tdx_api_code(ts_code)
+        if not tdx_api_code:
+            skipped_companies.append(company)
+            continue
+        converted_codes.append(tdx_api_code)
+
+    return (
+        int(window),
+        block_name,
+        block_code,
+        f"tdx-api://{block_code}",
+        _dedupe_keep_order(converted_codes),
+        _dedupe_keep_order(skipped_companies),
+    )
+
+
 def _build_block_export_result(
     window: int,
     block_name: str,
     block_code: str,
-    blk_path: Path,
+    blk_path: Path | str,
     converted_codes: Sequence[str],
     skipped_companies: Sequence[str],
+    verified_count: Optional[int] = None,
 ) -> Dict[str, Any]:
-    return {
+    result = {
         "window_days": window,
         "block_name": block_name,
         "block_code": block_code,
@@ -566,6 +799,9 @@ def _build_block_export_result(
         "skipped_count": len(skipped_companies),
         "skipped_companies": list(skipped_companies),
     }
+    if verified_count is not None:
+        result["verified_count"] = int(verified_count)
+    return result
 
 
 def _build_export_result(
@@ -628,6 +864,10 @@ def _resolve_tdx_root(
         candidates.append(Path(normalized))
 
     for candidate in candidates:
+        tdxquant_path = candidate / TDXQUANT_RELATIVE_PATH / "tqcenter.py"
+        client_dll_path = candidate / "PYPlugins" / "TPythClient.dll"
+        if tdxquant_path.exists() or client_dll_path.exists():
+            return candidate.resolve()
         block_dir = candidate / TDX_BLOCK_DIR_REL
         cfg_path = block_dir / TDX_CFG_NAME
         if cfg_path.exists() or block_dir.exists():
@@ -669,51 +909,48 @@ def export_a_share_rankings_to_tdx(
     resolved_codes, unresolved_companies, ambiguous_companies = resolve_company_codes(all_companies, stock_records)
 
     resolved_root = _resolve_tdx_root(tdx_root, env_path)
-    block_dir = resolved_root / TDX_BLOCK_DIR_REL
-    cfg_path = block_dir / TDX_CFG_NAME
-    if not cfg_path.exists():
-        raise RuntimeError(f"未找到通达信板块配置文件: {cfg_path}")
-
     expected_block_names = [
         _build_export_block_name(window, top_n, group_name)
         for window, top_n in export_specs
     ]
-    cfg_records = read_tdx_cfg(cfg_path)
-    cfg_by_name, created_cfg_records = _ensure_tdx_cfg_records(cfg_records, expected_block_names)
+    client = TdxBlockClient(tdx_root=resolved_root)
+    client.initialize()
+    try:
+        existing_blocks = client.list_user_blocks()
+        cfg_by_name, _created_cfg_records = _ensure_tdx_api_blocks(existing_blocks, expected_block_names)
+        pending_writes = [
+            _build_pending_block_sync(window, top_n, sliced_rankings, resolved_codes, cfg_by_name, group_name)
+            for window, top_n in export_specs
+        ]
 
-    pending_writes = [
-        _build_pending_block_write(window, top_n, sliced_rankings, resolved_codes, cfg_by_name, block_dir, group_name)
-        for window, top_n in export_specs
-    ]
+        block_results: List[Dict[str, Any]] = []
+        total_written = 0
+        aggregate_skipped: List[str] = list(unresolved_companies)
 
-    backup_dir = block_dir / f"backup_a_share_export_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-    backup_files = _backup_targets(
-        backup_dir,
-        ([cfg_path] if created_cfg_records else [])
-        + [blk_path for _, _, _, blk_path, _, _ in pending_writes],
-    )
-
-    block_results: List[Dict[str, Any]] = []
-    total_written = 0
-    aggregate_skipped: List[str] = list(unresolved_companies)
-
-    if created_cfg_records:
-        write_tdx_cfg(cfg_path, cfg_records)
-
-    for window, block_name, block_code, blk_path, converted_codes, skipped_companies in pending_writes:
-        _write_blk(blk_path, converted_codes)
-        total_written += len(converted_codes)
-        aggregate_skipped.extend(skipped_companies)
-        block_results.append(
-            _build_block_export_result(
-                window,
-                block_name,
-                block_code,
-                blk_path,
-                converted_codes,
-                skipped_companies,
+        for window, block_name, block_code, block_path, converted_codes, skipped_companies in pending_writes:
+            client.replace_block_stocks(
+                block_name=block_name,
+                block_code=block_code,
+                ts_codes=converted_codes,
             )
-        )
+            verified_codes = client.get_block_stocks(block_code)
+            total_written += len(converted_codes)
+            aggregate_skipped.extend(skipped_companies)
+            block_results.append(
+                _build_block_export_result(
+                    window,
+                    block_name,
+                    block_code,
+                    block_path,
+                    converted_codes,
+                    skipped_companies,
+                    verified_count=len(verified_codes),
+                )
+            )
+    finally:
+        client.close()
+
+    backup_files: List[str] = []
 
     export_id: Optional[int] = None
     if normalized_group_id is None:

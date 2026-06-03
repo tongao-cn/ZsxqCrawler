@@ -4,14 +4,19 @@ from pathlib import Path
 from backend.services.tdx_a_share_export_service import (
     DEFAULT_TDX_EXPORT_SPECS,
     DEFAULT_TDX_EXPORT_WINDOWS,
+    TdxBlock,
+    TdxBlockClient,
     _build_block_export_result,
     _build_export_block_name,
     _build_export_result,
+    _build_pending_block_sync,
     _build_pending_block_write,
     _build_ranking_block_name,
     _collect_ranking_companies,
+    _ensure_tdx_api_blocks,
     _ensure_tdx_cfg_records,
     _next_tdx_block_code,
+    _normalize_tdx_api_code,
     _normalize_tdx_code,
     resolve_company_codes,
 )
@@ -113,6 +118,23 @@ class TdxAShareExportServiceHelperTests(unittest.TestCase):
     def test_normalize_tdx_code_supports_beijing_market(self):
         self.assertEqual("2920522", _normalize_tdx_code("920522.BJ"))
 
+    def test_normalize_tdx_api_code_keeps_official_code_shape(self):
+        self.assertEqual("000001.SZ", _normalize_tdx_api_code("000001.sz"))
+        self.assertEqual("920522.BJ", _normalize_tdx_api_code("920522.BJ"))
+
+    def test_ensure_tdx_api_blocks_reuses_names_and_allocates_next_zx(self):
+        cfg_by_name, created_records = _ensure_tdx_api_blocks(
+            [
+                TdxBlock(code="ZX001", name="已有"),
+                TdxBlock(code="ZX009", name="纪要又要-30日Top300"),
+            ],
+            ["纪要又要-30日Top300", "纪要又要-7日Top100"],
+        )
+
+        self.assertEqual(cfg_by_name["纪要又要-30日Top300"]["code"], "ZX009")
+        self.assertEqual(cfg_by_name["纪要又要-7日Top100"]["code"], "ZX010")
+        self.assertEqual(created_records, [{"name": "纪要又要-7日Top100", "code": "ZX010"}])
+
     def test_build_pending_block_write_converts_and_dedupes_codes_and_skips(self):
         rankings = {
             "3": [
@@ -158,6 +180,48 @@ class TdxAShareExportServiceHelperTests(unittest.TestCase):
             ),
         )
 
+    def test_build_pending_block_sync_uses_official_api_codes(self):
+        rankings = {
+            "3": [
+                {"company": "平安银行"},
+                {"company": "招商银行"},
+                {"company": "平安银行"},
+                {"company": "坏代码"},
+            ]
+        }
+        resolved_codes = {
+            "平安银行": "000001.SZ",
+            "招商银行": "600036.SH",
+            "坏代码": "123456.HK",
+        }
+        cfg_by_name = {
+            "纪要又要-3日Top100": {
+                "name": "纪要又要-3日Top100",
+                "code": "ZX001",
+            }
+        }
+
+        pending = _build_pending_block_sync(
+            3,
+            100,
+            rankings,
+            resolved_codes,
+            cfg_by_name,
+            "纪要又要",
+        )
+
+        self.assertEqual(
+            pending,
+            (
+                3,
+                "纪要又要-3日Top100",
+                "ZX001",
+                "tdx-api://ZX001",
+                ["000001.SZ", "600036.SH"],
+                ["坏代码"],
+            ),
+        )
+
     def test_build_block_export_result_keeps_response_shape(self):
         result = _build_block_export_result(
             7,
@@ -180,6 +244,57 @@ class TdxAShareExportServiceHelperTests(unittest.TestCase):
                 "skipped_companies": ["未知公司"],
             },
         )
+
+    def test_build_block_export_result_can_include_verified_count(self):
+        result = _build_block_export_result(
+            7,
+            "7日推荐池",
+            "ZX007",
+            "tdx-api://ZX007",
+            ["000001.SZ"],
+            [],
+            verified_count=1,
+        )
+
+        self.assertEqual(result["block_path"], "tdx-api://ZX007")
+        self.assertEqual(result["verified_count"], 1)
+
+    def test_tdx_block_client_replaces_block_stocks_through_official_api(self):
+        class FakeTq:
+            def __init__(self):
+                self.sectors = []
+                self.sent = []
+                self.cleared = []
+
+            def get_user_sector(self):
+                return self.sectors
+
+            def create_sector(self, *, block_code, block_name):
+                self.sectors.append({"Code": block_code, "Name": block_name})
+                return {"ErrorId": 0}
+
+            def clear_sector(self, *, block_code):
+                self.cleared.append(block_code)
+                return {"ErrorId": 0}
+
+            def send_user_block(self, *, block_code, stocks, show):
+                self.sent.append((block_code, stocks, show))
+                return {"ErrorId": 0}
+
+        fake_tq = FakeTq()
+        client = TdxBlockClient(tq=fake_tq)
+
+        result = client.replace_block_stocks(
+            block_code="ZX010",
+            block_name="纪要又要-7日Top100",
+            ts_codes=["000001.SZ", "000001.SZ", "600036.SH"],
+        )
+
+        self.assertEqual(fake_tq.sectors, [{"Code": "ZX010", "Name": "纪要又要-7日Top100"}])
+        self.assertEqual(fake_tq.cleared, ["ZX010"])
+        self.assertEqual(fake_tq.sent, [("ZX010", ["000001.SZ", "600036.SH"], False)])
+        self.assertEqual(result["clear_result"], {"ErrorId": 0})
+        self.assertEqual(result["send_result"], {"ErrorId": 0})
 
     def test_build_export_result_keeps_response_shape_and_dedupes_unresolved(self):
         block_results = [
