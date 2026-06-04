@@ -66,10 +66,12 @@ class TdxAShareExportServiceHelperTests(unittest.TestCase):
             {"ts_code": "688498.SH", "name": "DR源杰科"},
             {"ts_code": "603083.SH", "name": "XD剑桥科"},
             {"ts_code": "603228.SH", "name": "XD景旺电"},
+            {"ts_code": "000725.SZ", "name": "京东方Ａ"},
+            {"ts_code": "301550.SZ", "name": "斯菱智驱"},
         ]
 
         resolved, unresolved, ambiguous = resolve_company_codes(
-            ["盛科通信", "信科移动", "源杰科技", "剑桥科技", "景旺电子"],
+            ["盛科通信", "信科移动", "源杰科技", "剑桥科技", "景旺电子", "京东方A", "斯菱股份"],
             records,
         )
 
@@ -81,6 +83,8 @@ class TdxAShareExportServiceHelperTests(unittest.TestCase):
                 "源杰科技": "688498.SH",
                 "剑桥科技": "603083.SH",
                 "景旺电子": "603228.SH",
+                "京东方A": "000725.SZ",
+                "斯菱股份": "301550.SZ",
             },
         )
         self.assertEqual([], unresolved)

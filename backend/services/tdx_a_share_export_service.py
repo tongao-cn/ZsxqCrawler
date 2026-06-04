@@ -6,6 +6,7 @@ import json
 import os
 import re
 import sys
+import unicodedata
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -54,6 +55,9 @@ RANKING_BLOCK_NAMES = {
 DEFAULT_TDX_EXPORT_SPECS = ((30, 300), (14, 150), (7, 100))
 DEFAULT_TDX_EXPORT_WINDOWS = tuple(window for window, _top_n in DEFAULT_TDX_EXPORT_SPECS)
 TDX_BLOCK_CODE_PATTERN = re.compile(r"^ZX(?P<number>\d+)$", re.IGNORECASE)
+COMPANY_NAME_ALIASES = {
+    "斯菱智驱": ("斯菱股份",),
+}
 
 
 @dataclass(frozen=True)
@@ -301,7 +305,8 @@ def _get_config_value(key: str, env_path: Path = DEFAULT_KNOW_ACTION_ENV_PATH) -
 
 
 def _normalize_company_name(value: str) -> str:
-    normalized = re.sub(r"[\s\u3000\-\._·・/\\()（）]+", "", str(value or "").strip())
+    normalized = unicodedata.normalize("NFKC", str(value or "").strip())
+    normalized = re.sub(r"[\s\u3000\-\._·・/\\()（）]+", "", normalized)
     return normalized.replace("*", "").upper()
 
 
@@ -332,6 +337,7 @@ def _build_company_name_aliases(name: str) -> Set[str]:
         _strip_a_share_name_markers(name),
         _strip_a_share_name_markers(_strip_st_prefix(name)),
     }
+    candidates.update(COMPANY_NAME_ALIASES.get(str(name or "").strip(), ()))
     return {alias for candidate in candidates if (alias := _normalize_company_name(candidate))}
 
 
