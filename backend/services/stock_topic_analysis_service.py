@@ -23,6 +23,14 @@ from backend.services.stock_topic_analysis_ai_prompts import (
     build_question_keyword_messages,
     build_stock_analysis_messages,
 )
+from backend.services.stock_topic_analysis_helpers import (
+    _build_stock_alias_terms,
+    _normalize_company_name,
+    _normalize_text,
+    _ordered_unique,
+    _parse_json_list,
+    _safe_float,
+)
 from backend.services.stock_topic_analysis_payloads import (
     build_analysis_topic_payload,
     build_question_analysis_prompt,
@@ -61,38 +69,9 @@ PROCESSED_TOPIC_STATUSES = {"analyzed", "skipped"}
 SUPPORTED_EXTRACT_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp"}
 
 
-def _normalize_text(value: Any) -> str:
-    return str(value or "").strip()
-
-
 def _log(log_callback: Callable[[str], None] | None, message: str) -> None:
     if log_callback:
         log_callback(message)
-
-
-def _normalize_company_name(value: Any) -> str:
-    return (
-        _normalize_text(value)
-        .replace(" ", "")
-        .replace("股份有限公司", "")
-        .replace("有限责任公司", "")
-        .replace("有限公司", "")
-        .replace("集团", "")
-    )
-
-
-def _parse_json_list(value: Any) -> List[str]:
-    if not value:
-        return []
-    if isinstance(value, list):
-        return [_normalize_text(item) for item in value if _normalize_text(item)]
-    try:
-        parsed = json.loads(value)
-    except Exception:
-        return []
-    if not isinstance(parsed, list):
-        return []
-    return [_normalize_text(item) for item in parsed if _normalize_text(item)]
 
 
 def parse_stock_names(values: Any, *, limit: int = MAX_BATCH_STOCKS) -> List[str]:
@@ -142,27 +121,6 @@ def _parse_image_data_url(image_data_url: str) -> Tuple[str, str, bytes]:
     if len(image_bytes) > MAX_EXTRACT_IMAGE_BYTES:
         raise ValueError("图片不能超过 4MB")
     return mime_type, value, image_bytes
-
-
-def _ordered_unique(values: Iterable[Any], *, limit: int = 50) -> List[str]:
-    result: List[str] = []
-    seen = set()
-    for value in values:
-        text = _normalize_text(value)
-        if not text or text in seen:
-            continue
-        result.append(text)
-        seen.add(text)
-        if len(result) >= limit:
-            break
-    return result
-
-
-def _safe_float(value: Any) -> float:
-    try:
-        return float(value or 0)
-    except Exception:
-        return 0.0
 
 
 def _topic_content(row: Any) -> str:
@@ -236,17 +194,6 @@ def _chunks(values: List[Dict[str, Any]], size: int) -> List[List[Dict[str, Any]
 
 def _recent_topic_cutoff_text() -> str:
     return (date.today() - timedelta(days=365)).isoformat()
-
-
-def _build_stock_alias_terms(stock_name: Any, stock_code: Any = "", market: Any = "") -> List[str]:
-    name = _normalize_text(stock_name)
-    normalized_name = _normalize_company_name(name)
-    code = _normalize_text(stock_code)
-    market_text = _normalize_text(market)
-    terms = [name, normalized_name, code]
-    if market_text and code:
-        terms.extend([f"{market_text}.{code}", f"{market_text}{code}"])
-    return _ordered_unique((term for term in terms if term), limit=10)
 
 
 def _require_topic_excerpt(value: Any, *, topic_id: Any, stock_name: Any) -> str:
