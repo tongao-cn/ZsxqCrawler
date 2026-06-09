@@ -31,6 +31,7 @@ backfill-a-share-analysis-to-core = "scripts.backfill_a_share_analysis_to_core:m
 export-a-share-research-dataset = "scripts.export_a_share_research_dataset:main"
 run-a-share-research-return-smoke = "scripts.run_a_share_research_return_smoke:main"
 run-a-share-recommendation-pool-rotation = "scripts.run_a_share_recommendation_pool_rotation:main"
+export-external-stock-summary = "scripts.export_external_stock_summary:main"
 manage-postgres-core-access = "scripts.manage_postgres_core_access:main"
 cleanup-postgres-legacy-artifacts = "scripts.cleanup_postgres_legacy_artifacts:main"
 generate-postgres-status-report = "scripts.generate_postgres_status_report:main"

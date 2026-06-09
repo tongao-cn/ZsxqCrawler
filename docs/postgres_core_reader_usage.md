@@ -108,6 +108,18 @@ Each returned stock keeps the input row even when no saved data exists. Missing
 data is represented by `has_data=false`, empty `concepts`, empty
 `summary_markdown`, and `null` detail objects.
 
+The same aggregation can be exported without starting the backend:
+
+```powershell
+uv run python scripts\export_external_stock_summary.py --group-id 51111112855254 --stock-names 宁德时代 中际旭创 --date 2026-06-09
+```
+
+Or write a UTF-8 JSON file:
+
+```powershell
+uv run export-external-stock-summary --group-id 51111112855254 --stock-names 宁德时代 中际旭创 --output output\exports\stock_summary\summary.json
+```
+
 ## A-share Research Dataset Export
 
 For downstream stock research, export a daily stock-signal CSV:
