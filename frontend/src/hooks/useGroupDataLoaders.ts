@@ -2,15 +2,9 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-import { apiClient, Account, AccountSelf, Group, GroupStats, Topic } from '@/lib/api';
+import { apiClient, Group, GroupStats, Topic } from '@/lib/api';
 import { useInitialLoad } from '@/hooks/useInitialLoad';
-
-interface GroupLocalFileStats {
-  total: number;
-  downloaded: number;
-  pending: number;
-  failed: number;
-}
+import { useGroupMetadataLoaders } from '@/hooks/useGroupMetadataLoaders';
 
 interface UseGroupDataLoadersOptions {
   groupId: number;
@@ -39,23 +33,9 @@ export function useGroupDataLoaders({
   const [retryCount, setRetryCount] = useState(0);
   const [isRetrying, setIsRetrying] = useState(false);
   const [totalPages, setTotalPages] = useState(1);
-  const [groupInfo, setGroupInfo] = useState<any>(null);
-  const [localFileCount, setLocalFileCount] = useState<number>(0);
-  const [localFileStats, setLocalFileStats] = useState<GroupLocalFileStats>({
-    total: 0,
-    downloaded: 0,
-    pending: 0,
-    failed: 0,
-  });
-  const [cacheInfo, setCacheInfo] = useState<any>(null);
-  const [accounts, setAccounts] = useState<Account[]>([]);
-  const [groupAccount, setGroupAccount] = useState<Account | null>(null);
-  const [selectedAccountId, setSelectedAccountId] = useState<string>('');
-  const [accountSelf, setAccountSelf] = useState<AccountSelf | null>(null);
-  const [hasColumns, setHasColumns] = useState<boolean>(false);
-  const [columnsTitle, setColumnsTitle] = useState<string | null>(null);
   const groupDetailRetryTimerRef = useRef<number | null>(null);
   const topicsRetryTimerRef = useRef<number | null>(null);
+  const metadata = useGroupMetadataLoaders(groupId);
 
   const loadGroupDetail = useCallback(async (currentRetryCount = 0) => {
     try {
@@ -195,89 +175,6 @@ export function useGroupDataLoaders({
     };
   }, [loadTopics]);
 
-  const loadGroupInfo = useCallback(async () => {
-    try {
-      const info = await apiClient.getGroupInfo(groupId);
-      setGroupInfo(info);
-    } catch (error) {
-      console.error('加载群组信息失败:', error);
-    }
-  }, [groupId]);
-
-  const loadLocalFileCount = useCallback(async () => {
-    try {
-      const stats = await apiClient.getFileStats(groupId);
-      const downloadStats = stats.download_stats || {};
-      const total = downloadStats.total_files || 0;
-      setLocalFileCount(total);
-      setLocalFileStats({
-        total,
-        downloaded: downloadStats.downloaded || 0,
-        pending: downloadStats.pending || 0,
-        failed: downloadStats.failed || 0,
-      });
-    } catch (error) {
-      console.error('加载本地文件数量失败:', error);
-      setLocalFileCount(0);
-      setLocalFileStats({
-        total: 0,
-        downloaded: 0,
-        pending: 0,
-        failed: 0,
-      });
-    }
-  }, [groupId]);
-
-  const loadAccounts = useCallback(async () => {
-    try {
-      const response = await apiClient.listAccounts();
-      setAccounts(response.accounts || []);
-    } catch (err) {
-      console.error('加载账号列表失败:', err);
-    }
-  }, []);
-
-  const loadGroupAccount = useCallback(async () => {
-    try {
-      const response = await apiClient.getGroupAccount(groupId);
-      const account = (response as any)?.account || null;
-      setGroupAccount(account);
-      setSelectedAccountId(account?.id || '');
-    } catch (err) {
-      console.error('加载群组账号失败:', err);
-    }
-  }, [groupId]);
-
-  const loadGroupAccountSelf = useCallback(async () => {
-    try {
-      const response = await apiClient.getGroupAccountSelf(groupId);
-      setAccountSelf((response as any)?.self || null);
-    } catch (err) {
-      console.error('加载账号用户信息失败:', err);
-    }
-  }, [groupId]);
-
-  const loadCacheInfo = useCallback(async () => {
-    try {
-      const info = await apiClient.getImageCacheInfo(groupId.toString());
-      setCacheInfo(info);
-    } catch (error) {
-      console.error('加载缓存信息失败:', error);
-    }
-  }, [groupId]);
-
-  const loadColumnsSummary = useCallback(async () => {
-    try {
-      const summary = await apiClient.getGroupColumnsSummary(groupId);
-      setHasColumns(summary.has_columns);
-      setColumnsTitle(summary.title);
-    } catch (error) {
-      console.error('加载专栏信息失败:', error);
-      setHasColumns(false);
-      setColumnsTitle(null);
-    }
-  }, [groupId]);
-
   const criticalLoaders = useMemo(() => [
     loadGroupDetail,
     loadGroupStats,
@@ -287,27 +184,6 @@ export function useGroupDataLoaders({
   ]);
 
   useInitialLoad({ loaders: criticalLoaders });
-
-  useEffect(() => {
-    const timeout = window.setTimeout(() => {
-      void loadGroupInfo();
-      void loadLocalFileCount();
-      void loadCacheInfo();
-      void loadGroupAccount();
-      void loadAccounts();
-      void loadGroupAccountSelf();
-      void loadColumnsSummary();
-    }, 0);
-    return () => window.clearTimeout(timeout);
-  }, [
-    loadAccounts,
-    loadCacheInfo,
-    loadColumnsSummary,
-    loadGroupAccount,
-    loadGroupAccountSelf,
-    loadGroupInfo,
-    loadLocalFileCount,
-  ]);
 
   return {
     group,
@@ -320,23 +196,23 @@ export function useGroupDataLoaders({
     retryCount,
     isRetrying,
     totalPages,
-    groupInfo,
-    localFileCount,
-    localFileStats,
-    cacheInfo,
-    accounts,
-    groupAccount,
-    selectedAccountId,
-    setSelectedAccountId,
-    accountSelf,
-    hasColumns,
-    columnsTitle,
+    groupInfo: metadata.groupInfo,
+    localFileCount: metadata.localFileCount,
+    localFileStats: metadata.localFileStats,
+    cacheInfo: metadata.cacheInfo,
+    accounts: metadata.accounts,
+    groupAccount: metadata.groupAccount,
+    selectedAccountId: metadata.selectedAccountId,
+    setSelectedAccountId: metadata.setSelectedAccountId,
+    accountSelf: metadata.accountSelf,
+    hasColumns: metadata.hasColumns,
+    columnsTitle: metadata.columnsTitle,
     loadGroupDetail,
     loadGroupStats,
     loadTopics,
-    loadLocalFileCount,
-    loadGroupAccount,
-    loadGroupAccountSelf,
-    loadCacheInfo,
+    loadLocalFileCount: metadata.loadLocalFileCount,
+    loadGroupAccount: metadata.loadGroupAccount,
+    loadGroupAccountSelf: metadata.loadGroupAccountSelf,
+    loadCacheInfo: metadata.loadCacheInfo,
   };
 }
