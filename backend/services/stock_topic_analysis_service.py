@@ -34,6 +34,13 @@ from backend.services.stock_topic_analysis_queries import (
     build_question_topic_search_sql,
     build_topic_search_sql,
 )
+from backend.services.stock_topic_analysis_store import (
+    insert_stock_topic_analysis_version,
+    load_latest_processed_topic_ids,
+    load_stock_topic_processed_state_ids,
+    upsert_stock_topic_analysis,
+    upsert_stock_topic_processed_states,
+)
 from backend.services.daily_topic_analysis_service import _clip, _extract_response_text
 from backend.storage.db_compat import connect
 
@@ -330,54 +337,23 @@ def _load_topic_summaries(conn: Any, group_id: str, topic_ids: List[str], stock_
 
 
 def _load_latest_processed_topic_ids(conn: Any, group_id: str, stock_name: str) -> List[str]:
-    query = _normalize_company_name(stock_name)
-    if not query:
-        return []
-    state_ids = _load_stock_topic_processed_state_ids(conn, group_id, query)
-    if state_ids:
-        return state_ids
-    try:
-        row = conn.execute(
-            """
-            SELECT topic_ids_json
-            FROM stock_topic_analyses
-            WHERE group_id = ?
-              AND stock_name ILIKE ?
-            ORDER BY updated_at DESC
-            LIMIT 1
-            """,
-            (_normalize_text(group_id), f"%{query}%"),
-        ).fetchone()
-    except Exception:
-        conn.rollback()
-        return []
-    if not row:
-        return []
-    try:
-        return _parse_json_list(row["topic_ids_json"])
-    except Exception:
-        conn.rollback()
-        return []
+    return load_latest_processed_topic_ids(
+        conn,
+        group_id,
+        stock_name,
+        processed_topic_statuses=PROCESSED_TOPIC_STATUSES,
+        max_tracked_topic_ids=MAX_TRACKED_TOPIC_IDS,
+    )
 
 
 def _load_stock_topic_processed_state_ids(conn: Any, group_id: str, stock_name: str) -> List[str]:
-    placeholders = ",".join("?" for _ in PROCESSED_TOPIC_STATUSES)
-    try:
-        rows = conn.execute(
-            f"""
-            SELECT topic_id
-            FROM stock_topic_processed_states
-            WHERE group_id = ?
-              AND stock_name ILIKE ?
-              AND status IN ({placeholders})
-            ORDER BY updated_at ASC
-            """,
-            [_normalize_text(group_id), f"%{_normalize_company_name(stock_name)}%", *sorted(PROCESSED_TOPIC_STATUSES)],
-        ).fetchall()
-    except Exception:
-        conn.rollback()
-        return []
-    return _ordered_unique((row["topic_id"] for row in rows), limit=MAX_TRACKED_TOPIC_IDS)
+    return load_stock_topic_processed_state_ids(
+        conn,
+        group_id,
+        stock_name,
+        processed_topic_statuses=PROCESSED_TOPIC_STATUSES,
+        max_tracked_topic_ids=MAX_TRACKED_TOPIC_IDS,
+    )
 
 
 def _upsert_stock_topic_processed_states(
@@ -391,39 +367,17 @@ def _upsert_stock_topic_processed_states(
     model: str = "",
     error: str = "",
 ) -> None:
-    normalized_topic_ids = _ordered_unique(topic_ids, limit=MAX_TRACKED_TOPIC_IDS)
-    if not normalized_topic_ids:
-        return
-    params = [
-        (
-            _normalize_text(group_id),
-            _normalize_company_name(stock_name),
-            topic_id,
-            status,
-            extract_mode,
-            model,
-            error,
-        )
-        for topic_id in normalized_topic_ids
-    ]
-    for row in params:
-        conn.execute(
-            """
-            INSERT INTO stock_topic_processed_states (
-                group_id, stock_name, topic_id, status, extract_mode, model,
-                error, processed_at, updated_at
-            )
-            VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-            ON CONFLICT(group_id, stock_name, topic_id) DO UPDATE SET
-                status = excluded.status,
-                extract_mode = excluded.extract_mode,
-                model = excluded.model,
-                error = excluded.error,
-                processed_at = excluded.processed_at,
-                updated_at = CURRENT_TIMESTAMP
-            """,
-            row,
-        )
+    upsert_stock_topic_processed_states(
+        conn,
+        group_id=group_id,
+        stock_name=stock_name,
+        topic_ids=topic_ids,
+        status=status,
+        max_tracked_topic_ids=MAX_TRACKED_TOPIC_IDS,
+        extract_mode=extract_mode,
+        model=model,
+        error=error,
+    )
 
 
 def _build_topic_search_sql(*, recent_cutoff: str | None = None) -> str:
@@ -472,54 +426,19 @@ def _upsert_stock_topic_analysis(
     commit: bool = True,
 ) -> None:
     topic_ids = list(analyzed_topic_ids) if analyzed_topic_ids is not None else _topic_ids_from_result(result)
-    if write_processed_state:
-        state_topic_ids = list(processed_state_topic_ids) if processed_state_topic_ids is not None else topic_ids
-        _upsert_stock_topic_processed_states(
-            conn,
-            group_id=result["group_id"],
-            stock_name=result["stock_name"],
-            topic_ids=state_topic_ids,
-            status=processed_topic_status,
-            extract_mode=extract_mode,
-            model=result.get("model", ""),
-            error=error,
-        )
-    conn.execute(
-        """
-        INSERT INTO stock_topic_analyses (
-            group_id, stock_name, stock_code, market, topic_ids_json,
-            concepts_json, recommendation_count, summary_markdown, model,
-            status, error, created_at, updated_at
-        )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-        ON CONFLICT(group_id, stock_name) DO UPDATE SET
-            stock_code = excluded.stock_code,
-            market = excluded.market,
-            topic_ids_json = excluded.topic_ids_json,
-            concepts_json = excluded.concepts_json,
-            recommendation_count = excluded.recommendation_count,
-            summary_markdown = excluded.summary_markdown,
-            model = excluded.model,
-            status = excluded.status,
-            error = excluded.error,
-            updated_at = CURRENT_TIMESTAMP
-        """,
-        (
-            result["group_id"],
-            result["stock_name"],
-            result.get("stock_code", ""),
-            result.get("market", ""),
-            _serialize_json_list(topic_ids),
-            _serialize_json_list(result.get("concepts", [])),
-            int(result.get("recommendation_count") or 0),
-            result.get("summary_markdown", ""),
-            result.get("model", ""),
-            status,
-            error,
-        ),
+    upsert_stock_topic_analysis(
+        conn,
+        result=result,
+        status=status,
+        topic_ids=topic_ids,
+        max_tracked_topic_ids=MAX_TRACKED_TOPIC_IDS,
+        error=error,
+        processed_state_topic_ids=processed_state_topic_ids,
+        processed_topic_status=processed_topic_status,
+        extract_mode=extract_mode,
+        write_processed_state=write_processed_state,
+        commit=commit,
     )
-    if commit:
-        conn.commit()
 
 
 def _insert_stock_topic_analysis_version(
@@ -531,32 +450,13 @@ def _insert_stock_topic_analysis_version(
     analyzed_topic_ids: Iterable[Any] | None = None,
 ) -> None:
     topic_ids = list(analyzed_topic_ids) if analyzed_topic_ids is not None else _topic_ids_from_result(result)
-    conn.execute(
-        """
-        INSERT INTO stock_topic_analysis_versions (
-            group_id, stock_name, stock_code, market, topic_ids_json,
-            concepts_json, recommendation_count, summary_markdown, model,
-            status, error, analysis_mode, new_topic_count, analysis_date,
-            created_at
-        )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-        """,
-        (
-            result["group_id"],
-            result["stock_name"],
-            result.get("stock_code", ""),
-            result.get("market", ""),
-            _serialize_json_list(topic_ids),
-            _serialize_json_list(result.get("concepts", [])),
-            int(result.get("recommendation_count") or 0),
-            result.get("summary_markdown", ""),
-            result.get("model", ""),
-            status,
-            error,
-            result.get("analysis_mode", ""),
-            int(result.get("new_topic_count") or 0),
-            date.today().isoformat(),
-        ),
+    insert_stock_topic_analysis_version(
+        conn,
+        result=result,
+        status=status,
+        topic_ids=topic_ids,
+        max_tracked_topic_ids=MAX_TRACKED_TOPIC_IDS,
+        error=error,
     )
 
 
