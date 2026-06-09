@@ -4,12 +4,12 @@ import { useCallback, useState } from 'react';
 import { apiClient, FileAIAnalysis, FileItem, getTaskConflictDetail } from '@/lib/api';
 import { toast } from 'sonner';
 import {
-  FileAnalysisDialog,
   GroupFileHeader,
   GroupFilePagination,
   GroupFileSummary,
   GroupFileToolbar,
 } from '@/components/GroupFileAnalysisPanelParts';
+import { FileAnalysisDialog } from '@/components/FileAnalysisDialog';
 import { GroupFileTable } from '@/components/GroupFileTable';
 import { GroupFileTaskWatchers, type FileTaskState } from '@/components/GroupFileTaskWatchers';
 import { useGroupFileList } from '@/hooks/useGroupFileList';
