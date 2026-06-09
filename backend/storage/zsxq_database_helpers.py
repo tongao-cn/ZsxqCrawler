@@ -165,6 +165,60 @@ def topic_detail_file_payload(row) -> Dict[str, Any]:
     }
 
 
+def topic_detail_base_payload(row) -> Dict[str, Any]:
+    return {
+        "topic_id": row[0],
+        "type": row[1],
+        "title": row[2],
+        "create_time": row[3],
+        "digested": bool(row[4]),
+        "sticky": bool(row[5]),
+        "likes_count": row[6],
+        "tourist_likes_count": row[7],
+        "rewards_count": row[8],
+        "comments_count": row[9],
+        "reading_count": row[10],
+        "readers_count": row[11],
+        "answered": bool(row[12]),
+        "silenced": bool(row[13]),
+        "annotation": row[14],
+        "group": {
+            "group_id": row[17],
+            "name": row[18],
+            "type": row[19],
+            "background_url": row[20],
+        },
+        "user_specific": {
+            "liked": bool(row[15]),
+            "liked_emojis": [],
+            "subscribed": bool(row[16]),
+        },
+    }
+
+
+def topic_detail_talk_payload(row) -> Dict[str, Any]:
+    return {
+        "text": row[0],
+        "owner": {
+            "user_id": row[1],
+            "name": row[2],
+            "alias": row[3],
+            "avatar_url": row[4],
+            "location": row[5],
+            "description": row[6],
+        },
+    }
+
+
+def topic_detail_article_payload(row) -> Dict[str, Any]:
+    return {
+        "title": row[0],
+        "article_id": row[1],
+        "article_url": row[2],
+        "inline_article_url": row[3],
+    }
+
+
 def topic_detail_like_payload(row) -> Dict[str, Any]:
     return {
         "create_time": row[0],
@@ -173,6 +227,13 @@ def topic_detail_like_payload(row) -> Dict[str, Any]:
             "name": row[2],
             "avatar_url": row[3],
         },
+    }
+
+
+def topic_detail_emoji_payload(row) -> Dict[str, Any]:
+    return {
+        "emoji_key": row[0],
+        "likes_count": row[1],
     }
 
 

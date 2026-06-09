@@ -12,11 +12,15 @@ from backend.storage.zsxq_database_helpers import (
     nullable_group_id_param,
     replace_file_topic_relation,
     topic_detail_answer_payload,
+    topic_detail_article_payload,
+    topic_detail_base_payload,
     topic_detail_comment_payload,
+    topic_detail_emoji_payload,
     topic_detail_file_payload,
     topic_detail_image_payload,
     topic_detail_like_payload,
     topic_detail_question_payload,
+    topic_detail_talk_payload,
     topic_file_payload_from_row,
     upsert_core_file,
 )
@@ -1137,34 +1141,7 @@ class ZSXQDatabase:
                 return None
 
             # 构建基本话题信息
-            topic_detail = {
-                "topic_id": topic_row[0],
-                "type": topic_row[1],
-                "title": topic_row[2],
-                "create_time": topic_row[3],
-                "digested": bool(topic_row[4]),
-                "sticky": bool(topic_row[5]),
-                "likes_count": topic_row[6],
-                "tourist_likes_count": topic_row[7],
-                "rewards_count": topic_row[8],
-                "comments_count": topic_row[9],
-                "reading_count": topic_row[10],
-                "readers_count": topic_row[11],
-                "answered": bool(topic_row[12]),
-                "silenced": bool(topic_row[13]),
-                "annotation": topic_row[14],
-                "group": {
-                    "group_id": topic_row[17],
-                    "name": topic_row[18],
-                    "type": topic_row[19],
-                    "background_url": topic_row[20]
-                },
-                "user_specific": {
-                    "liked": bool(topic_row[15]),
-                    "liked_emojis": [],
-                    "subscribed": bool(topic_row[16])
-                }
-            }
+            topic_detail = topic_detail_base_payload(topic_row)
 
             # 2. 获取话题内容（talk）
             self.cursor.execute('''
@@ -1179,17 +1156,7 @@ class ZSXQDatabase:
 
             talk_row = self.cursor.fetchone()
             if talk_row:
-                talk_data = {
-                    "text": talk_row[0],
-                    "owner": {
-                        "user_id": talk_row[1],
-                        "name": talk_row[2],
-                        "alias": talk_row[3],
-                        "avatar_url": talk_row[4],
-                        "location": talk_row[5],
-                        "description": talk_row[6]
-                    }
-                }
+                talk_data = topic_detail_talk_payload(talk_row)
 
                 # 获取话题图片
                 self.cursor.execute('''
@@ -1237,12 +1204,7 @@ class ZSXQDatabase:
                 ''', (topic_id, scoped_group_id, scoped_group_id))
                 article_row = self.cursor.fetchone()
                 if article_row:
-                    talk_data["article"] = {
-                        "title": article_row[0],
-                        "article_id": article_row[1],
-                        "article_url": article_row[2],
-                        "inline_article_url": article_row[3]
-                    }
+                    talk_data["article"] = topic_detail_article_payload(article_row)
 
                 topic_detail["talk"] = talk_data
 
@@ -1345,10 +1307,7 @@ class ZSXQDatabase:
 
             emojis = []
             for emoji_row in self.cursor.fetchall():
-                emojis.append({
-                    "emoji_key": emoji_row[0],
-                    "likes_count": emoji_row[1]
-                })
+                emojis.append(topic_detail_emoji_payload(emoji_row))
 
             topic_detail["likes_detail"] = {
                 "emojis": emojis
