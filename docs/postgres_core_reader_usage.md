@@ -84,6 +84,30 @@ ORDER BY topic_date DESC, stock_name ASC
 LIMIT 100;
 ```
 
+## Stock Summary API
+
+If a downstream caller wants a ready-to-use stock list response instead of
+joining tables directly, use the read-only API:
+
+```http
+POST /api/analysis/stock-topics/{group_id}/external-summary
+Content-Type: application/json
+
+{
+  "stockNames": ["宁德时代", "中际旭创"],
+  "date": "2026-06-09"
+}
+```
+
+`date` is optional. When omitted, `daily_stock_concepts` uses the latest
+available concept row for each stock. The endpoint does not crawl, call AI, or
+create tasks; it only reads existing rows from `daily_stock_concepts`,
+`stock_topic_analyses`, and `zsxq_a_share_topic_stock_extractions`.
+
+Each returned stock keeps the input row even when no saved data exists. Missing
+data is represented by `has_data=false`, empty `concepts`, empty
+`summary_markdown`, and `null` detail objects.
+
 ## A-share Research Dataset Export
 
 For downstream stock research, export a daily stock-signal CSV:

@@ -5,6 +5,7 @@ from typing import Callable
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 
+from backend.services.stock_external_summary_service import get_external_stock_summaries
 from backend.services.stock_topic_analysis_service import (
     answer_stock_question,
     analyze_stock_topics,
@@ -29,6 +30,11 @@ class StockTopicAnalysisRequest(BaseModel):
 
 class StockTopicAnalysisBatchRequest(BaseModel):
     stockNames: list[str] = Field(..., min_length=1, description="股票名称列表")
+
+
+class ExternalStockSummaryRequest(BaseModel):
+    stockNames: list[str] = Field(..., min_length=1, description="股票名称列表")
+    date: str | None = Field(default=None, description="每日概念日期，格式 YYYY-MM-DD；不传则取最新可用记录")
 
 
 class StockTopicImageExtractRequest(BaseModel):
@@ -221,6 +227,19 @@ async def create_stock_topic_analysis_batch(
         raise HTTPException(status_code=400, detail=str(exc))
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"创建批量个股话题分析任务失败: {str(exc)}")
+
+
+@router.post("/{group_id}/external-summary")
+async def read_external_stock_summaries(
+    group_id: str,
+    request: ExternalStockSummaryRequest,
+):
+    try:
+        return get_external_stock_summaries(group_id, request.stockNames, report_date=request.date)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"获取外部股票汇总失败: {str(exc)}")
 
 
 @router.get("/{group_id}/latest")
