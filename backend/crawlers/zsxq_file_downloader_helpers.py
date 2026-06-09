@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import datetime
+import os
+import re
 from typing import Any, Dict, Optional, Tuple
 
 
@@ -83,3 +85,21 @@ def download_file_data(file_info: Dict[str, Any]) -> Dict[str, Any]:
         "file_size": file_data.get("size", 0),
         "download_count": file_data.get("download_count", 0),
     }
+
+
+def existing_file_matches(file_path: str, expected_size: int) -> tuple[bool, bool, int]:
+    if not os.path.exists(file_path):
+        return False, False, 0
+    existing_size = os.path.getsize(file_path)
+    matches = existing_size == expected_size or (expected_size == 0 and existing_size > 0)
+    return True, matches, existing_size
+
+
+def content_disposition_filename(content_disposition: str) -> Optional[str]:
+    if "filename=" not in content_disposition:
+        return None
+    filename_match = re.search(r"filename[*]?=([^;]+)", content_disposition)
+    if not filename_match:
+        return None
+    real_filename = filename_match.group(1).strip('"\'')
+    return real_filename or None

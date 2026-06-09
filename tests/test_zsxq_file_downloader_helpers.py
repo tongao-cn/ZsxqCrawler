@@ -8,7 +8,9 @@ from unittest.mock import patch
 
 from backend.crawlers.zsxq_file_downloader import ZSXQFileDownloader
 from backend.crawlers.zsxq_file_downloader_helpers import (
+    content_disposition_filename,
     download_file_data,
+    existing_file_matches,
     normalize_date_range,
     parse_create_time,
     safe_download_filename,
@@ -180,6 +182,20 @@ class FileDownloaderFileDataHelperTests(unittest.TestCase):
     def test_safe_download_filename_keeps_supported_characters(self):
         self.assertEqual("memo（）[v1].pdf", safe_download_filename("memo（）[v1].pdf", 101))
         self.assertEqual("file_101", safe_download_filename("///", 101))
+
+    def test_existing_file_matches_size_or_nonzero_unknown_size(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            file_path = Path(temp_dir) / "memo.pdf"
+            file_path.write_bytes(b"memo")
+
+            self.assertEqual((True, True, 4), existing_file_matches(str(file_path), 4))
+            self.assertEqual((True, True, 4), existing_file_matches(str(file_path), 0))
+            self.assertEqual((True, False, 4), existing_file_matches(str(file_path), 5))
+            self.assertEqual((False, False, 0), existing_file_matches(str(file_path.with_suffix(".missing")), 4))
+
+    def test_content_disposition_filename_extracts_plain_filename(self):
+        self.assertEqual("memo.pdf", content_disposition_filename('attachment; filename="memo.pdf"'))
+        self.assertIsNone(content_disposition_filename("attachment"))
 
 
 class FileDownloaderDownloadTests(unittest.TestCase):

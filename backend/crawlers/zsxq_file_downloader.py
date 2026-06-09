@@ -18,7 +18,9 @@ import requests
 
 from backend.core.log_redaction import redact_json_like, redact_response_text
 from backend.crawlers.zsxq_file_downloader_helpers import (
+    content_disposition_filename,
     download_file_data,
+    existing_file_matches,
     normalize_date_range,
     parse_create_time,
     safe_download_filename,
@@ -573,9 +575,9 @@ class ZSXQFileDownloader:
         file_path = os.path.join(self.download_dir, safe_filename)
         
         # 🚀 优化：先检查本地文件，避免无意义的API请求
-        if os.path.exists(file_path):
-            existing_size = os.path.getsize(file_path)
-            if existing_size == file_size or (file_size == 0 and existing_size > 0):
+        file_exists, size_matches, _existing_size = existing_file_matches(file_path, file_size)
+        if file_exists:
+            if size_matches:
                 self.log(f"   ✅ 文件已存在且大小匹配，跳过下载")
                 self.file_db.update_file_download_status(file_id, 'completed', file_path)
                 return "skipped"  # 返回特殊值表示跳过
@@ -613,18 +615,12 @@ class ZSXQFileDownloader:
 
                 # 如果文件名是默认的，尝试从响应头获取真实文件名
                 if file_name.startswith('file_') and 'content-disposition' in response.headers:
-                    content_disposition = response.headers['content-disposition']
-                    if 'filename=' in content_disposition:
-                        # 提取文件名
-                        import re
-                        filename_match = re.search(r'filename[*]?=([^;]+)', content_disposition)
-                        if filename_match:
-                            real_filename = filename_match.group(1).strip('"\'')
-                            if real_filename:
-                                file_name = real_filename
-                                safe_filename = safe_download_filename(file_name, file_id)
-                                file_path = os.path.join(self.download_dir, safe_filename)
-                                self.log(f"   📝 从响应头获取到真实文件名: {file_name}")
+                    real_filename = content_disposition_filename(response.headers['content-disposition'])
+                    if real_filename:
+                        file_name = real_filename
+                        safe_filename = safe_download_filename(file_name, file_id)
+                        file_path = os.path.join(self.download_dir, safe_filename)
+                        self.log(f"   📝 从响应头获取到真实文件名: {file_name}")
 
                 if response.status_code == 200:
                     total_size = int(response.headers.get('content-length', 0))
