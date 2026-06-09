@@ -30,6 +30,14 @@ from backend.services.a_share_analysis_db_storage import (
     save_daily_mentions as save_daily_mentions_to_db,
     save_processed_state as save_processed_state_to_db,
 )
+from backend.services.a_share_analysis_dates import (
+    get_date_range_bounds,
+    get_last_days_range,
+    get_required_days_for_start_date,
+    normalize_date_range as _normalize_date_range,
+    select_available_date_range as _select_available_date_range,
+    validate_day,
+)
 
 try:
     from backend.core.logger_config import (
@@ -220,46 +228,6 @@ def normalize_day(dt: datetime) -> str:
     if dt.tzinfo:
         dt = dt.astimezone().replace(tzinfo=None)
     return dt.strftime("%Y-%m-%d")
-
-
-def validate_day(day: Optional[str], field_name: str = "date") -> Optional[str]:
-    if day is None or str(day).strip() == "":
-        return None
-    try:
-        return datetime.strptime(str(day).strip(), "%Y-%m-%d").strftime("%Y-%m-%d")
-    except ValueError as exc:
-        raise ValueError(f"{field_name} 必须是 YYYY-MM-DD 格式") from exc
-
-
-def _normalize_date_range(
-    start_date: Optional[str],
-    end_date: Optional[str],
-    start_field_name: str = "start_date",
-    end_field_name: str = "end_date",
-    reverse_error: str = "start_date 不能晚于 end_date",
-) -> Tuple[str, str]:
-    start_day = validate_day(start_date, start_field_name) or ""
-    end_day = validate_day(end_date, end_field_name) or ""
-    if start_day > end_day:
-        raise ValueError(reverse_error)
-    return start_day, end_day
-
-
-def get_last_days_range(days: int) -> Tuple[datetime, datetime]:
-    now = datetime.now()
-    return now - timedelta(days=days), now
-
-
-def get_date_range_bounds(start_date: str, end_date: str) -> Tuple[datetime, datetime]:
-    start = datetime.strptime(start_date, "%Y-%m-%d")
-    end = datetime.strptime(end_date, "%Y-%m-%d") + timedelta(days=1)
-    return start, end
-
-
-def get_required_days_for_start_date(start_date: str) -> int:
-    start_dt = datetime.strptime(start_date, "%Y-%m-%d")
-    delta = datetime.now().date() - start_dt.date()
-    return max(1, delta.days + 2)
 
 
 def make_item_key(item: Dict[str, Any]) -> str:
@@ -1187,19 +1155,6 @@ def _color_for_name(name: str) -> str:
     saturation = 58 + (seed % 17)
     lightness = 45 + (seed % 10)
     return f"hsl({hue}, {saturation}%, {lightness}%)"
-
-
-def _select_available_date_range(
-    available_dates: Sequence[str],
-    start_date: Optional[str] = None,
-    end_date: Optional[str] = None,
-) -> Tuple[str, str, List[str]]:
-    selected_start = validate_day(start_date, "start_date") or available_dates[0]
-    selected_end = validate_day(end_date, "end_date") or available_dates[-1]
-    if selected_start > selected_end:
-        selected_start, selected_end = selected_end, selected_start
-    range_dates = [day for day in available_dates if selected_start <= day <= selected_end]
-    return selected_start, selected_end, range_dates
 
 
 def _empty_chart_payload(
