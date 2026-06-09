@@ -65,6 +65,11 @@ from backend.services.a_share_analysis_local_store import (
     save_state_file as _save_state_file_impl,
     write_csv_file as _write_csv_file_impl,
 )
+from backend.services.a_share_analysis_topics import (
+    normalize_day as _normalize_day,
+    parse_time as _parse_time,
+    read_topics_in_time_range as _read_topics_in_time_range,
+)
 
 try:
     from backend.core.logger_config import (
@@ -166,36 +171,11 @@ def should_use_db_storage(group_id: Optional[str] = None) -> bool:
 
 
 def parse_time(value: Optional[str]) -> Optional[datetime]:
-    if not value:
-        return None
-    value = value.strip()
-    formats = (
-        "%Y-%m-%dT%H:%M:%S.%f%z",
-        "%Y-%m-%dT%H:%M:%S%z",
-        "%Y-%m-%d %H:%M:%S",
-        "%Y-%m-%d",
-    )
-    for fmt in formats:
-        try:
-            dt = datetime.strptime(value, fmt)
-            if dt.tzinfo:
-                return dt.astimezone().replace(tzinfo=None)
-            return dt.replace(tzinfo=None)
-        except Exception:
-            continue
-    try:
-        if value.endswith("+0800"):
-            base = value[:-5]
-            return datetime.strptime(base, "%Y-%m-%dT%H:%M:%S.%f")
-    except Exception:
-        pass
-    return None
+    return _parse_time(value)
 
 
 def normalize_day(dt: datetime) -> str:
-    if dt.tzinfo:
-        dt = dt.astimezone().replace(tzinfo=None)
-    return dt.strftime("%Y-%m-%d")
+    return _normalize_day(dt)
 
 
 def make_item_key(item: Dict[str, Any]) -> str:
@@ -248,65 +228,16 @@ def read_topics_in_time_range(
     range_label: str,
     log_callback: LogCallback = None,
 ) -> List[Dict[str, Any]]:
-    items: List[Dict[str, Any]] = []
-    normalized_group_id = str(group_id or "").strip()
-    query_group_id: Any = int(normalized_group_id) if normalized_group_id.isdigit() else normalized_group_id
-
-    conn = connect()
-    try:
-        cur = conn.cursor()
-        cur.execute(
-            "SELECT t.topic_id, t.title, t.create_time FROM topics t WHERE t.group_id = ?",
-            (query_group_id,),
-        )
-        rows = cur.fetchall()
-        log_debug(f"loaded topics rows: {len(rows)} from zsxq_core for group {normalized_group_id}")
-
-        filtered_rows = []
-        for topic_id, title, create_time in rows:
-            dt = parse_time(create_time)
-            if not dt or dt < start or dt > end:
-                continue
-            filtered_rows.append((topic_id, title, create_time, dt))
-
-        talk_texts: Dict[Any, str] = {}
-        topic_ids = [topic_id for topic_id, _, _, _ in filtered_rows]
-        if topic_ids:
-            try:
-                placeholders = ", ".join("?" for _ in topic_ids)
-                cur.execute(
-                    f"SELECT topic_id, text FROM talks WHERE topic_id IN ({placeholders})",
-                    tuple(topic_ids),
-                )
-                for topic_id, text in cur.fetchall():
-                    talk_texts[topic_id] = text or ""
-            except Exception:
-                pass
-        log_debug(f"loaded talks texts: {len(talk_texts)} for group {normalized_group_id}")
-
-        for topic_id, title, create_time, dt in filtered_rows:
-            text = talk_texts.get(topic_id) or (title or "")
-            if not text:
-                continue
-            items.append(
-                {
-                    "topic_id": topic_id,
-                    "title": title or "",
-                    "text": text,
-                    "create_time": create_time,
-                    "day": normalize_day(dt),
-                    "source": "topics",
-                    "group_id": normalized_group_id,
-                }
-            )
-    finally:
-        conn.close()
-
-    _emit_log(
-        f"filtered topics items: {len(items)} for {range_label} in group {normalized_group_id}",
-        log_callback,
+    return _read_topics_in_time_range(
+        group_id,
+        start,
+        end,
+        range_label,
+        connect_func=connect,
+        debug_logger=log_debug,
+        emit_log=_emit_log,
+        log_callback=log_callback,
     )
-    return items
 
 
 def _format_company_log(companies: Sequence[str], max_chars: int = 160) -> str:
