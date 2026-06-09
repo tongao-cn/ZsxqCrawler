@@ -122,7 +122,7 @@ Recommended verification:
 
 ```powershell
 uv run python scripts/scan_postgres_compat_debt.py
-uv run python -m pytest tests/test_db_compat.py tests/test_postgres_core_schema.py tests/test_zsxq_database_helpers.py tests/test_zsxq_file_database_helpers.py
+uv run python -m unittest tests.test_db_compat tests.test_postgres_core_schema tests.test_zsxq_database_helpers tests.test_zsxq_file_database_helpers -v
 ```
 
 ### Stage 2: Make Task Runtime A Product Contract
@@ -137,7 +137,7 @@ Goal: one task model across crawl, download, analysis, export, and sync.
 Recommended verification:
 
 ```powershell
-uv run python -m pytest tests/test_task_runtime_helpers.py tests/test_task_store.py tests/test_task_routes_helpers.py
+uv run python -m unittest tests.test_task_runtime_helpers tests.test_task_store tests.test_task_routes_helpers -v
 ```
 
 ### Stage 3: Refine The Group Workbench
@@ -153,8 +153,7 @@ Goal: make `/groups/[groupId]` the clear operating console.
 Recommended verification:
 
 ```powershell
-cd frontend
-npm run build
+npm --prefix frontend run build
 ```
 
 If global lint is blocked by unrelated existing issues, run focused TypeScript or ESLint checks for touched files and record the blocker.
@@ -172,7 +171,7 @@ Goal: share AI plumbing without merging business outputs.
 Recommended verification:
 
 ```powershell
-uv run python -m pytest tests/test_daily_topic_analysis_service_helpers.py tests/test_daily_stock_concept_service_helpers.py tests/test_file_ai_analysis_service_helpers.py tests/test_a_share_analysis_service_helpers.py
+uv run python -m unittest tests.test_daily_topic_analysis_service_helpers tests.test_daily_stock_concept_service_helpers tests.test_file_ai_analysis_service_helpers tests.test_a_share_analysis_service_helpers -v
 ```
 
 ### Stage 5: Publish A Stable Reader Contract

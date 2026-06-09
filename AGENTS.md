@@ -54,7 +54,8 @@ Define success in a way that can be checked.
 
 Common commands:
 
-- Backend test: `uv run python -m pytest tests/test_xxx.py -x -q`
+- Backend test: `uv run python -m unittest tests.test_xxx -v`
+- Backend full test: `uv run python -m unittest discover -s tests`
 - Backend syntax: `uv run python -m py_compile backend/path/to/file.py`
 - Frontend build: `npm --prefix frontend run build`
 - Frontend dev server for manual checks: `npm --prefix frontend run dev`
