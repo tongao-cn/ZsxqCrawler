@@ -1,15 +1,16 @@
 'use client';
 
 import { ChangeEvent, ClipboardEvent, KeyboardEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ImagePlus, RefreshCw, Search, Sparkles } from 'lucide-react';
+import { RefreshCw, Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Textarea } from '@/components/ui/textarea';
+import StockTopicAnalysisInputCard from '@/components/StockTopicAnalysisInputCard';
 import StockTopicAnalysisResultDialog from '@/components/StockTopicAnalysisResultDialog';
 import StockTopicAnalysisResultsTable from '@/components/StockTopicAnalysisResultsTable';
+import StockTopicAnalysisStatsCard from '@/components/StockTopicAnalysisStatsCard';
 import { apiClient, StockTopicAnalysisResponse } from '@/lib/api';
 import { useTaskStatus } from '@/hooks/useTaskStatus';
 
@@ -373,52 +374,24 @@ export default function StockTopicAnalysisPanel({ groupId, onTaskCreated }: Stoc
   return (
     <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_280px]">
       <div className="space-y-4">
-        <Card>
-          <CardHeader>
-            <CardTitle>个股分析</CardTitle>
-            <CardDescription>输入多只股票，查询已保存结果；没有结果可初始化，有新话题可增量更新</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <input
-              ref={imageInputRef}
-              type="file"
-              accept="image/png,image/jpeg,image/webp"
-              className="hidden"
-              onChange={handleImageSelected}
-            />
-            <Textarea
-              value={stockInput}
-              onChange={(event) => setStockInput(event.target.value)}
-              onPaste={(event) => void handleStockInputPaste(event)}
-              onKeyDown={handleStockInputKeyDown}
-              placeholder={'例如：德龙激光、宁德时代\n中际旭创 贵州茅台'}
-              className="min-h-24 resize-y"
-            />
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div className="text-sm text-muted-foreground">
-                已识别 {parsedStockNames.length}/{MAX_STOCK_COUNT} 只，自动去重
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  variant="outline"
-                  onClick={() => imageInputRef.current?.click()}
-                  disabled={extractingImage}
-                >
-                  <ImagePlus className="mr-2 h-4 w-4" />
-                  {extractingImage ? '识别中...' : '图片提取'}
-                </Button>
-                <Button variant="outline" onClick={handleSearch} disabled={searching || parsedStockNames.length === 0}>
-                  <Search className="mr-2 h-4 w-4" />
-                  {searching ? '搜索中...' : '搜索'}
-                </Button>
-                <Button onClick={handleAnalyze} disabled={analyzing || Boolean(activeBatchAnalysis) || parsedStockNames.length === 0}>
-                  <Sparkles className="mr-2 h-4 w-4" />
-                  {analyzeButtonLabel}
-                </Button>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+        <StockTopicAnalysisInputCard
+          analyzeButtonLabel={analyzeButtonLabel}
+          analyzing={analyzing}
+          extractingImage={extractingImage}
+          imageInputRef={imageInputRef}
+          maxStockCount={MAX_STOCK_COUNT}
+          onAnalyze={handleAnalyze}
+          onImageSelected={handleImageSelected}
+          onImageUploadClick={() => imageInputRef.current?.click()}
+          onSearch={handleSearch}
+          onStockInputChange={setStockInput}
+          onStockInputKeyDown={handleStockInputKeyDown}
+          onStockInputPaste={(event) => void handleStockInputPaste(event)}
+          parsedStockCount={parsedStockNames.length}
+          searching={searching}
+          stockInput={stockInput}
+          taskActive={Boolean(activeBatchAnalysis)}
+        />
 
         <Card>
           <CardHeader className="flex flex-row items-start justify-between gap-3">
@@ -465,43 +438,15 @@ export default function StockTopicAnalysisPanel({ groupId, onTaskCreated }: Stoc
         </Card>
       </div>
 
-      <Card className="h-fit">
-        <CardHeader>
-          <CardTitle>统计</CardTitle>
-              <CardDescription>当前输入与结果概览</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-3 text-sm">
-          <div className="flex items-center justify-between">
-            <span className="text-muted-foreground">输入股票</span>
-            <span className="font-medium">{parsedStockNames.length}</span>
-          </div>
-          <div className="flex items-center justify-between">
-            <span className="text-muted-foreground">结果行数</span>
-            <span className="font-medium">{results.length}</span>
-          </div>
-          <div className="flex items-center justify-between">
-            <span className="text-muted-foreground">已勾选</span>
-            <span className="font-medium">{selectedResults.length}</span>
-          </div>
-          <div className="flex items-center justify-between">
-            <span className="text-muted-foreground">命中话题</span>
-            <span className="font-medium">{totalTopics}</span>
-          </div>
-          <div className="flex items-center justify-between">
-            <span className="text-muted-foreground">已保存总结</span>
-            <span className="font-medium">{analyzedCount}</span>
-          </div>
-          <div className="flex items-center justify-between">
-            <span className="text-muted-foreground">待处理话题</span>
-            <span className="font-medium">{newTopicCount}</span>
-          </div>
-          {activeBatchAnalysis && (
-            <div className="rounded-md border border-blue-100 bg-blue-50 p-3 text-xs text-blue-700">
-              批量分析任务运行中，完成后会自动刷新表格。
-            </div>
-          )}
-        </CardContent>
-      </Card>
+      <StockTopicAnalysisStatsCard
+        active={Boolean(activeBatchAnalysis)}
+        analyzedCount={analyzedCount}
+        newTopicCount={newTopicCount}
+        parsedStockCount={parsedStockNames.length}
+        resultCount={results.length}
+        selectedCount={selectedResults.length}
+        totalTopics={totalTopics}
+      />
 
       <StockTopicAnalysisResultDialog
         onOpenChange={(open) => !open && setSelectedResult(null)}
