@@ -66,3 +66,20 @@ def summarize_page_time_range(files: list[Dict[str, Any]]) -> tuple[Optional[str
     oldest = min(timestamps).strftime("%Y-%m-%d %H:%M:%S")
     newest = max(timestamps).strftime("%Y-%m-%d %H:%M:%S")
     return oldest, newest
+
+
+def safe_download_filename(file_name: Any, file_id: Any) -> str:
+    safe_filename = "".join(c for c in str(file_name or "") if c.isalnum() or c in "._-（）()[]{}")
+    if not safe_filename:
+        safe_filename = f"file_{file_id}"
+    return safe_filename
+
+
+def download_file_data(file_info: Dict[str, Any]) -> Dict[str, Any]:
+    file_data = file_info.get("file", {}) or {}
+    return {
+        "file_id": file_data.get("id") or file_data.get("file_id"),
+        "file_name": file_data.get("name", "Unknown"),
+        "file_size": file_data.get("size", 0),
+        "download_count": file_data.get("download_count", 0),
+    }

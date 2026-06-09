@@ -18,8 +18,10 @@ import requests
 
 from backend.core.log_redaction import redact_json_like, redact_response_text
 from backend.crawlers.zsxq_file_downloader_helpers import (
+    download_file_data,
     normalize_date_range,
     parse_create_time,
+    safe_download_filename,
     summarize_page_time_range,
 )
 from backend.storage.postgres_core_schema import CORE_SCHEMA
@@ -546,11 +548,11 @@ class ZSXQFileDownloader:
     
     def download_file(self, file_info: Dict[str, Any]) -> bool:
         """下载单个文件"""
-        file_data = file_info.get('file', {})
-        file_id = file_data.get('id') or file_data.get('file_id')
-        file_name = file_data.get('name', 'Unknown')
-        file_size = file_data.get('size', 0)
-        download_count = file_data.get('download_count', 0)
+        file_data = download_file_data(file_info)
+        file_id = file_data["file_id"]
+        file_name = file_data["file_name"]
+        file_size = file_data["file_size"]
+        download_count = file_data["download_count"]
         
         self.log(f"📥 准备下载文件:")
         self.log(f"   📄 名称: {file_name}")
@@ -566,9 +568,7 @@ class ZSXQFileDownloader:
             return False
         
         # 清理文件名（移除非法字符）
-        safe_filename = "".join(c for c in file_name if c.isalnum() or c in '._-（）()[]{}')
-        if not safe_filename:
-            safe_filename = f"file_{file_id}"
+        safe_filename = safe_download_filename(file_name, file_id)
         
         file_path = os.path.join(self.download_dir, safe_filename)
         
@@ -622,9 +622,7 @@ class ZSXQFileDownloader:
                             real_filename = filename_match.group(1).strip('"\'')
                             if real_filename:
                                 file_name = real_filename
-                                safe_filename = "".join(c for c in file_name if c.isalnum() or c in '._-（）()[]{}')
-                                if not safe_filename:
-                                    safe_filename = f"file_{file_id}"
+                                safe_filename = safe_download_filename(file_name, file_id)
                                 file_path = os.path.join(self.download_dir, safe_filename)
                                 self.log(f"   📝 从响应头获取到真实文件名: {file_name}")
 

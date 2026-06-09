@@ -8,8 +8,10 @@ from unittest.mock import patch
 
 from backend.crawlers.zsxq_file_downloader import ZSXQFileDownloader
 from backend.crawlers.zsxq_file_downloader_helpers import (
+    download_file_data,
     normalize_date_range,
     parse_create_time,
+    safe_download_filename,
     summarize_page_time_range,
 )
 
@@ -162,6 +164,22 @@ class FileDownloaderTimeHelperTests(unittest.TestCase):
 
         self.assertEqual("2026-05-01 09:00:00", oldest)
         self.assertEqual("2026-05-02 10:00:00", newest)
+
+
+class FileDownloaderFileDataHelperTests(unittest.TestCase):
+    def test_download_file_data_accepts_id_or_file_id(self):
+        self.assertEqual(
+            101,
+            download_file_data({"file": {"file_id": 101, "name": "memo.pdf"}})["file_id"],
+        )
+        self.assertEqual(
+            202,
+            download_file_data({"file": {"id": 202, "name": "memo.pdf"}})["file_id"],
+        )
+
+    def test_safe_download_filename_keeps_supported_characters(self):
+        self.assertEqual("memo（）[v1].pdf", safe_download_filename("memo（）[v1].pdf", 101))
+        self.assertEqual("file_101", safe_download_filename("///", 101))
 
 
 class FileDownloaderDownloadTests(unittest.TestCase):
