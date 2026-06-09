@@ -7,6 +7,7 @@ from typing import Any, Dict, List, Optional
 
 import requests
 
+from backend.core.console_output import safe_console_print as print
 from backend.core.log_redaction import redact_json_like, redact_mapping, redact_response_text
 from backend.crawlers.topic_ingestion import TopicIngestionMixin
 from backend.crawlers.topic_pagination import TopicPaginationMixin

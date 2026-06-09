@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import Any, Dict
 
+from backend.core.console_output import safe_console_print as print
+
 
 def _query_group_id(group_id: str):
     value = str(group_id or "").strip()

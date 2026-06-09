@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
 
+from backend.core.console_output import safe_console_print as print
 from backend.crawlers.topic_ingestion import _query_group_id
 
 

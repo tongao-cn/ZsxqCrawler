@@ -16,6 +16,7 @@ from typing import Dict, Optional, Any, Tuple
 
 import requests
 
+from backend.core.console_output import safe_console_print as print
 from backend.core.log_redaction import redact_json_like, redact_response_text
 from backend.crawlers.zsxq_file_downloader_helpers import (
     add_import_stats,
