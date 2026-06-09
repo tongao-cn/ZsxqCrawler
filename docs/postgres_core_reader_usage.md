@@ -108,6 +108,11 @@ Each returned stock keeps the input row even when no saved data exists. Missing
 data is represented by `has_data=false`, empty `concepts`, empty
 `summary_markdown`, and `null` detail objects.
 
+Recommendation counts are included as `recommendation_count_7d`,
+`recommendation_count_14d`, `recommendation_count_30d`, and the nested
+`recommendation_counts` object. The window ends at the latest
+`zsxq_a_share_daily_mentions.mention_date` currently available for the group.
+
 The same aggregation can be exported without starting the backend:
 
 ```powershell

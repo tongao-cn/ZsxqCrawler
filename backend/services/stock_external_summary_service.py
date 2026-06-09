@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import date, timedelta
 from typing import Any, Dict, Iterable, List, Optional
 
 from backend.services.stock_topic_analysis_service import parse_stock_names
@@ -10,6 +11,7 @@ from backend.storage.db_compat import connect
 
 
 RECENT_EVIDENCE_LIMIT = 5
+RECOMMENDATION_WINDOWS = (7, 14, 30)
 
 
 def _normalize_text(value: Any) -> str:
@@ -151,12 +153,72 @@ def _first_non_empty(*values: Any) -> str:
     return ""
 
 
+def _parse_iso_date(value: Any) -> date | None:
+    text = _normalize_text(value)
+    if not text:
+        return None
+    try:
+        return date.fromisoformat(text[:10])
+    except ValueError:
+        return None
+
+
+def _load_latest_recommendation_date(conn: Any, *, group_id: str) -> str:
+    row = conn.execute(
+        """
+        SELECT MAX(mention_date)::text AS latest_date
+        FROM zsxq_a_share_daily_mentions
+        WHERE group_id = ?
+        """,
+        (_normalize_text(group_id),),
+    ).fetchone()
+    return _normalize_text(row["latest_date"] if row else "")
+
+
+def _load_recommendation_counts(
+    conn: Any,
+    *,
+    group_id: str,
+    stock_names: Iterable[Any],
+    as_of_date: str,
+) -> Dict[str, Any]:
+    anchor = _parse_iso_date(as_of_date)
+    names = _ordered_unique(stock_names, limit=10)
+    counts = {f"{window}d": 0 for window in RECOMMENDATION_WINDOWS}
+    if not anchor or not names:
+        return {"as_of_date": as_of_date or "", **counts}
+
+    company_conditions = " OR ".join("company ILIKE ?" for _ in names)
+    for window in RECOMMENDATION_WINDOWS:
+        start_date = anchor - timedelta(days=window - 1)
+        params: List[Any] = [
+            _normalize_text(group_id),
+            start_date.isoformat(),
+            anchor.isoformat(),
+            *(f"%{name}%" for name in names),
+        ]
+        row = conn.execute(
+            f"""
+            SELECT COALESCE(SUM(mentions_count), 0) AS mention_count
+            FROM zsxq_a_share_daily_mentions
+            WHERE group_id = ?
+              AND mention_date >= ?::date
+              AND mention_date <= ?::date
+              AND ({company_conditions})
+            """,
+            params,
+        ).fetchone()
+        counts[f"{window}d"] = int(row["mention_count"] or 0) if row else 0
+    return {"as_of_date": anchor.isoformat(), **counts}
+
+
 def _build_stock_summary(
     *,
     input_name: str,
     daily_concept: Dict[str, Any] | None,
     topic_analysis: Dict[str, Any] | None,
     recent_topic_evidence: List[Dict[str, Any]],
+    recommendation_counts: Dict[str, Any],
 ) -> Dict[str, Any]:
     evidence_concepts = [
         concept
@@ -188,13 +250,28 @@ def _build_stock_summary(
         (recent_topic_evidence[0] or {}).get("market") if recent_topic_evidence else "",
     )
     summary_markdown = _normalize_text((topic_analysis or {}).get("summary_markdown"))
+    has_recommendation_counts = any(
+        int(recommendation_counts.get(f"{window}d") or 0) > 0
+        for window in RECOMMENDATION_WINDOWS
+    )
     return {
         "input": input_name,
         "stock_name": stock_name,
         "stock_code": stock_code,
         "market": market,
-        "has_data": bool(concepts or summary_markdown or daily_concept or topic_analysis or recent_topic_evidence),
+        "has_data": bool(
+            concepts
+            or summary_markdown
+            or daily_concept
+            or topic_analysis
+            or recent_topic_evidence
+            or has_recommendation_counts
+        ),
         "concepts": concepts,
+        "recommendation_counts": recommendation_counts,
+        "recommendation_count_7d": int(recommendation_counts.get("7d") or 0),
+        "recommendation_count_14d": int(recommendation_counts.get("14d") or 0),
+        "recommendation_count_30d": int(recommendation_counts.get("30d") or 0),
         "summary_markdown": summary_markdown,
         "daily_concept": daily_concept,
         "stock_topic_analysis": topic_analysis,
@@ -217,6 +294,7 @@ def get_external_stock_summaries(
     conn = connect()
     try:
         stocks = []
+        recommendation_as_of_date = _load_latest_recommendation_date(conn, group_id=group_id_text)
         for stock_name in names:
             daily_concept = _load_latest_daily_concept(
                 conn,
@@ -226,12 +304,25 @@ def get_external_stock_summaries(
             )
             topic_analysis = _load_latest_topic_analysis(conn, group_id=group_id_text, stock_name=stock_name)
             recent_topic_evidence = _load_recent_topic_evidence(conn, group_id=group_id_text, stock_name=stock_name)
+            recommendation_stock_names = [
+                stock_name,
+                (topic_analysis or {}).get("stock_name"),
+                (daily_concept or {}).get("stock_name"),
+                *((item.get("stock_name") for item in recent_topic_evidence)),
+            ]
+            recommendation_counts = _load_recommendation_counts(
+                conn,
+                group_id=group_id_text,
+                stock_names=recommendation_stock_names,
+                as_of_date=recommendation_as_of_date,
+            )
             stocks.append(
                 _build_stock_summary(
                     input_name=stock_name,
                     daily_concept=daily_concept,
                     topic_analysis=topic_analysis,
                     recent_topic_evidence=recent_topic_evidence,
+                    recommendation_counts=recommendation_counts,
                 )
             )
         return {
