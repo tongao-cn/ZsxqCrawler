@@ -23,6 +23,17 @@ from backend.services.stock_topic_analysis_ai_prompts import (
     build_question_keyword_messages,
     build_stock_analysis_messages,
 )
+from backend.services.stock_topic_analysis_payloads import (
+    build_analysis_topic_payload,
+    build_question_analysis_prompt,
+    build_question_topic_payload,
+    build_stock_analysis_prompt,
+    require_topic_excerpt,
+)
+from backend.services.stock_topic_analysis_queries import (
+    build_question_topic_search_sql,
+    build_topic_search_sql,
+)
 from backend.services.daily_topic_analysis_service import _clip, _extract_response_text
 from backend.storage.db_compat import connect
 
@@ -232,10 +243,7 @@ def _build_stock_alias_terms(stock_name: Any, stock_code: Any = "", market: Any 
 
 
 def _require_topic_excerpt(value: Any, *, topic_id: Any, stock_name: Any) -> str:
-    excerpt = _normalize_text(value)
-    if not excerpt:
-        raise RuntimeError(f"topic {topic_id} 缺少 {_normalize_company_name(stock_name)} 的 excerpt，请先运行推荐池话题抽取")
-    return excerpt
+    return require_topic_excerpt(value, topic_id=topic_id, stock_name=stock_name)
 
 
 def _score_relevant_topic(extracted_content: str, mode: str, matched_terms: Iterable[str], topic_row: Dict[str, Any]) -> int:
@@ -419,63 +427,11 @@ def _upsert_stock_topic_processed_states(
 
 
 def _build_topic_search_sql(*, recent_cutoff: str | None = None) -> str:
-    cutoff_clause = "AND e.topic_date >= ?" if recent_cutoff else ""
-    return """
-        SELECT
-            e.topic_id,
-            COALESCE(t.title, '') AS title,
-            COALESCE(t.create_time, e.topic_date::text) AS create_time,
-            COALESCE(t.likes_count, 0) AS likes_count,
-            COALESCE(t.comments_count, 0) AS comments_count,
-            COALESCE(t.reading_count, 0) AS reading_count,
-            e.stock_name,
-            e.stock_code,
-            e.market,
-            e.concepts_json,
-            e.excerpt,
-            e.reason,
-            e.confidence,
-            e.topic_date::text AS topic_date
-        FROM zsxq_a_share_topic_stock_extractions e
-        LEFT JOIN topics t
-          ON t.group_id::text = e.group_id
-         AND t.topic_id::text = e.topic_id
-        WHERE e.stock_name ILIKE ?
-          AND e.group_id = ?
-          AND COALESCE(e.excerpt, '') <> ''
-          {cutoff_clause}
-        ORDER BY e.topic_date DESC, e.topic_id DESC
-        LIMIT ?
-    """.format(cutoff_clause=cutoff_clause)
+    return build_topic_search_sql(recent_cutoff=recent_cutoff)
 
 
 def _build_question_topic_search_sql(keyword_count: int, *, recent_cutoff: str | None = None) -> str:
-    cutoff_clause = "AND t.create_time >= ?" if recent_cutoff else ""
-    conditions = " OR ".join(
-        "(t.title ILIKE ? OR tk.text ILIKE ? OR q.text ILIKE ? OR a.text ILIKE ?)"
-        for _ in range(keyword_count)
-    )
-    return f"""
-        SELECT
-            t.topic_id,
-            t.title,
-            t.create_time,
-            t.likes_count,
-            t.comments_count,
-            t.reading_count,
-            tk.text AS talk_text,
-            q.text AS question_text,
-            a.text AS answer_text
-        FROM topics t
-        LEFT JOIN talks tk ON t.topic_id = tk.topic_id
-        LEFT JOIN questions q ON t.topic_id = q.topic_id
-        LEFT JOIN answers a ON t.topic_id = a.topic_id
-        WHERE t.group_id::text = ?
-          AND ({conditions})
-          {cutoff_clause}
-        ORDER BY t.create_time DESC
-        LIMIT ?
-    """.format(conditions=conditions, cutoff_clause=cutoff_clause)
+    return build_question_topic_search_sql(keyword_count, recent_cutoff=recent_cutoff)
 
 
 def _load_recommendation_counts(conn: Any, group_id: str, names: List[str]) -> Tuple[int, Dict[str, int]]:
@@ -836,29 +792,7 @@ def search_stock_question_topics(group_id: str, question: str, *, limit: int = M
 
 
 def _build_analysis_topic_payload(search_result: Dict[str, Any]) -> List[Dict[str, Any]]:
-    payload: List[Dict[str, Any]] = []
-    for topic in search_result.get("topics", []):
-        topic_id = str(topic.get("topic_id") or "")
-        excerpt = _require_topic_excerpt(
-            topic.get("excerpt"),
-            topic_id=topic_id,
-            stock_name=search_result.get("stock_name"),
-        )
-        payload.append(
-            {
-                "topic_id": topic_id,
-                "title": topic.get("title") or "",
-                "create_time": topic.get("create_time") or "",
-                "metrics": {
-                    "likes_count": int(topic.get("likes_count") or 0),
-                    "comments_count": int(topic.get("comments_count") or 0),
-                    "reading_count": int(topic.get("reading_count") or 0),
-                },
-                "concepts": list(topic.get("concepts") or []),
-                "excerpt": excerpt,
-            }
-        )
-    return payload
+    return build_analysis_topic_payload(search_result)
 
 
 def _build_question_topic_payload(search_result: Dict[str, Any]) -> List[Dict[str, Any]]:
@@ -894,26 +828,11 @@ def _build_question_topic_payload(search_result: Dict[str, Any]) -> List[Dict[st
     finally:
         conn.close()
 
-    keywords = list(search_result.get("keywords") or [])
-    return [
-        {
-            "topic_id": str(row["topic_id"]),
-            "title": row["title"] or "",
-            "create_time": row["create_time"] or "",
-            "metrics": {
-                "likes_count": int(row["likes_count"] or 0),
-                "comments_count": int(row["comments_count"] or 0),
-                "reading_count": int(row["reading_count"] or 0),
-            },
-            "matched_keywords": [
-                keyword
-                for keyword in keywords
-                if keyword.lower() in _topic_content(row).lower()
-            ],
-            "content": _clip(_topic_content(row), MAX_TOPIC_TEXT_CHARS),
-        }
-        for row in rows
-    ]
+    return build_question_topic_payload(
+        rows,
+        keywords=list(search_result.get("keywords") or []),
+        max_topic_text_chars=MAX_TOPIC_TEXT_CHARS,
+    )
 
 
 def _build_stock_analysis_prompt(
@@ -922,30 +841,20 @@ def _build_stock_analysis_prompt(
     *,
     existing_summary: str = "",
 ) -> str:
-    payload = {
-        "group_id": search_result["group_id"],
-        "analysis_date": date.today().isoformat(),
-        "stock_name": search_result["stock_name"],
-        "stock_code": search_result.get("stock_code") or "",
-        "market": search_result.get("market") or "",
-        "recommendation_count": search_result.get("recommendation_count") or 0,
-        "concepts": search_result.get("concepts") or [],
-        "existing_summary_markdown": existing_summary,
-        "new_topic_count": len(topics),
-        "new_topics": topics,
-    }
-    return _clip(json.dumps(payload, ensure_ascii=False, indent=2), MAX_ANALYSIS_PROMPT_CHARS)
+    return build_stock_analysis_prompt(
+        search_result,
+        topics,
+        existing_summary=existing_summary,
+        max_analysis_prompt_chars=MAX_ANALYSIS_PROMPT_CHARS,
+    )
 
 
 def _build_question_analysis_prompt(search_result: Dict[str, Any], topics: List[Dict[str, Any]]) -> str:
-    payload = {
-        "group_id": search_result["group_id"],
-        "question": search_result["question"],
-        "keywords": search_result.get("keywords") or [],
-        "topic_count": len(topics),
-        "topics": topics,
-    }
-    return _clip(json.dumps(payload, ensure_ascii=False, indent=2), MAX_ANALYSIS_PROMPT_CHARS)
+    return build_question_analysis_prompt(
+        search_result,
+        topics,
+        max_analysis_prompt_chars=MAX_ANALYSIS_PROMPT_CHARS,
+    )
 
 
 def _call_stock_analysis_ai(prompt_payload: str, *, incremental: bool = False) -> Tuple[str, str]:
