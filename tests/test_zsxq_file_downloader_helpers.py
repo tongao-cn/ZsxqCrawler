@@ -14,6 +14,8 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     empty_import_stats,
     existing_file_matches,
     filter_files_newer_than,
+    is_retryable_api_error,
+    is_retryable_http_status,
     normalize_date_range,
     page_crosses_stop_before,
     parse_create_time,
@@ -238,6 +240,21 @@ class FileDownloaderImportStatsHelperTests(unittest.TestCase):
         self.assertEqual(3, total_stats["topics"])
         self.assertEqual(4, total_stats["users"])
         self.assertNotIn("unknown", total_stats)
+
+
+class FileDownloaderRetryHelperTests(unittest.TestCase):
+    def test_retryable_api_error_accepts_numeric_and_string_codes(self):
+        self.assertTrue(is_retryable_api_error(1059))
+        self.assertTrue(is_retryable_api_error("1059"))
+        self.assertTrue(is_retryable_api_error("503"))
+        self.assertFalse(is_retryable_api_error(1030))
+        self.assertFalse(is_retryable_api_error("N/A"))
+
+    def test_retryable_http_status_only_accepts_transient_statuses(self):
+        self.assertTrue(is_retryable_http_status(429))
+        self.assertTrue(is_retryable_http_status(503))
+        self.assertFalse(is_retryable_http_status(403))
+        self.assertFalse(is_retryable_http_status(404))
 
 
 class FileDownloaderDownloadTests(unittest.TestCase):

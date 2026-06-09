@@ -20,6 +20,17 @@ IMPORT_STAT_KEYS = (
     "solutions",
 )
 
+RETRYABLE_API_ERROR_CODES = {"1059", "500", "502", "503", "504"}
+RETRYABLE_HTTP_STATUS_CODES = {429, 500, 502, 503, 504}
+
+
+def is_retryable_api_error(error_code: Any) -> bool:
+    return str(error_code) in RETRYABLE_API_ERROR_CODES
+
+
+def is_retryable_http_status(status_code: int) -> bool:
+    return int(status_code) in RETRYABLE_HTTP_STATUS_CODES
+
 
 def parse_create_time(value: Optional[str]) -> Optional[datetime.datetime]:
     if not value:

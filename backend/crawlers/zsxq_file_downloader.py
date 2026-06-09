@@ -25,6 +25,8 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     empty_import_stats,
     existing_file_matches,
     filter_files_newer_than,
+    is_retryable_api_error,
+    is_retryable_http_status,
     normalize_date_range,
     page_crosses_stop_before,
     parse_create_time,
@@ -414,7 +416,7 @@ class ZSXQFileDownloader:
                             print(f"   ❌ API返回失败: {error_msg} (代码: {error_code})")
                             
                             # 检查是否是可重试的错误
-                            if error_code in [1059, 500, 502, 503, 504]:  # 内部错误、服务器错误等
+                            if is_retryable_api_error(error_code):
                                 if attempt < max_retries - 1:
                                     print(f"   🔄 检测到可重试错误，准备重试...")
                                     continue
@@ -429,7 +431,7 @@ class ZSXQFileDownloader:
                             print(f"   🔄 JSON解析失败，准备重试...")
                             continue
                         
-                elif response.status_code in [429, 500, 502, 503, 504]:  # 频率限制或服务器错误
+                elif is_retryable_http_status(response.status_code):
                     print(f"   ❌ HTTP错误: {response.status_code}")
                     print(f"   📄 响应内容: {redact_response_text(response.text, limit=200)}")
                     if attempt < max_retries - 1:
@@ -517,7 +519,7 @@ class ZSXQFileDownloader:
                                 return None
 
                             # 检查是否是可重试的错误
-                            if error_code in [1059, 500, 502, 503, 504]:  # 内部错误、服务器错误等
+                            if is_retryable_api_error(error_code):
                                 if attempt < max_retries - 1:
                                     self.log(f"   🔄 检测到可重试错误，准备重试...")
                                     continue
@@ -532,7 +534,7 @@ class ZSXQFileDownloader:
                             print(f"   🔄 JSON解析失败，准备重试...")
                             continue
                         
-                elif response.status_code in [429, 500, 502, 503, 504]:  # 频率限制或服务器错误
+                elif is_retryable_http_status(response.status_code):
                     print(f"   ❌ HTTP错误: {response.status_code}")
                     print(f"   📄 响应内容: {redact_response_text(response.text, limit=200)}")
                     if attempt < max_retries - 1:
