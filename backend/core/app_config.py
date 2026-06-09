@@ -2,6 +2,10 @@ from __future__ import annotations
 
 import os
 
+from backend.core.console_output import safe_console_print
+
+print = safe_console_print
+
 try:
     import tomllib
 except ImportError:  # pragma: no cover - Python < 3.11 fallback

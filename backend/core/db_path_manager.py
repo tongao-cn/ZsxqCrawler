@@ -4,6 +4,10 @@
 import os
 from pathlib import Path
 
+from backend.core.console_output import safe_console_print
+
+print = safe_console_print
+
 _DEFAULT_CONFIG_TOML = """# 知识星球数据采集器配置文件
 # 首次启动自动生成；请按需修改
 

@@ -6,10 +6,13 @@ from typing import Any, Dict, Optional
 
 from fastapi import HTTPException
 
+from backend.core.console_output import safe_console_print
 from backend.core.db_path_manager import get_db_path_manager
 from backend.core.image_cache_manager import clear_group_cache_manager, get_image_cache_manager
 from backend.storage.db_compat import connect
 
+
+print = safe_console_print
 
 LOCAL_OUTPUT_DIR = os.environ.get("OUTPUT_DIR", "output")
 try:
