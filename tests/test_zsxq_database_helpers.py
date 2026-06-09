@@ -36,6 +36,42 @@ class FakeFileDatabase:
         self.cursor = FakeCursor()
 
 
+class FakeConnection:
+    def __init__(self):
+        self.commits = 0
+        self.rollbacks = 0
+
+    def commit(self):
+        self.commits += 1
+
+    def rollback(self):
+        self.rollbacks += 1
+
+    def close(self):
+        pass
+
+
+class FakeBackfillCursor(FakeCursor):
+    def __init__(self, rows):
+        super().__init__()
+        self.rows = rows
+        self.last_query = ""
+
+    def execute(self, query, params=()):
+        self.last_query = " ".join(query.split())
+        return super().execute(query, params)
+
+    def fetchall(self):
+        if "FROM topic_files" in self.last_query:
+            return self.rows
+        return []
+
+    def fetchone(self):
+        if "SELECT 1 FROM files" in self.last_query:
+            return None
+        return self.row
+
+
 class ZSXQDatabaseHelperTests(unittest.TestCase):
     def test_build_pagination_calculates_pages(self):
         self.assertEqual(
@@ -171,6 +207,51 @@ class ZSXQDatabaseHelperTests(unittest.TestCase):
             },
             _topic_file_payload_from_row(row),
         )
+
+    def test_backfill_topic_files_to_core_tables_uses_current_database_cursor(self):
+        from backend.storage.zsxq_database import ZSXQDatabase
+
+        row = (
+            202,
+            101,
+            "memo.pdf",
+            "abc",
+            12,
+            0,
+            3,
+            "2026-05-07T12:00:00.000+0800",
+            303,
+            "talk",
+            "title",
+            "",
+            "2026-05-07T10:00:00.000+0800",
+            1,
+            0,
+            0,
+            2,
+            3,
+            4,
+            False,
+            False,
+            False,
+            False,
+            "group",
+            "paid",
+            "bg",
+        )
+        db = object.__new__(ZSXQDatabase)
+        db.cursor = FakeBackfillCursor([row])
+        db.conn = FakeConnection()
+        db.group_id = "303"
+
+        stats = ZSXQDatabase.backfill_topic_files_to_core_tables(db, batch_size=1)
+
+        self.assertEqual({"scanned": 1, "new_files": 1, "relations": 1, "topic_files": 1}, stats)
+        self.assertGreaterEqual(db.conn.commits, 1)
+        calls = "\n".join(sql for sql, _params in db.cursor.calls)
+        self.assertIn("INSERT INTO groups", calls)
+        self.assertIn("INSERT INTO files", calls)
+        self.assertIn("INSERT INTO file_topic_relations", calls)
 
     def test_group_id_param_casts_numeric_ids_for_scoped_queries(self):
         self.assertEqual(155, _group_id_param("155"))

@@ -1155,28 +1155,6 @@ class ZSXQDatabase:
                         'background_url': background_url,
                     })
 
-                if topic_id and group_id and topic_type:
-                    file_db.insert_topic({
-                        'topic_id': topic_id,
-                        'group': {'group_id': group_id},
-                        'type': topic_type,
-                        'title': title,
-                        'annotation': annotation,
-                        'create_time': topic_create_time,
-                        'likes_count': likes_count or 0,
-                        'tourist_likes_count': tourist_likes_count or 0,
-                        'rewards_count': rewards_count or 0,
-                        'comments_count': comments_count or 0,
-                        'reading_count': reading_count or 0,
-                        'readers_count': readers_count or 0,
-                        'digested': bool(digested),
-                        'sticky': bool(sticky),
-                        'user_specific': {
-                            'liked': bool(user_liked),
-                            'subscribed': bool(user_subscribed),
-                        },
-                    })
-
                 file_data = _topic_file_payload_from_row(row)
                 if _upsert_core_file(self.cursor, group_id, topic_id, file_data):
                     stats['new_files'] += 1 if is_new_file else 0
