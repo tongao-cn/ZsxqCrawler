@@ -25,11 +25,14 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     empty_import_stats,
     existing_file_matches,
     filter_files_newer_than,
+    has_retry_attempt_remaining,
     is_retryable_api_error,
     is_retryable_http_status,
     normalize_date_range,
     page_crosses_stop_before,
     safe_download_filename,
+    should_retry_api_error,
+    should_retry_http_status,
     summarize_page_time_range,
 )
 from backend.storage.postgres_core_schema import CORE_SCHEMA
@@ -400,25 +403,24 @@ class ZSXQFileDownloader:
                             print(f"   ❌ API返回失败: {error_msg} (代码: {error_code})")
                             
                             # 检查是否是可重试的错误
-                            if is_retryable_api_error(error_code):
-                                if attempt < max_retries - 1:
-                                    print(f"   🔄 检测到可重试错误，准备重试...")
-                                    continue
-                            else:
+                            if should_retry_api_error(error_code, attempt, max_retries):
+                                print(f"   🔄 检测到可重试错误，准备重试...")
+                                continue
+                            if not is_retryable_api_error(error_code):
                                 print(f"   🚫 非可重试错误，停止重试")
                                 return None
                                 
                     except json.JSONDecodeError as e:
                         print(f"   ❌ JSON解析失败: {e}")
                         print(f"   📄 原始响应: {redact_response_text(response.text, limit=500)}")
-                        if attempt < max_retries - 1:
+                        if has_retry_attempt_remaining(attempt, max_retries):
                             print(f"   🔄 JSON解析失败，准备重试...")
                             continue
                         
                 elif is_retryable_http_status(response.status_code):
                     print(f"   ❌ HTTP错误: {response.status_code}")
                     print(f"   📄 响应内容: {redact_response_text(response.text, limit=200)}")
-                    if attempt < max_retries - 1:
+                    if should_retry_http_status(response.status_code, attempt, max_retries):
                         print(f"   🔄 服务器错误，准备重试...")
                         continue
                 else:
@@ -429,7 +431,7 @@ class ZSXQFileDownloader:
                     
             except Exception as e:
                 print(f"   ❌ 请求异常: {e}")
-                if attempt < max_retries - 1:
+                if has_retry_attempt_remaining(attempt, max_retries):
                     print(f"   🔄 请求异常，准备重试...")
                     continue
         
@@ -503,25 +505,24 @@ class ZSXQFileDownloader:
                                 return None
 
                             # 检查是否是可重试的错误
-                            if is_retryable_api_error(error_code):
-                                if attempt < max_retries - 1:
-                                    self.log(f"   🔄 检测到可重试错误，准备重试...")
-                                    continue
-                            else:
+                            if should_retry_api_error(error_code, attempt, max_retries):
+                                self.log(f"   🔄 检测到可重试错误，准备重试...")
+                                continue
+                            if not is_retryable_api_error(error_code):
                                 self.log(f"   🚫 非可重试错误，停止重试")
                                 return None
                                 
                     except json.JSONDecodeError as e:
                         print(f"   ❌ JSON解析失败: {e}")
                         print(f"   📄 原始响应: {redact_response_text(response.text, limit=500)}")
-                        if attempt < max_retries - 1:
+                        if has_retry_attempt_remaining(attempt, max_retries):
                             print(f"   🔄 JSON解析失败，准备重试...")
                             continue
                         
                 elif is_retryable_http_status(response.status_code):
                     print(f"   ❌ HTTP错误: {response.status_code}")
                     print(f"   📄 响应内容: {redact_response_text(response.text, limit=200)}")
-                    if attempt < max_retries - 1:
+                    if should_retry_http_status(response.status_code, attempt, max_retries):
                         print(f"   🔄 服务器错误，准备重试...")
                         continue
                 else:
@@ -532,7 +533,7 @@ class ZSXQFileDownloader:
                     
             except Exception as e:
                 print(f"   ❌ 请求异常: {e}")
-                if attempt < max_retries - 1:
+                if has_retry_attempt_remaining(attempt, max_retries):
                     print(f"   🔄 请求异常，准备重试...")
                     continue
         

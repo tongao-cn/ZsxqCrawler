@@ -32,6 +32,18 @@ def is_retryable_http_status(status_code: int) -> bool:
     return int(status_code) in RETRYABLE_HTTP_STATUS_CODES
 
 
+def has_retry_attempt_remaining(attempt: int, max_retries: int) -> bool:
+    return int(attempt) < int(max_retries) - 1
+
+
+def should_retry_api_error(error_code: Any, attempt: int, max_retries: int) -> bool:
+    return is_retryable_api_error(error_code) and has_retry_attempt_remaining(attempt, max_retries)
+
+
+def should_retry_http_status(status_code: int, attempt: int, max_retries: int) -> bool:
+    return is_retryable_http_status(status_code) and has_retry_attempt_remaining(attempt, max_retries)
+
+
 def parse_create_time(value: Optional[str]) -> Optional[datetime.datetime]:
     if not value:
         return None

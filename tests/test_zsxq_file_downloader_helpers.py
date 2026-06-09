@@ -14,12 +14,15 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     empty_import_stats,
     existing_file_matches,
     filter_files_newer_than,
+    has_retry_attempt_remaining,
     is_retryable_api_error,
     is_retryable_http_status,
     normalize_date_range,
     page_crosses_stop_before,
     parse_create_time,
     safe_download_filename,
+    should_retry_api_error,
+    should_retry_http_status,
     summarize_page_time_range,
 )
 
@@ -255,6 +258,19 @@ class FileDownloaderRetryHelperTests(unittest.TestCase):
         self.assertTrue(is_retryable_http_status(503))
         self.assertFalse(is_retryable_http_status(403))
         self.assertFalse(is_retryable_http_status(404))
+
+    def test_retry_attempt_remaining_stops_on_last_attempt(self):
+        self.assertTrue(has_retry_attempt_remaining(0, 3))
+        self.assertTrue(has_retry_attempt_remaining(1, 3))
+        self.assertFalse(has_retry_attempt_remaining(2, 3))
+
+    def test_retry_decisions_include_error_type_and_remaining_attempts(self):
+        self.assertTrue(should_retry_api_error("1059", 0, 2))
+        self.assertFalse(should_retry_api_error("1030", 0, 2))
+        self.assertFalse(should_retry_api_error("1059", 1, 2))
+        self.assertTrue(should_retry_http_status(429, 0, 2))
+        self.assertFalse(should_retry_http_status(403, 0, 2))
+        self.assertFalse(should_retry_http_status(429, 1, 2))
 
 
 class FileDownloaderDownloadTests(unittest.TestCase):
