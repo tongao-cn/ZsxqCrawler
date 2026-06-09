@@ -11,6 +11,10 @@ from backend.storage.zsxq_database_helpers import (
     group_id_param,
     nullable_group_id_param,
     replace_file_topic_relation,
+    topic_detail_comment_payload,
+    topic_detail_file_payload,
+    topic_detail_image_payload,
+    topic_detail_like_payload,
     topic_file_payload_from_row,
     upsert_core_file,
 )
@@ -1199,26 +1203,7 @@ class ZSXQDatabase:
 
                 images = []
                 for img_row in self.cursor.fetchall():
-                    images.append({
-                        "image_id": img_row[0],
-                        "type": img_row[1],
-                        "thumbnail": {
-                            "url": img_row[2],
-                            "width": img_row[3],
-                            "height": img_row[4]
-                        },
-                        "large": {
-                            "url": img_row[5],
-                            "width": img_row[6],
-                            "height": img_row[7]
-                        },
-                        "original": {
-                            "url": img_row[8],
-                            "width": img_row[9],
-                            "height": img_row[10],
-                            "size": img_row[11]
-                        }
-                    })
+                    images.append(topic_detail_image_payload(img_row))
 
                 if images:
                     talk_data["images"] = images
@@ -1235,15 +1220,7 @@ class ZSXQDatabase:
 
                 files = []
                 for file_row in self.cursor.fetchall():
-                    files.append({
-                        "file_id": file_row[0],
-                        "name": file_row[1],
-                        "hash": file_row[2],
-                        "size": file_row[3],
-                        "duration": file_row[4],
-                        "download_count": file_row[5],
-                        "create_time": file_row[6]
-                    })
+                    files.append(topic_detail_file_payload(file_row))
 
                 if files:
                     talk_data["files"] = files
@@ -1282,14 +1259,7 @@ class ZSXQDatabase:
 
             latest_likes = []
             for like_row in self.cursor.fetchall():
-                latest_likes.append({
-                    "create_time": like_row[0],
-                    "owner": {
-                        "user_id": like_row[1],
-                        "name": like_row[2],
-                        "avatar_url": like_row[3]
-                    }
-                })
+                latest_likes.append(topic_detail_like_payload(like_row))
             topic_detail["latest_likes"] = latest_likes
 
             # 4. 获取评论 - 不再限制为10条，返回所有评论
@@ -1329,26 +1299,9 @@ class ZSXQDatabase:
                     ''', [*chunk_ids, scoped_group_id, scoped_group_id])
 
                     for img_row in self.cursor.fetchall():
-                        comment_images_map.setdefault(img_row[0], []).append({
-                            "image_id": img_row[1],
-                            "type": img_row[2],
-                            "thumbnail": {
-                                "url": img_row[3],
-                                "width": img_row[4],
-                                "height": img_row[5]
-                            },
-                            "large": {
-                                "url": img_row[6],
-                                "width": img_row[7],
-                                "height": img_row[8]
-                            },
-                            "original": {
-                                "url": img_row[9],
-                                "width": img_row[10],
-                                "height": img_row[11],
-                                "size": img_row[12]
-                            }
-                        })
+                        comment_images_map.setdefault(img_row[0], []).append(
+                            topic_detail_image_payload(img_row, offset=1)
+                        )
 
             # 先收集所有评论，然后构建嵌套结构
             all_comments = {}  # comment_id -> comment_data
@@ -1359,36 +1312,8 @@ class ZSXQDatabase:
                 comment_id = comment_row[0]
                 parent_comment_id = comment_row[6]
 
-                comment_data = {
-                    "comment_id": comment_id,
-                    "text": comment_row[1],
-                    "create_time": comment_row[2],
-                    "likes_count": comment_row[3],
-                    "rewards_count": comment_row[4],
-                    "sticky": bool(comment_row[5]),
-                    "parent_comment_id": parent_comment_id,
-                    "replies_count": comment_row[7],
-                    "owner": {
-                        "user_id": comment_row[8],
-                        "name": comment_row[9],
-                        "alias": comment_row[10],
-                        "avatar_url": comment_row[11],
-                        "location": comment_row[12],
-                        "description": comment_row[13]
-                    }
-                }
-
-                # 添加回复人信息（如果存在）
-                if comment_row[14]:  # repliee_user_id
-                    comment_data["repliee"] = {
-                        "user_id": comment_row[14],
-                        "name": comment_row[15],
-                        "avatar_url": comment_row[16]
-                    }
-
                 images = comment_images_map.get(comment_id, [])
-                if images:
-                    comment_data["images"] = images
+                comment_data = topic_detail_comment_payload(comment_row, images)
 
                 # 存储评论并分类
                 all_comments[comment_id] = comment_data

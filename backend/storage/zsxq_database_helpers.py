@@ -128,3 +128,79 @@ def topic_file_payload_from_row(row) -> Dict[str, Any]:
         "download_count": row[6],
         "create_time": row[7],
     }
+
+
+def topic_detail_image_payload(row, *, offset: int = 0) -> Dict[str, Any]:
+    return {
+        "image_id": row[offset],
+        "type": row[offset + 1],
+        "thumbnail": {
+            "url": row[offset + 2],
+            "width": row[offset + 3],
+            "height": row[offset + 4],
+        },
+        "large": {
+            "url": row[offset + 5],
+            "width": row[offset + 6],
+            "height": row[offset + 7],
+        },
+        "original": {
+            "url": row[offset + 8],
+            "width": row[offset + 9],
+            "height": row[offset + 10],
+            "size": row[offset + 11],
+        },
+    }
+
+
+def topic_detail_file_payload(row) -> Dict[str, Any]:
+    return {
+        "file_id": row[0],
+        "name": row[1],
+        "hash": row[2],
+        "size": row[3],
+        "duration": row[4],
+        "download_count": row[5],
+        "create_time": row[6],
+    }
+
+
+def topic_detail_like_payload(row) -> Dict[str, Any]:
+    return {
+        "create_time": row[0],
+        "owner": {
+            "user_id": row[1],
+            "name": row[2],
+            "avatar_url": row[3],
+        },
+    }
+
+
+def topic_detail_comment_payload(row, images: list[Dict[str, Any]]) -> Dict[str, Any]:
+    comment_data = {
+        "comment_id": row[0],
+        "text": row[1],
+        "create_time": row[2],
+        "likes_count": row[3],
+        "rewards_count": row[4],
+        "sticky": bool(row[5]),
+        "parent_comment_id": row[6],
+        "replies_count": row[7],
+        "owner": {
+            "user_id": row[8],
+            "name": row[9],
+            "alias": row[10],
+            "avatar_url": row[11],
+            "location": row[12],
+            "description": row[13],
+        },
+    }
+    if row[14]:
+        comment_data["repliee"] = {
+            "user_id": row[14],
+            "name": row[15],
+            "avatar_url": row[16],
+        }
+    if images:
+        comment_data["images"] = images
+    return comment_data
