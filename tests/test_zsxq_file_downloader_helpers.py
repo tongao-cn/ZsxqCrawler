@@ -1,11 +1,17 @@
 import unittest
 import tempfile
 import contextlib
+import datetime
 import io
 from pathlib import Path
 from unittest.mock import patch
 
 from backend.crawlers.zsxq_file_downloader import ZSXQFileDownloader
+from backend.crawlers.zsxq_file_downloader_helpers import (
+    normalize_date_range,
+    parse_create_time,
+    summarize_page_time_range,
+)
 
 
 class FailingImportFileDb:
@@ -128,6 +134,34 @@ class FileDownloaderPaginationTests(unittest.TestCase):
         self.assertEqual(1, len(downloader.fetch_calls))
         self.assertEqual(1, downloader.file_db.import_calls)
         self.assertEqual(0, stats["files"])
+
+
+class FileDownloaderTimeHelperTests(unittest.TestCase):
+    def test_parse_create_time_accepts_common_formats(self):
+        self.assertEqual(
+            datetime.datetime(2026, 5, 1, 10, 30, 0),
+            parse_create_time("2026-05-01 10:30:00"),
+        )
+        self.assertEqual(datetime.datetime(2026, 5, 1), parse_create_time("2026-05-01"))
+        self.assertIsNone(parse_create_time("not-a-date"))
+
+    def test_normalize_date_range_trims_and_swaps_reversed_range(self):
+        start, end, stop_before = normalize_date_range(" 2026-05-07 ", "2026-05-01")
+
+        self.assertEqual(("2026-05-01", "2026-05-07"), (start, end))
+        self.assertEqual(datetime.datetime(2026, 5, 7), stop_before)
+
+    def test_summarize_page_time_range_ignores_invalid_timestamps(self):
+        oldest, newest = summarize_page_time_range(
+            [
+                {"file": {"create_time": "2026-05-02 10:00:00"}},
+                {"file": {"create_time": "bad"}},
+                {"file": {"create_time": "2026-05-01 09:00:00"}},
+            ]
+        )
+
+        self.assertEqual("2026-05-01 09:00:00", oldest)
+        self.assertEqual("2026-05-02 10:00:00", newest)
 
 
 class FileDownloaderDownloadTests(unittest.TestCase):

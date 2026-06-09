@@ -17,6 +17,11 @@ from typing import Dict, Optional, Any, Tuple
 import requests
 
 from backend.core.log_redaction import redact_json_like, redact_response_text
+from backend.crawlers.zsxq_file_downloader_helpers import (
+    normalize_date_range,
+    parse_create_time,
+    summarize_page_time_range,
+)
 from backend.storage.postgres_core_schema import CORE_SCHEMA
 from backend.storage.zsxq_file_database import ZSXQFileDatabase
 
@@ -279,29 +284,7 @@ class ZSXQFileDownloader:
 
     @staticmethod
     def _parse_create_time(value: Optional[str]) -> Optional[datetime.datetime]:
-        if not value:
-            return None
-        text = str(value).strip()
-        formats = (
-            "%Y-%m-%dT%H:%M:%S.%f%z",
-            "%Y-%m-%dT%H:%M:%S%z",
-            "%Y-%m-%d %H:%M:%S",
-            "%Y-%m-%d",
-        )
-        for fmt in formats:
-            try:
-                dt = datetime.datetime.strptime(text, fmt)
-                if dt.tzinfo:
-                    return dt.astimezone().replace(tzinfo=None)
-                return dt
-            except Exception:
-                continue
-        try:
-            if text.endswith("+0800"):
-                return datetime.datetime.strptime(text[:-5], "%Y-%m-%dT%H:%M:%S.%f")
-        except Exception:
-            pass
-        return None
+        return parse_create_time(value)
 
     @staticmethod
     def _normalize_date_range(
@@ -309,34 +292,10 @@ class ZSXQFileDownloader:
         end_date: Optional[str] = None,
         last_days: Optional[int] = None,
     ) -> Tuple[Optional[str], Optional[str], Optional[datetime.datetime]]:
-        if last_days:
-            start_dt = datetime.datetime.now() - datetime.timedelta(days=max(1, int(last_days)))
-            start = start_dt.strftime("%Y-%m-%d")
-            end = datetime.datetime.now().strftime("%Y-%m-%d")
-            return start, end, start_dt
-        start = str(start_date or "").strip() or None
-        end = str(end_date or "").strip() or None
-        stop_before_dt = None
-        if start:
-            stop_before_dt = datetime.datetime.strptime(start, "%Y-%m-%d")
-        if start and end and start > end:
-            start, end = end, start
-        return start, end, stop_before_dt
+        return normalize_date_range(start_date=start_date, end_date=end_date, last_days=last_days)
 
     def _summarize_page_time_range(self, files: list[Dict[str, Any]]) -> tuple[Optional[str], Optional[str]]:
-        timestamps: list[datetime.datetime] = []
-        for item in files:
-            file_data = item.get('file', {}) or {}
-            file_dt = self._parse_create_time(file_data.get('create_time'))
-            if file_dt:
-                timestamps.append(file_dt)
-
-        if not timestamps:
-            return None, None
-
-        oldest = min(timestamps).strftime("%Y-%m-%d %H:%M:%S")
-        newest = max(timestamps).strftime("%Y-%m-%d %H:%M:%S")
-        return oldest, newest
+        return summarize_page_time_range(files)
     
     def download_delay(self):
         """下载间隔延迟"""
