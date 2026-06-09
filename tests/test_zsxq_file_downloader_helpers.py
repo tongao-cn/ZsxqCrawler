@@ -13,7 +13,9 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     download_file_data,
     empty_import_stats,
     existing_file_matches,
+    filter_files_newer_than,
     normalize_date_range,
+    page_crosses_stop_before,
     parse_create_time,
     safe_download_filename,
     summarize_page_time_range,
@@ -168,6 +170,31 @@ class FileDownloaderTimeHelperTests(unittest.TestCase):
 
         self.assertEqual("2026-05-01 09:00:00", oldest)
         self.assertEqual("2026-05-02 10:00:00", newest)
+
+    def test_filter_files_newer_than_returns_newer_files_and_older_count(self):
+        newer_files, older_count = filter_files_newer_than(
+            [
+                {"file": {"file_id": 1, "create_time": "2026-05-03T00:00:00"}},
+                {"file": {"file_id": 2, "create_time": "2026-05-01T00:00:00"}},
+                {"file": {"file_id": 3}},
+            ],
+            "2026-05-02T00:00:00",
+        )
+
+        self.assertEqual([1], [item["file"]["file_id"] for item in newer_files])
+        self.assertEqual(2, older_count)
+
+    def test_page_crosses_stop_before_returns_oldest_time(self):
+        crossed, oldest = page_crosses_stop_before(
+            [
+                {"file": {"create_time": "2026-05-03 10:00:00"}},
+                {"file": {"create_time": "2026-05-01 09:00:00"}},
+            ],
+            datetime.datetime(2026, 5, 2),
+        )
+
+        self.assertTrue(crossed)
+        self.assertEqual(datetime.datetime(2026, 5, 1, 9, 0), oldest)
 
 
 class FileDownloaderFileDataHelperTests(unittest.TestCase):

@@ -23,7 +23,9 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     download_file_data,
     empty_import_stats,
     existing_file_matches,
+    filter_files_newer_than,
     normalize_date_range,
+    page_crosses_stop_before,
     parse_create_time,
     safe_download_filename,
     summarize_page_time_range,
@@ -1046,13 +1048,8 @@ class ZSXQFileDownloader:
 
                 should_stop_after_insert = False
                 if enable_time_dedupe and db_latest_time:
-                    newer_files = [
-                        file_info for file_info in files
-                        if file_info.get('file', {}).get('create_time', '') > db_latest_time
-                    ]
-                    
+                    newer_files, older_count = filter_files_newer_than(files, db_latest_time)
                     newer_count = len(newer_files)
-                    older_count = len(files) - newer_count
                     
                     self.log(f"   📊 时间分析: 新于数据库{newer_count}个, 旧于或等于数据库{older_count}个")
                     
@@ -1086,15 +1083,10 @@ class ZSXQFileDownloader:
                     break
 
                 if stop_before_time:
-                    page_times = []
-                    for item in files:
-                        file_data = item.get('file', {}) or {}
-                        file_dt = self._parse_create_time(file_data.get('create_time'))
-                        if file_dt:
-                            page_times.append(file_dt)
-                    if page_times and min(page_times) < stop_before_time:
+                    crossed_stop_before, oldest_page_time = page_crosses_stop_before(files, stop_before_time)
+                    if crossed_stop_before and oldest_page_time:
                         self.log(
-                            f"🛑 当前页最老文件时间 {min(page_times).strftime('%Y-%m-%d %H:%M:%S')} "
+                            f"🛑 当前页最老文件时间 {oldest_page_time.strftime('%Y-%m-%d %H:%M:%S')} "
                             f"早于目标起始时间 {stop_before_time.strftime('%Y-%m-%d')}，停止继续收集更早文件"
                         )
                         break

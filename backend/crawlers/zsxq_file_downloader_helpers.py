@@ -83,6 +83,31 @@ def summarize_page_time_range(files: list[Dict[str, Any]]) -> tuple[Optional[str
     return oldest, newest
 
 
+def filter_files_newer_than(files: list[Dict[str, Any]], latest_time: str) -> tuple[list[Dict[str, Any]], int]:
+    newer_files = [
+        file_info
+        for file_info in files
+        if (file_info.get("file", {}) or {}).get("create_time", "") > latest_time
+    ]
+    return newer_files, len(files) - len(newer_files)
+
+
+def page_crosses_stop_before(
+    files: list[Dict[str, Any]],
+    stop_before_time: datetime.datetime,
+) -> tuple[bool, Optional[datetime.datetime]]:
+    page_times = []
+    for item in files:
+        file_data = item.get("file", {}) or {}
+        file_dt = parse_create_time(file_data.get("create_time"))
+        if file_dt:
+            page_times.append(file_dt)
+    if not page_times:
+        return False, None
+    oldest = min(page_times)
+    return oldest < stop_before_time, oldest
+
+
 def safe_download_filename(file_name: Any, file_id: Any) -> str:
     safe_filename = "".join(c for c in str(file_name or "") if c.isalnum() or c in "._-（）()[]{}")
     if not safe_filename:
