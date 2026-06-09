@@ -4,53 +4,26 @@
 from typing import Dict, Any, Optional, List
 
 from backend.storage.db_compat import connect
+from backend.storage.zsxq_database_helpers import (
+    build_pagination,
+    format_tag_row,
+    format_tag_topic_row,
+    group_id_param,
+    nullable_group_id_param,
+    topic_file_payload_from_row,
+)
 
 
 def _build_pagination(page: int, per_page: int, total: int) -> Dict[str, int]:
-    return {
-        'page': page,
-        'per_page': per_page,
-        'total': total,
-        'pages': (total + per_page - 1) // per_page
-    }
+    return build_pagination(page, per_page, total)
 
 
 def _format_tag_row(row) -> Dict[str, Any]:
-    return {
-        'tag_id': row[0],
-        'tag_name': row[1],
-        'hid': row[2],
-        'topic_count': row[3],
-        'created_at': row[4]
-    }
+    return format_tag_row(row)
 
 
 def _format_tag_topic_row(topic) -> Dict[str, Any]:
-    topic_data = {
-        "topic_id": topic[0],
-        "title": topic[1],
-        "create_time": topic[2],
-        "likes_count": topic[3],
-        "comments_count": topic[4],
-        "reading_count": topic[5],
-        "type": topic[6],
-        "digested": bool(topic[7]) if topic[7] is not None else False,
-        "sticky": bool(topic[8]) if topic[8] is not None else False
-    }
-
-    if topic[6] == 'q&a':
-        topic_data['question_text'] = topic[9] if topic[9] else ''
-        topic_data['answer_text'] = topic[10] if topic[10] else ''
-    else:
-        topic_data['talk_text'] = topic[11] if topic[11] else ''
-        if topic[12]:
-            topic_data['author'] = {
-                'user_id': topic[12],
-                'name': topic[13],
-                'avatar_url': topic[14]
-            }
-
-    return topic_data
+    return format_tag_topic_row(topic)
 
 
 def _replace_file_topic_relation(file_db, file_id: int, topic_id: int) -> int:
@@ -67,15 +40,11 @@ def _replace_file_topic_relation(file_db, file_id: int, topic_id: int) -> int:
 
 
 def _group_id_param(group_id: Optional[str]) -> Any:
-    value = str(group_id or "").strip()
-    return int(value) if value.isdigit() else value
+    return group_id_param(group_id)
 
 
 def _nullable_group_id_param(group_id: Optional[str]) -> Any:
-    value = str(group_id or "").strip()
-    if not value:
-        return None
-    return int(value) if value.isdigit() else value
+    return nullable_group_id_param(group_id)
 
 
 def _upsert_core_file(cursor, group_id: Optional[int], topic_id: int, file_data: Dict[str, Any]) -> Optional[int]:
@@ -111,15 +80,7 @@ def _upsert_core_file(cursor, group_id: Optional[int], topic_id: int, file_data:
 
 
 def _topic_file_payload_from_row(row) -> Dict[str, Any]:
-    return {
-        'file_id': row[1],
-        'name': row[2] or '',
-        'hash': row[3],
-        'size': row[4],
-        'duration': row[5],
-        'download_count': row[6],
-        'create_time': row[7],
-    }
+    return topic_file_payload_from_row(row)
 
 
 class ZSXQDatabase:
