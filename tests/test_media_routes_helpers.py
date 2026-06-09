@@ -6,8 +6,10 @@ try:
     from fastapi import HTTPException
 
     from backend.core.image_cache_manager import ImageCacheManager
+    from backend.core.image_cache_manager import validate_remote_image_url
     from backend.routes.media_routes import (
         _build_cached_image_response,
+        _build_proxy_image_request_headers,
         _guess_content_type,
         _is_blocked_proxy_ip,
         _read_file_bytes,
@@ -75,6 +77,41 @@ class MediaRoutesHelperTests(unittest.TestCase):
 
         self.assertEqual(403, ctx.exception.status_code)
 
+    def test_validate_remote_image_url_allows_trusted_zsxq_proxy_address(self):
+        import backend.core.image_cache_manager as image_cache_manager
+
+        original_getaddrinfo = image_cache_manager.socket.getaddrinfo
+        try:
+            image_cache_manager.socket.getaddrinfo = lambda *args, **kwargs: [
+                (None, None, None, None, ("198.18.0.80", 443))
+            ]
+
+            self.assertEqual(
+                "https://images.zsxq.com/a.jpg",
+                validate_remote_image_url("https://images.zsxq.com/a.jpg"),
+            )
+            with self.assertRaises(ValueError):
+                validate_remote_image_url("https://example.com/a.jpg")
+        finally:
+            image_cache_manager.socket.getaddrinfo = original_getaddrinfo
+
+    def test_build_proxy_image_request_headers_uses_group_cookie(self):
+        from backend.routes import media_routes
+
+        original = media_routes.get_cookie_for_group
+        try:
+            media_routes.get_cookie_for_group = lambda group_id: "zsxq_access_token=secret" if group_id == "123" else None
+
+            self.assertEqual(
+                {"Cookie": "zsxq_access_token=secret"},
+                _build_proxy_image_request_headers("123", "https://images.zsxq.com/a.jpg"),
+            )
+            self.assertEqual({}, _build_proxy_image_request_headers("123", "https://example.com/a.jpg"))
+            self.assertEqual({}, _build_proxy_image_request_headers("456", "https://images.zsxq.com/a.jpg"))
+            self.assertEqual({}, _build_proxy_image_request_headers(None, "https://images.zsxq.com/a.jpg"))
+        finally:
+            media_routes.get_cookie_for_group = original
+
     def test_is_blocked_proxy_ip_identifies_private_ranges(self):
         self.assertTrue(_is_blocked_proxy_ip("10.0.0.1"))
         self.assertTrue(_is_blocked_proxy_ip("::1"))
@@ -92,12 +129,17 @@ class MediaRoutesHelperTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as tmp:
             manager = ImageCacheManager(tmp)
+            import backend.core.image_cache_manager as image_cache_manager
+
             original_get = __import__("requests").get
+            original_validate = image_cache_manager.validate_remote_image_url
             try:
+                image_cache_manager.validate_remote_image_url = lambda url: url
                 __import__("requests").get = lambda *args, **kwargs: FakeResponse()
-                ok, path, error = manager.download_and_cache("https://example.com/a.png", max_bytes=10)
+                ok, path, error = manager.download_and_cache("https://images.zsxq.com/a.png", max_bytes=10)
             finally:
                 __import__("requests").get = original_get
+                image_cache_manager.validate_remote_image_url = original_validate
 
         self.assertFalse(ok)
         self.assertIsNone(path)

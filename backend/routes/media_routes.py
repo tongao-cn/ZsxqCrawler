@@ -3,12 +3,19 @@ from __future__ import annotations
 import mimetypes
 from pathlib import Path
 from typing import Optional
+from urllib.parse import urlparse
 
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse, Response
 
 from backend.core.db_path_manager import get_db_path_manager
-from backend.core.image_cache_manager import get_image_cache_manager, is_blocked_remote_ip, validate_remote_image_url
+from backend.core.image_cache_manager import (
+    TRUSTED_IMAGE_HOSTNAMES,
+    get_image_cache_manager,
+    is_blocked_remote_ip,
+    validate_remote_image_url,
+)
+from backend.core.account_context import get_cookie_for_group
 
 _is_blocked_proxy_ip = is_blocked_remote_ip
 
@@ -56,6 +63,18 @@ def _validate_proxy_image_url(url: str) -> str:
     raise HTTPException(status_code=403, detail="禁止代理内网或本机图片 URL")
 
 
+def _build_proxy_image_request_headers(group_id: Optional[str], url: str) -> dict[str, str]:
+    if not group_id:
+        return {}
+    hostname = urlparse(url).hostname
+    if not hostname or hostname.lower() not in TRUSTED_IMAGE_HOSTNAMES:
+        return {}
+    cookie = get_cookie_for_group(group_id)
+    if not cookie:
+        return {}
+    return {"Cookie": cookie}
+
+
 @router.get("/proxy-image")
 async def proxy_image(url: str, group_id: Optional[str] = None):
     """代理图片请求，支持本地缓存"""
@@ -68,7 +87,10 @@ async def proxy_image(url: str, group_id: Optional[str] = None):
             if cached_path and cached_path.exists():
                 return _build_cached_image_response(cached_path, "HIT")
 
-        success, cached_path, error = cache_manager.download_and_cache(safe_url)
+        success, cached_path, error = cache_manager.download_and_cache(
+            safe_url,
+            request_headers=_build_proxy_image_request_headers(group_id, safe_url),
+        )
 
         if success and cached_path and cached_path.exists():
             return _build_cached_image_response(cached_path, "MISS")

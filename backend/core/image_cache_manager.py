@@ -10,12 +10,13 @@ import requests
 import mimetypes
 import socket
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Mapping, Optional, Tuple
 from urllib.parse import urlparse
 import time
 
 DEFAULT_MAX_IMAGE_BYTES = 10 * 1024 * 1024
 ALLOWED_IMAGE_URL_SCHEMES = {"http", "https"}
+TRUSTED_IMAGE_HOSTNAMES = {"images.zsxq.com"}
 
 
 def is_blocked_remote_ip(address: str) -> bool:
@@ -43,7 +44,8 @@ def validate_remote_image_url(url: str) -> str:
         raise ValueError("图片 URL 主机无法解析") from exc
 
     addresses = {info[4][0] for info in address_infos if info[4]}
-    if not addresses or any(is_blocked_remote_ip(address) for address in addresses):
+    trusted_image_host = parsed.hostname.lower() in TRUSTED_IMAGE_HOSTNAMES
+    if not addresses or (not trusted_image_host and any(is_blocked_remote_ip(address) for address in addresses)):
         raise ValueError("禁止代理内网或本机图片 URL")
 
     return url.strip()
@@ -193,6 +195,7 @@ class ImageCacheManager:
         url: str,
         timeout: int = 30,
         max_bytes: int = DEFAULT_MAX_IMAGE_BYTES,
+        request_headers: Optional[Mapping[str, str]] = None,
     ) -> Tuple[bool, Optional[Path], Optional[str]]:
         """
         下载并缓存图片
@@ -216,7 +219,10 @@ class ImageCacheManager:
                 return True, cached_path, None
             
             # 下载图片
-            response = requests.get(url, headers=self.headers, timeout=timeout, stream=True)
+            headers = dict(self.headers)
+            if request_headers:
+                headers.update(request_headers)
+            response = requests.get(url, headers=headers, timeout=timeout, stream=True)
             response.raise_for_status()
             
             # 检查内容类型
