@@ -177,7 +177,9 @@ export default function GroupDetailPage() {
     loadTopicDetail,
     topicDetails,
   } = useTopicDetailsCache({
+    active: activeTab === 'topics',
     groupId,
+    topics,
   });
   const scrollAreaRef = useRef<HTMLDivElement>(null);
 

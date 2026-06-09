@@ -3,17 +3,21 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import type { TopicCardProps } from '@/components/TopicCard';
-import { apiClient } from '@/lib/api';
+import { apiClient, type Topic } from '@/lib/api';
 
 type TopicDetail = NonNullable<TopicCardProps['topicDetail']>;
 type TopicDetailsMap = Map<string, TopicDetail>;
 
 interface UseTopicDetailsCacheOptions {
+  active?: boolean;
   groupId: number;
+  topics?: Topic[];
 }
 
 export function useTopicDetailsCache({
+  active = true,
   groupId,
+  topics = [],
 }: UseTopicDetailsCacheOptions) {
   const [topicDetails, setTopicDetails] = useState<TopicDetailsMap>(new Map());
   const topicDetailsRef = useRef<TopicDetailsMap>(new Map());
@@ -67,6 +71,37 @@ export function useTopicDetailsCache({
       inFlightRef.current.delete(key);
     }
   }, [groupId]);
+
+  useEffect(() => {
+    if (!active || topics.length === 0) {
+      return;
+    }
+
+    let cancelled = false;
+    const topicIds = topics
+      .map((topic) => String(topic?.topic_id || ''))
+      .filter((topicId) => {
+        if (!topicId || topicDetailsRef.current.has(topicId)) {
+          return false;
+        }
+        return !inFlightRef.current.has(`${groupId}-${topicId}`);
+      });
+
+    const prefetchDetails = async () => {
+      const concurrency = 4;
+
+      for (let index = 0; index < topicIds.length && !cancelled; index += concurrency) {
+        const batch = topicIds.slice(index, index + concurrency);
+        await Promise.all(batch.map((topicId) => loadTopicDetail(topicId)));
+      }
+    };
+
+    void prefetchDetails();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [active, groupId, loadTopicDetail, topics]);
 
   return {
     loadTopicDetail,
