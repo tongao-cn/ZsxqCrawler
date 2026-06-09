@@ -922,8 +922,8 @@ def analyze_stock_topics(
         failed_result = {
             **search_result,
             "topics": search_result["topics"][: len(topics)],
-            "summary_markdown": (latest or {}).get("summary_markdown") or "",
-            "model": (latest or {}).get("model", ""),
+            "summary_markdown": summary or "",
+            "model": model or "",
             "processed_topic_ids": processed_topic_ids,
             "analyzed_topic_ids": processed_topic_ids,
             "new_topic_count": len(topics),

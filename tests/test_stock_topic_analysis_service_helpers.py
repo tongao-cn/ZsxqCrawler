@@ -965,6 +965,57 @@ class StockTopicAnalysisServiceHelperTests(unittest.TestCase):
         )
 
     @unittest.skipUnless(HAS_SERVICE_DEPS, "stock topic analysis service dependencies are not installed")
+    def test_analyze_stock_topics_preserves_checkpoint_summary_on_batch_failure(self):
+        from backend.services.stock_topic_analysis_service import analyze_stock_topics
+
+        search_topics = [{"topic_id": str(1000 + index)} for index in range(15)]
+        search_result = {
+            "group_id": "51111112855254",
+            "stock_name": "宁德时代",
+            "stock_code": "300750",
+            "market": "SZ",
+            "topics": search_topics,
+            "concepts": ["固态电池"],
+            "topic_count": len(search_topics),
+            "recommendation_count": 10,
+            "processed_topic_ids": [],
+            "skipped_topic_ids": [],
+        }
+        payload_topics = [
+            {"topic_id": topic["topic_id"], "excerpt": f"excerpt-{topic['topic_id']}"}
+            for topic in search_topics
+        ]
+        conn = Mock()
+
+        def fake_ai(prompt_payload, *, incremental=False):
+            if fake_ai.call_count == 0:
+                fake_ai.call_count += 1
+                return "summary batch 1", "test-model"
+            raise RuntimeError("upstream failed")
+
+        fake_ai.call_count = 0
+
+        with (
+            patch("backend.services.stock_topic_analysis_service.search_stock_topics", return_value=search_result),
+            patch("backend.services.stock_topic_analysis_service.get_latest_stock_topic_analysis", return_value=None),
+            patch("backend.services.stock_topic_analysis_service._build_analysis_topic_payload", return_value=payload_topics),
+            patch("backend.services.stock_topic_analysis_service._call_stock_analysis_ai", side_effect=fake_ai),
+            patch("backend.services.stock_topic_analysis_service.connect", return_value=conn),
+            self.assertRaises(RuntimeError),
+        ):
+            analyze_stock_topics("51111112855254", "宁德时代")
+
+        analysis_writes = [
+            call.args[1]
+            for call in conn.execute.call_args_list
+            if "INSERT INTO stock_topic_analyses" in call.args[0]
+        ]
+        self.assertEqual("summary batch 1", analysis_writes[-1][7])
+        self.assertEqual("test-model", analysis_writes[-1][8])
+        self.assertEqual("failed", analysis_writes[-1][9])
+        self.assertEqual("upstream failed", analysis_writes[-1][10])
+
+    @unittest.skipUnless(HAS_SERVICE_DEPS, "stock topic analysis service dependencies are not installed")
     def test_build_analysis_topic_payload_does_not_truncate_stock_excerpts(self):
         from backend.services.stock_topic_analysis_service import _build_analysis_topic_payload
 
