@@ -8,6 +8,19 @@ import re
 from typing import Any, Dict, Optional, Tuple
 
 
+IMPORT_STAT_KEYS = (
+    "files",
+    "topics",
+    "users",
+    "groups",
+    "images",
+    "comments",
+    "likes",
+    "columns",
+    "solutions",
+)
+
+
 def parse_create_time(value: Optional[str]) -> Optional[datetime.datetime]:
     if not value:
         return None
@@ -103,3 +116,12 @@ def content_disposition_filename(content_disposition: str) -> Optional[str]:
         return None
     real_filename = filename_match.group(1).strip('"\'')
     return real_filename or None
+
+
+def empty_import_stats() -> Dict[str, int]:
+    return {key: 0 for key in IMPORT_STAT_KEYS}
+
+
+def add_import_stats(total_stats: Dict[str, int], page_stats: Dict[str, Any]) -> None:
+    for key in IMPORT_STAT_KEYS:
+        total_stats[key] = int(total_stats.get(key, 0) or 0) + int(page_stats.get(key, 0) or 0)

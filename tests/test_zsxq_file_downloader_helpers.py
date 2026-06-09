@@ -8,8 +8,10 @@ from unittest.mock import patch
 
 from backend.crawlers.zsxq_file_downloader import ZSXQFileDownloader
 from backend.crawlers.zsxq_file_downloader_helpers import (
+    add_import_stats,
     content_disposition_filename,
     download_file_data,
+    empty_import_stats,
     existing_file_matches,
     normalize_date_range,
     parse_create_time,
@@ -196,6 +198,19 @@ class FileDownloaderFileDataHelperTests(unittest.TestCase):
     def test_content_disposition_filename_extracts_plain_filename(self):
         self.assertEqual("memo.pdf", content_disposition_filename('attachment; filename="memo.pdf"'))
         self.assertIsNone(content_disposition_filename("attachment"))
+
+
+class FileDownloaderImportStatsHelperTests(unittest.TestCase):
+    def test_add_import_stats_accumulates_known_keys(self):
+        total_stats = empty_import_stats()
+
+        add_import_stats(total_stats, {"files": 2, "topics": "3", "unknown": 99})
+        add_import_stats(total_stats, {"files": 1, "users": 4})
+
+        self.assertEqual(3, total_stats["files"])
+        self.assertEqual(3, total_stats["topics"])
+        self.assertEqual(4, total_stats["users"])
+        self.assertNotIn("unknown", total_stats)
 
 
 class FileDownloaderDownloadTests(unittest.TestCase):

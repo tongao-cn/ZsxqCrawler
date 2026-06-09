@@ -18,8 +18,10 @@ import requests
 
 from backend.core.log_redaction import redact_json_like, redact_response_text
 from backend.crawlers.zsxq_file_downloader_helpers import (
+    add_import_stats,
     content_disposition_filename,
     download_file_data,
+    empty_import_stats,
     existing_file_matches,
     normalize_date_range,
     parse_create_time,
@@ -1009,10 +1011,7 @@ class ZSXQFileDownloader:
                 db_latest_time = result[0]
                 self.log(f"   📅 数据库最新文件时间: {db_latest_time}")
         
-        total_imported_stats = {
-            'files': 0, 'topics': 0, 'users': 0, 'groups': 0,
-            'images': 0, 'comments': 0, 'likes': 0, 'columns': 0, 'solutions': 0
-        }
+        total_imported_stats = empty_import_stats()
         current_index = start_time  # 使用时间戳作为index
         page_count = 0
         
@@ -1072,8 +1071,7 @@ class ZSXQFileDownloader:
                     page_stats = self.file_db.import_file_response(data)
 
                     # 累计统计
-                    for key in total_imported_stats:
-                        total_imported_stats[key] += page_stats.get(key, 0)
+                    add_import_stats(total_imported_stats, page_stats)
 
                     self.log(f"   ✅ 第{page_count}页存储完成: 文件+{page_stats.get('files', 0)}, 话题+{page_stats.get('topics', 0)}")
                     
