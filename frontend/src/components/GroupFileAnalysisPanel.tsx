@@ -8,9 +8,9 @@ import {
   GroupFileHeader,
   GroupFilePagination,
   GroupFileSummary,
-  GroupFileTable,
   GroupFileToolbar,
 } from '@/components/GroupFileAnalysisPanelParts';
+import { GroupFileTable } from '@/components/GroupFileTable';
 import { GroupFileTaskWatchers, type FileTaskState } from '@/components/GroupFileTaskWatchers';
 import { useGroupFileList } from '@/hooks/useGroupFileList';
 
