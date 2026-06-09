@@ -10,7 +10,9 @@ from backend.storage.zsxq_database_helpers import (
     format_tag_topic_row,
     group_id_param,
     nullable_group_id_param,
+    replace_file_topic_relation,
     topic_file_payload_from_row,
+    upsert_core_file,
 )
 
 
@@ -27,16 +29,7 @@ def _format_tag_topic_row(topic) -> Dict[str, Any]:
 
 
 def _replace_file_topic_relation(file_db, file_id: int, topic_id: int) -> int:
-    file_db.cursor.execute('''
-    DELETE FROM file_topic_relations
-    WHERE file_id = ? AND topic_id = ?
-    ''', (file_id, topic_id))
-    file_db.cursor.execute('''
-    INSERT INTO file_topic_relations (file_id, topic_id)
-    VALUES (?, ?)
-    ON CONFLICT(file_id, topic_id) DO NOTHING
-    ''', (file_id, topic_id))
-    return file_db.cursor.rowcount
+    return replace_file_topic_relation(file_db, file_id, topic_id)
 
 
 def _group_id_param(group_id: Optional[str]) -> Any:
@@ -48,35 +41,7 @@ def _nullable_group_id_param(group_id: Optional[str]) -> Any:
 
 
 def _upsert_core_file(cursor, group_id: Optional[int], topic_id: int, file_data: Dict[str, Any]) -> Optional[int]:
-    file_id = file_data.get('file_id')
-    if not file_id:
-        return None
-
-    cursor.execute('''
-    INSERT INTO files
-    (file_id, group_id, topic_id, name, hash, size, duration, download_count, create_time)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    ON CONFLICT(file_id) DO UPDATE SET
-        group_id = COALESCE(excluded.group_id, files.group_id),
-        topic_id = COALESCE(excluded.topic_id, files.topic_id),
-        name = excluded.name,
-        hash = excluded.hash,
-        size = excluded.size,
-        duration = excluded.duration,
-        download_count = excluded.download_count,
-        create_time = excluded.create_time
-    ''', (
-        file_id,
-        group_id,
-        topic_id,
-        file_data.get('name', ''),
-        file_data.get('hash'),
-        file_data.get('size'),
-        file_data.get('duration'),
-        file_data.get('download_count'),
-        file_data.get('create_time'),
-    ))
-    return file_id
+    return upsert_core_file(cursor, group_id, topic_id, file_data)
 
 
 def _topic_file_payload_from_row(row) -> Dict[str, Any]:
