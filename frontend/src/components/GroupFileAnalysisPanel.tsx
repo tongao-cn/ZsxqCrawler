@@ -5,14 +5,13 @@ import { apiClient, FileAIAnalysis, FileItem, getTaskConflictDetail } from '@/li
 import { toast } from 'sonner';
 import {
   FileAnalysisDialog,
-  FileTaskState,
   GroupFileHeader,
   GroupFilePagination,
   GroupFileSummary,
   GroupFileTable,
-  GroupFileTaskWatchers,
   GroupFileToolbar,
 } from '@/components/GroupFileAnalysisPanelParts';
+import { GroupFileTaskWatchers, type FileTaskState } from '@/components/GroupFileTaskWatchers';
 import { useGroupFileList } from '@/hooks/useGroupFileList';
 
 interface GroupFileAnalysisPanelProps {
