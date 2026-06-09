@@ -12,7 +12,7 @@ import json
 import os
 import random
 import time
-from typing import Dict, Optional, Any, Tuple
+from typing import Dict, Optional, Any
 
 import requests
 
@@ -29,7 +29,6 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     is_retryable_http_status,
     normalize_date_range,
     page_crosses_stop_before,
-    parse_create_time,
     safe_download_filename,
     summarize_page_time_range,
 )
@@ -293,21 +292,6 @@ class ZSXQFileDownloader:
             print(f"   ⏱️ 延迟 {delay:.1f}秒")
         time.sleep(delay)
 
-    @staticmethod
-    def _parse_create_time(value: Optional[str]) -> Optional[datetime.datetime]:
-        return parse_create_time(value)
-
-    @staticmethod
-    def _normalize_date_range(
-        start_date: Optional[str] = None,
-        end_date: Optional[str] = None,
-        last_days: Optional[int] = None,
-    ) -> Tuple[Optional[str], Optional[str], Optional[datetime.datetime]]:
-        return normalize_date_range(start_date=start_date, end_date=end_date, last_days=last_days)
-
-    def _summarize_page_time_range(self, files: list[Dict[str, Any]]) -> tuple[Optional[str], Optional[str]]:
-        return summarize_page_time_range(files)
-    
     def download_delay(self):
         """下载间隔延迟"""
         if self.use_random_interval:
@@ -1045,7 +1029,7 @@ class ZSXQFileDownloader:
                     break
 
                 self.log(f"   📋 当前页面: {len(files)} 个文件")
-                page_oldest, page_newest = self._summarize_page_time_range(files)
+                page_oldest, page_newest = summarize_page_time_range(files)
                 if page_oldest and page_newest:
                     self.log(f"   🗓️ 当前页文件时间范围: {page_newest} ~ {page_oldest}")
 
@@ -1193,7 +1177,7 @@ class ZSXQFileDownloader:
         end_date: Optional[str] = None,
         last_days: Optional[int] = None,
     ) -> Dict[str, int]:
-        normalized_start, normalized_end, stop_before_dt = self._normalize_date_range(
+        normalized_start, normalized_end, stop_before_dt = normalize_date_range(
             start_date=start_date,
             end_date=end_date,
             last_days=last_days,
@@ -1226,7 +1210,7 @@ class ZSXQFileDownloader:
         if last_days is None and legacy_recent_days is not None:
             last_days = legacy_recent_days
 
-        normalized_start, normalized_end, _ = self._normalize_date_range(
+        normalized_start, normalized_end, _ = normalize_date_range(
             start_date=start_date,
             end_date=end_date,
             last_days=last_days,
