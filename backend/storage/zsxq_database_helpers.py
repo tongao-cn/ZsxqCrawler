@@ -204,3 +204,53 @@ def topic_detail_comment_payload(row, images: list[Dict[str, Any]]) -> Dict[str,
     if images:
         comment_data["images"] = images
     return comment_data
+
+
+def topic_detail_question_payload(row) -> Dict[str, Any]:
+    question_data = {
+        "text": row[0],
+        "expired": bool(row[1]),
+        "anonymous": bool(row[2]),
+        "owner_detail": {
+            "questions_count": row[3],
+            "estimated_join_time": row[4],
+            "status": row[5],
+        },
+        "owner_location": row[6],
+    }
+
+    if row[12]:
+        question_data["questionee"] = {
+            "user_id": row[12],
+            "name": row[13],
+            "alias": row[14],
+            "avatar_url": row[15],
+            "location": row[16],
+            "description": row[17],
+        }
+
+    if not question_data["anonymous"] and row[7]:
+        question_data["owner"] = {
+            "user_id": row[7],
+            "name": row[8],
+            "alias": row[9],
+            "avatar_url": row[10],
+            "location": row[11],
+            "description": row[11],
+        }
+
+    return question_data
+
+
+def topic_detail_answer_payload(row) -> Dict[str, Any]:
+    return {
+        "text": row[0],
+        "owner": {
+            "user_id": row[1],
+            "name": row[2],
+            "alias": row[3],
+            "avatar_url": row[4],
+            "location": row[5],
+            "description": row[6],
+        },
+    }

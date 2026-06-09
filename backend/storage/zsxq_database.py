@@ -11,10 +11,12 @@ from backend.storage.zsxq_database_helpers import (
     group_id_param,
     nullable_group_id_param,
     replace_file_topic_relation,
+    topic_detail_answer_payload,
     topic_detail_comment_payload,
     topic_detail_file_payload,
     topic_detail_image_payload,
     topic_detail_like_payload,
+    topic_detail_question_payload,
     topic_file_payload_from_row,
     upsert_core_file,
 )
@@ -1375,41 +1377,7 @@ class ZSXQDatabase:
 
                 question_row = self.cursor.fetchone()
                 if question_row:
-                    question_data = {
-                        "text": question_row[0],
-                        "expired": bool(question_row[1]),
-                        "anonymous": bool(question_row[2]),
-                        "owner_detail": {
-                            "questions_count": question_row[3],
-                            "estimated_join_time": question_row[4],
-                            "status": question_row[5]
-                        },
-                        "owner_location": question_row[6]
-                    }
-
-                    # 添加被提问者信息
-                    if question_row[12]:  # questionee_user_id
-                        question_data["questionee"] = {
-                            "user_id": question_row[12],
-                            "name": question_row[13],
-                            "alias": question_row[14],
-                            "avatar_url": question_row[15],
-                            "location": question_row[16],
-                            "description": question_row[17]
-                        }
-
-                    # 如果不是匿名且有提问者信息，添加提问者信息
-                    if not question_data["anonymous"] and question_row[7]:  # owner_user_id
-                        question_data["owner"] = {
-                            "user_id": question_row[7],
-                            "name": question_row[8],
-                            "alias": question_row[9],
-                            "avatar_url": question_row[10],
-                            "location": question_row[11],
-                            "description": question_row[11]
-                        }
-
-                    topic_detail["question"] = question_data
+                    topic_detail["question"] = topic_detail_question_payload(question_row)
 
                 # 获取回答信息
                 self.cursor.execute('''
@@ -1425,18 +1393,7 @@ class ZSXQDatabase:
 
                 answer_row = self.cursor.fetchone()
                 if answer_row:
-                    answer_data = {
-                        "text": answer_row[0],
-                        "owner": {
-                            "user_id": answer_row[1],
-                            "name": answer_row[2],
-                            "alias": answer_row[3],
-                            "avatar_url": answer_row[4],
-                            "location": answer_row[5],
-                            "description": answer_row[6]
-                        }
-                    }
-                    topic_detail["answer"] = answer_data
+                    topic_detail["answer"] = topic_detail_answer_payload(answer_row)
 
             return topic_detail
 
