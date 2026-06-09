@@ -14,6 +14,7 @@ import GroupContextActionPanel from '@/components/GroupContextActionPanel';
 import GroupTopBar from '@/components/GroupTopBar';
 import GroupTopicsTab from '@/components/GroupTopicsTab';
 import GroupWorkbenchTabList from '@/components/GroupWorkbenchTabList';
+import GroupScrollableTabContent from '@/components/GroupScrollableTabContent';
 import TaskDock from '@/components/TaskDock';
 import { useTopicDetailsCache } from '@/hooks/useTopicDetailsPrefetch';
 import { useDebouncedSearch } from '@/hooks/useDebouncedSearch';
@@ -410,52 +411,42 @@ export default function GroupDetailPage() {
               </div>
             </TabsContent>
 
-            <TabsContent value="analysis" className="flex-1 flex flex-col min-h-0">
-              <div className="flex-1 min-h-0 overflow-auto">
-                <AShareAnalysisPanel
-                  selectedGroup={group}
-                  onTaskCreated={handleTaskCreated}
-                />
-              </div>
-            </TabsContent>
+            <GroupScrollableTabContent value="analysis">
+              <AShareAnalysisPanel
+                selectedGroup={group}
+                onTaskCreated={handleTaskCreated}
+              />
+            </GroupScrollableTabContent>
 
-            <TabsContent value="daily-analysis" className="flex-1 flex flex-col min-h-0">
-              <div className="flex-1 min-h-0 overflow-auto">
-                <DailyTopicAnalysisPanel
-                  groupId={groupId}
-                  onTaskCreated={handleTaskCreated}
-                  mode="report"
-                />
-              </div>
-            </TabsContent>
+            <GroupScrollableTabContent value="daily-analysis">
+              <DailyTopicAnalysisPanel
+                groupId={groupId}
+                onTaskCreated={handleTaskCreated}
+                mode="report"
+              />
+            </GroupScrollableTabContent>
 
-            <TabsContent value="stock-concepts" className="flex-1 flex flex-col min-h-0">
-              <div className="flex-1 min-h-0 overflow-auto">
-                <DailyTopicAnalysisPanel
-                  groupId={groupId}
-                  onTaskCreated={handleTaskCreated}
-                  mode="stock-concepts"
-                />
-              </div>
-            </TabsContent>
+            <GroupScrollableTabContent value="stock-concepts">
+              <DailyTopicAnalysisPanel
+                groupId={groupId}
+                onTaskCreated={handleTaskCreated}
+                mode="stock-concepts"
+              />
+            </GroupScrollableTabContent>
 
-            <TabsContent value="stock-topic-analysis" className="flex-1 flex flex-col min-h-0">
-              <div className="flex-1 min-h-0 overflow-auto">
-                <StockTopicAnalysisPanel
-                  groupId={groupId}
-                  onTaskCreated={handleTaskCreated}
-                />
-              </div>
-            </TabsContent>
+            <GroupScrollableTabContent value="stock-topic-analysis">
+              <StockTopicAnalysisPanel
+                groupId={groupId}
+                onTaskCreated={handleTaskCreated}
+              />
+            </GroupScrollableTabContent>
 
-            <TabsContent value="stock-question" className="flex-1 flex flex-col min-h-0">
-              <div className="flex-1 min-h-0 overflow-auto">
-                <StockQuestionPanel
-                  groupId={groupId}
-                  onTaskCreated={handleTaskCreated}
-                />
-              </div>
-            </TabsContent>
+            <GroupScrollableTabContent value="stock-question">
+              <StockQuestionPanel
+                groupId={groupId}
+                onTaskCreated={handleTaskCreated}
+              />
+            </GroupScrollableTabContent>
           </Tabs>
         </div>
 
