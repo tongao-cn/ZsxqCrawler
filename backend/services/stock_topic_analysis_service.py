@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date, timedelta
@@ -25,11 +24,17 @@ from backend.services.stock_topic_analysis_ai_prompts import (
 )
 from backend.services.stock_topic_analysis_helpers import (
     _build_stock_alias_terms,
+    _chunks,
+    _exclude_topic_ids,
+    _merge_topic_ids,
     _normalize_company_name,
     _normalize_text,
     _ordered_unique,
     _parse_json_list,
     _safe_float,
+    _serialize_json_list,
+    _topic_id_set,
+    _topic_ids_from_result,
 )
 from backend.services.stock_topic_analysis_payloads import (
     build_analysis_topic_payload,
@@ -162,34 +167,6 @@ def _empty_latest_result(group_id: str, stock_name: str) -> Dict[str, Any]:
         "created_at": None,
         "updated_at": None,
     }
-
-
-def _serialize_json_list(values: Iterable[Any]) -> str:
-    return json.dumps(_ordered_unique(values, limit=MAX_TRACKED_TOPIC_IDS), ensure_ascii=False)
-
-
-def _topic_ids_from_result(result: Dict[str, Any]) -> List[str]:
-    return _ordered_unique((topic.get("topic_id") for topic in result.get("topics", [])), limit=MAX_TRACKED_TOPIC_IDS)
-
-
-def _merge_topic_ids(*groups: Iterable[Any]) -> List[str]:
-    merged: List[Any] = []
-    for group in groups:
-        merged.extend(list(group or []))
-    return _ordered_unique(merged, limit=MAX_TRACKED_TOPIC_IDS)
-
-
-def _exclude_topic_ids(values: Iterable[Any], excluded: Iterable[Any]) -> List[str]:
-    excluded_set = _topic_id_set(excluded)
-    return _ordered_unique((value for value in values if str(value) not in excluded_set), limit=MAX_TRACKED_TOPIC_IDS)
-
-
-def _topic_id_set(values: Iterable[Any]) -> set[str]:
-    return {str(value) for value in _ordered_unique(values, limit=MAX_TRACKED_TOPIC_IDS)}
-
-
-def _chunks(values: List[Dict[str, Any]], size: int) -> List[List[Dict[str, Any]]]:
-    return [values[index : index + size] for index in range(0, len(values), size)]
 
 
 def _recent_topic_cutoff_text() -> str:

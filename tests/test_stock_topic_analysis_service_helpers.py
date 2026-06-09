@@ -33,6 +33,34 @@ class StockTopicAnalysisServiceHelperTests(unittest.TestCase):
         self.assertEqual(["宁德时代", "德龙激光", "贵州茅台", "中际旭创"], names)
         self.assertEqual(50, len(parse_stock_names([f"股票{i}" for i in range(55)])))
 
+    def test_topic_id_helpers_dedupe_merge_exclude_and_limit(self):
+        from backend.services.stock_topic_analysis_helpers import (
+            _exclude_topic_ids,
+            _merge_topic_ids,
+            _serialize_json_list,
+            _topic_id_set,
+            _topic_ids_from_result,
+        )
+
+        result = {"topics": [{"topic_id": 101}, {"topic_id": "102"}, {"topic_id": 101}, {"topic_id": ""}]}
+
+        self.assertEqual(["101", "102"], _topic_ids_from_result(result))
+        self.assertEqual(["101", "102", "103"], _merge_topic_ids(["101", 102], ["102", 103]))
+        self.assertEqual(["102", "103"], _exclude_topic_ids(["101", "102", "103"], [101]))
+        self.assertEqual({"101", "102"}, _topic_id_set(["101", 102, "102"]))
+        self.assertEqual('["101", "102"]', _serialize_json_list(["101", "102", "101"]))
+        self.assertEqual(["1", "2"], _merge_topic_ids([1, 2, 3], limit=2))
+
+    def test_chunks_splits_without_reordering(self):
+        from backend.services.stock_topic_analysis_helpers import _chunks
+
+        rows = [{"topic_id": index} for index in range(5)]
+
+        self.assertEqual(
+            [[{"topic_id": 0}, {"topic_id": 1}], [{"topic_id": 2}, {"topic_id": 3}], [{"topic_id": 4}]],
+            _chunks(rows, 2),
+        )
+
     @unittest.skipUnless(HAS_SERVICE_DEPS, "stock topic analysis service dependencies are not installed")
     def test_normalize_question_keywords_dedupes_and_limits(self):
         from backend.services.stock_topic_analysis_service import _normalize_question_keywords
