@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import base64
-import json
 import mimetypes
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date, datetime, timedelta, timezone
@@ -19,6 +18,18 @@ from backend.core.ai_provider_config import (
     get_summary_reasoning_effort,
 )
 from backend.core.image_cache_manager import get_image_cache_manager
+from backend.services.daily_topic_analysis_prompts import (
+    build_chunk_summary_user_prompt,
+    build_empty_report_summary,
+    build_final_report_user_prompt,
+    build_prompt_payload,
+    build_prompt_payload_unclipped,
+    build_report_metadata,
+    build_report_user_prompt,
+    clip_chunk_summaries_for_final,
+    collect_report_images,
+    split_topics_for_report_chunks,
+)
 from backend.services.daily_topic_analysis_store import (
     connect_topics_db,
     ensure_report_table,
@@ -127,24 +138,11 @@ def _fetch_topics_for_date(
 
 
 def _build_prompt_payload(group_id: str, report_date: str, topics: List[Dict[str, Any]]) -> str:
-    payload = {
-        "group_id": group_id,
-        "report_date": report_date,
-        "topic_count": len(topics),
-        "topics": topics,
-    }
-    text = json.dumps(payload, ensure_ascii=False, indent=2)
-    return _clip(text, MAX_PROMPT_CHARS)
+    return build_prompt_payload(group_id, report_date, topics, max_prompt_chars=MAX_PROMPT_CHARS)
 
 
 def _build_prompt_payload_unclipped(group_id: str, report_date: str, topics: List[Dict[str, Any]]) -> str:
-    payload = {
-        "group_id": group_id,
-        "report_date": report_date,
-        "topic_count": len(topics),
-        "topics": topics,
-    }
-    return json.dumps(payload, ensure_ascii=False, indent=2)
+    return build_prompt_payload_unclipped(group_id, report_date, topics)
 
 
 def _split_topics_for_report_chunks(
@@ -154,27 +152,11 @@ def _split_topics_for_report_chunks(
     *,
     max_chars: int = REPORT_CHUNK_PROMPT_CHARS,
 ) -> List[List[Dict[str, Any]]]:
-    chunks: List[List[Dict[str, Any]]] = []
-    current: List[Dict[str, Any]] = []
-    for topic in topics:
-        candidate = [*current, topic]
-        candidate_text = _build_prompt_payload_unclipped(group_id, report_date, candidate)
-        if current and len(candidate_text) > max_chars:
-            chunks.append(current)
-            current = [topic]
-            continue
-        current = candidate
-    if current:
-        chunks.append(current)
-    return chunks
+    return split_topics_for_report_chunks(group_id, report_date, topics, max_chars=max_chars)
 
 
 def _build_empty_report_summary(report_date: str) -> str:
-    return (
-        "# 每日话题分析报告\n\n"
-        f"日期：{report_date}\n\n"
-        "当天没有采集到话题。建议先确认当天最新数据已完成抓取，或检查群组是否确实无新增内容。\n"
-    )
+    return build_empty_report_summary(report_date)
 
 
 def _build_report_metadata(
@@ -184,14 +166,13 @@ def _build_report_metadata(
     topics: List[Dict[str, Any]],
     report_path: str,
 ) -> Dict[str, Any]:
-    return {
-        "group_id": group_id,
-        "report_date": report_date,
-        "topic_count": len(topics),
-        "topic_ids": [topic["topic_id"] for topic in topics],
-        "image_refs": [image["image_ref"] for image in _collect_report_images(topics)],
-        "report_path": report_path,
-    }
+    return build_report_metadata(
+        group_id=group_id,
+        report_date=report_date,
+        topics=topics,
+        report_path=report_path,
+        max_images_per_report=MAX_IMAGES_PER_REPORT,
+    )
 
 
 def _parse_report_raw_json(value: Any) -> Dict[str, Any]:
@@ -199,21 +180,7 @@ def _parse_report_raw_json(value: Any) -> Dict[str, Any]:
 
 
 def _collect_report_images(topics: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    images: List[Dict[str, Any]] = []
-    for topic in topics:
-        for image in topic.get("images", []) or []:
-            if image.get("url"):
-                images.append(image)
-                if len(images) >= MAX_IMAGES_PER_REPORT:
-                    return images
-
-        for comment in topic.get("comments", []) or []:
-            for image in comment.get("images", []) or []:
-                if image.get("url"):
-                    images.append(image)
-                    if len(images) >= MAX_IMAGES_PER_REPORT:
-                        return images
-    return images
+    return collect_report_images(topics, max_images_per_report=MAX_IMAGES_PER_REPORT)
 
 
 def _build_image_content_parts(group_id: str, images: List[Dict[str, Any]]) -> List[Dict[str, str]]:
@@ -262,33 +229,7 @@ def _build_report_user_prompt(
     *,
     image_refs: Optional[List[str]] = None,
 ) -> str:
-    image_note = ""
-    if image_refs:
-        image_note = (
-            "\n- 部分话题图片已作为附件随本请求传入；图片顺序与话题数据中的 image_ref 顺序一致。"
-            "\n- 如图片内容影响判断，请在相关话题分析中结合文字与图片，不要臆测图片外的信息。"
-        )
-
-    user_prompt = (
-        f"请为 {report_date} 的全部话题生成 AI 日报。\n\n"
-        "请按以下结构输出：\n"
-        "# 每日话题分析报告\n"
-        "## 一句话结论\n"
-        "## 今日核心洞察\n"
-        "## 热点话题 Top 5\n"
-        "## 高价值观点与问答\n"
-        "## 需要跟进的机会或风险\n"
-        "## 明日关注点\n"
-        "## 话题索引\n\n"
-        "要求：\n"
-        "- 每个重点尽量引用 topic_id，方便回溯。\n"
-        "- 热点综合阅读、点赞、评论和内容价值判断。\n"
-        "- 如果当天话题很少，也要如实说明。"
-        f"{image_note}\n"
-        "- 不要输出 JSON。\n\n"
-        f"话题数据：\n{prompt_payload}"
-    )
-    return user_prompt
+    return build_report_user_prompt(prompt_payload, report_date, image_refs=image_refs)
 
 
 def _build_chunk_summary_user_prompt(
@@ -298,49 +239,20 @@ def _build_chunk_summary_user_prompt(
     chunk_index: int,
     chunk_count: int,
 ) -> str:
-    return (
-        f"请为 {report_date} 的第 {chunk_index}/{chunk_count} 个话题分块生成局部摘要。\n\n"
-        "输出中文 Markdown，结构如下：\n"
-        "## 分块核心结论\n"
-        "## 重要话题与证据\n"
-        "## 股票、产业链和概念线索\n"
-        "## 风险与待跟进事项\n"
-        "## topic_id 索引\n\n"
-        "要求：\n"
-        "- 只基于本分块输入，不要补充外部信息。\n"
-        "- 每个重点尽量引用 topic_id。\n"
-        "- 保留能支撑最终日报的高信息密度，不要写寒暄。\n\n"
-        f"话题数据：\n{prompt_payload}"
+    return build_chunk_summary_user_prompt(
+        prompt_payload,
+        report_date,
+        chunk_index=chunk_index,
+        chunk_count=chunk_count,
     )
 
 
 def _clip_chunk_summaries_for_final(chunk_summaries: List[str], limit: int) -> Tuple[List[str], bool]:
-    clipped = [_clip(summary, limit) for summary in chunk_summaries]
-    return clipped, any(clipped_summary != original for clipped_summary, original in zip(clipped, chunk_summaries))
+    return clip_chunk_summaries_for_final(chunk_summaries, limit)
 
 
 def _build_final_report_user_prompt(chunk_summaries: List[str], report_date: str) -> str:
-    joined = "\n\n".join(
-        f"<!-- chunk {index + 1} -->\n{summary}"
-        for index, summary in enumerate(chunk_summaries)
-    )
-    return (
-        f"请基于 {report_date} 的多个分块摘要，生成最终 AI 日报。\n\n"
-        "请按以下结构输出：\n"
-        "# 每日话题分析报告\n"
-        "## 一句话结论\n"
-        "## 今日核心洞察\n"
-        "## 热点话题 Top 5\n"
-        "## 高价值观点与问答\n"
-        "## 需要跟进的机会或风险\n"
-        "## 明日关注点\n"
-        "## 话题索引\n\n"
-        "要求：\n"
-        "- 只能基于分块摘要，不要编造未出现的信息。\n"
-        "- 合并重复观点，保留 topic_id 方便回溯。\n"
-        "- 不要输出 JSON。\n\n"
-        f"分块摘要：\n{joined}"
-    )
+    return build_final_report_user_prompt(chunk_summaries, report_date)
 
 
 def _call_report_ai(
