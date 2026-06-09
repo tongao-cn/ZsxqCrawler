@@ -1,12 +1,9 @@
 #!/usr/bin/env python3
-import csv
-import json
 import os
 from collections import defaultdict
 from datetime import datetime, timedelta
 from typing import Any, Callable, Dict, Iterable, List, Mapping, Optional, Sequence, Set, Tuple
 
-from backend.core.db_path_manager import get_db_path_manager
 from backend.core.local_group_runtime import get_cached_local_group_ids
 from backend.storage.db_compat import connect
 from backend.core.ai_provider_config import (
@@ -54,6 +51,20 @@ from backend.services.a_share_analysis_ai import (
     call_openai_extract_companies as _call_openai_extract_companies,
     call_openai_extract_topic_stocks as _call_openai_extract_topic_stocks,
 )
+from backend.services.a_share_analysis_local_store import (
+    DEFAULT_OUTPUT_PATH,
+    DEFAULT_STATE_PATH,
+    GROUP_ANALYSIS_DIRNAME,
+    GROUP_OUTPUT_FILENAME,
+    GROUP_STATE_FILENAME,
+    get_group_analysis_paths as _get_group_analysis_paths,
+    load_state_file as _load_state_file_impl,
+    normalize_group_id,
+    read_existing_csv_file as _read_existing_csv_file_impl,
+    resolve_analysis_paths as _resolve_analysis_paths,
+    save_state_file as _save_state_file_impl,
+    write_csv_file as _write_csv_file_impl,
+)
 
 try:
     from backend.core.logger_config import (
@@ -84,14 +95,9 @@ except Exception:
         print(f"[DEBUG] {message}")
 
 
-DEFAULT_OUTPUT_PATH = "output/company_mentions_last_month.csv"
-DEFAULT_STATE_PATH = "output/company_mentions_state.json"
 DEFAULT_MODEL = get_default_model()
 DEFAULT_CONCURRENCY = 10
 DEFAULT_CHECKPOINT_BATCH_SIZE = 20
-GROUP_ANALYSIS_DIRNAME = "a_share_analysis"
-GROUP_OUTPUT_FILENAME = "company_mentions.csv"
-GROUP_STATE_FILENAME = "company_mentions_state.json"
 
 LogCallback = Optional[Callable[[str], None]]
 AggregateSuccessCallback = Optional[Callable[[str, str, List[Dict[str, Any]], List[str]], None]]
@@ -129,13 +135,6 @@ def _db_storage_enabled(log_callback: LogCallback = None, force_recheck: bool = 
     return _db_storage_available
 
 
-def normalize_group_id(group_id: Optional[str]) -> Optional[str]:
-    if group_id is None:
-        return None
-    normalized = str(group_id).strip()
-    return normalized or None
-
-
 def _looks_like_attachment_only_topic(content: str) -> bool:
     normalized = str(content or "").strip()
     return normalized in {"「图片」", "「文件」", "[图片]", "[文件]", "图片", "文件"}
@@ -151,18 +150,7 @@ def _should_skip_topic_stock_ai_extraction(content: str) -> Tuple[bool, str]:
 
 
 def get_group_analysis_paths(group_id: str) -> Dict[str, str]:
-    normalized_group_id = normalize_group_id(group_id)
-    if not normalized_group_id:
-        raise ValueError("group_id 不能为空")
-
-    path_manager = get_db_path_manager()
-    analysis_dir = os.path.join(path_manager.get_group_dir(normalized_group_id), GROUP_ANALYSIS_DIRNAME)
-    return {
-        "group_id": normalized_group_id,
-        "analysis_dir": analysis_dir,
-        "output_path": os.path.join(analysis_dir, GROUP_OUTPUT_FILENAME),
-        "state_path": os.path.join(analysis_dir, GROUP_STATE_FILENAME),
-    }
+    return _get_group_analysis_paths(group_id)
 
 
 def resolve_analysis_paths(
@@ -170,11 +158,7 @@ def resolve_analysis_paths(
     state_path: str = DEFAULT_STATE_PATH,
     group_id: Optional[str] = None,
 ) -> Tuple[str, str]:
-    normalized_group_id = normalize_group_id(group_id)
-    if normalized_group_id and output_path == DEFAULT_OUTPUT_PATH and state_path == DEFAULT_STATE_PATH:
-        group_paths = get_group_analysis_paths(normalized_group_id)
-        return group_paths["output_path"], group_paths["state_path"]
-    return output_path, state_path
+    return _resolve_analysis_paths(output_path, state_path, group_id)
 
 
 def should_use_db_storage(group_id: Optional[str] = None) -> bool:
@@ -558,28 +542,7 @@ def aggregate_daily(
 
 
 def _read_existing_csv_file(output_path: str = DEFAULT_OUTPUT_PATH) -> Dict[str, Dict[str, int]]:
-    daily: Dict[str, Dict[str, int]] = {}
-    if not os.path.exists(output_path):
-        return daily
-    try:
-        with open(output_path, "r", encoding="utf-8", newline="") as file_obj:
-            reader = csv.DictReader(file_obj)
-            for row in reader:
-                day = (row.get("date") or "").strip()
-                company = (row.get("company") or "").strip()
-                if not day or not company:
-                    continue
-                try:
-                    count = int(str(row.get("articles_count") or "0").strip())
-                except Exception:
-                    continue
-                daily.setdefault(day, {})[company] = count
-    except Exception:
-        return {}
-
-    total_entries = sum(sum(company_counts.values()) for company_counts in daily.values())
-    log_info(f"loaded existing csv days={len(daily)} total_entries={total_entries}")
-    return daily
+    return _read_existing_csv_file_impl(output_path, log_info)
 
 
 def read_existing_csv(
@@ -596,16 +559,7 @@ def read_existing_csv(
 
 
 def _write_csv_file(daily: Dict[str, Dict[str, int]], output_path: str = DEFAULT_OUTPUT_PATH):
-    directory = os.path.dirname(output_path)
-    if directory:
-        os.makedirs(directory, exist_ok=True)
-    with open(output_path, "w", encoding="utf-8", newline="") as file_obj:
-        writer = csv.writer(file_obj)
-        writer.writerow(["date", "company", "articles_count"])
-        for day in sorted(daily.keys()):
-            for company, count in sorted(daily[day].items(), key=lambda item: (-item[1], item[0])):
-                writer.writerow([day, company, count])
-    log_info(f"legacy local csv fallback written: {output_path}")
+    _write_csv_file_impl(daily, output_path, log_info)
 
 
 def write_csv(
@@ -630,17 +584,7 @@ def write_csv(
 
 
 def _load_state_file(state_path: str = DEFAULT_STATE_PATH) -> set:
-    if not os.path.exists(state_path):
-        log_info("state file not found, start fresh")
-        return set()
-    try:
-        with open(state_path, "r", encoding="utf-8") as file_obj:
-            data = json.load(file_obj)
-            processed = set(data.get("processed", []))
-            log_info(f"loaded state entries={len(processed)}")
-            return processed
-    except Exception:
-        return set()
+    return _load_state_file_impl(state_path, log_info)
 
 
 def load_state(
@@ -657,13 +601,7 @@ def load_state(
 
 
 def _save_state_file(state_path: str = DEFAULT_STATE_PATH, processed_keys: Optional[Iterable[str]] = None):
-    directory = os.path.dirname(state_path)
-    if directory:
-        os.makedirs(directory, exist_ok=True)
-    payload = {"processed": sorted(list(processed_keys or set()))}
-    with open(state_path, "w", encoding="utf-8") as file_obj:
-        json.dump(payload, file_obj, ensure_ascii=False, indent=2)
-    log_info(f"saved state entries={len(payload['processed'])} to {state_path}")
+    _save_state_file_impl(state_path, processed_keys, log_info)
 
 
 def save_state(
