@@ -3,13 +3,14 @@
 import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
-import { apiClient, DailyStockConcept, TopicDetail } from '@/lib/api';
+import { apiClient, DailyStockConcept } from '@/lib/api';
 import DailyStockConceptsView from '@/components/DailyStockConceptsView';
 import DailyTopicReportView from '@/components/DailyTopicReportView';
 import DailyStockDetailDialog, { type StockTrendDay } from '@/components/DailyStockDetailDialog';
 import DailyTopicDetailDialog from '@/components/DailyTopicDetailDialog';
 import { useDailyTopicAnalysisData } from '@/hooks/useDailyTopicAnalysisData';
 import { useDailyStockConceptDerivedState } from '@/hooks/useDailyStockConceptDerivedState';
+import { useDailyTopicDetailState } from '@/hooks/useDailyTopicDetailState';
 import {
   getDateText,
   getTodayText,
@@ -35,14 +36,17 @@ export default function DailyTopicAnalysisPanel({
   const [selectedStock, setSelectedStock] = useState<DailyStockConcept | null>(null);
   const [stockTrend, setStockTrend] = useState<StockTrendDay[]>([]);
   const [loadingStockTrend, setLoadingStockTrend] = useState(false);
-  const [selectedTopicId, setSelectedTopicId] = useState<string | null>(null);
-  const [topicDetail, setTopicDetail] = useState<TopicDetail | null>(null);
-  const [loadingTopicDetail, setLoadingTopicDetail] = useState(false);
   const [selectedConcept, setSelectedConcept] = useState<string | null>(null);
   const [selectedConceptDetail, setSelectedConceptDetail] = useState<string | null>(null);
   const [onlyRecommendationHits, setOnlyRecommendationHits] = useState(false);
-  const topicDetailRequestRef = useRef(0);
   const stockTrendRequestRef = useRef(0);
+  const {
+    closeTopicDetail,
+    loadingTopicDetail,
+    openTopicDetail,
+    selectedTopicId,
+    topicDetail,
+  } = useDailyTopicDetailState(groupId);
   const {
     conceptTrendDates,
     conceptTrendItems,
@@ -82,10 +86,9 @@ export default function DailyTopicAnalysisPanel({
     if (mode !== 'stock-concepts') {
       setSelectedStock(null);
       setStockTrend([]);
-      setSelectedTopicId(null);
-      setTopicDetail(null);
+      closeTopicDetail();
     }
-  }, [mode]);
+  }, [closeTopicDetail, mode]);
 
   const handleRunToday = async () => {
     try {
@@ -121,31 +124,6 @@ export default function DailyTopicAnalysisPanel({
   const openConceptDetail = (concept: string) => {
     setSelectedConceptDetail(concept);
     setSelectedConcept(concept);
-  };
-
-  const openTopicDetail = async (topicId: string | number) => {
-    const id = String(topicId);
-    const requestId = topicDetailRequestRef.current + 1;
-    topicDetailRequestRef.current = requestId;
-    try {
-      setSelectedTopicId(id);
-      setTopicDetail(null);
-      setLoadingTopicDetail(true);
-      const detail = await apiClient.getTopicDetail(id, groupId);
-      if (topicDetailRequestRef.current !== requestId) {
-        return;
-      }
-      setTopicDetail(detail);
-    } catch (error) {
-      if (topicDetailRequestRef.current !== requestId) {
-        return;
-      }
-      toast.error(`加载话题详情失败: ${error instanceof Error ? error.message : '未知错误'}`);
-    } finally {
-      if (topicDetailRequestRef.current === requestId) {
-        setLoadingTopicDetail(false);
-      }
-    }
   };
 
   const openStockDetail = async (stock: DailyStockConcept) => {
@@ -187,13 +165,6 @@ export default function DailyTopicAnalysisPanel({
         setLoadingStockTrend(false);
       }
     }
-  };
-
-  const closeTopicDetail = () => {
-    topicDetailRequestRef.current += 1;
-    setSelectedTopicId(null);
-    setTopicDetail(null);
-    setLoadingTopicDetail(false);
   };
 
   const closeStockDetail = () => {
