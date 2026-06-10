@@ -1,22 +1,21 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 
-import { apiClient, DailyStockConcept } from '@/lib/api';
+import { apiClient } from '@/lib/api';
 import DailyStockConceptsView from '@/components/DailyStockConceptsView';
 import DailyTopicReportView from '@/components/DailyTopicReportView';
-import DailyStockDetailDialog, { type StockTrendDay } from '@/components/DailyStockDetailDialog';
+import DailyStockDetailDialog from '@/components/DailyStockDetailDialog';
 import DailyTopicDetailDialog from '@/components/DailyTopicDetailDialog';
 import { useDailyTopicAnalysisData } from '@/hooks/useDailyTopicAnalysisData';
 import { useDailyStockConceptDerivedState } from '@/hooks/useDailyStockConceptDerivedState';
+import { useDailyStockTrendState } from '@/hooks/useDailyStockTrendState';
 import { useDailyTopicDetailState } from '@/hooks/useDailyTopicDetailState';
 import {
-  getDateText,
   getTodayText,
   normalizeCompanyName,
   normalizeConceptName,
-  stockKey,
 } from '@/components/DailyTopicAnalysisPanelUtils';
 
 interface DailyTopicAnalysisPanelProps {
@@ -33,13 +32,16 @@ export default function DailyTopicAnalysisPanel({
   const [reportDate, setReportDate] = useState(getTodayText);
   const [submitting, setSubmitting] = useState(false);
   const [extractingStocks, setExtractingStocks] = useState(false);
-  const [selectedStock, setSelectedStock] = useState<DailyStockConcept | null>(null);
-  const [stockTrend, setStockTrend] = useState<StockTrendDay[]>([]);
-  const [loadingStockTrend, setLoadingStockTrend] = useState(false);
   const [selectedConcept, setSelectedConcept] = useState<string | null>(null);
   const [selectedConceptDetail, setSelectedConceptDetail] = useState<string | null>(null);
   const [onlyRecommendationHits, setOnlyRecommendationHits] = useState(false);
-  const stockTrendRequestRef = useRef(0);
+  const {
+    closeStockDetail,
+    loadingStockTrend,
+    openStockDetail,
+    selectedStock,
+    stockTrend,
+  } = useDailyStockTrendState({ groupId, reportDate });
   const {
     closeTopicDetail,
     loadingTopicDetail,
@@ -84,11 +86,10 @@ export default function DailyTopicAnalysisPanel({
 
   useEffect(() => {
     if (mode !== 'stock-concepts') {
-      setSelectedStock(null);
-      setStockTrend([]);
+      closeStockDetail();
       closeTopicDetail();
     }
-  }, [closeTopicDetail, mode]);
+  }, [closeStockDetail, closeTopicDetail, mode]);
 
   const handleRunToday = async () => {
     try {
@@ -124,54 +125,6 @@ export default function DailyTopicAnalysisPanel({
   const openConceptDetail = (concept: string) => {
     setSelectedConceptDetail(concept);
     setSelectedConcept(concept);
-  };
-
-  const openStockDetail = async (stock: DailyStockConcept) => {
-    const selectedReportDate = reportDate;
-    const targetKey = stockKey(stock);
-    const requestId = stockTrendRequestRef.current + 1;
-    stockTrendRequestRef.current = requestId;
-    setSelectedStock(stock);
-    setStockTrend([]);
-    setLoadingStockTrend(true);
-    const dates = Array.from({ length: 7 }, (_, index) => getDateText(index - 6, selectedReportDate));
-    try {
-      const results = await Promise.all(
-        dates.map(async (date) => {
-          try {
-            return await apiClient.getDailyStockConcepts(groupId, date);
-          } catch {
-            return null;
-          }
-        })
-      );
-      if (stockTrendRequestRef.current !== requestId) {
-        return;
-      }
-      setStockTrend(
-        dates.map((date, index) => {
-          const matched = results[index]?.stocks.find((item) => stockKey(item) === targetKey);
-          const uniqueTopicIds = new Set((matched?.topic_ids || []).map((topicId) => String(topicId)));
-          return {
-            date,
-            concepts: matched?.concepts || [],
-            topicCount: uniqueTopicIds.size,
-            present: Boolean(matched),
-          };
-        })
-      );
-    } finally {
-      if (stockTrendRequestRef.current === requestId) {
-        setLoadingStockTrend(false);
-      }
-    }
-  };
-
-  const closeStockDetail = () => {
-    stockTrendRequestRef.current += 1;
-    setSelectedStock(null);
-    setStockTrend([]);
-    setLoadingStockTrend(false);
   };
 
   return (
