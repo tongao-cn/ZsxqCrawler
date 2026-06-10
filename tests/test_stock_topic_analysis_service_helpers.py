@@ -105,6 +105,54 @@ class StockTopicAnalysisServiceHelperTests(unittest.TestCase):
         self.assertEqual(["101"], result["processed_topic_ids"])
         self.assertTrue(result["has_new_processed_topic_ids"])
 
+    def test_build_saved_stock_analysis_result_keeps_saved_metadata(self):
+        from backend.services.stock_topic_analysis_helpers import _build_saved_stock_analysis_result
+
+        search_result = {"group_id": "group-1", "stock_name": "宁德时代", "topics": []}
+        latest = {
+            "summary_markdown": "saved",
+            "model": "test-model",
+            "status": "completed",
+            "error": "",
+            "created_at": "2026-05-10T10:00:00",
+            "updated_at": "2026-05-10T10:01:00",
+        }
+
+        result = _build_saved_stock_analysis_result(
+            search_result,
+            latest,
+            processed_topic_ids=["101", "102"],
+            analyzed_topic_ids=["101"],
+        )
+
+        self.assertEqual("saved", result["summary_markdown"])
+        self.assertEqual("test-model", result["model"])
+        self.assertEqual(["101", "102"], result["processed_topic_ids"])
+        self.assertEqual(["101"], result["analyzed_topic_ids"])
+        self.assertEqual(0, result["new_topic_count"])
+        self.assertEqual("up_to_date", result["analysis_mode"])
+        self.assertEqual("2026-05-10T10:01:00", result["updated_at"])
+
+    def test_build_stock_analysis_result_can_omit_status_for_failed_upsert(self):
+        from backend.services.stock_topic_analysis_helpers import _build_stock_analysis_result
+
+        result = _build_stock_analysis_result(
+            {"group_id": "group-1", "stock_name": "宁德时代", "topics": [{"topic_id": "101"}]},
+            topics=[],
+            summary_markdown="partial",
+            model="test-model",
+            status=None,
+            processed_topic_ids=["101"],
+            new_topic_count=1,
+            analysis_mode="initialize",
+        )
+
+        self.assertNotIn("status", result)
+        self.assertEqual([], result["topics"])
+        self.assertEqual(["101"], result["processed_topic_ids"])
+        self.assertEqual(["101"], result["analyzed_topic_ids"])
+        self.assertEqual("partial", result["summary_markdown"])
+
     def test_chunks_splits_without_reordering(self):
         from backend.services.stock_topic_analysis_helpers import _chunks
 

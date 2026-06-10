@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from typing import Any, Dict, Iterable, List
+from typing import Any, Dict, Iterable, List, Optional
 
 
 def _normalize_text(value: Any) -> str:
@@ -107,6 +107,56 @@ def _reconcile_processed_topic_ids(latest: Dict[str, Any] | None, search_result:
         "processed_topic_ids": processed_topic_ids,
         "has_new_processed_topic_ids": has_new_processed_topic_ids,
     }
+
+
+def _build_saved_stock_analysis_result(
+    search_result: Dict[str, Any],
+    latest: Dict[str, Any],
+    *,
+    processed_topic_ids: Iterable[Any],
+    analyzed_topic_ids: Iterable[Any],
+) -> Dict[str, Any]:
+    return {
+        **search_result,
+        "summary_markdown": latest.get("summary_markdown", ""),
+        "model": latest.get("model", ""),
+        "status": latest.get("status", "completed"),
+        "error": latest.get("error", ""),
+        "created_at": latest.get("created_at"),
+        "updated_at": latest.get("updated_at"),
+        "processed_topic_ids": list(processed_topic_ids),
+        "analyzed_topic_ids": list(analyzed_topic_ids),
+        "new_topic_count": 0,
+        "analysis_mode": "up_to_date",
+    }
+
+
+def _build_stock_analysis_result(
+    search_result: Dict[str, Any],
+    *,
+    summary_markdown: str,
+    model: str,
+    processed_topic_ids: Iterable[Any],
+    analyzed_topic_ids: Optional[Iterable[Any]] = None,
+    new_topic_count: int,
+    analysis_mode: str,
+    status: Optional[str] = "completed",
+    topics: Optional[List[Dict[str, Any]]] = None,
+) -> Dict[str, Any]:
+    result = {
+        **search_result,
+        "summary_markdown": summary_markdown,
+        "model": model,
+        "processed_topic_ids": list(processed_topic_ids),
+        "analyzed_topic_ids": list(analyzed_topic_ids if analyzed_topic_ids is not None else processed_topic_ids),
+        "new_topic_count": new_topic_count,
+        "analysis_mode": analysis_mode,
+    }
+    if status is not None:
+        result["status"] = status
+    if topics is not None:
+        result["topics"] = topics
+    return result
 
 
 def _chunks(values: List[Dict[str, Any]], size: int) -> List[List[Dict[str, Any]]]:

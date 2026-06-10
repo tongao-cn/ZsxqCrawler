@@ -23,7 +23,9 @@ from backend.services.stock_topic_analysis_ai_prompts import (
     build_stock_analysis_messages,
 )
 from backend.services.stock_topic_analysis_helpers import (
+    _build_saved_stock_analysis_result,
     _build_stock_alias_terms,
+    _build_stock_analysis_result,
     _chunks,
     _merge_topic_ids,
     _normalize_company_name,
@@ -812,19 +814,12 @@ def analyze_stock_topics(
     has_existing_summary = bool((latest or {}).get("summary_markdown"))
 
     if has_existing_summary and not new_topic_ids:
-        result = {
-            **search_result,
-            "summary_markdown": latest.get("summary_markdown", ""),
-            "model": latest.get("model", ""),
-            "status": latest.get("status", "completed"),
-            "error": latest.get("error", ""),
-            "created_at": latest.get("created_at"),
-            "updated_at": latest.get("updated_at"),
-            "processed_topic_ids": processed_topic_ids,
-            "analyzed_topic_ids": saved_topic_ids,
-            "new_topic_count": 0,
-            "analysis_mode": "up_to_date",
-        }
+        result = _build_saved_stock_analysis_result(
+            search_result,
+            latest,
+            processed_topic_ids=processed_topic_ids,
+            analyzed_topic_ids=saved_topic_ids,
+        )
         if has_new_processed_topic_ids:
             conn = connect()
             try:
@@ -848,16 +843,16 @@ def analyze_stock_topics(
 
     if not topics:
         processed_topic_ids = _merge_topic_ids(processed_topic_ids, current_topic_ids)
-        result = {
-            **search_result,
-            "summary_markdown": (latest or {}).get("summary_markdown") or "没有找到可分析的话题内容。",
-            "model": (latest or {}).get("model", ""),
-            "status": "completed",
-            "processed_topic_ids": processed_topic_ids,
-            "analyzed_topic_ids": saved_topic_ids,
-            "new_topic_count": 0,
-            "analysis_mode": "up_to_date" if has_existing_summary else "initialize",
-        }
+        result = _build_stock_analysis_result(
+            search_result,
+            summary_markdown=(latest or {}).get("summary_markdown") or "没有找到可分析的话题内容。",
+            model=(latest or {}).get("model", ""),
+            status="completed",
+            processed_topic_ids=processed_topic_ids,
+            analyzed_topic_ids=saved_topic_ids,
+            new_topic_count=0,
+            analysis_mode="up_to_date" if has_existing_summary else "initialize",
+        )
         conn = connect()
         try:
             _upsert_stock_topic_analysis(
@@ -895,16 +890,15 @@ def analyze_stock_topics(
                 incremental=bool(summary),
             )
             processed_topic_ids = _merge_topic_ids(processed_topic_ids, current_batch_topic_ids)
-            checkpoint_result = {
-                **search_result,
-                "summary_markdown": summary or "",
-                "model": model,
-                "status": "running" if batch_index < len(topic_batches) else "completed",
-                "processed_topic_ids": processed_topic_ids,
-                "analyzed_topic_ids": processed_topic_ids,
-                "new_topic_count": len(topics),
-                "analysis_mode": analysis_mode,
-            }
+            checkpoint_result = _build_stock_analysis_result(
+                search_result,
+                summary_markdown=summary or "",
+                model=model,
+                status="running" if batch_index < len(topic_batches) else "completed",
+                processed_topic_ids=processed_topic_ids,
+                new_topic_count=len(topics),
+                analysis_mode=analysis_mode,
+            )
             conn = connect()
             try:
                 _upsert_stock_topic_analysis(
@@ -919,16 +913,16 @@ def analyze_stock_topics(
                 conn.close()
     except Exception as exc:
         failed_topic_ids = current_batch_topic_ids or new_topic_ids
-        failed_result = {
-            **search_result,
-            "topics": search_result["topics"][: len(topics)],
-            "summary_markdown": summary or "",
-            "model": model or "",
-            "processed_topic_ids": processed_topic_ids,
-            "analyzed_topic_ids": processed_topic_ids,
-            "new_topic_count": len(topics),
-            "analysis_mode": analysis_mode,
-        }
+        failed_result = _build_stock_analysis_result(
+            search_result,
+            topics=search_result["topics"][: len(topics)],
+            summary_markdown=summary or "",
+            model=model or "",
+            status=None,
+            processed_topic_ids=processed_topic_ids,
+            new_topic_count=len(topics),
+            analysis_mode=analysis_mode,
+        )
         conn = connect()
         try:
             _upsert_stock_topic_analysis(
@@ -944,17 +938,16 @@ def analyze_stock_topics(
             conn.close()
         raise
     processed_topic_ids = _merge_topic_ids(processed_topic_ids, (topic.get("topic_id") for topic in topics))
-    result = {
-        **search_result,
-        "topics": search_result["topics"],
-        "summary_markdown": summary or "AI 返回内容为空。",
-        "model": model,
-        "status": "completed",
-        "processed_topic_ids": processed_topic_ids,
-        "analyzed_topic_ids": processed_topic_ids,
-        "new_topic_count": len(topics),
-        "analysis_mode": analysis_mode,
-    }
+    result = _build_stock_analysis_result(
+        search_result,
+        topics=search_result["topics"],
+        summary_markdown=summary or "AI 返回内容为空。",
+        model=model,
+        status="completed",
+        processed_topic_ids=processed_topic_ids,
+        new_topic_count=len(topics),
+        analysis_mode=analysis_mode,
+    )
     conn = connect()
     try:
         _upsert_stock_topic_analysis(
