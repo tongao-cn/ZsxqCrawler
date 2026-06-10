@@ -70,10 +70,32 @@ export default function GroupFileAnalysisPanel({
   const openAnalysisDialog = async (file: FileItem, force: boolean = false) => {
     try {
       setSelectedFile(file);
-      setAnalysis(null);
       setAnalysisOpen(true);
+
+      const activeTask = taskState.getAnalysisTask(file.file_id);
+      if (activeTask && taskState.isAnalysisTaskActive(activeTask)) {
+        try {
+          const latestTask = await apiClient.getTask(activeTask.taskId);
+          if (taskState.isAnalysisTaskActive({
+            taskId: activeTask.taskId,
+            status: latestTask.status,
+            message: latestTask.message,
+          })) {
+            toast.info(`文件分析任务仍在运行: ${activeTask.taskId}`);
+            setAnalysisLoading(true);
+            taskState.markFileAnalyzing(file.file_id, true);
+            return;
+          }
+          taskState.clearAnalysisTask(file.file_id);
+          taskState.markFileAnalyzing(file.file_id, false);
+        } catch {
+          taskState.clearAnalysisTask(file.file_id);
+          taskState.markFileAnalyzing(file.file_id, false);
+        }
+      }
+
+      setAnalysis(null);
       setAnalysisLoading(true);
-      taskState.markFileAnalyzing(file.file_id, true);
 
       if (!force && file.has_ai_analysis) {
         const cached = await apiClient.getFileAIAnalysis(groupId, file.file_id);
@@ -85,11 +107,7 @@ export default function GroupFileAnalysisPanel({
         }
       }
 
-      const activeTask = taskState.getAnalysisTask(file.file_id);
-      if (taskState.isAnalysisTaskActive(activeTask)) {
-        return;
-      }
-
+      taskState.markFileAnalyzing(file.file_id, true);
       const response = await apiClient.analyzeFileTask(groupId, file.file_id, force);
       onTaskCreated?.(response.task_id);
       taskState.trackAnalysisTask(file.file_id, response.task_id);

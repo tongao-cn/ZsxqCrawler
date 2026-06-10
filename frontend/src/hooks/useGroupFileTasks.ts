@@ -95,6 +95,14 @@ export function useGroupFileTasks({
 
   const getAnalysisTask = useCallback((fileId: number) => analysisTasks.get(fileId), [analysisTasks]);
 
+  const clearAnalysisTask = useCallback((fileId: number) => {
+    setAnalysisTasks(prev => {
+      const next = new Map(prev);
+      next.delete(fileId);
+      return next;
+    });
+  }, []);
+
   const handleFileTaskTerminal = useCallback(async (
     fileId: number,
     taskId: string,
@@ -335,6 +343,7 @@ export function useGroupFileTasks({
     batchDownloadTaskId,
     downloadingFiles,
     fileTasks,
+    clearAnalysisTask,
     getAnalysisTask,
     handleAnalysisTaskTerminal,
     handleBatchAnalysisTerminal,
