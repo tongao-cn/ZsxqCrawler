@@ -7,6 +7,7 @@ from backend.services.file_workflow_service import (
     _build_sync_files_response,
     _close_crawler_file_databases,
     _enqueue_file_task,
+    _fail_file_task,
     _get_download_file_status,
     _query_group_id,
     _resolve_download_record_status,
@@ -301,6 +302,28 @@ class FileRoutesHelperTests(unittest.TestCase):
 
         self.assertEqual(409, raised.exception.status_code)
         self.assertEqual([], background_tasks.calls)
+
+    def test_fail_file_task_logs_and_updates_failure(self):
+        with (
+            patch("backend.services.file_workflow_service.is_task_stopped", return_value=False),
+            patch("backend.services.file_workflow_service.add_task_log") as add_task_log,
+            patch("backend.services.file_workflow_service.update_task") as update_task,
+        ):
+            _fail_file_task("task-1", "下载失败: boom", "下载失败: boom", {"failed": 1})
+
+        add_task_log.assert_called_once_with("task-1", "❌ 下载失败: boom")
+        update_task.assert_called_once_with("task-1", "failed", "下载失败: boom", {"failed": 1})
+
+    def test_fail_file_task_skips_stopped_tasks(self):
+        with (
+            patch("backend.services.file_workflow_service.is_task_stopped", return_value=True),
+            patch("backend.services.file_workflow_service.add_task_log") as add_task_log,
+            patch("backend.services.file_workflow_service.update_task") as update_task,
+        ):
+            _fail_file_task("task-1", "下载失败: boom", "下载失败: boom")
+
+        add_task_log.assert_not_called()
+        update_task.assert_not_called()
 
     def test_get_download_file_status_handles_missing_file(self):
         with patch("backend.services.file_workflow_service.get_db_path_manager") as mocked_manager:

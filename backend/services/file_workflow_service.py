@@ -433,6 +433,48 @@ def _remove_file_downloader(task_id: str) -> None:
     file_downloader_instances.pop(task_id, None)
 
 
+def _safe_remove_file_downloader(task_id: str) -> None:
+    try:
+        _remove_file_downloader(task_id)
+    except Exception:
+        pass
+
+
+def _close_quietly(resource: Any) -> None:
+    if not resource:
+        return
+    try:
+        resource.close()
+    except Exception:
+        pass
+
+
+def _rollback_downloader_file_db(downloader: Optional[ZSXQFileDownloader]) -> None:
+    try:
+        if downloader and getattr(downloader, "file_db", None):
+            downloader.file_db.conn.rollback()
+    except Exception:
+        pass
+
+
+def _fail_file_task(
+    task_id: str,
+    log_message: str,
+    task_message: str,
+    result: Optional[Dict[str, Any]] = None,
+) -> None:
+    try:
+        if is_task_stopped(task_id):
+            return
+        add_task_log(task_id, f"❌ {log_message}")
+        if result is None:
+            update_task(task_id, "failed", task_message)
+        else:
+            update_task(task_id, "failed", task_message, result)
+    except Exception:
+        pass
+
+
 def _enqueue_file_task(
     background_tasks: BackgroundTasks,
     task_type: str,
@@ -484,17 +526,9 @@ def run_collect_files_task(task_id: str, group_id: str, request: FileCollectRequ
         add_task_log(task_id, "✅ 文件列表收集完成！")
         update_task(task_id, "completed", "文件列表收集完成", result)
     except Exception as e:
-        try:
-            if not is_task_stopped(task_id):
-                add_task_log(task_id, f"❌ 文件列表收集失败: {str(e)}")
-                update_task(task_id, "failed", f"文件列表收集失败: {str(e)}")
-        except Exception:
-            pass
+        _fail_file_task(task_id, f"文件列表收集失败: {e}", f"文件列表收集失败: {e}")
     finally:
-        try:
-            _remove_file_downloader(task_id)
-        except Exception:
-            pass
+        _safe_remove_file_downloader(task_id)
 
 
 def run_file_download_task(
@@ -590,17 +624,9 @@ def run_file_download_task(
         add_task_log(task_id, "✅ 文件下载完成！")
         update_task(task_id, "completed", "文件下载完成", {"downloaded_files": result})
     except Exception as e:
-        try:
-            if not is_task_stopped(task_id):
-                add_task_log(task_id, f"❌ 文件下载失败: {str(e)}")
-                update_task(task_id, "failed", f"文件下载失败: {str(e)}")
-        except Exception:
-            pass
+        _fail_file_task(task_id, f"文件下载失败: {e}", f"文件下载失败: {e}")
     finally:
-        try:
-            _remove_file_downloader(task_id)
-        except Exception:
-            pass
+        _safe_remove_file_downloader(task_id)
 
 
 def _load_download_file_records(
@@ -784,17 +810,9 @@ def run_selected_file_download_task(task_id: str, group_id: str, file_ids: Seque
 
         update_task(task_id, "completed", "选中文件下载完成", {"downloaded_files": stats})
     except Exception as e:
-        try:
-            if not is_task_stopped(task_id):
-                add_task_log(task_id, f"❌ 选中文件下载失败: {str(e)}")
-                update_task(task_id, "failed", f"选中文件下载失败: {str(e)}")
-        except Exception:
-            pass
+        _fail_file_task(task_id, f"选中文件下载失败: {e}", f"选中文件下载失败: {e}")
     finally:
-        try:
-            _remove_file_downloader(task_id)
-        except Exception:
-            pass
+        _safe_remove_file_downloader(task_id)
 
 
 def run_filtered_file_download_task(
@@ -836,17 +854,9 @@ def run_filtered_file_download_task(
             return
         update_task(task_id, "completed", "筛选结果下载完成", {"downloaded_files": stats})
     except Exception as e:
-        try:
-            if not is_task_stopped(task_id):
-                add_task_log(task_id, f"❌ 筛选结果下载失败: {str(e)}")
-                update_task(task_id, "failed", f"筛选结果下载失败: {str(e)}")
-        except Exception:
-            pass
+        _fail_file_task(task_id, f"筛选结果下载失败: {e}", f"筛选结果下载失败: {e}")
     finally:
-        try:
-            _remove_file_downloader(task_id)
-        except Exception:
-            pass
+        _safe_remove_file_downloader(task_id)
 
 
 def run_single_file_download_task_with_info(
@@ -856,6 +866,7 @@ def run_single_file_download_task_with_info(
     file_name: Optional[str] = None,
     file_size: Optional[int] = None,
 ):
+    downloader = None
     try:
         update_task(task_id, "running", f"开始下载文件 (ID: {file_id})...")
         downloader = _create_file_downloader(task_id, group_id)
@@ -923,21 +934,10 @@ def run_single_file_download_task_with_info(
             add_task_log(task_id, "❌ 文件下载失败")
             update_task(task_id, "failed", "下载失败")
     except Exception as e:
-        try:
-            downloader.file_db.conn.rollback()
-        except Exception:
-            pass
-        try:
-            if not is_task_stopped(task_id):
-                add_task_log(task_id, f"❌ 任务执行失败: {str(e)}")
-                update_task(task_id, "failed", f"任务失败: {str(e)}")
-        except Exception:
-            pass
+        _rollback_downloader_file_db(downloader)
+        _fail_file_task(task_id, f"任务执行失败: {e}", f"任务失败: {e}")
     finally:
-        try:
-            _remove_file_downloader(task_id)
-        except Exception:
-            pass
+        _safe_remove_file_downloader(task_id)
 
 
 def run_sync_files_from_topics_task(task_id: str, group_id: str):
@@ -955,18 +955,9 @@ def run_sync_files_from_topics_task(task_id: str, group_id: str):
 
         update_task(task_id, "completed", "从话题同步文件记录完成", stats)
     except Exception as e:
-        try:
-            if not is_task_stopped(task_id):
-                add_task_log(task_id, f"❌ 从话题同步文件记录失败: {str(e)}")
-                update_task(task_id, "failed", f"从话题同步文件记录失败: {str(e)}")
-        except Exception:
-            pass
+        _fail_file_task(task_id, f"从话题同步文件记录失败: {e}", f"从话题同步文件记录失败: {e}")
     finally:
-        if topics_db:
-            try:
-                topics_db.close()
-            except Exception:
-                pass
+        _close_quietly(topics_db)
 
 
 def run_file_analysis_task(
@@ -1014,9 +1005,4 @@ def run_file_analysis_task(
             return
         update_task(task_id, "completed", "文件分析完成", {"analysis": stats})
     except Exception as e:
-        try:
-            if not is_task_stopped(task_id):
-                add_task_log(task_id, f"❌ 文件分析任务失败: {str(e)}")
-                update_task(task_id, "failed", f"文件分析任务失败: {str(e)}", {"analysis": stats})
-        except Exception:
-            pass
+        _fail_file_task(task_id, f"文件分析任务失败: {e}", f"文件分析任务失败: {e}", {"analysis": stats})
