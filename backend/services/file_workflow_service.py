@@ -325,6 +325,11 @@ def _get_files_response(
 
         where_clause = f"WHERE {' AND '.join(conditions)}" if conditions else ""
 
+        from_clause = """
+            FROM files f
+            LEFT JOIN file_ai_analyses faa ON faa.file_id = f.file_id
+        """
+
         query = f"""
             SELECT
                 f.file_id,
@@ -338,8 +343,7 @@ def _get_files_response(
                 f.download_error_message,
                 f.last_download_attempt_at,
                 faa.updated_at
-            FROM files f
-            LEFT JOIN file_ai_analyses faa ON faa.file_id = f.file_id
+            {from_clause}
             {where_clause}
             ORDER BY f.create_time DESC
             LIMIT ? OFFSET ?
@@ -349,7 +353,7 @@ def _get_files_response(
         file_db.cursor.execute(query, params)
         files = file_db.cursor.fetchall()
 
-        count_query = f"SELECT COUNT(*) FROM files f {where_clause}"
+        count_query = f"SELECT COUNT(*) {from_clause} {where_clause}"
         file_db.cursor.execute(count_query, tuple(params_prefix))
         total = file_db.cursor.fetchone()[0]
 

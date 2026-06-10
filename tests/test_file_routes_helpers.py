@@ -525,12 +525,26 @@ class FileRoutesHelperTests(unittest.TestCase):
 
         self.assertEqual([], response["files"])
         self.assertTrue(any("faa.updated_at IS NOT NULL" in sql for sql, _params in fake_db.cursor.executed))
+        self.assertEqual(2, len(fake_db.cursor.executed))
+        self.assertTrue(
+            all(
+                "LEFT JOIN file_ai_analyses faa ON faa.file_id = f.file_id" in sql
+                for sql, _params in fake_db.cursor.executed
+            )
+        )
 
         fake_db = FakeFileDb()
         with patch("backend.services.file_workflow_service._file_db", return_value=fake_db):
             file_workflow_service._get_files_response("group-1", analysis_status="pending")
 
         self.assertTrue(any("faa.updated_at IS NULL" in sql for sql, _params in fake_db.cursor.executed))
+        self.assertEqual(2, len(fake_db.cursor.executed))
+        self.assertTrue(
+            all(
+                "LEFT JOIN file_ai_analyses faa ON faa.file_id = f.file_id" in sql
+                for sql, _params in fake_db.cursor.executed
+            )
+        )
 
     def test_close_crawler_file_databases_closes_file_and_topic_dbs(self):
         crawler = FakeCrawler()
