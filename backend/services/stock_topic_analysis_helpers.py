@@ -91,5 +91,23 @@ def _exclude_topic_ids(values: Iterable[Any], excluded: Iterable[Any], *, limit:
     return _ordered_unique((value for value in values if str(value) not in excluded_set), limit=limit)
 
 
+def _reconcile_processed_topic_ids(latest: Dict[str, Any] | None, search_result: Dict[str, Any]) -> Dict[str, Any]:
+    saved_topic_ids = list((latest or {}).get("processed_topic_ids") or (latest or {}).get("analyzed_topic_ids") or [])
+    current_topic_ids = _topic_ids_from_result(search_result)
+    saved_topic_id_set = _topic_id_set(saved_topic_ids)
+    new_topic_ids = [topic_id for topic_id in current_topic_ids if topic_id not in saved_topic_id_set]
+    new_skipped_topic_ids = _exclude_topic_ids(search_result.get("skipped_topic_ids") or [], saved_topic_ids)
+    processed_topic_ids = _merge_topic_ids(saved_topic_ids, search_result.get("processed_topic_ids") or [], new_skipped_topic_ids)
+    has_new_processed_topic_ids = len(_topic_id_set(processed_topic_ids)) > len(saved_topic_id_set)
+    return {
+        "saved_topic_ids": saved_topic_ids,
+        "current_topic_ids": current_topic_ids,
+        "new_topic_ids": new_topic_ids,
+        "new_skipped_topic_ids": new_skipped_topic_ids,
+        "processed_topic_ids": processed_topic_ids,
+        "has_new_processed_topic_ids": has_new_processed_topic_ids,
+    }
+
+
 def _chunks(values: List[Dict[str, Any]], size: int) -> List[List[Dict[str, Any]]]:
     return [values[index : index + size] for index in range(0, len(values), size)]

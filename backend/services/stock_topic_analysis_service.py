@@ -25,15 +25,14 @@ from backend.services.stock_topic_analysis_ai_prompts import (
 from backend.services.stock_topic_analysis_helpers import (
     _build_stock_alias_terms,
     _chunks,
-    _exclude_topic_ids,
     _merge_topic_ids,
     _normalize_company_name,
     _normalize_text,
     _ordered_unique,
     _parse_json_list,
+    _reconcile_processed_topic_ids,
     _safe_float,
     _serialize_json_list,
-    _topic_id_set,
     _topic_ids_from_result,
 )
 from backend.services.stock_topic_analysis_payloads import (
@@ -803,12 +802,13 @@ def analyze_stock_topics(
     search_result = search_stock_topics(group_id, stock_name, limit=limit)
     _log(log_callback, f"📊 命中话题: {search_result['topic_count']}，推荐次数: {search_result['recommendation_count']}")
     latest = get_latest_stock_topic_analysis(group_id, stock_name)
-    saved_topic_ids = list((latest or {}).get("processed_topic_ids") or (latest or {}).get("analyzed_topic_ids") or [])
-    current_topic_ids = _topic_ids_from_result(search_result)
-    new_topic_ids = [topic_id for topic_id in current_topic_ids if topic_id not in _topic_id_set(saved_topic_ids)]
-    new_skipped_topic_ids = _exclude_topic_ids(search_result.get("skipped_topic_ids") or [], saved_topic_ids)
-    processed_topic_ids = _merge_topic_ids(saved_topic_ids, search_result.get("processed_topic_ids") or [], new_skipped_topic_ids)
-    has_new_processed_topic_ids = len(_topic_id_set(processed_topic_ids)) > len(_topic_id_set(saved_topic_ids))
+    topic_progress = _reconcile_processed_topic_ids(latest, search_result)
+    saved_topic_ids = topic_progress["saved_topic_ids"]
+    current_topic_ids = topic_progress["current_topic_ids"]
+    new_topic_ids = topic_progress["new_topic_ids"]
+    new_skipped_topic_ids = topic_progress["new_skipped_topic_ids"]
+    processed_topic_ids = topic_progress["processed_topic_ids"]
+    has_new_processed_topic_ids = topic_progress["has_new_processed_topic_ids"]
     has_existing_summary = bool((latest or {}).get("summary_markdown"))
 
     if has_existing_summary and not new_topic_ids:

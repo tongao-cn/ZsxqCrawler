@@ -51,6 +51,60 @@ class StockTopicAnalysisServiceHelperTests(unittest.TestCase):
         self.assertEqual('["101", "102"]', _serialize_json_list(["101", "102", "101"]))
         self.assertEqual(["1", "2"], _merge_topic_ids([1, 2, 3], limit=2))
 
+    def test_reconcile_processed_topic_ids_prefers_processed_ids(self):
+        from backend.services.stock_topic_analysis_helpers import _reconcile_processed_topic_ids
+
+        latest = {"processed_topic_ids": ["101", "102"], "analyzed_topic_ids": ["old"]}
+        search_result = {
+            "topics": [{"topic_id": "102"}, {"topic_id": "103"}, {"topic_id": "104"}],
+            "processed_topic_ids": ["102", "103"],
+            "skipped_topic_ids": ["101", "104", "105"],
+        }
+
+        result = _reconcile_processed_topic_ids(latest, search_result)
+
+        self.assertEqual(["101", "102"], result["saved_topic_ids"])
+        self.assertEqual(["102", "103", "104"], result["current_topic_ids"])
+        self.assertEqual(["103", "104"], result["new_topic_ids"])
+        self.assertEqual(["104", "105"], result["new_skipped_topic_ids"])
+        self.assertEqual(["101", "102", "103", "104", "105"], result["processed_topic_ids"])
+        self.assertTrue(result["has_new_processed_topic_ids"])
+
+    def test_reconcile_processed_topic_ids_falls_back_to_analyzed_ids(self):
+        from backend.services.stock_topic_analysis_helpers import _reconcile_processed_topic_ids
+
+        latest = {"analyzed_topic_ids": ["101"]}
+        search_result = {
+            "topics": [{"topic_id": "101"}],
+            "processed_topic_ids": ["101"],
+            "skipped_topic_ids": ["101"],
+        }
+
+        result = _reconcile_processed_topic_ids(latest, search_result)
+
+        self.assertEqual(["101"], result["saved_topic_ids"])
+        self.assertEqual([], result["new_topic_ids"])
+        self.assertEqual([], result["new_skipped_topic_ids"])
+        self.assertEqual(["101"], result["processed_topic_ids"])
+        self.assertFalse(result["has_new_processed_topic_ids"])
+
+    def test_reconcile_processed_topic_ids_handles_empty_latest(self):
+        from backend.services.stock_topic_analysis_helpers import _reconcile_processed_topic_ids
+
+        search_result = {
+            "topics": [{"topic_id": "101"}, {"topic_id": "101"}, {"topic_id": "102"}],
+            "processed_topic_ids": ["101"],
+        }
+
+        result = _reconcile_processed_topic_ids(None, search_result)
+
+        self.assertEqual([], result["saved_topic_ids"])
+        self.assertEqual(["101", "102"], result["current_topic_ids"])
+        self.assertEqual(["101", "102"], result["new_topic_ids"])
+        self.assertEqual([], result["new_skipped_topic_ids"])
+        self.assertEqual(["101"], result["processed_topic_ids"])
+        self.assertTrue(result["has_new_processed_topic_ids"])
+
     def test_chunks_splits_without_reordering(self):
         from backend.services.stock_topic_analysis_helpers import _chunks
 
