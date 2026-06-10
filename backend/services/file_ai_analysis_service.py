@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import csv
 import io
 import json
@@ -15,7 +16,6 @@ from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
 
 from openai import OpenAI
-from pypdf import PdfReader
 
 from backend.core.ai_provider_config import (
     get_default_base_url,
@@ -87,6 +87,8 @@ TEXT_EXTENSIONS = {
 AUDIO_EXTENSIONS = {".mp3", ".wav", ".m4a", ".mpeg", ".mpga", ".webm"}
 MAX_TEXT_CHARS = 30000
 PREVIEW_CHARS = 4000
+MAX_DIRECT_PDF_BYTES = 50 * 1024 * 1024
+PDF_DIRECT_ANALYSIS_NOTE = "PDF 已作为 input_file 直接传给模型分析，未执行本地文本抽取。"
 _WHISPER_MODEL_CACHE: dict[tuple[str, str, str], Any] = {}
 _WHISPER_MODEL_LOCK = threading.Lock()
 
@@ -146,16 +148,6 @@ def _extract_text_from_csv(path: Path) -> str:
     return "\n".join(lines)
 
 
-def _extract_text_from_pdf(path: Path) -> str:
-    reader = PdfReader(str(path))
-    pages = []
-    for page in reader.pages:
-        text = page.extract_text() or ""
-        if text.strip():
-            pages.append(text.strip())
-    return "\n\n".join(pages)
-
-
 def extract_file_text(path: Path) -> Tuple[str, str]:
     suffix = path.suffix.lower()
 
@@ -172,7 +164,7 @@ def extract_file_text(path: Path) -> Tuple[str, str]:
         return _extract_text_from_docx(path), "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 
     if suffix == ".pdf":
-        return _extract_text_from_pdf(path), "application/pdf"
+        raise ValueError("PDF 分析不走本地文本抽取，请通过 input_file 直传模型")
 
     raise ValueError(
         f"暂不支持分析该文件类型: {suffix or '无扩展名'}。"
@@ -242,6 +234,60 @@ def _summarize_text_with_ai(
 
     response = client.chat.completions.create(model=model, messages=messages, stream=False)
     return str(response.choices[0].message.content or "").strip()
+
+
+def _summarize_pdf_with_ai(
+    path: Path,
+    *,
+    file_name: str,
+    model: str,
+    api_base: str,
+    wire_api: str,
+    reasoning_effort: str,
+) -> str:
+    if str(wire_api or "").strip().lower() != "responses":
+        raise ValueError("PDF 分析默认使用 input_file 直传；当前接口不支持，请切换为 responses 接口")
+
+    source_size = path.stat().st_size
+    if source_size > MAX_DIRECT_PDF_BYTES:
+        raise ValueError(
+            f"PDF 文件超过 input_file 直传上限 {MAX_DIRECT_PDF_BYTES // (1024 * 1024)} MB，无法进行 AI 分析"
+        )
+
+    runtime_ai_config = get_openai_compatible_config()
+    api_key = str(runtime_ai_config.get("api_key") or "").strip()
+    if not api_key:
+        raise RuntimeError("OPENAI_API_KEY not set and config.toml [ai].api_key is empty")
+
+    base64_string = base64.b64encode(path.read_bytes()).decode("utf-8")
+    client = OpenAI(api_key=api_key, base_url=api_base, timeout=180)
+    response = client.responses.create(
+        model=model,
+        input=[
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "input_file",
+                        "filename": file_name,
+                        "file_data": f"data:application/pdf;base64,{base64_string}",
+                    },
+                    {
+                        "type": "input_text",
+                        "text": (
+                            f"请分析 PDF 文件《{file_name}》的内容，并输出：\n"
+                            "1. 一句话结论\n"
+                            "2. 核心要点（3-8条）\n"
+                            "3. 如果是研究/资料文件，补充可能值得关注的风险或后续动作\n\n"
+                            "请直接基于 PDF 页面内容分析；如果 PDF 是扫描件，也请尽量读取页面图像中的文字。"
+                        ),
+                    },
+                ],
+            }
+        ],
+        reasoning={"effort": reasoning_effort},
+    )
+    return _extract_response_text(response).strip()
 
 
 def _get_faster_whisper_model():
@@ -365,18 +411,31 @@ def analyze_group_file(
         if resolved_path is None:
             raise ValueError("本地文件不存在，请先下载该文件后再进行 AI 分析")
 
-        extracted_text, content_type = _extract_file_content_for_analysis(resolved_path)
-        if not extracted_text.strip():
-            raise ValueError("文件内容为空，无法进行 AI 分析")
+        file_name = str(row[1] or f"file_{file_id}")
+        if resolved_path.suffix.lower() == ".pdf":
+            summary = _summarize_pdf_with_ai(
+                resolved_path,
+                file_name=file_name,
+                model=model,
+                api_base=api_base,
+                wire_api=wire_api,
+                reasoning_effort=reasoning_effort,
+            )
+            extracted_text = PDF_DIRECT_ANALYSIS_NOTE
+            content_type = "application/pdf"
+        else:
+            extracted_text, content_type = _extract_file_content_for_analysis(resolved_path)
+            if not extracted_text.strip():
+                raise ValueError("文件内容为空，无法进行 AI 分析")
 
-        summary = _summarize_text_with_ai(
-            extracted_text,
-            file_name=str(row[1] or f"file_{file_id}"),
-            model=model,
-            api_base=api_base,
-            wire_api=wire_api,
-            reasoning_effort=reasoning_effort,
-        )
+            summary = _summarize_text_with_ai(
+                extracted_text,
+                file_name=file_name,
+                model=model,
+                api_base=api_base,
+                wire_api=wire_api,
+                reasoning_effort=reasoning_effort,
+            )
 
         preview = extracted_text[:PREVIEW_CHARS]
         db.upsert_file_ai_analysis(
