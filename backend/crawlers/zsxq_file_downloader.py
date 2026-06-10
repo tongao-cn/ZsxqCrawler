@@ -345,6 +345,40 @@ class ZSXQFileDownloader:
             print(f"😴 长休眠结束，继续下载...")
             print(f"   🕐 实际结束: {actual_end_time.strftime('%H:%M:%S')}")
     
+    def _prepare_retry_api_request(self, attempt: int) -> Dict[str, str]:
+        if attempt > 0:
+            retry_delay = random.uniform(15, 30)
+            print(f"   🔄 第{attempt}次重试，等待{retry_delay:.1f}秒...")
+            time.sleep(retry_delay)
+
+        self.smart_delay()
+        self.request_count += 1
+        headers = self.get_stealth_headers()
+
+        if attempt > 0:
+            print(f"   🔄 重试#{attempt}: 使用新的User-Agent: {headers.get('User-Agent', 'N/A')[:50]}...")
+        return headers
+
+    def _parse_api_json_response(
+        self,
+        response: requests.Response,
+        attempt: int,
+        max_retries: int,
+    ) -> tuple[Optional[Dict[str, Any]], bool]:
+        try:
+            data = response.json()
+        except json.JSONDecodeError as e:
+            print(f"   ❌ JSON解析失败: {e}")
+            print(f"   📄 原始响应: {redact_response_text(response.text, limit=500)}")
+            if has_retry_attempt_remaining(attempt, max_retries):
+                print(f"   🔄 JSON解析失败，准备重试...")
+                return None, True
+            return None, False
+
+        if should_log_full_response(attempt, max_retries, data.get('succeeded')):
+            print(f"   📋 响应内容: {json.dumps(redact_json_like(data), ensure_ascii=False, indent=2)}")
+        return data, False
+
     def fetch_file_list(self, count: int = 20, index: Optional[str] = None, sort: str = "by_download_count") -> Optional[Dict[str, Any]]:
         """获取文件列表（带重试机制）"""
         url = f"{self.base_url}/v2/groups/{self.group_id}/files"
@@ -365,19 +399,7 @@ class ZSXQFileDownloader:
         self.log(f"   🌐 请求URL: {url}")
         
         for attempt in range(max_retries):
-            if attempt > 0:
-                # 重试延迟：15-30秒
-                retry_delay = random.uniform(15, 30)
-                print(f"   🔄 第{attempt}次重试，等待{retry_delay:.1f}秒...")
-                time.sleep(retry_delay)
-            
-            # 每次重试都获取新的请求头（包含新的User-Agent等）
-            self.smart_delay()
-            self.request_count += 1
-            headers = self.get_stealth_headers()
-            
-            if attempt > 0:
-                print(f"   🔄 重试#{attempt}: 使用新的User-Agent: {headers.get('User-Agent', 'N/A')[:50]}...")
+            headers = self._prepare_retry_api_request(attempt)
             
             try:
                 response = self.session.get(url, headers=headers, params=params, timeout=30)
@@ -385,40 +407,31 @@ class ZSXQFileDownloader:
                 print(f"   📊 响应状态: {response.status_code}")
                 
                 if response.status_code == 200:
-                    try:
-                        data = response.json()
-                        
-                        # 只在第一次尝试或最后一次失败时显示完整响应
-                        if should_log_full_response(attempt, max_retries, data.get('succeeded')):
-                            print(f"   📋 响应内容: {json.dumps(redact_json_like(data), ensure_ascii=False, indent=2)}")
-                        
-                        if data.get('succeeded'):
-                            files = data.get('resp_data', {}).get('files', [])
-                            next_index = data.get('resp_data', {}).get('index')
-                            if attempt > 0:
-                                print(f"   ✅ 重试成功！第{attempt}次重试获取到文件列表")
-                            else:
-                                print(f"   ✅ 获取成功: {len(files)}个文件")
-                            return data
+                    data, should_retry_json = self._parse_api_json_response(response, attempt, max_retries)
+                    if should_retry_json:
+                        continue
+                    if not data:
+                        continue
+
+                    if data.get('succeeded'):
+                        files = data.get('resp_data', {}).get('files', [])
+                        if attempt > 0:
+                            print(f"   ✅ 重试成功！第{attempt}次重试获取到文件列表")
                         else:
-                            error_msg = data.get('message', data.get('error', '未知错误'))
-                            error_code = data.get('code', 'N/A')
-                            print(f"   ❌ API返回失败: {error_msg} (代码: {error_code})")
-                            
-                            failure_class = classify_api_failure(error_code, attempt, max_retries)
-                            if failure_class == API_FAILURE_RETRY:
-                                print(f"   🔄 检测到可重试错误，准备重试...")
-                                continue
-                            if failure_class in {API_FAILURE_NON_RETRY, API_FAILURE_PERMISSION_DENIED_1030}:
-                                print(f"   🚫 非可重试错误，停止重试")
-                                return None
-                                
-                    except json.JSONDecodeError as e:
-                        print(f"   ❌ JSON解析失败: {e}")
-                        print(f"   📄 原始响应: {redact_response_text(response.text, limit=500)}")
-                        if has_retry_attempt_remaining(attempt, max_retries):
-                            print(f"   🔄 JSON解析失败，准备重试...")
-                            continue
+                            print(f"   ✅ 获取成功: {len(files)}个文件")
+                        return data
+
+                    error_msg = data.get('message', data.get('error', '未知错误'))
+                    error_code = data.get('code', 'N/A')
+                    print(f"   ❌ API返回失败: {error_msg} (代码: {error_code})")
+
+                    failure_class = classify_api_failure(error_code, attempt, max_retries)
+                    if failure_class == API_FAILURE_RETRY:
+                        print(f"   🔄 检测到可重试错误，准备重试...")
+                        continue
+                    if failure_class in {API_FAILURE_NON_RETRY, API_FAILURE_PERMISSION_DENIED_1030}:
+                        print(f"   🚫 非可重试错误，停止重试")
+                        return None
                         
                 elif is_retryable_http_status(response.status_code):
                     print(f"   ❌ HTTP错误: {response.status_code}")
@@ -456,19 +469,7 @@ class ZSXQFileDownloader:
         self.log(f"   🌐 请求URL: {url}")
         
         for attempt in range(max_retries):
-            if attempt > 0:
-                # 重试延迟：15-30秒
-                retry_delay = random.uniform(15, 30)
-                print(f"   🔄 第{attempt}次重试，等待{retry_delay:.1f}秒...")
-                time.sleep(retry_delay)
-            
-            # 每次重试都获取新的请求头（包含新的User-Agent等）
-            self.smart_delay()
-            self.request_count += 1
-            headers = self.get_stealth_headers()
-            
-            if attempt > 0:
-                print(f"   🔄 重试#{attempt}: 使用新的User-Agent: {headers.get('User-Agent', 'N/A')[:50]}...")
+            headers = self._prepare_retry_api_request(attempt)
             
             try:
                 response = self.session.get(url, headers=headers, timeout=30)
@@ -476,52 +477,42 @@ class ZSXQFileDownloader:
                 print(f"   📊 响应状态: {response.status_code}")
                 
                 if response.status_code == 200:
-                    try:
-                        data = response.json()
-                        
-                        # 只在第一次尝试或最后一次失败时显示完整响应
-                        if should_log_full_response(attempt, max_retries, data.get('succeeded')):
-                            display_data = redact_json_like(data)
-                            print(f"   📋 响应内容: {json.dumps(display_data, ensure_ascii=False, indent=2)}")
-                        
-                        if data.get('succeeded'):
-                            download_url = data.get('resp_data', {}).get('download_url')
-                            if download_url:
-                                if attempt > 0:
-                                    print(f"   ✅ 重试成功！第{attempt}次重试获取到下载链接")
-                                else:
-                                    print(f"   ✅ 获取下载链接成功")
-                                return download_url
+                    data, should_retry_json = self._parse_api_json_response(response, attempt, max_retries)
+                    if should_retry_json:
+                        continue
+                    if not data:
+                        continue
+
+                    if data.get('succeeded'):
+                        download_url = data.get('resp_data', {}).get('download_url')
+                        if download_url:
+                            if attempt > 0:
+                                print(f"   ✅ 重试成功！第{attempt}次重试获取到下载链接")
                             else:
-                                print(f"   ❌ 响应中无下载链接字段")
-                        else:
-                            error_msg = data.get('message', data.get('error', '未知错误'))
-                            error_code = data.get('code', 'N/A')
-                            self.log(f"   ❌ API返回失败: {error_msg} (代码: {error_code})")
+                                print(f"   ✅ 获取下载链接成功")
+                            return download_url
+                        print(f"   ❌ 响应中无下载链接字段")
+                    else:
+                        error_msg = data.get('message', data.get('error', '未知错误'))
+                        error_code = data.get('code', 'N/A')
+                        self.log(f"   ❌ API返回失败: {error_msg} (代码: {error_code})")
 
-                            failure_class = classify_api_failure(error_code, attempt, max_retries)
+                        failure_class = classify_api_failure(error_code, attempt, max_retries)
 
-                            if failure_class == API_FAILURE_PERMISSION_DENIED_1030:
-                                self.last_download_url_error = {
-                                    "code": error_code,
-                                    "message": error_msg,
-                                }
-                                self.log("   🚫 权限不足错误(1030)：此文件可能只能在手机端下载，已跳过当前文件")
-                                return None
+                        if failure_class == API_FAILURE_PERMISSION_DENIED_1030:
+                            self.last_download_url_error = {
+                                "code": error_code,
+                                "message": error_msg,
+                            }
+                            self.log("   🚫 权限不足错误(1030)：此文件可能只能在手机端下载，已跳过当前文件")
+                            return None
 
-                            if failure_class == API_FAILURE_RETRY:
-                                self.log(f"   🔄 检测到可重试错误，准备重试...")
-                                continue
-                            if failure_class == API_FAILURE_NON_RETRY:
-                                self.log(f"   🚫 非可重试错误，停止重试")
-                                return None
-                                
-                    except json.JSONDecodeError as e:
-                        print(f"   ❌ JSON解析失败: {e}")
-                        print(f"   📄 原始响应: {redact_response_text(response.text, limit=500)}")
-                        if has_retry_attempt_remaining(attempt, max_retries):
-                            print(f"   🔄 JSON解析失败，准备重试...")
+                        if failure_class == API_FAILURE_RETRY:
+                            self.log(f"   🔄 检测到可重试错误，准备重试...")
                             continue
+                        if failure_class == API_FAILURE_NON_RETRY:
+                            self.log(f"   🚫 非可重试错误，停止重试")
+                            return None
                         
                 elif is_retryable_http_status(response.status_code):
                     print(f"   ❌ HTTP错误: {response.status_code}")

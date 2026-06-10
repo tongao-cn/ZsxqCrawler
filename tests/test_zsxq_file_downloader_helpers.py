@@ -3,6 +3,7 @@ import tempfile
 import contextlib
 import datetime
 import io
+import json
 from pathlib import Path
 from unittest.mock import patch
 
@@ -101,6 +102,14 @@ class FakeFailedJsonResponse:
             "code": self.code,
             "message": self.message,
         }
+
+
+class FakeInvalidJsonResponse:
+    status_code = 200
+    text = "{not json"
+
+    def json(self):
+        raise json.JSONDecodeError("bad json", self.text, 1)
 
 
 class FakeDownloadSession:
@@ -289,6 +298,39 @@ class FileDownloaderRetryHelperTests(unittest.TestCase):
         self.assertEqual(API_FAILURE_RETRY_EXHAUSTED, classify_api_failure("1059", 1, 2))
         self.assertEqual(API_FAILURE_NON_RETRY, classify_api_failure("N/A", 0, 2))
         self.assertEqual(API_FAILURE_PERMISSION_DENIED_1030, classify_api_failure(1030, 0, 2))
+
+    def test_prepare_retry_api_request_sleeps_counts_and_rotates_headers(self):
+        downloader = object.__new__(ZSXQFileDownloader)
+        downloader.request_count = 0
+        downloader.smart_delay = lambda: None
+        downloader.get_stealth_headers = lambda: {"User-Agent": "unit-test-agent"}
+
+        with (
+            patch("backend.crawlers.zsxq_file_downloader.random.uniform", return_value=15.0),
+            patch("backend.crawlers.zsxq_file_downloader.time.sleep") as sleep,
+        ):
+            headers = ZSXQFileDownloader._prepare_retry_api_request(downloader, 1)
+
+        sleep.assert_called_once_with(15.0)
+        self.assertEqual({"User-Agent": "unit-test-agent"}, headers)
+        self.assertEqual(1, downloader.request_count)
+
+    def test_parse_api_json_response_returns_retry_on_decode_error(self):
+        downloader = object.__new__(ZSXQFileDownloader)
+        output = io.StringIO()
+
+        with contextlib.redirect_stdout(output):
+            data, should_retry = ZSXQFileDownloader._parse_api_json_response(
+                downloader,
+                FakeInvalidJsonResponse(),
+                0,
+                2,
+            )
+
+        self.assertIsNone(data)
+        self.assertTrue(should_retry)
+        self.assertIn("JSON解析失败", output.getvalue())
+        self.assertIn("准备重试", output.getvalue())
 
 
 class FileDownloaderDownloadTests(unittest.TestCase):
