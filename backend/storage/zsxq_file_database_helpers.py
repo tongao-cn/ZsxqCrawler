@@ -62,6 +62,19 @@ def _nullable_group_id_param(group_id: Optional[str]) -> Any:
     return int(value) if value.isdigit() else value
 
 
+def _file_attachment_params(parent_id: Any, file_data: Dict[str, Any]) -> tuple[Any, ...]:
+    return (
+        parent_id,
+        file_data.get('file_id'),
+        file_data.get('name', ''),
+        file_data.get('hash'),
+        file_data.get('size'),
+        file_data.get('duration'),
+        file_data.get('download_count'),
+        file_data.get('create_time'),
+    )
+
+
 def _count_tables(cursor: Any, tables: Any = _STATS_TABLES, group_id: Optional[str] = None) -> Dict[str, Any]:
     stats = {}
     scoped_topic_ids_sql = "SELECT topic_id FROM topics WHERE group_id = ?"

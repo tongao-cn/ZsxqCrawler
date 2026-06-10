@@ -5,6 +5,7 @@ from backend.storage.zsxq_file_database_helpers import (
     _FILE_AI_ANALYSIS_FIELDS,
     _close_connection,
     _count_tables,
+    _file_attachment_params,
     _group_id_param,
     _new_import_stats,
     _nullable_group_id_param,
@@ -286,16 +287,7 @@ class ZSXQFileDatabase:
                 duration = excluded.duration,
                 download_count = excluded.download_count,
                 create_time = excluded.create_time
-            ''', (
-                topic_id,
-                file.get('file_id'),
-                file.get('name', ''),
-                file.get('hash'),
-                file.get('size'),
-                file.get('duration'),
-                file.get('download_count'),
-                file.get('create_time')
-            ))
+            ''', _file_attachment_params(topic_id, file))
     
     def insert_latest_likes(self, topic_id: int, likes_data: List[Dict[str, Any]]):
         """插入最新点赞记录"""
@@ -446,16 +438,7 @@ class ZSXQFileDatabase:
                 duration = excluded.duration,
                 download_count = excluded.download_count,
                 create_time = excluded.create_time
-            ''', (
-                solution_id,
-                file.get('file_id'),
-                file.get('name', ''),
-                file.get('hash'),
-                file.get('size'),
-                file.get('duration'),
-                file.get('download_count'),
-                file.get('create_time')
-            ))
+            ''', _file_attachment_params(solution_id, file))
         
         return solution_id
     

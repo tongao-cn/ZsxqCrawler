@@ -4,6 +4,7 @@ from backend.storage.zsxq_file_database import (
     _FILE_AI_ANALYSIS_FIELDS,
     _close_connection,
     _count_tables,
+    _file_attachment_params,
     _new_import_stats,
     _row_to_file_ai_analysis,
 )
@@ -140,6 +141,25 @@ class ZSXQFileDatabaseHelperTests(unittest.TestCase):
         self.assertEqual(
             dict(zip(_FILE_AI_ANALYSIS_FIELDS, row)),
             _row_to_file_ai_analysis(row),
+        )
+
+    def test_file_attachment_params_keep_sql_column_order(self):
+        params = _file_attachment_params(
+            202,
+            {
+                "file_id": 101,
+                "name": "memo.pdf",
+                "hash": "abc",
+                "size": 20,
+                "duration": 3,
+                "download_count": 4,
+                "create_time": "2026-06-10T12:00:00",
+            },
+        )
+
+        self.assertEqual(
+            (202, 101, "memo.pdf", "abc", 20, 3, 4, "2026-06-10T12:00:00"),
+            params,
         )
 
     def test_count_tables_builds_stats_from_cursor_counts(self):
