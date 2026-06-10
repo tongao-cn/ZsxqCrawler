@@ -115,10 +115,11 @@ export function useTaskStatus(
           return;
         }
         setError(null);
-        handleTaskStatus(polledTask);
         if (TERMINAL_STATUSES.includes(polledTask.status)) {
           await handleTerminalTask(polledTask, false);
+          return;
         }
+        handleTaskStatus(polledTask);
       } catch {
         if (!cancelled && !terminalHandledRef.current) {
           setError('任务状态连接中断，正在轮询恢复');
@@ -161,11 +162,12 @@ export function useTaskStatus(
           created_at: '',
           updated_at: '',
         };
-        handleTaskStatus(statusTask);
 
         if (TERMINAL_STATUSES.includes(data.status)) {
           void handleTerminalTask(statusTask, true);
+          return;
         }
+        handleTaskStatus(statusTask);
       } catch {
         // Ignore malformed SSE payloads and wait for the next status update.
       }
