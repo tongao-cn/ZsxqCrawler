@@ -19,20 +19,23 @@ import requests
 from backend.core.console_output import safe_console_print as print
 from backend.core.log_redaction import redact_json_like, redact_response_text
 from backend.crawlers.zsxq_file_downloader_helpers import (
+    API_FAILURE_NON_RETRY,
+    API_FAILURE_PERMISSION_DENIED_1030,
+    API_FAILURE_RETRY,
     add_import_stats,
+    classify_api_failure,
     content_disposition_filename,
     download_file_data,
     empty_import_stats,
     existing_file_matches,
     filter_files_newer_than,
     has_retry_attempt_remaining,
-    is_retryable_api_error,
     is_retryable_http_status,
     normalize_date_range,
     page_crosses_stop_before,
     safe_download_filename,
-    should_retry_api_error,
     should_retry_http_status,
+    should_log_full_response,
     summarize_page_time_range,
 )
 from backend.storage.postgres_core_schema import CORE_SCHEMA
@@ -386,7 +389,7 @@ class ZSXQFileDownloader:
                         data = response.json()
                         
                         # 只在第一次尝试或最后一次失败时显示完整响应
-                        if attempt == 0 or attempt == max_retries - 1 or data.get('succeeded'):
+                        if should_log_full_response(attempt, max_retries, data.get('succeeded')):
                             print(f"   📋 响应内容: {json.dumps(redact_json_like(data), ensure_ascii=False, indent=2)}")
                         
                         if data.get('succeeded'):
@@ -402,11 +405,11 @@ class ZSXQFileDownloader:
                             error_code = data.get('code', 'N/A')
                             print(f"   ❌ API返回失败: {error_msg} (代码: {error_code})")
                             
-                            # 检查是否是可重试的错误
-                            if should_retry_api_error(error_code, attempt, max_retries):
+                            failure_class = classify_api_failure(error_code, attempt, max_retries)
+                            if failure_class == API_FAILURE_RETRY:
                                 print(f"   🔄 检测到可重试错误，准备重试...")
                                 continue
-                            if not is_retryable_api_error(error_code):
+                            if failure_class in {API_FAILURE_NON_RETRY, API_FAILURE_PERMISSION_DENIED_1030}:
                                 print(f"   🚫 非可重试错误，停止重试")
                                 return None
                                 
@@ -477,7 +480,7 @@ class ZSXQFileDownloader:
                         data = response.json()
                         
                         # 只在第一次尝试或最后一次失败时显示完整响应
-                        if attempt == 0 or attempt == max_retries - 1 or data.get('succeeded'):
+                        if should_log_full_response(attempt, max_retries, data.get('succeeded')):
                             display_data = redact_json_like(data)
                             print(f"   📋 响应内容: {json.dumps(display_data, ensure_ascii=False, indent=2)}")
                         
@@ -496,7 +499,9 @@ class ZSXQFileDownloader:
                             error_code = data.get('code', 'N/A')
                             self.log(f"   ❌ API返回失败: {error_msg} (代码: {error_code})")
 
-                            if str(error_code) == "1030":
+                            failure_class = classify_api_failure(error_code, attempt, max_retries)
+
+                            if failure_class == API_FAILURE_PERMISSION_DENIED_1030:
                                 self.last_download_url_error = {
                                     "code": error_code,
                                     "message": error_msg,
@@ -504,11 +509,10 @@ class ZSXQFileDownloader:
                                 self.log("   🚫 权限不足错误(1030)：此文件可能只能在手机端下载，已跳过当前文件")
                                 return None
 
-                            # 检查是否是可重试的错误
-                            if should_retry_api_error(error_code, attempt, max_retries):
+                            if failure_class == API_FAILURE_RETRY:
                                 self.log(f"   🔄 检测到可重试错误，准备重试...")
                                 continue
-                            if not is_retryable_api_error(error_code):
+                            if failure_class == API_FAILURE_NON_RETRY:
                                 self.log(f"   🚫 非可重试错误，停止重试")
                                 return None
                                 

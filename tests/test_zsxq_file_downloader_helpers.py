@@ -8,7 +8,12 @@ from unittest.mock import patch
 
 from backend.crawlers.zsxq_file_downloader import ZSXQFileDownloader
 from backend.crawlers.zsxq_file_downloader_helpers import (
+    API_FAILURE_NON_RETRY,
+    API_FAILURE_PERMISSION_DENIED_1030,
+    API_FAILURE_RETRY,
+    API_FAILURE_RETRY_EXHAUSTED,
     add_import_stats,
+    classify_api_failure,
     content_disposition_filename,
     download_file_data,
     empty_import_stats,
@@ -23,6 +28,7 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     safe_download_filename,
     should_retry_api_error,
     should_retry_http_status,
+    should_log_full_response,
     summarize_page_time_range,
 )
 
@@ -271,6 +277,18 @@ class FileDownloaderRetryHelperTests(unittest.TestCase):
         self.assertTrue(should_retry_http_status(429, 0, 2))
         self.assertFalse(should_retry_http_status(403, 0, 2))
         self.assertFalse(should_retry_http_status(429, 1, 2))
+
+    def test_should_log_full_response_on_first_last_or_success(self):
+        self.assertTrue(should_log_full_response(0, 3, False))
+        self.assertFalse(should_log_full_response(1, 3, False))
+        self.assertTrue(should_log_full_response(1, 3, True))
+        self.assertTrue(should_log_full_response(2, 3, False))
+
+    def test_classify_api_failure_distinguishes_retry_and_terminal_cases(self):
+        self.assertEqual(API_FAILURE_RETRY, classify_api_failure("1059", 0, 2))
+        self.assertEqual(API_FAILURE_RETRY_EXHAUSTED, classify_api_failure("1059", 1, 2))
+        self.assertEqual(API_FAILURE_NON_RETRY, classify_api_failure("N/A", 0, 2))
+        self.assertEqual(API_FAILURE_PERMISSION_DENIED_1030, classify_api_failure(1030, 0, 2))
 
 
 class FileDownloaderDownloadTests(unittest.TestCase):

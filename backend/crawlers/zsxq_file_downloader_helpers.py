@@ -22,6 +22,10 @@ IMPORT_STAT_KEYS = (
 
 RETRYABLE_API_ERROR_CODES = {"1059", "500", "502", "503", "504"}
 RETRYABLE_HTTP_STATUS_CODES = {429, 500, 502, 503, 504}
+API_FAILURE_RETRY = "retry"
+API_FAILURE_NON_RETRY = "non_retry"
+API_FAILURE_RETRY_EXHAUSTED = "retry_exhausted"
+API_FAILURE_PERMISSION_DENIED_1030 = "permission_denied_1030"
 
 
 def is_retryable_api_error(error_code: Any) -> bool:
@@ -42,6 +46,20 @@ def should_retry_api_error(error_code: Any, attempt: int, max_retries: int) -> b
 
 def should_retry_http_status(status_code: int, attempt: int, max_retries: int) -> bool:
     return is_retryable_http_status(status_code) and has_retry_attempt_remaining(attempt, max_retries)
+
+
+def should_log_full_response(attempt: int, max_retries: int, succeeded: Any) -> bool:
+    return int(attempt) == 0 or int(attempt) == int(max_retries) - 1 or bool(succeeded)
+
+
+def classify_api_failure(error_code: Any, attempt: int, max_retries: int) -> str:
+    if str(error_code) == "1030":
+        return API_FAILURE_PERMISSION_DENIED_1030
+    if not is_retryable_api_error(error_code):
+        return API_FAILURE_NON_RETRY
+    if has_retry_attempt_remaining(attempt, max_retries):
+        return API_FAILURE_RETRY
+    return API_FAILURE_RETRY_EXHAUSTED
 
 
 def parse_create_time(value: Optional[str]) -> Optional[datetime.datetime]:
