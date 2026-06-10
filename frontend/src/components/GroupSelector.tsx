@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useState, useEffect, useRef, type KeyboardEvent } from 'react';
+import { type KeyboardEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -8,18 +8,11 @@ import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { MessageSquare, Crown, UserCog, RefreshCw, Trash2 } from 'lucide-react';
-import { apiClient, Group, GroupStats } from '@/lib/api';
-import { toast } from 'sonner';
+import { type Group, type GroupStats } from '@/lib/api';
+import { useGroupSelectorData } from '@/hooks/useGroupSelectorData';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import SafeImage from './SafeImage';
 import '../styles/group-selector.css';
-
-const MAX_AUTO_RETRIES = 5;
-const RETRYABLE_LOAD_ERROR_MARKERS = ['未知错误', '空数据', '反爬虫'];
-
-function isRetryableLoadError(message: string) {
-  return RETRYABLE_LOAD_ERROR_MARKERS.some((marker) => message.includes(marker));
-}
 
 function getGradientByType(type: string) {
   switch (type) {
@@ -227,184 +220,18 @@ function GroupGrid({
 
 export default function GroupSelector() {
   const router = useRouter();
-  const [groups, setGroups] = useState<Group[]>([]);
-  const [groupStats, setGroupStats] = useState<Record<number, GroupStats>>({});
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [retryCount, setRetryCount] = useState(0);
-  const [isRetrying, setIsRetrying] = useState(false);
-  const [deletingGroups, setDeletingGroups] = useState<Set<number>>(new Set());
-  const hasLoadedGroupsRef = useRef(false);
-  const retryTimerRef = useRef<number | null>(null);
-  const loadRequestRef = useRef(0);
-  const statsRequestRef = useRef(0);
-
-  const loadGroups = useCallback(async (currentRetryCount = 0) => {
-    const loadRequestId = loadRequestRef.current + 1;
-    loadRequestRef.current = loadRequestId;
-    try {
-      if (currentRetryCount === 0) {
-        if (retryTimerRef.current) {
-          window.clearTimeout(retryTimerRef.current);
-          retryTimerRef.current = null;
-        }
-        statsRequestRef.current += 1;
-        if (!hasLoadedGroupsRef.current) {
-          setLoading(true);
-        }
-        setError(null);
-        setRetryCount(0);
-        setIsRetrying(false);
-      } else {
-        setIsRetrying(true);
-        setRetryCount(currentRetryCount);
-      }
-
-      const data = await apiClient.getGroups();
-      if (loadRequestRef.current !== loadRequestId) {
-        return;
-      }
-
-      // 检查返回数据（允许为空，显示空态，不再抛错）
-
-      setGroups(data.groups);
-      hasLoadedGroupsRef.current = true;
-      setGroupStats({});
-      const statsRequestId = statsRequestRef.current + 1;
-      statsRequestRef.current = statsRequestId;
-
-      // 群组列表先展示出来，统计信息后台补齐；避免某个 stats 慢导致首页一直停在加载态。
-      setError(null);
-      setRetryCount(0);
-      setIsRetrying(false);
-      setLoading(false);
-
-      void (async () => {
-        const statsPromises = data.groups.map(async (group: Group) => {
-          try {
-            const stats = await apiClient.getGroupStats(group.group_id);
-            return { groupId: group.group_id, stats };
-          } catch (error) {
-            console.warn(`获取群组 ${group.group_id} 统计信息失败:`, error);
-            return { groupId: group.group_id, stats: null };
-          }
-        });
-
-        const statsResults = await Promise.all(statsPromises);
-        const statsMap: Record<number, GroupStats> = {};
-        statsResults.forEach(({ groupId, stats }) => {
-          if (stats) {
-            statsMap[groupId] = stats;
-          }
-        });
-        if (statsRequestRef.current === statsRequestId) {
-          setGroupStats(statsMap);
-        }
-      })();
-
-    } catch (err) {
-      if (loadRequestRef.current !== loadRequestId) {
-        return;
-      }
-      const errorMessage = err instanceof Error ? err.message : '加载群组列表失败';
-
-      if (isRetryableLoadError(errorMessage) && currentRetryCount < MAX_AUTO_RETRIES) {
-        const nextRetryCount = currentRetryCount + 1;
-        const delay = Math.min(1000 + (nextRetryCount * 500), 5000); // 递增延迟，最大5秒
-
-        if (retryTimerRef.current) {
-          window.clearTimeout(retryTimerRef.current);
-        }
-        retryTimerRef.current = window.setTimeout(() => {
-          retryTimerRef.current = null;
-          void loadGroups(nextRetryCount);
-        }, delay);
-        return;
-      }
-
-      setError(isRetryableLoadError(errorMessage) ? `${errorMessage}，自动重试已达上限` : errorMessage);
-      setIsRetrying(false);
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    void loadGroups();
-  }, [loadGroups]);
-
-  useEffect(() => {
-    return () => {
-      if (retryTimerRef.current) {
-        window.clearTimeout(retryTimerRef.current);
-        retryTimerRef.current = null;
-      }
-      loadRequestRef.current += 1;
-      statsRequestRef.current += 1;
-    };
-  }, []);
-
-  // 监听页面可见性变化和窗口焦点，返回页面时自动刷新群组列表
-  // 使用节流避免频繁刷新
-  useEffect(() => {
-    let lastRefresh = 0;
-    const REFRESH_INTERVAL = 5000; // 最少间隔 5 秒
-
-    const maybeRefresh = () => {
-      const now = Date.now();
-      if (now - lastRefresh > REFRESH_INTERVAL) {
-        lastRefresh = now;
-        void loadGroups(0);
-      }
-    };
-
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible') {
-        maybeRefresh();
-      }
-    };
-    const handleFocus = () => {
-      maybeRefresh();
-    };
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    window.addEventListener('focus', handleFocus);
-    return () => {
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-      window.removeEventListener('focus', handleFocus);
-    };
-  }, [loadGroups]);
-
-
-
-  const handleRefresh = async () => {
-    try {
-      await apiClient.refreshLocalGroups();
-      await loadGroups(0);
-      toast.success('已刷新本地群目录');
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      toast.error(`刷新失败: ${msg}`);
-    }
-  };
-
-  const handleDeleteGroup = async (groupId: number) => {
-    if (deletingGroups.has(groupId)) return;
-    setDeletingGroups((prev) => new Set(prev).add(groupId));
-    try {
-      const res = await apiClient.deleteGroup(groupId);
-      const msg = (res as any)?.message || '已删除';
-      toast.success(msg);
-      await loadGroups(0);
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      toast.error(`删除失败: ${msg}`);
-    } finally {
-      setDeletingGroups((prev) => {
-        const s = new Set(prev);
-        s.delete(groupId);
-        return s;
-      });
-    }
-  };
+  const {
+    deleteGroup,
+    deletingGroups,
+    error,
+    groupStats,
+    groups,
+    isRetrying,
+    loadGroups,
+    loading,
+    refreshLocalGroups,
+    retryCount,
+  } = useGroupSelectorData();
 
   const openGroup = (groupId: number) => {
     router.push(`/groups/${groupId}`);
@@ -486,7 +313,7 @@ export default function GroupSelector() {
             <div className="flex items-center gap-2">
               <Button
                 variant="outline"
-                onClick={handleRefresh}
+                onClick={() => void refreshLocalGroups()}
                 className="flex items-center gap-2"
               >
                 <RefreshCw className="h-4 w-4" />
@@ -536,7 +363,7 @@ export default function GroupSelector() {
                 groupStats={groupStats}
                 groups={accountGroups}
                 mode="account"
-                onDeleteGroup={(groupId) => void handleDeleteGroup(groupId)}
+                onDeleteGroup={(groupId) => void deleteGroup(groupId)}
                 onOpenGroup={openGroup}
               />
             )}
@@ -560,7 +387,7 @@ export default function GroupSelector() {
                 groupStats={groupStats}
                 groups={localGroups}
                 mode="local"
-                onDeleteGroup={(groupId) => void handleDeleteGroup(groupId)}
+                onDeleteGroup={(groupId) => void deleteGroup(groupId)}
                 onOpenGroup={openGroup}
               />
             )}
