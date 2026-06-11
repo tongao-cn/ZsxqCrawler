@@ -65,7 +65,11 @@ INGESTION_LOCK_KEY = "ingestion"
 
 def _initialize_task_tracking_locked(task_id: str) -> None:
     task_logs[task_id] = []
-    task_stop_flags[task_id] = False
+    _set_task_stop_flag_locked(task_id, False)
+
+
+def _set_task_stop_flag_locked(task_id: str, stopped: bool) -> None:
+    task_stop_flags[task_id] = stopped
 
 
 def _persist_task_creation_tracking(task_id: str, description: str, store: Optional[TaskStore] = None) -> None:
@@ -413,7 +417,7 @@ def unregister_task_crawler(task_id: str) -> None:
 
 
 def _prepare_task_stop_resources_locked(task_id: str) -> tuple[Any, Any]:
-    task_stop_flags[task_id] = True
+    _set_task_stop_flag_locked(task_id, True)
     return _task_crawler_locked(task_id), _task_file_downloader_locked(task_id)
 
 
@@ -536,7 +540,7 @@ def _prepare_runtime_shutdown_snapshot_locked() -> tuple[List[tuple[str, Dict[st
         if _is_active_task_status(task.get("status"))
     ]
     for task_id in stopping_task_ids:
-        task_stop_flags[task_id] = True
+        _set_task_stop_flag_locked(task_id, True)
     return tasks_snapshot, _runtime_crawlers_snapshot_locked(), _runtime_file_downloaders_snapshot_locked()
 
 

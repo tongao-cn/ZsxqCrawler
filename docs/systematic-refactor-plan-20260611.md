@@ -1962,6 +1962,51 @@ Result:
 - PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
 - Git diff whitespace check passed.
 
+### 2026-06-11 - P5 task stop flag helper extraction
+
+Changed:
+
+- Extracted `_set_task_stop_flag_locked()` so task creation, user stop, and runtime shutdown stop
+  flag mutations go through a single locked helper boundary.
+- Reused existing characterization coverage for initial stop flag state, user stop ordering,
+  runtime shutdown ordering, and `is_task_stopped()` memory short-circuit behavior.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Task creation still initializes the in-memory stop flag to `False`.
+- `stop_task()` still marks the in-memory stop flag before stopping registered resources and before
+  updating the persisted task status.
+- Runtime shutdown still marks active in-memory tasks as stopped before resource stop requests.
+- No public route response, task status field, cancellation behavior, stop-resource ordering,
+  global crawler fallback, fallback polling, storage schema, legacy path, config semantics, or
+  frontend hook behavior changed.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_task_runtime_helpers.TaskRuntimeHelperTests.test_create_task_uses_persisted_sequence_and_initializes_runtime_state tests.test_task_runtime_helpers.TaskRuntimeHelperTests.test_create_ingestion_task_builds_memory_task_when_store_returns_no_task tests.test_task_runtime_helpers.TaskRuntimeHelperTests.test_stop_task_marks_memory_stop_flag_before_stopping_resources tests.test_task_runtime_helpers.TaskRuntimeHelperTests.test_request_runtime_shutdown_marks_stop_flags_before_stopping_resources tests.test_task_runtime_helpers.TaskRuntimeHelperTests.test_is_task_stopped_short_circuits_when_memory_flag_is_set -v
+uv run python -m py_compile backend\services\task_runtime.py
+uv run python -m unittest tests.test_task_runtime_helpers -v
+uv run python -m unittest tests.test_task_runtime_helpers tests.test_task_store tests.test_task_routes_helpers -v
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+uv run python scripts\scan_postgres_compat_debt.py
+git diff --check
+```
+
+Result:
+
+- Existing characterization tests passed before the helper extraction: 5 tests.
+- Post-refactor characterization tests passed: 5 tests.
+- Focused task runtime tests passed: 37 tests.
+- Recommended task runtime gate passed: 56 tests, 14 PostgreSQL integration tests skipped by
+  configuration.
+- Full backend tests passed: 556 tests, 15 skipped.
+- Frontend build passed.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Git diff whitespace check passed.
+
 ## Stop Conditions
 
 Pause before editing if:
