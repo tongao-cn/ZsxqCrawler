@@ -483,6 +483,39 @@ class TaskRuntimeHelperTests(unittest.TestCase):
             store.logs,
         )
 
+    def test_update_task_updates_memory_task_when_present(self):
+        from backend.services import task_runtime
+
+        store = FakeTaskStore()
+        store.tasks["task-1"] = {"task_id": "task-1", "status": "pending", "message": "queued"}
+
+        with patch("backend.services.task_runtime.get_task_store", return_value=store):
+            task_runtime.current_tasks["task-1"] = dict(store.tasks["task-1"])
+            try:
+                task_runtime.update_task("task-1", "running", "working", result={"ok": True})
+                memory_task = dict(task_runtime.current_tasks["task-1"])
+            finally:
+                task_runtime.current_tasks.pop("task-1", None)
+                task_runtime.task_logs.pop("task-1", None)
+
+        self.assertEqual("running", memory_task["status"])
+        self.assertEqual("working", memory_task["message"])
+        self.assertEqual({"ok": True}, memory_task["result"])
+        self.assertEqual("running", store.tasks["task-1"]["status"])
+        self.assertEqual([("task-1", "状态更新: working")], store.logs)
+
+    def test_update_task_returns_when_task_is_unknown(self):
+        from backend.services import task_runtime
+
+        store = FakeTaskStore()
+
+        with (
+            patch("backend.services.task_runtime.get_task_store", return_value=store),
+            patch.object(store, "update_task", side_effect=AssertionError("store should not be updated")),
+            patch("backend.services.task_runtime.add_task_log", side_effect=AssertionError("log should not be added")),
+        ):
+            task_runtime.update_task("missing-task", "running", "working")
+
     def test_get_task_logs_state_returns_memory_log_copy(self):
         from backend.services import task_runtime
 

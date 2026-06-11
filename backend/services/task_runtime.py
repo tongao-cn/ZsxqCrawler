@@ -304,6 +304,28 @@ def broadcast_log(task_id: str, log_message: str) -> None:
             pass
 
 
+def _has_memory_task_locked(task_id: str) -> bool:
+    return task_id in current_tasks
+
+
+def _update_memory_task_locked(
+    task_id: str,
+    status: str,
+    message: str,
+    result: Optional[Dict[str, Any]],
+    updated_at: datetime,
+) -> None:
+    if task_id in current_tasks:
+        current_tasks[task_id].update(
+            {
+                "status": status,
+                "message": message,
+                "result": result,
+                "updated_at": updated_at,
+            }
+        )
+
+
 def update_task(
     task_id: str,
     status: str,
@@ -314,7 +336,7 @@ def update_task(
     store = get_task_store()
     existing_task = get_task_state(task_id)
     with _state_lock:
-        has_memory_task = task_id in current_tasks
+        has_memory_task = _has_memory_task_locked(task_id)
     if not has_memory_task and existing_task is None:
         return
     if existing_task and existing_task.get("status") == "cancelled" and status != "cancelled":
@@ -322,15 +344,7 @@ def update_task(
 
     now = datetime.now()
     with _state_lock:
-        if task_id in current_tasks:
-            current_tasks[task_id].update(
-                {
-                    "status": status,
-                    "message": message,
-                    "result": result,
-                    "updated_at": now,
-                }
-            )
+        _update_memory_task_locked(task_id, status, message, result, now)
 
     store.update_task(task_id, status, message, result=result, updated_at=now)
     add_task_log(task_id, f"状态更新: {message}")
