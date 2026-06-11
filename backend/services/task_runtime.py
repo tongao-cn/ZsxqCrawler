@@ -538,20 +538,26 @@ def _clear_runtime_task_threads_locked() -> None:
     runtime_task_threads.clear()
 
 
-def enqueue_runtime_task(task_func: Callable[..., Any], task_id: str, *args: Any) -> None:
-    def run_task() -> None:
-        try:
-            _start_task_lock_heartbeat(task_id)
-            result = task_func(task_id, *args)
-            if inspect.isawaitable(result):
-                asyncio.run(result)
-        finally:
-            _stop_task_lock_heartbeat(task_id)
-            with _state_lock:
-                _forget_runtime_task_thread_locked(task_id)
+def _run_runtime_task(
+    task_func: Callable[..., Any],
+    task_id: str,
+    task_args: tuple[Any, ...],
+) -> None:
+    try:
+        _start_task_lock_heartbeat(task_id)
+        result = task_func(task_id, *task_args)
+        if inspect.isawaitable(result):
+            asyncio.run(result)
+    finally:
+        _stop_task_lock_heartbeat(task_id)
+        with _state_lock:
+            _forget_runtime_task_thread_locked(task_id)
 
+
+def enqueue_runtime_task(task_func: Callable[..., Any], task_id: str, *args: Any) -> None:
     thread = threading.Thread(
-        target=run_task,
+        target=_run_runtime_task,
+        args=(task_func, task_id, args),
         name=f"zsxq-task-{task_id}",
         daemon=True,
     )

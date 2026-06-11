@@ -2180,6 +2180,33 @@ Result:
 - `py_compile` passed.
 - `tests.test_task_runtime_helpers`: 38 tests passed.
 
+### 2026-06-11 - P5 runtime task runner helper extraction
+
+Changed:
+
+- Extracted `_run_runtime_task` from the nested runner inside `enqueue_runtime_task`.
+- Kept `enqueue_runtime_task` responsible for thread construction, runtime thread registration, and
+  starting the daemon thread.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Thread name, daemon flag, argument order passed to task functions, coroutine handling,
+  heartbeat start/stop, and runtime thread cleanup remain unchanged.
+- The heartbeat thread path is untouched.
+
+Verification:
+
+```powershell
+uv run python -m py_compile backend\services\task_runtime.py
+uv run python -m unittest tests.test_task_runtime_helpers -v
+```
+
+Result:
+
+- `py_compile` passed.
+- `tests.test_task_runtime_helpers`: 38 tests passed.
+
 ## Stop Conditions
 
 Pause before editing if:
