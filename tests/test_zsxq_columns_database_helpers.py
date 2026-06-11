@@ -9,6 +9,7 @@ from backend.storage.zsxq_columns_database import (
     _pending_files_query,
     _pending_video_row_to_dict,
     _pending_videos_query,
+    _stats_count_queries,
     _topic_comment_row_to_dict,
     _topic_detail_row_to_dict,
     _topic_file_row_to_dict,
@@ -427,6 +428,71 @@ class ZSXQColumnsDatabaseHelperTests(unittest.TestCase):
                 "comments_count",
             },
         )
+
+    def test_stats_count_queries_preserve_order_and_group_filter(self):
+        queries = _stats_count_queries(303)
+
+        self.assertEqual(
+            [key for key, _, _ in queries],
+            [
+                "columns_count",
+                "topics_count",
+                "details_count",
+                "images_count",
+                "files_count",
+                "files_downloaded",
+                "videos_count",
+                "videos_downloaded",
+                "comments_count",
+            ],
+        )
+        self.assertTrue(all(params == (303,) for _, _, params in queries))
+        self.assertIn("FROM columns WHERE group_id = ?", self._sql(queries[0][1]))
+        self.assertIn("FROM column_topics WHERE group_id = ?", self._sql(queries[1][1]))
+        self.assertIn("FROM topic_details WHERE group_id = ?", self._sql(queries[2][1]))
+        self.assertIn("FROM images i JOIN topic_details td ON i.topic_id = td.topic_id", self._sql(queries[3][1]))
+        self.assertIn("FROM files f JOIN topic_details td ON f.topic_id = td.topic_id", self._sql(queries[4][1]))
+        self.assertIn("f.download_status = 'completed'", self._sql(queries[5][1]))
+        self.assertIn("FROM videos v JOIN topic_details td ON v.topic_id = td.topic_id", self._sql(queries[6][1]))
+        self.assertIn("v.download_status = 'completed'", self._sql(queries[7][1]))
+        self.assertIn("FROM comments c JOIN topic_details td ON c.topic_id = td.topic_id", self._sql(queries[8][1]))
+
+    def test_get_stats_preserves_count_result_shape(self):
+        from backend.storage.zsxq_columns_database import ZSXQColumnsDatabase
+
+        class FakeCursor:
+            def __init__(self):
+                self.calls = []
+                self.next_count = 1
+
+            def execute(self, sql, params=()):
+                self.calls.append((" ".join(sql.split()), params))
+                return self
+
+            def fetchone(self):
+                count = self.next_count
+                self.next_count += 1
+                return (count,)
+
+        db = object.__new__(ZSXQColumnsDatabase)
+        db.cursor = FakeCursor()
+
+        self.assertEqual(
+            ZSXQColumnsDatabase.get_stats(db, 303),
+            {
+                "columns_count": 1,
+                "topics_count": 2,
+                "details_count": 3,
+                "images_count": 4,
+                "files_count": 5,
+                "files_downloaded": 6,
+                "videos_count": 7,
+                "videos_downloaded": 8,
+                "comments_count": 9,
+            },
+        )
+        self.assertEqual(len(db.cursor.calls), 9)
+        self.assertTrue(all(params == (303,) for _, params in db.cursor.calls))
 
     def test_pending_queue_queries_preserve_group_filter_branches(self):
         video_sql, video_params = _pending_videos_query(303)

@@ -2918,6 +2918,41 @@ Result:
 - PostgreSQL compatibility debt scan: no SQLite compatibility patterns found.
 - Frontend build is not planned because this slice only changes backend storage/helper code.
 
+### 2026-06-11 - P3 stats count query helper extraction
+
+Changed:
+
+- Added `_stats_count_queries` to `backend/storage/zsxq_columns_database_helpers.py`.
+- Replaced the repeated count-query block in `get_stats` with a loop over the helper output.
+- Added focused characterization coverage for statistics query key order, group filter params,
+  completed-download filters, and returned stats shape.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- `get_stats` still initializes from `_empty_stats`, executes the same 9 count queries in the
+  same order, and writes the same statistics keys.
+- Query params remain `(group_id,)` for every count query.
+- Error behavior is unchanged: query or fetch failures still propagate from the same call path.
+- No schema, compatibility, fallback, status, or commit behavior was changed.
+
+Verification:
+
+```powershell
+uv run python -m py_compile backend\storage\zsxq_columns_database.py backend\storage\zsxq_columns_database_helpers.py
+uv run python -m unittest tests.test_zsxq_columns_database_helpers -v
+uv run python -m unittest discover -s tests
+uv run python scripts\scan_postgres_compat_debt.py
+```
+
+Result:
+
+- `py_compile` passed.
+- `tests.test_zsxq_columns_database_helpers`: 20 tests passed.
+- Full backend unittest discovery: 567 tests passed, 15 skipped.
+- PostgreSQL compatibility debt scan: no SQLite compatibility patterns found.
+- Frontend build is not planned because this slice only changes backend storage/helper code.
+
 ## Stop Conditions
 
 Pause before editing if:

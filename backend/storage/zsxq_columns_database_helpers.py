@@ -225,6 +225,68 @@ def _empty_stats() -> Dict[str, int]:
     }
 
 
+def _stats_count_queries(group_id: int) -> tuple[tuple[str, str, tuple[Any, ...]], ...]:
+    return (
+        ('columns_count', 'SELECT COUNT(*) FROM columns WHERE group_id = ?', (group_id,)),
+        ('topics_count', 'SELECT COUNT(*) FROM column_topics WHERE group_id = ?', (group_id,)),
+        ('details_count', 'SELECT COUNT(*) FROM topic_details WHERE group_id = ?', (group_id,)),
+        (
+            'images_count',
+            '''
+                SELECT COUNT(*) FROM images i
+                JOIN topic_details td ON i.topic_id = td.topic_id
+                WHERE td.group_id = ?
+            ''',
+            (group_id,),
+        ),
+        (
+            'files_count',
+            '''
+                SELECT COUNT(*) FROM files f
+                JOIN topic_details td ON f.topic_id = td.topic_id
+                WHERE td.group_id = ?
+            ''',
+            (group_id,),
+        ),
+        (
+            'files_downloaded',
+            '''
+                SELECT COUNT(*) FROM files f
+                JOIN topic_details td ON f.topic_id = td.topic_id
+                WHERE td.group_id = ? AND f.download_status = 'completed'
+            ''',
+            (group_id,),
+        ),
+        (
+            'videos_count',
+            '''
+                SELECT COUNT(*) FROM videos v
+                JOIN topic_details td ON v.topic_id = td.topic_id
+                WHERE td.group_id = ?
+            ''',
+            (group_id,),
+        ),
+        (
+            'videos_downloaded',
+            '''
+                SELECT COUNT(*) FROM videos v
+                JOIN topic_details td ON v.topic_id = td.topic_id
+                WHERE td.group_id = ? AND v.download_status = 'completed'
+            ''',
+            (group_id,),
+        ),
+        (
+            'comments_count',
+            '''
+                SELECT COUNT(*) FROM comments c
+                JOIN topic_details td ON c.topic_id = td.topic_id
+                WHERE td.group_id = ?
+            ''',
+            (group_id,),
+        ),
+    )
+
+
 def _group_id_param(group_id: Optional[str]) -> Any:
     value = str(group_id or "").strip()
     return int(value) if value.isdigit() else value

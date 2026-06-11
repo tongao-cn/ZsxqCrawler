@@ -21,6 +21,7 @@ from backend.storage.zsxq_columns_database_helpers import (
     _pending_video_row_to_dict,
     _pending_videos_query,
     _scope_group_id_param,
+    _stats_count_queries,
     _topic_comment_row_to_dict,
     _topic_detail_row_to_dict,
     _topic_file_row_to_dict,
@@ -659,57 +660,10 @@ class ZSXQColumnsDatabase:
     def get_stats(self, group_id: int) -> Dict[str, Any]:
         """获取专栏数据库统计信息"""
         stats = _empty_stats()
-        
-        self.cursor.execute('SELECT COUNT(*) FROM columns WHERE group_id = ?', (group_id,))
-        stats['columns_count'] = self.cursor.fetchone()[0]
-        
-        self.cursor.execute('SELECT COUNT(*) FROM column_topics WHERE group_id = ?', (group_id,))
-        stats['topics_count'] = self.cursor.fetchone()[0]
-        
-        self.cursor.execute('SELECT COUNT(*) FROM topic_details WHERE group_id = ?', (group_id,))
-        stats['details_count'] = self.cursor.fetchone()[0]
-        
-        self.cursor.execute('''
-            SELECT COUNT(*) FROM images i
-            JOIN topic_details td ON i.topic_id = td.topic_id
-            WHERE td.group_id = ?
-        ''', (group_id,))
-        stats['images_count'] = self.cursor.fetchone()[0]
-        
-        self.cursor.execute('''
-            SELECT COUNT(*) FROM files f
-            JOIN topic_details td ON f.topic_id = td.topic_id
-            WHERE td.group_id = ?
-        ''', (group_id,))
-        stats['files_count'] = self.cursor.fetchone()[0]
-        
-        self.cursor.execute('''
-            SELECT COUNT(*) FROM files f
-            JOIN topic_details td ON f.topic_id = td.topic_id
-            WHERE td.group_id = ? AND f.download_status = 'completed'
-        ''', (group_id,))
-        stats['files_downloaded'] = self.cursor.fetchone()[0]
-        
-        self.cursor.execute('''
-            SELECT COUNT(*) FROM videos v
-            JOIN topic_details td ON v.topic_id = td.topic_id
-            WHERE td.group_id = ?
-        ''', (group_id,))
-        stats['videos_count'] = self.cursor.fetchone()[0]
-        
-        self.cursor.execute('''
-            SELECT COUNT(*) FROM videos v
-            JOIN topic_details td ON v.topic_id = td.topic_id
-            WHERE td.group_id = ? AND v.download_status = 'completed'
-        ''', (group_id,))
-        stats['videos_downloaded'] = self.cursor.fetchone()[0]
-        
-        self.cursor.execute('''
-            SELECT COUNT(*) FROM comments c
-            JOIN topic_details td ON c.topic_id = td.topic_id
-            WHERE td.group_id = ?
-        ''', (group_id,))
-        stats['comments_count'] = self.cursor.fetchone()[0]
+
+        for key, sql, params in _stats_count_queries(group_id):
+            self.cursor.execute(sql, params)
+            stats[key] = self.cursor.fetchone()[0]
         
         return stats
     
