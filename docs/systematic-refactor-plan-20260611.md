@@ -951,6 +951,44 @@ Result:
 - PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
 - Git diff whitespace check passed.
 
+### 2026-06-11 - P6 group API type surface split
+
+Changed:
+
+- Added `frontend/src/lib/api/groupTypes.ts` for group/topic/account frontend API types:
+  `Topic`, `TopicOwner`, `TopicDetail`, `FetchMoreCommentsResponse`, `Group`, `GroupStats`,
+  `Account`, and `AccountSelf`.
+- Kept `frontend/src/lib/api/types.ts` as the compatibility facade by re-exporting those
+  group/topic/account types.
+- Updated `frontend/src/lib/api/groups.ts` to import group-specific types from `groupTypes.ts`
+  while leaving shared `PaginatedResponse<T>` in `types.ts`.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Public frontend import path `@/lib/api`, exported type names, group/topic/account response
+  shapes, pagination shape, request URLs, request bodies, and runtime behavior are preserved.
+- `PaginatedResponse<T>` remains in the shared type facade because both file and group clients use
+  it.
+- No backend route, storage schema, task behavior, SSE behavior, fallback polling, legacy path, or
+  config semantics changed.
+
+Verification:
+
+```powershell
+npm --prefix frontend run build
+uv run python -m unittest discover -s tests
+uv run python scripts\scan_postgres_compat_debt.py
+git diff --check
+```
+
+Result:
+
+- Frontend build passed.
+- Full backend tests passed: 533 tests, 15 skipped.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Git diff whitespace check passed.
+
 ## Stop Conditions
 
 Pause before editing if:

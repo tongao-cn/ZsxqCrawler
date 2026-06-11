@@ -1,5 +1,6 @@
 import { FilesApiClient } from './files';
-import type { Account, AccountSelf, FetchMoreCommentsResponse, Group, GroupStats, PaginatedResponse, Topic, TopicDetail } from './types';
+import type { Account, AccountSelf, FetchMoreCommentsResponse, Group, GroupStats, Topic, TopicDetail } from './groupTypes';
+import type { PaginatedResponse } from './types';
 
 export class GroupsApiClient extends FilesApiClient {
   async crawlHistorical(groupId: number, pages: number = 10, perPage: number = 20, crawlSettings?: {
