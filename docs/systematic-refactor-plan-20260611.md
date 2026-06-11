@@ -3046,6 +3046,39 @@ Result:
 - PostgreSQL compatibility debt scan: no SQLite compatibility patterns found.
 - Frontend build is not planned because this slice only changes backend crawler/helper code.
 
+### 2026-06-11 - P9 download expected size helper extraction
+
+Changed:
+
+- Added `download_expected_size` to `backend/crawlers/zsxq_file_downloader_helpers.py`.
+- Replaced inline expected-size calculation in the body-download size validation path.
+- Added focused helper coverage for positive metadata size, zero size, and negative size branches.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Positive file metadata size still takes precedence over response `content-length`.
+- Zero or negative file metadata size still falls back to response `content-length`.
+- Size mismatch detection, retry continuation, `.part` cleanup, and final status updates remain unchanged.
+- No retry, stop, signed URL, fallback, or status-update behavior was changed.
+
+Verification:
+
+```powershell
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py backend\crawlers\zsxq_file_downloader_helpers.py
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers -v
+uv run python -m unittest discover -s tests
+uv run python scripts\scan_postgres_compat_debt.py
+```
+
+Result:
+
+- `py_compile` passed.
+- `tests.test_zsxq_file_downloader_helpers`: 41 tests passed.
+- Full backend unittest discovery: 577 tests passed, 15 skipped.
+- PostgreSQL compatibility debt scan: no SQLite compatibility patterns found.
+- Frontend build is not planned because this slice only changes backend crawler/helper code.
+
 ### 2026-06-11 - P3 columns database helper module split
 
 Changed:

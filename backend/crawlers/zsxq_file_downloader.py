@@ -29,6 +29,7 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     classify_http_failure,
     download_file_data,
     download_exception_detail,
+    download_expected_size,
     download_final_failure_detail,
     download_http_failure_detail,
     download_interval_plan,
@@ -618,7 +619,7 @@ class ZSXQFileDownloader:
                 if response.status_code == 200:
                     total_size = int(response.headers.get('content-length', 0))
                     downloaded_size = 0
-                    expected_size = file_size if file_size > 0 else total_size
+                    expected_size = download_expected_size(file_size, total_size)
                     temp_path = f"{file_path}.part"
                     remove_partial_download(temp_path)
 

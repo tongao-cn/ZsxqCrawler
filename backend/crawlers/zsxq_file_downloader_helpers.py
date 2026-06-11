@@ -273,6 +273,10 @@ def download_final_failure_detail(
     return last_error_code or "download_failed", last_error or "文件下载失败"
 
 
+def download_expected_size(file_size: int, total_size: int) -> int:
+    return file_size if file_size > 0 else total_size
+
+
 def content_disposition_filename(content_disposition: str) -> Optional[str]:
     if "filename=" not in content_disposition:
         return None
