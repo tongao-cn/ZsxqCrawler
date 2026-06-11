@@ -497,6 +497,13 @@ def _crawl_log_update_parts(
     return updates, values
 
 
+def _crawl_log_update_statement(updates: list[str]) -> str:
+    return f'''
+        UPDATE crawl_log SET {', '.join(updates)}
+        WHERE id = ?
+    '''
+
+
 def _empty_clear_data_stats() -> Dict[str, int]:
     return {
         'columns_deleted': 0,

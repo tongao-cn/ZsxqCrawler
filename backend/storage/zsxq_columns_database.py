@@ -23,6 +23,7 @@ from backend.storage.zsxq_columns_database_helpers import (
     _crawl_log_insert_statement,
     _empty_clear_data_stats,
     _crawl_log_update_parts,
+    _crawl_log_update_statement,
     _empty_stats,
     _file_download_status_update,
     _group_clear_delete_statements,
@@ -454,10 +455,7 @@ class ZSXQColumnsDatabase:
         
         if updates:
             values.append(log_id)
-            self.cursor.execute(f'''
-                UPDATE crawl_log SET {', '.join(updates)}
-                WHERE id = ?
-            ''', values)
+            self.cursor.execute(_crawl_log_update_statement(updates), values)
             self.conn.commit()
     
     # ==================== 增量爬取支持 ====================

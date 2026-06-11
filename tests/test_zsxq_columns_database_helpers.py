@@ -15,6 +15,7 @@ from backend.storage.zsxq_columns_database import (
     _comment_images_query,
     _crawl_log_insert_statement,
     _crawl_log_update_parts,
+    _crawl_log_update_statement,
     _empty_clear_data_stats,
     _empty_stats,
     _file_download_status_update,
@@ -913,6 +914,21 @@ class ZSXQColumnsDatabaseHelperTests(unittest.TestCase):
         self.assertIn("INSERT INTO crawl_log (group_id, crawl_type)", sql)
         self.assertIn("VALUES (?, ?)", sql)
         self.assertIn("RETURNING id", sql)
+
+    def test_crawl_log_update_statement_preserves_dynamic_set_shape(self):
+        updates = [
+            "columns_count = ?",
+            "topics_count = ?",
+            "status = ?",
+            "end_time = CURRENT_TIMESTAMP",
+        ]
+        sql = self._sql(_crawl_log_update_statement(updates))
+
+        self.assertEqual(
+            "UPDATE crawl_log SET columns_count = ?, topics_count = ?, status = ?, "
+            "end_time = CURRENT_TIMESTAMP WHERE id = ?",
+            sql,
+        )
 
     def test_clear_data_helpers_preserve_stats_and_topic_delete_order(self):
         first = _empty_clear_data_stats()
@@ -1880,6 +1896,47 @@ class ZSXQColumnsDatabaseHelperTests(unittest.TestCase):
         self.assertIsNone(ZSXQColumnsDatabase.update_crawl_log(db, 7))
         self.assertEqual([], db.cursor.calls)
         self.assertEqual(0, db.conn.commits)
+
+    def test_update_crawl_log_preserves_dynamic_sql_values_and_commit(self):
+        from backend.storage.zsxq_columns_database import ZSXQColumnsDatabase
+
+        class FakeCursor:
+            def __init__(self):
+                self.calls = []
+
+            def execute(self, sql, params=()):
+                self.calls.append((" ".join(sql.split()), params))
+
+        class FakeConnection:
+            def __init__(self):
+                self.commits = 0
+
+            def commit(self):
+                self.commits += 1
+
+        db = object.__new__(ZSXQColumnsDatabase)
+        db.cursor = FakeCursor()
+        db.conn = FakeConnection()
+
+        ZSXQColumnsDatabase.update_crawl_log(
+            db,
+            7,
+            columns_count=1,
+            topics_count=2,
+            details_count=3,
+            files_count=4,
+            status="failed",
+            error_message="boom",
+        )
+
+        sql, params = db.cursor.calls[-1]
+        self.assertEqual(
+            "UPDATE crawl_log SET columns_count = ?, topics_count = ?, details_count = ?, "
+            "files_count = ?, status = ?, end_time = CURRENT_TIMESTAMP, error_message = ? WHERE id = ?",
+            sql,
+        )
+        self.assertEqual([1, 2, 3, 4, "failed", "boom", 7], params)
+        self.assertEqual(1, db.conn.commits)
 
     def test_clear_all_data_preserves_delete_order_stats_and_commit(self):
         from backend.storage.zsxq_columns_database import ZSXQColumnsDatabase
