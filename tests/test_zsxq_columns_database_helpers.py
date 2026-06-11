@@ -19,6 +19,7 @@ from backend.storage.zsxq_columns_database import (
     _file_download_status_update,
     _group_clear_delete_statements,
     _image_local_path_update,
+    _group_topic_ids_query,
     _nest_topic_comments,
     _pending_file_row_to_dict,
     _pending_files_query,
@@ -31,6 +32,7 @@ from backend.storage.zsxq_columns_database import (
     _topic_comment_row_to_dict,
     _topic_detail_insert_params,
     _topic_detail_insert_statement,
+    _topic_detail_exists_query,
     _topic_detail_query,
     _topic_detail_row_to_dict,
     _topic_file_insert_params,
@@ -47,6 +49,7 @@ from backend.storage.zsxq_columns_database import (
     _topic_video_insert_statement,
     _topic_videos_query,
     _topic_video_row_to_dict,
+    _topic_group_id_query,
     _topic_child_delete_statements,
     _uncached_image_row_to_dict,
     _uncached_images_query,
@@ -944,6 +947,19 @@ class ZSXQColumnsDatabaseHelperTests(unittest.TestCase):
         self.assertEqual("DELETE FROM columns WHERE group_id = ?", group_statements[2][1])
         self.assertEqual("DELETE FROM crawl_log WHERE group_id = ?", group_statements[3][1])
 
+    def test_incremental_select_query_helpers_preserve_sql_and_params(self):
+        group_sql, group_params = _topic_group_id_query(202)
+        self.assertEqual("SELECT group_id FROM topic_details WHERE topic_id = ? LIMIT 1", group_sql)
+        self.assertEqual((202,), group_params)
+
+        exists_sql, exists_params = _topic_detail_exists_query(202)
+        self.assertEqual("SELECT 1 FROM topic_details WHERE topic_id = ?", exists_sql)
+        self.assertEqual((202,), exists_params)
+
+        topic_ids_sql, topic_ids_params = _group_topic_ids_query(303)
+        self.assertEqual("SELECT topic_id FROM topic_details WHERE group_id = ?", topic_ids_sql)
+        self.assertEqual((303,), topic_ids_params)
+
     def test_pending_queue_queries_preserve_group_filter_branches(self):
         video_sql, video_params = _pending_videos_query(303)
         file_sql, file_params = _pending_files_query(303)
@@ -1169,6 +1185,80 @@ class ZSXQColumnsDatabaseHelperTests(unittest.TestCase):
         self.assertIn("UPDATE images SET local_path = ? WHERE image_id = ?", db.cursor.calls[-1][0])
         self.assertEqual(("image.jpg", 301), db.cursor.calls[-1][1])
         self.assertEqual(2, db.conn.commits)
+
+    def test_incremental_select_methods_preserve_execute_params_and_fetch_shape(self):
+        from backend.storage.zsxq_columns_database import ZSXQColumnsDatabase
+
+        class FakeCursor:
+            def __init__(self):
+                self.calls = []
+                self.fetchone_results = [(1,), None]
+                self.fetchall_result = [(10,), (11,)]
+
+            def execute(self, sql, params=()):
+                self.calls.append((" ".join(sql.split()), params))
+                return self
+
+            def fetchone(self):
+                return self.fetchone_results.pop(0)
+
+            def fetchall(self):
+                return self.fetchall_result
+
+        db = object.__new__(ZSXQColumnsDatabase)
+        db.cursor = FakeCursor()
+
+        self.assertTrue(ZSXQColumnsDatabase.topic_detail_exists(db, 202))
+        self.assertEqual(("SELECT 1 FROM topic_details WHERE topic_id = ?", (202,)), db.cursor.calls[-1])
+
+        self.assertFalse(ZSXQColumnsDatabase.topic_detail_exists(db, 203))
+        self.assertEqual(("SELECT 1 FROM topic_details WHERE topic_id = ?", (203,)), db.cursor.calls[-1])
+
+        self.assertEqual({10, 11}, ZSXQColumnsDatabase.get_existing_topic_ids(db, 303))
+        self.assertEqual(("SELECT topic_id FROM topic_details WHERE group_id = ?", (303,)), db.cursor.calls[-1])
+
+    def test_resolve_topic_group_id_preserves_scope_lookup_and_exception_fallback(self):
+        from backend.storage.zsxq_columns_database import ZSXQColumnsDatabase
+
+        class FakeCursor:
+            def __init__(self, row=None, raises=False):
+                self.calls = []
+                self.row = row
+                self.raises = raises
+
+            def execute(self, sql, params=()):
+                self.calls.append((" ".join(sql.split()), params))
+                if self.raises:
+                    raise RuntimeError("temporary storage failure")
+                return self
+
+            def fetchone(self):
+                return self.row
+
+        scoped_db = object.__new__(ZSXQColumnsDatabase)
+        scoped_db.cursor = FakeCursor((999,))
+        scoped_db.group_id = "303"
+        self.assertEqual(303, ZSXQColumnsDatabase._resolve_topic_group_id(scoped_db, 202))
+        self.assertEqual([], scoped_db.cursor.calls)
+
+        lookup_db = object.__new__(ZSXQColumnsDatabase)
+        lookup_db.cursor = FakeCursor((303,))
+        lookup_db.group_id = None
+        self.assertEqual(303, ZSXQColumnsDatabase._resolve_topic_group_id(lookup_db, 202))
+        self.assertEqual(
+            [("SELECT group_id FROM topic_details WHERE topic_id = ? LIMIT 1", (202,))],
+            lookup_db.cursor.calls,
+        )
+
+        missing_db = object.__new__(ZSXQColumnsDatabase)
+        missing_db.cursor = FakeCursor(None)
+        missing_db.group_id = None
+        self.assertIsNone(ZSXQColumnsDatabase._resolve_topic_group_id(missing_db, 202))
+
+        failing_db = object.__new__(ZSXQColumnsDatabase)
+        failing_db.cursor = FakeCursor(raises=True)
+        failing_db.group_id = None
+        self.assertIsNone(ZSXQColumnsDatabase._resolve_topic_group_id(failing_db, 202))
 
     def test_insert_comment_writes_group_id_from_runtime_scope(self):
         from backend.storage.zsxq_columns_database import ZSXQColumnsDatabase

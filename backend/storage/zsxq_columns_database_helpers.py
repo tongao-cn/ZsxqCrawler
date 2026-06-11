@@ -521,6 +521,18 @@ def _group_clear_delete_statements() -> tuple[tuple[Optional[str], str], ...]:
     )
 
 
+def _topic_group_id_query(topic_id: int) -> tuple[str, tuple[Any, ...]]:
+    return 'SELECT group_id FROM topic_details WHERE topic_id = ? LIMIT 1', (topic_id,)
+
+
+def _topic_detail_exists_query(topic_id: int) -> tuple[str, tuple[Any, ...]]:
+    return 'SELECT 1 FROM topic_details WHERE topic_id = ?', (topic_id,)
+
+
+def _group_topic_ids_query(group_id: int) -> tuple[str, tuple[Any, ...]]:
+    return 'SELECT topic_id FROM topic_details WHERE group_id = ?', (group_id,)
+
+
 def _group_id_param(group_id: Optional[str]) -> Any:
     value = str(group_id or "").strip()
     return int(value) if value.isdigit() else value

@@ -4074,6 +4074,45 @@ Result:
 - PostgreSQL compatibility debt scan: no SQLite compatibility patterns found.
 - Frontend build is not planned because this slice only changes backend storage/helper code.
 
+### 2026-06-11 - P3 incremental SELECT query helper extraction
+
+Changed:
+
+- Added `_topic_group_id_query`, `_topic_detail_exists_query`, and `_group_topic_ids_query` to
+  `backend/storage/zsxq_columns_database_helpers.py`.
+- Replaced inline SELECT statements in `_resolve_topic_group_id`, `topic_detail_exists`,
+  `get_existing_topic_ids`, and the topic-id prefetch in `clear_all_data`.
+- Added characterization coverage for SQL shape, parameter order, fetchone/fetchall behavior, and
+  `_resolve_topic_group_id` exception fallback.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- `_resolve_topic_group_id` still prefers `self.group_id`, still avoids storage reads in that
+  branch, and still returns `None` when the lookup fails.
+- `topic_detail_exists` still returns `True` for any fetched row and `False` for no row.
+- `get_existing_topic_ids` and `clear_all_data` still fetch the same group-scoped topic ids before
+  downstream set/delete behavior.
+- No schema, config, compatibility, fallback, error handling, logging, or public API semantics were
+  changed.
+
+Verification:
+
+```powershell
+uv run python -m py_compile backend\storage\zsxq_columns_database.py backend\storage\zsxq_columns_database_helpers.py tests\test_zsxq_columns_database_helpers.py
+uv run python -m unittest tests.test_zsxq_columns_database_helpers -v
+uv run python -m unittest discover -s tests
+uv run python scripts\scan_postgres_compat_debt.py
+```
+
+Result:
+
+- `py_compile` passed.
+- `tests.test_zsxq_columns_database_helpers`: 58 tests passed.
+- Full backend unittest discovery: 618 tests passed, 15 skipped.
+- PostgreSQL compatibility debt scan: no SQLite compatibility patterns found.
+- Frontend build is not planned because this slice only changes backend storage/helper code.
+
 ## Stop Conditions
 
 Pause before editing if:

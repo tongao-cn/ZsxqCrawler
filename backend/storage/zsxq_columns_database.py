@@ -26,6 +26,7 @@ from backend.storage.zsxq_columns_database_helpers import (
     _file_download_status_update,
     _group_clear_delete_statements,
     _group_id_param,
+    _group_topic_ids_query,
     _image_local_path_update,
     _nullable_group_id_param,
     _pending_file_row_to_dict,
@@ -41,6 +42,7 @@ from backend.storage.zsxq_columns_database_helpers import (
     _topic_comment_row_to_dict,
     _topic_detail_insert_params,
     _topic_detail_insert_statement,
+    _topic_detail_exists_query,
     _topic_detail_query,
     _topic_detail_row_to_dict,
     _topic_file_insert_params,
@@ -54,6 +56,7 @@ from backend.storage.zsxq_columns_database_helpers import (
     _topic_video_insert_params,
     _topic_videos_query,
     _topic_video_row_to_dict,
+    _topic_group_id_query,
     _topic_owner_insert_params,
     _topic_owner_insert_statement,
     _topic_child_delete_statements,
@@ -252,7 +255,8 @@ class ZSXQColumnsDatabase:
         if self.group_id:
             return _nullable_group_id_param(self.group_id)
         try:
-            self.cursor.execute('SELECT group_id FROM topic_details WHERE topic_id = ? LIMIT 1', (topic_id,))
+            sql, params = _topic_group_id_query(topic_id)
+            self.cursor.execute(sql, params)
             row = self.cursor.fetchone()
             return row[0] if row and row[0] is not None else None
         except Exception:
@@ -463,12 +467,14 @@ class ZSXQColumnsDatabase:
     
     def topic_detail_exists(self, topic_id: int) -> bool:
         """检查文章详情是否已存在"""
-        self.cursor.execute('SELECT 1 FROM topic_details WHERE topic_id = ?', (topic_id,))
+        sql, params = _topic_detail_exists_query(topic_id)
+        self.cursor.execute(sql, params)
         return self.cursor.fetchone() is not None
     
     def get_existing_topic_ids(self, group_id: int) -> set:
         """获取已存在的文章ID集合"""
-        self.cursor.execute('SELECT topic_id FROM topic_details WHERE group_id = ?', (group_id,))
+        sql, params = _group_topic_ids_query(group_id)
+        self.cursor.execute(sql, params)
         return {row[0] for row in self.cursor.fetchall()}
     
     # ==================== 数据清理 ====================
@@ -479,7 +485,8 @@ class ZSXQColumnsDatabase:
         
         try:
             # 获取该群组的所有topic_id
-            self.cursor.execute('SELECT topic_id FROM topic_details WHERE group_id = ?', (group_id,))
+            sql, params = _group_topic_ids_query(group_id)
+            self.cursor.execute(sql, params)
             topic_ids = [row[0] for row in self.cursor.fetchall()]
             
             if topic_ids:
