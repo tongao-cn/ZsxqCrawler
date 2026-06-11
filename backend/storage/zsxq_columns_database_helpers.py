@@ -1,0 +1,241 @@
+"""Helper functions for ZSXQ columns storage."""
+
+from typing import Any, Dict, Optional
+
+
+def _column_row_to_dict(row) -> Dict[str, Any]:
+    return {
+        'column_id': row[0],
+        'group_id': row[1],
+        'name': row[2],
+        'cover_url': row[3],
+        'topics_count': row[4],
+        'create_time': row[5],
+        'last_topic_attach_time': row[6],
+        'imported_at': row[7]
+    }
+
+
+def _column_topic_row_to_dict(row) -> Dict[str, Any]:
+    return {
+        'topic_id': row[0],
+        'column_id': row[1],
+        'group_id': row[2],
+        'title': row[3],
+        'text': row[4],
+        'create_time': row[5],
+        'attached_to_column_time': row[6],
+        'imported_at': row[7],
+        'has_detail': bool(row[8])
+    }
+
+
+def _topic_image_row_to_dict(row) -> Dict[str, Any]:
+    return {
+        'image_id': row[0],
+        'type': row[1],
+        'thumbnail': {
+            'url': row[2],
+            'width': row[3],
+            'height': row[4]
+        },
+        'large': {
+            'url': row[5],
+            'width': row[6],
+            'height': row[7]
+        },
+        'original': {
+            'url': row[8],
+            'width': row[9],
+            'height': row[10],
+            'size': row[11]
+        },
+        'local_path': row[12]
+    }
+
+
+def _comment_image_row_to_dict(row) -> Dict[str, Any]:
+    return {
+        'image_id': row[0],
+        'type': row[1],
+        'thumbnail': {
+            'url': row[2],
+            'width': row[3],
+            'height': row[4]
+        },
+        'large': {
+            'url': row[5],
+            'width': row[6],
+            'height': row[7]
+        },
+        'original': {
+            'url': row[8],
+            'width': row[9],
+            'height': row[10],
+            'size': row[11]
+        }
+    }
+
+
+def _topic_file_row_to_dict(row) -> Dict[str, Any]:
+    return {
+        'file_id': row[0],
+        'name': row[1],
+        'hash': row[2],
+        'size': row[3],
+        'duration': row[4],
+        'download_count': row[5],
+        'create_time': row[6],
+        'download_status': row[7],
+        'local_path': row[8],
+        'download_time': row[9]
+    }
+
+
+def _topic_video_row_to_dict(row) -> Dict[str, Any]:
+    return {
+        'video_id': row[0],
+        'size': row[1],
+        'duration': row[2],
+        'cover': {
+            'url': row[3],
+            'width': row[4],
+            'height': row[5],
+            'local_path': row[6]
+        },
+        'video_url': row[7],
+        'download_status': row[8],
+        'local_path': row[9],
+        'download_time': row[10]
+    }
+
+
+def _pending_video_row_to_dict(row) -> Dict[str, Any]:
+    return {
+        'video_id': row[0],
+        'topic_id': row[1],
+        'size': row[2],
+        'duration': row[3],
+        'cover_url': row[4],
+        'group_id': row[5]
+    }
+
+
+def _topic_detail_row_to_dict(row) -> Dict[str, Any]:
+    result = {
+        'topic_id': row[0],
+        'group_id': row[1],
+        'type': row[2],
+        'title': row[3],
+        'full_text': row[4],
+        'likes_count': row[5],
+        'comments_count': row[6],
+        'readers_count': row[7],
+        'digested': bool(row[8]),
+        'sticky': bool(row[9]),
+        'create_time': row[10],
+        'modify_time': row[11],
+        'raw_json': row[12],
+        'imported_at': row[13],
+        'updated_at': row[14],
+        'owner': None,
+        'images': [],
+        'files': [],
+        'comments': []
+    }
+
+    if row[15]:
+        result['owner'] = {
+            'user_id': row[15],
+            'name': row[16],
+            'alias': row[17],
+            'avatar_url': row[18],
+            'description': row[19],
+            'location': row[20]
+        }
+
+    return result
+
+
+def _topic_comment_row_to_dict(row) -> Dict[str, Any]:
+    comment = {
+        'comment_id': row[0],
+        'parent_comment_id': row[1],
+        'text': row[2],
+        'create_time': row[3],
+        'likes_count': row[4],
+        'rewards_count': row[5],
+        'replies_count': row[6],
+        'sticky': bool(row[7]),
+        'owner': None,
+        'repliee': None
+    }
+
+    if row[8]:
+        comment['owner'] = {
+            'user_id': row[8],
+            'name': row[9],
+            'alias': row[10],
+            'avatar_url': row[11],
+            'location': row[12]
+        }
+
+    if row[13]:
+        comment['repliee'] = {
+            'user_id': row[13],
+            'name': row[14],
+            'alias': row[15],
+            'avatar_url': row[16]
+        }
+
+    return comment
+
+
+def _pending_file_row_to_dict(row) -> Dict[str, Any]:
+    return {
+        'file_id': row[0],
+        'topic_id': row[1],
+        'name': row[2],
+        'size': row[3],
+        'hash': row[4],
+        'group_id': row[5]
+    }
+
+
+def _uncached_image_row_to_dict(row) -> Dict[str, Any]:
+    return {
+        'image_id': row[0],
+        'topic_id': row[1],
+        'original_url': row[2],
+        'group_id': row[3]
+    }
+
+
+def _empty_stats() -> Dict[str, int]:
+    return {
+        'columns_count': 0,
+        'topics_count': 0,
+        'details_count': 0,
+        'images_count': 0,
+        'files_count': 0,
+        'files_downloaded': 0,
+        'videos_count': 0,
+        'videos_downloaded': 0,
+        'comments_count': 0
+    }
+
+
+def _group_id_param(group_id: Optional[str]) -> Any:
+    value = str(group_id or "").strip()
+    return int(value) if value.isdigit() else value
+
+
+def _nullable_group_id_param(group_id: Optional[str]) -> Any:
+    value = str(group_id or "").strip()
+    if not value:
+        return None
+    return int(value) if value.isdigit() else value
+
+
+def _scope_group_id_param(group_id: Optional[Any]) -> Any:
+    return _nullable_group_id_param(group_id)

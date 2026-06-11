@@ -2846,6 +2846,43 @@ Result:
 - PostgreSQL compatibility debt scan: no SQLite compatibility patterns found.
 - Frontend build is not planned because this slice only changes backend crawler/helper code.
 
+### 2026-06-11 - P3 columns database helper module split
+
+Changed:
+
+- Added `backend/storage/zsxq_columns_database_helpers.py` for pure column storage row mappers,
+  stats defaults, and group-id scope helpers.
+- Re-exported the moved helpers from `backend/storage/zsxq_columns_database.py` via imports so
+  existing internal/test import paths continue to work.
+- Left all SQL, connection setup, commits, runtime DDL no-op behavior, and public methods in
+  `backend/storage/zsxq_columns_database.py`.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Existing helper tests still import from `backend.storage.zsxq_columns_database`, proving the old
+  module-level helper names remain available.
+- Row payload shapes, boolean normalization, group-id coercion, scoped query params, and independent
+  stats dict behavior are covered by existing tests.
+- No schema, compatibility, fallback, or runtime storage behavior was changed.
+
+Verification:
+
+```powershell
+uv run python -m py_compile backend\storage\zsxq_columns_database.py backend\storage\zsxq_columns_database_helpers.py
+uv run python -m unittest tests.test_zsxq_columns_database_helpers -v
+uv run python -m unittest discover -s tests
+uv run python scripts\scan_postgres_compat_debt.py
+```
+
+Result:
+
+- `py_compile` passed.
+- `tests.test_zsxq_columns_database_helpers`: 16 tests passed.
+- Full backend unittest discovery: 563 tests passed, 15 skipped.
+- PostgreSQL compatibility debt scan: no SQLite compatibility patterns found.
+- Frontend build is not planned because this slice only changes backend storage/helper code.
+
 ## Stop Conditions
 
 Pause before editing if:
