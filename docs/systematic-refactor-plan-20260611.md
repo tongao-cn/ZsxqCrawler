@@ -407,6 +407,42 @@ Result:
 - Frontend build passed.
 - PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
 
+### 2026-06-11 - P2 topic detail engagement payload extraction
+
+Changed:
+
+- Added characterization coverage for `ZSXQDatabase.get_topic_detail` latest-like and like-emoji
+  assembly, including response shape and scoped engagement-query parameters.
+- Extracted `build_topic_detail_latest_likes` and `build_topic_detail_likes_detail` into
+  `backend/storage/zsxq_database_helpers.py`.
+- Reused the helpers from `get_topic_detail` and removed the now-unused direct row-payload imports
+  from `backend/storage/zsxq_database.py`.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Latest-like ordering, owner payload shape, `likes_detail.emojis` shape, empty-list behavior,
+  scoped query parameters, and topic-detail response fields are preserved.
+- No schema, public API, storage write path, fallback behavior, legacy compatibility path, or config
+  semantics changed.
+
+Verification:
+
+```powershell
+uv run python -m py_compile backend\storage\zsxq_database.py backend\storage\zsxq_database_helpers.py
+uv run python -m unittest tests.test_zsxq_database_helpers -v
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+uv run python scripts\scan_postgres_compat_debt.py
+```
+
+Result:
+
+- Focused ZSXQ database helper tests passed: 18 tests.
+- Full backend tests passed: 520 tests, 15 skipped.
+- Frontend build passed.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+
 ## Stop Conditions
 
 Pause before editing if:

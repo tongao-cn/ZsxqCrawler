@@ -5,6 +5,8 @@ from typing import Dict, Any, Optional, List
 
 from backend.storage.db_compat import connect
 from backend.storage.zsxq_database_helpers import (
+    build_topic_detail_latest_likes,
+    build_topic_detail_likes_detail,
     build_topic_detail_comments,
     build_topic_detail_talk,
     build_pagination,
@@ -15,10 +17,8 @@ from backend.storage.zsxq_database_helpers import (
     replace_file_topic_relation,
     topic_detail_answer_payload,
     topic_detail_base_payload,
-    topic_detail_emoji_payload,
     topic_detail_file_payload,
     topic_detail_image_payload,
-    topic_detail_like_payload,
     topic_detail_question_payload,
     topic_detail_scope,
     topic_file_payload_from_row,
@@ -1206,10 +1206,7 @@ class ZSXQDatabase:
                 LIMIT 5
             ''', (topic_id, scoped_group_id, scoped_group_id))
 
-            latest_likes = []
-            for like_row in self.cursor.fetchall():
-                latest_likes.append(topic_detail_like_payload(like_row))
-            topic_detail["latest_likes"] = latest_likes
+            topic_detail["latest_likes"] = build_topic_detail_latest_likes(self.cursor.fetchall())
 
             # 4. 获取评论 - 不再限制为10条，返回所有评论
             self.cursor.execute('''
@@ -1262,13 +1259,7 @@ class ZSXQDatabase:
                   AND (? IS NULL OR topic_id IN (SELECT topic_id FROM topics WHERE group_id = ?))
             ''', (topic_id, scoped_group_id, scoped_group_id))
 
-            emojis = []
-            for emoji_row in self.cursor.fetchall():
-                emojis.append(topic_detail_emoji_payload(emoji_row))
-
-            topic_detail["likes_detail"] = {
-                "emojis": emojis
-            }
+            topic_detail["likes_detail"] = build_topic_detail_likes_detail(self.cursor.fetchall())
 
             # 6. 获取问答数据（如果是问答类型话题）
             if topic_detail["type"] == "q&a":

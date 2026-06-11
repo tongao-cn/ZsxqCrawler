@@ -251,6 +251,57 @@ class FakeTopicDetailTalkCursor(FakeCursor):
         return []
 
 
+class FakeTopicDetailEngagementCursor(FakeCursor):
+    def __init__(self):
+        super().__init__()
+        self.last_query = ""
+
+    def execute(self, query, params=()):
+        self.last_query = " ".join(query.split())
+        return super().execute(query, params)
+
+    def fetchone(self):
+        if "FROM topics t LEFT JOIN groups" in self.last_query:
+            return (
+                202,
+                "talk",
+                "title",
+                "2026-05-07T10:00:00.000+0800",
+                0,
+                0,
+                2,
+                1,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                "",
+                0,
+                0,
+                303,
+                "group",
+                "paid",
+                "bg",
+            )
+        if "FROM talks" in self.last_query:
+            return None
+        return None
+
+    def fetchall(self):
+        if "FROM likes l" in self.last_query:
+            return [
+                ("2026-05-07T12:00:00.000+0800", 901, "Alice", "a.png"),
+                ("2026-05-07T11:00:00.000+0800", 902, "Bob", "b.png"),
+            ]
+        if "FROM like_emojis" in self.last_query:
+            return [("[like]", 3), ("[ok]", 2)]
+        if "FROM comments c" in self.last_query:
+            return []
+        return []
+
+
 class ZSXQDatabaseHelperTests(unittest.TestCase):
     def test_build_pagination_calculates_pages(self):
         self.assertEqual(
@@ -643,6 +694,40 @@ class ZSXQDatabaseHelperTests(unittest.TestCase):
             )
         ]
         self.assertEqual([(202, 303, 303), (202, 303, 303), (202, 303, 303)], scoped_attachment_calls)
+
+    def test_get_topic_detail_builds_latest_likes_and_like_emojis(self):
+        from backend.storage.zsxq_database import ZSXQDatabase
+
+        cursor = FakeTopicDetailEngagementCursor()
+        db = object.__new__(ZSXQDatabase)
+        db.cursor = cursor
+        db.group_id = "303"
+
+        detail = ZSXQDatabase.get_topic_detail(db, 202)
+
+        self.assertEqual(
+            [
+                {
+                    "create_time": "2026-05-07T12:00:00.000+0800",
+                    "owner": {"user_id": 901, "name": "Alice", "avatar_url": "a.png"},
+                },
+                {
+                    "create_time": "2026-05-07T11:00:00.000+0800",
+                    "owner": {"user_id": 902, "name": "Bob", "avatar_url": "b.png"},
+                },
+            ],
+            detail["latest_likes"],
+        )
+        self.assertEqual(
+            {"emojis": [{"emoji_key": "[like]", "likes_count": 3}, {"emoji_key": "[ok]", "likes_count": 2}]},
+            detail["likes_detail"],
+        )
+        engagement_calls = [
+            params
+            for sql, params in cursor.calls
+            if "FROM likes l" in sql or "FROM like_emojis" in sql
+        ]
+        self.assertEqual([(202, 303, 303), (202, 303, 303)], engagement_calls)
 
     def test_runtime_init_database_does_not_execute_ddl(self):
         from backend.storage.zsxq_database import ZSXQDatabase

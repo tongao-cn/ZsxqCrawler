@@ -263,6 +263,16 @@ def topic_detail_emoji_payload(row) -> Dict[str, Any]:
     }
 
 
+def build_topic_detail_latest_likes(like_rows) -> list[Dict[str, Any]]:
+    return [topic_detail_like_payload(like_row) for like_row in like_rows]
+
+
+def build_topic_detail_likes_detail(emoji_rows) -> Dict[str, list[Dict[str, Any]]]:
+    return {
+        "emojis": [topic_detail_emoji_payload(emoji_row) for emoji_row in emoji_rows],
+    }
+
+
 def topic_detail_comment_payload(row, images: list[Dict[str, Any]]) -> Dict[str, Any]:
     comment_data = {
         "comment_id": row[0],
