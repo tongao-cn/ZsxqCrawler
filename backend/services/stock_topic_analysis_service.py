@@ -35,6 +35,7 @@ from backend.services.stock_topic_analysis_helpers import (
     _reconcile_processed_topic_ids,
     _safe_float,
     _serialize_json_list,
+    _stock_analysis_mode,
     _topic_ids_from_result,
 )
 from backend.services.stock_topic_analysis_payloads import (
@@ -851,7 +852,10 @@ def analyze_stock_topics(
             processed_topic_ids=processed_topic_ids,
             analyzed_topic_ids=saved_topic_ids,
             new_topic_count=0,
-            analysis_mode="up_to_date" if has_existing_summary else "initialize",
+            analysis_mode=_stock_analysis_mode(
+                has_existing_summary=has_existing_summary,
+                has_topics_to_analyze=False,
+            ),
         )
         conn = connect()
         try:
@@ -867,7 +871,10 @@ def analyze_stock_topics(
             conn.close()
         return result
 
-    analysis_mode = "incremental" if has_existing_summary else "initialize"
+    analysis_mode = _stock_analysis_mode(
+        has_existing_summary=has_existing_summary,
+        has_topics_to_analyze=True,
+    )
     topic_batches = _chunks(topics, MAX_ANALYSIS_TOPICS_PER_CALL)
     _log(
         log_callback,

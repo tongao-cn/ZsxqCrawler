@@ -153,6 +153,22 @@ class StockTopicAnalysisServiceHelperTests(unittest.TestCase):
         self.assertEqual(["101"], result["analyzed_topic_ids"])
         self.assertEqual("partial", result["summary_markdown"])
 
+    def test_stock_analysis_mode_distinguishes_empty_and_incremental_paths(self):
+        from backend.services.stock_topic_analysis_helpers import _stock_analysis_mode
+
+        self.assertEqual(
+            "initialize",
+            _stock_analysis_mode(has_existing_summary=False, has_topics_to_analyze=False),
+        )
+        self.assertEqual(
+            "up_to_date",
+            _stock_analysis_mode(has_existing_summary=True, has_topics_to_analyze=False),
+        )
+        self.assertEqual(
+            "incremental",
+            _stock_analysis_mode(has_existing_summary=True, has_topics_to_analyze=True),
+        )
+
     def test_chunks_splits_without_reordering(self):
         from backend.services.stock_topic_analysis_helpers import _chunks
 

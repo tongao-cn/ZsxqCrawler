@@ -159,5 +159,11 @@ def _build_stock_analysis_result(
     return result
 
 
+def _stock_analysis_mode(*, has_existing_summary: bool, has_topics_to_analyze: bool) -> str:
+    if not has_topics_to_analyze:
+        return "up_to_date" if has_existing_summary else "initialize"
+    return "incremental" if has_existing_summary else "initialize"
+
+
 def _chunks(values: List[Dict[str, Any]], size: int) -> List[List[Dict[str, Any]]]:
     return [values[index : index + size] for index in range(0, len(values), size)]
