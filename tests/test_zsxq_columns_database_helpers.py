@@ -18,6 +18,7 @@ from backend.storage.zsxq_columns_database import (
     _empty_stats,
     _file_download_status_update,
     _group_clear_delete_statements,
+    _image_local_path_update,
     _nest_topic_comments,
     _pending_file_row_to_dict,
     _pending_files_query,
@@ -51,6 +52,7 @@ from backend.storage.zsxq_columns_database import (
     _uncached_images_query,
     _user_insert_params,
     _user_insert_statement,
+    _video_cover_path_update,
     _video_download_status_update,
 )
 
@@ -1084,6 +1086,17 @@ class ZSXQColumnsDatabaseHelperTests(unittest.TestCase):
         self.assertNotIn("local_path", self._sql(file_min_sql))
         self.assertEqual(("pending", 401, None, None), file_min_params)
 
+    def test_local_path_update_helpers_preserve_sql_and_params(self):
+        video_sql, video_params = _video_cover_path_update(501, "cover.jpg")
+        self.assertIn("UPDATE videos SET cover_local_path = ?", self._sql(video_sql))
+        self.assertIn("WHERE video_id = ?", self._sql(video_sql))
+        self.assertEqual(("cover.jpg", 501), video_params)
+
+        image_sql, image_params = _image_local_path_update(301, "image.jpg")
+        self.assertIn("UPDATE images SET local_path = ?", self._sql(image_sql))
+        self.assertIn("WHERE image_id = ?", self._sql(image_sql))
+        self.assertEqual(("image.jpg", 301), image_params)
+
     def test_download_status_methods_preserve_execute_params_and_commit(self):
         from backend.storage.zsxq_columns_database import ZSXQColumnsDatabase
 
@@ -1125,6 +1138,37 @@ class ZSXQColumnsDatabaseHelperTests(unittest.TestCase):
         self.assertIn("UPDATE files SET download_status = ? WHERE file_id = ?", db.cursor.calls[-1][0])
         self.assertEqual(("pending", 402, 303, 303), db.cursor.calls[-1][1])
         self.assertEqual(4, db.conn.commits)
+
+    def test_local_path_update_methods_preserve_execute_params_and_commit(self):
+        from backend.storage.zsxq_columns_database import ZSXQColumnsDatabase
+
+        class FakeCursor:
+            def __init__(self):
+                self.calls = []
+
+            def execute(self, sql, params=()):
+                self.calls.append((" ".join(sql.split()), params))
+
+        class FakeConnection:
+            def __init__(self):
+                self.commits = 0
+
+            def commit(self):
+                self.commits += 1
+
+        db = object.__new__(ZSXQColumnsDatabase)
+        db.cursor = FakeCursor()
+        db.conn = FakeConnection()
+
+        ZSXQColumnsDatabase.update_video_cover_path(db, 501, "cover.jpg")
+        self.assertIn("UPDATE videos SET cover_local_path = ? WHERE video_id = ?", db.cursor.calls[-1][0])
+        self.assertEqual(("cover.jpg", 501), db.cursor.calls[-1][1])
+        self.assertEqual(1, db.conn.commits)
+
+        ZSXQColumnsDatabase.update_image_local_path(db, 301, "image.jpg")
+        self.assertIn("UPDATE images SET local_path = ? WHERE image_id = ?", db.cursor.calls[-1][0])
+        self.assertEqual(("image.jpg", 301), db.cursor.calls[-1][1])
+        self.assertEqual(2, db.conn.commits)
 
     def test_insert_comment_writes_group_id_from_runtime_scope(self):
         from backend.storage.zsxq_columns_database import ZSXQColumnsDatabase

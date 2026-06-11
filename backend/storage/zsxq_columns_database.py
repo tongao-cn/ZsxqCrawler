@@ -26,6 +26,7 @@ from backend.storage.zsxq_columns_database_helpers import (
     _file_download_status_update,
     _group_clear_delete_statements,
     _group_id_param,
+    _image_local_path_update,
     _nullable_group_id_param,
     _pending_file_row_to_dict,
     _pending_files_query,
@@ -61,6 +62,7 @@ from backend.storage.zsxq_columns_database_helpers import (
     _uncached_images_query,
     _user_insert_params,
     _user_insert_statement,
+    _video_cover_path_update,
     _video_download_status_update,
 )
 
@@ -331,10 +333,8 @@ class ZSXQColumnsDatabase:
     
     def update_video_cover_path(self, video_id: int, local_path: str):
         """更新视频封面本地缓存路径"""
-        self.cursor.execute('''
-            UPDATE videos SET cover_local_path = ?
-            WHERE video_id = ?
-        ''', (local_path, video_id))
+        sql, params = _video_cover_path_update(video_id, local_path)
+        self.cursor.execute(sql, params)
         self.conn.commit()
     
     def update_video_download_status(self, video_id: int, status: str, video_url: str = None, local_path: str = None):
@@ -399,10 +399,8 @@ class ZSXQColumnsDatabase:
     
     def update_image_local_path(self, image_id: int, local_path: str):
         """更新图片本地缓存路径"""
-        self.cursor.execute('''
-            UPDATE images SET local_path = ?
-            WHERE image_id = ?
-        ''', (local_path, image_id))
+        sql, params = _image_local_path_update(image_id, local_path)
+        self.cursor.execute(sql, params)
         self.conn.commit()
     
     def get_uncached_images(self, group_id: int = None) -> List[Dict[str, Any]]:

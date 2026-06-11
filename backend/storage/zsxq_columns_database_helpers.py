@@ -821,6 +821,16 @@ def _topic_comments_query(topic_id: int, scope_group_id: Any) -> tuple[str, tupl
     )
 
 
+def _video_cover_path_update(video_id: int, local_path: str) -> tuple[str, tuple[Any, ...]]:
+    return (
+        '''
+            UPDATE videos SET cover_local_path = ?
+            WHERE video_id = ?
+        ''',
+        (local_path, video_id),
+    )
+
+
 def _video_download_status_update(
     video_id: int,
     status: str,
@@ -872,6 +882,16 @@ def _file_download_status_update(
             WHERE file_id = ? AND (? IS NULL OR group_id = ?)
         ''',
         (status, file_id, group_id, group_id),
+    )
+
+
+def _image_local_path_update(image_id: int, local_path: str) -> tuple[str, tuple[Any, ...]]:
+    return (
+        '''
+            UPDATE images SET local_path = ?
+            WHERE image_id = ?
+        ''',
+        (local_path, image_id),
     )
 
 
