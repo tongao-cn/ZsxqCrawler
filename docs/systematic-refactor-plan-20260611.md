@@ -2883,6 +2883,41 @@ Result:
 - PostgreSQL compatibility debt scan: no SQLite compatibility patterns found.
 - Frontend build is not planned because this slice only changes backend storage/helper code.
 
+### 2026-06-11 - P3 pending queue query helper extraction
+
+Changed:
+
+- Added `_pending_videos_query`, `_pending_files_query`, and `_uncached_images_query` to
+  `backend/storage/zsxq_columns_database_helpers.py`.
+- Added focused coverage for scoped and unscoped query branches.
+- Replaced the inline SQL branches in `get_pending_videos`, `get_pending_files`, and
+  `get_uncached_images` with helper calls.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- The truthy `group_id` behavior is preserved: only truthy group ids add `AND td.group_id = ?`.
+- Unscoped branches still execute without a params tuple.
+- Returned row mapping and queue payload shapes are unchanged.
+- No schema, compatibility, fallback, status, or commit behavior was changed.
+
+Verification:
+
+```powershell
+uv run python -m py_compile backend\storage\zsxq_columns_database.py backend\storage\zsxq_columns_database_helpers.py
+uv run python -m unittest tests.test_zsxq_columns_database_helpers -v
+uv run python -m unittest discover -s tests
+uv run python scripts\scan_postgres_compat_debt.py
+```
+
+Result:
+
+- `py_compile` passed.
+- `tests.test_zsxq_columns_database_helpers`: 18 tests passed.
+- Full backend unittest discovery: 565 tests passed, 15 skipped.
+- PostgreSQL compatibility debt scan: no SQLite compatibility patterns found.
+- Frontend build is not planned because this slice only changes backend storage/helper code.
+
 ## Stop Conditions
 
 Pause before editing if:

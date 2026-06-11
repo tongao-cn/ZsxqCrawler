@@ -17,7 +17,9 @@ from backend.storage.zsxq_columns_database_helpers import (
     _group_id_param,
     _nullable_group_id_param,
     _pending_file_row_to_dict,
+    _pending_files_query,
     _pending_video_row_to_dict,
+    _pending_videos_query,
     _scope_group_id_param,
     _topic_comment_row_to_dict,
     _topic_detail_row_to_dict,
@@ -25,6 +27,7 @@ from backend.storage.zsxq_columns_database_helpers import (
     _topic_image_row_to_dict,
     _topic_video_row_to_dict,
     _uncached_image_row_to_dict,
+    _uncached_images_query,
 )
 
 
@@ -538,20 +541,11 @@ class ZSXQColumnsDatabase:
     
     def get_pending_videos(self, group_id: int = None) -> List[Dict[str, Any]]:
         """获取待下载的视频列表"""
-        if group_id:
-            self.cursor.execute('''
-                SELECT v.video_id, v.topic_id, v.size, v.duration, v.cover_url, td.group_id
-                FROM videos v
-                JOIN topic_details td ON v.topic_id = td.topic_id
-                WHERE v.download_status = 'pending' AND td.group_id = ?
-            ''', (group_id,))
+        sql, params = _pending_videos_query(group_id)
+        if params:
+            self.cursor.execute(sql, params)
         else:
-            self.cursor.execute('''
-                SELECT v.video_id, v.topic_id, v.size, v.duration, v.cover_url, td.group_id
-                FROM videos v
-                JOIN topic_details td ON v.topic_id = td.topic_id
-                WHERE v.download_status = 'pending'
-            ''')
+            self.cursor.execute(sql)
         
         return [_pending_video_row_to_dict(row) for row in self.cursor.fetchall()]
     
@@ -632,20 +626,11 @@ class ZSXQColumnsDatabase:
     
     def get_pending_files(self, group_id: int = None) -> List[Dict[str, Any]]:
         """获取待下载的文件列表"""
-        if group_id:
-            self.cursor.execute('''
-                SELECT f.file_id, f.topic_id, f.name, f.size, f.hash, td.group_id
-                FROM files f
-                JOIN topic_details td ON f.topic_id = td.topic_id
-                WHERE f.download_status = 'pending' AND td.group_id = ?
-            ''', (group_id,))
+        sql, params = _pending_files_query(group_id)
+        if params:
+            self.cursor.execute(sql, params)
         else:
-            self.cursor.execute('''
-                SELECT f.file_id, f.topic_id, f.name, f.size, f.hash, td.group_id
-                FROM files f
-                JOIN topic_details td ON f.topic_id = td.topic_id
-                WHERE f.download_status = 'pending'
-            ''')
+            self.cursor.execute(sql)
         
         return [_pending_file_row_to_dict(row) for row in self.cursor.fetchall()]
     
@@ -661,20 +646,11 @@ class ZSXQColumnsDatabase:
     
     def get_uncached_images(self, group_id: int = None) -> List[Dict[str, Any]]:
         """获取未缓存的图片列表"""
-        if group_id:
-            self.cursor.execute('''
-                SELECT i.image_id, i.topic_id, i.original_url, td.group_id
-                FROM images i
-                JOIN topic_details td ON i.topic_id = td.topic_id
-                WHERE i.local_path IS NULL AND i.original_url IS NOT NULL AND td.group_id = ?
-            ''', (group_id,))
+        sql, params = _uncached_images_query(group_id)
+        if params:
+            self.cursor.execute(sql, params)
         else:
-            self.cursor.execute('''
-                SELECT i.image_id, i.topic_id, i.original_url, td.group_id
-                FROM images i
-                JOIN topic_details td ON i.topic_id = td.topic_id
-                WHERE i.local_path IS NULL AND i.original_url IS NOT NULL
-            ''')
+            self.cursor.execute(sql)
         
         return [_uncached_image_row_to_dict(row) for row in self.cursor.fetchall()]
     

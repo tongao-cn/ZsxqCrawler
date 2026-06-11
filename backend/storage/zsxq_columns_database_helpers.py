@@ -239,3 +239,69 @@ def _nullable_group_id_param(group_id: Optional[str]) -> Any:
 
 def _scope_group_id_param(group_id: Optional[Any]) -> Any:
     return _nullable_group_id_param(group_id)
+
+
+def _pending_videos_query(group_id: Optional[int]) -> tuple[str, Optional[tuple[Any, ...]]]:
+    if group_id:
+        return (
+            '''
+                SELECT v.video_id, v.topic_id, v.size, v.duration, v.cover_url, td.group_id
+                FROM videos v
+                JOIN topic_details td ON v.topic_id = td.topic_id
+                WHERE v.download_status = 'pending' AND td.group_id = ?
+            ''',
+            (group_id,),
+        )
+    return (
+        '''
+            SELECT v.video_id, v.topic_id, v.size, v.duration, v.cover_url, td.group_id
+            FROM videos v
+            JOIN topic_details td ON v.topic_id = td.topic_id
+            WHERE v.download_status = 'pending'
+        ''',
+        None,
+    )
+
+
+def _pending_files_query(group_id: Optional[int]) -> tuple[str, Optional[tuple[Any, ...]]]:
+    if group_id:
+        return (
+            '''
+                SELECT f.file_id, f.topic_id, f.name, f.size, f.hash, td.group_id
+                FROM files f
+                JOIN topic_details td ON f.topic_id = td.topic_id
+                WHERE f.download_status = 'pending' AND td.group_id = ?
+            ''',
+            (group_id,),
+        )
+    return (
+        '''
+            SELECT f.file_id, f.topic_id, f.name, f.size, f.hash, td.group_id
+            FROM files f
+            JOIN topic_details td ON f.topic_id = td.topic_id
+            WHERE f.download_status = 'pending'
+        ''',
+        None,
+    )
+
+
+def _uncached_images_query(group_id: Optional[int]) -> tuple[str, Optional[tuple[Any, ...]]]:
+    if group_id:
+        return (
+            '''
+                SELECT i.image_id, i.topic_id, i.original_url, td.group_id
+                FROM images i
+                JOIN topic_details td ON i.topic_id = td.topic_id
+                WHERE i.local_path IS NULL AND i.original_url IS NOT NULL AND td.group_id = ?
+            ''',
+            (group_id,),
+        )
+    return (
+        '''
+            SELECT i.image_id, i.topic_id, i.original_url, td.group_id
+            FROM images i
+            JOIN topic_details td ON i.topic_id = td.topic_id
+            WHERE i.local_path IS NULL AND i.original_url IS NOT NULL
+        ''',
+        None,
+    )

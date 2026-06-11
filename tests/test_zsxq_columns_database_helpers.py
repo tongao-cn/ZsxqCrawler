@@ -6,17 +6,23 @@ from backend.storage.zsxq_columns_database import (
     _comment_image_row_to_dict,
     _empty_stats,
     _pending_file_row_to_dict,
+    _pending_files_query,
     _pending_video_row_to_dict,
+    _pending_videos_query,
     _topic_comment_row_to_dict,
     _topic_detail_row_to_dict,
     _topic_file_row_to_dict,
     _topic_image_row_to_dict,
     _topic_video_row_to_dict,
     _uncached_image_row_to_dict,
+    _uncached_images_query,
 )
 
 
 class ZSXQColumnsDatabaseHelperTests(unittest.TestCase):
+    def _sql(self, sql):
+        return " ".join(sql.split())
+
     def test_column_row_to_dict_preserves_shape(self):
         row = (
             101,
@@ -421,6 +427,36 @@ class ZSXQColumnsDatabaseHelperTests(unittest.TestCase):
                 "comments_count",
             },
         )
+
+    def test_pending_queue_queries_preserve_group_filter_branches(self):
+        video_sql, video_params = _pending_videos_query(303)
+        file_sql, file_params = _pending_files_query(303)
+        image_sql, image_params = _uncached_images_query(303)
+
+        self.assertIn("WHERE v.download_status = 'pending' AND td.group_id = ?", self._sql(video_sql))
+        self.assertEqual((303,), video_params)
+        self.assertIn("WHERE f.download_status = 'pending' AND td.group_id = ?", self._sql(file_sql))
+        self.assertEqual((303,), file_params)
+        self.assertIn(
+            "WHERE i.local_path IS NULL AND i.original_url IS NOT NULL AND td.group_id = ?",
+            self._sql(image_sql),
+        )
+        self.assertEqual((303,), image_params)
+
+    def test_pending_queue_queries_preserve_unscoped_branches(self):
+        video_sql, video_params = _pending_videos_query(None)
+        file_sql, file_params = _pending_files_query(None)
+        image_sql, image_params = _uncached_images_query(None)
+
+        self.assertIn("WHERE v.download_status = 'pending'", self._sql(video_sql))
+        self.assertNotIn("AND td.group_id = ?", self._sql(video_sql))
+        self.assertIsNone(video_params)
+        self.assertIn("WHERE f.download_status = 'pending'", self._sql(file_sql))
+        self.assertNotIn("AND td.group_id = ?", self._sql(file_sql))
+        self.assertIsNone(file_params)
+        self.assertIn("WHERE i.local_path IS NULL AND i.original_url IS NOT NULL", self._sql(image_sql))
+        self.assertNotIn("AND td.group_id = ?", self._sql(image_sql))
+        self.assertIsNone(image_params)
 
     def test_insert_comment_writes_group_id_from_runtime_scope(self):
         from backend.storage.zsxq_columns_database import ZSXQColumnsDatabase
