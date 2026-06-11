@@ -93,6 +93,29 @@ def _file_record_params(
     )
 
 
+def _file_download_status_params(
+    group_id: Optional[str],
+    file_id: int,
+    status: str,
+    local_path: Optional[str] = None,
+    error_code: Optional[str] = None,
+    error_message: Optional[str] = None,
+) -> tuple[Any, ...]:
+    group_param = _group_id_param(group_id)
+    return (
+        status,
+        local_path,
+        status,
+        status,
+        error_code,
+        status,
+        error_message,
+        file_id,
+        group_param,
+        group_param,
+    )
+
+
 def _count_tables(cursor: Any, tables: Any = _STATS_TABLES, group_id: Optional[str] = None) -> Dict[str, Any]:
     stats = {}
     scoped_topic_ids_sql = "SELECT topic_id FROM topics WHERE group_id = ?"

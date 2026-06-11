@@ -5,6 +5,7 @@ from backend.storage.zsxq_file_database import (
     _close_connection,
     _count_tables,
     _file_attachment_params,
+    _file_download_status_params,
     _file_record_params,
     _new_import_stats,
     _row_to_file_ai_analysis,
@@ -182,6 +183,16 @@ class ZSXQFileDatabaseHelperTests(unittest.TestCase):
             params,
         )
         self.assertEqual(None, _file_record_params({"file_id": 101}, group_id=None)[1])
+
+    def test_file_download_status_params_keep_update_column_order(self):
+        self.assertEqual(
+            ("completed", r"C:\tmp\file.pdf", "completed", "completed", None, "completed", None, 101, 303, 303),
+            _file_download_status_params("303", 101, "completed", r"C:\tmp\file.pdf"),
+        )
+        self.assertEqual(
+            ("failed", None, "failed", "failed", "size_mismatch", "failed", "bad size", 101, 303, 303),
+            _file_download_status_params("303", 101, "failed", error_code="size_mismatch", error_message="bad size"),
+        )
 
     def test_count_tables_builds_stats_from_cursor_counts(self):
         cursor = FakeCursor({"files": 3, "topics": 2})

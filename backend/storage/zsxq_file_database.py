@@ -6,6 +6,7 @@ from backend.storage.zsxq_file_database_helpers import (
     _close_connection,
     _count_tables,
     _file_attachment_params,
+    _file_download_status_params,
     _file_record_params,
     _group_id_param,
     _new_import_stats,
@@ -182,18 +183,7 @@ class ZSXQFileDatabase:
             last_download_attempt_at = CURRENT_TIMESTAMP::text
         WHERE file_id = ?
           AND (? IS NULL OR group_id = ?)
-        ''', (
-            status,
-            local_path,
-            status,
-            status,
-            error_code,
-            status,
-            error_message,
-            file_id,
-            _group_id_param(self.group_id),
-            _group_id_param(self.group_id),
-        ))
+        ''', _file_download_status_params(self.group_id, file_id, status, local_path, error_code, error_message))
         self.conn.commit()
     
     def insert_talk(self, topic_id: int, talk_data: Dict[str, Any]):
