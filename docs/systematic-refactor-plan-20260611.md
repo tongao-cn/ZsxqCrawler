@@ -336,6 +336,41 @@ Result:
 - Frontend build passed.
 - PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
 
+### 2026-06-11 - P2 topic detail talk payload extraction
+
+Changed:
+
+- Added characterization coverage for `ZSXQDatabase.get_topic_detail` talk attachment assembly,
+  including topic images, topic files, article payload, and scoped attachment-query parameters.
+- Extracted `build_topic_detail_talk` into `backend/storage/zsxq_database_helpers.py`.
+- Reused the helper from `get_topic_detail` while preserving the existing talk-row gate and child
+  query order.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Talk owner payload, optional `images`, optional `files`, optional `article`, attachment ordering,
+  group scoping, and topic-detail response fields are preserved.
+- No schema, public API, storage write path, legacy compatibility path, fallback behavior, or config
+  semantics changed.
+
+Verification:
+
+```powershell
+uv run python -m py_compile backend\storage\zsxq_database.py backend\storage\zsxq_database_helpers.py
+uv run python -m unittest tests.test_zsxq_database_helpers -v
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+uv run python scripts\scan_postgres_compat_debt.py
+```
+
+Result:
+
+- Focused ZSXQ database helper tests passed: 16 tests.
+- Full backend tests passed: 518 tests, 15 skipped.
+- Frontend build passed.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+
 ## Stop Conditions
 
 Pause before editing if:

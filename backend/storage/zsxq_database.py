@@ -6,6 +6,7 @@ from typing import Dict, Any, Optional, List
 from backend.storage.db_compat import connect
 from backend.storage.zsxq_database_helpers import (
     build_topic_detail_comments,
+    build_topic_detail_talk,
     build_pagination,
     format_tag_row,
     format_tag_topic_row,
@@ -13,14 +14,12 @@ from backend.storage.zsxq_database_helpers import (
     nullable_group_id_param,
     replace_file_topic_relation,
     topic_detail_answer_payload,
-    topic_detail_article_payload,
     topic_detail_base_payload,
     topic_detail_emoji_payload,
     topic_detail_file_payload,
     topic_detail_image_payload,
     topic_detail_like_payload,
     topic_detail_question_payload,
-    topic_detail_talk_payload,
     topic_file_payload_from_row,
     upsert_core_file,
 )
@@ -1156,8 +1155,6 @@ class ZSXQDatabase:
 
             talk_row = self.cursor.fetchone()
             if talk_row:
-                talk_data = topic_detail_talk_payload(talk_row)
-
                 # 获取话题图片
                 self.cursor.execute('''
                     SELECT
@@ -1170,12 +1167,7 @@ class ZSXQDatabase:
                     ORDER BY image_id
                 ''', (topic_id, scoped_group_id, scoped_group_id))
 
-                images = []
-                for img_row in self.cursor.fetchall():
-                    images.append(topic_detail_image_payload(img_row))
-
-                if images:
-                    talk_data["images"] = images
+                images = [topic_detail_image_payload(img_row) for img_row in self.cursor.fetchall()]
 
                 # 获取话题文件
                 self.cursor.execute('''
@@ -1187,12 +1179,7 @@ class ZSXQDatabase:
                     ORDER BY file_id
                 ''', (topic_id, scoped_group_id, scoped_group_id))
 
-                files = []
-                for file_row in self.cursor.fetchall():
-                    files.append(topic_detail_file_payload(file_row))
-
-                if files:
-                    talk_data["files"] = files
+                files = [topic_detail_file_payload(file_row) for file_row in self.cursor.fetchall()]
 
                 # 读取文章信息（如有）
                 self.cursor.execute('''
@@ -1203,10 +1190,8 @@ class ZSXQDatabase:
                     LIMIT 1
                 ''', (topic_id, scoped_group_id, scoped_group_id))
                 article_row = self.cursor.fetchone()
-                if article_row:
-                    talk_data["article"] = topic_detail_article_payload(article_row)
 
-                topic_detail["talk"] = talk_data
+                topic_detail["talk"] = build_topic_detail_talk(talk_row, images, files, article_row)
 
             # 3. 获取最新点赞
             self.cursor.execute('''

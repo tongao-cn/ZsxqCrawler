@@ -175,6 +175,81 @@ class FakeTopicDetailCursor(FakeCursor):
         return []
 
 
+class FakeTopicDetailTalkCursor(FakeCursor):
+    def __init__(self):
+        super().__init__()
+        self.last_query = ""
+
+    def execute(self, query, params=()):
+        self.last_query = " ".join(query.split())
+        return super().execute(query, params)
+
+    def fetchone(self):
+        if "FROM topics t LEFT JOIN groups" in self.last_query:
+            return (
+                202,
+                "talk",
+                "title",
+                "2026-05-07T10:00:00.000+0800",
+                0,
+                0,
+                1,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                "",
+                0,
+                0,
+                303,
+                "group",
+                "paid",
+                "bg",
+            )
+        if "FROM talks" in self.last_query:
+            return ("body", 901, "Alice", "A", "a.png", "SH", "owner description")
+        if "FROM articles" in self.last_query:
+            return ("article title", 401, "article-url", "inline-url")
+        return None
+
+    def fetchall(self):
+        if "FROM images WHERE topic_id = ?" in self.last_query and "comment_id IS NULL" in self.last_query:
+            return [
+                (
+                    701,
+                    "image",
+                    "thumb.jpg",
+                    100,
+                    80,
+                    "large.jpg",
+                    1000,
+                    800,
+                    "origin.jpg",
+                    2000,
+                    1600,
+                    12345,
+                )
+            ]
+        if "FROM topic_files tf" in self.last_query:
+            return [
+                (
+                    501,
+                    "memo.pdf",
+                    "hash-1",
+                    123,
+                    0,
+                    7,
+                    "2026-05-07T09:00:00.000+0800",
+                )
+            ]
+        if "FROM likes" in self.last_query or "FROM comments c" in self.last_query or "FROM like_emojis" in self.last_query:
+            return []
+        return []
+
+
 class ZSXQDatabaseHelperTests(unittest.TestCase):
     def test_build_pagination_calculates_pages(self):
         self.assertEqual(
@@ -487,6 +562,72 @@ class ZSXQDatabaseHelperTests(unittest.TestCase):
         )
         image_calls = [params for sql, params in cursor.calls if "FROM images WHERE comment_id IN" in sql]
         self.assertEqual([[10, 11, 303, 303]], image_calls)
+
+    def test_get_topic_detail_builds_talk_with_images_files_and_article(self):
+        from backend.storage.zsxq_database import ZSXQDatabase
+
+        cursor = FakeTopicDetailTalkCursor()
+        db = object.__new__(ZSXQDatabase)
+        db.cursor = cursor
+        db.group_id = "303"
+
+        detail = ZSXQDatabase.get_topic_detail(db, 202)
+
+        self.assertEqual(
+            {
+                "text": "body",
+                "owner": {
+                    "user_id": 901,
+                    "name": "Alice",
+                    "alias": "A",
+                    "avatar_url": "a.png",
+                    "location": "SH",
+                    "description": "owner description",
+                },
+                "images": [
+                    {
+                        "image_id": 701,
+                        "type": "image",
+                        "thumbnail": {"url": "thumb.jpg", "width": 100, "height": 80},
+                        "large": {"url": "large.jpg", "width": 1000, "height": 800},
+                        "original": {
+                            "url": "origin.jpg",
+                            "width": 2000,
+                            "height": 1600,
+                            "size": 12345,
+                        },
+                    }
+                ],
+                "files": [
+                    {
+                        "file_id": 501,
+                        "name": "memo.pdf",
+                        "hash": "hash-1",
+                        "size": 123,
+                        "duration": 0,
+                        "download_count": 7,
+                        "create_time": "2026-05-07T09:00:00.000+0800",
+                    }
+                ],
+                "article": {
+                    "title": "article title",
+                    "article_id": 401,
+                    "article_url": "article-url",
+                    "inline_article_url": "inline-url",
+                },
+            },
+            detail["talk"],
+        )
+        scoped_attachment_calls = [
+            params
+            for sql, params in cursor.calls
+            if (
+                "FROM images WHERE topic_id = ?" in sql
+                or "FROM topic_files tf" in sql
+                or "FROM articles" in sql
+            )
+        ]
+        self.assertEqual([(202, 303, 303), (202, 303, 303), (202, 303, 303)], scoped_attachment_calls)
 
     def test_runtime_init_database_does_not_execute_ddl(self):
         from backend.storage.zsxq_database import ZSXQDatabase

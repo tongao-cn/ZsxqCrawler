@@ -219,6 +219,22 @@ def topic_detail_article_payload(row) -> Dict[str, Any]:
     }
 
 
+def build_topic_detail_talk(
+    talk_row,
+    images: list[Dict[str, Any]],
+    files: list[Dict[str, Any]],
+    article_row,
+) -> Dict[str, Any]:
+    talk_data = topic_detail_talk_payload(talk_row)
+    if images:
+        talk_data["images"] = images
+    if files:
+        talk_data["files"] = files
+    if article_row:
+        talk_data["article"] = topic_detail_article_payload(article_row)
+    return talk_data
+
+
 def topic_detail_like_payload(row) -> Dict[str, Any]:
     return {
         "create_time": row[0],
