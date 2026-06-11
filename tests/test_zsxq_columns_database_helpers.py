@@ -10,6 +10,7 @@ from backend.storage.zsxq_columns_database import (
     _crawl_log_update_parts,
     _empty_clear_data_stats,
     _empty_stats,
+    _file_download_status_update,
     _group_clear_delete_statements,
     _nest_topic_comments,
     _pending_file_row_to_dict,
@@ -32,6 +33,7 @@ from backend.storage.zsxq_columns_database import (
     _uncached_image_row_to_dict,
     _uncached_images_query,
     _user_insert_params,
+    _video_download_status_update,
 )
 
 
@@ -864,6 +866,78 @@ class ZSXQColumnsDatabaseHelperTests(unittest.TestCase):
         self.assertIn("WHERE i.local_path IS NULL AND i.original_url IS NOT NULL", self._sql(image_sql))
         self.assertNotIn("AND td.group_id = ?", self._sql(image_sql))
         self.assertIsNone(image_params)
+
+    def test_download_status_update_helpers_preserve_truthy_branches(self):
+        video_sql, video_params = _video_download_status_update(501, "completed", "https://v", "local.mp4")
+        self.assertIn(
+            "UPDATE videos SET download_status = ?, video_url = ?, local_path = ?, download_time = CURRENT_TIMESTAMP",
+            self._sql(video_sql),
+        )
+        self.assertEqual(("completed", "https://v", "local.mp4", 501), video_params)
+
+        video_url_sql, video_url_params = _video_download_status_update(501, "pending", "https://v", "")
+        self.assertIn("UPDATE videos SET download_status = ?, video_url = ?", self._sql(video_url_sql))
+        self.assertNotIn("local_path", self._sql(video_url_sql))
+        self.assertEqual(("pending", "https://v", 501), video_url_params)
+
+        video_min_sql, video_min_params = _video_download_status_update(501, "failed", "", "")
+        self.assertIn("UPDATE videos SET download_status = ?", self._sql(video_min_sql))
+        self.assertNotIn("video_url", self._sql(video_min_sql))
+        self.assertEqual(("failed", 501), video_min_params)
+
+        file_path_sql, file_path_params = _file_download_status_update(401, "completed", 303, "local.pdf")
+        self.assertIn(
+            "UPDATE files SET download_status = ?, local_path = ?, download_time = CURRENT_TIMESTAMP",
+            self._sql(file_path_sql),
+        )
+        self.assertEqual(("completed", "local.pdf", 401, 303, 303), file_path_params)
+
+        file_min_sql, file_min_params = _file_download_status_update(401, "pending", None, "")
+        self.assertIn("UPDATE files SET download_status = ?", self._sql(file_min_sql))
+        self.assertNotIn("local_path", self._sql(file_min_sql))
+        self.assertEqual(("pending", 401, None, None), file_min_params)
+
+    def test_download_status_methods_preserve_execute_params_and_commit(self):
+        from backend.storage.zsxq_columns_database import ZSXQColumnsDatabase
+
+        class FakeCursor:
+            def __init__(self):
+                self.calls = []
+
+            def execute(self, sql, params=()):
+                self.calls.append((" ".join(sql.split()), params))
+
+        class FakeConnection:
+            def __init__(self):
+                self.commits = 0
+
+            def commit(self):
+                self.commits += 1
+
+        db = object.__new__(ZSXQColumnsDatabase)
+        db.cursor = FakeCursor()
+        db.conn = FakeConnection()
+        db.group_id = "303"
+
+        ZSXQColumnsDatabase.update_video_download_status(db, 501, "completed", "https://v", "local.mp4")
+        self.assertIn("UPDATE videos SET download_status = ?, video_url = ?, local_path = ?", db.cursor.calls[-1][0])
+        self.assertEqual(("completed", "https://v", "local.mp4", 501), db.cursor.calls[-1][1])
+        self.assertEqual(1, db.conn.commits)
+
+        ZSXQColumnsDatabase.update_video_download_status(db, 502, "failed", "", "")
+        self.assertIn("UPDATE videos SET download_status = ? WHERE video_id = ?", db.cursor.calls[-1][0])
+        self.assertEqual(("failed", 502), db.cursor.calls[-1][1])
+        self.assertEqual(2, db.conn.commits)
+
+        ZSXQColumnsDatabase.update_file_download_status(db, 401, "completed", "local.pdf")
+        self.assertIn("UPDATE files SET download_status = ?, local_path = ?", db.cursor.calls[-1][0])
+        self.assertEqual(("completed", "local.pdf", 401, 303, 303), db.cursor.calls[-1][1])
+        self.assertEqual(3, db.conn.commits)
+
+        ZSXQColumnsDatabase.update_file_download_status(db, 402, "pending", "")
+        self.assertIn("UPDATE files SET download_status = ? WHERE file_id = ?", db.cursor.calls[-1][0])
+        self.assertEqual(("pending", 402, 303, 303), db.cursor.calls[-1][1])
+        self.assertEqual(4, db.conn.commits)
 
     def test_insert_comment_writes_group_id_from_runtime_scope(self):
         from backend.storage.zsxq_columns_database import ZSXQColumnsDatabase

@@ -537,6 +537,60 @@ def _scope_group_id_param(group_id: Optional[Any]) -> Any:
     return _nullable_group_id_param(group_id)
 
 
+def _video_download_status_update(
+    video_id: int,
+    status: str,
+    video_url: Optional[str],
+    local_path: Optional[str],
+) -> tuple[str, tuple[Any, ...]]:
+    if local_path:
+        return (
+            '''
+                UPDATE videos SET download_status = ?, video_url = ?, local_path = ?, download_time = CURRENT_TIMESTAMP
+                WHERE video_id = ?
+            ''',
+            (status, video_url, local_path, video_id),
+        )
+    if video_url:
+        return (
+            '''
+                UPDATE videos SET download_status = ?, video_url = ?
+                WHERE video_id = ?
+            ''',
+            (status, video_url, video_id),
+        )
+    return (
+        '''
+            UPDATE videos SET download_status = ?
+            WHERE video_id = ?
+        ''',
+        (status, video_id),
+    )
+
+
+def _file_download_status_update(
+    file_id: int,
+    status: str,
+    group_id: Any,
+    local_path: Optional[str],
+) -> tuple[str, tuple[Any, ...]]:
+    if local_path:
+        return (
+            '''
+                UPDATE files SET download_status = ?, local_path = ?, download_time = CURRENT_TIMESTAMP
+                WHERE file_id = ? AND (? IS NULL OR group_id = ?)
+            ''',
+            (status, local_path, file_id, group_id, group_id),
+        )
+    return (
+        '''
+            UPDATE files SET download_status = ?
+            WHERE file_id = ? AND (? IS NULL OR group_id = ?)
+        ''',
+        (status, file_id, group_id, group_id),
+    )
+
+
 def _pending_videos_query(group_id: Optional[int]) -> tuple[str, Optional[tuple[Any, ...]]]:
     if group_id:
         return (

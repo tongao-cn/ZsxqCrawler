@@ -3698,6 +3698,44 @@ Result:
 - PostgreSQL compatibility debt scan: no SQLite compatibility patterns found.
 - Frontend build is not planned because this slice only changes backend storage/helper code.
 
+### 2026-06-11 - P3 download status update helper extraction
+
+Changed:
+
+- Added `_video_download_status_update` and `_file_download_status_update` to
+  `backend/storage/zsxq_columns_database_helpers.py`.
+- Replaced inline SQL branches in `update_video_download_status` and `update_file_download_status`
+  with helper-generated SQL/params.
+- Added characterization coverage for truthy branch selection, empty-string behavior, SQL params,
+  group-id normalization at the method boundary, and commit counts.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- `local_path` still controls whether video/file updates set local path and download time.
+- `video_url` still controls the intermediate video update branch only when no truthy
+  `local_path` exists.
+- Empty strings still follow the old falsy branches.
+- Method signatures, commit behavior, SQL semantics, schema, compatibility layer, fallback path,
+  and public API behavior are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m py_compile backend\storage\zsxq_columns_database.py backend\storage\zsxq_columns_database_helpers.py tests\test_zsxq_columns_database_helpers.py
+uv run python -m unittest tests.test_zsxq_columns_database_helpers -v
+uv run python -m unittest discover -s tests
+uv run python scripts\scan_postgres_compat_debt.py
+```
+
+Result:
+
+- `py_compile` passed.
+- `tests.test_zsxq_columns_database_helpers`: 40 tests passed.
+- Full backend unittest discovery: 599 tests passed, 15 skipped.
+- PostgreSQL compatibility debt scan: no SQLite compatibility patterns found.
+- Frontend build is not planned because this slice only changes backend storage/helper code.
+
 ## Stop Conditions
 
 Pause before editing if:

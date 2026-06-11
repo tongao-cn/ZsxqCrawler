@@ -17,6 +17,7 @@ from backend.storage.zsxq_columns_database_helpers import (
     _empty_clear_data_stats,
     _crawl_log_update_parts,
     _empty_stats,
+    _file_download_status_update,
     _group_clear_delete_statements,
     _group_id_param,
     _nullable_group_id_param,
@@ -42,6 +43,7 @@ from backend.storage.zsxq_columns_database_helpers import (
     _uncached_image_row_to_dict,
     _uncached_images_query,
     _user_insert_params,
+    _video_download_status_update,
 )
 
 
@@ -454,21 +456,8 @@ class ZSXQColumnsDatabase:
     
     def update_video_download_status(self, video_id: int, status: str, video_url: str = None, local_path: str = None):
         """更新视频下载状态"""
-        if local_path:
-            self.cursor.execute('''
-                UPDATE videos SET download_status = ?, video_url = ?, local_path = ?, download_time = CURRENT_TIMESTAMP
-                WHERE video_id = ?
-            ''', (status, video_url, local_path, video_id))
-        elif video_url:
-            self.cursor.execute('''
-                UPDATE videos SET download_status = ?, video_url = ?
-                WHERE video_id = ?
-            ''', (status, video_url, video_id))
-        else:
-            self.cursor.execute('''
-                UPDATE videos SET download_status = ?
-                WHERE video_id = ?
-            ''', (status, video_id))
+        sql, params = _video_download_status_update(video_id, status, video_url, local_path)
+        self.cursor.execute(sql, params)
         self.conn.commit()
     
     def get_pending_videos(self, group_id: int = None) -> List[Dict[str, Any]]:
@@ -526,16 +515,8 @@ class ZSXQColumnsDatabase:
     def update_file_download_status(self, file_id: int, status: str, local_path: str = None):
         """更新文件下载状态"""
         group_id = _group_id_param(self.group_id)
-        if local_path:
-            self.cursor.execute('''
-                UPDATE files SET download_status = ?, local_path = ?, download_time = CURRENT_TIMESTAMP
-                WHERE file_id = ? AND (? IS NULL OR group_id = ?)
-            ''', (status, local_path, file_id, group_id, group_id))
-        else:
-            self.cursor.execute('''
-                UPDATE files SET download_status = ?
-                WHERE file_id = ? AND (? IS NULL OR group_id = ?)
-            ''', (status, file_id, group_id, group_id))
+        sql, params = _file_download_status_update(file_id, status, group_id, local_path)
+        self.cursor.execute(sql, params)
         self.conn.commit()
     
     def get_pending_files(self, group_id: int = None) -> List[Dict[str, Any]]:
