@@ -17,6 +17,14 @@ from backend.services.task_runtime_logs import (
     task_log_subscribers_snapshot,
     task_logs_copy,
 )
+from backend.services.task_runtime_memory import (
+    has_memory_task,
+    memory_task_state,
+    memory_tasks_snapshot,
+    set_pending_memory_task,
+    should_apply_task_update,
+    update_memory_task,
+)
 from backend.services.task_runtime_status import (
     INGESTION_LOCK_KEY,
     INGESTION_LOCK_TYPES,
@@ -84,27 +92,6 @@ def _forget_task_tracking_locked(task_id: str) -> None:
     sse_connections.pop(task_id, None)
 
 
-def _build_pending_task_state(
-    task_id: str,
-    task_type: str,
-    description: str,
-    now: datetime,
-    metadata: Optional[Dict[str, Any]] = None,
-) -> Dict[str, Any]:
-    task = {
-        "task_id": task_id,
-        "type": task_type,
-        "status": "pending",
-        "message": description,
-        "result": None,
-        "created_at": now,
-        "updated_at": now,
-    }
-    if metadata:
-        task.update(metadata)
-    return task
-
-
 def list_tasks(limit: Optional[int] = None) -> List[Dict[str, Any]]:
     return [
         normalized
@@ -114,11 +101,7 @@ def list_tasks(limit: Optional[int] = None) -> List[Dict[str, Any]]:
 
 
 def _memory_task_state_locked(task_id: str) -> Optional[Dict[str, Any]]:
-    return current_tasks.get(task_id)
-
-
-def _set_memory_task_locked(task_id: str, task: Dict[str, Any]) -> None:
-    current_tasks[task_id] = task
+    return memory_task_state(current_tasks, task_id)
 
 
 def _set_pending_memory_task_locked(
@@ -129,20 +112,19 @@ def _set_pending_memory_task_locked(
     metadata: Optional[Dict[str, Any]] = None,
     task: Optional[Dict[str, Any]] = None,
 ) -> None:
-    _set_memory_task_locked(
+    set_pending_memory_task(
+        current_tasks,
         task_id,
-        task or _build_pending_task_state(
-            task_id,
-            task_type,
-            description,
-            now,
-            metadata,
-        ),
+        task_type,
+        description,
+        now,
+        metadata,
+        task,
     )
 
 
 def _memory_tasks_snapshot_locked() -> List[tuple[str, Dict[str, Any]]]:
-    return list(current_tasks.items())
+    return memory_tasks_snapshot(current_tasks)
 
 
 def get_task_state(task_id: str) -> Optional[Dict[str, Any]]:
@@ -311,7 +293,7 @@ def broadcast_log(task_id: str, log_message: str) -> None:
 
 
 def _has_memory_task_locked(task_id: str) -> bool:
-    return task_id in current_tasks
+    return has_memory_task(current_tasks, task_id)
 
 
 def _update_memory_task_locked(
@@ -321,27 +303,7 @@ def _update_memory_task_locked(
     result: Optional[Dict[str, Any]],
     updated_at: datetime,
 ) -> None:
-    if task_id in current_tasks:
-        current_tasks[task_id].update(
-            {
-                "status": status,
-                "message": message,
-                "result": result,
-                "updated_at": updated_at,
-            }
-        )
-
-
-def _should_apply_task_update(
-    existing_task: Optional[Dict[str, Any]],
-    has_memory_task: bool,
-    status: str,
-) -> bool:
-    if not has_memory_task and existing_task is None:
-        return False
-    if existing_task and existing_task.get("status") == "cancelled" and status != "cancelled":
-        return False
-    return True
+    update_memory_task(current_tasks, task_id, status, message, result, updated_at)
 
 
 def update_task(
@@ -354,8 +316,8 @@ def update_task(
     store = get_task_store()
     existing_task = get_task_state(task_id)
     with _state_lock:
-        has_memory_task = _has_memory_task_locked(task_id)
-    if not _should_apply_task_update(existing_task, has_memory_task, status):
+        memory_task_exists = _has_memory_task_locked(task_id)
+    if not should_apply_task_update(existing_task, memory_task_exists, status):
         return
 
     now = datetime.now()

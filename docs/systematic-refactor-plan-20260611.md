@@ -2359,6 +2359,38 @@ Result:
 - Combined task runtime/store/routes tests: 57 tests passed, 14 PostgreSQL integration tests
   skipped.
 
+### 2026-06-11 - P5 task runtime memory helper module extraction
+
+Changed:
+
+- Added `backend/services/task_runtime_memory.py` for in-memory task state construction, lookup,
+  snapshot, update, and update-guard predicates.
+- Kept the `current_tasks` compatibility dict in `backend/services/task_runtime.py`; only the dict
+  operations moved.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Ordinary task creation, ingestion task creation, memory fallback reads, shutdown snapshots,
+  unknown-task update no-op behavior, cancelled-task overwrite protection, and memory result updates
+  remain unchanged.
+- Public task runtime functions and direct access to `task_runtime.current_tasks` remain available.
+
+Verification:
+
+```powershell
+uv run python -m py_compile backend\services\task_runtime.py backend\services\task_runtime_memory.py
+uv run python -m unittest tests.test_task_runtime_helpers -v
+uv run python -m unittest tests.test_task_runtime_helpers tests.test_task_store tests.test_task_routes_helpers -v
+```
+
+Result:
+
+- `py_compile` passed.
+- `tests.test_task_runtime_helpers`: 38 tests passed.
+- Combined task runtime/store/routes tests: 57 tests passed, 14 PostgreSQL integration tests
+  skipped.
+
 ## Stop Conditions
 
 Pause before editing if:
