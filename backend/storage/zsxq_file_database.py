@@ -5,6 +5,7 @@ from backend.storage.zsxq_file_database_helpers import (
     _FILE_AI_ANALYSIS_FIELDS,
     _close_connection,
     _count_tables,
+    _file_ai_analysis_params,
     _file_attachment_params,
     _file_download_status_params,
     _file_record_params,
@@ -591,10 +592,21 @@ class ZSXQFileDatabase:
             reasoning_effort=excluded.reasoning_effort,
             error_message=excluded.error_message,
             updated_at=CURRENT_TIMESTAMP
-        ''', (
-            file_id, _group_id_param(self.group_id), status, summary, extracted_text, extracted_text_preview, content_type,
-            source_path, source_size, model, api_base, wire_api, reasoning_effort,
-            error_message
+        ''', _file_ai_analysis_params(
+            self.group_id,
+            file_id,
+            status=status,
+            summary=summary,
+            extracted_text=extracted_text,
+            extracted_text_preview=extracted_text_preview,
+            content_type=content_type,
+            source_path=source_path,
+            source_size=source_size,
+            model=model,
+            api_base=api_base,
+            wire_api=wire_api,
+            reasoning_effort=reasoning_effort,
+            error_message=error_message,
         ))
         self.conn.commit()
 

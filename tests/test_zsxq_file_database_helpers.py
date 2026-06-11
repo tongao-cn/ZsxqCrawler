@@ -4,6 +4,7 @@ from backend.storage.zsxq_file_database import (
     _FILE_AI_ANALYSIS_FIELDS,
     _close_connection,
     _count_tables,
+    _file_ai_analysis_params,
     _file_attachment_params,
     _file_download_status_params,
     _file_record_params,
@@ -192,6 +193,46 @@ class ZSXQFileDatabaseHelperTests(unittest.TestCase):
         self.assertEqual(
             ("failed", None, "failed", "failed", "size_mismatch", "failed", "bad size", 101, 303, 303),
             _file_download_status_params("303", 101, "failed", error_code="size_mismatch", error_message="bad size"),
+        )
+
+    def test_file_ai_analysis_params_keep_upsert_column_order(self):
+        self.assertEqual(
+            (101, 303, "completed", None, None, None, None, None, None, None, None, None, None, None),
+            _file_ai_analysis_params("303", 101),
+        )
+        self.assertEqual(
+            (
+                101,
+                303,
+                "failed",
+                "summary",
+                "full text",
+                "preview",
+                "application/pdf",
+                r"C:\tmp\file.pdf",
+                456,
+                "model-a",
+                "https://api.example.test",
+                "responses",
+                "low",
+                "boom",
+            ),
+            _file_ai_analysis_params(
+                "303",
+                101,
+                status="failed",
+                summary="summary",
+                extracted_text="full text",
+                extracted_text_preview="preview",
+                content_type="application/pdf",
+                source_path=r"C:\tmp\file.pdf",
+                source_size=456,
+                model="model-a",
+                api_base="https://api.example.test",
+                wire_api="responses",
+                reasoning_effort="low",
+                error_message="boom",
+            ),
         )
 
     def test_count_tables_builds_stats_from_cursor_counts(self):

@@ -116,6 +116,41 @@ def _file_download_status_params(
     )
 
 
+def _file_ai_analysis_params(
+    group_id: Optional[str],
+    file_id: int,
+    *,
+    status: str = 'completed',
+    summary: Optional[str] = None,
+    extracted_text: Optional[str] = None,
+    extracted_text_preview: Optional[str] = None,
+    content_type: Optional[str] = None,
+    source_path: Optional[str] = None,
+    source_size: Optional[int] = None,
+    model: Optional[str] = None,
+    api_base: Optional[str] = None,
+    wire_api: Optional[str] = None,
+    reasoning_effort: Optional[str] = None,
+    error_message: Optional[str] = None,
+) -> tuple[Any, ...]:
+    return (
+        file_id,
+        _group_id_param(group_id),
+        status,
+        summary,
+        extracted_text,
+        extracted_text_preview,
+        content_type,
+        source_path,
+        source_size,
+        model,
+        api_base,
+        wire_api,
+        reasoning_effort,
+        error_message,
+    )
+
+
 def _count_tables(cursor: Any, tables: Any = _STATS_TABLES, group_id: Optional[str] = None) -> Dict[str, Any]:
     stats = {}
     scoped_topic_ids_sql = "SELECT topic_id FROM topics WHERE group_id = ?"
