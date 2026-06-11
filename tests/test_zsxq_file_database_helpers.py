@@ -11,6 +11,7 @@ from backend.storage.zsxq_file_database import (
     _group_record_params,
     _new_import_stats,
     _row_to_file_ai_analysis,
+    _topic_record_params,
     _user_record_params,
 )
 
@@ -259,6 +260,53 @@ class ZSXQFileDatabaseHelperTests(unittest.TestCase):
         )
         self.assertEqual((303, "", None, None), _group_record_params({"group_id": 303}))
 
+    def test_topic_record_params_keep_insert_column_order(self):
+        self.assertEqual(
+            (
+                202,
+                303,
+                "talk",
+                "title",
+                "note",
+                4,
+                5,
+                6,
+                7,
+                8,
+                9,
+                True,
+                True,
+                "2026-06-10T12:00:00",
+                "2026-06-10T12:30:00",
+                True,
+                True,
+            ),
+            _topic_record_params(
+                {
+                    "topic_id": 202,
+                    "group": {"group_id": 303},
+                    "type": "talk",
+                    "title": "title",
+                    "annotation": "note",
+                    "likes_count": 4,
+                    "tourist_likes_count": 5,
+                    "rewards_count": 6,
+                    "comments_count": 7,
+                    "reading_count": 8,
+                    "readers_count": 9,
+                    "digested": True,
+                    "sticky": True,
+                    "create_time": "2026-06-10T12:00:00",
+                    "modify_time": "2026-06-10T12:30:00",
+                    "user_specific": {"liked": True, "subscribed": True},
+                }
+            ),
+        )
+        self.assertEqual(
+            (202, None, None, None, None, 0, 0, 0, 0, 0, 0, False, False, None, None, False, False),
+            _topic_record_params({"topic_id": 202}),
+        )
+
     def test_count_tables_builds_stats_from_cursor_counts(self):
         cursor = FakeCursor({"files": 3, "topics": 2})
 
@@ -375,6 +423,34 @@ class ZSXQFileDatabaseHelperTests(unittest.TestCase):
         group_sql, group_params = db.cursor.calls[-1]
         self.assertIn("INSERT INTO groups", group_sql)
         self.assertEqual((303, "group", None, None), group_params)
+
+    def test_insert_topic_uses_record_params(self):
+        from backend.storage.zsxq_file_database import ZSXQFileDatabase
+
+        db = object.__new__(ZSXQFileDatabase)
+        db.cursor = FakeCommentCursor()
+
+        self.assertIsNone(ZSXQFileDatabase.insert_topic(db, {}))
+        self.assertEqual([], db.cursor.calls)
+
+        self.assertEqual(
+            202,
+            ZSXQFileDatabase.insert_topic(
+                db,
+                {
+                    "topic_id": 202,
+                    "group": {"group_id": 303},
+                    "type": "talk",
+                    "title": "title",
+                    "user_specific": {"liked": True},
+                },
+            ),
+        )
+        topic_sql, topic_params = db.cursor.calls[-1]
+        self.assertIn("INSERT INTO topics", topic_sql)
+        self.assertIn("ON CONFLICT(topic_id) DO UPDATE SET", topic_sql)
+        self.assertEqual((202, 303, "talk", "title", None), topic_params[:5])
+        self.assertEqual((False, None, None, True, False), topic_params[12:])
 
     def test_update_file_download_status_casts_timestamp_to_text(self):
         from backend.storage.zsxq_file_database import ZSXQFileDatabase

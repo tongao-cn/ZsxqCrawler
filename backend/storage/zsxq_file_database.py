@@ -14,6 +14,7 @@ from backend.storage.zsxq_file_database_helpers import (
     _new_import_stats,
     _nullable_group_id_param,
     _row_to_file_ai_analysis,
+    _topic_record_params,
     _user_record_params,
 )
 
@@ -98,9 +99,6 @@ class ZSXQFileDatabase:
         if not topic_data or not topic_data.get('topic_id'):
             return None
         
-        # 处理用户特定信息
-        user_specific = topic_data.get('user_specific', {})
-        
         self.cursor.execute('''
         INSERT INTO topics 
         (topic_id, group_id, type, title, annotation, likes_count, tourist_likes_count,
@@ -124,25 +122,7 @@ class ZSXQFileDatabase:
             modify_time = excluded.modify_time,
             user_liked = excluded.user_liked,
             user_subscribed = excluded.user_subscribed
-        ''', (
-            topic_data.get('topic_id'),
-            topic_data.get('group', {}).get('group_id'),
-            topic_data.get('type'),
-            topic_data.get('title'),
-            topic_data.get('annotation'),
-            topic_data.get('likes_count', 0),
-            topic_data.get('tourist_likes_count', 0),
-            topic_data.get('rewards_count', 0),
-            topic_data.get('comments_count', 0),
-            topic_data.get('reading_count', 0),
-            topic_data.get('readers_count', 0),
-            topic_data.get('digested', False),
-            topic_data.get('sticky', False),
-            topic_data.get('create_time'),
-            topic_data.get('modify_time'),  # 新增字段
-            user_specific.get('liked', False),
-            user_specific.get('subscribed', False)
-        ))
+        ''', _topic_record_params(topic_data))
         return topic_data.get('topic_id')
 
     def update_file_download_status(

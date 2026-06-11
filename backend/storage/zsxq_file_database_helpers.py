@@ -83,6 +83,29 @@ def _group_record_params(group_data: Dict[str, Any]) -> tuple[Any, ...]:
     )
 
 
+def _topic_record_params(topic_data: Dict[str, Any]) -> tuple[Any, ...]:
+    user_specific = topic_data.get('user_specific', {})
+    return (
+        topic_data.get('topic_id'),
+        topic_data.get('group', {}).get('group_id'),
+        topic_data.get('type'),
+        topic_data.get('title'),
+        topic_data.get('annotation'),
+        topic_data.get('likes_count', 0),
+        topic_data.get('tourist_likes_count', 0),
+        topic_data.get('rewards_count', 0),
+        topic_data.get('comments_count', 0),
+        topic_data.get('reading_count', 0),
+        topic_data.get('readers_count', 0),
+        topic_data.get('digested', False),
+        topic_data.get('sticky', False),
+        topic_data.get('create_time'),
+        topic_data.get('modify_time'),
+        user_specific.get('liked', False),
+        user_specific.get('subscribed', False),
+    )
+
+
 def _file_attachment_params(parent_id: Any, file_data: Dict[str, Any]) -> tuple[Any, ...]:
     return (
         parent_id,
