@@ -2289,6 +2289,42 @@ Result:
 - `py_compile` passed.
 - `tests.test_task_runtime_helpers`: 38 tests passed.
 
+### 2026-06-11 - P5 task runtime status module extraction
+
+Changed:
+
+- Added `backend/services/task_runtime_status.py` for pure task status constants, normalization, and
+  task-matching helpers.
+- Moved ingestion lock identity checks and latest-task matching helpers out of
+  `backend/services/task_runtime.py`.
+- Kept the same symbol names imported into `task_runtime.py`, preserving existing internal imports
+  such as `_normalize_task`, `_is_active_task_status`, `_is_runtime_terminal_status`, and
+  `INGESTION_LOCK_TYPES`.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Public task runtime functions, route behavior, task status normalization, ingestion lock matching,
+  latest-task filtering/sorting, fallback memory task behavior, and task store interactions remain
+  unchanged.
+- This is a module-boundary cleanup only; no storage schema, route response, task ordering, or
+  frontend behavior changed.
+
+Verification:
+
+```powershell
+uv run python -m py_compile backend\services\task_runtime.py backend\services\task_runtime_status.py
+uv run python -m unittest tests.test_task_runtime_helpers -v
+uv run python -m unittest tests.test_task_runtime_helpers tests.test_task_store tests.test_task_routes_helpers -v
+```
+
+Result:
+
+- `py_compile` passed.
+- `tests.test_task_runtime_helpers`: 38 tests passed.
+- Combined task runtime/store/routes tests: 57 tests passed, 14 PostgreSQL integration tests
+  skipped.
+
 ## Stop Conditions
 
 Pause before editing if:

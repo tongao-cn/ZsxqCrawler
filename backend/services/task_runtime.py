@@ -9,6 +9,17 @@ from typing import Any, Callable, Dict, List, Optional
 
 from backend.core import crawler_runtime
 from backend.services.a_share_analysis_service import normalize_group_id
+from backend.services.task_runtime_status import (
+    INGESTION_LOCK_KEY,
+    INGESTION_LOCK_TYPES,
+    _is_active_task_status,
+    _is_runtime_terminal_status,
+    _matches_latest_task_query,
+    _matches_running_ingestion_task,
+    _normalize_task,
+    _normalize_task_status,
+    _task_created_at_sort_value,
+)
 from backend.storage.task_store import TaskStore
 
 
@@ -16,8 +27,6 @@ task_store: Optional[TaskStore] = None
 TASK_LOCK_LEASE_MINUTES = 30
 TASK_LOCK_HEARTBEAT_SECONDS = 60
 _state_lock = threading.RLock()
-ACTIVE_TASK_STATUSES = {"pending", "running"}
-RUNTIME_TERMINAL_TASK_STATUSES = {"completed", "failed", "cancelled"}
 
 
 def get_task_store() -> TaskStore:
@@ -45,23 +54,6 @@ crawler_instances: Dict[str, Any] = {}
 file_downloader_instances: Dict[str, Any] = {}
 runtime_task_threads: Dict[str, threading.Thread] = {}
 runtime_task_heartbeats: Dict[str, threading.Event] = {}
-
-INGESTION_LOCK_TYPES = {
-    "columns_fetch",
-    "crawl_all",
-    "crawl_historical",
-    "crawl_incremental",
-    "crawl_latest_until_complete",
-    "crawl_time_range",
-    "collect_files",
-    "download_files",
-    "download_filtered_files",
-    "download_selected_files",
-    "download_single_file",
-    "sync_files_from_topics",
-}
-INGESTION_LOCK_KEY = "ingestion"
-
 
 def _initialize_task_tracking_locked(task_id: str) -> None:
     task_logs[task_id] = []
@@ -103,26 +95,6 @@ def _build_pending_task_state(
     if metadata:
         task.update(metadata)
     return task
-
-
-def _normalize_task_status(status: str) -> str:
-    return "cancelled" if status == "stopped" else status
-
-
-def _is_active_task_status(status: Any) -> bool:
-    return status in ACTIVE_TASK_STATUSES
-
-
-def _is_runtime_terminal_status(status: Any) -> bool:
-    return _normalize_task_status(str(status or "")) in RUNTIME_TERMINAL_TASK_STATUSES
-
-
-def _normalize_task(task: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
-    if not task:
-        return None
-    normalized = dict(task)
-    normalized["status"] = _normalize_task_status(str(normalized.get("status") or ""))
-    return normalized
 
 
 def list_tasks(limit: Optional[int] = None) -> List[Dict[str, Any]]:
@@ -239,18 +211,6 @@ def create_task(task_type: str, description: str, metadata: Optional[Dict[str, A
     _persist_task_creation_tracking(task_id, description, store)
 
     return task_id
-
-
-def _has_ingestion_lock_identity(task: Dict[str, Any]) -> bool:
-    return task.get("ingestion_lock_key") == INGESTION_LOCK_KEY or task.get("type") in INGESTION_LOCK_TYPES
-
-
-def _matches_running_ingestion_task(task: Dict[str, Any], normalized_group_id: str) -> bool:
-    if not _is_active_task_status(task.get("status")):
-        return False
-    if not _has_ingestion_lock_identity(task):
-        return False
-    return normalize_group_id(task.get("group_id")) == normalized_group_id
 
 
 def find_running_ingestion_task(group_id: str, exclude_task_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
@@ -633,25 +593,6 @@ def is_task_stopped(task_id: str) -> bool:
     with _state_lock:
         memory_stopped = _task_stop_flag_locked(task_id)
     return memory_stopped or get_task_store().is_stopped(task_id)
-
-
-def _matches_latest_task_query(
-    task: Dict[str, Any],
-    task_type: str,
-    status: Optional[str],
-    normalized_group_id: Optional[str],
-) -> bool:
-    if task.get("type") != task_type:
-        return False
-    if status and task.get("status") != status:
-        return False
-    if normalized_group_id is not None and normalize_group_id(task.get("group_id")) != normalized_group_id:
-        return False
-    return True
-
-
-def _task_created_at_sort_value(task: Dict[str, Any]) -> Any:
-    return task.get("created_at") or datetime.min
 
 
 def get_latest_task_by_type(
