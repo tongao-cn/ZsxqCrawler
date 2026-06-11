@@ -1,5 +1,5 @@
 import { API_BASE_URL, ApiClientBase } from './client';
-import type { DatabaseStats } from './types';
+import type { DatabaseStats } from './coreTypes';
 
 export class CoreApiClient extends ApiClientBase {
   async healthCheck() {

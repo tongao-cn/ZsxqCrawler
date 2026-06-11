@@ -11,6 +11,7 @@ export type {
   ColumnTopicDetail,
   ColumnVideo,
 } from './columnTypes';
+export type { DatabaseStats } from './coreTypes';
 export type { FileAIAnalysis, FileItem, FileStatus } from './fileTypes';
 export type {
   Account,
@@ -328,22 +329,6 @@ export interface AShareAnalysisExportTdxResponse {
   unresolved_companies: string[];
   ambiguous_companies: Record<string, string[]>;
   export_id?: number | null;
-}
-
-export interface DatabaseStats {
-  configured?: boolean;
-  topic_database: {
-    stats: Record<string, number>;
-    timestamp_info: {
-      total_topics: number;
-      oldest_timestamp: string;
-      newest_timestamp: string;
-      has_data: boolean;
-    };
-  };
-  file_database: {
-    stats: Record<string, number>;
-  };
 }
 
 export interface PaginatedResponse<T> {
