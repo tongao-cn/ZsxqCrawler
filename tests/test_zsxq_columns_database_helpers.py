@@ -19,6 +19,7 @@ from backend.storage.zsxq_columns_database import (
     _stats_count_queries,
     _topic_comment_insert_params,
     _topic_comment_row_to_dict,
+    _topic_detail_insert_params,
     _topic_detail_row_to_dict,
     _topic_file_insert_params,
     _topic_file_row_to_dict,
@@ -493,6 +494,46 @@ class ZSXQColumnsDatabaseHelperTests(unittest.TestCase):
             _user_insert_params({"user_id": 801}),
         )
 
+    def test_topic_detail_insert_params_preserve_column_order_and_defaults(self):
+        self.assertEqual(
+            (
+                202,
+                303,
+                "talk",
+                "topic title",
+                "full text",
+                5,
+                6,
+                7,
+                True,
+                True,
+                "2026-06-10T14:00:00",
+                "2026-06-10T15:00:00",
+                '{"raw": true}',
+            ),
+            _topic_detail_insert_params(
+                303,
+                {
+                    "topic_id": 202,
+                    "type": "talk",
+                    "title": "topic title",
+                    "talk": {"text": "full text"},
+                    "likes_count": 5,
+                    "comments_count": 6,
+                    "readers_count": 7,
+                    "digested": True,
+                    "sticky": True,
+                    "create_time": "2026-06-10T14:00:00",
+                    "modify_time": "2026-06-10T15:00:00",
+                },
+                '{"raw": true}',
+            ),
+        )
+        self.assertEqual(
+            (202, 303, None, None, "", 0, 0, 0, False, False, None, None, None),
+            _topic_detail_insert_params(303, {"topic_id": 202}, None),
+        )
+
     def test_topic_media_insert_params_preserve_column_order_and_defaults(self):
         self.assertEqual(
             (
@@ -944,6 +985,77 @@ class ZSXQColumnsDatabaseHelperTests(unittest.TestCase):
         self.assertIn("ON CONFLICT(user_id) DO UPDATE SET", user_sql)
         self.assertEqual((801, "user name", None, None, None, None), user_params)
         self.assertEqual(2, db.conn.commits)
+
+    def test_topic_detail_insert_method_preserves_skip_params_and_commit(self):
+        from backend.storage.zsxq_columns_database import ZSXQColumnsDatabase
+
+        class FakeCursor:
+            def __init__(self):
+                self.calls = []
+
+            def execute(self, sql, params=()):
+                self.calls.append((" ".join(sql.split()), params))
+                return self
+
+        class FakeConnection:
+            def __init__(self):
+                self.commits = 0
+
+            def commit(self):
+                self.commits += 1
+
+        db = object.__new__(ZSXQColumnsDatabase)
+        db.cursor = FakeCursor()
+        db.conn = FakeConnection()
+
+        self.assertIsNone(ZSXQColumnsDatabase.insert_topic_detail(db, 303, {}))
+        self.assertEqual([], db.cursor.calls)
+        self.assertEqual(0, db.conn.commits)
+
+        self.assertEqual(
+            202,
+            ZSXQColumnsDatabase.insert_topic_detail(
+                db,
+                303,
+                {
+                    "topic_id": 202,
+                    "type": "talk",
+                    "title": "topic title",
+                    "talk": {"text": "full text"},
+                    "likes_count": 5,
+                    "comments_count": 6,
+                    "readers_count": 7,
+                    "digested": True,
+                    "sticky": True,
+                    "create_time": "2026-06-10T14:00:00",
+                    "modify_time": "2026-06-10T15:00:00",
+                },
+                '{"raw": true}',
+            ),
+        )
+
+        detail_sql, detail_params = db.cursor.calls[-1]
+        self.assertIn("INSERT INTO topic_details", detail_sql)
+        self.assertIn("ON CONFLICT(topic_id) DO UPDATE SET", detail_sql)
+        self.assertEqual(
+            (
+                202,
+                303,
+                "talk",
+                "topic title",
+                "full text",
+                5,
+                6,
+                7,
+                True,
+                True,
+                "2026-06-10T14:00:00",
+                "2026-06-10T15:00:00",
+                '{"raw": true}',
+            ),
+            detail_params,
+        )
+        self.assertEqual(1, db.conn.commits)
 
     def test_column_queries_are_scoped_by_group(self):
         from backend.storage.zsxq_columns_database import ZSXQColumnsDatabase

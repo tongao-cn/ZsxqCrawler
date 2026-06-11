@@ -29,6 +29,7 @@ from backend.storage.zsxq_columns_database_helpers import (
     _nest_topic_comments,
     _topic_comment_insert_params,
     _topic_comment_row_to_dict,
+    _topic_detail_insert_params,
     _topic_detail_row_to_dict,
     _topic_file_insert_params,
     _topic_file_row_to_dict,
@@ -166,9 +167,7 @@ class ZSXQColumnsDatabase:
         
         topic_id = topic_data.get('topic_id')
         
-        # 获取文本内容
         talk = topic_data.get('talk', {})
-        full_text = talk.get('text', '')
         
         self.cursor.execute('''
             INSERT INTO topic_details 
@@ -189,21 +188,7 @@ class ZSXQColumnsDatabase:
                 modify_time = excluded.modify_time,
                 raw_json = excluded.raw_json,
                 updated_at = excluded.updated_at
-        ''', (
-            topic_id,
-            group_id,
-            topic_data.get('type'),
-            topic_data.get('title'),
-            full_text,
-            topic_data.get('likes_count', 0),
-            topic_data.get('comments_count', 0),
-            topic_data.get('readers_count', 0),
-            topic_data.get('digested', False),
-            topic_data.get('sticky', False),
-            topic_data.get('create_time'),
-            topic_data.get('modify_time'),
-            raw_json
-        ))
+        ''', _topic_detail_insert_params(group_id, topic_data, raw_json))
         
         # 处理作者信息
         if talk and talk.get('owner'):

@@ -3587,6 +3587,43 @@ Result:
 - PostgreSQL compatibility debt scan: no SQLite compatibility patterns found.
 - Frontend build is not planned because this slice only changes backend storage/helper code.
 
+### 2026-06-11 - P3 topic detail insert params helper extraction
+
+Changed:
+
+- Added `_topic_detail_insert_params` to `backend/storage/zsxq_columns_database_helpers.py`.
+- Replaced the inline `topic_details` insert parameter tuple in `insert_topic_detail`.
+- Added characterization coverage for topic-detail insert column order, `talk.text` extraction,
+  default values, raw JSON placement, missing-`topic_id` skip behavior, and successful commit count.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- `insert_topic_detail` still returns `None` without SQL or commit when `topic_id` is missing.
+- `topic_data.get('talk', {})` behavior is preserved, including the existing expectation that a
+  present `talk` value is mapping-like.
+- Owner, image, file, content-voice, video, and comment processing still runs after the
+  `topic_details` insert in the same order.
+- SQL text, conflict update clause, method signature, default values, raw JSON storage, schema,
+  compatibility layer, fallback path, public API behavior, and commit behavior are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m py_compile backend\storage\zsxq_columns_database.py backend\storage\zsxq_columns_database_helpers.py tests\test_zsxq_columns_database_helpers.py
+uv run python -m unittest tests.test_zsxq_columns_database_helpers -v
+uv run python -m unittest discover -s tests
+uv run python scripts\scan_postgres_compat_debt.py
+```
+
+Result:
+
+- `py_compile` passed.
+- `tests.test_zsxq_columns_database_helpers`: 34 tests passed.
+- Full backend unittest discovery: 593 tests passed, 15 skipped.
+- PostgreSQL compatibility debt scan: no SQLite compatibility patterns found.
+- Frontend build is not planned because this slice only changes backend storage/helper code.
+
 ## Stop Conditions
 
 Pause before editing if:

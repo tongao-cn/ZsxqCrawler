@@ -232,6 +232,30 @@ def _user_insert_params(user_data: Dict[str, Any]) -> tuple[Any, ...]:
     )
 
 
+def _topic_detail_insert_params(
+    group_id: int,
+    topic_data: Dict[str, Any],
+    raw_json: Optional[str],
+) -> tuple[Any, ...]:
+    talk = topic_data.get('talk', {})
+
+    return (
+        topic_data.get('topic_id'),
+        group_id,
+        topic_data.get('type'),
+        topic_data.get('title'),
+        talk.get('text', ''),
+        topic_data.get('likes_count', 0),
+        topic_data.get('comments_count', 0),
+        topic_data.get('readers_count', 0),
+        topic_data.get('digested', False),
+        topic_data.get('sticky', False),
+        topic_data.get('create_time'),
+        topic_data.get('modify_time'),
+        raw_json
+    )
+
+
 def _topic_image_insert_params(topic_id: int, image_data: Dict[str, Any]) -> tuple[Any, ...]:
     thumbnail = image_data.get('thumbnail', {})
     large = image_data.get('large', {})
