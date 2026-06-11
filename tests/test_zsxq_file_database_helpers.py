@@ -17,6 +17,8 @@ from backend.storage.zsxq_file_database import (
     _latest_like_record_params,
     _like_emoji_record_params,
     _new_import_stats,
+    _record_imported_items,
+    _record_imported_value,
     _row_to_file_ai_analysis,
     _solution_record_params,
     _talk_record_params,
@@ -151,6 +153,29 @@ class ZSXQFileDatabaseHelperTests(unittest.TestCase):
             },
             stats,
         )
+
+    def test_record_imported_value_increments_only_for_truthy_values(self):
+        stats = _new_import_stats()
+
+        self.assertEqual(101, _record_imported_value(stats, "files", 101))
+        self.assertEqual(0, _record_imported_value(stats, "topics", 0))
+        self.assertIsNone(_record_imported_value(stats, "groups", None))
+
+        self.assertEqual(1, stats["files"])
+        self.assertEqual(0, stats["topics"])
+        self.assertEqual(0, stats["groups"])
+
+    def test_record_imported_items_increments_by_current_payload_length(self):
+        stats = _new_import_stats()
+        items = [{"id": 1}, {"id": None}]
+
+        self.assertIs(items, _record_imported_items(stats, "comments", items))
+        self.assertEqual([], _record_imported_items(stats, "likes", []))
+        self.assertIsNone(_record_imported_items(stats, "images", None))
+
+        self.assertEqual(2, stats["comments"])
+        self.assertEqual(0, stats["likes"])
+        self.assertEqual(0, stats["images"])
 
     def test_row_to_file_ai_analysis_maps_columns_and_handles_missing_row(self):
         row = tuple(f"value-{index}" for index, _field in enumerate(_FILE_AI_ANALYSIS_FIELDS))
@@ -499,6 +524,67 @@ class ZSXQFileDatabaseHelperTests(unittest.TestCase):
         self.assertIn(("file", 101, 303, 202), fake.calls)
         self.assertIn(("delete_relation", (101, 202)), fake.calls)
         self.assertIn(("insert_relation", (101, 202)), fake.calls)
+
+    def test_import_file_response_counts_current_payload_shapes(self):
+        from backend.storage.zsxq_file_database import ZSXQFileDatabase
+
+        db = object.__new__(ZSXQFileDatabase)
+        fake = FakeImportDatabase()
+        db.cursor = fake
+        db.conn = fake
+        db.insert_group = fake.insert_group
+        db.insert_topic = fake.insert_topic
+        db.insert_file = fake.insert_file
+        db.insert_talk = fake.insert_talk
+        db.insert_topic_files = fake.insert_topic_files
+        db.insert_images = lambda topic_id, images: fake.calls.append(("images", topic_id, len(images)))
+        db.insert_latest_likes = lambda topic_id, likes: fake.calls.append(("likes", topic_id, len(likes)))
+        db.insert_comments = lambda topic_id, comments: fake.calls.append(("comments", topic_id, len(comments)))
+        db.insert_columns = lambda topic_id, columns: fake.calls.append(("columns", topic_id, len(columns)))
+
+        def fake_insert_solution(topic_id, solution):
+            fake.calls.append(("solution", topic_id, solution.get("task_id")))
+            return 777
+
+        db.insert_solution = fake_insert_solution
+
+        stats = ZSXQFileDatabase.import_file_response(
+            db,
+            {
+                "succeeded": True,
+                "resp_data": {
+                    "files": [
+                        {
+                            "file": {"file_id": 101, "name": "memo.pdf"},
+                            "topic": {
+                                "topic_id": 202,
+                                "group": {"group_id": 303, "name": "group"},
+                                "talk": {"images": [{"image_id": 1}, {"image_id": 2}]},
+                                "latest_likes": [{"owner": {"user_id": 9}}],
+                                "show_comments": [{"comment_id": 1}, {"text": "missing id"}],
+                                "columns": [{"column_id": 301}, {"name": "missing id"}],
+                                "solution": {"task_id": 401},
+                            },
+                        }
+                    ],
+                },
+            },
+        )
+
+        self.assertEqual(
+            {
+                "files": 1,
+                "topics": 1,
+                "users": 0,
+                "groups": 1,
+                "images": 2,
+                "comments": 2,
+                "likes": 1,
+                "columns": 2,
+                "solutions": 1,
+            },
+            stats,
+        )
 
     def test_insert_file_writes_group_and_topic_ids(self):
         from backend.storage.zsxq_file_database import ZSXQFileDatabase

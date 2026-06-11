@@ -44,6 +44,18 @@ def _new_import_stats() -> Dict[str, int]:
     return dict.fromkeys(_IMPORT_STAT_KEYS, 0)
 
 
+def _record_imported_value(stats: Dict[str, int], key: str, value: Any, amount: int = 1) -> Any:
+    if value:
+        stats[key] += amount
+    return value
+
+
+def _record_imported_items(stats: Dict[str, int], key: str, items: Any) -> Any:
+    if items:
+        stats[key] += len(items)
+    return items
+
+
 def _row_to_file_ai_analysis(row: Any) -> Optional[Dict[str, Any]]:
     if not row:
         return None

@@ -20,6 +20,8 @@ from backend.storage.zsxq_file_database_helpers import (
     _like_emoji_record_params,
     _new_import_stats,
     _nullable_group_id_param,
+    _record_imported_items,
+    _record_imported_value,
     _row_to_file_ai_analysis,
     _solution_record_params,
     _talk_record_params,
@@ -392,13 +394,12 @@ class ZSXQFileDatabase:
                 group_data = topic_data.get('group', {})
                 if group_data:
                     group_id = self.insert_group(group_data)
-                    if group_id:
-                        stats['groups'] += 1
+                    _record_imported_value(stats, 'groups', group_id)
                 
                 # 插入话题
                 topic_id = self.insert_topic(topic_data)
                 if topic_id:
-                    stats['topics'] += 1
+                    _record_imported_value(stats, 'topics', topic_id)
 
                     # 处理talk信息
                     talk_data = topic_data.get('talk', {})
@@ -410,7 +411,7 @@ class ZSXQFileDatabase:
                         images = talk_data.get('images', [])
                         if images:
                             self.insert_images(topic_id, images)
-                            stats['images'] += len(images)
+                            _record_imported_items(stats, 'images', images)
                         
                         # 处理talk中的文件
                         topic_files = talk_data.get('files', [])
@@ -419,13 +420,13 @@ class ZSXQFileDatabase:
                     latest_likes = topic_data.get('latest_likes', [])
                     if latest_likes:
                         self.insert_latest_likes(topic_id, latest_likes)
-                        stats['likes'] += len(latest_likes)
+                        _record_imported_items(stats, 'likes', latest_likes)
                     
                     # 处理评论
                     comments = topic_data.get('show_comments', [])
                     if comments:
                         self.insert_comments(topic_id, comments)
-                        stats['comments'] += len(comments)
+                        _record_imported_items(stats, 'comments', comments)
                     
                     # 处理点赞详情
                     likes_detail = topic_data.get('likes_detail', {})
@@ -442,19 +443,17 @@ class ZSXQFileDatabase:
                     columns = topic_data.get('columns', [])
                     if columns:
                         self.insert_columns(topic_id, columns)
-                        stats['columns'] += len(columns)
+                        _record_imported_items(stats, 'columns', columns)
                     
                     # 处理解决方案
                     solution = topic_data.get('solution', {})
                     if solution:
                         solution_id = self.insert_solution(topic_id, solution)
-                        if solution_id:
-                            stats['solutions'] += 1
+                        _record_imported_value(stats, 'solutions', solution_id)
 
                     group_id_for_file = (topic_data.get('group') or {}).get('group_id')
                     file_id = self.insert_file(file_data, group_id=group_id_for_file, topic_id=topic_id)
-                    if file_id:
-                        stats['files'] += 1
+                    _record_imported_value(stats, 'files', file_id)
 
                     self.cursor.execute('''
                     DELETE FROM file_topic_relations
