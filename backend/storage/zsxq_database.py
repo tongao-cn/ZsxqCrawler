@@ -5,6 +5,7 @@ from typing import Dict, Any, Optional, List
 
 from backend.storage.db_compat import connect
 from backend.storage.zsxq_database_helpers import (
+    build_topic_detail_qa,
     build_topic_detail_latest_likes,
     build_topic_detail_likes_detail,
     build_topic_detail_comments,
@@ -15,11 +16,9 @@ from backend.storage.zsxq_database_helpers import (
     group_id_param,
     nullable_group_id_param,
     replace_file_topic_relation,
-    topic_detail_answer_payload,
     topic_detail_base_payload,
     topic_detail_file_payload,
     topic_detail_image_payload,
-    topic_detail_question_payload,
     topic_detail_scope,
     topic_file_payload_from_row,
     upsert_core_file,
@@ -1283,8 +1282,6 @@ class ZSXQDatabase:
                 ''', (topic_id, scoped_group_id, scoped_group_id))
 
                 question_row = self.cursor.fetchone()
-                if question_row:
-                    topic_detail["question"] = topic_detail_question_payload(question_row)
 
                 # 获取回答信息
                 self.cursor.execute('''
@@ -1299,8 +1296,7 @@ class ZSXQDatabase:
                 ''', (topic_id, scoped_group_id, scoped_group_id))
 
                 answer_row = self.cursor.fetchone()
-                if answer_row:
-                    topic_detail["answer"] = topic_detail_answer_payload(answer_row)
+                topic_detail.update(build_topic_detail_qa(question_row, answer_row))
 
             return topic_detail
 

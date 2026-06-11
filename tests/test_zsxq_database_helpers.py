@@ -302,6 +302,74 @@ class FakeTopicDetailEngagementCursor(FakeCursor):
         return []
 
 
+class FakeTopicDetailQACursor(FakeCursor):
+    def __init__(self):
+        super().__init__()
+        self.last_query = ""
+
+    def execute(self, query, params=()):
+        self.last_query = " ".join(query.split())
+        return super().execute(query, params)
+
+    def fetchone(self):
+        if "FROM topics t LEFT JOIN groups" in self.last_query:
+            return (
+                202,
+                "q&a",
+                "title",
+                "2026-05-07T10:00:00.000+0800",
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                1,
+                0,
+                "",
+                0,
+                0,
+                303,
+                "group",
+                "paid",
+                "bg",
+            )
+        if "FROM talks" in self.last_query:
+            return None
+        if "FROM questions q" in self.last_query:
+            return (
+                "question text",
+                0,
+                0,
+                7,
+                "2026-01-01T00:00:00.000+0800",
+                "active",
+                "question owner location",
+                901,
+                "Question Owner",
+                "QO",
+                "owner.png",
+                "SH",
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
+        if "FROM answers a" in self.last_query:
+            return ("answer text", 902, "Answer Owner", "AO", "answer.png", "BJ", "answer owner")
+        return None
+
+    def fetchall(self):
+        if "FROM likes l" in self.last_query or "FROM comments c" in self.last_query or "FROM like_emojis" in self.last_query:
+            return []
+        return []
+
+
 class ZSXQDatabaseHelperTests(unittest.TestCase):
     def test_build_pagination_calculates_pages(self):
         self.assertEqual(
@@ -728,6 +796,59 @@ class ZSXQDatabaseHelperTests(unittest.TestCase):
             if "FROM likes l" in sql or "FROM like_emojis" in sql
         ]
         self.assertEqual([(202, 303, 303), (202, 303, 303)], engagement_calls)
+
+    def test_get_topic_detail_builds_question_and_answer_payloads(self):
+        from backend.storage.zsxq_database import ZSXQDatabase
+
+        cursor = FakeTopicDetailQACursor()
+        db = object.__new__(ZSXQDatabase)
+        db.cursor = cursor
+        db.group_id = "303"
+
+        detail = ZSXQDatabase.get_topic_detail(db, 202)
+
+        self.assertEqual(
+            {
+                "text": "question text",
+                "expired": False,
+                "anonymous": False,
+                "owner_detail": {
+                    "questions_count": 7,
+                    "estimated_join_time": "2026-01-01T00:00:00.000+0800",
+                    "status": "active",
+                },
+                "owner_location": "question owner location",
+                "owner": {
+                    "user_id": 901,
+                    "name": "Question Owner",
+                    "alias": "QO",
+                    "avatar_url": "owner.png",
+                    "location": "SH",
+                    "description": "SH",
+                },
+            },
+            detail["question"],
+        )
+        self.assertEqual(
+            {
+                "text": "answer text",
+                "owner": {
+                    "user_id": 902,
+                    "name": "Answer Owner",
+                    "alias": "AO",
+                    "avatar_url": "answer.png",
+                    "location": "BJ",
+                    "description": "answer owner",
+                },
+            },
+            detail["answer"],
+        )
+        qa_calls = [
+            params
+            for sql, params in cursor.calls
+            if "FROM questions q" in sql or "FROM answers a" in sql
+        ]
+        self.assertEqual([(202, 303, 303), (202, 303, 303)], qa_calls)
 
     def test_runtime_init_database_does_not_execute_ddl(self):
         from backend.storage.zsxq_database import ZSXQDatabase

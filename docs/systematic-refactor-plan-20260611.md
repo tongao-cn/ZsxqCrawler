@@ -443,6 +443,42 @@ Result:
 - Frontend build passed.
 - PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
 
+### 2026-06-11 - P2 topic detail Q&A payload extraction
+
+Changed:
+
+- Added characterization coverage for `ZSXQDatabase.get_topic_detail` question/answer assembly,
+  including current question owner payload shape, answer owner payload shape, and scoped Q&A query
+  parameters.
+- Extracted `build_topic_detail_qa` into `backend/storage/zsxq_database_helpers.py`.
+- Reused the helper from the `q&a` branch of `get_topic_detail` and removed the now-unused direct
+  question/answer payload imports from `backend/storage/zsxq_database.py`.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- The `q&a` type gate, query order, query parameters, optional `question` and optional `answer`
+  fields, boolean coercions, and current owner payload field mapping are preserved.
+- No schema, public API, storage write path, fallback behavior, legacy compatibility path, or config
+  semantics changed.
+
+Verification:
+
+```powershell
+uv run python -m py_compile backend\storage\zsxq_database.py backend\storage\zsxq_database_helpers.py
+uv run python -m unittest tests.test_zsxq_database_helpers -v
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+uv run python scripts\scan_postgres_compat_debt.py
+```
+
+Result:
+
+- Focused ZSXQ database helper tests passed: 19 tests.
+- Full backend tests passed: 521 tests, 15 skipped.
+- Frontend build passed.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+
 ## Stop Conditions
 
 Pause before editing if:

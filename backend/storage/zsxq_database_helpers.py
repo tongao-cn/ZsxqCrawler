@@ -380,3 +380,12 @@ def topic_detail_answer_payload(row) -> Dict[str, Any]:
             "description": row[6],
         },
     }
+
+
+def build_topic_detail_qa(question_row, answer_row) -> Dict[str, Any]:
+    qa_data = {}
+    if question_row:
+        qa_data["question"] = topic_detail_question_payload(question_row)
+    if answer_row:
+        qa_data["answer"] = topic_detail_answer_payload(answer_row)
+    return qa_data
