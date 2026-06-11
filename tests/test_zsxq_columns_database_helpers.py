@@ -7,6 +7,7 @@ from backend.storage.zsxq_columns_database import (
     _column_topic_insert_params,
     _column_topic_row_to_dict,
     _comment_image_row_to_dict,
+    _comment_images_query,
     _crawl_log_update_parts,
     _empty_clear_data_stats,
     _empty_stats,
@@ -893,6 +894,15 @@ class ZSXQColumnsDatabaseHelperTests(unittest.TestCase):
         self.assertEqual((202, None, None), _topic_files_query(202, None)[1])
         self.assertEqual((202, None, None), _topic_videos_query(202, None)[1])
 
+    def test_comment_images_query_preserves_topic_filter_params_and_selects(self):
+        sql, params = _comment_images_query(701, 303, 202)
+
+        self.assertIn("SELECT image_id, type, thumbnail_url", self._sql(sql))
+        self.assertIn("FROM images WHERE comment_id = ?", self._sql(sql))
+        self.assertIn("AND (? IS NULL OR topic_id = ?)", self._sql(sql))
+        self.assertEqual((701, 303, 202), params)
+        self.assertEqual((701, None, 202), _comment_images_query(701, None, 202)[1])
+
     def test_download_status_update_helpers_preserve_truthy_branches(self):
         video_sql, video_params = _video_download_status_update(501, "completed", "https://v", "local.mp4")
         self.assertIn(
@@ -1424,6 +1434,99 @@ class ZSXQColumnsDatabaseHelperTests(unittest.TestCase):
         comments_sql, comments_params = db.cursor.calls[-1]
         self.assertIn("WHERE c.topic_id = ? AND (? IS NULL OR c.group_id = ?)", comments_sql)
         self.assertEqual((202, 303, 303), comments_params)
+
+    def test_topic_comments_preserve_comment_image_queries_and_nested_shape(self):
+        from backend.storage.zsxq_columns_database import ZSXQColumnsDatabase
+
+        class FakeCursor:
+            def __init__(self):
+                self.calls = []
+                self.fetchall_results = [
+                    [
+                        (
+                            701,
+                            None,
+                            "parent",
+                            "2026-06-10T10:00:00",
+                            1,
+                            2,
+                            3,
+                            False,
+                            801,
+                            "owner",
+                            "alias",
+                            "avatar",
+                            "location",
+                            None,
+                            None,
+                            None,
+                            None,
+                        ),
+                        (
+                            702,
+                            701,
+                            "child",
+                            "2026-06-10T10:01:00",
+                            0,
+                            0,
+                            0,
+                            False,
+                            802,
+                            "reply-owner",
+                            None,
+                            None,
+                            None,
+                            801,
+                            "owner",
+                            "alias",
+                            "avatar",
+                        ),
+                    ],
+                    [
+                        (
+                            301,
+                            "image",
+                            "thumb-url",
+                            10,
+                            20,
+                            "large-url",
+                            30,
+                            40,
+                            "original-url",
+                            50,
+                            60,
+                            70,
+                        )
+                    ],
+                    [],
+                ]
+
+            def execute(self, sql, params=()):
+                self.calls.append((" ".join(sql.split()), params))
+                return self
+
+            def fetchall(self):
+                return self.fetchall_results.pop(0)
+
+        db = object.__new__(ZSXQColumnsDatabase)
+        db.cursor = FakeCursor()
+        db.group_id = "303"
+
+        comments = ZSXQColumnsDatabase.get_topic_comments(db, 202)
+
+        self.assertEqual(1, len(comments))
+        self.assertEqual(701, comments[0]["comment_id"])
+        self.assertEqual(301, comments[0]["images"][0]["image_id"])
+        self.assertEqual(1, len(comments[0]["replied_comments"]))
+        self.assertEqual(702, comments[0]["replied_comments"][0]["comment_id"])
+        self.assertNotIn("images", comments[0]["replied_comments"][0])
+
+        self.assertIn("FROM comments c", db.cursor.calls[0][0])
+        self.assertEqual((202, 303, 303), db.cursor.calls[0][1])
+        self.assertIn("FROM images WHERE comment_id = ?", db.cursor.calls[1][0])
+        self.assertEqual((701, 303, 202), db.cursor.calls[1][1])
+        self.assertIn("FROM images WHERE comment_id = ?", db.cursor.calls[2][0])
+        self.assertEqual((702, 303, 202), db.cursor.calls[2][1])
 
     def test_update_crawl_log_preserves_noop_when_no_update_parts(self):
         from backend.storage.zsxq_columns_database import ZSXQColumnsDatabase

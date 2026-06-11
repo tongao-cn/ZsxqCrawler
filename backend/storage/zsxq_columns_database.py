@@ -14,6 +14,7 @@ from backend.storage.zsxq_columns_database_helpers import (
     _column_topic_insert_params,
     _column_topic_row_to_dict,
     _comment_image_row_to_dict,
+    _comment_images_query,
     _empty_clear_data_stats,
     _crawl_log_update_parts,
     _empty_stats,
@@ -479,15 +480,8 @@ class ZSXQColumnsDatabase:
             comment = _topic_comment_row_to_dict(row)
             comment_id = comment['comment_id']
 
-            # 获取评论图片
-            self.cursor.execute('''
-                SELECT image_id, type, thumbnail_url, thumbnail_width, thumbnail_height,
-                       large_url, large_width, large_height, original_url, original_width,
-                       original_height, original_size
-                FROM images
-                WHERE comment_id = ?
-                  AND (? IS NULL OR topic_id = ?)
-            ''', (comment_id, scope_group_id, topic_id))
+            sql, params = _comment_images_query(comment_id, scope_group_id, topic_id)
+            self.cursor.execute(sql, params)
 
             images = [_comment_image_row_to_dict(img_row) for img_row in self.cursor.fetchall()]
             if images:

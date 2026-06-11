@@ -577,6 +577,24 @@ def _topic_videos_query(topic_id: int, scope_group_id: Any) -> tuple[str, tuple[
     )
 
 
+def _comment_images_query(
+    comment_id: int,
+    scope_group_id: Any,
+    topic_id: int,
+) -> tuple[str, tuple[Any, ...]]:
+    return (
+        '''
+            SELECT image_id, type, thumbnail_url, thumbnail_width, thumbnail_height,
+                   large_url, large_width, large_height, original_url, original_width,
+                   original_height, original_size
+            FROM images
+            WHERE comment_id = ?
+              AND (? IS NULL OR topic_id = ?)
+        ''',
+        (comment_id, scope_group_id, topic_id),
+    )
+
+
 def _video_download_status_update(
     video_id: int,
     status: str,
