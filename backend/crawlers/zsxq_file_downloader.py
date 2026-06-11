@@ -29,6 +29,7 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     classify_http_failure,
     download_file_data,
     download_progress_message,
+    download_retry_wait,
     download_url_failure_detail,
     empty_import_stats,
     existing_file_matches,
@@ -580,8 +581,8 @@ class ZSXQFileDownloader:
         for attempt in range(download_retries):
             try:
                 if attempt > 0:
-                    retry_delay = 2 * attempt
-                    self.log(f"   🔄 文件下载重试 {attempt + 1}/{download_retries}，等待 {retry_delay} 秒...")
+                    retry_delay, retry_message = download_retry_wait(attempt, download_retries)
+                    self.log(retry_message)
                     time.sleep(retry_delay)
 
                 download_url = self.get_download_url(file_id)

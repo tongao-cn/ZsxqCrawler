@@ -217,6 +217,14 @@ def download_url_failure_detail(error_detail: Optional[Dict[str, Any]]) -> tuple
     )
 
 
+def download_retry_wait(attempt: int, download_retries: int) -> tuple[int, str]:
+    retry_delay = 2 * attempt
+    return (
+        retry_delay,
+        f"   🔄 文件下载重试 {attempt + 1}/{download_retries}，等待 {retry_delay} 秒...",
+    )
+
+
 def content_disposition_filename(content_disposition: str) -> Optional[str]:
     if "filename=" not in content_disposition:
         return None

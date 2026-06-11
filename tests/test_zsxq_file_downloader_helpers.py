@@ -33,6 +33,7 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     page_crosses_stop_before,
     parse_create_time,
     remove_partial_download,
+    download_retry_wait,
     safe_download_filename,
     should_retry_api_error,
     should_retry_http_status,
@@ -281,6 +282,15 @@ class FileDownloaderFileDataHelperTests(unittest.TestCase):
         self.assertEqual(
             ("download_url_unavailable", "无法获取下载链接"),
             download_url_failure_detail({"code": "", "message": ""}),
+        )
+
+    def test_download_retry_wait_preserves_delay_and_message(self):
+        self.assertEqual(
+            (
+                4,
+                "   🔄 文件下载重试 3/5，等待 4 秒...",
+            ),
+            download_retry_wait(2, 5),
         )
 
     def test_content_disposition_filename_extracts_plain_filename(self):

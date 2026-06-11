@@ -2846,6 +2846,40 @@ Result:
 - PostgreSQL compatibility debt scan: no SQLite compatibility patterns found.
 - Frontend build is not planned because this slice only changes backend crawler/helper code.
 
+### 2026-06-11 - P9 download retry wait helper extraction
+
+Changed:
+
+- Added `download_retry_wait` to `backend/crawlers/zsxq_file_downloader_helpers.py`.
+- Replaced the inline retry-delay and retry-message construction in `download_file`.
+- Added focused helper coverage for the retry delay formula and exact retry log message.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- The retry branch still runs only when `attempt > 0`.
+- The delay remains `2 * attempt`, and the same log message is emitted before sleeping.
+- `time.sleep`, signed URL fetch, body download, partial-file cleanup, and status updates remain in
+  the same `download_file` control flow.
+- No retry, stop, signed URL, fallback, or status-update behavior was removed.
+
+Verification:
+
+```powershell
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py backend\crawlers\zsxq_file_downloader_helpers.py
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers -v
+uv run python -m unittest discover -s tests
+uv run python scripts\scan_postgres_compat_debt.py
+```
+
+Result:
+
+- `py_compile` passed.
+- `tests.test_zsxq_file_downloader_helpers`: 33 tests passed.
+- Full backend unittest discovery: 569 tests passed, 15 skipped.
+- PostgreSQL compatibility debt scan: no SQLite compatibility patterns found.
+- Frontend build is not planned because this slice only changes backend crawler/helper code.
+
 ### 2026-06-11 - P3 columns database helper module split
 
 Changed:
