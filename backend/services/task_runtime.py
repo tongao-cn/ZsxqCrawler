@@ -438,18 +438,28 @@ def enqueue_runtime_task(task_func: Callable[..., Any], task_id: str, *args: Any
     thread.start()
 
 
+def _prepare_runtime_shutdown_snapshot_locked() -> tuple[List[tuple[str, Dict[str, Any]]], List[Any], List[Any]]:
+    tasks_snapshot = list(current_tasks.items())
+    stopping_task_ids = [
+        task_id
+        for task_id, task in tasks_snapshot
+        if _is_active_task_status(task.get("status"))
+    ]
+    for task_id in stopping_task_ids:
+        task_stop_flags[task_id] = True
+    return tasks_snapshot, list(crawler_instances.values()), list(file_downloader_instances.values())
+
+
+def _clear_runtime_shutdown_tracking_locked() -> List[str]:
+    crawler_instances.clear()
+    file_downloader_instances.clear()
+    sse_connections.clear()
+    return list(runtime_task_heartbeats)
+
+
 def request_runtime_shutdown() -> None:
     with _state_lock:
-        tasks_snapshot = list(current_tasks.items())
-        stopping_task_ids = [
-            task_id
-            for task_id, task in tasks_snapshot
-            if _is_active_task_status(task.get("status"))
-        ]
-        for task_id in stopping_task_ids:
-            task_stop_flags[task_id] = True
-        crawler_snapshot = list(crawler_instances.values())
-        downloader_snapshot = list(file_downloader_instances.values())
+        tasks_snapshot, crawler_snapshot, downloader_snapshot = _prepare_runtime_shutdown_snapshot_locked()
 
     _request_stop_for_resources(crawler_snapshot)
     _request_stop_for_resources(downloader_snapshot)
@@ -460,10 +470,7 @@ def request_runtime_shutdown() -> None:
             update_task(task_id, "cancelled", "服务关闭，任务已停止")
 
     with _state_lock:
-        crawler_instances.clear()
-        file_downloader_instances.clear()
-        sse_connections.clear()
-        heartbeat_task_ids = list(runtime_task_heartbeats)
+        heartbeat_task_ids = _clear_runtime_shutdown_tracking_locked()
     for task_id in heartbeat_task_ids:
         _stop_task_lock_heartbeat(task_id)
     with _state_lock:

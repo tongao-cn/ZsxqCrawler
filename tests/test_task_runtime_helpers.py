@@ -91,6 +91,16 @@ class FailingSubscriber:
         raise RuntimeError("subscriber failed")
 
 
+class StopFlagObserver:
+    def __init__(self, flags, task_id):
+        self.flags = flags
+        self.task_id = task_id
+        self.flag_when_stopped = None
+
+    def set_stop_flag(self):
+        self.flag_when_stopped = self.flags.get(self.task_id)
+
+
 class TaskRuntimeHelperTests(unittest.TestCase):
     def test_columns_fetch_is_ingestion_locked(self):
         from backend.services.task_runtime import INGESTION_LOCK_TYPES
@@ -514,6 +524,48 @@ class TaskRuntimeHelperTests(unittest.TestCase):
         self.assertEqual("cancelled", store.tasks["task-1"]["status"])
         self.assertEqual("completed", store.tasks["task-2"]["status"])
         self.assertEqual({}, task_runtime.sse_connections)
+        self.assertEqual({}, task_runtime.crawler_instances)
+        self.assertEqual({}, task_runtime.file_downloader_instances)
+
+    def test_request_runtime_shutdown_marks_stop_flags_before_stopping_resources(self):
+        from backend.services import task_runtime
+
+        store = FakeTaskStore()
+        store.tasks["task-1"] = {"task_id": "task-1", "status": "running", "message": "running"}
+        crawler = StopFlagObserver(task_runtime.task_stop_flags, "task-1")
+
+        with patch("backend.services.task_runtime.get_task_store", return_value=store):
+            try:
+                task_runtime.current_tasks["task-1"] = dict(store.tasks["task-1"])
+                task_runtime.register_task_crawler("task-1", crawler)
+
+                task_runtime.request_runtime_shutdown()
+
+                self.assertTrue(crawler.flag_when_stopped)
+            finally:
+                task_runtime.current_tasks.clear()
+                task_runtime.task_stop_flags.clear()
+                task_runtime.crawler_instances.clear()
+                task_runtime.file_downloader_instances.clear()
+                task_runtime.sse_connections.clear()
+
+    def test_request_runtime_shutdown_stops_heartbeats_and_clears_runtime_threads(self):
+        from backend.services import task_runtime
+
+        heartbeat = Event()
+
+        try:
+            task_runtime.runtime_task_heartbeats["task-1"] = heartbeat
+            task_runtime.runtime_task_threads["task-1"] = object()
+
+            task_runtime.request_runtime_shutdown()
+
+            self.assertTrue(heartbeat.is_set())
+            self.assertEqual({}, task_runtime.runtime_task_heartbeats)
+            self.assertEqual({}, task_runtime.runtime_task_threads)
+        finally:
+            task_runtime.runtime_task_heartbeats.clear()
+            task_runtime.runtime_task_threads.clear()
 
     def test_enqueue_runtime_task_runs_daemon_thread_and_unregisters(self):
         from backend.services import task_runtime
