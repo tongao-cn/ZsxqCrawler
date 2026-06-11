@@ -3148,6 +3148,41 @@ Result:
 - PostgreSQL compatibility debt scan: no SQLite compatibility patterns found.
 - Frontend build is not planned because this slice only changes backend crawler/helper code.
 
+### 2026-06-11 - P9 download stop handler extraction
+
+Changed:
+
+- Added `_handle_download_stop` to `backend/crawlers/zsxq_file_downloader.py`.
+- Replaced the inline in-loop stop side-effect block with the private handler.
+- Added focused handler coverage for stopped status detail, log message, and partial-file cleanup.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- The in-loop stop branch still logs `🛑 下载过程中被停止`, writes failed status with `stopped` /
+  `下载过程中被停止`, then attempts partial-file cleanup before returning `False`.
+- The handler is called at the original stop-check point inside the chunk loop, so retry, signed URL,
+  progress, file write, fallback, and status-update behavior remain unchanged.
+- This slice intentionally does not change the existing Windows open-file deletion behavior in the
+  stop path; that would be a bug fix requiring a separate risk note and behavior-level test.
+
+Verification:
+
+```powershell
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py backend\crawlers\zsxq_file_downloader_helpers.py
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers -v
+uv run python -m unittest discover -s tests
+uv run python scripts\scan_postgres_compat_debt.py
+```
+
+Result:
+
+- `py_compile` passed.
+- `tests.test_zsxq_file_downloader_helpers`: 44 tests passed.
+- Full backend unittest discovery: 580 tests passed, 15 skipped.
+- PostgreSQL compatibility debt scan: no SQLite compatibility patterns found.
+- Frontend build is not planned because this slice only changes backend crawler/helper code.
+
 ### 2026-06-11 - P3 columns database helper module split
 
 Changed:

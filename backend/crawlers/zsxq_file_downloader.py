@@ -637,14 +637,7 @@ class ZSXQFileDownloader:
 
                                 # 检查是否需要停止
                                 if self.check_stop():
-                                    self.log("🛑 下载过程中被停止")
-                                    self.file_db.update_file_download_status(
-                                        file_id,
-                                        'failed',
-                                        error_code='stopped',
-                                        error_message='下载过程中被停止',
-                                    )
-                                    remove_partial_download(temp_path)
+                                    self._handle_download_stop(file_id, temp_path)
                                     return False
 
                     # 验证文件大小
@@ -689,6 +682,16 @@ class ZSXQFileDownloader:
             error_message=error_message,
         )
         return False
+
+    def _handle_download_stop(self, file_id: int, temp_path: str) -> None:
+        self.log("🛑 下载过程中被停止")
+        self.file_db.update_file_download_status(
+            file_id,
+            'failed',
+            error_code='stopped',
+            error_message='下载过程中被停止',
+        )
+        remove_partial_download(temp_path)
 
     def _apply_download_intervals(self):
         """应用下载间隔控制"""

@@ -567,6 +567,24 @@ class FileDownloaderDownloadTests(unittest.TestCase):
             self.assertFalse((Path(temp_dir) / "memo.pdf").exists())
             self.assertFalse((Path(temp_dir) / "memo.pdf.part").exists())
 
+    def test_handle_download_stop_preserves_status_log_and_cleanup(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir) / "memo.pdf.part"
+            temp_path.write_bytes(b"memo")
+            downloader = object.__new__(ZSXQFileDownloader)
+            downloader.file_db = FakeDownloadFileDb()
+            downloader.logs = []
+            downloader.log = downloader.logs.append
+
+            ZSXQFileDownloader._handle_download_stop(downloader, 101, str(temp_path))
+
+            self.assertEqual(
+                (101, "failed", None, "stopped", "下载过程中被停止"),
+                downloader.file_db.status_updates[-1],
+            )
+            self.assertFalse(temp_path.exists())
+            self.assertEqual(["🛑 下载过程中被停止"], downloader.logs)
+
     def test_apply_download_intervals_preserves_long_sleep_side_effects(self):
         downloader = object.__new__(ZSXQFileDownloader)
         downloader.current_batch_count = 10
