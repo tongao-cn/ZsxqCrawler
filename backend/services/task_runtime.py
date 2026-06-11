@@ -370,6 +370,12 @@ def _stop_task_lock_heartbeat(task_id: str) -> None:
         stop_event.set()
 
 
+def _request_stop_for_resources(resources: List[Any]) -> None:
+    for resource in resources:
+        if hasattr(resource, "set_stop_flag"):
+            resource.set_stop_flag()
+
+
 def enqueue_runtime_task(task_func: Callable[..., Any], task_id: str, *args: Any) -> None:
     def run_task() -> None:
         try:
@@ -405,13 +411,8 @@ def request_runtime_shutdown() -> None:
         crawler_snapshot = list(crawler_instances.values())
         downloader_snapshot = list(file_downloader_instances.values())
 
-    for crawler in crawler_snapshot:
-        if hasattr(crawler, "set_stop_flag"):
-            crawler.set_stop_flag()
-
-    for downloader in downloader_snapshot:
-        if hasattr(downloader, "set_stop_flag"):
-            downloader.set_stop_flag()
+    _request_stop_for_resources(crawler_snapshot)
+    _request_stop_for_resources(downloader_snapshot)
 
     for task_id, task in tasks_snapshot:
         if _is_active_task_status(task.get("status")):

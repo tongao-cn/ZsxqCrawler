@@ -1174,6 +1174,46 @@ Result:
 - PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
 - Git diff whitespace check passed.
 
+### 2026-06-11 - P5 task shutdown resource-stop helper extraction
+
+Changed:
+
+- Extracted `_request_stop_for_resources()` from `request_runtime_shutdown()` to isolate
+  registered crawler/downloader stop notification.
+- Added characterization coverage that resources without `set_stop_flag` are ignored while
+  stoppable resources still receive the stop request.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Shutdown still marks active tasks stopped, notifies registered crawlers/downloaders, cancels
+  active tasks, releases task locks through `update_task()`, clears SSE connections, stops lock
+  heartbeats, and clears runtime task thread tracking.
+- No public route response, task store SQL, SSE behavior, cancellation semantics, fallback polling,
+  legacy path, config semantics, or frontend hook behavior changed.
+
+Verification:
+
+```powershell
+uv run python -m py_compile backend\services\task_runtime.py
+uv run python -m unittest tests.test_task_runtime_helpers -v
+uv run python -m unittest tests.test_task_runtime_helpers tests.test_task_store tests.test_task_routes_helpers -v
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+uv run python scripts\scan_postgres_compat_debt.py
+git diff --check
+```
+
+Result:
+
+- Focused task runtime tests passed: 15 tests.
+- Recommended task runtime gate passed: 34 tests, 14 PostgreSQL integration tests skipped by
+  configuration.
+- Full backend tests passed: 534 tests, 15 skipped.
+- Frontend build passed.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Git diff whitespace check passed.
+
 ## Stop Conditions
 
 Pause before editing if:

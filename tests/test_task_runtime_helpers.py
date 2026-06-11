@@ -285,6 +285,15 @@ class TaskRuntimeHelperTests(unittest.TestCase):
         self.assertEqual("cancelled", store.tasks["task-1"]["status"])
         self.assertEqual([], store.released_locks)
 
+    def test_request_stop_for_resources_ignores_objects_without_stop_flag(self):
+        from backend.services.task_runtime import _request_stop_for_resources
+
+        stoppable = Stoppable()
+
+        _request_stop_for_resources([object(), stoppable])
+
+        self.assertTrue(stoppable.stopped)
+
     def test_request_runtime_shutdown_cancels_running_resources(self):
         from backend.services import task_runtime
 
