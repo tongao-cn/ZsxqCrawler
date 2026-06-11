@@ -594,6 +594,27 @@ class TaskRuntimeHelperTests(unittest.TestCase):
         finally:
             task_runtime.sse_connections.pop("task-1", None)
 
+    def test_task_log_unsubscribe_ignores_unknown_subscriber(self):
+        from backend.services import task_runtime
+
+        subscriber = task_runtime.subscribe_task_logs("task-1")
+        unknown_subscriber = queue.Queue()
+        try:
+            task_runtime.unsubscribe_task_logs("task-1", unknown_subscriber)
+            task_runtime.broadcast_log("task-1", "first")
+
+            self.assertEqual("first", subscriber.get_nowait())
+            self.assertIn(subscriber, task_runtime.sse_connections["task-1"])
+        finally:
+            task_runtime.sse_connections.pop("task-1", None)
+
+    def test_task_log_unsubscribe_is_noop_for_unknown_task(self):
+        from backend.services import task_runtime
+
+        task_runtime.unsubscribe_task_logs("missing-task", queue.Queue())
+
+        self.assertNotIn("missing-task", task_runtime.sse_connections)
+
     def test_broadcast_log_ignores_failing_subscriber(self):
         from backend.services import task_runtime
 

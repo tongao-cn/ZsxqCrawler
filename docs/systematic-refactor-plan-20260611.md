@@ -1737,6 +1737,51 @@ Result:
 - PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
 - Git diff whitespace check passed.
 
+### 2026-06-11 - P5 task log subscription helper extraction
+
+Changed:
+
+- Added characterization coverage for `unsubscribe_task_logs()` ignoring an unknown subscriber
+  while preserving existing subscribers.
+- Added characterization coverage for `unsubscribe_task_logs()` being a no-op for unknown task
+  IDs.
+- Extracted `_add_task_log_subscriber_locked()` and `_remove_task_log_subscriber_locked()` to
+  isolate locked `sse_connections` subscription mutations.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- `subscribe_task_logs()` still returns a new queue and appends it to the same per-task subscriber
+  list.
+- `unsubscribe_task_logs()` still ignores missing task IDs and unknown subscriber queues, removes
+  only the requested queue, and deletes the task entry when the last subscriber is removed.
+- No public route response, SSE frame format, queue type, broadcast order, failing-subscriber
+  handling, task log text, fallback polling, storage schema, legacy path, config semantics, or
+  frontend hook behavior changed.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_task_runtime_helpers -v
+uv run python -m py_compile backend\services\task_runtime.py
+uv run python -m unittest tests.test_task_runtime_helpers tests.test_task_store tests.test_task_routes_helpers -v
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+uv run python scripts\scan_postgres_compat_debt.py
+git diff --check
+```
+
+Result:
+
+- Characterization tests passed on the pre-refactor code before the helper extraction.
+- Focused task runtime tests passed: 34 tests.
+- Recommended task runtime gate passed: 53 tests, 14 PostgreSQL integration tests skipped by
+  configuration.
+- Full backend tests passed: 553 tests, 15 skipped.
+- Frontend build passed.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Git diff whitespace check passed.
+
 ## Stop Conditions
 
 Pause before editing if:

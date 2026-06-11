@@ -270,24 +270,32 @@ def add_task_log(task_id: str, log_message: str) -> None:
     broadcast_log(task_id, formatted_log)
 
 
+def _add_task_log_subscriber_locked(task_id: str, subscriber: queue.Queue[str]) -> None:
+    sse_connections.setdefault(task_id, []).append(subscriber)
+
+
+def _remove_task_log_subscriber_locked(task_id: str, subscriber: queue.Queue[str]) -> None:
+    subscribers = sse_connections.get(task_id)
+    if not subscribers:
+        return
+    try:
+        subscribers.remove(subscriber)
+    except ValueError:
+        return
+    if not subscribers:
+        sse_connections.pop(task_id, None)
+
+
 def subscribe_task_logs(task_id: str) -> queue.Queue[str]:
     subscriber: queue.Queue[str] = queue.Queue()
     with _state_lock:
-        sse_connections.setdefault(task_id, []).append(subscriber)
+        _add_task_log_subscriber_locked(task_id, subscriber)
     return subscriber
 
 
 def unsubscribe_task_logs(task_id: str, subscriber: queue.Queue[str]) -> None:
     with _state_lock:
-        subscribers = sse_connections.get(task_id)
-        if not subscribers:
-            return
-        try:
-            subscribers.remove(subscriber)
-        except ValueError:
-            return
-        if not subscribers:
-            sse_connections.pop(task_id, None)
+        _remove_task_log_subscriber_locked(task_id, subscriber)
 
 
 def _task_log_subscribers_snapshot_locked(task_id: str) -> List[queue.Queue[str]]:
