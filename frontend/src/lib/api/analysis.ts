@@ -13,7 +13,7 @@ import type {
   StockTopicAnalysisResponse,
   StockTopicImageExtractResponse,
   StockQuestionResponse,
-} from './types';
+} from './analysisTypes';
 import type { TaskCreateResponse } from './taskTypes';
 import type { ApiRequestOptions } from './client';
 

@@ -1022,6 +1022,43 @@ Result:
 - PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
 - Git diff whitespace check passed.
 
+### 2026-06-11 - P6 analysis API type surface split
+
+Changed:
+
+- Added `frontend/src/lib/api/analysisTypes.ts` for daily analysis, stock-topic analysis, stock
+  question, and A-share analysis frontend API types.
+- Kept `frontend/src/lib/api/types.ts` as the compatibility facade by re-exporting those analysis
+  types.
+- Updated `frontend/src/lib/api/analysis.ts` to import analysis-specific types from
+  `analysisTypes.ts`.
+- Left `ApiResponse<T>` and shared `PaginatedResponse<T>` in `types.ts`.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Public frontend import path `@/lib/api`, exported type names, daily report shape, stock-topic
+  analysis shapes, A-share status/chart/export shapes, request URLs, request bodies, and runtime
+  behavior are preserved.
+- No backend route, storage schema, task behavior, SSE behavior, fallback polling, legacy path,
+  prompt, AI output, or config semantics changed.
+
+Verification:
+
+```powershell
+npm --prefix frontend run build
+uv run python -m unittest discover -s tests
+uv run python scripts\scan_postgres_compat_debt.py
+git diff --check
+```
+
+Result:
+
+- Frontend build passed.
+- Full backend tests passed: 533 tests, 15 skipped.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Git diff whitespace check passed.
+
 ## Stop Conditions
 
 Pause before editing if:
