@@ -16,6 +16,8 @@ task_store: Optional[TaskStore] = None
 TASK_LOCK_LEASE_MINUTES = 30
 TASK_LOCK_HEARTBEAT_SECONDS = 60
 _state_lock = threading.RLock()
+ACTIVE_TASK_STATUSES = {"pending", "running"}
+RUNTIME_TERMINAL_TASK_STATUSES = {"completed", "failed", "cancelled"}
 
 
 def get_task_store() -> TaskStore:
@@ -54,6 +56,14 @@ INGESTION_LOCK_KEY = "ingestion"
 
 def _normalize_task_status(status: str) -> str:
     return "cancelled" if status == "stopped" else status
+
+
+def _is_active_task_status(status: Any) -> bool:
+    return status in ACTIVE_TASK_STATUSES
+
+
+def _is_runtime_terminal_status(status: Any) -> bool:
+    return _normalize_task_status(str(status or "")) in RUNTIME_TERMINAL_TASK_STATUSES
 
 
 def _normalize_task(task: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
@@ -162,7 +172,7 @@ def find_running_ingestion_task(group_id: str, exclude_task_id: Optional[str] = 
     for task in list_tasks():
         if exclude_task_id and task.get("task_id") == exclude_task_id:
             continue
-        if task.get("status") not in {"pending", "running"}:
+        if not _is_active_task_status(task.get("status")):
             continue
         if task.get("ingestion_lock_key") != INGESTION_LOCK_KEY and task.get("type") not in INGESTION_LOCK_TYPES:
             continue
@@ -279,7 +289,7 @@ def update_task(
 
     store.update_task(task_id, status, message, result=result, updated_at=now)
     add_task_log(task_id, f"状态更新: {message}")
-    if status in {"completed", "failed", "cancelled"}:
+    if _is_runtime_terminal_status(status):
         try:
             store.release_task_lock(task_id, status, released_at=now)
         except Exception as exc:
@@ -301,7 +311,7 @@ def stop_task(task_id: str) -> bool:
     if not task:
         return False
 
-    if task["status"] not in ["pending", "running"]:
+    if not _is_active_task_status(task["status"]):
         return False
 
     with _state_lock:
@@ -381,7 +391,7 @@ def request_runtime_shutdown() -> None:
         stopping_task_ids = [
             task_id
             for task_id, task in tasks_snapshot
-            if task.get("status") in {"pending", "running"}
+            if _is_active_task_status(task.get("status"))
         ]
         for task_id in stopping_task_ids:
             task_stop_flags[task_id] = True
@@ -397,7 +407,7 @@ def request_runtime_shutdown() -> None:
             downloader.set_stop_flag()
 
     for task_id, task in tasks_snapshot:
-        if task.get("status") in {"pending", "running"}:
+        if _is_active_task_status(task.get("status")):
             get_task_store().set_stop_flag(task_id, True)
             update_task(task_id, "cancelled", "服务关闭，任务已停止")
 

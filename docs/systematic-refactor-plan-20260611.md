@@ -710,6 +710,51 @@ Result:
 - PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
 - Git diff whitespace check passed.
 
+### 2026-06-11 - P5 task runtime status boundary helper extraction
+
+Changed:
+
+- Added characterization coverage for runtime active status checks, terminal status checks, and
+  legacy `stopped` normalization to `cancelled`.
+- Added `ACTIVE_TASK_STATUSES`, `RUNTIME_TERMINAL_TASK_STATUSES`,
+  `_is_active_task_status`, and `_is_runtime_terminal_status` in
+  `backend/services/task_runtime.py`.
+- Reused the helpers from ingestion-task conflict checks, task update lock release, stop handling,
+  and shutdown cancellation paths.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- `pending` and `running` remain the only active runtime statuses.
+- `completed`, `failed`, and `cancelled` remain the only runtime terminal statuses after
+  normalization; `stopped` still normalizes to `cancelled`.
+- Cancellation behavior, terminal lock release, task IDs, persisted fields, log messages, SSE
+  semantics, fallback polling, and frontend task contract are preserved.
+- No storage schema, task store SQL, public route response, frontend hook, legacy path, or config
+  semantics changed.
+
+Verification:
+
+```powershell
+uv run python -m py_compile backend\services\task_runtime.py
+uv run python -m unittest tests.test_task_runtime_helpers -v
+uv run python -m unittest tests.test_task_runtime_helpers tests.test_task_store tests.test_task_routes_helpers -v
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+uv run python scripts\scan_postgres_compat_debt.py
+git diff --check
+```
+
+Result:
+
+- Focused task runtime helper tests passed: 13 tests.
+- Recommended task runtime gate passed: 32 tests, 14 PostgreSQL integration tests skipped by
+  environment gate.
+- Full backend tests passed: 532 tests, 15 skipped.
+- Frontend build passed.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Git diff whitespace check passed.
+
 ## Stop Conditions
 
 Pause before editing if:

@@ -70,6 +70,26 @@ class TaskRuntimeHelperTests(unittest.TestCase):
         self.assertIn("columns_fetch", INGESTION_LOCK_TYPES)
         self.assertIn("download_single_file", INGESTION_LOCK_TYPES)
 
+    def test_runtime_status_helpers_preserve_task_state_contract(self):
+        from backend.services.task_runtime import (
+            _is_active_task_status,
+            _is_runtime_terminal_status,
+            _normalize_task,
+        )
+
+        self.assertTrue(_is_active_task_status("pending"))
+        self.assertTrue(_is_active_task_status("running"))
+        self.assertFalse(_is_active_task_status("completed"))
+
+        self.assertTrue(_is_runtime_terminal_status("completed"))
+        self.assertTrue(_is_runtime_terminal_status("failed"))
+        self.assertTrue(_is_runtime_terminal_status("cancelled"))
+        self.assertTrue(_is_runtime_terminal_status("stopped"))
+        self.assertFalse(_is_runtime_terminal_status("running"))
+
+        normalized = _normalize_task({"task_id": "task-1", "status": "stopped"})
+        self.assertEqual("cancelled", normalized["status"])
+
     def test_find_running_ingestion_task_matches_same_group(self):
         from backend.services.task_runtime import find_running_ingestion_task
 
