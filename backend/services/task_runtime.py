@@ -274,9 +274,13 @@ def unsubscribe_task_logs(task_id: str, subscriber: queue.Queue[str]) -> None:
             sse_connections.pop(task_id, None)
 
 
+def _task_log_subscribers_snapshot_locked(task_id: str) -> List[queue.Queue[str]]:
+    return list(sse_connections.get(task_id, []))
+
+
 def broadcast_log(task_id: str, log_message: str) -> None:
     with _state_lock:
-        subscribers = list(sse_connections.get(task_id, []))
+        subscribers = _task_log_subscribers_snapshot_locked(task_id)
     for subscriber in subscribers:
         try:
             subscriber.put_nowait(log_message)

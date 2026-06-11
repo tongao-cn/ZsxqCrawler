@@ -86,6 +86,11 @@ class Stoppable:
         self.stopped = True
 
 
+class FailingSubscriber:
+    def put_nowait(self, _message):
+        raise RuntimeError("subscriber failed")
+
+
 class TaskRuntimeHelperTests(unittest.TestCase):
     def test_columns_fetch_is_ingestion_locked(self):
         from backend.services.task_runtime import INGESTION_LOCK_TYPES
@@ -422,6 +427,19 @@ class TaskRuntimeHelperTests(unittest.TestCase):
             with self.assertRaises(queue.Empty):
                 subscriber.get_nowait()
             self.assertNotIn("task-1", task_runtime.sse_connections)
+        finally:
+            task_runtime.sse_connections.pop("task-1", None)
+
+    def test_broadcast_log_ignores_failing_subscriber(self):
+        from backend.services import task_runtime
+
+        subscriber = queue.Queue()
+        task_runtime.sse_connections["task-1"] = [FailingSubscriber(), subscriber]
+
+        try:
+            task_runtime.broadcast_log("task-1", "first")
+
+            self.assertEqual("first", subscriber.get_nowait())
         finally:
             task_runtime.sse_connections.pop("task-1", None)
 
