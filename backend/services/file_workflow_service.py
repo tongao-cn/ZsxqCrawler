@@ -675,16 +675,21 @@ def _load_download_file_records(
     rows = downloader.file_db.cursor.fetchall()
     by_file_id = {int(row[0]): row for row in rows}
     records = [
-        (
-            int(row[0]),
-            str(row[1] or f"file_{int(row[0])}"),
-            int(row[2] or 0),
-            int(row[3] or 0),
-        )
+        _normalize_download_file_record(row)
         for row in (by_file_id[file_id] for file_id in ordered_ids if file_id in by_file_id)
     ]
     missing = [file_id for file_id in ordered_ids if file_id not in by_file_id]
     return records, missing
+
+
+def _normalize_download_file_record(row: Sequence[Any]) -> tuple[int, str, int, int]:
+    file_id = int(row[0])
+    return (
+        file_id,
+        str(row[1] or f"file_{file_id}"),
+        int(row[2] or 0),
+        int(row[3] or 0),
+    )
 
 
 def _add_file_search_condition(conditions: list[str], params: list[Any], search: Optional[str]) -> None:
@@ -766,15 +771,7 @@ def _load_filtered_download_file_records(
         tuple(params),
     )
     rows = downloader.file_db.cursor.fetchall()
-    return [
-        (
-            int(row[0]),
-            str(row[1] or f"file_{int(row[0])}"),
-            int(row[2] or 0),
-            int(row[3] or 0),
-        )
-        for row in rows
-    ]
+    return [_normalize_download_file_record(row) for row in rows]
 
 
 def _run_download_records(

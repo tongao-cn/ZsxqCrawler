@@ -12,6 +12,7 @@ from backend.services.file_workflow_service import (
     _enqueue_file_task,
     _fail_file_task,
     _get_download_file_status,
+    _load_download_file_records,
     _load_filtered_download_file_records,
     _query_group_id,
     _resolve_download_record_status,
@@ -722,6 +723,40 @@ class FileRoutesHelperTests(unittest.TestCase):
             ],
             records,
         )
+
+    def test_load_download_file_records_dedupes_preserves_order_and_reports_missing(self):
+        class FakeCursor:
+            def __init__(self):
+                self.executed = []
+
+            def execute(self, sql, params=()):
+                self.executed.append((sql, params))
+
+            def fetchall(self):
+                return [
+                    (102, None, None, None),
+                    (101, "Report.PDF", 123, 7),
+                ]
+
+        class FakeDownloader:
+            def __init__(self):
+                self.file_db = type("FakeFileDb", (), {"cursor": FakeCursor()})()
+
+        downloader = FakeDownloader()
+
+        records, missing = _load_download_file_records(downloader, "123", [101, 102, 101, 999])
+
+        query, params = downloader.file_db.cursor.executed[0]
+        self.assertIn("WHERE group_id = ? AND file_id IN (?, ?, ?)", " ".join(query.split()))
+        self.assertEqual((123, 101, 102, 999), params)
+        self.assertEqual(
+            [
+                (101, "Report.PDF", 123, 7),
+                (102, "file_102", 0, 0),
+            ],
+            records,
+        )
+        self.assertEqual([999], missing)
 
     def test_close_crawler_file_databases_closes_file_and_topic_dbs(self):
         crawler = FakeCrawler()

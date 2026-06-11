@@ -155,6 +155,39 @@ Result:
 - Frontend build passed.
 - PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
 
+### 2026-06-11 - P1 shared download record normalization
+
+Changed:
+
+- Added characterization coverage for `_load_download_file_records` selected-file ID de-duplication,
+  original-order preservation, missing-ID reporting, SQL parameters, and blank-row fallback values.
+- Extracted `_normalize_download_file_record` and reused it from both selected-file and
+  filtered-download record loaders.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Selected download ordering, missing ID reporting, fallback file names, zero defaults, filtered
+  download row shape, and task execution behavior are preserved.
+- No route, task status, storage schema, legacy path, or fallback behavior changed.
+
+Verification:
+
+```powershell
+uv run python -m py_compile backend\services\file_workflow_service.py
+uv run python -m unittest tests.test_file_routes_helpers -v
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+uv run python scripts\scan_postgres_compat_debt.py
+```
+
+Result:
+
+- Focused file route helper tests passed: 31 tests.
+- Full backend tests passed: 509 tests, 15 skipped.
+- Frontend build passed.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+
 ## Stop Conditions
 
 Pause before editing if:
