@@ -1428,6 +1428,48 @@ Result:
 - PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
 - Git diff whitespace check passed.
 
+### 2026-06-11 - P5 task log append helper extraction
+
+Changed:
+
+- Added characterization coverage for `add_task_log()` using the persisted log text returned by
+  `TaskStore.add_log()` for both in-memory task logs and broadcasts.
+- Extracted `_append_task_log_locked()` to centralize the locked in-memory task-log list creation
+  and append behavior.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- `add_task_log()` still persists the input log message first, stores the persisted/formatted log
+  text in `task_logs`, and broadcasts that same persisted/formatted log text afterward.
+- The in-memory fallback for tasks without an existing `task_logs` entry is preserved.
+- No public route response, task store SQL, task status behavior, task cancellation behavior, task
+  log text source, SSE framing, fallback polling, storage schema, legacy path, config semantics, or
+  frontend hook behavior changed.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_task_runtime_helpers -v
+uv run python -m py_compile backend\services\task_runtime.py
+uv run python -m unittest tests.test_task_runtime_helpers tests.test_task_store tests.test_task_routes_helpers -v
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+uv run python scripts\scan_postgres_compat_debt.py
+git diff --check
+```
+
+Result:
+
+- Characterization test passed on the pre-refactor code before the helper extraction.
+- Focused task runtime tests passed: 21 tests.
+- Recommended task runtime gate passed: 40 tests, 14 PostgreSQL integration tests skipped by
+  configuration.
+- Full backend tests passed: 540 tests, 15 skipped.
+- Frontend build passed.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Git diff whitespace check passed.
+
 ## Stop Conditions
 
 Pause before editing if:

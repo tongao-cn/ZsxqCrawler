@@ -413,6 +413,25 @@ class TaskRuntimeHelperTests(unittest.TestCase):
             finally:
                 task_runtime.task_logs.pop("task-1", None)
 
+    def test_add_task_log_uses_persisted_log_text_for_memory_and_broadcast(self):
+        from backend.services import task_runtime
+
+        store = FakeTaskStore()
+
+        with (
+            patch("backend.services.task_runtime.get_task_store", return_value=store),
+            patch.object(store, "add_log", return_value="persisted:first") as add_log,
+            patch("backend.services.task_runtime.broadcast_log") as broadcast_log,
+        ):
+            try:
+                task_runtime.add_task_log("task-1", "first")
+
+                add_log.assert_called_once_with("task-1", "first")
+                self.assertEqual(["persisted:first"], task_runtime.task_logs["task-1"])
+                broadcast_log.assert_called_once_with("task-1", "persisted:first")
+            finally:
+                task_runtime.task_logs.pop("task-1", None)
+
     def test_task_log_subscription_receives_broadcast_until_unsubscribed(self):
         from backend.services import task_runtime
 

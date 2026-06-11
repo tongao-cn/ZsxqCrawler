@@ -245,12 +245,16 @@ def create_ingestion_task(task_type: str, description: str, group_id: str) -> tu
     return task_id, None
 
 
+def _append_task_log_locked(task_id: str, formatted_log: str) -> None:
+    if task_id not in task_logs:
+        task_logs[task_id] = []
+    task_logs[task_id].append(formatted_log)
+
+
 def add_task_log(task_id: str, log_message: str) -> None:
     formatted_log = get_task_store().add_log(task_id, log_message)
     with _state_lock:
-        if task_id not in task_logs:
-            task_logs[task_id] = []
-        task_logs[task_id].append(formatted_log)
+        _append_task_log_locked(task_id, formatted_log)
     broadcast_log(task_id, formatted_log)
 
 
