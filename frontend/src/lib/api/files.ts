@@ -1,6 +1,7 @@
 import { AnalysisApiClient } from './analysis';
+import type { FileAIAnalysis, FileItem } from './fileTypes';
 import type { TaskCreateResponse } from './taskTypes';
-import type { FileAIAnalysis, FileItem, PaginatedResponse } from './types';
+import type { PaginatedResponse } from './types';
 
 export class FilesApiClient extends AnalysisApiClient {
   async downloadFiles(groupId: number | string, maxFiles?: number, sortBy: string = 'download_count',
