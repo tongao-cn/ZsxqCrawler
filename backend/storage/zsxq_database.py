@@ -6,14 +6,14 @@ from typing import Dict, Any, Optional, List
 from backend.storage.db_compat import connect
 from backend.storage.zsxq_database_helpers import (
     build_topic_detail_qa,
-    build_topic_detail_latest_likes,
-    build_topic_detail_likes_detail,
     build_topic_detail_comments,
     build_pagination,
     format_tag_row,
     format_tag_topic_row,
     group_id_param,
     load_topic_comment_images_map,
+    load_topic_detail_latest_likes,
+    load_topic_detail_likes_detail,
     load_topic_detail_talk,
     nullable_group_id_param,
     replace_file_topic_relation,
@@ -1156,19 +1156,7 @@ class ZSXQDatabase:
                 topic_detail["talk"] = load_topic_detail_talk(self.cursor, topic_id, scoped_group_id, talk_row)
 
             # 3. 获取最新点赞
-            self.cursor.execute('''
-                SELECT
-                    l.create_time,
-                    u.user_id, u.name, u.avatar_url
-                FROM likes l
-                LEFT JOIN users u ON l.user_id = u.user_id
-                WHERE l.topic_id = ?
-                  AND (? IS NULL OR l.topic_id IN (SELECT topic_id FROM topics WHERE group_id = ?))
-                ORDER BY l.create_time DESC
-                LIMIT 5
-            ''', (topic_id, scoped_group_id, scoped_group_id))
-
-            topic_detail["latest_likes"] = build_topic_detail_latest_likes(self.cursor.fetchall())
+            topic_detail["latest_likes"] = load_topic_detail_latest_likes(self.cursor, topic_id, scoped_group_id)
 
             # 4. 获取评论 - 不再限制为10条，返回所有评论
             self.cursor.execute('''
@@ -1192,14 +1180,7 @@ class ZSXQDatabase:
             topic_detail["show_comments"] = build_topic_detail_comments(comment_rows, comment_images_map)
 
             # 5. 获取点赞详情（表情）
-            self.cursor.execute('''
-                SELECT emoji_key, likes_count
-                FROM like_emojis
-                WHERE topic_id = ?
-                  AND (? IS NULL OR topic_id IN (SELECT topic_id FROM topics WHERE group_id = ?))
-            ''', (topic_id, scoped_group_id, scoped_group_id))
-
-            topic_detail["likes_detail"] = build_topic_detail_likes_detail(self.cursor.fetchall())
+            topic_detail["likes_detail"] = load_topic_detail_likes_detail(self.cursor, topic_id, scoped_group_id)
 
             # 6. 获取问答数据（如果是问答类型话题）
             if topic_detail["type"] == "q&a":

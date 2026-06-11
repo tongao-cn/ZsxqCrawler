@@ -310,6 +310,33 @@ def build_topic_detail_likes_detail(emoji_rows) -> Dict[str, list[Dict[str, Any]
     }
 
 
+def load_topic_detail_latest_likes(cursor, topic_id: int, scoped_group_id: Any) -> list[Dict[str, Any]]:
+    cursor.execute('''
+        SELECT
+            l.create_time,
+            u.user_id, u.name, u.avatar_url
+        FROM likes l
+        LEFT JOIN users u ON l.user_id = u.user_id
+        WHERE l.topic_id = ?
+          AND (? IS NULL OR l.topic_id IN (SELECT topic_id FROM topics WHERE group_id = ?))
+        ORDER BY l.create_time DESC
+        LIMIT 5
+    ''', (topic_id, scoped_group_id, scoped_group_id))
+
+    return build_topic_detail_latest_likes(cursor.fetchall())
+
+
+def load_topic_detail_likes_detail(cursor, topic_id: int, scoped_group_id: Any) -> Dict[str, list[Dict[str, Any]]]:
+    cursor.execute('''
+        SELECT emoji_key, likes_count
+        FROM like_emojis
+        WHERE topic_id = ?
+          AND (? IS NULL OR topic_id IN (SELECT topic_id FROM topics WHERE group_id = ?))
+    ''', (topic_id, scoped_group_id, scoped_group_id))
+
+    return build_topic_detail_likes_detail(cursor.fetchall())
+
+
 def topic_detail_comment_payload(row, images: list[Dict[str, Any]]) -> Dict[str, Any]:
     comment_data = {
         "comment_id": row[0],

@@ -2528,6 +2528,42 @@ Result:
 - PostgreSQL compatibility debt scan: no SQLite compatibility patterns found.
 - Frontend build was not rerun because this slice only changes backend storage/helper code.
 
+### 2026-06-11 - P2 topic engagement loader extraction
+
+Changed:
+
+- Added `load_topic_detail_latest_likes` and `load_topic_detail_likes_detail` to
+  `backend/storage/zsxq_database_helpers.py`.
+- Replaced the matching latest-like and like-emoji query blocks in
+  `backend/storage/zsxq_database.py` with helper calls at the original call sites.
+- Removed the now-unused direct payload-builder imports from `backend/storage/zsxq_database.py`.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Query order remains unchanged: latest likes are still read before comments, and like emojis are
+  still read after comments.
+- SQL predicates, scoped group filters, sort/limit behavior, parameter tuples, and returned payload
+  shapes are unchanged.
+- Existing engagement tests verify the two query parameter lists and returned payload.
+
+Verification:
+
+```powershell
+uv run python -m py_compile backend\storage\zsxq_database.py backend\storage\zsxq_database_helpers.py
+uv run python -m unittest tests.test_zsxq_database_helpers -v
+uv run python -m unittest discover -s tests
+uv run python scripts\scan_postgres_compat_debt.py
+```
+
+Result:
+
+- `py_compile` passed.
+- `tests.test_zsxq_database_helpers`: 19 tests passed.
+- Full backend unittest discovery: 557 tests passed, 15 skipped.
+- PostgreSQL compatibility debt scan: no SQLite compatibility patterns found.
+- Frontend build was not rerun because this slice only changes backend storage/helper code.
+
 ## Stop Conditions
 
 Pause before editing if:
