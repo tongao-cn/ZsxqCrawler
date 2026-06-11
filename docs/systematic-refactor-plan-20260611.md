@@ -188,6 +188,43 @@ Result:
 - Frontend build passed.
 - PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
 
+### 2026-06-11 - P1 file download task decision extraction
+
+Changed:
+
+- Added characterization coverage for `run_file_download_task` download-count mode with existing
+  file records, including skip-collect behavior, downloader construction options, query parameters,
+  download options, completion update, and cleanup.
+- Added characterization coverage for `run_file_download_task` create-time mode with an empty file
+  library, including date-range collection, download date filters, range logging, collection result
+  logging, completion update, and cleanup.
+- Extracted `_build_file_download_range_log`, `_collect_files_for_download`, and
+  `_build_file_download_options` from `run_file_download_task`.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Download configuration logs, existing-file skip logic, empty-library collection choice, downloader
+  method calls, download option shapes, completion result shape, and cleanup behavior are preserved.
+- No public API, task status semantics, storage schema, legacy path, or fallback behavior changed.
+
+Verification:
+
+```powershell
+uv run python -m py_compile backend\services\file_workflow_service.py
+uv run python -m unittest tests.test_file_routes_helpers -v
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+uv run python scripts\scan_postgres_compat_debt.py
+```
+
+Result:
+
+- Focused file route helper tests passed: 33 tests.
+- Full backend tests passed: 511 tests, 15 skipped.
+- Frontend build passed.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+
 ## Stop Conditions
 
 Pause before editing if:

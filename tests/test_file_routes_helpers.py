@@ -53,6 +53,37 @@ class FakeCrawler:
         return self.downloader
 
 
+class FakeFileDownloadTaskCursor:
+    def __init__(self, existing_count):
+        self.existing_count = existing_count
+        self.executed = []
+
+    def execute(self, sql, params=()):
+        self.executed.append((sql, params))
+
+    def fetchone(self):
+        return (self.existing_count,)
+
+
+class FakeFileDownloadTaskDownloader:
+    def __init__(self, existing_count):
+        self.file_db = type("FakeFileDb", (), {"cursor": FakeFileDownloadTaskCursor(existing_count)})()
+        self.collect_calls = []
+        self.download_calls = []
+
+    def collect_files_for_date_range(self, **kwargs):
+        self.collect_calls.append(("date_range", kwargs))
+        return "range-result"
+
+    def collect_incremental_files(self):
+        self.collect_calls.append(("incremental", {}))
+        return "incremental-result"
+
+    def download_files_from_database(self, **kwargs):
+        self.download_calls.append(kwargs)
+        return "download-result"
+
+
 class FileRoutesHelperTests(unittest.TestCase):
     def test_enqueue_file_task_creates_task_and_schedules_callback(self):
         background_tasks = FakeBackgroundTasks()
@@ -682,6 +713,109 @@ class FileRoutesHelperTests(unittest.TestCase):
             },
             response["files"][0],
         )
+
+    def test_run_file_download_task_existing_files_uses_download_count_without_collect(self):
+        from backend.services.file_workflow_service import run_file_download_task
+
+        downloader = FakeFileDownloadTaskDownloader(existing_count=2)
+
+        with (
+            patch("backend.services.file_workflow_service._create_file_downloader", return_value=downloader) as create_downloader,
+            patch("backend.services.file_workflow_service.update_task") as update_task,
+            patch("backend.services.file_workflow_service.add_task_log") as add_task_log,
+            patch("backend.services.file_workflow_service.is_task_stopped", return_value=False),
+            patch("backend.services.file_workflow_service._safe_remove_file_downloader") as safe_remove,
+        ):
+            run_file_download_task(
+                "task-1",
+                "123",
+                max_files=5,
+                sort_by="download_count",
+                download_interval=2.0,
+                long_sleep_interval=30.0,
+                files_per_batch=4,
+            )
+
+        create_downloader.assert_called_once_with(
+            "task-1",
+            "123",
+            download_interval=2.0,
+            long_sleep_interval=30.0,
+            files_per_batch=4,
+            download_interval_min=None,
+            download_interval_max=None,
+            long_sleep_interval_min=None,
+            long_sleep_interval_max=None,
+        )
+        self.assertEqual(
+            [("SELECT COUNT(*) FROM files WHERE group_id = ?", (123,))],
+            downloader.file_db.cursor.executed,
+        )
+        self.assertEqual([], downloader.collect_calls)
+        self.assertEqual(
+            [{"max_files": 5, "status_filter": "pending", "sort_by": "download_count"}],
+            downloader.download_calls,
+        )
+        self.assertIn(
+            ("task-1", "📚 文件库已有 2 条记录，跳过收集阶段，直接下载"),
+            [call.args for call in add_task_log.call_args_list],
+        )
+        update_task.assert_any_call("task-1", "completed", "文件下载完成", {"downloaded_files": "download-result"})
+        safe_remove.assert_called_once_with("task-1")
+
+    def test_run_file_download_task_empty_create_time_collects_and_downloads_date_range(self):
+        from backend.services.file_workflow_service import run_file_download_task
+
+        downloader = FakeFileDownloadTaskDownloader(existing_count=0)
+
+        with (
+            patch("backend.services.file_workflow_service._create_file_downloader", return_value=downloader),
+            patch("backend.services.file_workflow_service.update_task") as update_task,
+            patch("backend.services.file_workflow_service.add_task_log") as add_task_log,
+            patch("backend.services.file_workflow_service.is_task_stopped", return_value=False),
+            patch("backend.services.file_workflow_service._safe_remove_file_downloader") as safe_remove,
+        ):
+            run_file_download_task(
+                "task-1",
+                "123",
+                max_files=5,
+                sort_by="create_time",
+                start_time="2026-06-01",
+                end_time="2026-06-02",
+            )
+
+        self.assertEqual(
+            [
+                (
+                    "date_range",
+                    {"start_date": "2026-06-01", "end_date": "2026-06-02", "last_days": None},
+                )
+            ],
+            downloader.collect_calls,
+        )
+        self.assertEqual(
+            [
+                {
+                    "max_files": 5,
+                    "status_filter": "pending",
+                    "sort_by": "create_time",
+                    "start_date": "2026-06-01",
+                    "end_date": "2026-06-02",
+                    "last_days": None,
+                }
+            ],
+            downloader.download_calls,
+        )
+        self.assertIn(
+            ("task-1", "   📅 下载区间: 2026-06-01 ~ 2026-06-02"),
+            [call.args for call in add_task_log.call_args_list],
+        )
+        self.assertIn(
+            ("task-1", "📊 文件收集完成: range-result"),
+            [call.args for call in add_task_log.call_args_list],
+        )
+        update_task.assert_any_call("task-1", "completed", "文件下载完成", {"downloaded_files": "download-result"})
+        safe_remove.assert_called_once_with("task-1")
 
     def test_load_filtered_download_file_records_keeps_default_search_and_limit_shape(self):
         class FakeCursor:

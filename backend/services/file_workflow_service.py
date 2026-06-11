@@ -559,6 +559,60 @@ def run_collect_files_task(task_id: str, group_id: str, request: FileCollectRequ
         _safe_remove_file_downloader(task_id)
 
 
+def _build_file_download_range_log(
+    sort_by: str,
+    start_time: Optional[str],
+    end_time: Optional[str],
+    last_days: Optional[int],
+) -> Optional[str]:
+    if sort_by != "create_time":
+        return None
+    if start_time or end_time:
+        return f"   📅 下载区间: {start_time or '-'} ~ {end_time or '-'}"
+    if last_days:
+        return f"   📅 下载最近天数: {last_days}天"
+    return None
+
+
+def _collect_files_for_download(
+    downloader: ZSXQFileDownloader,
+    sort_by: str,
+    start_time: Optional[str],
+    end_time: Optional[str],
+    last_days: Optional[int],
+) -> Any:
+    if sort_by == "create_time":
+        return downloader.collect_files_for_date_range(
+            start_date=start_time,
+            end_date=end_time,
+            last_days=last_days,
+        )
+    return downloader.collect_incremental_files()
+
+
+def _build_file_download_options(
+    sort_by: str,
+    max_files: Optional[int],
+    start_time: Optional[str],
+    end_time: Optional[str],
+    last_days: Optional[int],
+) -> Dict[str, Any]:
+    if sort_by == "download_count":
+        return {
+            "max_files": max_files,
+            "status_filter": "pending",
+            "sort_by": "download_count",
+        }
+    return {
+        "max_files": max_files,
+        "status_filter": "pending",
+        "sort_by": "create_time",
+        "start_date": start_time,
+        "end_date": end_time,
+        "last_days": last_days,
+    }
+
+
 def run_file_download_task(
     task_id: str,
     group_id: str,
@@ -593,11 +647,9 @@ def run_file_download_task(
         add_task_log(task_id, f"   ⏱️ 单次下载间隔: {download_interval}秒")
         add_task_log(task_id, f"   😴 长休眠间隔: {long_sleep_interval}秒")
         add_task_log(task_id, f"   📦 批次大小: {files_per_batch}个文件")
-        if sort_by == "create_time":
-            if start_time or end_time:
-                add_task_log(task_id, f"   📅 下载区间: {start_time or '-'} ~ {end_time or '-'}")
-            elif last_days:
-                add_task_log(task_id, f"   📅 下载最近天数: {last_days}天")
+        range_log = _build_file_download_range_log(sort_by, start_time, end_time, last_days)
+        if range_log:
+            add_task_log(task_id, range_log)
 
         if is_task_stopped(task_id):
             add_task_log(task_id, "🛑 任务在初始化过程中被停止")
@@ -611,14 +663,13 @@ def run_file_download_task(
         if existing_files_count == 0:
             add_task_log(task_id, "📍 阶段一：收集文件列表")
             add_task_log(task_id, "🔍 文件库为空，开始收集文件列表...")
-            if sort_by == "create_time":
-                collect_result = downloader.collect_files_for_date_range(
-                    start_date=start_time,
-                    end_date=end_time,
-                    last_days=last_days,
-                )
-            else:
-                collect_result = downloader.collect_incremental_files()
+            collect_result = _collect_files_for_download(
+                downloader,
+                sort_by,
+                start_time,
+                end_time,
+                last_days,
+            )
         else:
             add_task_log(task_id, f"📚 文件库已有 {existing_files_count} 条记录，跳过收集阶段，直接下载")
 
@@ -630,21 +681,15 @@ def run_file_download_task(
         add_task_log(task_id, "📍 阶段二：下载文件本体")
         add_task_log(task_id, "🚀 开始下载文件...")
 
-        if sort_by == "download_count":
-            result = downloader.download_files_from_database(
-                max_files=max_files,
-                status_filter="pending",
-                sort_by="download_count",
+        result = downloader.download_files_from_database(
+            **_build_file_download_options(
+                sort_by,
+                max_files,
+                start_time,
+                end_time,
+                last_days,
             )
-        else:
-            result = downloader.download_files_from_database(
-                max_files=max_files,
-                status_filter="pending",
-                sort_by="create_time",
-                start_date=start_time,
-                end_date=end_time,
-                last_days=last_days,
-            )
+        )
 
         if is_task_stopped(task_id):
             return
