@@ -21,6 +21,7 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     classify_http_failure,
     content_disposition_filename,
     download_exception_detail,
+    download_final_failure_detail,
     download_http_failure_detail,
     download_progress_message,
     download_url_failure_detail,
@@ -337,6 +338,11 @@ class FileDownloaderFileDataHelperTests(unittest.TestCase):
 
     def test_download_exception_detail_preserves_error_contract(self):
         self.assertEqual(("download_exception", "network down"), download_exception_detail(RuntimeError("network down")))
+
+    def test_download_final_failure_detail_preserves_defaults_and_last_error(self):
+        self.assertEqual(("download_failed", "文件下载失败"), download_final_failure_detail(None, None))
+        self.assertEqual(("download_failed", "文件下载失败"), download_final_failure_detail("", ""))
+        self.assertEqual(("http_status", "HTTP 500"), download_final_failure_detail("http_status", "HTTP 500"))
 
     def test_content_disposition_filename_extracts_plain_filename(self):
         self.assertEqual("memo.pdf", content_disposition_filename('attachment; filename="memo.pdf"'))

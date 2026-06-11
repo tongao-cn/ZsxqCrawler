@@ -29,6 +29,7 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     classify_http_failure,
     download_file_data,
     download_exception_detail,
+    download_final_failure_detail,
     download_http_failure_detail,
     download_interval_plan,
     download_progress_message,
@@ -677,11 +678,12 @@ class ZSXQFileDownloader:
                     self.log(f"   🗑️ 删除不完整文件")
 
         self.log(f"   🚫 文件下载重试{download_retries}次仍失败: {last_error}")
+        error_code, error_message = download_final_failure_detail(last_error_code, last_error)
         self.file_db.update_file_download_status(
             file_id,
             'failed',
-            error_code=last_error_code or "download_failed",
-            error_message=last_error or "文件下载失败",
+            error_code=error_code,
+            error_message=error_message,
         )
         return False
 

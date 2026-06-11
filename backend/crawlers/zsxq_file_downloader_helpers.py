@@ -266,6 +266,13 @@ def download_exception_detail(exc: Exception) -> tuple[str, str]:
     return "download_exception", str(exc)
 
 
+def download_final_failure_detail(
+    last_error_code: Optional[str],
+    last_error: Optional[str],
+) -> tuple[str, str]:
+    return last_error_code or "download_failed", last_error or "文件下载失败"
+
+
 def content_disposition_filename(content_disposition: str) -> Optional[str]:
     if "filename=" not in content_disposition:
         return None
