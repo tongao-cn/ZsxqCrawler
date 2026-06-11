@@ -1825,6 +1825,51 @@ Result:
 - PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
 - Git diff whitespace check passed.
 
+### 2026-06-11 - P5 task lock heartbeat helper extraction
+
+Changed:
+
+- Added characterization coverage for `_start_task_lock_heartbeat()` skipping non-ingestion tasks
+  without starting a heartbeat thread.
+- Added characterization coverage for `_start_task_lock_heartbeat()` registering ingestion task
+  heartbeat stop events and `_stop_task_lock_heartbeat()` clearing and setting them.
+- Extracted `_register_task_lock_heartbeat_locked()`, `_pop_task_lock_heartbeat_locked()`, and
+  `_task_lock_heartbeat_ids_locked()` to isolate locked `runtime_task_heartbeats` mutations and
+  snapshots.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Task lock heartbeat still only starts for tasks with `ingestion_lock_key == "ingestion"`, still
+  creates daemon threads named `zsxq-lock-heartbeat-{task_id}`, still swallows heartbeat store
+  errors, and still sets the stop event when stopped or during runtime shutdown.
+- No public route response, task status field, cancellation behavior, heartbeat interval, lock
+  lease minutes, fallback polling, storage schema, legacy path, config semantics, or frontend hook
+  behavior changed.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_task_runtime_helpers -v
+uv run python -m py_compile backend\services\task_runtime.py
+uv run python -m unittest tests.test_task_runtime_helpers tests.test_task_store tests.test_task_routes_helpers -v
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+uv run python scripts\scan_postgres_compat_debt.py
+git diff --check
+```
+
+Result:
+
+- Characterization tests passed on the pre-refactor code before the helper extraction.
+- Focused task runtime tests passed: 36 tests.
+- Recommended task runtime gate passed: 55 tests, 14 PostgreSQL integration tests skipped by
+  configuration.
+- Full backend tests passed: 555 tests, 15 skipped.
+- Frontend build passed.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Git diff whitespace check passed.
+
 ## Stop Conditions
 
 Pause before editing if:

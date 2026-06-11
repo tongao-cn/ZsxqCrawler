@@ -417,13 +417,25 @@ def _request_stop_for_task_resources(crawler: Any, downloader: Any) -> None:
         downloader.set_stop_flag()
 
 
+def _register_task_lock_heartbeat_locked(task_id: str, stop_event: threading.Event) -> None:
+    runtime_task_heartbeats[task_id] = stop_event
+
+
+def _pop_task_lock_heartbeat_locked(task_id: str) -> Optional[threading.Event]:
+    return runtime_task_heartbeats.pop(task_id, None)
+
+
+def _task_lock_heartbeat_ids_locked() -> List[str]:
+    return list(runtime_task_heartbeats)
+
+
 def _start_task_lock_heartbeat(task_id: str) -> None:
     task = get_task_state(task_id)
     if not task or task.get("ingestion_lock_key") != INGESTION_LOCK_KEY:
         return
     stop_event = threading.Event()
     with _state_lock:
-        runtime_task_heartbeats[task_id] = stop_event
+        _register_task_lock_heartbeat_locked(task_id, stop_event)
 
     def heartbeat() -> None:
         while not stop_event.wait(TASK_LOCK_HEARTBEAT_SECONDS):
@@ -442,7 +454,7 @@ def _start_task_lock_heartbeat(task_id: str) -> None:
 
 def _stop_task_lock_heartbeat(task_id: str) -> None:
     with _state_lock:
-        stop_event = runtime_task_heartbeats.pop(task_id, None)
+        stop_event = _pop_task_lock_heartbeat_locked(task_id)
     if stop_event:
         stop_event.set()
 
@@ -499,7 +511,7 @@ def _clear_runtime_shutdown_tracking_locked() -> List[str]:
     crawler_instances.clear()
     file_downloader_instances.clear()
     sse_connections.clear()
-    return list(runtime_task_heartbeats)
+    return _task_lock_heartbeat_ids_locked()
 
 
 def request_runtime_shutdown() -> None:

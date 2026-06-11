@@ -748,6 +748,65 @@ class TaskRuntimeHelperTests(unittest.TestCase):
             task_runtime.runtime_task_heartbeats.clear()
             task_runtime.runtime_task_threads.clear()
 
+    def test_start_task_lock_heartbeat_skips_non_ingestion_tasks(self):
+        from backend.services import task_runtime
+
+        store = FakeTaskStore()
+        store.tasks["task-1"] = {"task_id": "task-1", "status": "running", "message": "running"}
+
+        with (
+            patch("backend.services.task_runtime.get_task_store", return_value=store),
+            patch(
+                "backend.services.task_runtime.threading.Thread",
+                side_effect=AssertionError("heartbeat thread should not start"),
+            ),
+        ):
+            task_runtime._start_task_lock_heartbeat("task-1")
+
+        self.assertNotIn("task-1", task_runtime.runtime_task_heartbeats)
+
+    def test_start_task_lock_heartbeat_registers_and_stop_clears_ingestion_heartbeat(self):
+        from backend.services import task_runtime
+
+        store = FakeTaskStore()
+        store.tasks["task-1"] = {
+            "task_id": "task-1",
+            "status": "running",
+            "message": "running",
+            "ingestion_lock_key": "ingestion",
+        }
+        created_threads = []
+
+        class FakeThread:
+            def __init__(self, target, name, daemon):
+                self.target = target
+                self.name = name
+                self.daemon = daemon
+                self.started = False
+                created_threads.append(self)
+
+            def start(self):
+                self.started = True
+
+        with (
+            patch("backend.services.task_runtime.get_task_store", return_value=store),
+            patch("backend.services.task_runtime.threading.Thread", FakeThread),
+        ):
+            try:
+                task_runtime._start_task_lock_heartbeat("task-1")
+                heartbeat = task_runtime.runtime_task_heartbeats["task-1"]
+
+                task_runtime._stop_task_lock_heartbeat("task-1")
+            finally:
+                task_runtime.runtime_task_heartbeats.clear()
+
+        self.assertEqual(1, len(created_threads))
+        self.assertEqual("zsxq-lock-heartbeat-task-1", created_threads[0].name)
+        self.assertTrue(created_threads[0].daemon)
+        self.assertTrue(created_threads[0].started)
+        self.assertTrue(heartbeat.is_set())
+        self.assertNotIn("task-1", task_runtime.runtime_task_heartbeats)
+
     def test_enqueue_runtime_task_runs_daemon_thread_and_unregisters(self):
         from backend.services import task_runtime
 
