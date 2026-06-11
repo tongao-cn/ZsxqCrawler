@@ -2459,6 +2459,40 @@ Result:
 - Combined task runtime/store/routes tests: 57 tests passed, 14 PostgreSQL integration tests
   skipped.
 
+### 2026-06-11 - P2 topic comment image loader extraction
+
+Changed:
+
+- Added `load_topic_comment_images_map` to `backend/storage/zsxq_database_helpers.py`.
+- Moved the existing `get_topic_detail` comment-image batch query and image row mapping from
+  `backend/storage/zsxq_database.py` into the helper.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- The comment image query still uses 500-row chunks, the same scoped group condition, the same
+  `ORDER BY comment_id ASC, image_id ASC`, the same parameter order, and
+  `topic_detail_image_payload(..., offset=1)`.
+- Existing `get_topic_detail` comment nesting, repliee, image payload, and scoped-query tests remain
+  the behavior lock.
+
+Verification:
+
+```powershell
+uv run python -m py_compile backend\storage\zsxq_database.py backend\storage\zsxq_database_helpers.py
+uv run python -m unittest tests.test_zsxq_database_helpers -v
+uv run python -m unittest discover -s tests
+uv run python scripts\scan_postgres_compat_debt.py
+```
+
+Result:
+
+- `py_compile` passed.
+- `tests.test_zsxq_database_helpers`: 19 tests passed.
+- Full backend unittest discovery: 557 tests passed, 15 skipped.
+- PostgreSQL compatibility debt scan: no SQLite compatibility patterns found.
+- Frontend build was not rerun because this slice only changes backend storage/helper code.
+
 ## Stop Conditions
 
 Pause before editing if:

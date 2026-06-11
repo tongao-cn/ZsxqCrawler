@@ -14,6 +14,7 @@ from backend.storage.zsxq_database_helpers import (
     format_tag_row,
     format_tag_topic_row,
     group_id_param,
+    load_topic_comment_images_map,
     nullable_group_id_param,
     replace_file_topic_relation,
     topic_detail_base_payload,
@@ -1224,29 +1225,7 @@ class ZSXQDatabase:
 
             comment_rows = self.cursor.fetchall()
             comment_ids = [row[0] for row in comment_rows]
-            comment_images_map = {}
-
-            # 批量获取评论图片，避免按评论逐条查询造成 N+1
-            if comment_ids:
-                chunk_size = 500
-                for start in range(0, len(comment_ids), chunk_size):
-                    chunk_ids = comment_ids[start:start + chunk_size]
-                    placeholders = ','.join('?' for _ in chunk_ids)
-                    self.cursor.execute(f'''
-                        SELECT
-                            comment_id, image_id, type, thumbnail_url, thumbnail_width, thumbnail_height,
-                            large_url, large_width, large_height,
-                            original_url, original_width, original_height, original_size
-                        FROM images
-                        WHERE comment_id IN ({placeholders})
-                          AND (? IS NULL OR topic_id IN (SELECT topic_id FROM topics WHERE group_id = ?))
-                        ORDER BY comment_id ASC, image_id ASC
-                    ''', [*chunk_ids, scoped_group_id, scoped_group_id])
-
-                    for img_row in self.cursor.fetchall():
-                        comment_images_map.setdefault(img_row[0], []).append(
-                            topic_detail_image_payload(img_row, offset=1)
-                        )
+            comment_images_map = load_topic_comment_images_map(self.cursor, comment_ids, scoped_group_id)
 
             topic_detail["show_comments"] = build_topic_detail_comments(comment_rows, comment_images_map)
 

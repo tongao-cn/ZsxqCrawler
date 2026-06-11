@@ -332,6 +332,39 @@ def build_topic_detail_comments(comment_rows, comment_images_map: Dict[Any, list
     return parent_comments
 
 
+def load_topic_comment_images_map(
+    cursor,
+    comment_ids: list[Any],
+    scoped_group_id: Any,
+    *,
+    chunk_size: int = 500,
+) -> Dict[Any, list[Dict[str, Any]]]:
+    comment_images_map = {}
+    if not comment_ids:
+        return comment_images_map
+
+    for start in range(0, len(comment_ids), chunk_size):
+        chunk_ids = comment_ids[start:start + chunk_size]
+        placeholders = ','.join('?' for _ in chunk_ids)
+        cursor.execute(f'''
+            SELECT
+                comment_id, image_id, type, thumbnail_url, thumbnail_width, thumbnail_height,
+                large_url, large_width, large_height,
+                original_url, original_width, original_height, original_size
+            FROM images
+            WHERE comment_id IN ({placeholders})
+              AND (? IS NULL OR topic_id IN (SELECT topic_id FROM topics WHERE group_id = ?))
+            ORDER BY comment_id ASC, image_id ASC
+        ''', [*chunk_ids, scoped_group_id, scoped_group_id])
+
+        for img_row in cursor.fetchall():
+            comment_images_map.setdefault(img_row[0], []).append(
+                topic_detail_image_payload(img_row, offset=1)
+            )
+
+    return comment_images_map
+
+
 def topic_detail_question_payload(row) -> Dict[str, Any]:
     question_data = {
         "text": row[0],
