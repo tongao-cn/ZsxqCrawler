@@ -596,6 +596,44 @@ Result:
 - PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
 - Git diff whitespace check passed.
 
+### 2026-06-11 - P3 column pending media queue mapper extraction
+
+Changed:
+
+- Added characterization coverage for pending video download queue row mapping, pending file
+  download queue row mapping, and uncached image queue row mapping.
+- Extracted `_pending_video_row_to_dict`, `_pending_file_row_to_dict`, and
+  `_uncached_image_row_to_dict` in `backend/storage/zsxq_columns_database.py`.
+- Reused the helpers from `get_pending_videos`, `get_pending_files`, and `get_uncached_images`
+  while leaving SQL branches, optional group filtering, joins, and returned field names unchanged.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Queue payload fields, empty-list behavior, group-filtered branch behavior, unfiltered branch
+  behavior, and cache/download workflow semantics are preserved.
+- No schema, public API, storage write path, fallback behavior, legacy compatibility path, or config
+  semantics changed.
+
+Verification:
+
+```powershell
+uv run python -m py_compile backend\storage\zsxq_columns_database.py
+uv run python -m unittest tests.test_zsxq_columns_database_helpers -v
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+uv run python scripts\scan_postgres_compat_debt.py
+git diff --check
+```
+
+Result:
+
+- Focused column database helper tests passed: 16 tests.
+- Full backend tests passed: 529 tests, 15 skipped.
+- Frontend build passed.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Git diff whitespace check passed.
+
 ## Stop Conditions
 
 Pause before editing if:

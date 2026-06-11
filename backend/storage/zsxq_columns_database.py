@@ -118,6 +118,17 @@ def _topic_video_row_to_dict(row) -> Dict[str, Any]:
     }
 
 
+def _pending_video_row_to_dict(row) -> Dict[str, Any]:
+    return {
+        'video_id': row[0],
+        'topic_id': row[1],
+        'size': row[2],
+        'duration': row[3],
+        'cover_url': row[4],
+        'group_id': row[5]
+    }
+
+
 def _topic_detail_row_to_dict(row) -> Dict[str, Any]:
     result = {
         'topic_id': row[0],
@@ -186,6 +197,26 @@ def _topic_comment_row_to_dict(row) -> Dict[str, Any]:
         }
 
     return comment
+
+
+def _pending_file_row_to_dict(row) -> Dict[str, Any]:
+    return {
+        'file_id': row[0],
+        'topic_id': row[1],
+        'name': row[2],
+        'size': row[3],
+        'hash': row[4],
+        'group_id': row[5]
+    }
+
+
+def _uncached_image_row_to_dict(row) -> Dict[str, Any]:
+    return {
+        'image_id': row[0],
+        'topic_id': row[1],
+        'original_url': row[2],
+        'group_id': row[3]
+    }
 
 
 def _empty_stats() -> Dict[str, int]:
@@ -743,17 +774,7 @@ class ZSXQColumnsDatabase:
                 WHERE v.download_status = 'pending'
             ''')
         
-        videos = []
-        for row in self.cursor.fetchall():
-            videos.append({
-                'video_id': row[0],
-                'topic_id': row[1],
-                'size': row[2],
-                'duration': row[3],
-                'cover_url': row[4],
-                'group_id': row[5]
-            })
-        return videos
+        return [_pending_video_row_to_dict(row) for row in self.cursor.fetchall()]
     
     def get_topic_comments(self, topic_id: int, group_id: Optional[Any] = None) -> List[Dict[str, Any]]:
         """获取文章的所有评论（支持嵌套结构）"""
@@ -847,17 +868,7 @@ class ZSXQColumnsDatabase:
                 WHERE f.download_status = 'pending'
             ''')
         
-        files = []
-        for row in self.cursor.fetchall():
-            files.append({
-                'file_id': row[0],
-                'topic_id': row[1],
-                'name': row[2],
-                'size': row[3],
-                'hash': row[4],
-                'group_id': row[5]
-            })
-        return files
+        return [_pending_file_row_to_dict(row) for row in self.cursor.fetchall()]
     
     # ==================== 图片缓存 ====================
     
@@ -886,15 +897,7 @@ class ZSXQColumnsDatabase:
                 WHERE i.local_path IS NULL AND i.original_url IS NOT NULL
             ''')
         
-        images = []
-        for row in self.cursor.fetchall():
-            images.append({
-                'image_id': row[0],
-                'topic_id': row[1],
-                'original_url': row[2],
-                'group_id': row[3]
-            })
-        return images
+        return [_uncached_image_row_to_dict(row) for row in self.cursor.fetchall()]
     
     # ==================== 统计信息 ====================
     

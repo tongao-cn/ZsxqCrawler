@@ -5,11 +5,14 @@ from backend.storage.zsxq_columns_database import (
     _column_topic_row_to_dict,
     _comment_image_row_to_dict,
     _empty_stats,
+    _pending_file_row_to_dict,
+    _pending_video_row_to_dict,
     _topic_comment_row_to_dict,
     _topic_detail_row_to_dict,
     _topic_file_row_to_dict,
     _topic_image_row_to_dict,
     _topic_video_row_to_dict,
+    _uncached_image_row_to_dict,
 )
 
 
@@ -201,6 +204,68 @@ class ZSXQColumnsDatabaseHelperTests(unittest.TestCase):
                 "download_status": "pending",
                 "local_path": "downloads/video.mp4",
                 "download_time": "2026-05-03 12:00:00",
+            },
+        )
+
+    def test_pending_video_row_to_dict_preserves_download_queue_shape(self):
+        row = (
+            602,
+            202,
+            8192,
+            300,
+            "cover-url",
+            303,
+        )
+
+        self.assertEqual(
+            _pending_video_row_to_dict(row),
+            {
+                "video_id": 602,
+                "topic_id": 202,
+                "size": 8192,
+                "duration": 300,
+                "cover_url": "cover-url",
+                "group_id": 303,
+            },
+        )
+
+    def test_pending_file_row_to_dict_preserves_download_queue_shape(self):
+        row = (
+            502,
+            202,
+            "report.pdf",
+            4096,
+            "file-hash",
+            303,
+        )
+
+        self.assertEqual(
+            _pending_file_row_to_dict(row),
+            {
+                "file_id": 502,
+                "topic_id": 202,
+                "name": "report.pdf",
+                "size": 4096,
+                "hash": "file-hash",
+                "group_id": 303,
+            },
+        )
+
+    def test_uncached_image_row_to_dict_preserves_cache_queue_shape(self):
+        row = (
+            403,
+            202,
+            "original-url",
+            303,
+        )
+
+        self.assertEqual(
+            _uncached_image_row_to_dict(row),
+            {
+                "image_id": 403,
+                "topic_id": 202,
+                "original_url": "original-url",
+                "group_id": 303,
             },
         )
 
