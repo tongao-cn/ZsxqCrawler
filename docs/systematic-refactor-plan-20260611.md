@@ -3361,6 +3361,38 @@ Result:
 - PostgreSQL compatibility debt scan: no SQLite compatibility patterns found.
 - Frontend build is not planned because this slice only changes backend storage/helper code.
 
+### 2026-06-11 - P3 unused datetime import cleanup
+
+Changed:
+
+- Removed the unused `datetime` import from `backend/storage/zsxq_columns_database.py`.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Static search showed `datetime` only appeared on the import line in this module.
+- No storage method, SQL text, commit behavior, compatibility layer, fallback path, or public
+  import surface was changed.
+
+Verification:
+
+```powershell
+rg -n "datetime|^from datetime" backend\storage\zsxq_columns_database.py
+uv run python -m py_compile backend\storage\zsxq_columns_database.py
+uv run python -m unittest tests.test_zsxq_columns_database_helpers -v
+uv run python -m unittest discover -s tests
+uv run python scripts\scan_postgres_compat_debt.py
+```
+
+Result:
+
+- Static search before deletion found only `from datetime import datetime`.
+- `py_compile` passed.
+- `tests.test_zsxq_columns_database_helpers`: 24 tests passed.
+- Full backend unittest discovery: 583 tests passed, 15 skipped.
+- PostgreSQL compatibility debt scan: no SQLite compatibility patterns found.
+- Frontend build is not planned because this slice only removes an unused backend import.
+
 ## Stop Conditions
 
 Pause before editing if:
