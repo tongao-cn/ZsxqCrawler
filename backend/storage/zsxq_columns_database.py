@@ -62,6 +62,29 @@ def _topic_image_row_to_dict(row) -> Dict[str, Any]:
     }
 
 
+def _comment_image_row_to_dict(row) -> Dict[str, Any]:
+    return {
+        'image_id': row[0],
+        'type': row[1],
+        'thumbnail': {
+            'url': row[2],
+            'width': row[3],
+            'height': row[4]
+        },
+        'large': {
+            'url': row[5],
+            'width': row[6],
+            'height': row[7]
+        },
+        'original': {
+            'url': row[8],
+            'width': row[9],
+            'height': row[10],
+            'size': row[11]
+        }
+    }
+
+
 def _topic_file_row_to_dict(row) -> Dict[str, Any]:
     return {
         'file_id': row[0],
@@ -129,6 +152,40 @@ def _topic_detail_row_to_dict(row) -> Dict[str, Any]:
         }
 
     return result
+
+
+def _topic_comment_row_to_dict(row) -> Dict[str, Any]:
+    comment = {
+        'comment_id': row[0],
+        'parent_comment_id': row[1],
+        'text': row[2],
+        'create_time': row[3],
+        'likes_count': row[4],
+        'rewards_count': row[5],
+        'replies_count': row[6],
+        'sticky': bool(row[7]),
+        'owner': None,
+        'repliee': None
+    }
+
+    if row[8]:
+        comment['owner'] = {
+            'user_id': row[8],
+            'name': row[9],
+            'alias': row[10],
+            'avatar_url': row[11],
+            'location': row[12]
+        }
+
+    if row[13]:
+        comment['repliee'] = {
+            'user_id': row[13],
+            'name': row[14],
+            'alias': row[15],
+            'avatar_url': row[16]
+        }
+
+    return comment
 
 
 def _empty_stats() -> Dict[str, int]:
@@ -720,38 +777,9 @@ class ZSXQColumnsDatabase:
         child_comments = []   # 子评论（有parent_comment_id的）
 
         for row in self.cursor.fetchall():
-            comment_id = row[0]
-            parent_comment_id = row[1]
-
-            comment = {
-                'comment_id': comment_id,
-                'parent_comment_id': parent_comment_id,
-                'text': row[2],
-                'create_time': row[3],
-                'likes_count': row[4],
-                'rewards_count': row[5],
-                'replies_count': row[6],
-                'sticky': bool(row[7]),
-                'owner': None,
-                'repliee': None
-            }
-
-            if row[8]:
-                comment['owner'] = {
-                    'user_id': row[8],
-                    'name': row[9],
-                    'alias': row[10],
-                    'avatar_url': row[11],
-                    'location': row[12]
-                }
-
-            if row[13]:
-                comment['repliee'] = {
-                    'user_id': row[13],
-                    'name': row[14],
-                    'alias': row[15],
-                    'avatar_url': row[16]
-                }
+            comment = _topic_comment_row_to_dict(row)
+            comment_id = comment['comment_id']
+            parent_comment_id = comment['parent_comment_id']
 
             # 获取评论图片
             self.cursor.execute('''
@@ -763,28 +791,7 @@ class ZSXQColumnsDatabase:
                   AND (? IS NULL OR topic_id = ?)
             ''', (comment_id, scope_group_id, topic_id))
 
-            images = []
-            for img_row in self.cursor.fetchall():
-                images.append({
-                    'image_id': img_row[0],
-                    'type': img_row[1],
-                    'thumbnail': {
-                        'url': img_row[2],
-                        'width': img_row[3],
-                        'height': img_row[4]
-                    },
-                    'large': {
-                        'url': img_row[5],
-                        'width': img_row[6],
-                        'height': img_row[7]
-                    },
-                    'original': {
-                        'url': img_row[8],
-                        'width': img_row[9],
-                        'height': img_row[10],
-                        'size': img_row[11]
-                    }
-                })
+            images = [_comment_image_row_to_dict(img_row) for img_row in self.cursor.fetchall()]
             if images:
                 comment['images'] = images
 

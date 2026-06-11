@@ -3,7 +3,9 @@ import unittest
 from backend.storage.zsxq_columns_database import (
     _column_row_to_dict,
     _column_topic_row_to_dict,
+    _comment_image_row_to_dict,
     _empty_stats,
+    _topic_comment_row_to_dict,
     _topic_detail_row_to_dict,
     _topic_file_row_to_dict,
     _topic_image_row_to_dict,
@@ -95,6 +97,46 @@ class ZSXQColumnsDatabaseHelperTests(unittest.TestCase):
                     "size": 2048,
                 },
                 "local_path": "cache/image.png",
+            },
+        )
+
+    def test_comment_image_row_to_dict_preserves_nested_image_shape_without_local_path(self):
+        row = (
+            402,
+            "image",
+            "comment-thumb-url",
+            100,
+            66,
+            "comment-large-url",
+            900,
+            600,
+            "comment-original-url",
+            1800,
+            1200,
+            1024,
+        )
+
+        self.assertEqual(
+            _comment_image_row_to_dict(row),
+            {
+                "image_id": 402,
+                "type": "image",
+                "thumbnail": {
+                    "url": "comment-thumb-url",
+                    "width": 100,
+                    "height": 66,
+                },
+                "large": {
+                    "url": "comment-large-url",
+                    "width": 900,
+                    "height": 600,
+                },
+                "original": {
+                    "url": "comment-original-url",
+                    "width": 1800,
+                    "height": 1200,
+                    "size": 1024,
+                },
             },
         )
 
@@ -243,6 +285,54 @@ class ZSXQColumnsDatabaseHelperTests(unittest.TestCase):
                 "files",
                 "comments",
             ],
+        )
+
+    def test_topic_comment_row_to_dict_preserves_owner_and_repliee_shape(self):
+        row = (
+            701,
+            700,
+            "comment text",
+            "2026-05-01T08:00:00+0800",
+            5,
+            6,
+            7,
+            1,
+            801,
+            "owner name",
+            "owner alias",
+            "owner-avatar",
+            "owner location",
+            901,
+            "repliee name",
+            "repliee alias",
+            "repliee-avatar",
+        )
+
+        self.assertEqual(
+            _topic_comment_row_to_dict(row),
+            {
+                "comment_id": 701,
+                "parent_comment_id": 700,
+                "text": "comment text",
+                "create_time": "2026-05-01T08:00:00+0800",
+                "likes_count": 5,
+                "rewards_count": 6,
+                "replies_count": 7,
+                "sticky": True,
+                "owner": {
+                    "user_id": 801,
+                    "name": "owner name",
+                    "alias": "owner alias",
+                    "avatar_url": "owner-avatar",
+                    "location": "owner location",
+                },
+                "repliee": {
+                    "user_id": 901,
+                    "name": "repliee name",
+                    "alias": "repliee alias",
+                    "avatar_url": "repliee-avatar",
+                },
+            },
         )
 
     def test_empty_stats_returns_independent_default_dicts(self):

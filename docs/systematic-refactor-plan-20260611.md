@@ -555,6 +555,47 @@ Result:
 - PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
 - Git diff whitespace check passed.
 
+### 2026-06-11 - P3 column topic comment mapper extraction
+
+Changed:
+
+- Added characterization coverage for comment row mapping, including owner payload, repliee payload,
+  and sticky boolean normalization.
+- Added characterization coverage for comment-image row mapping, including the current nested image
+  shape without a `local_path` field.
+- Extracted `_topic_comment_row_to_dict` and `_comment_image_row_to_dict` in
+  `backend/storage/zsxq_columns_database.py`.
+- Reused the helpers from `get_topic_comments` while leaving comment SQL, per-comment image SQL,
+  image query parameters, top-level vs child classification, and `replied_comments` assembly
+  unchanged.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Comment payload fields, owner/repliee shapes, sticky coercion, optional `images` field behavior,
+  nested reply construction, and group scope semantics are preserved.
+- No schema, public API, storage write path, fallback behavior, legacy compatibility path, or config
+  semantics changed.
+
+Verification:
+
+```powershell
+uv run python -m py_compile backend\storage\zsxq_columns_database.py
+uv run python -m unittest tests.test_zsxq_columns_database_helpers -v
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+uv run python scripts\scan_postgres_compat_debt.py
+git diff --check
+```
+
+Result:
+
+- Focused column database helper tests passed: 13 tests.
+- Full backend tests passed: 526 tests, 15 skipped.
+- Frontend build passed.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Git diff whitespace check passed.
+
 ## Stop Conditions
 
 Pause before editing if:
