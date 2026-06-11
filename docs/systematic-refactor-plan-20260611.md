@@ -755,6 +755,48 @@ Result:
 - PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
 - Git diff whitespace check passed.
 
+### 2026-06-11 - P5 task runtime ID allocation helper extraction
+
+Changed:
+
+- Added characterization coverage for `create_task` task ID allocation from the persisted maximum
+  sequence, persisted task fields, runtime memory state, stop-flag initialization, and creation log.
+- Extended the task-runtime fake store to cover the existing `create_task` store contract.
+- Extracted `_allocate_task_id_locked` and reused it from `create_task` and
+  `create_ingestion_task`.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Task ID format, sequence initialization from `TaskStore.max_task_sequence()`, timestamp suffix,
+  task-counter increment order, memory task fields, metadata merge, stop flag, creation log, and
+  ingestion lock behavior are preserved.
+- The helper intentionally keeps the original lock boundary by being called inside `_state_lock`.
+- No public route response, task store SQL, SSE behavior, cancellation behavior, legacy path, or
+  config semantics changed.
+
+Verification:
+
+```powershell
+uv run python -m py_compile backend\services\task_runtime.py
+uv run python -m unittest tests.test_task_runtime_helpers -v
+uv run python -m unittest tests.test_task_runtime_helpers tests.test_task_store tests.test_task_routes_helpers -v
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+uv run python scripts\scan_postgres_compat_debt.py
+git diff --check
+```
+
+Result:
+
+- Focused task runtime helper tests passed: 14 tests.
+- Recommended task runtime gate passed: 33 tests, 14 PostgreSQL integration tests skipped by
+  environment gate.
+- Full backend tests passed: 533 tests, 15 skipped.
+- Frontend build passed.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Git diff whitespace check passed.
+
 ## Stop Conditions
 
 Pause before editing if:

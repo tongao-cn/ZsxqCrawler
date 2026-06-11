@@ -12,12 +12,13 @@ class FakeTaskStore:
         self.logs = []
         self.released_locks = []
         self.heartbeats = []
+        self.max_sequence = 0
 
     def get_task(self, task_id):
         return self.tasks.get(task_id)
 
     def max_task_sequence(self):
-        return 0
+        return self.max_sequence
 
     def set_stop_flag(self, task_id, stopped=True):
         self.stop_flags[task_id] = stopped
@@ -32,6 +33,21 @@ class FakeTaskStore:
     def update_task(self, task_id, status, message, result=None, updated_at=None):
         self.tasks[task_id].update({"status": status, "message": message, "result": result, "updated_at": updated_at})
         return self.tasks[task_id]
+
+    def create_task(self, task_id, task_type, status, message, result=None, metadata=None, created_at=None, updated_at=None):
+        task = {
+            "task_id": task_id,
+            "type": task_type,
+            "status": status,
+            "message": message,
+            "result": result,
+            "created_at": created_at,
+            "updated_at": updated_at,
+        }
+        if metadata:
+            task.update(metadata)
+        self.tasks[task_id] = task
+        return task
 
     def create_task_with_lock(self, task_id, task_type, message, group_id, category, metadata=None, lease_minutes=30, created_at=None):
         task = {
@@ -89,6 +105,35 @@ class TaskRuntimeHelperTests(unittest.TestCase):
 
         normalized = _normalize_task({"task_id": "task-1", "status": "stopped"})
         self.assertEqual("cancelled", normalized["status"])
+
+    def test_create_task_uses_persisted_sequence_and_initializes_runtime_state(self):
+        from backend.services import task_runtime
+        from backend.services.task_runtime import create_task
+
+        store = FakeTaskStore()
+        store.max_sequence = 41
+        original_counter = task_runtime.task_counter
+        task_id = None
+
+        with patch("backend.services.task_runtime.get_task_store", return_value=store):
+            task_runtime.task_counter = 0
+            try:
+                task_id = create_task("daily_analysis", "run daily", metadata={"group_id": "155"})
+
+                self.assertTrue(task_id.startswith("task_42_"))
+                self.assertEqual("pending", store.tasks[task_id]["status"])
+                self.assertEqual("155", store.tasks[task_id]["group_id"])
+                self.assertEqual(False, store.stop_flags[task_id])
+                self.assertEqual([(task_id, "任务创建: run daily")], store.logs)
+                self.assertEqual("pending", task_runtime.current_tasks[task_id]["status"])
+                self.assertEqual(["任务创建: run daily"], task_runtime.task_logs[task_id])
+                self.assertEqual(False, task_runtime.task_stop_flags[task_id])
+            finally:
+                if task_id:
+                    task_runtime.current_tasks.pop(task_id, None)
+                    task_runtime.task_logs.pop(task_id, None)
+                    task_runtime.task_stop_flags.pop(task_id, None)
+                task_runtime.task_counter = original_counter
 
     def test_find_running_ingestion_task_matches_same_group(self):
         from backend.services.task_runtime import find_running_ingestion_task

@@ -27,6 +27,15 @@ def get_task_store() -> TaskStore:
             task_store = TaskStore()
         return task_store
 
+
+def _allocate_task_id_locked(now: datetime) -> str:
+    global task_counter
+    if task_counter == 0:
+        task_counter = get_task_store().max_task_sequence()
+    task_counter += 1
+    return f"task_{task_counter}_{int(now.timestamp())}"
+
+
 current_tasks: Dict[str, Dict[str, Any]] = {}
 task_counter = 0
 task_logs: Dict[str, List[str]] = {}
@@ -123,13 +132,9 @@ def cleanup_tasks(keep_latest: int = 100) -> Dict[str, int]:
 
 
 def create_task(task_type: str, description: str, metadata: Optional[Dict[str, Any]] = None) -> str:
-    global task_counter
     now = datetime.now()
     with _state_lock:
-        if task_counter == 0:
-            task_counter = get_task_store().max_task_sequence()
-        task_counter += 1
-        task_id = f"task_{task_counter}_{int(now.timestamp())}"
+        task_id = _allocate_task_id_locked(now)
 
         current_tasks[task_id] = {
             "task_id": task_id,
@@ -182,13 +187,9 @@ def find_running_ingestion_task(group_id: str, exclude_task_id: Optional[str] = 
 
 
 def create_ingestion_task(task_type: str, description: str, group_id: str) -> tuple[Optional[str], Optional[Dict[str, Any]]]:
-    global task_counter
     now = datetime.now()
     with _state_lock:
-        if task_counter == 0:
-            task_counter = get_task_store().max_task_sequence()
-        task_counter += 1
-        task_id = f"task_{task_counter}_{int(now.timestamp())}"
+        task_id = _allocate_task_id_locked(now)
     metadata = {"group_id": str(group_id), "ingestion_lock_key": INGESTION_LOCK_KEY}
     task, existing = get_task_store().create_task_with_lock(
         task_id,
