@@ -47,6 +47,7 @@ cache
 /.history/
 /downloads/
 /output/
+/tmp_stock_analysis_*
 
 # local config
 config.toml

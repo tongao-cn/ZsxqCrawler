@@ -13,7 +13,9 @@ and committed independently.
 
 Observed on 2026-06-11:
 
-- `git status --short` shows only out-of-scope root `tmp_stock_analysis_*` files.
+- Earlier `git status --short` showed root `tmp_stock_analysis_*` scratch files; tracked scratch
+  artifacts were later cleaned in the P0 slice, while untracked scratch files remain preserved and
+  ignored.
 - `uv run python -m unittest discover -s tests`: 506 tests passed, 15 skipped.
 - `npm --prefix frontend run build`: passed.
 - `uv run python scripts\scan_postgres_compat_debt.py`: no SQLite compatibility patterns found.
@@ -24,7 +26,8 @@ Observed on 2026-06-11:
 
 - Work directly on `main`.
 - Stage and commit only files touched for the current slice.
-- Do not modify root `tmp_stock_analysis_*` files unless cleanup is explicitly requested.
+- Do not modify remaining untracked root `tmp_stock_analysis_*` files unless cleanup is explicitly
+  requested.
 - Do not remove legacy or fallback behavior without proof that it is unreachable, unused, or fully
   covered by equivalent behavior.
 - Add characterization tests before refactoring behavior that touches tasks, fallback paths,
@@ -48,7 +51,7 @@ Observed on 2026-06-11:
 
 | Priority | Files or modules | Purpose | Risk | Verification | New tests | Legacy/fallback handling |
 | --- | --- | --- | --- | --- | --- | --- |
-| P0 | Root `tmp_stock_analysis_*` files | Inventory only | Low | `git status --short` | No | Preserve |
+| P0 | Root `tmp_stock_analysis_*` files | Remove tracked scratch artifacts and ignore future root scratch | Low | `git status --short`; `git check-ignore`; reference search | No | Preserve remaining untracked files |
 | P1 | `backend/services/file_workflow_service.py` | Extract file listing filters, pagination, row mapping, and status helpers | Medium | `py_compile`; `tests.test_file_routes_helpers` | Yes | Preserve task status, response fields, error messages, paths, and side effects |
 | P2 | `backend/storage/zsxq_database.py` | Extract topic/detail row mappers and payload builders | Medium | `tests.test_zsxq_database_helpers`; PG smoke only if SQL changes | Yes | Do not change schema, `db_compat.py`, runtime DDL, or compat method names |
 | P3 | `backend/storage/zsxq_columns_database.py` | Extract column topic/comment row mappers | Medium | `tests.test_zsxq_columns_database_helpers`; column service tests | Yes | Preserve commit order and return shapes |
@@ -2097,6 +2100,52 @@ Result:
 - Full backend tests passed: 557 tests, 15 skipped.
 - Frontend build passed.
 - PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Git diff whitespace check passed.
+
+### 2026-06-11 - P0 root stock-analysis scratch cleanup
+
+Changed:
+
+- Removed tracked root scratch artifacts `tmp_stock_analysis_missing_45.json`,
+  `tmp_stock_analysis_remaining_35.json`, and
+  `tmp_stock_analysis_remaining_35_concurrency5.json`.
+- Added root `.gitignore` coverage for `/tmp_stock_analysis_*` so future stock-analysis scratch
+  scripts, logs, and result files do not pollute `git status`.
+- Preserved the existing untracked root `tmp_stock_analysis_*` files; they were not moved, edited,
+  or deleted.
+
+Evidence:
+
+- Before documenting this cleanup slice, `rg` found no references to the removed tracked filenames
+  or their `missing_45`/`remaining_35` suffixes outside the files themselves.
+- The two tracked `remaining_35` files had identical content.
+- `git log --oneline -- tmp_stock_analysis_missing_45.json
+  tmp_stock_analysis_remaining_35.json tmp_stock_analysis_remaining_35_concurrency5.json` showed
+  they entered the repository as one-off workspace/result artifacts.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- No runtime code, public route response, task status field, storage schema, fallback path, config
+  semantics, dependency, or frontend behavior changed.
+- Remaining scratch files stay on disk but are ignored by Git unless explicitly force-added.
+
+Verification:
+
+```powershell
+git status --short
+git check-ignore -v tmp_stock_analysis_run_pending_21_40_20260611_concurrency5.py tmp_stock_analysis_run_pending_21_40_20260611_concurrency5_20260611_162420_result.json tmp_stock_analysis_run_2_concurrency2_result.json
+rg -n "tmp_stock_analysis_missing_45|tmp_stock_analysis_remaining_35|missing_45|remaining_35" . --glob '!frontend/.next/**' --glob '!node_modules/**' --glob '!output/**' --glob '!docs/systematic-refactor-plan-20260611.md'
+git diff --check
+```
+
+Result:
+
+- `git status --short` shows only the intended tracked cleanup files for this slice.
+- `git check-ignore -v` confirms `/tmp_stock_analysis_*` covers representative root scratch
+  scripts and JSON result files.
+- Reference search, excluding this execution log, found no matches for the removed tracked scratch
+  artifact names.
 - Git diff whitespace check passed.
 
 ## Stop Conditions
