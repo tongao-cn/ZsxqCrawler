@@ -479,6 +479,44 @@ Result:
 - Frontend build passed.
 - PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
 
+### 2026-06-11 - P3 column topic detail row mapper extraction
+
+Changed:
+
+- Added characterization coverage for `ZSXQColumnsDatabase` topic-detail row mapping, including
+  current base response shape, owner payload shape, boolean coercions, empty media/comment defaults,
+  and field insertion order.
+- Extracted `_topic_detail_row_to_dict` in `backend/storage/zsxq_columns_database.py`.
+- Reused the helper from `get_topic_detail` while leaving SQL, scoped query parameters, media fetch
+  order, comment fetch order, and return keys unchanged.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- The existing `get_topic_detail` no-row behavior, group scope semantics, owner mapping, boolean
+  normalization, and lazy media/comment enrichment are preserved.
+- No schema, public API, storage write path, fallback behavior, legacy compatibility path, or config
+  semantics changed.
+
+Verification:
+
+```powershell
+uv run python -m py_compile backend\storage\zsxq_columns_database.py
+uv run python -m unittest tests.test_zsxq_columns_database_helpers -v
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+uv run python scripts\scan_postgres_compat_debt.py
+git diff --check
+```
+
+Result:
+
+- Focused column database helper tests passed: 9 tests.
+- Full backend tests passed: 522 tests, 15 skipped.
+- Frontend build passed.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Git diff whitespace check passed.
+
 ## Stop Conditions
 
 Pause before editing if:

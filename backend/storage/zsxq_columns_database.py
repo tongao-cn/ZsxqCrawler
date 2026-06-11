@@ -62,6 +62,42 @@ def _topic_image_row_to_dict(row) -> Dict[str, Any]:
     }
 
 
+def _topic_detail_row_to_dict(row) -> Dict[str, Any]:
+    result = {
+        'topic_id': row[0],
+        'group_id': row[1],
+        'type': row[2],
+        'title': row[3],
+        'full_text': row[4],
+        'likes_count': row[5],
+        'comments_count': row[6],
+        'readers_count': row[7],
+        'digested': bool(row[8]),
+        'sticky': bool(row[9]),
+        'create_time': row[10],
+        'modify_time': row[11],
+        'raw_json': row[12],
+        'imported_at': row[13],
+        'updated_at': row[14],
+        'owner': None,
+        'images': [],
+        'files': [],
+        'comments': []
+    }
+
+    if row[15]:
+        result['owner'] = {
+            'user_id': row[15],
+            'name': row[16],
+            'alias': row[17],
+            'avatar_url': row[18],
+            'description': row[19],
+            'location': row[20]
+        }
+
+    return result
+
+
 def _empty_stats() -> Dict[str, int]:
     return {
         'columns_count': 0,
@@ -517,38 +553,7 @@ class ZSXQColumnsDatabase:
         if not row:
             return None
         
-        result = {
-            'topic_id': row[0],
-            'group_id': row[1],
-            'type': row[2],
-            'title': row[3],
-            'full_text': row[4],
-            'likes_count': row[5],
-            'comments_count': row[6],
-            'readers_count': row[7],
-            'digested': bool(row[8]),
-            'sticky': bool(row[9]),
-            'create_time': row[10],
-            'modify_time': row[11],
-            'raw_json': row[12],
-            'imported_at': row[13],
-            'updated_at': row[14],
-            'owner': None,
-            'images': [],
-            'files': [],
-            'comments': []
-        }
-        
-        # 设置作者信息
-        if row[15]:
-            result['owner'] = {
-                'user_id': row[15],
-                'name': row[16],
-                'alias': row[17],
-                'avatar_url': row[18],
-                'description': row[19],
-                'location': row[20]
-            }
+        result = _topic_detail_row_to_dict(row)
         
         # 获取图片
         result['images'] = self.get_topic_images(topic_id, scope_group_id)

@@ -4,6 +4,7 @@ from backend.storage.zsxq_columns_database import (
     _column_row_to_dict,
     _column_topic_row_to_dict,
     _empty_stats,
+    _topic_detail_row_to_dict,
     _topic_image_row_to_dict,
 )
 
@@ -93,6 +94,89 @@ class ZSXQColumnsDatabaseHelperTests(unittest.TestCase):
                 },
                 "local_path": "cache/image.png",
             },
+        )
+
+    def test_topic_detail_row_to_dict_preserves_base_shape(self):
+        row = (
+            202,
+            303,
+            "talk",
+            "topic title",
+            "full topic text",
+            11,
+            22,
+            33,
+            0,
+            1,
+            "2026-05-01T08:00:00+0800",
+            "2026-05-02T08:00:00+0800",
+            '{"topic_id":202}',
+            "2026-05-03 12:00:00",
+            "2026-05-04 12:00:00",
+            404,
+            "owner name",
+            "owner alias",
+            "avatar-url",
+            "owner description",
+            "owner location",
+        )
+
+        result = _topic_detail_row_to_dict(row)
+
+        self.assertEqual(
+            result,
+            {
+                "topic_id": 202,
+                "group_id": 303,
+                "type": "talk",
+                "title": "topic title",
+                "full_text": "full topic text",
+                "likes_count": 11,
+                "comments_count": 22,
+                "readers_count": 33,
+                "digested": False,
+                "sticky": True,
+                "create_time": "2026-05-01T08:00:00+0800",
+                "modify_time": "2026-05-02T08:00:00+0800",
+                "raw_json": '{"topic_id":202}',
+                "imported_at": "2026-05-03 12:00:00",
+                "updated_at": "2026-05-04 12:00:00",
+                "owner": {
+                    "user_id": 404,
+                    "name": "owner name",
+                    "alias": "owner alias",
+                    "avatar_url": "avatar-url",
+                    "description": "owner description",
+                    "location": "owner location",
+                },
+                "images": [],
+                "files": [],
+                "comments": [],
+            },
+        )
+        self.assertEqual(
+            list(result),
+            [
+                "topic_id",
+                "group_id",
+                "type",
+                "title",
+                "full_text",
+                "likes_count",
+                "comments_count",
+                "readers_count",
+                "digested",
+                "sticky",
+                "create_time",
+                "modify_time",
+                "raw_json",
+                "imported_at",
+                "updated_at",
+                "owner",
+                "images",
+                "files",
+                "comments",
+            ],
         )
 
     def test_empty_stats_returns_independent_default_dicts(self):
