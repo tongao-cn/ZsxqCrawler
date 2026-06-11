@@ -373,19 +373,48 @@ def _release_task_lock_on_terminal_status(
         add_task_log(task_id, f"⚠️ 释放任务锁失败: {exc}")
 
 
+def _register_task_crawler_locked(task_id: str, crawler: Any) -> None:
+    crawler_instances[task_id] = crawler
+
+
+def _unregister_task_crawler_locked(task_id: str) -> None:
+    crawler_instances.pop(task_id, None)
+
+
+def _task_crawler_locked(task_id: str) -> Any:
+    return crawler_instances.get(task_id)
+
+
+def _task_file_downloader_locked(task_id: str) -> Any:
+    return file_downloader_instances.get(task_id)
+
+
+def _runtime_crawlers_snapshot_locked() -> List[Any]:
+    return list(crawler_instances.values())
+
+
+def _runtime_file_downloaders_snapshot_locked() -> List[Any]:
+    return list(file_downloader_instances.values())
+
+
+def _clear_runtime_resource_tracking_locked() -> None:
+    crawler_instances.clear()
+    file_downloader_instances.clear()
+
+
 def register_task_crawler(task_id: str, crawler: Any) -> None:
     with _state_lock:
-        crawler_instances[task_id] = crawler
+        _register_task_crawler_locked(task_id, crawler)
 
 
 def unregister_task_crawler(task_id: str) -> None:
     with _state_lock:
-        crawler_instances.pop(task_id, None)
+        _unregister_task_crawler_locked(task_id)
 
 
 def _prepare_task_stop_resources_locked(task_id: str) -> tuple[Any, Any]:
     task_stop_flags[task_id] = True
-    return crawler_instances.get(task_id), file_downloader_instances.get(task_id)
+    return _task_crawler_locked(task_id), _task_file_downloader_locked(task_id)
 
 
 def stop_task(task_id: str) -> bool:
@@ -504,12 +533,11 @@ def _prepare_runtime_shutdown_snapshot_locked() -> tuple[List[tuple[str, Dict[st
     ]
     for task_id in stopping_task_ids:
         task_stop_flags[task_id] = True
-    return tasks_snapshot, list(crawler_instances.values()), list(file_downloader_instances.values())
+    return tasks_snapshot, _runtime_crawlers_snapshot_locked(), _runtime_file_downloaders_snapshot_locked()
 
 
 def _clear_runtime_shutdown_tracking_locked() -> List[str]:
-    crawler_instances.clear()
-    file_downloader_instances.clear()
+    _clear_runtime_resource_tracking_locked()
     sse_connections.clear()
     return _task_lock_heartbeat_ids_locked()
 

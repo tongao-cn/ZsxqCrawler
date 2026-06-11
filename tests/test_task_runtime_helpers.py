@@ -399,6 +399,22 @@ class TaskRuntimeHelperTests(unittest.TestCase):
         self.assertEqual("cancelled", store.tasks["task-1"]["status"])
         self.assertEqual([("task-1", "cancelled")], store.released_locks)
 
+    def test_unregister_task_crawler_removes_registered_crawler_and_is_idempotent(self):
+        from backend.services import task_runtime
+
+        crawler = Stoppable()
+
+        try:
+            task_runtime.register_task_crawler("task-1", crawler)
+            self.assertIs(crawler, task_runtime.crawler_instances["task-1"])
+
+            task_runtime.unregister_task_crawler("task-1")
+            task_runtime.unregister_task_crawler("task-1")
+        finally:
+            task_runtime.crawler_instances.pop("task-1", None)
+
+        self.assertNotIn("task-1", task_runtime.crawler_instances)
+
     def test_stop_task_marks_memory_stop_flag_before_stopping_resources(self):
         from backend.services import task_runtime
 

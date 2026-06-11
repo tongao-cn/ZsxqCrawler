@@ -1870,6 +1870,55 @@ Result:
 - PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
 - Git diff whitespace check passed.
 
+### 2026-06-11 - P5 runtime resource helper extraction
+
+Changed:
+
+- Added characterization coverage for `unregister_task_crawler()` removing registered crawlers and
+  remaining idempotent for unknown task IDs.
+- Extracted `_register_task_crawler_locked()`, `_unregister_task_crawler_locked()`,
+  `_task_crawler_locked()`, `_task_file_downloader_locked()`,
+  `_runtime_crawlers_snapshot_locked()`, `_runtime_file_downloaders_snapshot_locked()`, and
+  `_clear_runtime_resource_tracking_locked()` to isolate locked crawler/downloader runtime resource
+  mutations and snapshots.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- `register_task_crawler()` and `unregister_task_crawler()` still mutate the same runtime crawler
+  tracking under `_state_lock`.
+- `stop_task()` still marks the memory stop flag before stopping resources, still stops registered
+  crawlers/downloaders first, and still falls back to the global crawler when no task crawler is
+  registered.
+- Runtime shutdown still snapshots crawler/downloader resources before stopping them and clears the
+  same resource tracking dictionaries.
+- No public route response, task status field, cancellation behavior, stop-resource ordering,
+  global crawler fallback, fallback polling, storage schema, legacy path, config semantics, or
+  frontend hook behavior changed.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_task_runtime_helpers -v
+uv run python -m py_compile backend\services\task_runtime.py
+uv run python -m unittest tests.test_task_runtime_helpers tests.test_task_store tests.test_task_routes_helpers -v
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+uv run python scripts\scan_postgres_compat_debt.py
+git diff --check
+```
+
+Result:
+
+- Characterization tests passed on the pre-refactor code before the helper extraction.
+- Focused task runtime tests passed: 37 tests.
+- Recommended task runtime gate passed: 56 tests, 14 PostgreSQL integration tests skipped by
+  configuration.
+- Full backend tests passed: 556 tests, 15 skipped.
+- Frontend build passed.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Git diff whitespace check passed.
+
 ## Stop Conditions
 
 Pause before editing if:
