@@ -621,6 +621,38 @@ def _user_insert_statement() -> str:
         '''
 
 
+def _topic_detail_insert_statement() -> str:
+    return '''
+            INSERT INTO topic_details
+            (topic_id, group_id, type, title, full_text, likes_count, comments_count,
+             readers_count, digested, sticky, create_time, modify_time, raw_json, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+            ON CONFLICT(topic_id) DO UPDATE SET
+                group_id = excluded.group_id,
+                type = excluded.type,
+                title = excluded.title,
+                full_text = excluded.full_text,
+                likes_count = excluded.likes_count,
+                comments_count = excluded.comments_count,
+                readers_count = excluded.readers_count,
+                digested = excluded.digested,
+                sticky = excluded.sticky,
+                create_time = excluded.create_time,
+                modify_time = excluded.modify_time,
+                raw_json = excluded.raw_json,
+                updated_at = excluded.updated_at
+        '''
+
+
+def _topic_owner_insert_statement() -> str:
+    return '''
+                INSERT INTO topic_owners (topic_id, user_id, owner_type)
+                VALUES (?, ?, 'talk')
+                ON CONFLICT(topic_id, owner_type) DO UPDATE SET
+                    user_id = excluded.user_id
+            '''
+
+
 def _topic_detail_query(topic_id: int, scope_group_id: Any) -> tuple[str, tuple[Any, ...]]:
     return (
         '''

@@ -28,6 +28,7 @@ from backend.storage.zsxq_columns_database import (
     _topic_comments_query,
     _topic_comment_row_to_dict,
     _topic_detail_insert_params,
+    _topic_detail_insert_statement,
     _topic_detail_query,
     _topic_detail_row_to_dict,
     _topic_file_insert_params,
@@ -37,6 +38,7 @@ from backend.storage.zsxq_columns_database import (
     _topic_images_query,
     _topic_image_row_to_dict,
     _topic_owner_insert_params,
+    _topic_owner_insert_statement,
     _topic_video_insert_params,
     _topic_videos_query,
     _topic_video_row_to_dict,
@@ -579,8 +581,29 @@ class ZSXQColumnsDatabaseHelperTests(unittest.TestCase):
             _topic_detail_insert_params(303, {"topic_id": 202}, None),
         )
 
+    def test_topic_detail_insert_statement_preserves_upsert_shape(self):
+        sql = self._sql(_topic_detail_insert_statement())
+
+        self.assertIn("INSERT INTO topic_details", sql)
+        self.assertIn(
+            "(topic_id, group_id, type, title, full_text, likes_count, comments_count, readers_count, digested, sticky, create_time, modify_time, raw_json, updated_at)",
+            sql,
+        )
+        self.assertIn("VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)", sql)
+        self.assertIn("ON CONFLICT(topic_id) DO UPDATE SET", sql)
+        self.assertIn("raw_json = excluded.raw_json", sql)
+        self.assertIn("updated_at = excluded.updated_at", sql)
+
     def test_topic_owner_insert_params_preserve_column_order(self):
         self.assertEqual((202, 801), _topic_owner_insert_params(202, 801))
+
+    def test_topic_owner_insert_statement_preserves_owner_type_and_upsert_shape(self):
+        sql = self._sql(_topic_owner_insert_statement())
+
+        self.assertIn("INSERT INTO topic_owners (topic_id, user_id, owner_type)", sql)
+        self.assertIn("VALUES (?, ?, 'talk')", sql)
+        self.assertIn("ON CONFLICT(topic_id, owner_type) DO UPDATE SET", sql)
+        self.assertIn("user_id = excluded.user_id", sql)
 
     def test_topic_media_insert_params_preserve_column_order_and_defaults(self):
         self.assertEqual(

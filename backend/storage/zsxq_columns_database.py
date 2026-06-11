@@ -38,6 +38,7 @@ from backend.storage.zsxq_columns_database_helpers import (
     _topic_comments_query,
     _topic_comment_row_to_dict,
     _topic_detail_insert_params,
+    _topic_detail_insert_statement,
     _topic_detail_query,
     _topic_detail_row_to_dict,
     _topic_file_insert_params,
@@ -50,6 +51,7 @@ from backend.storage.zsxq_columns_database_helpers import (
     _topic_videos_query,
     _topic_video_row_to_dict,
     _topic_owner_insert_params,
+    _topic_owner_insert_statement,
     _topic_child_delete_statements,
     _uncached_image_row_to_dict,
     _uncached_images_query,
@@ -139,26 +141,10 @@ class ZSXQColumnsDatabase:
         
         talk = topic_data.get('talk', {})
         
-        self.cursor.execute('''
-            INSERT INTO topic_details 
-            (topic_id, group_id, type, title, full_text, likes_count, comments_count,
-             readers_count, digested, sticky, create_time, modify_time, raw_json, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-            ON CONFLICT(topic_id) DO UPDATE SET
-                group_id = excluded.group_id,
-                type = excluded.type,
-                title = excluded.title,
-                full_text = excluded.full_text,
-                likes_count = excluded.likes_count,
-                comments_count = excluded.comments_count,
-                readers_count = excluded.readers_count,
-                digested = excluded.digested,
-                sticky = excluded.sticky,
-                create_time = excluded.create_time,
-                modify_time = excluded.modify_time,
-                raw_json = excluded.raw_json,
-                updated_at = excluded.updated_at
-        ''', _topic_detail_insert_params(group_id, topic_data, raw_json))
+        self.cursor.execute(
+            _topic_detail_insert_statement(),
+            _topic_detail_insert_params(group_id, topic_data, raw_json),
+        )
         
         self._insert_topic_owner(topic_id, talk)
 
@@ -202,12 +188,10 @@ class ZSXQColumnsDatabase:
         owner = talk['owner']
         user_id = self.insert_user(owner)
         if user_id:
-            self.cursor.execute('''
-                INSERT INTO topic_owners (topic_id, user_id, owner_type)
-                VALUES (?, ?, 'talk')
-                ON CONFLICT(topic_id, owner_type) DO UPDATE SET
-                    user_id = excluded.user_id
-            ''', _topic_owner_insert_params(topic_id, user_id))
+            self.cursor.execute(
+                _topic_owner_insert_statement(),
+                _topic_owner_insert_params(topic_id, user_id),
+            )
     
     def _insert_image(self, topic_id: int, image_data: Dict[str, Any]):
         """插入图片信息"""
