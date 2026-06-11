@@ -586,6 +586,101 @@ class FileRoutesHelperTests(unittest.TestCase):
             )
         )
 
+    def test_get_files_response_keeps_completed_search_and_pagination_shape(self):
+        from backend.services import file_workflow_service
+
+        class FakeCursor:
+            def __init__(self):
+                self.executed = []
+                self._fetchall_calls = 0
+
+            def execute(self, sql, params=()):
+                self.executed.append((sql, params))
+
+            def fetchall(self):
+                self._fetchall_calls += 1
+                return [
+                    (
+                        101,
+                        "Report.PDF",
+                        123,
+                        7,
+                        "2026-06-10T10:00:00+08:00",
+                        "downloaded",
+                        r"C:\old\Report.PDF",
+                        "E1",
+                        "boom",
+                        "2026-06-11T09:00:00+08:00",
+                        "2026-06-11T10:00:00+08:00",
+                    )
+                ]
+
+            def fetchone(self):
+                return (21,)
+
+        class FakeFileDb:
+            def __init__(self):
+                self.cursor = FakeCursor()
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+        fake_db = FakeFileDb()
+        with (
+            patch("backend.services.file_workflow_service._file_db", return_value=fake_db),
+            patch(
+                "backend.services.file_workflow_service.resolve_local_file_path",
+                return_value=r"C:\resolved\Report.PDF",
+            ),
+        ):
+            response = file_workflow_service._get_files_response(
+                "123",
+                page=2,
+                per_page=5,
+                status="completed",
+                search=" Foo ",
+                analysis_status="analyzed",
+            )
+
+        query, params = fake_db.cursor.executed[0]
+        count_query, count_params = fake_db.cursor.executed[1]
+        self.assertIn("f.download_status IN (?, ?, ?)", query)
+        self.assertIn("faa.updated_at IS NOT NULL", query)
+        self.assertIn("LOWER(COALESCE(f.name, '')) LIKE ?", query)
+        self.assertEqual((123, "completed", "downloaded", "skipped", *["%foo%"] * 8, 5, 5), params)
+        self.assertEqual((123, "completed", "downloaded", "skipped", *["%foo%"] * 8), count_params)
+        self.assertTrue(count_query.strip().startswith("SELECT COUNT(*)"))
+        self.assertEqual(
+            {
+                "page": 2,
+                "per_page": 5,
+                "total": 21,
+                "pages": 5,
+            },
+            response["pagination"],
+        )
+        self.assertEqual(
+            {
+                "file_id": 101,
+                "name": "Report.PDF",
+                "size": 123,
+                "download_count": 7,
+                "create_time": "2026-06-10T10:00:00+08:00",
+                "download_status": "completed",
+                "local_exists": True,
+                "local_path": r"C:\resolved\Report.PDF",
+                "download_error_code": "E1",
+                "download_error_message": "boom",
+                "last_download_attempt_at": "2026-06-11T09:00:00+08:00",
+                "has_ai_analysis": True,
+                "analysis_updated_at": "2026-06-11T10:00:00+08:00",
+            },
+            response["files"][0],
+        )
+
     def test_close_crawler_file_databases_closes_file_and_topic_dbs(self):
         crawler = FakeCrawler()
 

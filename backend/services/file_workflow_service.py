@@ -293,39 +293,40 @@ def _clear_file_database_response(group_id: str) -> dict:
     return {"message": f"群组 {group_id} 的文件数据和图片缓存已删除", "deleted": deleted_counts}
 
 
-def _get_files_response(
+_FILES_FROM_CLAUSE = """
+            FROM files f
+            LEFT JOIN file_ai_analyses faa ON faa.file_id = f.file_id
+        """
+
+
+def _build_file_list_filters(
     group_id: str,
-    page: int = 1,
-    per_page: int = 20,
-    status: Optional[str] = None,
-    search: Optional[str] = None,
-    analysis_status: Optional[str] = None,
-) -> dict:
-    with _file_db(group_id) as file_db:
-        offset = (page - 1) * per_page
+    status: Optional[str],
+    search: Optional[str],
+    analysis_status: Optional[str],
+) -> tuple[str, list[Any]]:
+    conditions = []
+    params_prefix = [_query_group_id(group_id)]
+    conditions.append("f.group_id = ?")
 
-        conditions = []
-        params_prefix = [_query_group_id(group_id)]
-        conditions.append("f.group_id = ?")
+    if status:
+        if status == "completed":
+            conditions.append("f.download_status IN (?, ?, ?)")
+            params_prefix.extend(["completed", "downloaded", "skipped"])
+        else:
+            conditions.append("f.download_status = ?")
+            params_prefix.append(status)
 
-        if status:
-            if status == "completed":
-                conditions.append("f.download_status IN (?, ?, ?)")
-                params_prefix.extend(["completed", "downloaded", "skipped"])
-            else:
-                conditions.append("f.download_status = ?")
-                params_prefix.append(status)
+    if analysis_status == "analyzed":
+        conditions.append("faa.updated_at IS NOT NULL")
+    elif analysis_status == "pending":
+        conditions.append("faa.updated_at IS NULL")
 
-        if analysis_status == "analyzed":
-            conditions.append("faa.updated_at IS NOT NULL")
-        elif analysis_status == "pending":
-            conditions.append("faa.updated_at IS NULL")
-
-        search_text = (search or "").strip()
-        if search_text:
-            search_pattern = f"%{search_text.lower()}%"
-            conditions.append(
-                """
+    search_text = (search or "").strip()
+    if search_text:
+        search_pattern = f"%{search_text.lower()}%"
+        conditions.append(
+            """
                 (
                     LOWER(COALESCE(f.name, '')) LIKE ?
                     OR EXISTS (
@@ -355,17 +356,15 @@ def _get_files_response(
                     )
                 )
                 """
-            )
-            params_prefix.extend([search_pattern] * 8)
+        )
+        params_prefix.extend([search_pattern] * 8)
 
-        where_clause = f"WHERE {' AND '.join(conditions)}" if conditions else ""
+    where_clause = f"WHERE {' AND '.join(conditions)}" if conditions else ""
+    return where_clause, params_prefix
 
-        from_clause = """
-            FROM files f
-            LEFT JOIN file_ai_analyses faa ON faa.file_id = f.file_id
-        """
 
-        query = f"""
+def _build_file_list_query(where_clause: str) -> str:
+    return f"""
             SELECT
                 f.file_id,
                 f.name,
@@ -378,63 +377,88 @@ def _get_files_response(
                 f.download_error_message,
                 f.last_download_attempt_at,
                 faa.updated_at
-            {from_clause}
+            {_FILES_FROM_CLAUSE}
             {where_clause}
             ORDER BY f.create_time DESC
             LIMIT ? OFFSET ?
         """
+
+
+def _build_file_count_query(where_clause: str) -> str:
+    return f"SELECT COUNT(*) {_FILES_FROM_CLAUSE} {where_clause}"
+
+
+def _normalize_file_list_row(group_id: str, file: Sequence[Any]) -> Dict[str, Any]:
+    file_id = file[0]
+    file_name = file[1]
+    stored_status = file[5] if len(file) > 5 else "unknown"
+    stored_local_path = file[6] if len(file) > 6 else None
+
+    local_status = _resolve_download_record_status(
+        group_id,
+        file_id,
+        file_name,
+        stored_status,
+        stored_local_path,
+    )
+
+    return {
+        "file_id": file_id,
+        "name": file_name,
+        "size": file[2],
+        "download_count": file[3],
+        "create_time": file[4],
+        "download_status": local_status["download_status"],
+        "local_exists": local_status["local_exists"],
+        "local_path": local_status["local_path"],
+        "download_error_code": file[7] if len(file) > 7 else None,
+        "download_error_message": file[8] if len(file) > 8 else None,
+        "last_download_attempt_at": file[9] if len(file) > 9 else None,
+        "has_ai_analysis": bool(file[10]) if len(file) > 10 and file[10] else False,
+        "analysis_updated_at": file[10] if len(file) > 10 else None,
+    }
+
+
+def _build_file_list_response(
+    group_id: str,
+    files: Sequence[Sequence[Any]],
+    total: int,
+    page: int,
+    per_page: int,
+) -> Dict[str, Any]:
+    return {
+        "files": [_normalize_file_list_row(group_id, file) for file in files],
+        "pagination": {
+            "page": page,
+            "per_page": per_page,
+            "total": total,
+            "pages": (total + per_page - 1) // per_page,
+        },
+    }
+
+
+def _get_files_response(
+    group_id: str,
+    page: int = 1,
+    per_page: int = 20,
+    status: Optional[str] = None,
+    search: Optional[str] = None,
+    analysis_status: Optional[str] = None,
+) -> dict:
+    with _file_db(group_id) as file_db:
+        offset = (page - 1) * per_page
+        where_clause, params_prefix = _build_file_list_filters(group_id, status, search, analysis_status)
+        query = _build_file_list_query(where_clause)
         params = (*params_prefix, per_page, offset)
 
         file_db.cursor.execute(query, params)
         files = file_db.cursor.fetchall()
 
-        count_query = f"SELECT COUNT(*) {from_clause} {where_clause}"
+        count_query = _build_file_count_query(where_clause)
         file_db.cursor.execute(count_query, tuple(params_prefix))
         total = file_db.cursor.fetchone()[0]
 
-        normalized_files = []
-        for file in files:
-            file_id = file[0]
-            file_name = file[1]
-            file_size = file[2]
-            stored_status = file[5] if len(file) > 5 else "unknown"
-            stored_local_path = file[6] if len(file) > 6 else None
-
-            local_status = _resolve_download_record_status(
-                group_id,
-                file_id,
-                file_name,
-                stored_status,
-                stored_local_path,
-            )
-
-            normalized_files.append(
-                {
-                    "file_id": file_id,
-                    "name": file_name,
-                    "size": file_size,
-                    "download_count": file[3],
-                    "create_time": file[4],
-                    "download_status": local_status["download_status"],
-                    "local_exists": local_status["local_exists"],
-                    "local_path": local_status["local_path"],
-                    "download_error_code": file[7] if len(file) > 7 else None,
-                    "download_error_message": file[8] if len(file) > 8 else None,
-                    "last_download_attempt_at": file[9] if len(file) > 9 else None,
-                    "has_ai_analysis": bool(file[10]) if len(file) > 10 and file[10] else False,
-                    "analysis_updated_at": file[10] if len(file) > 10 else None,
-                }
-            )
-
-        return {
-            "files": normalized_files,
-            "pagination": {
-                "page": page,
-                "per_page": per_page,
-                "total": total,
-                "pages": (total + per_page - 1) // per_page,
-            },
-        }
+        return _build_file_list_response(group_id, files, total, page, per_page)
 
 
 def _log_file_route_event(level: str, message: str) -> None:
