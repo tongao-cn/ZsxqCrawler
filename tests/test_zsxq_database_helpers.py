@@ -7,6 +7,7 @@ from backend.storage.zsxq_database import (
     _group_id_param,
     _nullable_group_id_param,
     _replace_file_topic_relation,
+    _topic_detail_scope,
     _topic_file_payload_from_row,
     _upsert_core_file,
 )
@@ -441,6 +442,20 @@ class ZSXQDatabaseHelperTests(unittest.TestCase):
         self.assertIsNone(_nullable_group_id_param(""))
         self.assertEqual(155, _nullable_group_id_param("155"))
         self.assertEqual("group-x", _nullable_group_id_param("group-x"))
+
+    def test_topic_detail_scope_preserves_existing_group_id_semantics(self):
+        self.assertEqual(
+            (None, "t.topic_id = ?", [202]),
+            _topic_detail_scope(202, None),
+        )
+        self.assertEqual(
+            (303, "t.topic_id = ? AND t.group_id = ?", [202, 303]),
+            _topic_detail_scope(202, "303"),
+        )
+        self.assertEqual(
+            ("", "t.topic_id = ? AND t.group_id = ?", [202, ""]),
+            _topic_detail_scope(202, ""),
+        )
 
     def test_upsert_comment_writes_group_id_from_runtime_scope(self):
         from backend.storage.zsxq_database import ZSXQDatabase

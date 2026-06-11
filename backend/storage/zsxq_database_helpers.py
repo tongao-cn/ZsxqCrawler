@@ -64,6 +64,16 @@ def nullable_group_id_param(group_id: Optional[str]) -> Any:
     return int(value) if value.isdigit() else value
 
 
+def topic_detail_scope(topic_id: int, group_id: Optional[str]) -> tuple[Any, str, list[Any]]:
+    scoped_group_id = group_id_param(group_id) if group_id is not None else None
+    topic_scope_sql = "t.topic_id = ?"
+    topic_scope_params = [topic_id]
+    if scoped_group_id is not None:
+        topic_scope_sql += " AND t.group_id = ?"
+        topic_scope_params.append(scoped_group_id)
+    return scoped_group_id, topic_scope_sql, topic_scope_params
+
+
 def replace_file_topic_relation(file_db, file_id: int, topic_id: int) -> int:
     file_db.cursor.execute(
         """

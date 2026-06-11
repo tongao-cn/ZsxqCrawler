@@ -20,6 +20,7 @@ from backend.storage.zsxq_database_helpers import (
     topic_detail_image_payload,
     topic_detail_like_payload,
     topic_detail_question_payload,
+    topic_detail_scope,
     topic_file_payload_from_row,
     upsert_core_file,
 )
@@ -47,6 +48,10 @@ def _group_id_param(group_id: Optional[str]) -> Any:
 
 def _nullable_group_id_param(group_id: Optional[str]) -> Any:
     return nullable_group_id_param(group_id)
+
+
+def _topic_detail_scope(topic_id: int, group_id: Optional[str]) -> tuple[Any, str, list[Any]]:
+    return topic_detail_scope(topic_id, group_id)
 
 
 def _upsert_core_file(cursor, group_id: Optional[int], topic_id: int, file_data: Dict[str, Any]) -> Optional[int]:
@@ -1115,12 +1120,7 @@ class ZSXQDatabase:
     def get_topic_detail(self, topic_id: int):
         """获取完整的话题详情"""
         try:
-            scoped_group_id = _group_id_param(self.group_id) if self.group_id is not None else None
-            topic_scope_sql = "t.topic_id = ?"
-            topic_scope_params = [topic_id]
-            if scoped_group_id is not None:
-                topic_scope_sql += " AND t.group_id = ?"
-                topic_scope_params.append(scoped_group_id)
+            scoped_group_id, topic_scope_sql, topic_scope_params = _topic_detail_scope(topic_id, self.group_id)
 
             # 1. 获取基本话题信息和群组信息
             self.cursor.execute(f'''

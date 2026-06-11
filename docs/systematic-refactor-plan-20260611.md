@@ -371,6 +371,42 @@ Result:
 - Frontend build passed.
 - PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
 
+### 2026-06-11 - P2 topic detail scope extraction
+
+Changed:
+
+- Added characterization coverage for topic-detail scope construction with `group_id=None`,
+  numeric group IDs, and empty-string group IDs.
+- Extracted `topic_detail_scope` into `backend/storage/zsxq_database_helpers.py`.
+- Reused the helper at the start of `ZSXQDatabase.get_topic_detail`.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Existing scope semantics are preserved, including the compatibility detail that `group_id=None`
+  leaves the base topic query unscoped while an empty string still appends `AND t.group_id = ?`.
+- Base-topic SQL shape, parameter list shape, numeric group-ID casting, and child query reuse of
+  `scoped_group_id` are unchanged.
+- No schema, public API, storage write path, fallback behavior, legacy compatibility path, or config
+  semantics changed.
+
+Verification:
+
+```powershell
+uv run python -m py_compile backend\storage\zsxq_database.py backend\storage\zsxq_database_helpers.py
+uv run python -m unittest tests.test_zsxq_database_helpers -v
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+uv run python scripts\scan_postgres_compat_debt.py
+```
+
+Result:
+
+- Focused ZSXQ database helper tests passed: 17 tests.
+- Full backend tests passed: 519 tests, 15 skipped.
+- Frontend build passed.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+
 ## Stop Conditions
 
 Pause before editing if:
