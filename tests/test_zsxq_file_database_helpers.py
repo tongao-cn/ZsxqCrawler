@@ -3,6 +3,7 @@ import unittest
 from backend.storage.zsxq_file_database import (
     _FILE_AI_ANALYSIS_FIELDS,
     _close_connection,
+    _column_record_params,
     _comment_record_params,
     _count_tables,
     _file_ai_analysis_params,
@@ -15,7 +16,9 @@ from backend.storage.zsxq_file_database import (
     _like_emoji_record_params,
     _new_import_stats,
     _row_to_file_ai_analysis,
+    _solution_record_params,
     _talk_record_params,
+    _topic_column_record_params,
     _topic_record_params,
     _user_liked_emoji_record_params,
     _user_record_params,
@@ -118,13 +121,14 @@ class FakeAnalysisConnection:
 class FakeCommentCursor:
     def __init__(self):
         self.calls = []
+        self.row = None
 
     def execute(self, sql, params=()):
         self.calls.append((" ".join(sql.split()), params))
         return self
 
     def fetchone(self):
-        return None
+        return self.row
 
 
 class ZSXQFileDatabaseHelperTests(unittest.TestCase):
@@ -390,6 +394,20 @@ class ZSXQFileDatabaseHelperTests(unittest.TestCase):
 
     def test_user_liked_emoji_record_params_keep_insert_column_order(self):
         self.assertEqual((202, "[ok]"), _user_liked_emoji_record_params(202, "[ok]"))
+
+    def test_column_record_params_keep_insert_column_order(self):
+        self.assertEqual((301, "weekly"), _column_record_params({"column_id": 301, "name": "weekly"}))
+        self.assertEqual((301, ""), _column_record_params({"column_id": 301}))
+
+    def test_topic_column_record_params_keep_insert_column_order(self):
+        self.assertEqual((202, 301), _topic_column_record_params(202, 301))
+
+    def test_solution_record_params_keep_insert_column_order(self):
+        self.assertEqual(
+            (202, 401, 9, "answer"),
+            _solution_record_params(202, 9, {"task_id": 401, "text": "answer"}),
+        )
+        self.assertEqual((202, None, None, ""), _solution_record_params(202, None, {}))
 
     def test_count_tables_builds_stats_from_cursor_counts(self):
         cursor = FakeCursor({"files": 3, "topics": 2})
@@ -693,6 +711,83 @@ class ZSXQFileDatabaseHelperTests(unittest.TestCase):
             (101, 303, 202, 9, 88, 10, "ok", "2026-06-10T12:00:00", 1, 2, 3, True),
             params,
         )
+
+    def test_insert_columns_uses_record_params_and_skips_missing_ids(self):
+        from backend.storage.zsxq_file_database import ZSXQFileDatabase
+
+        db = object.__new__(ZSXQFileDatabase)
+        db.cursor = FakeCommentCursor()
+
+        ZSXQFileDatabase.insert_columns(
+            db,
+            202,
+            [{"name": "missing id"}, {"column_id": 301, "name": "weekly"}, {"column_id": 302}],
+        )
+
+        self.assertEqual(4, len(db.cursor.calls))
+        first_column_sql, first_column_params = db.cursor.calls[0]
+        first_relation_sql, first_relation_params = db.cursor.calls[1]
+        second_column_sql, second_column_params = db.cursor.calls[2]
+        second_relation_sql, second_relation_params = db.cursor.calls[3]
+        self.assertIn("INSERT INTO columns", first_column_sql)
+        self.assertIn("ON CONFLICT(column_id) DO UPDATE SET", first_column_sql)
+        self.assertEqual((301, "weekly"), first_column_params)
+        self.assertIn("INSERT INTO topic_columns", first_relation_sql)
+        self.assertIn("ON CONFLICT(topic_id, column_id) DO NOTHING", first_relation_sql)
+        self.assertEqual((202, 301), first_relation_params)
+        self.assertEqual((302, ""), second_column_params)
+        self.assertEqual((202, 302), second_relation_params)
+
+    def test_insert_solution_uses_record_params_and_returns_id(self):
+        from backend.storage.zsxq_file_database import ZSXQFileDatabase
+
+        db = object.__new__(ZSXQFileDatabase)
+        db.cursor = FakeCommentCursor()
+        db.cursor.row = (777,)
+        users = []
+
+        def fake_insert_user(user):
+            users.append(user)
+            return user.get("user_id") if user else None
+
+        db.insert_user = fake_insert_user
+
+        self.assertIsNone(ZSXQFileDatabase.insert_solution(db, 202, {}))
+        self.assertEqual([], db.cursor.calls)
+        self.assertEqual([], users)
+
+        solution_id = ZSXQFileDatabase.insert_solution(
+            db,
+            202,
+            {
+                "task_id": 401,
+                "owner": {"user_id": 9},
+                "text": "answer",
+                "files": [
+                    {
+                        "file_id": 101,
+                        "name": "memo.pdf",
+                        "hash": "abc",
+                        "size": 20,
+                        "duration": 3,
+                        "download_count": 4,
+                        "create_time": "2026-06-10T12:00:00",
+                    }
+                ],
+            },
+        )
+
+        self.assertEqual(777, solution_id)
+        self.assertEqual([{"user_id": 9}], users)
+        self.assertEqual(2, len(db.cursor.calls))
+        solution_sql, solution_params = db.cursor.calls[0]
+        solution_file_sql, solution_file_params = db.cursor.calls[1]
+        self.assertIn("INSERT INTO solutions", solution_sql)
+        self.assertIn("RETURNING id", solution_sql)
+        self.assertEqual((202, 401, 9, "answer"), solution_params)
+        self.assertIn("INSERT INTO solution_files", solution_file_sql)
+        self.assertIn("ON CONFLICT(solution_id, file_id) DO UPDATE SET", solution_file_sql)
+        self.assertEqual((777, 101, "memo.pdf", "abc", 20, 3, 4, "2026-06-10T12:00:00"), solution_file_params)
 
     def test_content_child_writes_use_explicit_unique_semantics(self):
         from backend.storage.zsxq_file_database import ZSXQFileDatabase

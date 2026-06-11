@@ -4,6 +4,7 @@ from backend.storage.db_compat import connect
 from backend.storage.zsxq_file_database_helpers import (
     _FILE_AI_ANALYSIS_FIELDS,
     _close_connection,
+    _column_record_params,
     _comment_record_params,
     _count_tables,
     _file_ai_analysis_params,
@@ -18,7 +19,9 @@ from backend.storage.zsxq_file_database_helpers import (
     _new_import_stats,
     _nullable_group_id_param,
     _row_to_file_ai_analysis,
+    _solution_record_params,
     _talk_record_params,
+    _topic_column_record_params,
     _topic_record_params,
     _user_liked_emoji_record_params,
     _user_record_params,
@@ -319,14 +322,14 @@ class ZSXQFileDatabase:
             VALUES (?, ?)
             ON CONFLICT(column_id) DO UPDATE SET
                 name = excluded.name
-            ''', (column.get('column_id'), column.get('name', '')))
+            ''', _column_record_params(column))
             
             # 插入话题-栏目关联
             self.cursor.execute('''
             INSERT INTO topic_columns (topic_id, column_id)
             VALUES (?, ?)
             ON CONFLICT(topic_id, column_id) DO NOTHING
-            ''', (topic_id, column.get('column_id')))
+            ''', _topic_column_record_params(topic_id, column.get('column_id')))
     
     def insert_solution(self, topic_id: int, solution_data: Dict[str, Any]):
         """插入解决方案信息"""
@@ -340,12 +343,7 @@ class ZSXQFileDatabase:
         INSERT INTO solutions (topic_id, task_id, owner_user_id, text)
         VALUES (?, ?, ?, ?)
         RETURNING id
-        ''', (
-            topic_id,
-            solution_data.get('task_id'),
-            owner_id,
-            solution_data.get('text', '')
-        ))
+        ''', _solution_record_params(topic_id, owner_id, solution_data))
         
         row = self.cursor.fetchone()
         solution_id = row[0] if row else None

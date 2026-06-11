@@ -181,6 +181,29 @@ def _user_liked_emoji_record_params(topic_id: int, emoji_key: str) -> tuple[Any,
     )
 
 
+def _column_record_params(column_data: Dict[str, Any]) -> tuple[Any, ...]:
+    return (
+        column_data.get('column_id'),
+        column_data.get('name', ''),
+    )
+
+
+def _topic_column_record_params(topic_id: int, column_id: Any) -> tuple[Any, ...]:
+    return (
+        topic_id,
+        column_id,
+    )
+
+
+def _solution_record_params(topic_id: int, owner_id: Optional[Any], solution_data: Dict[str, Any]) -> tuple[Any, ...]:
+    return (
+        topic_id,
+        solution_data.get('task_id'),
+        owner_id,
+        solution_data.get('text', ''),
+    )
+
+
 def _file_attachment_params(parent_id: Any, file_data: Dict[str, Any]) -> tuple[Any, ...]:
     return (
         parent_id,
