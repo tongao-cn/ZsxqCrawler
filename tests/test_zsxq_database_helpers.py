@@ -72,6 +72,109 @@ class FakeBackfillCursor(FakeCursor):
         return self.row
 
 
+class FakeTopicDetailCursor(FakeCursor):
+    def __init__(self):
+        super().__init__()
+        self.last_query = ""
+
+    def execute(self, query, params=()):
+        self.last_query = " ".join(query.split())
+        return super().execute(query, params)
+
+    def fetchone(self):
+        if "FROM topics t LEFT JOIN groups" in self.last_query:
+            return (
+                202,
+                "talk",
+                "title",
+                "2026-05-07T10:00:00.000+0800",
+                0,
+                1,
+                3,
+                0,
+                0,
+                2,
+                5,
+                6,
+                0,
+                0,
+                "note",
+                0,
+                1,
+                303,
+                "group",
+                "paid",
+                "bg",
+            )
+        if "FROM talks" in self.last_query:
+            return None
+        return None
+
+    def fetchall(self):
+        if "FROM comments c" in self.last_query:
+            return [
+                (
+                    10,
+                    "parent",
+                    "2026-05-07T11:00:00.000+0800",
+                    1,
+                    0,
+                    0,
+                    None,
+                    1,
+                    901,
+                    "Alice",
+                    "A",
+                    "a.png",
+                    "SH",
+                    "parent owner",
+                    None,
+                    None,
+                    None,
+                ),
+                (
+                    11,
+                    "child",
+                    "2026-05-07T11:01:00.000+0800",
+                    2,
+                    0,
+                    1,
+                    10,
+                    0,
+                    902,
+                    "Bob",
+                    "B",
+                    "b.png",
+                    "BJ",
+                    "child owner",
+                    901,
+                    "Alice",
+                    "a.png",
+                ),
+            ]
+        if "FROM images WHERE comment_id IN" in self.last_query:
+            return [
+                (
+                    11,
+                    701,
+                    "image",
+                    "thumb.jpg",
+                    100,
+                    80,
+                    "large.jpg",
+                    1000,
+                    800,
+                    "origin.jpg",
+                    2000,
+                    1600,
+                    12345,
+                )
+            ]
+        if "FROM likes" in self.last_query or "FROM like_emojis" in self.last_query:
+            return []
+        return []
+
+
 class ZSXQDatabaseHelperTests(unittest.TestCase):
     def test_build_pagination_calculates_pages(self):
         self.assertEqual(
@@ -344,6 +447,46 @@ class ZSXQDatabaseHelperTests(unittest.TestCase):
         self.assertIn("WHERE t.topic_id = ? AND t.group_id = ?", calls)
         self.assertIn("AND (? IS NULL OR c.group_id = ?)", calls)
         self.assertIn("topic_id IN (SELECT topic_id FROM topics WHERE group_id = ?)", calls)
+
+    def test_get_topic_detail_builds_nested_comments_with_images_and_repliee(self):
+        from backend.storage.zsxq_database import ZSXQDatabase
+
+        cursor = FakeTopicDetailCursor()
+        db = object.__new__(ZSXQDatabase)
+        db.cursor = cursor
+        db.group_id = "303"
+
+        detail = ZSXQDatabase.get_topic_detail(db, 202)
+
+        comments = detail["show_comments"]
+        self.assertEqual(1, len(comments))
+        parent = comments[0]
+        self.assertEqual(10, parent["comment_id"])
+        self.assertEqual("parent", parent["text"])
+        self.assertEqual(1, len(parent["replied_comments"]))
+        child = parent["replied_comments"][0]
+        self.assertEqual(11, child["comment_id"])
+        self.assertEqual(10, child["parent_comment_id"])
+        self.assertEqual({"user_id": 901, "name": "Alice", "avatar_url": "a.png"}, child["repliee"])
+        self.assertEqual(
+            [
+                {
+                    "image_id": 701,
+                    "type": "image",
+                    "thumbnail": {"url": "thumb.jpg", "width": 100, "height": 80},
+                    "large": {"url": "large.jpg", "width": 1000, "height": 800},
+                    "original": {
+                        "url": "origin.jpg",
+                        "width": 2000,
+                        "height": 1600,
+                        "size": 12345,
+                    },
+                }
+            ],
+            child["images"],
+        )
+        image_calls = [params for sql, params in cursor.calls if "FROM images WHERE comment_id IN" in sql]
+        self.assertEqual([[10, 11, 303, 303]], image_calls)
 
     def test_runtime_init_database_does_not_execute_ddl(self):
         from backend.storage.zsxq_database import ZSXQDatabase

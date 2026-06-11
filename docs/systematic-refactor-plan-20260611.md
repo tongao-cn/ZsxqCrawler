@@ -299,6 +299,43 @@ Result:
 - Frontend build passed.
 - PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
 
+### 2026-06-11 - P2 topic detail nested comments extraction
+
+Changed:
+
+- Added characterization coverage for `ZSXQDatabase.get_topic_detail` nested comment assembly,
+  including parent/child comment placement, repliee payload shape, child comment images, and scoped
+  batched image-query parameters.
+- Extracted `build_topic_detail_comments` into `backend/storage/zsxq_database_helpers.py` and reused
+  it from `get_topic_detail`.
+- Removed the now-unused direct `topic_detail_comment_payload` import from
+  `backend/storage/zsxq_database.py`.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Comment ordering, parent-child nesting, `replied_comments` shape, image payload shape, repliee
+  shape, batched image-query parameters, group scoping, and topic-detail response fields are
+  preserved.
+- No schema, public API, storage write path, legacy compatibility path, or fallback behavior changed.
+
+Verification:
+
+```powershell
+uv run python -m py_compile backend\storage\zsxq_database.py backend\storage\zsxq_database_helpers.py
+uv run python -m unittest tests.test_zsxq_database_helpers -v
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+uv run python scripts\scan_postgres_compat_debt.py
+```
+
+Result:
+
+- Focused ZSXQ database helper tests passed: 15 tests.
+- Full backend tests passed: 517 tests, 15 skipped.
+- Frontend build passed.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+
 ## Stop Conditions
 
 Pause before editing if:

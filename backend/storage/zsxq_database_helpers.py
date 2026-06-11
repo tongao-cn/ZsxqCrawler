@@ -267,6 +267,35 @@ def topic_detail_comment_payload(row, images: list[Dict[str, Any]]) -> Dict[str,
     return comment_data
 
 
+def build_topic_detail_comments(comment_rows, comment_images_map: Dict[Any, list[Dict[str, Any]]]) -> list[Dict[str, Any]]:
+    all_comments = {}
+    parent_comments = []
+    child_comments = []
+
+    for comment_row in comment_rows:
+        comment_id = comment_row[0]
+        parent_comment_id = comment_row[6]
+
+        images = comment_images_map.get(comment_id, [])
+        comment_data = topic_detail_comment_payload(comment_row, images)
+
+        all_comments[comment_id] = comment_data
+        if parent_comment_id:
+            child_comments.append(comment_data)
+        else:
+            parent_comments.append(comment_data)
+
+    for child in child_comments:
+        parent_id = child.get("parent_comment_id")
+        if parent_id and parent_id in all_comments:
+            parent = all_comments[parent_id]
+            if "replied_comments" not in parent:
+                parent["replied_comments"] = []
+            parent["replied_comments"].append(child)
+
+    return parent_comments
+
+
 def topic_detail_question_payload(row) -> Dict[str, Any]:
     question_data = {
         "text": row[0],

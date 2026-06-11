@@ -5,6 +5,7 @@ from typing import Dict, Any, Optional, List
 
 from backend.storage.db_compat import connect
 from backend.storage.zsxq_database_helpers import (
+    build_topic_detail_comments,
     build_pagination,
     format_tag_row,
     format_tag_topic_row,
@@ -14,7 +15,6 @@ from backend.storage.zsxq_database_helpers import (
     topic_detail_answer_payload,
     topic_detail_article_payload,
     topic_detail_base_payload,
-    topic_detail_comment_payload,
     topic_detail_emoji_payload,
     topic_detail_file_payload,
     topic_detail_image_payload,
@@ -1267,35 +1267,7 @@ class ZSXQDatabase:
                             topic_detail_image_payload(img_row, offset=1)
                         )
 
-            # 先收集所有评论，然后构建嵌套结构
-            all_comments = {}  # comment_id -> comment_data
-            parent_comments = []  # 顶级评论
-            child_comments = []   # 子评论（有parent_comment_id的）
-
-            for comment_row in comment_rows:
-                comment_id = comment_row[0]
-                parent_comment_id = comment_row[6]
-
-                images = comment_images_map.get(comment_id, [])
-                comment_data = topic_detail_comment_payload(comment_row, images)
-
-                # 存储评论并分类
-                all_comments[comment_id] = comment_data
-                if parent_comment_id:
-                    child_comments.append(comment_data)
-                else:
-                    parent_comments.append(comment_data)
-
-            # 构建嵌套结构：将子评论附加到父评论的 replied_comments 中
-            for child in child_comments:
-                parent_id = child.get("parent_comment_id")
-                if parent_id and parent_id in all_comments:
-                    parent = all_comments[parent_id]
-                    if "replied_comments" not in parent:
-                        parent["replied_comments"] = []
-                    parent["replied_comments"].append(child)
-
-            topic_detail["show_comments"] = parent_comments
+            topic_detail["show_comments"] = build_topic_detail_comments(comment_rows, comment_images_map)
 
             # 5. 获取点赞详情（表情）
             self.cursor.execute('''
