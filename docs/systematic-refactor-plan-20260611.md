@@ -3999,6 +3999,45 @@ Result:
 - PostgreSQL compatibility debt scan: no SQLite compatibility patterns found.
 - Frontend build is not planned because this slice only changes backend storage/helper code.
 
+### 2026-06-11 - P3 topic media/comment insert statement helper extraction
+
+Changed:
+
+- Added `_topic_image_insert_statement`, `_topic_file_insert_statement`,
+  `_topic_video_insert_statement`, and `_topic_comment_insert_statement` to
+  `backend/storage/zsxq_columns_database_helpers.py`.
+- Replaced inline insert SQL in `_insert_image`, `_insert_file`, `_insert_video`, and
+  `_insert_comment` with helper-returned SQL.
+- Added characterization coverage for target tables, column order, conflict keys, and update
+  fields.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Existing parameter helpers still build all execute params.
+- `_insert_comment` still inserts owner and repliee users first, resolves group id the same way,
+  then writes the comment row.
+- Missing-id skip behavior, related payload write order, `import_comments` commit behavior, SQL
+  upsert semantics, method signatures, schema, compatibility layer, fallback path, and public API
+  behavior are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m py_compile backend\storage\zsxq_columns_database.py backend\storage\zsxq_columns_database_helpers.py tests\test_zsxq_columns_database_helpers.py
+uv run python -m unittest tests.test_zsxq_columns_database_helpers -v
+uv run python -m unittest discover -s tests
+uv run python scripts\scan_postgres_compat_debt.py
+```
+
+Result:
+
+- `py_compile` passed.
+- `tests.test_zsxq_columns_database_helpers`: 53 tests passed.
+- Full backend unittest discovery: 613 tests passed, 15 skipped.
+- PostgreSQL compatibility debt scan: no SQLite compatibility patterns found.
+- Frontend build is not planned because this slice only changes backend storage/helper code.
+
 ## Stop Conditions
 
 Pause before editing if:

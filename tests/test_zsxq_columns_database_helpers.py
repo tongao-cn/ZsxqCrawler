@@ -25,6 +25,7 @@ from backend.storage.zsxq_columns_database import (
     _pending_videos_query,
     _stats_count_queries,
     _topic_comment_insert_params,
+    _topic_comment_insert_statement,
     _topic_comments_query,
     _topic_comment_row_to_dict,
     _topic_detail_insert_params,
@@ -32,14 +33,17 @@ from backend.storage.zsxq_columns_database import (
     _topic_detail_query,
     _topic_detail_row_to_dict,
     _topic_file_insert_params,
+    _topic_file_insert_statement,
     _topic_files_query,
     _topic_file_row_to_dict,
     _topic_image_insert_params,
+    _topic_image_insert_statement,
     _topic_images_query,
     _topic_image_row_to_dict,
     _topic_owner_insert_params,
     _topic_owner_insert_statement,
     _topic_video_insert_params,
+    _topic_video_insert_statement,
     _topic_videos_query,
     _topic_video_row_to_dict,
     _topic_child_delete_statements,
@@ -673,6 +677,29 @@ class ZSXQColumnsDatabaseHelperTests(unittest.TestCase):
             _topic_video_insert_params(202, {"video_id": 501}),
         )
 
+    def test_topic_media_insert_statements_preserve_upsert_shape(self):
+        image_sql = self._sql(_topic_image_insert_statement())
+        file_sql = self._sql(_topic_file_insert_statement())
+        video_sql = self._sql(_topic_video_insert_statement())
+
+        self.assertIn("INSERT INTO images", image_sql)
+        self.assertIn(
+            "(image_id, topic_id, type, thumbnail_url, thumbnail_width, thumbnail_height, large_url, large_width, large_height, original_url, original_width, original_height, original_size)",
+            image_sql,
+        )
+        self.assertIn("ON CONFLICT(image_id) DO UPDATE SET", image_sql)
+        self.assertIn("original_size = excluded.original_size", image_sql)
+
+        self.assertIn("INSERT INTO files", file_sql)
+        self.assertIn("(file_id, topic_id, name, hash, size, duration, download_count, create_time)", file_sql)
+        self.assertIn("ON CONFLICT(file_id) DO UPDATE SET", file_sql)
+        self.assertIn("create_time = excluded.create_time", file_sql)
+
+        self.assertIn("INSERT INTO videos", video_sql)
+        self.assertIn("(video_id, topic_id, size, duration, cover_url, cover_width, cover_height)", video_sql)
+        self.assertIn("ON CONFLICT(video_id) DO UPDATE SET", video_sql)
+        self.assertIn("cover_height = excluded.cover_height", video_sql)
+
     def test_topic_comment_insert_params_preserve_column_order_and_defaults(self):
         self.assertEqual(
             (
@@ -710,6 +737,19 @@ class ZSXQColumnsDatabaseHelperTests(unittest.TestCase):
             (701, None, 202, None, None, None, "", None, 0, 0, 0, False),
             _topic_comment_insert_params(202, None, None, None, {"comment_id": 701}),
         )
+
+    def test_topic_comment_insert_statement_preserves_upsert_shape(self):
+        sql = self._sql(_topic_comment_insert_statement())
+
+        self.assertIn("INSERT INTO comments", sql)
+        self.assertIn(
+            "(comment_id, group_id, topic_id, owner_user_id, parent_comment_id, repliee_user_id, text, create_time, likes_count, rewards_count, replies_count, sticky)",
+            sql,
+        )
+        self.assertIn("VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", sql)
+        self.assertIn("ON CONFLICT(comment_id) DO UPDATE SET", sql)
+        self.assertIn("repliee_user_id = excluded.repliee_user_id", sql)
+        self.assertIn("sticky = excluded.sticky", sql)
 
     def test_nest_topic_comments_preserves_existing_nested_shape(self):
         parent = {"comment_id": 1, "parent_comment_id": None, "text": "parent"}

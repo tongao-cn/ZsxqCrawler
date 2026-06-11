@@ -35,6 +35,7 @@ from backend.storage.zsxq_columns_database_helpers import (
     _stats_count_queries,
     _nest_topic_comments,
     _topic_comment_insert_params,
+    _topic_comment_insert_statement,
     _topic_comments_query,
     _topic_comment_row_to_dict,
     _topic_detail_insert_params,
@@ -42,9 +43,11 @@ from backend.storage.zsxq_columns_database_helpers import (
     _topic_detail_query,
     _topic_detail_row_to_dict,
     _topic_file_insert_params,
+    _topic_file_insert_statement,
     _topic_files_query,
     _topic_file_row_to_dict,
     _topic_image_insert_params,
+    _topic_image_insert_statement,
     _topic_images_query,
     _topic_image_row_to_dict,
     _topic_video_insert_params,
@@ -53,6 +56,7 @@ from backend.storage.zsxq_columns_database_helpers import (
     _topic_owner_insert_params,
     _topic_owner_insert_statement,
     _topic_child_delete_statements,
+    _topic_video_insert_statement,
     _uncached_image_row_to_dict,
     _uncached_images_query,
     _user_insert_params,
@@ -198,63 +202,30 @@ class ZSXQColumnsDatabase:
         if not image_data or not image_data.get('image_id'):
             return
         
-        self.cursor.execute('''
-            INSERT INTO images 
-            (image_id, topic_id, type, thumbnail_url, thumbnail_width, thumbnail_height,
-             large_url, large_width, large_height, original_url, original_width, 
-             original_height, original_size)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT(image_id) DO UPDATE SET
-                topic_id = excluded.topic_id,
-                type = excluded.type,
-                thumbnail_url = excluded.thumbnail_url,
-                thumbnail_width = excluded.thumbnail_width,
-                thumbnail_height = excluded.thumbnail_height,
-                large_url = excluded.large_url,
-                large_width = excluded.large_width,
-                large_height = excluded.large_height,
-                original_url = excluded.original_url,
-                original_width = excluded.original_width,
-                original_height = excluded.original_height,
-                original_size = excluded.original_size
-        ''', _topic_image_insert_params(topic_id, image_data))
+        self.cursor.execute(
+            _topic_image_insert_statement(),
+            _topic_image_insert_params(topic_id, image_data),
+        )
     
     def _insert_file(self, topic_id: int, file_data: Dict[str, Any]):
         """插入文件信息"""
         if not file_data or not file_data.get('file_id'):
             return
         
-        self.cursor.execute('''
-            INSERT INTO files 
-            (file_id, topic_id, name, hash, size, duration, download_count, create_time)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT(file_id) DO UPDATE SET
-                topic_id = excluded.topic_id,
-                name = excluded.name,
-                hash = excluded.hash,
-                size = excluded.size,
-                duration = excluded.duration,
-                download_count = excluded.download_count,
-                create_time = excluded.create_time
-        ''', _topic_file_insert_params(topic_id, file_data))
+        self.cursor.execute(
+            _topic_file_insert_statement(),
+            _topic_file_insert_params(topic_id, file_data),
+        )
     
     def _insert_video(self, topic_id: int, video_data: Dict[str, Any]):
         """插入视频信息"""
         if not video_data or not video_data.get('video_id'):
             return
         
-        self.cursor.execute('''
-            INSERT INTO videos 
-            (video_id, topic_id, size, duration, cover_url, cover_width, cover_height)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT(video_id) DO UPDATE SET
-                topic_id = excluded.topic_id,
-                size = excluded.size,
-                duration = excluded.duration,
-                cover_url = excluded.cover_url,
-                cover_width = excluded.cover_width,
-                cover_height = excluded.cover_height
-        ''', _topic_video_insert_params(topic_id, video_data))
+        self.cursor.execute(
+            _topic_video_insert_statement(),
+            _topic_video_insert_params(topic_id, video_data),
+        )
     
     def _insert_comment(self, topic_id: int, comment_data: Dict[str, Any]):
         """插入评论信息"""
@@ -270,24 +241,10 @@ class ZSXQColumnsDatabase:
         repliee_id = self.insert_user(repliee) if repliee else None
         group_id = self._resolve_topic_group_id(topic_id)
         
-        self.cursor.execute('''
-            INSERT INTO comments 
-            (comment_id, group_id, topic_id, owner_user_id, parent_comment_id, repliee_user_id,
-             text, create_time, likes_count, rewards_count, replies_count, sticky)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT(comment_id) DO UPDATE SET
-                group_id = excluded.group_id,
-                topic_id = excluded.topic_id,
-                owner_user_id = excluded.owner_user_id,
-                parent_comment_id = excluded.parent_comment_id,
-                repliee_user_id = excluded.repliee_user_id,
-                text = excluded.text,
-                create_time = excluded.create_time,
-                likes_count = excluded.likes_count,
-                rewards_count = excluded.rewards_count,
-                replies_count = excluded.replies_count,
-                sticky = excluded.sticky
-        ''', _topic_comment_insert_params(topic_id, group_id, owner_id, repliee_id, comment_data))
+        self.cursor.execute(
+            _topic_comment_insert_statement(),
+            _topic_comment_insert_params(topic_id, group_id, owner_id, repliee_id, comment_data),
+        )
 
     def _resolve_topic_group_id(self, topic_id: int):
         if self.group_id:
