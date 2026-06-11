@@ -129,11 +129,15 @@ def list_tasks(limit: Optional[int] = None) -> List[Dict[str, Any]]:
     ]
 
 
+def _memory_task_state_locked(task_id: str) -> Optional[Dict[str, Any]]:
+    return current_tasks.get(task_id)
+
+
 def get_task_state(task_id: str) -> Optional[Dict[str, Any]]:
     task = get_task_store().get_task(task_id)
     if not task:
         with _state_lock:
-            task = current_tasks.get(task_id)
+            task = _memory_task_state_locked(task_id)
     return _normalize_task(task)
 
 

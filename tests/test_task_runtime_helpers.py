@@ -131,6 +131,55 @@ class TaskRuntimeHelperTests(unittest.TestCase):
         normalized = _normalize_task({"task_id": "task-1", "status": "stopped"})
         self.assertEqual("cancelled", normalized["status"])
 
+    def test_get_task_state_prefers_persisted_task_over_memory_fallback(self):
+        from backend.services import task_runtime
+        from backend.services.task_runtime import get_task_state
+
+        store = FakeTaskStore()
+        store.tasks["task-1"] = {
+            "task_id": "task-1",
+            "status": "pending",
+            "message": "persisted",
+        }
+
+        with patch("backend.services.task_runtime.get_task_store", return_value=store):
+            try:
+                task_runtime.current_tasks["task-1"] = {
+                    "task_id": "task-1",
+                    "status": "running",
+                    "message": "memory",
+                }
+
+                task = get_task_state("task-1")
+            finally:
+                task_runtime.current_tasks.pop("task-1", None)
+
+        self.assertEqual("pending", task["status"])
+        self.assertEqual("persisted", task["message"])
+
+    def test_get_task_state_falls_back_to_normalized_memory_task(self):
+        from backend.services import task_runtime
+        from backend.services.task_runtime import get_task_state
+
+        store = FakeTaskStore()
+
+        with patch("backend.services.task_runtime.get_task_store", return_value=store):
+            try:
+                task_runtime.current_tasks["task-1"] = {
+                    "task_id": "task-1",
+                    "status": "stopped",
+                    "message": "memory",
+                }
+
+                task = get_task_state("task-1")
+                missing_task = get_task_state("missing-task")
+            finally:
+                task_runtime.current_tasks.pop("task-1", None)
+
+        self.assertEqual("cancelled", task["status"])
+        self.assertEqual("memory", task["message"])
+        self.assertIsNone(missing_task)
+
     def test_create_task_uses_persisted_sequence_and_initializes_runtime_state(self):
         from backend.services import task_runtime
         from backend.services.task_runtime import create_task

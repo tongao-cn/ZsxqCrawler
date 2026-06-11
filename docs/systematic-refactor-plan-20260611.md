@@ -1649,6 +1649,49 @@ Result:
 - PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
 - Git diff whitespace check passed.
 
+### 2026-06-11 - P5 task state fallback helper extraction
+
+Changed:
+
+- Added characterization coverage for `get_task_state()` preferring persisted task state over
+  the in-memory runtime fallback when both exist.
+- Added characterization coverage for `get_task_state()` using the in-memory runtime fallback
+  and preserving status normalization from `stopped` to `cancelled`.
+- Extracted `_memory_task_state_locked()` to isolate locked `current_tasks` fallback reads.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- `get_task_state()` still reads persisted task state first, only falls back to `current_tasks`
+  when no persisted task exists, and still normalizes the returned status through
+  `_normalize_task()`.
+- No public route response, task store SQL, task status field, cancellation behavior, task log
+  fallback, SSE framing, fallback polling, storage schema, legacy path, config semantics, or
+  frontend hook behavior changed.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_task_runtime_helpers -v
+uv run python -m py_compile backend\services\task_runtime.py
+uv run python -m unittest tests.test_task_runtime_helpers tests.test_task_store tests.test_task_routes_helpers -v
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+uv run python scripts\scan_postgres_compat_debt.py
+git diff --check
+```
+
+Result:
+
+- Characterization tests passed on the pre-refactor code before the helper extraction.
+- Focused task runtime tests passed: 30 tests.
+- Recommended task runtime gate passed: 49 tests, 14 PostgreSQL integration tests skipped by
+  configuration.
+- Full backend tests passed: 549 tests, 15 skipped.
+- Frontend build passed.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Git diff whitespace check passed.
+
 ## Stop Conditions
 
 Pause before editing if:
