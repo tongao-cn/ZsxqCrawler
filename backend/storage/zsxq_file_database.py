@@ -10,6 +10,7 @@ from backend.storage.zsxq_file_database_helpers import (
     _file_download_status_params,
     _file_record_params,
     _group_id_param,
+    _image_record_params,
     _group_record_params,
     _new_import_stats,
     _nullable_group_id_param,
@@ -178,10 +179,6 @@ class ZSXQFileDatabase:
         for image in images_data:
             if not image.get('image_id'):
                 continue
-                
-            thumbnail = image.get('thumbnail', {})
-            large = image.get('large', {})
-            original = image.get('original', {})
             
             self.cursor.execute('''
             INSERT INTO images 
@@ -201,21 +198,7 @@ class ZSXQFileDatabase:
                 original_width = excluded.original_width,
                 original_height = excluded.original_height,
                 original_size = excluded.original_size
-            ''', (
-                image.get('image_id'),
-                topic_id,
-                image.get('type'),
-                thumbnail.get('url'),
-                thumbnail.get('width'),
-                thumbnail.get('height'),
-                large.get('url'),
-                large.get('width'),
-                large.get('height'),
-                original.get('url'),
-                original.get('width'),
-                original.get('height'),
-                original.get('size')
-            ))
+            ''', _image_record_params(topic_id, image))
     
     def insert_topic_files(self, topic_id: int, files_data: List[Dict[str, Any]]):
         """插入话题关联的文件"""

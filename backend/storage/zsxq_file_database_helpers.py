@@ -114,6 +114,27 @@ def _talk_record_params(topic_id: int, owner_id: Optional[Any], talk_data: Dict[
     )
 
 
+def _image_record_params(topic_id: int, image_data: Dict[str, Any]) -> tuple[Any, ...]:
+    thumbnail = image_data.get('thumbnail', {})
+    large = image_data.get('large', {})
+    original = image_data.get('original', {})
+    return (
+        image_data.get('image_id'),
+        topic_id,
+        image_data.get('type'),
+        thumbnail.get('url'),
+        thumbnail.get('width'),
+        thumbnail.get('height'),
+        large.get('url'),
+        large.get('width'),
+        large.get('height'),
+        original.get('url'),
+        original.get('width'),
+        original.get('height'),
+        original.get('size'),
+    )
+
+
 def _file_attachment_params(parent_id: Any, file_data: Dict[str, Any]) -> tuple[Any, ...]:
     return (
         parent_id,

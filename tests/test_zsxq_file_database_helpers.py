@@ -9,6 +9,7 @@ from backend.storage.zsxq_file_database import (
     _file_download_status_params,
     _file_record_params,
     _group_record_params,
+    _image_record_params,
     _new_import_stats,
     _row_to_file_ai_analysis,
     _talk_record_params,
@@ -312,6 +313,36 @@ class ZSXQFileDatabaseHelperTests(unittest.TestCase):
         self.assertEqual((202, 9, "body"), _talk_record_params(202, 9, {"text": "body"}))
         self.assertEqual((202, None, ""), _talk_record_params(202, None, {}))
 
+    def test_image_record_params_keep_insert_column_order(self):
+        self.assertEqual(
+            (
+                301,
+                202,
+                "image",
+                "thumb-url",
+                100,
+                80,
+                "large-url",
+                1000,
+                800,
+                "origin-url",
+                1200,
+                900,
+                12345,
+            ),
+            _image_record_params(
+                202,
+                {
+                    "image_id": 301,
+                    "type": "image",
+                    "thumbnail": {"url": "thumb-url", "width": 100, "height": 80},
+                    "large": {"url": "large-url", "width": 1000, "height": 800},
+                    "original": {"url": "origin-url", "width": 1200, "height": 900, "size": 12345},
+                },
+            ),
+        )
+        self.assertEqual((301, 202, None, None, None, None, None, None, None, None, None, None, None), _image_record_params(202, {"image_id": 301}))
+
     def test_count_tables_builds_stats_from_cursor_counts(self):
         cursor = FakeCursor({"files": 3, "topics": 2})
 
@@ -482,6 +513,36 @@ class ZSXQFileDatabaseHelperTests(unittest.TestCase):
         self.assertIn("INSERT INTO talks", talk_sql)
         self.assertIn("ON CONFLICT(topic_id) DO UPDATE SET", talk_sql)
         self.assertEqual((202, 9, "body"), talk_params)
+
+    def test_insert_images_uses_record_params_and_skips_missing_ids(self):
+        from backend.storage.zsxq_file_database import ZSXQFileDatabase
+
+        db = object.__new__(ZSXQFileDatabase)
+        db.cursor = FakeCommentCursor()
+
+        ZSXQFileDatabase.insert_images(
+            db,
+            202,
+            [
+                {"type": "image"},
+                {
+                    "image_id": 301,
+                    "type": "image",
+                    "thumbnail": {"url": "thumb-url", "width": 100, "height": 80},
+                    "large": {"url": "large-url", "width": 1000, "height": 800},
+                    "original": {"url": "origin-url", "width": 1200, "height": 900, "size": 12345},
+                },
+            ],
+        )
+
+        self.assertEqual(1, len(db.cursor.calls))
+        image_sql, image_params = db.cursor.calls[-1]
+        self.assertIn("INSERT INTO images", image_sql)
+        self.assertIn("ON CONFLICT(image_id) DO UPDATE SET", image_sql)
+        self.assertEqual(
+            (301, 202, "image", "thumb-url", 100, 80, "large-url", 1000, 800, "origin-url", 1200, 900, 12345),
+            image_params,
+        )
 
     def test_update_file_download_status_casts_timestamp_to_text(self):
         from backend.storage.zsxq_file_database import ZSXQFileDatabase
