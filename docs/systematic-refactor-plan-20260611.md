@@ -2325,6 +2325,40 @@ Result:
 - Combined task runtime/store/routes tests: 57 tests passed, 14 PostgreSQL integration tests
   skipped.
 
+### 2026-06-11 - P5 task runtime log helper module extraction
+
+Changed:
+
+- Added `backend/services/task_runtime_logs.py` for in-memory task log and SSE subscriber dict
+  operations.
+- Kept `backend/services/task_runtime.py` responsible for locking, persistence, broadcast ordering,
+  and public task runtime APIs.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- `add_task_log` still persists first, appends the persisted formatted log to memory, then
+  broadcasts.
+- `get_task_logs_state` still prefers persisted logs over memory logs and still returns a memory log
+  copy when persistence is empty.
+- Subscribe, unsubscribe, unknown-subscriber handling, unknown-task unsubscribe no-op behavior, and
+  failing-subscriber broadcast tolerance remain unchanged.
+
+Verification:
+
+```powershell
+uv run python -m py_compile backend\services\task_runtime.py backend\services\task_runtime_logs.py
+uv run python -m unittest tests.test_task_runtime_helpers -v
+uv run python -m unittest tests.test_task_runtime_helpers tests.test_task_store tests.test_task_routes_helpers -v
+```
+
+Result:
+
+- `py_compile` passed.
+- `tests.test_task_runtime_helpers`: 38 tests passed.
+- Combined task runtime/store/routes tests: 57 tests passed, 14 PostgreSQL integration tests
+  skipped.
+
 ## Stop Conditions
 
 Pause before editing if:

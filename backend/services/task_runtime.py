@@ -9,6 +9,14 @@ from typing import Any, Callable, Dict, List, Optional
 
 from backend.core import crawler_runtime
 from backend.services.a_share_analysis_service import normalize_group_id
+from backend.services.task_runtime_logs import (
+    add_task_log_subscriber,
+    append_task_log,
+    has_task_logs,
+    remove_task_log_subscriber,
+    task_log_subscribers_snapshot,
+    task_logs_copy,
+)
 from backend.services.task_runtime_status import (
     INGESTION_LOCK_KEY,
     INGESTION_LOCK_TYPES,
@@ -146,11 +154,11 @@ def get_task_state(task_id: str) -> Optional[Dict[str, Any]]:
 
 
 def _has_task_logs_locked(task_id: str) -> bool:
-    return task_id in task_logs
+    return has_task_logs(task_logs, task_id)
 
 
 def _task_logs_copy_locked(task_id: str) -> List[str]:
-    return list(task_logs.get(task_id, []))
+    return task_logs_copy(task_logs, task_id)
 
 
 def get_task_logs_state(task_id: str) -> Optional[List[str]]:
@@ -258,9 +266,7 @@ def create_ingestion_task(task_type: str, description: str, group_id: str) -> tu
 
 
 def _append_task_log_locked(task_id: str, formatted_log: str) -> None:
-    if task_id not in task_logs:
-        task_logs[task_id] = []
-    task_logs[task_id].append(formatted_log)
+    append_task_log(task_logs, task_id, formatted_log)
 
 
 def add_task_log(task_id: str, log_message: str) -> None:
@@ -271,19 +277,11 @@ def add_task_log(task_id: str, log_message: str) -> None:
 
 
 def _add_task_log_subscriber_locked(task_id: str, subscriber: queue.Queue[str]) -> None:
-    sse_connections.setdefault(task_id, []).append(subscriber)
+    add_task_log_subscriber(sse_connections, task_id, subscriber)
 
 
 def _remove_task_log_subscriber_locked(task_id: str, subscriber: queue.Queue[str]) -> None:
-    subscribers = sse_connections.get(task_id)
-    if not subscribers:
-        return
-    try:
-        subscribers.remove(subscriber)
-    except ValueError:
-        return
-    if not subscribers:
-        sse_connections.pop(task_id, None)
+    remove_task_log_subscriber(sse_connections, task_id, subscriber)
 
 
 def subscribe_task_logs(task_id: str) -> queue.Queue[str]:
@@ -299,7 +297,7 @@ def unsubscribe_task_logs(task_id: str, subscriber: queue.Queue[str]) -> None:
 
 
 def _task_log_subscribers_snapshot_locked(task_id: str) -> List[queue.Queue[str]]:
-    return list(sse_connections.get(task_id, []))
+    return task_log_subscribers_snapshot(sse_connections, task_id)
 
 
 def broadcast_log(task_id: str, log_message: str) -> None:
