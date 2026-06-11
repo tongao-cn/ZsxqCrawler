@@ -330,6 +330,32 @@ class TaskRuntimeHelperTests(unittest.TestCase):
         store = FakeTaskStore()
         store.tasks["task-1"] = {"task_id": "task-1", "status": "running", "message": "running"}
         crawler = Stoppable()
+        downloader = Stoppable()
+
+        with patch("backend.services.task_runtime.get_task_store", return_value=store):
+            try:
+                task_runtime.register_task_crawler("task-1", crawler)
+                task_runtime.file_downloader_instances["task-1"] = downloader
+
+                stopped = task_runtime.stop_task("task-1")
+            finally:
+                task_runtime.unregister_task_crawler("task-1")
+                task_runtime.file_downloader_instances.pop("task-1", None)
+                task_runtime.task_stop_flags.pop("task-1", None)
+
+        self.assertTrue(stopped)
+        self.assertTrue(crawler.stopped)
+        self.assertTrue(downloader.stopped)
+        self.assertTrue(store.stop_flags["task-1"])
+        self.assertEqual("cancelled", store.tasks["task-1"]["status"])
+        self.assertEqual([("task-1", "cancelled")], store.released_locks)
+
+    def test_stop_task_marks_memory_stop_flag_before_stopping_resources(self):
+        from backend.services import task_runtime
+
+        store = FakeTaskStore()
+        store.tasks["task-1"] = {"task_id": "task-1", "status": "running", "message": "running"}
+        crawler = StopFlagObserver(task_runtime.task_stop_flags, "task-1")
 
         with patch("backend.services.task_runtime.get_task_store", return_value=store):
             try:
@@ -341,10 +367,7 @@ class TaskRuntimeHelperTests(unittest.TestCase):
                 task_runtime.task_stop_flags.pop("task-1", None)
 
         self.assertTrue(stopped)
-        self.assertTrue(crawler.stopped)
-        self.assertTrue(store.stop_flags["task-1"])
-        self.assertEqual("cancelled", store.tasks["task-1"]["status"])
-        self.assertEqual([("task-1", "cancelled")], store.released_locks)
+        self.assertTrue(crawler.flag_when_stopped)
 
     def test_stop_task_uses_global_crawler_fallback_when_no_registered_crawler(self):
         from backend.services import task_runtime

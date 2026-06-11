@@ -349,6 +349,11 @@ def unregister_task_crawler(task_id: str) -> None:
         crawler_instances.pop(task_id, None)
 
 
+def _prepare_task_stop_resources_locked(task_id: str) -> tuple[Any, Any]:
+    task_stop_flags[task_id] = True
+    return crawler_instances.get(task_id), file_downloader_instances.get(task_id)
+
+
 def stop_task(task_id: str) -> bool:
     task = get_task_state(task_id)
     if not task:
@@ -358,9 +363,7 @@ def stop_task(task_id: str) -> bool:
         return False
 
     with _state_lock:
-        task_stop_flags[task_id] = True
-        crawler = crawler_instances.get(task_id)
-        downloader = file_downloader_instances.get(task_id)
+        crawler, downloader = _prepare_task_stop_resources_locked(task_id)
     get_task_store().set_stop_flag(task_id, True)
     add_task_log(task_id, "🛑 收到停止请求，正在停止任务...")
 
