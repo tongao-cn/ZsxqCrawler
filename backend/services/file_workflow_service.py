@@ -195,6 +195,22 @@ def _build_download_task_stats(total_files: int, found: int, missing: int = 0) -
     }
 
 
+def _build_download_file_info(
+    file_id: int,
+    file_name: str,
+    file_size: int,
+    download_count: int = 0,
+) -> Dict[str, Dict[str, Any]]:
+    return {
+        "file": {
+            "id": file_id,
+            "name": file_name,
+            "size": file_size,
+            "download_count": download_count,
+        }
+    }
+
+
 def _get_file_status_response(group_id: str, file_id: int) -> dict:
     with _file_db(group_id) as file_db:
         file_db.cursor.execute(
@@ -777,14 +793,7 @@ def _run_download_records(
 
         add_task_log(task_id, f"【{index}/{len(records)}】{file_name}")
         result = downloader.download_file(
-            {
-                "file": {
-                    "id": file_id,
-                    "name": file_name,
-                    "size": file_size,
-                    "download_count": download_count,
-                }
-            }
+            _build_download_file_info(file_id, file_name, file_size, download_count)
         )
         if result == "skipped":
             stats["skipped"] += 1
@@ -893,34 +902,13 @@ def run_single_file_download_task_with_info(
         if result:
             _, db_file_name, db_file_size, download_count = result
             add_task_log(task_id, f"📄 从数据库获取文件信息: {db_file_name} ({db_file_size} bytes)")
-            file_info = {
-                "file": {
-                    "id": file_id,
-                    "name": db_file_name,
-                    "size": db_file_size,
-                    "download_count": download_count,
-                }
-            }
+            file_info = _build_download_file_info(file_id, db_file_name, db_file_size, download_count)
         elif file_name and file_size is not None:
             add_task_log(task_id, f"📄 文件库未命中，使用请求中的文件信息: {file_name} ({file_size} bytes)")
-            file_info = {
-                "file": {
-                    "id": file_id,
-                    "name": file_name,
-                    "size": file_size,
-                    "download_count": 0,
-                }
-            }
+            file_info = _build_download_file_info(file_id, file_name, file_size)
         else:
             add_task_log(task_id, f"📄 直接下载文件 ID: {file_id}")
-            file_info = {
-                "file": {
-                    "id": file_id,
-                    "name": f"file_{file_id}",
-                    "size": 0,
-                    "download_count": 0,
-                }
-            }
+            file_info = _build_download_file_info(file_id, f"file_{file_id}", 0)
 
         result = downloader.download_file(file_info)
 

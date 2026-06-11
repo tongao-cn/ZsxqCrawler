@@ -3,6 +3,7 @@ from unittest.mock import patch
 
 from backend.services.file_workflow_service import (
     _build_check_local_file_status_response,
+    _build_download_file_info,
     _build_download_task_stats,
     _build_file_status_response,
     _build_sync_files_response,
@@ -442,6 +443,21 @@ class FileRoutesHelperTests(unittest.TestCase):
                 "failed": 0,
             },
             stats,
+        )
+
+    def test_build_download_file_info_keeps_downloader_payload_shape(self):
+        payload = _build_download_file_info(123, "file.pdf", 456, 7)
+
+        self.assertEqual(
+            {
+                "file": {
+                    "id": 123,
+                    "name": "file.pdf",
+                    "size": 456,
+                    "download_count": 7,
+                }
+            },
+            payload,
         )
 
     def test_file_status_routes_offload_sync_work_to_thread(self):
