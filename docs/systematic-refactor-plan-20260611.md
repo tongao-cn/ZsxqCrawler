@@ -2391,6 +2391,41 @@ Result:
 - Combined task runtime/store/routes tests: 57 tests passed, 14 PostgreSQL integration tests
   skipped.
 
+### 2026-06-11 - P5 task runtime resource helper module extraction
+
+Changed:
+
+- Added `backend/services/task_runtime_resources.py` for crawler/downloader resource registry
+  operations and stop-flag requests.
+- Kept `crawler_instances` and `file_downloader_instances` in
+  `backend/services/task_runtime.py` for compatibility with existing tests and file workflow code.
+- Preserved `_request_stop_for_resources` and `_request_stop_for_task_resources` as internal
+  `task_runtime.py` wrappers.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Registered crawler stop, downloader stop, global crawler fallback stop, runtime shutdown resource
+  snapshots, resource tracking cleanup, and objects-without-`set_stop_flag` tolerance remain
+  unchanged.
+- Public `register_task_crawler`/`unregister_task_crawler` and direct access to
+  `task_runtime.crawler_instances` / `task_runtime.file_downloader_instances` remain available.
+
+Verification:
+
+```powershell
+uv run python -m py_compile backend\services\task_runtime.py backend\services\task_runtime_resources.py
+uv run python -m unittest tests.test_task_runtime_helpers -v
+uv run python -m unittest tests.test_task_runtime_helpers tests.test_task_store tests.test_task_routes_helpers -v
+```
+
+Result:
+
+- `py_compile` passed.
+- `tests.test_task_runtime_helpers`: 38 tests passed.
+- Combined task runtime/store/routes tests: 57 tests passed, 14 PostgreSQL integration tests
+  skipped.
+
 ## Stop Conditions
 
 Pause before editing if:

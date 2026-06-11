@@ -25,6 +25,17 @@ from backend.services.task_runtime_memory import (
     should_apply_task_update,
     update_memory_task,
 )
+from backend.services.task_runtime_resources import (
+    clear_runtime_resource_tracking,
+    register_task_crawler as _register_resource_crawler,
+    request_stop_for_resources,
+    request_stop_for_task_resources,
+    runtime_crawlers_snapshot,
+    runtime_file_downloaders_snapshot,
+    task_crawler,
+    task_file_downloader,
+    unregister_task_crawler as _unregister_resource_crawler,
+)
 from backend.services.task_runtime_status import (
     INGESTION_LOCK_KEY,
     INGESTION_LOCK_TYPES,
@@ -344,32 +355,31 @@ def _release_task_lock_on_terminal_status(
 
 
 def _register_task_crawler_locked(task_id: str, crawler: Any) -> None:
-    crawler_instances[task_id] = crawler
+    _register_resource_crawler(crawler_instances, task_id, crawler)
 
 
 def _unregister_task_crawler_locked(task_id: str) -> None:
-    crawler_instances.pop(task_id, None)
+    _unregister_resource_crawler(crawler_instances, task_id)
 
 
 def _task_crawler_locked(task_id: str) -> Any:
-    return crawler_instances.get(task_id)
+    return task_crawler(crawler_instances, task_id)
 
 
 def _task_file_downloader_locked(task_id: str) -> Any:
-    return file_downloader_instances.get(task_id)
+    return task_file_downloader(file_downloader_instances, task_id)
 
 
 def _runtime_crawlers_snapshot_locked() -> List[Any]:
-    return list(crawler_instances.values())
+    return runtime_crawlers_snapshot(crawler_instances)
 
 
 def _runtime_file_downloaders_snapshot_locked() -> List[Any]:
-    return list(file_downloader_instances.values())
+    return runtime_file_downloaders_snapshot(file_downloader_instances)
 
 
 def _clear_runtime_resource_tracking_locked() -> None:
-    crawler_instances.clear()
-    file_downloader_instances.clear()
+    clear_runtime_resource_tracking(crawler_instances, file_downloader_instances)
 
 
 def register_task_crawler(task_id: str, crawler: Any) -> None:
@@ -407,13 +417,7 @@ def stop_task(task_id: str) -> bool:
 
 
 def _request_stop_for_task_resources(crawler: Any, downloader: Any) -> None:
-    if crawler is not None:
-        crawler.set_stop_flag()
-    elif crawler_runtime.crawler_instance:
-        crawler_runtime.crawler_instance.set_stop_flag()
-
-    if downloader is not None:
-        downloader.set_stop_flag()
+    request_stop_for_task_resources(crawler, downloader, crawler_runtime.crawler_instance)
 
 
 def _register_task_lock_heartbeat_locked(task_id: str, stop_event: threading.Event) -> None:
@@ -459,9 +463,7 @@ def _stop_task_lock_heartbeat(task_id: str) -> None:
 
 
 def _request_stop_for_resources(resources: List[Any]) -> None:
-    for resource in resources:
-        if hasattr(resource, "set_stop_flag"):
-            resource.set_stop_flag()
+    request_stop_for_resources(resources)
 
 
 def _register_runtime_task_thread_locked(task_id: str, thread: threading.Thread) -> None:
