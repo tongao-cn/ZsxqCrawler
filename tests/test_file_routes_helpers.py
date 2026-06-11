@@ -12,6 +12,7 @@ from backend.services.file_workflow_service import (
     _enqueue_file_task,
     _fail_file_task,
     _get_download_file_status,
+    _load_filtered_download_file_records,
     _query_group_id,
     _resolve_download_record_status,
 )
@@ -679,6 +680,47 @@ class FileRoutesHelperTests(unittest.TestCase):
                 "analysis_updated_at": "2026-06-11T10:00:00+08:00",
             },
             response["files"][0],
+        )
+
+    def test_load_filtered_download_file_records_keeps_default_search_and_limit_shape(self):
+        class FakeCursor:
+            def __init__(self):
+                self.executed = []
+
+            def execute(self, sql, params=()):
+                self.executed.append((sql, params))
+
+            def fetchall(self):
+                return [
+                    (101, "Report.PDF", 123, 7),
+                    (102, None, None, None),
+                ]
+
+        class FakeDownloader:
+            def __init__(self):
+                self.file_db = type("FakeFileDb", (), {"cursor": FakeCursor()})()
+
+        downloader = FakeDownloader()
+
+        records = _load_filtered_download_file_records(
+            downloader,
+            "123",
+            search=" Foo ",
+            max_files=3,
+        )
+
+        query, params = downloader.file_db.cursor.executed[0]
+        self.assertIn("(f.download_status IS NULL OR f.download_status NOT IN (?, ?, ?))", query)
+        self.assertIn("LOWER(COALESCE(f.name, '')) LIKE ?", query)
+        self.assertIn("ORDER BY f.create_time DESC, f.download_count DESC", query)
+        self.assertIn("LIMIT ?", query)
+        self.assertEqual((123, "completed", "downloaded", "skipped", *["%foo%"] * 8, 3), params)
+        self.assertEqual(
+            [
+                (101, "Report.PDF", 123, 7),
+                (102, "file_102", 0, 0),
+            ],
+            records,
         )
 
     def test_close_crawler_file_databases_closes_file_and_topic_dbs(self):

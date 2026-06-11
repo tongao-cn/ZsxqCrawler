@@ -322,42 +322,7 @@ def _build_file_list_filters(
     elif analysis_status == "pending":
         conditions.append("faa.updated_at IS NULL")
 
-    search_text = (search or "").strip()
-    if search_text:
-        search_pattern = f"%{search_text.lower()}%"
-        conditions.append(
-            """
-                (
-                    LOWER(COALESCE(f.name, '')) LIKE ?
-                    OR EXISTS (
-                        SELECT 1
-                        FROM file_topic_relations fr
-                        LEFT JOIN topics t ON t.topic_id = fr.topic_id
-                        LEFT JOIN talks tk ON tk.topic_id = fr.topic_id
-                        LEFT JOIN articles ar ON ar.topic_id = fr.topic_id
-                        WHERE fr.file_id = f.file_id
-                          AND (
-                              LOWER(COALESCE(t.title, '')) LIKE ?
-                              OR LOWER(COALESCE(t.annotation, '')) LIKE ?
-                              OR LOWER(COALESCE(tk.text, '')) LIKE ?
-                              OR LOWER(COALESCE(ar.title, '')) LIKE ?
-                          )
-                    )
-                    OR EXISTS (
-                        SELECT 1
-                        FROM topic_files tf
-                        LEFT JOIN topics t2 ON t2.topic_id = tf.topic_id
-                        WHERE tf.file_id = f.file_id
-                          AND (
-                              LOWER(COALESCE(tf.name, '')) LIKE ?
-                              OR LOWER(COALESCE(t2.title, '')) LIKE ?
-                              OR LOWER(COALESCE(t2.annotation, '')) LIKE ?
-                          )
-                    )
-                )
-                """
-        )
-        params_prefix.extend([search_pattern] * 8)
+    _add_file_search_condition(conditions, params_prefix, search)
 
     where_clause = f"WHERE {' AND '.join(conditions)}" if conditions else ""
     return where_clause, params_prefix

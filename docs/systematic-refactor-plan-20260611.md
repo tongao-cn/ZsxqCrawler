@@ -122,6 +122,39 @@ Result:
 - Frontend build passed.
 - PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
 
+### 2026-06-11 - P1 shared file search filter
+
+Changed:
+
+- Added characterization coverage for `_load_filtered_download_file_records` default status
+  filtering, search parameter expansion, `LIMIT` handling, and row normalization.
+- Reused `_add_file_search_condition` from `_build_file_list_filters`, so file listing and
+  filtered-download record loading now share the same search-condition implementation.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- SQL search fields, LIKE parameter count, default non-completed filter behavior, max-file limit,
+  and returned download record shape are preserved.
+- No task execution, download behavior, route fields, legacy path, or fallback behavior changed.
+
+Verification:
+
+```powershell
+uv run python -m py_compile backend\services\file_workflow_service.py
+uv run python -m unittest tests.test_file_routes_helpers -v
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+uv run python scripts\scan_postgres_compat_debt.py
+```
+
+Result:
+
+- Focused file route helper tests passed: 30 tests.
+- Full backend tests passed: 508 tests, 15 skipped.
+- Frontend build passed.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+
 ## Stop Conditions
 
 Pause before editing if:
