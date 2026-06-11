@@ -48,6 +48,54 @@ class FileAIAnalysisServiceHelperTests(unittest.TestCase):
         self.assertEqual("text/plain", content_type)
 
     @unittest.skipUnless(HAS_FILE_AI_DEPS, "file AI service dependencies are not installed")
+    def test_summarize_text_with_ai_uses_deep_summary_prompt(self):
+        from backend.services.file_ai_analysis_service import _summarize_text_with_ai
+
+        class FakeResponses:
+            def __init__(self):
+                self.kwargs = None
+
+            def create(self, **kwargs):
+                self.kwargs = kwargs
+
+                class Response:
+                    output_text = "Deep summary"
+
+                return Response()
+
+        class FakeClient:
+            def __init__(self):
+                self.responses = FakeResponses()
+
+        fake_client = FakeClient()
+
+        with (
+            patch(
+                "backend.services.file_ai_analysis_service.get_openai_compatible_config",
+                return_value={"api_key": "sk-test"},
+            ),
+            patch("backend.services.file_ai_analysis_service.OpenAI", return_value=fake_client),
+        ):
+            summary = _summarize_text_with_ai(
+                "正文内容",
+                file_name="report.txt",
+                model="gpt-5.5",
+                api_base="https://api.openai.com/v1",
+                wire_api="responses",
+                reasoning_effort="high",
+            )
+
+        self.assertEqual("Deep summary", summary)
+        self.assertEqual({"effort": "high"}, fake_client.responses.kwargs["reasoning"])
+        messages = fake_client.responses.kwargs["input"]
+        self.assertIn("深入、结构化、可执行", messages[0]["content"])
+        user_prompt = messages[1]["content"]
+        self.assertIn("请深度阅读并总结文件《report.txt》", user_prompt)
+        self.assertIn("不要为了简洁省略重要信息", user_prompt)
+        self.assertIn("关键数据、预测、目标价、评级或情景假设", user_prompt)
+        self.assertNotIn("3-8条", user_prompt)
+
+    @unittest.skipUnless(HAS_FILE_AI_DEPS, "file AI service dependencies are not installed")
     def test_summarize_pdf_with_ai_sends_pdf_file_input(self):
         from backend.services.file_ai_analysis_service import _summarize_pdf_with_ai
 
@@ -97,6 +145,9 @@ class FileAIAnalysisServiceHelperTests(unittest.TestCase):
         self.assertEqual("report.pdf", content[0]["filename"])
         self.assertTrue(content[0]["file_data"].startswith("data:application/pdf;base64,"))
         self.assertEqual("input_text", content[1]["type"])
+        self.assertIn("请深度阅读并总结文件《report.pdf》", content[1]["text"])
+        self.assertIn("不要为了简洁省略重要信息", content[1]["text"])
+        self.assertNotIn("3-8条", content[1]["text"])
 
 
 if __name__ == "__main__":

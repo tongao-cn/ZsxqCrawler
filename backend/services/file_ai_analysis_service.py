@@ -187,6 +187,25 @@ def _extract_response_text(response: Any) -> str:
     return "\n".join(chunks)
 
 
+def _build_deep_summary_prompt(file_name: str) -> str:
+    return (
+        f"请深度阅读并总结文件《{file_name}》。\n\n"
+        "要求：\n"
+        "- 不要为了简洁省略重要信息，按材料信息量决定篇幅。\n"
+        "- 尽量保留关键数据、判断、假设、时间点、公司/行业/标的名称。\n"
+        "- 如果是券商研报、会议纪要、投资材料，请重点提取：\n"
+        "  1. 核心结论\n"
+        "  2. 主要观点和逻辑链条\n"
+        "  3. 关键数据、预测、目标价、评级或情景假设\n"
+        "  4. 涉及的公司、行业、产业链环节\n"
+        "  5. 催化因素\n"
+        "  6. 风险点和反方观点\n"
+        "  7. 后续值得跟踪的问题\n"
+        "- 如果材料内容很长，可以分章节/主题总结。\n"
+        "- 如果原文没有的信息，不要编造。"
+    )
+
+
 def _summarize_text_with_ai(
     text: str,
     *,
@@ -207,17 +226,14 @@ def _summarize_text_with_ai(
             "role": "system",
             "content": (
                 "你是文件内容分析助手。"
-                "请基于用户提供的文件正文做简洁、结构化、可执行的中文总结。"
+                "请基于用户提供的文件正文做深入、结构化、可执行的中文总结。"
                 "如果内容明显是表格、代码或配置，请按其类型总结重点。"
             ),
         },
         {
             "role": "user",
             "content": (
-                f"请分析文件《{file_name}》的内容，并输出：\n"
-                "1. 一句话结论\n"
-                "2. 核心要点（3-8条）\n"
-                "3. 如果是研究/资料文件，补充可能值得关注的风险或后续动作\n\n"
+                f"{_build_deep_summary_prompt(file_name)}\n\n"
                 f"文件内容如下：\n{clipped_text}"
             ),
         },
@@ -275,10 +291,7 @@ def _summarize_pdf_with_ai(
                     {
                         "type": "input_text",
                         "text": (
-                            f"请分析 PDF 文件《{file_name}》的内容，并输出：\n"
-                            "1. 一句话结论\n"
-                            "2. 核心要点（3-8条）\n"
-                            "3. 如果是研究/资料文件，补充可能值得关注的风险或后续动作\n\n"
+                            f"{_build_deep_summary_prompt(file_name)}\n\n"
                             "请直接基于 PDF 页面内容分析；如果 PDF 是扫描件，也请尽量读取页面图像中的文字。"
                         ),
                     },
