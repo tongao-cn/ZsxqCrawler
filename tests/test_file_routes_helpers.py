@@ -8,6 +8,7 @@ from backend.services.file_workflow_service import (
     _build_file_status_response,
     _build_sync_files_response,
     _close_crawler_file_databases,
+    _download_result_stat_key,
     _enqueue_file_task,
     _fail_file_task,
     _get_download_file_status,
@@ -459,6 +460,13 @@ class FileRoutesHelperTests(unittest.TestCase):
             },
             payload,
         )
+
+    def test_download_result_stat_key_preserves_existing_counts(self):
+        self.assertEqual("skipped", _download_result_stat_key("skipped"))
+        self.assertEqual("downloaded", _download_result_stat_key(True))
+        self.assertEqual("downloaded", _download_result_stat_key("local/path.pdf"))
+        self.assertEqual("failed", _download_result_stat_key(False))
+        self.assertEqual("failed", _download_result_stat_key(None))
 
     def test_file_status_routes_offload_sync_work_to_thread(self):
         from backend.routes import file_routes

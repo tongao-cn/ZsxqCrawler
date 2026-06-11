@@ -211,6 +211,14 @@ def _build_download_file_info(
     }
 
 
+def _download_result_stat_key(result: Any) -> str:
+    if result == "skipped":
+        return "skipped"
+    if result:
+        return "downloaded"
+    return "failed"
+
+
 def _get_file_status_response(group_id: str, file_id: int) -> dict:
     with _file_db(group_id) as file_db:
         file_db.cursor.execute(
@@ -795,12 +803,7 @@ def _run_download_records(
         result = downloader.download_file(
             _build_download_file_info(file_id, file_name, file_size, download_count)
         )
-        if result == "skipped":
-            stats["skipped"] += 1
-        elif result:
-            stats["downloaded"] += 1
-        else:
-            stats["failed"] += 1
+        stats[_download_result_stat_key(result)] += 1
     return stats
 
 
