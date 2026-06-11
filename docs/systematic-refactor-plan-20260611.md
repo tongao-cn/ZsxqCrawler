@@ -1919,6 +1919,49 @@ Result:
 - PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
 - Git diff whitespace check passed.
 
+### 2026-06-11 - P5 runtime thread clear helper extraction
+
+Changed:
+
+- Extracted `_clear_runtime_task_threads_locked()` so runtime task thread registration, removal, and
+  shutdown clearing now go through the same locked helper boundary.
+- Reused the existing characterization coverage for `request_runtime_shutdown()` clearing
+  `runtime_task_threads` after stopping runtime heartbeats.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Runtime shutdown still clears `runtime_task_threads` under `_state_lock` after heartbeat stop
+  requests are issued.
+- No public route response, task status field, cancellation behavior, stop-resource ordering,
+  heartbeat semantics, fallback polling, storage schema, legacy path, config semantics, or frontend
+  hook behavior changed.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_task_runtime_helpers.TaskRuntimeHelperTests.test_request_runtime_shutdown_stops_heartbeats_and_clears_runtime_threads -v
+uv run python -m py_compile backend\services\task_runtime.py
+uv run python -m unittest tests.test_task_runtime_helpers -v
+uv run python -m unittest tests.test_task_runtime_helpers tests.test_task_store tests.test_task_routes_helpers -v
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+uv run python scripts\scan_postgres_compat_debt.py
+git diff --check
+```
+
+Result:
+
+- Existing characterization test passed before the helper extraction: 1 test.
+- Post-refactor characterization test passed: 1 test.
+- Focused task runtime tests passed: 37 tests.
+- Recommended task runtime gate passed: 56 tests, 14 PostgreSQL integration tests skipped by
+  configuration.
+- Full backend tests passed: 556 tests, 15 skipped.
+- Frontend build passed.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Git diff whitespace check passed.
+
 ## Stop Conditions
 
 Pause before editing if:

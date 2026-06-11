@@ -502,6 +502,10 @@ def _forget_runtime_task_thread_locked(task_id: str) -> None:
     runtime_task_threads.pop(task_id, None)
 
 
+def _clear_runtime_task_threads_locked() -> None:
+    runtime_task_threads.clear()
+
+
 def enqueue_runtime_task(task_func: Callable[..., Any], task_id: str, *args: Any) -> None:
     def run_task() -> None:
         try:
@@ -559,7 +563,7 @@ def request_runtime_shutdown() -> None:
     for task_id in heartbeat_task_ids:
         _stop_task_lock_heartbeat(task_id)
     with _state_lock:
-        runtime_task_threads.clear()
+        _clear_runtime_task_threads_locked()
 
 
 def _task_stop_flag_locked(task_id: str) -> bool:
