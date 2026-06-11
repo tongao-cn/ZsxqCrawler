@@ -6,6 +6,14 @@ from backend.core.console_output import safe_console_print as print
 from backend.crawlers.topic_ingestion import _query_group_id
 
 
+def _offset_zsxq_end_time(value: str, offset_ms: int) -> str:
+    from datetime import datetime, timedelta
+
+    dt = datetime.fromisoformat(value.replace('+0800', '+08:00'))
+    dt = dt - timedelta(milliseconds=offset_ms)
+    return dt.strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + '+0800'
+
+
 class TopicPaginationMixin:
     """Pagination strategies for ZSXQ topic crawlers."""
     def _topic_next_end_time(self, topics: List[Dict[str, Any]]) -> Optional[str]:
@@ -16,10 +24,7 @@ class TopicPaginationMixin:
             self.log("   ⚠️ 最后一条话题缺少 create_time，停止继续翻页")
             return None
         try:
-            from datetime import datetime, timedelta
-            dt = datetime.fromisoformat(original_time.replace('+0800', '+08:00'))
-            dt = dt - timedelta(milliseconds=self.timestamp_offset_ms)
-            return dt.strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + '+0800'
+            return _offset_zsxq_end_time(original_time, self.timestamp_offset_ms)
         except Exception as e:
             self.log(f"   ⚠️ 时间戳调整失败: {e}")
             return original_time

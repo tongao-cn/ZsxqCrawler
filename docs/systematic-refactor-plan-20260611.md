@@ -673,6 +673,43 @@ Result:
 - PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
 - Git diff whitespace check passed.
 
+### 2026-06-11 - P4 legacy pagination cursor helper extraction
+
+Changed:
+
+- Added characterization coverage for `_offset_zsxq_end_time` timestamp formatting and
+  `_topic_next_end_time` timestamp adjustment failure fallback.
+- Extracted `_offset_zsxq_end_time` in `backend/crawlers/topic_pagination.py`.
+- Reused the helper from `_topic_next_end_time` while leaving fetch/store loops, retry behavior,
+  stop checks, one-hour skip behavior, and return fallback unchanged.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Missing `create_time`, invalid timestamp fallback, `+0800` output format, and millisecond
+  offset semantics are preserved.
+- No source routing, task status, crawler call order, legacy behavior, fallback behavior, storage
+  write path, or config semantics changed.
+
+Verification:
+
+```powershell
+uv run python -m py_compile backend\crawlers\topic_pagination.py
+uv run python -m unittest tests.test_zsxq_interactive_crawler_helpers -v
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+uv run python scripts\scan_postgres_compat_debt.py
+git diff --check
+```
+
+Result:
+
+- Focused pagination helper tests passed: 4 tests.
+- Full backend tests passed: 531 tests, 15 skipped.
+- Frontend build passed.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Git diff whitespace check passed.
+
 ## Stop Conditions
 
 Pause before editing if:
