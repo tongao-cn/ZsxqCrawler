@@ -602,17 +602,20 @@ def _clear_runtime_shutdown_tracking_locked() -> List[str]:
     return _task_lock_heartbeat_ids_locked()
 
 
+def _cancel_active_runtime_tasks(tasks_snapshot: List[tuple[str, Dict[str, Any]]]) -> None:
+    for task_id, task in tasks_snapshot:
+        if _is_active_task_status(task.get("status")):
+            get_task_store().set_stop_flag(task_id, True)
+            update_task(task_id, "cancelled", "服务关闭，任务已停止")
+
+
 def request_runtime_shutdown() -> None:
     with _state_lock:
         tasks_snapshot, crawler_snapshot, downloader_snapshot = _prepare_runtime_shutdown_snapshot_locked()
 
     _request_stop_for_resources(crawler_snapshot)
     _request_stop_for_resources(downloader_snapshot)
-
-    for task_id, task in tasks_snapshot:
-        if _is_active_task_status(task.get("status")):
-            get_task_store().set_stop_flag(task_id, True)
-            update_task(task_id, "cancelled", "服务关闭，任务已停止")
+    _cancel_active_runtime_tasks(tasks_snapshot)
 
     with _state_lock:
         heartbeat_task_ids = _clear_runtime_shutdown_tracking_locked()

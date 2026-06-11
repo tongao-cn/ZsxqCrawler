@@ -2261,6 +2261,34 @@ Result:
 - `py_compile` passed.
 - `tests.test_task_runtime_helpers`: 38 tests passed.
 
+### 2026-06-11 - P5 runtime shutdown active task cancel helper extraction
+
+Changed:
+
+- Extracted `_cancel_active_runtime_tasks` from `request_runtime_shutdown`.
+- Kept resource stop requests before task cancellation and runtime tracking cleanup after task
+  cancellation.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Active runtime tasks still have persisted stop flags set before `update_task(..., "cancelled",
+  "服务关闭，任务已停止")`.
+- Shutdown resource stop ordering, log/status behavior, heartbeat cleanup, runtime thread cleanup,
+  and SSE cleanup remain unchanged.
+
+Verification:
+
+```powershell
+uv run python -m py_compile backend\services\task_runtime.py
+uv run python -m unittest tests.test_task_runtime_helpers -v
+```
+
+Result:
+
+- `py_compile` passed.
+- `tests.test_task_runtime_helpers`: 38 tests passed.
+
 ## Stop Conditions
 
 Pause before editing if:
