@@ -178,19 +178,29 @@ class TaskRuntimeHelperTests(unittest.TestCase):
         from backend.services.task_runtime import create_ingestion_task
 
         store = FakeTaskStore()
+        task_id = None
+        runtime_logs = None
+        runtime_stop_flag = None
 
         with patch("backend.services.task_runtime.get_task_store", return_value=store):
             try:
                 task_id, conflict = create_ingestion_task("collect_files", "collect", "166")
+                runtime_logs = list(task_runtime.task_logs[task_id])
+                runtime_stop_flag = task_runtime.task_stop_flags[task_id]
             finally:
                 for task_id_to_remove in list(store.tasks):
                     task_runtime.current_tasks.pop(task_id_to_remove, None)
+                    task_runtime.task_logs.pop(task_id_to_remove, None)
                     task_runtime.task_stop_flags.pop(task_id_to_remove, None)
 
         self.assertTrue(task_id.startswith("task_"))
         self.assertIsNone(conflict)
         self.assertEqual("166", store.tasks[task_id]["group_id"])
         self.assertEqual("ingestion", store.tasks[task_id]["ingestion_lock_key"])
+        self.assertEqual(False, store.stop_flags[task_id])
+        self.assertEqual([(task_id, "任务创建: collect")], store.logs)
+        self.assertEqual(["任务创建: collect"], runtime_logs)
+        self.assertEqual(False, runtime_stop_flag)
 
     def test_stop_task_stops_registered_task_crawler(self):
         from backend.services import task_runtime

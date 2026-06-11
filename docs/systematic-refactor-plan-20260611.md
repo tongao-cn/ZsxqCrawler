@@ -797,6 +797,50 @@ Result:
 - PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
 - Git diff whitespace check passed.
 
+### 2026-06-11 - P5 task runtime creation tracking helper extraction
+
+Changed:
+
+- Added characterization coverage for ingestion-task creation tracking: persisted stop flag,
+  creation log, memory log, and memory stop flag.
+- Tightened the ingestion-task helper test cleanup so runtime memory logs are removed after the
+  test.
+- Extracted `_initialize_task_tracking_locked` and `_persist_task_creation_tracking`, then reused
+  them from `create_task` and `create_ingestion_task`.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Runtime memory log initialization, memory stop-flag initialization, persisted stop-flag reset,
+  creation log text, task ID allocation, task creation order, and ingestion lock behavior are
+  preserved.
+- The ingestion task memory initialization remains inside the same `_state_lock` block as
+  `current_tasks` assignment.
+- No public route response, task store SQL, SSE behavior, cancellation behavior, legacy path, or
+  config semantics changed.
+
+Verification:
+
+```powershell
+uv run python -m py_compile backend\services\task_runtime.py
+uv run python -m unittest tests.test_task_runtime_helpers -v
+uv run python -m unittest tests.test_task_runtime_helpers tests.test_task_store tests.test_task_routes_helpers -v
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+uv run python scripts\scan_postgres_compat_debt.py
+git diff --check
+```
+
+Result:
+
+- Focused task runtime helper tests passed: 14 tests.
+- Recommended task runtime gate passed: 33 tests, 14 PostgreSQL integration tests skipped by
+  environment gate.
+- Full backend tests passed: 533 tests, 15 skipped.
+- Frontend build passed.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Git diff whitespace check passed.
+
 ## Stop Conditions
 
 Pause before editing if:

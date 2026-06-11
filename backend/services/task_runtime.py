@@ -63,6 +63,16 @@ INGESTION_LOCK_TYPES = {
 INGESTION_LOCK_KEY = "ingestion"
 
 
+def _initialize_task_tracking_locked(task_id: str) -> None:
+    task_logs[task_id] = []
+    task_stop_flags[task_id] = False
+
+
+def _persist_task_creation_tracking(task_id: str, description: str, store: Optional[TaskStore] = None) -> None:
+    (store or get_task_store()).set_stop_flag(task_id, False)
+    add_task_log(task_id, f"任务创建: {description}")
+
+
 def _normalize_task_status(status: str) -> str:
     return "cancelled" if status == "stopped" else status
 
@@ -161,10 +171,8 @@ def create_task(task_type: str, description: str, metadata: Optional[Dict[str, A
     )
 
     with _state_lock:
-        task_logs[task_id] = []
-        task_stop_flags[task_id] = False
-    store.set_stop_flag(task_id, False)
-    add_task_log(task_id, f"任务创建: {description}")
+        _initialize_task_tracking_locked(task_id)
+    _persist_task_creation_tracking(task_id, description, store)
 
     return task_id
 
@@ -214,10 +222,8 @@ def create_ingestion_task(task_type: str, description: str, group_id: str) -> tu
             "updated_at": now,
             **metadata,
         }
-        task_logs[task_id] = []
-        task_stop_flags[task_id] = False
-    get_task_store().set_stop_flag(task_id, False)
-    add_task_log(task_id, f"任务创建: {description}")
+        _initialize_task_tracking_locked(task_id)
+    _persist_task_creation_tracking(task_id, description)
     return task_id, None
 
 
