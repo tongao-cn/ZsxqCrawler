@@ -17,8 +17,11 @@ from backend.storage.zsxq_columns_database import (
     _stats_count_queries,
     _topic_comment_row_to_dict,
     _topic_detail_row_to_dict,
+    _topic_file_insert_params,
     _topic_file_row_to_dict,
+    _topic_image_insert_params,
     _topic_image_row_to_dict,
+    _topic_video_insert_params,
     _topic_video_row_to_dict,
     _topic_child_delete_statements,
     _uncached_image_row_to_dict,
@@ -413,6 +416,74 @@ class ZSXQColumnsDatabaseHelperTests(unittest.TestCase):
             },
         )
 
+    def test_topic_media_insert_params_preserve_column_order_and_defaults(self):
+        self.assertEqual(
+            (
+                301,
+                202,
+                "png",
+                "thumb-url",
+                100,
+                80,
+                "large-url",
+                1000,
+                800,
+                "original-url",
+                1200,
+                900,
+                4567,
+            ),
+            _topic_image_insert_params(
+                202,
+                {
+                    "image_id": 301,
+                    "type": "png",
+                    "thumbnail": {"url": "thumb-url", "width": 100, "height": 80},
+                    "large": {"url": "large-url", "width": 1000, "height": 800},
+                    "original": {"url": "original-url", "width": 1200, "height": 900, "size": 4567},
+                },
+            ),
+        )
+        self.assertEqual(
+            (301, 202, None, None, None, None, None, None, None, None, None, None, None),
+            _topic_image_insert_params(202, {"image_id": 301}),
+        )
+        self.assertEqual(
+            (401, 202, "memo.pdf", "abc", 2048, 3, 4, "2026-06-10T12:00:00"),
+            _topic_file_insert_params(
+                202,
+                {
+                    "file_id": 401,
+                    "name": "memo.pdf",
+                    "hash": "abc",
+                    "size": 2048,
+                    "duration": 3,
+                    "download_count": 4,
+                    "create_time": "2026-06-10T12:00:00",
+                },
+            ),
+        )
+        self.assertEqual(
+            (401, 202, "", None, None, None, 0, None),
+            _topic_file_insert_params(202, {"file_id": 401}),
+        )
+        self.assertEqual(
+            (501, 202, 4096, 60, "cover-url", 640, 360),
+            _topic_video_insert_params(
+                202,
+                {
+                    "video_id": 501,
+                    "size": 4096,
+                    "duration": 60,
+                    "cover": {"url": "cover-url", "width": 640, "height": 360},
+                },
+            ),
+        )
+        self.assertEqual(
+            (501, 202, None, None, None, None, None),
+            _topic_video_insert_params(202, {"video_id": 501}),
+        )
+
     def test_nest_topic_comments_preserves_existing_nested_shape(self):
         parent = {"comment_id": 1, "parent_comment_id": None, "text": "parent"}
         child_before_parent = {"comment_id": 2, "parent_comment_id": 1, "text": "reply-a"}
@@ -660,6 +731,24 @@ class ZSXQColumnsDatabaseHelperTests(unittest.TestCase):
         self.assertIn("ON CONFLICT(comment_id) DO UPDATE SET", sql)
         self.assertIn("comment_id, group_id, topic_id", sql)
         self.assertEqual((101, 303, 202), params[:3])
+
+    def test_insert_media_helpers_preserve_missing_id_skip_behavior(self):
+        from backend.storage.zsxq_columns_database import ZSXQColumnsDatabase
+
+        class FakeCursor:
+            def __init__(self):
+                self.calls = []
+
+            def execute(self, sql, params=()):
+                self.calls.append((" ".join(sql.split()), params))
+
+        db = object.__new__(ZSXQColumnsDatabase)
+        db.cursor = FakeCursor()
+
+        self.assertIsNone(ZSXQColumnsDatabase._insert_image(db, 202, {}))
+        self.assertIsNone(ZSXQColumnsDatabase._insert_file(db, 202, {}))
+        self.assertIsNone(ZSXQColumnsDatabase._insert_video(db, 202, {}))
+        self.assertEqual([], db.cursor.calls)
 
     def test_column_queries_are_scoped_by_group(self):
         from backend.storage.zsxq_columns_database import ZSXQColumnsDatabase

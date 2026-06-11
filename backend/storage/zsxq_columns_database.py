@@ -27,8 +27,11 @@ from backend.storage.zsxq_columns_database_helpers import (
     _nest_topic_comments,
     _topic_comment_row_to_dict,
     _topic_detail_row_to_dict,
+    _topic_file_insert_params,
     _topic_file_row_to_dict,
+    _topic_image_insert_params,
     _topic_image_row_to_dict,
+    _topic_video_insert_params,
     _topic_video_row_to_dict,
     _topic_child_delete_statements,
     _uncached_image_row_to_dict,
@@ -268,10 +271,6 @@ class ZSXQColumnsDatabase:
         if not image_data or not image_data.get('image_id'):
             return
         
-        thumbnail = image_data.get('thumbnail', {})
-        large = image_data.get('large', {})
-        original = image_data.get('original', {})
-        
         self.cursor.execute('''
             INSERT INTO images 
             (image_id, topic_id, type, thumbnail_url, thumbnail_width, thumbnail_height,
@@ -291,21 +290,7 @@ class ZSXQColumnsDatabase:
                 original_width = excluded.original_width,
                 original_height = excluded.original_height,
                 original_size = excluded.original_size
-        ''', (
-            image_data.get('image_id'),
-            topic_id,
-            image_data.get('type'),
-            thumbnail.get('url'),
-            thumbnail.get('width'),
-            thumbnail.get('height'),
-            large.get('url'),
-            large.get('width'),
-            large.get('height'),
-            original.get('url'),
-            original.get('width'),
-            original.get('height'),
-            original.get('size')
-        ))
+        ''', _topic_image_insert_params(topic_id, image_data))
     
     def _insert_file(self, topic_id: int, file_data: Dict[str, Any]):
         """插入文件信息"""
@@ -324,23 +309,12 @@ class ZSXQColumnsDatabase:
                 duration = excluded.duration,
                 download_count = excluded.download_count,
                 create_time = excluded.create_time
-        ''', (
-            file_data.get('file_id'),
-            topic_id,
-            file_data.get('name', ''),
-            file_data.get('hash'),
-            file_data.get('size'),
-            file_data.get('duration'),
-            file_data.get('download_count', 0),
-            file_data.get('create_time')
-        ))
+        ''', _topic_file_insert_params(topic_id, file_data))
     
     def _insert_video(self, topic_id: int, video_data: Dict[str, Any]):
         """插入视频信息"""
         if not video_data or not video_data.get('video_id'):
             return
-        
-        cover = video_data.get('cover', {})
         
         self.cursor.execute('''
             INSERT INTO videos 
@@ -353,15 +327,7 @@ class ZSXQColumnsDatabase:
                 cover_url = excluded.cover_url,
                 cover_width = excluded.cover_width,
                 cover_height = excluded.cover_height
-        ''', (
-            video_data.get('video_id'),
-            topic_id,
-            video_data.get('size'),
-            video_data.get('duration'),
-            cover.get('url'),
-            cover.get('width'),
-            cover.get('height')
-        ))
+        ''', _topic_video_insert_params(topic_id, video_data))
     
     def _insert_comment(self, topic_id: int, comment_data: Dict[str, Any]):
         """插入评论信息"""

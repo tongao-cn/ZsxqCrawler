@@ -191,6 +191,55 @@ def _topic_comment_row_to_dict(row) -> Dict[str, Any]:
     return comment
 
 
+def _topic_image_insert_params(topic_id: int, image_data: Dict[str, Any]) -> tuple[Any, ...]:
+    thumbnail = image_data.get('thumbnail', {})
+    large = image_data.get('large', {})
+    original = image_data.get('original', {})
+
+    return (
+        image_data.get('image_id'),
+        topic_id,
+        image_data.get('type'),
+        thumbnail.get('url'),
+        thumbnail.get('width'),
+        thumbnail.get('height'),
+        large.get('url'),
+        large.get('width'),
+        large.get('height'),
+        original.get('url'),
+        original.get('width'),
+        original.get('height'),
+        original.get('size')
+    )
+
+
+def _topic_file_insert_params(topic_id: int, file_data: Dict[str, Any]) -> tuple[Any, ...]:
+    return (
+        file_data.get('file_id'),
+        topic_id,
+        file_data.get('name', ''),
+        file_data.get('hash'),
+        file_data.get('size'),
+        file_data.get('duration'),
+        file_data.get('download_count', 0),
+        file_data.get('create_time')
+    )
+
+
+def _topic_video_insert_params(topic_id: int, video_data: Dict[str, Any]) -> tuple[Any, ...]:
+    cover = video_data.get('cover', {})
+
+    return (
+        video_data.get('video_id'),
+        topic_id,
+        video_data.get('size'),
+        video_data.get('duration'),
+        cover.get('url'),
+        cover.get('width'),
+        cover.get('height')
+    )
+
+
 def _nest_topic_comments(comments: list[Dict[str, Any]]) -> list[Dict[str, Any]]:
     all_comments = {}
     parent_comments = []

@@ -3472,6 +3472,45 @@ Result:
 - PostgreSQL compatibility debt scan: no SQLite compatibility patterns found.
 - Frontend build is not planned because this slice only changes backend storage/helper code.
 
+### 2026-06-11 - P3 media insert params helper extraction
+
+Changed:
+
+- Added `_topic_image_insert_params`, `_topic_file_insert_params`, and `_topic_video_insert_params`
+  to `backend/storage/zsxq_columns_database_helpers.py`.
+- Replaced inline media insert parameter tuples in `_insert_image`, `_insert_file`, and
+  `_insert_video`.
+- Added characterization coverage for image/file/video insert column order, missing nested media
+  defaults, file-name/download-count defaults, and missing-id skip behavior.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- The SQL text, conflict update clauses, method signatures, and missing-id early returns are
+  unchanged.
+- Media insert helpers preserve the original tuple order and default values: missing image nested
+  objects produce `None` fields, missing file name becomes `""`, missing download count becomes
+  `0`, and missing video cover fields become `None`.
+- No commit behavior, schema, compatibility layer, fallback path, or public API behavior was
+  changed.
+
+Verification:
+
+```powershell
+uv run python -m py_compile backend\storage\zsxq_columns_database.py backend\storage\zsxq_columns_database_helpers.py tests\test_zsxq_columns_database_helpers.py
+uv run python -m unittest tests.test_zsxq_columns_database_helpers -v
+uv run python -m unittest discover -s tests
+uv run python scripts\scan_postgres_compat_debt.py
+```
+
+Result:
+
+- `py_compile` passed.
+- `tests.test_zsxq_columns_database_helpers`: 28 tests passed.
+- Full backend unittest discovery: 587 tests passed, 15 skipped.
+- PostgreSQL compatibility debt scan: no SQLite compatibility patterns found.
+- Frontend build is not planned because this slice only changes backend storage/helper code.
+
 ## Stop Conditions
 
 Pause before editing if:
