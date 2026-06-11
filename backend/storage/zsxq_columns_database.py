@@ -15,6 +15,7 @@ from backend.storage.zsxq_columns_database_helpers import (
     _empty_clear_data_stats,
     _crawl_log_update_parts,
     _empty_stats,
+    _group_clear_delete_statements,
     _group_id_param,
     _nullable_group_id_param,
     _pending_file_row_to_dict,
@@ -717,20 +718,10 @@ class ZSXQColumnsDatabase:
                     if stat_key:
                         stats[stat_key] = self.cursor.rowcount
             
-            # 删除文章详情
-            self.cursor.execute('DELETE FROM topic_details WHERE group_id = ?', (group_id,))
-            stats['details_deleted'] = self.cursor.rowcount
-            
-            # 删除专栏文章
-            self.cursor.execute('DELETE FROM column_topics WHERE group_id = ?', (group_id,))
-            stats['topics_deleted'] = self.cursor.rowcount
-            
-            # 删除专栏目录
-            self.cursor.execute('DELETE FROM columns WHERE group_id = ?', (group_id,))
-            stats['columns_deleted'] = self.cursor.rowcount
-            
-            # 删除采集日志
-            self.cursor.execute('DELETE FROM crawl_log WHERE group_id = ?', (group_id,))
+            for stat_key, sql in _group_clear_delete_statements():
+                self.cursor.execute(sql, (group_id,))
+                if stat_key:
+                    stats[stat_key] = self.cursor.rowcount
             
             self.conn.commit()
             print(f"✅ 清空专栏数据完成: {stats}")

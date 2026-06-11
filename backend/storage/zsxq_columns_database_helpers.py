@@ -371,6 +371,15 @@ def _topic_child_delete_statements(placeholders: str) -> tuple[tuple[Optional[st
     )
 
 
+def _group_clear_delete_statements() -> tuple[tuple[Optional[str], str], ...]:
+    return (
+        ('details_deleted', 'DELETE FROM topic_details WHERE group_id = ?'),
+        ('topics_deleted', 'DELETE FROM column_topics WHERE group_id = ?'),
+        ('columns_deleted', 'DELETE FROM columns WHERE group_id = ?'),
+        (None, 'DELETE FROM crawl_log WHERE group_id = ?'),
+    )
+
+
 def _group_id_param(group_id: Optional[str]) -> Any:
     value = str(group_id or "").strip()
     return int(value) if value.isdigit() else value

@@ -3434,6 +3434,44 @@ Result:
 - PostgreSQL compatibility debt scan: no SQLite compatibility patterns found.
 - Frontend build is not planned because this slice only changes backend storage/helper code.
 
+### 2026-06-11 - P3 group clear delete helper extraction
+
+Changed:
+
+- Added `_group_clear_delete_statements` to `backend/storage/zsxq_columns_database_helpers.py`.
+- Replaced the remaining group-scoped delete block in `clear_all_data` with a helper-driven loop.
+- Extended clear-data helper coverage to lock group delete order and the non-counted crawl-log
+  delete entry.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- `clear_all_data` still deletes topic details, column topics, columns, and crawl logs in the same
+  order after topic child deletes.
+- Returned stats still count `details_deleted`, `topics_deleted`, and `columns_deleted`; crawl-log
+  deletion still has no returned stats counter.
+- The existing method-level test continues to prove SQL order, rowcount-to-stats mapping, commit
+  count, and rollback absence on success.
+- No schema, compatibility layer, fallback path, public API behavior, or deletion side effect was
+  changed.
+
+Verification:
+
+```powershell
+uv run python -m py_compile backend\storage\zsxq_columns_database.py backend\storage\zsxq_columns_database_helpers.py tests\test_zsxq_columns_database_helpers.py
+uv run python -m unittest tests.test_zsxq_columns_database_helpers -v
+uv run python -m unittest discover -s tests
+uv run python scripts\scan_postgres_compat_debt.py
+```
+
+Result:
+
+- `py_compile` passed.
+- `tests.test_zsxq_columns_database_helpers`: 26 tests passed.
+- Full backend unittest discovery: 585 tests passed, 15 skipped.
+- PostgreSQL compatibility debt scan: no SQLite compatibility patterns found.
+- Frontend build is not planned because this slice only changes backend storage/helper code.
+
 ## Stop Conditions
 
 Pause before editing if:

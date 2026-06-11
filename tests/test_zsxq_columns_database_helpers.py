@@ -8,6 +8,7 @@ from backend.storage.zsxq_columns_database import (
     _crawl_log_update_parts,
     _empty_clear_data_stats,
     _empty_stats,
+    _group_clear_delete_statements,
     _nest_topic_comments,
     _pending_file_row_to_dict,
     _pending_files_query,
@@ -592,6 +593,16 @@ class ZSXQColumnsDatabaseHelperTests(unittest.TestCase):
         self.assertIn("DELETE FROM files WHERE topic_id IN (?,?)", statements[2][1])
         self.assertIn("DELETE FROM images WHERE topic_id IN (?,?)", statements[3][1])
         self.assertIn("DELETE FROM topic_owners WHERE topic_id IN (?,?)", statements[4][1])
+
+        group_statements = _group_clear_delete_statements()
+        self.assertEqual(
+            ["details_deleted", "topics_deleted", "columns_deleted", None],
+            [stat_key for stat_key, _ in group_statements],
+        )
+        self.assertEqual("DELETE FROM topic_details WHERE group_id = ?", group_statements[0][1])
+        self.assertEqual("DELETE FROM column_topics WHERE group_id = ?", group_statements[1][1])
+        self.assertEqual("DELETE FROM columns WHERE group_id = ?", group_statements[2][1])
+        self.assertEqual("DELETE FROM crawl_log WHERE group_id = ?", group_statements[3][1])
 
     def test_pending_queue_queries_preserve_group_filter_branches(self):
         video_sql, video_params = _pending_videos_query(303)
