@@ -1782,6 +1782,49 @@ Result:
 - PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
 - Git diff whitespace check passed.
 
+### 2026-06-11 - P5 runtime task thread helper extraction
+
+Changed:
+
+- Added characterization coverage for `enqueue_runtime_task()` preserving the existing runtime
+  thread name format.
+- Extracted `_register_runtime_task_thread_locked()` and `_forget_runtime_task_thread_locked()` to
+  isolate locked `runtime_task_threads` registration and cleanup.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- `enqueue_runtime_task()` still creates daemon threads named `zsxq-task-{task_id}`, registers the
+  thread before starting it, starts task lock heartbeat before invoking the task function, awaits
+  coroutine task functions, stops task lock heartbeat in `finally`, and removes runtime thread
+  tracking after task completion.
+- No public route response, task status field, cancellation behavior, heartbeat behavior, thread
+  name, daemon flag, fallback polling, storage schema, legacy path, config semantics, or frontend
+  hook behavior changed.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_task_runtime_helpers -v
+uv run python -m py_compile backend\services\task_runtime.py
+uv run python -m unittest tests.test_task_runtime_helpers tests.test_task_store tests.test_task_routes_helpers -v
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+uv run python scripts\scan_postgres_compat_debt.py
+git diff --check
+```
+
+Result:
+
+- Characterization tests passed on the pre-refactor code before the helper extraction.
+- Focused task runtime tests passed: 34 tests.
+- Recommended task runtime gate passed: 53 tests, 14 PostgreSQL integration tests skipped by
+  configuration.
+- Full backend tests passed: 553 tests, 15 skipped.
+- Frontend build passed.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Git diff whitespace check passed.
+
 ## Stop Conditions
 
 Pause before editing if:

@@ -453,6 +453,14 @@ def _request_stop_for_resources(resources: List[Any]) -> None:
             resource.set_stop_flag()
 
 
+def _register_runtime_task_thread_locked(task_id: str, thread: threading.Thread) -> None:
+    runtime_task_threads[task_id] = thread
+
+
+def _forget_runtime_task_thread_locked(task_id: str) -> None:
+    runtime_task_threads.pop(task_id, None)
+
+
 def enqueue_runtime_task(task_func: Callable[..., Any], task_id: str, *args: Any) -> None:
     def run_task() -> None:
         try:
@@ -463,7 +471,7 @@ def enqueue_runtime_task(task_func: Callable[..., Any], task_id: str, *args: Any
         finally:
             _stop_task_lock_heartbeat(task_id)
             with _state_lock:
-                runtime_task_threads.pop(task_id, None)
+                _forget_runtime_task_thread_locked(task_id)
 
     thread = threading.Thread(
         target=run_task,
@@ -471,7 +479,7 @@ def enqueue_runtime_task(task_func: Callable[..., Any], task_id: str, *args: Any
         daemon=True,
     )
     with _state_lock:
-        runtime_task_threads[task_id] = thread
+        _register_runtime_task_thread_locked(task_id, thread)
     thread.start()
 
 

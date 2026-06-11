@@ -764,6 +764,7 @@ class TaskRuntimeHelperTests(unittest.TestCase):
             task_runtime.enqueue_runtime_task(task_func, "task-thread", "payload")
             thread = task_runtime.runtime_task_threads["task-thread"]
             self.assertTrue(thread.daemon)
+            self.assertEqual("zsxq-task-task-thread", thread.name)
             release.set()
             self.assertTrue(finished.wait(2))
             thread.join(2)
