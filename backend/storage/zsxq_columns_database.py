@@ -20,6 +20,7 @@ from backend.storage.zsxq_columns_database_helpers import (
     _columns_query,
     _comment_image_row_to_dict,
     _comment_images_query,
+    _crawl_log_insert_statement,
     _empty_clear_data_stats,
     _crawl_log_update_parts,
     _empty_stats,
@@ -433,11 +434,7 @@ class ZSXQColumnsDatabase:
     
     def start_crawl_log(self, group_id: int, crawl_type: str) -> int:
         """开始采集日志"""
-        self.cursor.execute('''
-            INSERT INTO crawl_log (group_id, crawl_type)
-            VALUES (?, ?)
-            RETURNING id
-        ''', (group_id, crawl_type))
+        self.cursor.execute(_crawl_log_insert_statement(), (group_id, crawl_type))
         row = self.cursor.fetchone()
         self.conn.commit()
         return row[0] if row else None

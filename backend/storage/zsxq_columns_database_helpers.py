@@ -454,6 +454,14 @@ def _stats_count_queries(group_id: int) -> tuple[tuple[str, str, tuple[Any, ...]
     )
 
 
+def _crawl_log_insert_statement() -> str:
+    return '''
+        INSERT INTO crawl_log (group_id, crawl_type)
+        VALUES (?, ?)
+        RETURNING id
+    '''
+
+
 def _crawl_log_update_parts(
     columns_count: int = 0,
     topics_count: int = 0,

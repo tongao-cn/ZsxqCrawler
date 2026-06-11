@@ -13,6 +13,7 @@ from backend.storage.zsxq_columns_database import (
     _columns_query,
     _comment_image_row_to_dict,
     _comment_images_query,
+    _crawl_log_insert_statement,
     _crawl_log_update_parts,
     _empty_clear_data_stats,
     _empty_stats,
@@ -905,6 +906,13 @@ class ZSXQColumnsDatabaseHelperTests(unittest.TestCase):
         running_updates, running_values = _crawl_log_update_parts(status="running")
         self.assertEqual(["status = ?"], running_updates)
         self.assertEqual(["running"], running_values)
+
+    def test_crawl_log_insert_statement_preserves_returning_id_shape(self):
+        sql = self._sql(_crawl_log_insert_statement())
+
+        self.assertIn("INSERT INTO crawl_log (group_id, crawl_type)", sql)
+        self.assertIn("VALUES (?, ?)", sql)
+        self.assertIn("RETURNING id", sql)
 
     def test_clear_data_helpers_preserve_stats_and_topic_delete_order(self):
         first = _empty_clear_data_stats()
@@ -1812,6 +1820,41 @@ class ZSXQColumnsDatabaseHelperTests(unittest.TestCase):
         self.assertEqual((701, 303, 202), db.cursor.calls[1][1])
         self.assertIn("FROM images WHERE comment_id = ?", db.cursor.calls[2][0])
         self.assertEqual((702, 303, 202), db.cursor.calls[2][1])
+
+    def test_start_crawl_log_preserves_insert_params_commit_and_none_row(self):
+        from backend.storage.zsxq_columns_database import ZSXQColumnsDatabase
+
+        class FakeCursor:
+            def __init__(self):
+                self.calls = []
+                self.fetchone_results = [(77,), None]
+
+            def execute(self, sql, params=()):
+                self.calls.append((" ".join(sql.split()), params))
+                return self
+
+            def fetchone(self):
+                return self.fetchone_results.pop(0)
+
+        class FakeConnection:
+            def __init__(self):
+                self.commits = 0
+
+            def commit(self):
+                self.commits += 1
+
+        db = object.__new__(ZSXQColumnsDatabase)
+        db.cursor = FakeCursor()
+        db.conn = FakeConnection()
+
+        self.assertEqual(77, ZSXQColumnsDatabase.start_crawl_log(db, 303, "columns"))
+        self.assertIn("INSERT INTO crawl_log (group_id, crawl_type) VALUES (?, ?) RETURNING id", db.cursor.calls[-1][0])
+        self.assertEqual((303, "columns"), db.cursor.calls[-1][1])
+        self.assertEqual(1, db.conn.commits)
+
+        self.assertIsNone(ZSXQColumnsDatabase.start_crawl_log(db, 304, "details"))
+        self.assertEqual((304, "details"), db.cursor.calls[-1][1])
+        self.assertEqual(2, db.conn.commits)
 
     def test_update_crawl_log_preserves_noop_when_no_update_parts(self):
         from backend.storage.zsxq_columns_database import ZSXQColumnsDatabase

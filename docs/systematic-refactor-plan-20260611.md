@@ -4113,6 +4113,41 @@ Result:
 - PostgreSQL compatibility debt scan: no SQLite compatibility patterns found.
 - Frontend build is not planned because this slice only changes backend storage/helper code.
 
+### 2026-06-11 - P3 crawl log insert statement helper extraction
+
+Changed:
+
+- Added `_crawl_log_insert_statement` to `backend/storage/zsxq_columns_database_helpers.py`.
+- Replaced inline `crawl_log` insert SQL in `start_crawl_log` with helper-returned SQL.
+- Added characterization coverage for SQL shape, `RETURNING id`, execute params, commit behavior,
+  and the no-return-row `None` branch.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- `start_crawl_log` still passes `(group_id, crawl_type)`, fetches one row, commits once, returns
+  the returned id when present, and returns `None` when no row is returned.
+- No schema, config, compatibility, fallback, error handling, logging, or public API semantics were
+  changed.
+- The dynamic `update_crawl_log` SQL remains intentionally untouched for a separate risk review.
+
+Verification:
+
+```powershell
+uv run python -m py_compile backend\storage\zsxq_columns_database.py backend\storage\zsxq_columns_database_helpers.py tests\test_zsxq_columns_database_helpers.py
+uv run python -m unittest tests.test_zsxq_columns_database_helpers -v
+uv run python -m unittest discover -s tests
+uv run python scripts\scan_postgres_compat_debt.py
+```
+
+Result:
+
+- `py_compile` passed.
+- `tests.test_zsxq_columns_database_helpers`: 60 tests passed.
+- Full backend unittest discovery: 620 tests passed, 15 skipped.
+- PostgreSQL compatibility debt scan: no SQLite compatibility patterns found.
+- Frontend build is not planned because this slice only changes backend storage/helper code.
+
 ## Stop Conditions
 
 Pause before editing if:
