@@ -23,6 +23,7 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     download_progress_message,
     download_url_failure_detail,
     download_file_data,
+    download_interval_plan,
     empty_import_stats,
     existing_file_matches,
     filter_files_newer_than,
@@ -293,6 +294,30 @@ class FileDownloaderFileDataHelperTests(unittest.TestCase):
             download_retry_wait(2, 5),
         )
 
+    def test_download_interval_plan_preserves_long_sleep_branch(self):
+        self.assertEqual(
+            (
+                60,
+                (
+                    "⏰ 已下载 10 个文件，开始长休眠 60 秒...",
+                    "😴 长休眠结束，继续下载",
+                ),
+                True,
+            ),
+            download_interval_plan(10, 10, 1, 60),
+        )
+
+    def test_download_interval_plan_preserves_normal_and_no_sleep_branches(self):
+        self.assertEqual(
+            (
+                1.5,
+                ("⏱️ 下载间隔休眠 1.5 秒...",),
+                False,
+            ),
+            download_interval_plan(3, 10, 1.5, 60),
+        )
+        self.assertEqual((None, (), False), download_interval_plan(3, 10, 0, 60))
+
     def test_content_disposition_filename_extracts_plain_filename(self):
         self.assertEqual("memo.pdf", content_disposition_filename('attachment; filename="memo.pdf"'))
         self.assertIsNone(content_disposition_filename("attachment"))
@@ -498,6 +523,28 @@ class FileDownloaderDownloadTests(unittest.TestCase):
             self.assertEqual((101, "failed", None, "size_mismatch"), downloader.file_db.status_updates[-1][:4])
             self.assertFalse((Path(temp_dir) / "memo.pdf").exists())
             self.assertFalse((Path(temp_dir) / "memo.pdf.part").exists())
+
+    def test_apply_download_intervals_preserves_long_sleep_side_effects(self):
+        downloader = object.__new__(ZSXQFileDownloader)
+        downloader.current_batch_count = 10
+        downloader.files_per_batch = 10
+        downloader.download_interval = 1
+        downloader.long_sleep_interval = 60
+        downloader.logs = []
+        downloader.log = downloader.logs.append
+
+        with patch("backend.crawlers.zsxq_file_downloader.time.sleep") as sleep:
+            ZSXQFileDownloader._apply_download_intervals(downloader)
+
+        sleep.assert_called_once_with(60)
+        self.assertEqual(0, downloader.current_batch_count)
+        self.assertEqual(
+            [
+                "⏰ 已下载 10 个文件，开始长休眠 60 秒...",
+                "😴 长休眠结束，继续下载",
+            ],
+            downloader.logs,
+        )
 
     def test_get_download_url_redacts_signed_url_in_stdout(self):
         session = FakeDownloadSession([FakeJsonResponse()])

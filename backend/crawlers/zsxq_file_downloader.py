@@ -28,6 +28,7 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     classify_api_failure,
     classify_http_failure,
     download_file_data,
+    download_interval_plan,
     download_progress_message,
     download_retry_wait,
     download_url_failure_detail,
@@ -687,17 +688,20 @@ class ZSXQFileDownloader:
         """应用下载间隔控制"""
         import time
 
-        # 检查是否需要长休眠
-        if self.current_batch_count >= self.files_per_batch:
-            self.log(f"⏰ 已下载 {self.current_batch_count} 个文件，开始长休眠 {self.long_sleep_interval} 秒...")
-            time.sleep(self.long_sleep_interval)
+        delay, messages, should_reset_batch = download_interval_plan(
+            self.current_batch_count,
+            self.files_per_batch,
+            self.download_interval,
+            self.long_sleep_interval,
+        )
+        if delay is None:
+            return
+
+        self.log(messages[0])
+        time.sleep(delay)
+        if should_reset_batch:
             self.current_batch_count = 0  # 重置批次计数
-            self.log(f"😴 长休眠结束，继续下载")
-        else:
-            # 普通下载间隔
-            if self.download_interval > 0:
-                self.log(f"⏱️ 下载间隔休眠 {self.download_interval} 秒...")
-                time.sleep(self.download_interval)
+            self.log(messages[1])
 
     def download_files_batch(self, max_files: Optional[int] = None, start_index: Optional[str] = None) -> Dict[str, int]:
         """批量下载文件"""

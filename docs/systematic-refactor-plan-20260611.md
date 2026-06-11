@@ -2880,6 +2880,41 @@ Result:
 - PostgreSQL compatibility debt scan: no SQLite compatibility patterns found.
 - Frontend build is not planned because this slice only changes backend crawler/helper code.
 
+### 2026-06-11 - P9 download interval plan helper extraction
+
+Changed:
+
+- Added `download_interval_plan` to `backend/crawlers/zsxq_file_downloader_helpers.py`.
+- Replaced the inline branch planning inside `_apply_download_intervals` with the helper output.
+- Added focused helper coverage for long-sleep, normal interval, and no-sleep branches.
+- Added method-level coverage for long-sleep side effects: log order, `time.sleep`, and batch reset.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- `_apply_download_intervals` still performs the same side effects in the same order:
+  long-sleep log, sleep, reset `current_batch_count`, completion log.
+- Normal interval still logs then sleeps only when `download_interval > 0`.
+- The no-sleep branch still returns without logging or sleeping.
+- No retry, stop, signed URL, partial-file cleanup, fallback, or status-update behavior was changed.
+
+Verification:
+
+```powershell
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py backend\crawlers\zsxq_file_downloader_helpers.py
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers -v
+uv run python -m unittest discover -s tests
+uv run python scripts\scan_postgres_compat_debt.py
+```
+
+Result:
+
+- `py_compile` passed.
+- `tests.test_zsxq_file_downloader_helpers`: 36 tests passed.
+- Full backend unittest discovery: 572 tests passed, 15 skipped.
+- PostgreSQL compatibility debt scan: no SQLite compatibility patterns found.
+- Frontend build is not planned because this slice only changes backend crawler/helper code.
+
 ### 2026-06-11 - P3 columns database helper module split
 
 Changed:

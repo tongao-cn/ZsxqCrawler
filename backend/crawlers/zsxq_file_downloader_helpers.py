@@ -225,6 +225,30 @@ def download_retry_wait(attempt: int, download_retries: int) -> tuple[int, str]:
     )
 
 
+def download_interval_plan(
+    current_batch_count: int,
+    files_per_batch: int,
+    download_interval: float,
+    long_sleep_interval: float,
+) -> tuple[Optional[float], tuple[str, ...], bool]:
+    if current_batch_count >= files_per_batch:
+        return (
+            long_sleep_interval,
+            (
+                f"⏰ 已下载 {current_batch_count} 个文件，开始长休眠 {long_sleep_interval} 秒...",
+                "😴 长休眠结束，继续下载",
+            ),
+            True,
+        )
+    if download_interval > 0:
+        return (
+            download_interval,
+            (f"⏱️ 下载间隔休眠 {download_interval} 秒...",),
+            False,
+        )
+    return None, (), False
+
+
 def content_disposition_filename(content_disposition: str) -> Optional[str]:
     if "filename=" not in content_disposition:
         return None
