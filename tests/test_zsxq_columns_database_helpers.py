@@ -15,6 +15,7 @@ from backend.storage.zsxq_columns_database import (
     _pending_video_row_to_dict,
     _pending_videos_query,
     _stats_count_queries,
+    _topic_comment_insert_params,
     _topic_comment_row_to_dict,
     _topic_detail_row_to_dict,
     _topic_file_insert_params,
@@ -484,6 +485,44 @@ class ZSXQColumnsDatabaseHelperTests(unittest.TestCase):
             _topic_video_insert_params(202, {"video_id": 501}),
         )
 
+    def test_topic_comment_insert_params_preserve_column_order_and_defaults(self):
+        self.assertEqual(
+            (
+                701,
+                303,
+                202,
+                801,
+                700,
+                901,
+                "comment text",
+                "2026-06-10T12:00:00",
+                5,
+                6,
+                7,
+                True,
+            ),
+            _topic_comment_insert_params(
+                202,
+                303,
+                801,
+                901,
+                {
+                    "comment_id": 701,
+                    "parent_comment_id": 700,
+                    "text": "comment text",
+                    "create_time": "2026-06-10T12:00:00",
+                    "likes_count": 5,
+                    "rewards_count": 6,
+                    "replies_count": 7,
+                    "sticky": True,
+                },
+            ),
+        )
+        self.assertEqual(
+            (701, None, 202, None, None, None, "", None, 0, 0, 0, False),
+            _topic_comment_insert_params(202, None, None, None, {"comment_id": 701}),
+        )
+
     def test_nest_topic_comments_preserves_existing_nested_shape(self):
         parent = {"comment_id": 1, "parent_comment_id": None, "text": "parent"}
         child_before_parent = {"comment_id": 2, "parent_comment_id": 1, "text": "reply-a"}
@@ -730,9 +769,9 @@ class ZSXQColumnsDatabaseHelperTests(unittest.TestCase):
         self.assertIn("INSERT INTO comments", sql)
         self.assertIn("ON CONFLICT(comment_id) DO UPDATE SET", sql)
         self.assertIn("comment_id, group_id, topic_id", sql)
-        self.assertEqual((101, 303, 202), params[:3])
+        self.assertEqual((101, 303, 202, 9, None, None, "ok", None, 0, 0, 0, False), params)
 
-    def test_insert_media_helpers_preserve_missing_id_skip_behavior(self):
+    def test_insert_media_and_comment_helpers_preserve_missing_id_skip_behavior(self):
         from backend.storage.zsxq_columns_database import ZSXQColumnsDatabase
 
         class FakeCursor:
@@ -748,6 +787,7 @@ class ZSXQColumnsDatabaseHelperTests(unittest.TestCase):
         self.assertIsNone(ZSXQColumnsDatabase._insert_image(db, 202, {}))
         self.assertIsNone(ZSXQColumnsDatabase._insert_file(db, 202, {}))
         self.assertIsNone(ZSXQColumnsDatabase._insert_video(db, 202, {}))
+        self.assertIsNone(ZSXQColumnsDatabase._insert_comment(db, 202, {}))
         self.assertEqual([], db.cursor.calls)
 
     def test_column_queries_are_scoped_by_group(self):

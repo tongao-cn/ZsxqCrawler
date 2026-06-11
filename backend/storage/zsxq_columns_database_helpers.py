@@ -240,6 +240,29 @@ def _topic_video_insert_params(topic_id: int, video_data: Dict[str, Any]) -> tup
     )
 
 
+def _topic_comment_insert_params(
+    topic_id: int,
+    group_id: Any,
+    owner_id: Optional[Any],
+    repliee_id: Optional[Any],
+    comment_data: Dict[str, Any],
+) -> tuple[Any, ...]:
+    return (
+        comment_data.get('comment_id'),
+        group_id,
+        topic_id,
+        owner_id,
+        comment_data.get('parent_comment_id'),
+        repliee_id,
+        comment_data.get('text', ''),
+        comment_data.get('create_time'),
+        comment_data.get('likes_count', 0),
+        comment_data.get('rewards_count', 0),
+        comment_data.get('replies_count', 0),
+        comment_data.get('sticky', False)
+    )
+
+
 def _nest_topic_comments(comments: list[Dict[str, Any]]) -> list[Dict[str, Any]]:
     all_comments = {}
     parent_comments = []
