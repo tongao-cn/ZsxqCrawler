@@ -634,6 +634,45 @@ Result:
 - PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
 - Git diff whitespace check passed.
 
+### 2026-06-11 - P4 crawl source boundary helper extraction
+
+Changed:
+
+- Added characterization coverage for topic-source aliases: official aliases `mcp` and `cli`,
+  legacy aliases `crawler` and `cookie`, and unknown source normalization.
+- Added characterization coverage for `_uses_official_topic_source` under default, environment, and
+  explicit request-source precedence.
+- Extracted `_uses_official_topic_source` in `backend/services/crawl_service.py` and reused it at
+  crawl task entrypoints instead of repeating `_resolve_topic_source(...) == "official"`.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Request source precedence, environment fallback, default official source, legacy branch routing,
+  and official branch routing are preserved.
+- The old `cli` spelling remains accepted as an official-source alias and still does not shell out.
+- No schema, public API, task status semantics, crawler call order, legacy behavior, fallback
+  behavior, storage write path, or config semantics changed.
+
+Verification:
+
+```powershell
+uv run python -m py_compile backend\services\crawl_service.py
+uv run python -m unittest tests.test_crawl_routes_helpers -v
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+uv run python scripts\scan_postgres_compat_debt.py
+git diff --check
+```
+
+Result:
+
+- Focused crawl route helper tests passed: 16 tests.
+- Full backend tests passed: 529 tests, 15 skipped.
+- Frontend build passed.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Git diff whitespace check passed.
+
 ## Stop Conditions
 
 Pause before editing if:

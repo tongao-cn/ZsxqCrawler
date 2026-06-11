@@ -146,17 +146,27 @@ class CrawlRoutesHelperTests(unittest.TestCase):
     @unittest.skipUnless(HAS_CRAWL_ROUTE_DEPS, "crawl route dependencies are not installed")
     def test_resolve_topic_source_prefers_request_then_env_then_official(self):
         from backend.routes.crawl_routes import CrawlSettingsRequest, CrawlTimeRangeRequest
-        from backend.services.crawl_service import _resolve_topic_source
+        from backend.services.crawl_service import _normalize_topic_source, _resolve_topic_source, _uses_official_topic_source
+
+        self.assertEqual("official", _normalize_topic_source("mcp"))
+        self.assertEqual("official", _normalize_topic_source("cli"))
+        self.assertEqual("legacy", _normalize_topic_source("crawler"))
+        self.assertEqual("legacy", _normalize_topic_source("cookie"))
+        self.assertIsNone(_normalize_topic_source("unknown"))
 
         with patch.dict("os.environ", {"ZSXQ_TOPIC_SOURCE": ""}):
             self.assertEqual("official", _resolve_topic_source(CrawlTimeRangeRequest()))
+            self.assertTrue(_uses_official_topic_source(CrawlTimeRangeRequest()))
 
         with patch.dict("os.environ", {"ZSXQ_TOPIC_SOURCE": "legacy"}):
             self.assertEqual("legacy", _resolve_topic_source(CrawlTimeRangeRequest()))
             self.assertEqual("official", _resolve_topic_source(CrawlTimeRangeRequest(topicSource="official")))
+            self.assertFalse(_uses_official_topic_source(CrawlTimeRangeRequest()))
+            self.assertTrue(_uses_official_topic_source(CrawlTimeRangeRequest(topicSource="official")))
 
         with patch.dict("os.environ", {"ZSXQ_TOPIC_SOURCE": "official"}):
             self.assertEqual("legacy", _resolve_topic_source(CrawlTimeRangeRequest(topicSource="legacy")))
+            self.assertFalse(_uses_official_topic_source(CrawlTimeRangeRequest(topicSource="legacy")))
 
         self.assertEqual("official", _resolve_topic_source(CrawlTimeRangeRequest(topicSource="official")))
         self.assertEqual("official", _resolve_topic_source(CrawlSettingsRequest(topicSource="official")))

@@ -88,6 +88,9 @@ def _resolve_topic_source(request: Any) -> str:
         or "official"
     )
 
+def _uses_official_topic_source(request: Any) -> bool:
+    return _resolve_topic_source(request) == "official"
+
 def _mark_expired_task(task_id: str, result: dict[str, Any], default_message: str = "成员体验已到期") -> None:
     message = result.get("message", default_message)
     add_task_log(task_id, f"❌ 会员已过期: {message}")
@@ -408,7 +411,7 @@ def run_crawl_historical_task(
         update_task(task_id, "running", f"开始爬取历史数据 {pages} 页...")
         add_task_log(task_id, f"🚀 开始获取历史数据，{pages} 页，每页 {per_page} 条")
 
-        if _resolve_topic_source(crawl_settings) == "official":
+        if _uses_official_topic_source(crawl_settings):
             add_task_log(task_id, "🔁 使用官方历史增量采集流程（MCP HTTP）")
             db = ZSXQDatabase(group_id)
             start_cursor = _official_start_cursor_from_oldest(db, task_id, allow_empty=False)
@@ -461,7 +464,7 @@ def run_crawl_all_task(task_id: str, group_id: str, crawl_settings: Any = None):
         add_task_log(task_id, "🚀 开始全量爬取...")
         add_task_log(task_id, "⚠️ 警告：此模式将持续爬取直到没有数据，可能需要很长时间")
 
-        if _resolve_topic_source(crawl_settings) == "official":
+        if _uses_official_topic_source(crawl_settings):
             add_task_log(task_id, "🔁 使用官方全量采集流程（MCP HTTP）")
             db = ZSXQDatabase(group_id)
             start_cursor = _official_start_cursor_from_oldest(db, task_id, allow_empty=True)
@@ -520,7 +523,7 @@ def run_crawl_incremental_task(
 
         update_task(task_id, "running", "开始增量爬取...")
 
-        if _resolve_topic_source(crawl_settings) == "official":
+        if _uses_official_topic_source(crawl_settings):
             add_task_log(task_id, "🔁 使用官方增量采集流程（MCP HTTP）")
             db = ZSXQDatabase(group_id)
             start_cursor = _official_start_cursor_from_oldest(db, task_id, allow_empty=False)
@@ -561,7 +564,7 @@ def run_crawl_latest_task(task_id: str, group_id: str, crawl_settings: Any = Non
 
         update_task(task_id, "running", "开始获取最新记录...")
 
-        if _resolve_topic_source(crawl_settings) == "official":
+        if _uses_official_topic_source(crawl_settings):
             add_task_log(task_id, "🔁 使用官方最新采集流程（MCP HTTP）")
             _run_official_crawl_pages_task(task_id, group_id, None, 20, "latest")
             return
@@ -606,7 +609,7 @@ def run_crawl_time_range_task(task_id: str, group_id: str, request: Any):
         update_task(task_id, "running", "开始按时间区间爬取...")
         add_task_log(task_id, f"🗓️ 时间范围: {start_dt.isoformat()} ~ {end_dt.isoformat()}")
 
-        if _resolve_topic_source(request) == "official":
+        if _uses_official_topic_source(request):
             _run_official_crawl_time_range_task(task_id, group_id, request, start_dt, end_dt)
             return
 
