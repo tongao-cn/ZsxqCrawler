@@ -537,6 +537,23 @@ def _scope_group_id_param(group_id: Optional[Any]) -> Any:
     return _nullable_group_id_param(group_id)
 
 
+def _topic_detail_query(topic_id: int, scope_group_id: Any) -> tuple[str, tuple[Any, ...]]:
+    return (
+        '''
+            SELECT td.topic_id, td.group_id, td.type, td.title, td.full_text,
+                   td.likes_count, td.comments_count, td.readers_count,
+                   td.digested, td.sticky, td.create_time, td.modify_time,
+                   td.raw_json, td.imported_at, td.updated_at,
+                   u.user_id, u.name, u.alias, u.avatar_url, u.description, u.location
+            FROM topic_details td
+            LEFT JOIN topic_owners tow ON td.topic_id = tow.topic_id AND tow.owner_type = 'talk'
+            LEFT JOIN users u ON tow.user_id = u.user_id
+            WHERE td.topic_id = ? AND (? IS NULL OR td.group_id = ?)
+        ''',
+        (topic_id, scope_group_id, scope_group_id),
+    )
+
+
 def _topic_images_query(topic_id: int, scope_group_id: Any) -> tuple[str, tuple[Any, ...]]:
     return (
         '''

@@ -23,6 +23,7 @@ from backend.storage.zsxq_columns_database import (
     _topic_comments_query,
     _topic_comment_row_to_dict,
     _topic_detail_insert_params,
+    _topic_detail_query,
     _topic_detail_row_to_dict,
     _topic_file_insert_params,
     _topic_files_query,
@@ -894,6 +895,18 @@ class ZSXQColumnsDatabaseHelperTests(unittest.TestCase):
         self.assertEqual((202, None, None), _topic_images_query(202, None)[1])
         self.assertEqual((202, None, None), _topic_files_query(202, None)[1])
         self.assertEqual((202, None, None), _topic_videos_query(202, None)[1])
+
+    def test_topic_detail_query_preserves_owner_join_and_scope_params(self):
+        sql, params = _topic_detail_query(202, 303)
+
+        self.assertIn("SELECT td.topic_id, td.group_id, td.type", self._sql(sql))
+        self.assertIn("FROM topic_details td", self._sql(sql))
+        self.assertIn("LEFT JOIN topic_owners tow ON td.topic_id = tow.topic_id", self._sql(sql))
+        self.assertIn("tow.owner_type = 'talk'", self._sql(sql))
+        self.assertIn("LEFT JOIN users u ON tow.user_id = u.user_id", self._sql(sql))
+        self.assertIn("WHERE td.topic_id = ? AND (? IS NULL OR td.group_id = ?)", self._sql(sql))
+        self.assertEqual((202, 303, 303), params)
+        self.assertEqual((202, None, None), _topic_detail_query(202, None)[1])
 
     def test_comment_images_query_preserves_topic_filter_params_and_selects(self):
         sql, params = _comment_images_query(701, 303, 202)
