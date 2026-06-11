@@ -62,6 +62,27 @@ def _nullable_group_id_param(group_id: Optional[str]) -> Any:
     return int(value) if value.isdigit() else value
 
 
+def _user_record_params(user_data: Dict[str, Any]) -> tuple[Any, ...]:
+    return (
+        user_data.get('user_id'),
+        user_data.get('name', ''),
+        user_data.get('alias'),
+        user_data.get('avatar_url'),
+        user_data.get('description'),
+        user_data.get('location'),
+        user_data.get('ai_comment_url'),
+    )
+
+
+def _group_record_params(group_data: Dict[str, Any]) -> tuple[Any, ...]:
+    return (
+        group_data.get('group_id'),
+        group_data.get('name', ''),
+        group_data.get('type'),
+        group_data.get('background_url'),
+    )
+
+
 def _file_attachment_params(parent_id: Any, file_data: Dict[str, Any]) -> tuple[Any, ...]:
     return (
         parent_id,

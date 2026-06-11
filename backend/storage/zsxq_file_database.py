@@ -10,9 +10,11 @@ from backend.storage.zsxq_file_database_helpers import (
     _file_download_status_params,
     _file_record_params,
     _group_id_param,
+    _group_record_params,
     _new_import_stats,
     _nullable_group_id_param,
     _row_to_file_ai_analysis,
+    _user_record_params,
 )
 
 
@@ -46,15 +48,7 @@ class ZSXQFileDatabase:
             description = excluded.description,
             location = excluded.location,
             ai_comment_url = excluded.ai_comment_url
-        ''', (
-            user_data.get('user_id'),
-            user_data.get('name', ''),
-            user_data.get('alias'),
-            user_data.get('avatar_url'),
-            user_data.get('description'),
-            user_data.get('location'),
-            user_data.get('ai_comment_url')
-        ))
+        ''', _user_record_params(user_data))
         return user_data.get('user_id')
     
     def insert_group(self, group_data: Dict[str, Any]) -> Optional[int]:
@@ -70,12 +64,7 @@ class ZSXQFileDatabase:
             name = excluded.name,
             type = excluded.type,
             background_url = excluded.background_url
-        ''', (
-            group_data.get('group_id'),
-            group_data.get('name', ''),
-            group_data.get('type'),
-            group_data.get('background_url')
-        ))
+        ''', _group_record_params(group_data))
         return group_data.get('group_id')
     
     def insert_file(

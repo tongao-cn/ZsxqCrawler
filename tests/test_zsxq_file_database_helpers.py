@@ -8,8 +8,10 @@ from backend.storage.zsxq_file_database import (
     _file_attachment_params,
     _file_download_status_params,
     _file_record_params,
+    _group_record_params,
     _new_import_stats,
     _row_to_file_ai_analysis,
+    _user_record_params,
 )
 
 
@@ -235,6 +237,28 @@ class ZSXQFileDatabaseHelperTests(unittest.TestCase):
             ),
         )
 
+    def test_user_and_group_record_params_keep_insert_column_order(self):
+        self.assertEqual(
+            (9, "Alice", "A", "avatar", "desc", "Shanghai", "ai-url"),
+            _user_record_params(
+                {
+                    "user_id": 9,
+                    "name": "Alice",
+                    "alias": "A",
+                    "avatar_url": "avatar",
+                    "description": "desc",
+                    "location": "Shanghai",
+                    "ai_comment_url": "ai-url",
+                }
+            ),
+        )
+        self.assertEqual((9, "", None, None, None, None, None), _user_record_params({"user_id": 9}))
+        self.assertEqual(
+            (303, "group", "paid", "bg"),
+            _group_record_params({"group_id": 303, "name": "group", "type": "paid", "background_url": "bg"}),
+        )
+        self.assertEqual((303, "", None, None), _group_record_params({"group_id": 303}))
+
     def test_count_tables_builds_stats_from_cursor_counts(self):
         cursor = FakeCursor({"files": 3, "topics": 2})
 
@@ -331,6 +355,26 @@ class ZSXQFileDatabaseHelperTests(unittest.TestCase):
         self.assertIn("file_id, group_id, topic_id", sql)
         self.assertIn("group_id = COALESCE", sql)
         self.assertEqual((101, 303, 202), params[:3])
+
+    def test_insert_user_and_group_use_record_params(self):
+        from backend.storage.zsxq_file_database import ZSXQFileDatabase
+
+        db = object.__new__(ZSXQFileDatabase)
+        db.cursor = FakeCommentCursor()
+
+        self.assertIsNone(ZSXQFileDatabase.insert_user(db, {}))
+        self.assertIsNone(ZSXQFileDatabase.insert_group(db, {}))
+        self.assertEqual([], db.cursor.calls)
+
+        self.assertEqual(9, ZSXQFileDatabase.insert_user(db, {"user_id": 9, "name": "Alice"}))
+        user_sql, user_params = db.cursor.calls[-1]
+        self.assertIn("INSERT INTO users", user_sql)
+        self.assertEqual((9, "Alice", None, None, None, None, None), user_params)
+
+        self.assertEqual(303, ZSXQFileDatabase.insert_group(db, {"group_id": 303, "name": "group"}))
+        group_sql, group_params = db.cursor.calls[-1]
+        self.assertIn("INSERT INTO groups", group_sql)
+        self.assertEqual((303, "group", None, None), group_params)
 
     def test_update_file_download_status_casts_timestamp_to_text(self):
         from backend.storage.zsxq_file_database import ZSXQFileDatabase
