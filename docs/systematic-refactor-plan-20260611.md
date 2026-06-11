@@ -2207,6 +2207,33 @@ Result:
 - `py_compile` passed.
 - `tests.test_task_runtime_helpers`: 38 tests passed.
 
+### 2026-06-11 - P5 task update guard helper extraction
+
+Changed:
+
+- Extracted `_should_apply_task_update` from `update_task`.
+- Kept the unknown-task guard and cancelled-task overwrite guard as a named internal predicate.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Unknown tasks still return without store updates or log writes.
+- Persisted or memory tasks with `cancelled` status still reject later non-cancelled updates.
+- Status normalization, memory update, store update, log append, and terminal lock release ordering
+  remain unchanged.
+
+Verification:
+
+```powershell
+uv run python -m py_compile backend\services\task_runtime.py
+uv run python -m unittest tests.test_task_runtime_helpers -v
+```
+
+Result:
+
+- `py_compile` passed.
+- `tests.test_task_runtime_helpers`: 38 tests passed.
+
 ## Stop Conditions
 
 Pause before editing if:

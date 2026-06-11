@@ -366,6 +366,18 @@ def _update_memory_task_locked(
         )
 
 
+def _should_apply_task_update(
+    existing_task: Optional[Dict[str, Any]],
+    has_memory_task: bool,
+    status: str,
+) -> bool:
+    if not has_memory_task and existing_task is None:
+        return False
+    if existing_task and existing_task.get("status") == "cancelled" and status != "cancelled":
+        return False
+    return True
+
+
 def update_task(
     task_id: str,
     status: str,
@@ -377,9 +389,7 @@ def update_task(
     existing_task = get_task_state(task_id)
     with _state_lock:
         has_memory_task = _has_memory_task_locked(task_id)
-    if not has_memory_task and existing_task is None:
-        return
-    if existing_task and existing_task.get("status") == "cancelled" and status != "cancelled":
+    if not _should_apply_task_update(existing_task, has_memory_task, status):
         return
 
     now = datetime.now()
