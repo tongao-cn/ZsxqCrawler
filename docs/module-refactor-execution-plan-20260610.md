@@ -377,6 +377,41 @@ git status --short
 git log --oneline -8
 ```
 
+## Completion Audit - 2026-06-11
+
+Current-state closeout after the final Phase 4 slice:
+
+- Phase 0 is complete. `git status --short` still shows only out-of-scope untracked
+  `tmp_stock_analysis_*` files.
+- Phase 1 is complete. Downloader retry, API failure, HTTP failure, and response-decision
+  helpers are extracted and covered by `tests.test_zsxq_file_downloader_helpers`.
+- Phase 2 is complete. Stock topic reconciliation, analysis mode, and result/payload helpers
+  are extracted and covered by `tests.test_stock_topic_analysis_service_helpers`.
+- Phase 3 is complete as a review/no-op. The route and export script both delegate to
+  `get_external_stock_summaries`; payload shaping remains centralized in
+  `stock_external_summary_service._build_stock_summary`, so a separate payload module was not
+  justified.
+- Phase 4 is complete. File database record, attachment, AI analysis, relation, content-child,
+  and import-stat mappers live in `backend/storage/zsxq_file_database_helpers.py` with
+  characterization coverage in `tests.test_zsxq_file_database_helpers`.
+- Phase 5 is complete. `DailyTopicAnalysisPanel.tsx` delegates topic detail and stock trend
+  async state to `useDailyTopicDetailState` and `useDailyStockTrendState`; request-race guards
+  remain in `useLatestRequestGuard`.
+
+Closeout verification:
+
+- `uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py backend\crawlers\zsxq_file_downloader_helpers.py backend\services\stock_topic_analysis_service.py backend\services\stock_topic_analysis_helpers.py backend\storage\zsxq_file_database.py backend\storage\zsxq_file_database_helpers.py`
+- `uv run python -m unittest tests.test_zsxq_file_downloader_helpers tests.test_stock_topic_analysis_service_helpers tests.test_stock_external_summary_service_helpers tests.test_export_external_stock_summary_script tests.test_stock_topic_analysis_routes_helpers tests.test_zsxq_file_database_helpers -v`: 118 tests passed.
+- `uv run python -m unittest discover -s tests`: 506 tests passed, 15 skipped.
+- `npm --prefix frontend run build`: passed.
+- `uv run python scripts\scan_postgres_compat_debt.py`: no SQLite compatibility patterns found.
+
+Residual scope:
+
+- Root `tmp_stock_analysis_*` files remain untracked and intentionally out of scope.
+- No public API, schema, prompt, config, SQL conflict behavior, retry count, fallback, or frontend
+  request-parameter changes were introduced by these closeout slices.
+
 ## Stop Conditions
 
 Pause and reassess before editing if any of these occur:
