@@ -2948,6 +2948,38 @@ Result:
 - PostgreSQL compatibility debt scan: no SQLite compatibility patterns found.
 - Frontend build is not planned because this slice only changes backend crawler/helper code.
 
+### 2026-06-11 - P9 download HTTP failure detail helper extraction
+
+Changed:
+
+- Added `download_http_failure_detail` to `backend/crawlers/zsxq_file_downloader_helpers.py`.
+- Replaced inline non-200 body-download error code/message construction in `download_file`.
+- Added focused helper coverage for the exact `http_status` / `HTTP <status_code>` contract.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Non-200 body download still uses `http_status` and `HTTP <status_code>`.
+- Logging, retry-loop continuation, final failed status update, and partial-file cleanup behavior remain unchanged.
+- No retry, stop, signed URL, fallback, or status-update behavior was changed.
+
+Verification:
+
+```powershell
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py backend\crawlers\zsxq_file_downloader_helpers.py
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers -v
+uv run python -m unittest discover -s tests
+uv run python scripts\scan_postgres_compat_debt.py
+```
+
+Result:
+
+- `py_compile` passed.
+- `tests.test_zsxq_file_downloader_helpers`: 38 tests passed.
+- Full backend unittest discovery: 574 tests passed, 15 skipped.
+- PostgreSQL compatibility debt scan: no SQLite compatibility patterns found.
+- Frontend build is not planned because this slice only changes backend crawler/helper code.
+
 ### 2026-06-11 - P3 columns database helper module split
 
 Changed:

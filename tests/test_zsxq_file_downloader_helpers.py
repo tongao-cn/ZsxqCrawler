@@ -20,6 +20,7 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     classify_api_failure,
     classify_http_failure,
     content_disposition_filename,
+    download_http_failure_detail,
     download_progress_message,
     download_url_failure_detail,
     download_file_data,
@@ -329,6 +330,9 @@ class FileDownloaderFileDataHelperTests(unittest.TestCase):
         )
         self.assertIsNone(download_size_mismatch_detail(0, 512))
         self.assertIsNone(download_size_mismatch_detail(512, 512))
+
+    def test_download_http_failure_detail_preserves_error_contract(self):
+        self.assertEqual(("http_status", "HTTP 500"), download_http_failure_detail(500))
 
     def test_content_disposition_filename_extracts_plain_filename(self):
         self.assertEqual("memo.pdf", content_disposition_filename('attachment; filename="memo.pdf"'))

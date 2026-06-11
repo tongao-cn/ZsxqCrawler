@@ -258,6 +258,10 @@ def download_size_mismatch_detail(expected_size: int, final_size: int) -> Option
     )
 
 
+def download_http_failure_detail(status_code: int) -> tuple[str, str]:
+    return "http_status", f"HTTP {status_code}"
+
+
 def content_disposition_filename(content_disposition: str) -> Optional[str]:
     if "filename=" not in content_disposition:
         return None

@@ -28,6 +28,7 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     classify_api_failure,
     classify_http_failure,
     download_file_data,
+    download_http_failure_detail,
     download_interval_plan,
     download_progress_message,
     download_retry_wait,
@@ -664,8 +665,7 @@ class ZSXQFileDownloader:
 
                     return True
 
-                last_error_code = "http_status"
-                last_error = f"HTTP {response.status_code}"
+                last_error_code, last_error = download_http_failure_detail(response.status_code)
                 self.log(f"   ❌ 下载失败: {last_error}")
 
             except Exception as e:
