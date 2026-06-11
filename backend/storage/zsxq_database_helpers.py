@@ -429,6 +429,27 @@ def load_topic_comment_images_map(
     return comment_images_map
 
 
+def load_topic_detail_comments(cursor, topic_id: int, scoped_group_id: Any) -> list[Dict[str, Any]]:
+    cursor.execute('''
+        SELECT
+            c.comment_id, c.text, c.create_time, c.likes_count, c.rewards_count, c.sticky,
+            c.parent_comment_id, c.replies_count,
+            u.user_id, u.name, u.alias, u.avatar_url, u.location, u.description,
+            r.user_id as repliee_user_id, r.name as repliee_name, r.avatar_url as repliee_avatar_url
+        FROM comments c
+        LEFT JOIN users u ON c.owner_user_id = u.user_id
+        LEFT JOIN users r ON c.repliee_user_id = r.user_id
+        WHERE c.topic_id = ?
+          AND (? IS NULL OR c.group_id = ?)
+        ORDER BY c.create_time ASC
+    ''', (topic_id, scoped_group_id, scoped_group_id))
+
+    comment_rows = cursor.fetchall()
+    comment_ids = [row[0] for row in comment_rows]
+    comment_images_map = load_topic_comment_images_map(cursor, comment_ids, scoped_group_id)
+    return build_topic_detail_comments(comment_rows, comment_images_map)
+
+
 def topic_detail_question_payload(row) -> Dict[str, Any]:
     question_data = {
         "text": row[0],

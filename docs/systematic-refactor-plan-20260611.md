@@ -2598,6 +2598,42 @@ Result:
 - PostgreSQL compatibility debt scan: no SQLite compatibility patterns found.
 - Frontend build was not rerun because this slice only changes backend storage/helper code.
 
+### 2026-06-11 - P2 topic comment loader extraction
+
+Changed:
+
+- Added `load_topic_detail_comments` to `backend/storage/zsxq_database_helpers.py`.
+- Moved the existing `get_topic_detail` comment list query, comment-id collection, image-map load,
+  and nested comment build into the helper.
+- Removed the now-unused direct comment helper imports from `backend/storage/zsxq_database.py`.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- The comment query still returns all comments, keeps `ORDER BY c.create_time ASC`, and keeps the
+  same scoped group predicate and parameter tuple.
+- The comment image batch loader and nested comment builder are called in the same order after the
+  comment rows are read.
+- Existing tests verify scoped child queries, comment-image query params, repliee payloads, and
+  nested comment output.
+
+Verification:
+
+```powershell
+uv run python -m py_compile backend\storage\zsxq_database.py backend\storage\zsxq_database_helpers.py
+uv run python -m unittest tests.test_zsxq_database_helpers -v
+uv run python -m unittest discover -s tests
+uv run python scripts\scan_postgres_compat_debt.py
+```
+
+Result:
+
+- `py_compile` passed.
+- `tests.test_zsxq_database_helpers`: 19 tests passed.
+- Full backend unittest discovery: 557 tests passed, 15 skipped.
+- PostgreSQL compatibility debt scan: no SQLite compatibility patterns found.
+- Frontend build was not rerun because this slice only changes backend storage/helper code.
+
 ## Stop Conditions
 
 Pause before editing if:

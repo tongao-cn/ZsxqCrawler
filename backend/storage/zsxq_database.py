@@ -5,12 +5,11 @@ from typing import Dict, Any, Optional, List
 
 from backend.storage.db_compat import connect
 from backend.storage.zsxq_database_helpers import (
-    build_topic_detail_comments,
     build_pagination,
     format_tag_row,
     format_tag_topic_row,
     group_id_param,
-    load_topic_comment_images_map,
+    load_topic_detail_comments,
     load_topic_detail_latest_likes,
     load_topic_detail_likes_detail,
     load_topic_detail_qa,
@@ -1159,25 +1158,7 @@ class ZSXQDatabase:
             topic_detail["latest_likes"] = load_topic_detail_latest_likes(self.cursor, topic_id, scoped_group_id)
 
             # 4. 获取评论 - 不再限制为10条，返回所有评论
-            self.cursor.execute('''
-                SELECT
-                    c.comment_id, c.text, c.create_time, c.likes_count, c.rewards_count, c.sticky,
-                    c.parent_comment_id, c.replies_count,
-                    u.user_id, u.name, u.alias, u.avatar_url, u.location, u.description,
-                    r.user_id as repliee_user_id, r.name as repliee_name, r.avatar_url as repliee_avatar_url
-                FROM comments c
-                LEFT JOIN users u ON c.owner_user_id = u.user_id
-                LEFT JOIN users r ON c.repliee_user_id = r.user_id
-                WHERE c.topic_id = ?
-                  AND (? IS NULL OR c.group_id = ?)
-                ORDER BY c.create_time ASC
-            ''', (topic_id, scoped_group_id, scoped_group_id))
-
-            comment_rows = self.cursor.fetchall()
-            comment_ids = [row[0] for row in comment_rows]
-            comment_images_map = load_topic_comment_images_map(self.cursor, comment_ids, scoped_group_id)
-
-            topic_detail["show_comments"] = build_topic_detail_comments(comment_rows, comment_images_map)
+            topic_detail["show_comments"] = load_topic_detail_comments(self.cursor, topic_id, scoped_group_id)
 
             # 5. 获取点赞详情（表情）
             topic_detail["likes_detail"] = load_topic_detail_likes_detail(self.cursor, topic_id, scoped_group_id)
