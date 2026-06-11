@@ -262,6 +262,10 @@ def download_http_failure_detail(status_code: int) -> tuple[str, str]:
     return "http_status", f"HTTP {status_code}"
 
 
+def download_exception_detail(exc: Exception) -> tuple[str, str]:
+    return "download_exception", str(exc)
+
+
 def content_disposition_filename(content_disposition: str) -> Optional[str]:
     if "filename=" not in content_disposition:
         return None
