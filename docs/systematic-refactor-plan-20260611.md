@@ -2054,6 +2054,51 @@ Result:
 - PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
 - Git diff whitespace check passed.
 
+### 2026-06-11 - P5 latest task query helper extraction
+
+Changed:
+
+- Added characterization coverage for `get_latest_task_by_type()` filtering by task type, status,
+  normalized group ID, and newest `created_at`.
+- Locked the legacy `stopped` to `cancelled` read compatibility behavior for latest-task queries.
+- Extracted `_matches_latest_task_query()` and `_task_created_at_sort_value()` so latest-task
+  filtering and sorting are named, focused helpers.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- `get_latest_task_by_type()` still reads through `list_tasks()`, so persisted task normalization
+  and legacy `stopped` status compatibility are preserved.
+- Status filtering, task type filtering, group ID normalization, missing `created_at` fallback to
+  `datetime.min`, and newest-first selection are unchanged.
+- No public route response, task status field, cancellation behavior, fallback polling, storage
+  schema, legacy path, config semantics, or frontend hook behavior changed.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_task_runtime_helpers.TaskRuntimeHelperTests.test_get_latest_task_by_type_filters_status_group_and_sorts_latest -v
+uv run python -m unittest tests.test_task_runtime_helpers -v
+uv run python -m py_compile backend\services\task_runtime.py
+uv run python -m unittest tests.test_task_runtime_helpers tests.test_task_store tests.test_task_routes_helpers -v
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+uv run python scripts\scan_postgres_compat_debt.py
+git diff --check
+```
+
+Result:
+
+- New characterization test passed on the pre-refactor code before helper extraction: 1 test.
+- Post-refactor characterization test passed: 1 test.
+- Focused task runtime tests passed: 38 tests.
+- Recommended task runtime gate passed: 57 tests, 14 PostgreSQL integration tests skipped by
+  configuration.
+- Full backend tests passed: 557 tests, 15 skipped.
+- Frontend build passed.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Git diff whitespace check passed.
+
 ## Stop Conditions
 
 Pause before editing if:

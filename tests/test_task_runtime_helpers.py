@@ -1,6 +1,7 @@
 import unittest
 import asyncio
 import queue
+from datetime import datetime
 from threading import Event
 from unittest.mock import patch
 
@@ -230,6 +231,63 @@ class TaskRuntimeHelperTests(unittest.TestCase):
         with patch("backend.services.task_runtime.list_tasks", return_value=[other_group, running]):
             self.assertEqual(running, find_running_ingestion_task("155"))
             self.assertIsNone(find_running_ingestion_task("177"))
+
+    def test_get_latest_task_by_type_filters_status_group_and_sorts_latest(self):
+        from backend.services.task_runtime import get_latest_task_by_type
+
+        store = FakeTaskStore()
+        store.tasks = {
+            "task-old": {
+                "task_id": "task-old",
+                "type": "daily_analysis",
+                "status": "completed",
+                "group_id": 155,
+                "created_at": datetime(2026, 1, 1, 9, 0, 0),
+            },
+            "task-new": {
+                "task_id": "task-new",
+                "type": "daily_analysis",
+                "status": "completed",
+                "group_id": "155",
+                "created_at": datetime(2026, 1, 2, 9, 0, 0),
+            },
+            "task-wrong-status": {
+                "task_id": "task-wrong-status",
+                "type": "daily_analysis",
+                "status": "running",
+                "group_id": "155",
+                "created_at": datetime(2026, 1, 3, 9, 0, 0),
+            },
+            "task-wrong-group": {
+                "task_id": "task-wrong-group",
+                "type": "daily_analysis",
+                "status": "completed",
+                "group_id": "166",
+                "created_at": datetime(2026, 1, 4, 9, 0, 0),
+            },
+            "task-stopped": {
+                "task_id": "task-stopped",
+                "type": "daily_analysis",
+                "status": "stopped",
+                "group_id": "155",
+                "created_at": datetime(2026, 1, 5, 9, 0, 0),
+            },
+            "task-other-type": {
+                "task_id": "task-other-type",
+                "type": "file_analysis",
+                "status": "completed",
+                "group_id": "155",
+                "created_at": datetime(2026, 1, 6, 9, 0, 0),
+            },
+        }
+
+        with patch("backend.services.task_runtime.get_task_store", return_value=store):
+            latest_completed = get_latest_task_by_type("daily_analysis", status="completed", group_id="155")
+            latest_cancelled = get_latest_task_by_type("daily_analysis", status="cancelled", group_id=155)
+
+        self.assertEqual("task-new", latest_completed["task_id"])
+        self.assertEqual("task-stopped", latest_cancelled["task_id"])
+        self.assertEqual("cancelled", latest_cancelled["status"])
 
     def test_create_ingestion_task_rejects_existing_same_group(self):
         from backend.services.task_runtime import create_ingestion_task

@@ -594,22 +594,37 @@ def is_task_stopped(task_id: str) -> bool:
     return memory_stopped or get_task_store().is_stopped(task_id)
 
 
+def _matches_latest_task_query(
+    task: Dict[str, Any],
+    task_type: str,
+    status: Optional[str],
+    normalized_group_id: Optional[str],
+) -> bool:
+    if task.get("type") != task_type:
+        return False
+    if status and task.get("status") != status:
+        return False
+    if normalized_group_id is not None and normalize_group_id(task.get("group_id")) != normalized_group_id:
+        return False
+    return True
+
+
+def _task_created_at_sort_value(task: Dict[str, Any]) -> Any:
+    return task.get("created_at") or datetime.min
+
+
 def get_latest_task_by_type(
     task_type: str,
     status: Optional[str] = None,
     group_id: Optional[str] = None,
 ) -> Optional[Dict[str, Any]]:
     normalized_group_id = normalize_group_id(group_id)
-    candidates = []
-    for task in list_tasks():
-        if task.get("type") != task_type:
-            continue
-        if status and task.get("status") != status:
-            continue
-        if normalized_group_id is not None and normalize_group_id(task.get("group_id")) != normalized_group_id:
-            continue
-        candidates.append(task)
+    candidates = [
+        task
+        for task in list_tasks()
+        if _matches_latest_task_query(task, task_type, status, normalized_group_id)
+    ]
     if not candidates:
         return None
-    candidates.sort(key=lambda item: item.get("created_at") or datetime.min, reverse=True)
+    candidates.sort(key=_task_created_at_sort_value, reverse=True)
     return candidates[0]
