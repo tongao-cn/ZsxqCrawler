@@ -185,6 +185,13 @@ def existing_file_matches(file_path: str, expected_size: int) -> tuple[bool, boo
     return True, matches, existing_size
 
 
+def remove_partial_download(temp_path: str) -> bool:
+    if not os.path.exists(temp_path):
+        return False
+    os.remove(temp_path)
+    return True
+
+
 def content_disposition_filename(content_disposition: str) -> Optional[str]:
     if "filename=" not in content_disposition:
         return None

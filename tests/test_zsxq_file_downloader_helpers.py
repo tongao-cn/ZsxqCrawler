@@ -30,6 +30,7 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     normalize_date_range,
     page_crosses_stop_before,
     parse_create_time,
+    remove_partial_download,
     safe_download_filename,
     should_retry_api_error,
     should_retry_http_status,
@@ -247,6 +248,16 @@ class FileDownloaderFileDataHelperTests(unittest.TestCase):
             self.assertEqual((True, True, 4), existing_file_matches(str(file_path), 0))
             self.assertEqual((True, False, 4), existing_file_matches(str(file_path), 5))
             self.assertEqual((False, False, 0), existing_file_matches(str(file_path.with_suffix(".missing")), 4))
+
+    def test_remove_partial_download_deletes_existing_file_only(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            partial_path = Path(temp_dir) / "memo.pdf.part"
+            missing_path = Path(temp_dir) / "missing.pdf.part"
+            partial_path.write_bytes(b"partial")
+
+            self.assertTrue(remove_partial_download(str(partial_path)))
+            self.assertFalse(partial_path.exists())
+            self.assertFalse(remove_partial_download(str(missing_path)))
 
     def test_content_disposition_filename_extracts_plain_filename(self):
         self.assertEqual("memo.pdf", content_disposition_filename('attachment; filename="memo.pdf"'))

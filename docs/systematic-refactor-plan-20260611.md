@@ -2741,6 +2741,43 @@ Result:
 - PostgreSQL compatibility debt scan: no SQLite compatibility patterns found.
 - Frontend build is not planned because this slice only changes backend crawler/helper code.
 
+### 2026-06-11 - P9 partial download cleanup helper extraction
+
+Changed:
+
+- Added `remove_partial_download` to `backend/crawlers/zsxq_file_downloader_helpers.py`.
+- Added focused helper coverage for deleting an existing `.part` file and returning `False` for a
+  missing path.
+- Replaced the conditional `.part` cleanup blocks before writing, on stop, and on download
+  exception in `backend/crawlers/zsxq_file_downloader.py`.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- The helper still calls `os.remove` only when the partial path exists, so delete errors propagate
+  as before.
+- The size-mismatch cleanup remains a direct `os.remove(temp_path)` because that path previously
+  assumed the `.part` file exists and should continue to enter the existing retry/error flow if
+  removal fails.
+- No retry, stop, signed URL, status-update, or fallback behavior was removed.
+
+Verification:
+
+```powershell
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py backend\crawlers\zsxq_file_downloader_helpers.py
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers -v
+uv run python -m unittest discover -s tests
+uv run python scripts\scan_postgres_compat_debt.py
+```
+
+Result:
+
+- `py_compile` passed.
+- `tests.test_zsxq_file_downloader_helpers`: 28 tests passed.
+- Full backend unittest discovery: 559 tests passed, 15 skipped.
+- PostgreSQL compatibility debt scan: no SQLite compatibility patterns found.
+- Frontend build is not planned because this slice only changes backend crawler/helper code.
+
 ## Stop Conditions
 
 Pause before editing if:
