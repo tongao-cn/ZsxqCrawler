@@ -1,4 +1,4 @@
-import type { ApiErrorDetail } from './types';
+import type { ApiErrorDetail } from './taskTypes';
 
 export const API_BASE_URL = (process.env.NEXT_PUBLIC_API_BASE_URL?.trim() || 'http://localhost:8508').replace(/\/$/, '');
 

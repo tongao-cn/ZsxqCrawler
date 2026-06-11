@@ -1,5 +1,5 @@
 import { CoreApiClient } from './core';
-import type { Task } from './types';
+import type { Task } from './taskTypes';
 
 export class TasksApiClient extends CoreApiClient {
   async getTasks(groupId?: string | number | null, taskType?: string): Promise<Task[]> {

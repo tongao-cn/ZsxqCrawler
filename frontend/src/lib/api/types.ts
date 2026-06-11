@@ -1,19 +1,11 @@
+import type { Task } from './taskTypes';
+
+export type { ApiErrorDetail, Task, TaskCreateResponse } from './taskTypes';
+
 export interface ApiResponse<T = any> {
   data?: T;
   message?: string;
   error?: string;
-}
-
-export interface Task {
-  task_id: string;
-  type: string;
-  status: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
-  message: string;
-  result?: any;
-  created_at: string;
-  updated_at: string;
-  group_id?: string | number | null;
-  ingestion_lock_key?: string | null;
 }
 
 export interface DailyTopicReport {
@@ -135,20 +127,6 @@ export interface StockQuestionResponse {
   summary_markdown?: string;
   model?: string;
   status?: string;
-}
-
-export interface TaskCreateResponse {
-  task_id: string;
-  message: string;
-}
-
-export interface ApiErrorDetail {
-  message?: string;
-  error?: string;
-  task_id?: string;
-  type?: string;
-  status?: string;
-  [key: string]: unknown;
 }
 
 export interface AShareAnalysisSummary {

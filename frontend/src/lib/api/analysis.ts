@@ -13,8 +13,8 @@ import type {
   StockTopicAnalysisResponse,
   StockTopicImageExtractResponse,
   StockQuestionResponse,
-  TaskCreateResponse,
 } from './types';
+import type { TaskCreateResponse } from './taskTypes';
 import type { ApiRequestOptions } from './client';
 
 function normalizeOptionalId(value?: string | number) {

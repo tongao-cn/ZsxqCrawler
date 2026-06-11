@@ -841,6 +841,42 @@ Result:
 - PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
 - Git diff whitespace check passed.
 
+### 2026-06-11 - P6 task API type surface split
+
+Changed:
+
+- Added `frontend/src/lib/api/taskTypes.ts` for task-related frontend API types:
+  `Task`, `TaskCreateResponse`, and `ApiErrorDetail`.
+- Kept `frontend/src/lib/api/types.ts` as the compatibility facade by re-exporting those task
+  types.
+- Updated internal API clients to import task-specific types from `taskTypes.ts` while keeping
+  existing external imports from `@/lib/api` valid.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Public frontend import path `@/lib/api`, exported type names, task status union, task response
+  shape, task conflict detail shape, API client inheritance, request URLs, request bodies, and
+  runtime behavior are preserved.
+- No backend route, storage schema, SSE behavior, fallback polling, legacy path, or config
+  semantics changed.
+
+Verification:
+
+```powershell
+npm --prefix frontend run build
+uv run python -m unittest discover -s tests
+uv run python scripts\scan_postgres_compat_debt.py
+git diff --check
+```
+
+Result:
+
+- Frontend build passed.
+- Full backend tests passed: 533 tests, 15 skipped.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Git diff whitespace check passed.
+
 ## Stop Conditions
 
 Pause before editing if:
