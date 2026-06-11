@@ -1059,6 +1059,46 @@ Result:
 - PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
 - Git diff whitespace check passed.
 
+### 2026-06-11 - P7 unused frontend runtime dependency removal
+
+Changed:
+
+- Removed the unused direct frontend dependency `@babel/runtime` from `frontend/package.json` and
+  `frontend/package-lock.json`.
+- Kept unrelated optional Next.js SWC lockfile entries unchanged after npm initially produced
+  lockfile noise.
+- Left `tailwind.config.js` and `tw-animate-css` untouched because the Tailwind animation setup
+  needs separate config-semantics review.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Frontend source and configuration scans found no `@babel/runtime` imports or config references
+  before removal.
+- `npm --prefix frontend ls @babel/runtime` now reports the package as absent.
+- No frontend source code, route behavior, backend route, storage schema, task behavior, fallback
+  polling, legacy path, prompt, AI output, or config semantics changed.
+
+Verification:
+
+```powershell
+rg -n "@babel/runtime" frontend\package.json frontend\package-lock.json frontend\src frontend -g "*.json" -g "*.ts" -g "*.tsx" -g "*.js" -g "*.mjs"
+npm --prefix frontend ls @babel/runtime
+npm --prefix frontend run build
+uv run python -m unittest discover -s tests
+uv run python scripts\scan_postgres_compat_debt.py
+git diff --check
+```
+
+Result:
+
+- `@babel/runtime` has no remaining source, config, package, or lockfile references.
+- `npm --prefix frontend ls @babel/runtime` reports `(empty)`.
+- Frontend build passed.
+- Full backend tests passed: 533 tests, 15 skipped.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Git diff whitespace check passed.
+
 ## Stop Conditions
 
 Pause before editing if:
