@@ -14,6 +14,7 @@ from backend.storage.zsxq_file_database_helpers import (
     _new_import_stats,
     _nullable_group_id_param,
     _row_to_file_ai_analysis,
+    _talk_record_params,
     _topic_record_params,
     _user_record_params,
 )
@@ -170,7 +171,7 @@ class ZSXQFileDatabase:
         ON CONFLICT(topic_id) DO UPDATE SET
             owner_user_id = excluded.owner_user_id,
             text = excluded.text
-        ''', (topic_id, owner_id, talk_data.get('text', '')))
+        ''', _talk_record_params(topic_id, owner_id, talk_data))
     
     def insert_images(self, topic_id: int, images_data: List[Dict[str, Any]]):
         """插入图片信息"""

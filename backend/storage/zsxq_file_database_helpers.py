@@ -106,6 +106,14 @@ def _topic_record_params(topic_data: Dict[str, Any]) -> tuple[Any, ...]:
     )
 
 
+def _talk_record_params(topic_id: int, owner_id: Optional[Any], talk_data: Dict[str, Any]) -> tuple[Any, ...]:
+    return (
+        topic_id,
+        owner_id,
+        talk_data.get('text', ''),
+    )
+
+
 def _file_attachment_params(parent_id: Any, file_data: Dict[str, Any]) -> tuple[Any, ...]:
     return (
         parent_id,

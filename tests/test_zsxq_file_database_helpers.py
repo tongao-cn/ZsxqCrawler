@@ -11,6 +11,7 @@ from backend.storage.zsxq_file_database import (
     _group_record_params,
     _new_import_stats,
     _row_to_file_ai_analysis,
+    _talk_record_params,
     _topic_record_params,
     _user_record_params,
 )
@@ -307,6 +308,10 @@ class ZSXQFileDatabaseHelperTests(unittest.TestCase):
             _topic_record_params({"topic_id": 202}),
         )
 
+    def test_talk_record_params_keep_insert_column_order(self):
+        self.assertEqual((202, 9, "body"), _talk_record_params(202, 9, {"text": "body"}))
+        self.assertEqual((202, None, ""), _talk_record_params(202, None, {}))
+
     def test_count_tables_builds_stats_from_cursor_counts(self):
         cursor = FakeCursor({"files": 3, "topics": 2})
 
@@ -451,6 +456,32 @@ class ZSXQFileDatabaseHelperTests(unittest.TestCase):
         self.assertIn("ON CONFLICT(topic_id) DO UPDATE SET", topic_sql)
         self.assertEqual((202, 303, "talk", "title", None), topic_params[:5])
         self.assertEqual((False, None, None, True, False), topic_params[12:])
+
+    def test_insert_talk_uses_record_params_after_user_upsert(self):
+        from backend.storage.zsxq_file_database import ZSXQFileDatabase
+
+        db = object.__new__(ZSXQFileDatabase)
+        db.cursor = FakeCommentCursor()
+        users = []
+
+        def fake_insert_user(user):
+            users.append(user)
+            return user.get("user_id") if user else None
+
+        db.insert_user = fake_insert_user
+
+        self.assertIsNone(ZSXQFileDatabase.insert_talk(db, 202, {}))
+        self.assertEqual([], db.cursor.calls)
+        self.assertEqual([], users)
+
+        self.assertIsNone(
+            ZSXQFileDatabase.insert_talk(db, 202, {"owner": {"user_id": 9}, "text": "body"})
+        )
+        talk_sql, talk_params = db.cursor.calls[-1]
+        self.assertEqual([{"user_id": 9}], users)
+        self.assertIn("INSERT INTO talks", talk_sql)
+        self.assertIn("ON CONFLICT(topic_id) DO UPDATE SET", talk_sql)
+        self.assertEqual((202, 9, "body"), talk_params)
 
     def test_update_file_download_status_casts_timestamp_to_text(self):
         from backend.storage.zsxq_file_database import ZSXQFileDatabase
