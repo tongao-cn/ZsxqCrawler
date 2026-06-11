@@ -184,6 +184,17 @@ def _build_sync_files_response(group_id: str, stats: Dict[str, Any]) -> Dict[str
     }
 
 
+def _build_download_task_stats(total_files: int, found: int, missing: int = 0) -> Dict[str, int]:
+    return {
+        "total_files": int(total_files),
+        "found": int(found),
+        "missing": int(missing),
+        "downloaded": 0,
+        "skipped": 0,
+        "failed": 0,
+    }
+
+
 def _get_file_status_response(group_id: str, file_id: int) -> dict:
     with _file_db(group_id) as file_db:
         file_db.cursor.execute(
@@ -794,14 +805,11 @@ def run_selected_file_download_task(task_id: str, group_id: str, file_ids: Seque
             return
 
         records, missing = _load_download_file_records(downloader, group_id, file_ids)
-        stats = {
-            "total_files": len(dict.fromkeys(int(file_id) for file_id in file_ids)),
-            "found": len(records),
-            "missing": len(missing),
-            "downloaded": 0,
-            "skipped": 0,
-            "failed": 0,
-        }
+        stats = _build_download_task_stats(
+            total_files=len(dict.fromkeys(int(file_id) for file_id in file_ids)),
+            found=len(records),
+            missing=len(missing),
+        )
         if missing:
             add_task_log(task_id, f"⚠️ {len(missing)} 个文件未在文件库中找到，已跳过")
         if not records:
@@ -841,14 +849,7 @@ def run_filtered_file_download_task(
             search=search,
             max_files=max_files,
         )
-        stats = {
-            "total_files": len(records),
-            "found": len(records),
-            "missing": 0,
-            "downloaded": 0,
-            "skipped": 0,
-            "failed": 0,
-        }
+        stats = _build_download_task_stats(total_files=len(records), found=len(records))
         if not records:
             update_task(task_id, "completed", "当前筛选下没有可下载文件", {"downloaded_files": stats})
             return

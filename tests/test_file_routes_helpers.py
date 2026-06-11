@@ -3,6 +3,7 @@ from unittest.mock import patch
 
 from backend.services.file_workflow_service import (
     _build_check_local_file_status_response,
+    _build_download_task_stats,
     _build_file_status_response,
     _build_sync_files_response,
     _close_crawler_file_databases,
@@ -427,6 +428,21 @@ class FileRoutesHelperTests(unittest.TestCase):
         response = _build_sync_files_response("group-1", stats)
 
         self.assertEqual({"success": True, "group_id": "group-1", "stats": stats}, response)
+
+    def test_build_download_task_stats_keeps_result_shape(self):
+        stats = _build_download_task_stats(total_files=3, found=2, missing=1)
+
+        self.assertEqual(
+            {
+                "total_files": 3,
+                "found": 2,
+                "missing": 1,
+                "downloaded": 0,
+                "skipped": 0,
+                "failed": 0,
+            },
+            stats,
+        )
 
     def test_file_status_routes_offload_sync_work_to_thread(self):
         from backend.routes import file_routes
