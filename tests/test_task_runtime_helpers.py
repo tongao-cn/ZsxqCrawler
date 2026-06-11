@@ -224,6 +224,28 @@ class TaskRuntimeHelperTests(unittest.TestCase):
         self.assertEqual("cancelled", store.tasks["task-1"]["status"])
         self.assertEqual([("task-1", "cancelled")], store.released_locks)
 
+    def test_stop_task_uses_global_crawler_fallback_when_no_registered_crawler(self):
+        from backend.services import task_runtime
+
+        store = FakeTaskStore()
+        store.tasks["task-1"] = {"task_id": "task-1", "status": "running", "message": "running"}
+        crawler = Stoppable()
+
+        with (
+            patch("backend.services.task_runtime.get_task_store", return_value=store),
+            patch.object(task_runtime.crawler_runtime, "crawler_instance", crawler),
+        ):
+            try:
+                stopped = task_runtime.stop_task("task-1")
+            finally:
+                task_runtime.task_stop_flags.pop("task-1", None)
+
+        self.assertTrue(stopped)
+        self.assertTrue(crawler.stopped)
+        self.assertTrue(store.stop_flags["task-1"])
+        self.assertEqual("cancelled", store.tasks["task-1"]["status"])
+        self.assertEqual([("task-1", "cancelled")], store.released_locks)
+
     def test_update_task_releases_lock_on_terminal_status(self):
         from backend.services import task_runtime
 

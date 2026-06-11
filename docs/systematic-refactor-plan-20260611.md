@@ -1214,6 +1214,50 @@ Result:
 - PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
 - Git diff whitespace check passed.
 
+### 2026-06-11 - P5 stop-task resource fallback helper extraction
+
+Changed:
+
+- Added characterization coverage for `stop_task()` using the global
+  `crawler_runtime.crawler_instance` fallback when no task-specific crawler is registered.
+- Extracted `_request_stop_for_task_resources()` from `stop_task()` to isolate task-specific
+  crawler/downloader stop notification plus the retained global crawler fallback.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- `stop_task()` still returns `False` for missing or non-active tasks; for active tasks it still
+  sets the in-memory and persisted stop flags, logs the stop request, notifies the same crawler or
+  downloader resource path, updates the task to `cancelled`, and releases the task lock through
+  `update_task()`.
+- The global crawler fallback remains intentionally preserved and is now covered by a
+  characterization test.
+- No public route response, task store SQL, task status normalization, SSE behavior, fallback
+  polling, storage schema, legacy path, config semantics, or frontend hook behavior changed.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_task_runtime_helpers -v
+uv run python -m py_compile backend\services\task_runtime.py
+uv run python -m unittest tests.test_task_runtime_helpers tests.test_task_store tests.test_task_routes_helpers -v
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+uv run python scripts\scan_postgres_compat_debt.py
+git diff --check
+```
+
+Result:
+
+- Characterization test passed on the pre-refactor code before the helper extraction.
+- Focused task runtime tests passed: 16 tests.
+- Recommended task runtime gate passed: 35 tests, 14 PostgreSQL integration tests skipped by
+  configuration.
+- Full backend tests passed: 535 tests, 15 skipped.
+- Frontend build passed.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Git diff whitespace check passed.
+
 ## Stop Conditions
 
 Pause before editing if:

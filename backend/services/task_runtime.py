@@ -328,6 +328,13 @@ def stop_task(task_id: str) -> bool:
     get_task_store().set_stop_flag(task_id, True)
     add_task_log(task_id, "🛑 收到停止请求，正在停止任务...")
 
+    _request_stop_for_task_resources(crawler, downloader)
+
+    update_task(task_id, "cancelled", "任务已被用户停止")
+    return True
+
+
+def _request_stop_for_task_resources(crawler: Any, downloader: Any) -> None:
     if crawler is not None:
         crawler.set_stop_flag()
     elif crawler_runtime.crawler_instance:
@@ -335,9 +342,6 @@ def stop_task(task_id: str) -> bool:
 
     if downloader is not None:
         downloader.set_stop_flag()
-
-    update_task(task_id, "cancelled", "任务已被用户停止")
-    return True
 
 
 def _start_task_lock_heartbeat(task_id: str) -> None:
