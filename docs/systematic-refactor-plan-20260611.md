@@ -1605,6 +1605,50 @@ Result:
 - PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
 - Git diff whitespace check passed.
 
+### 2026-06-11 - P5 task log fallback helper extraction
+
+Changed:
+
+- Added characterization coverage for `get_task_logs_state()` preferring persisted task logs over
+  in-memory task logs when persisted logs are available.
+- Added characterization coverage for `get_task_logs_state()` returning `None` for unknown tasks
+  that have no in-memory log fallback.
+- Extracted `_has_task_logs_locked()` and `_task_logs_copy_locked()` to isolate locked in-memory
+  `task_logs` existence and copy reads.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- `get_task_logs_state()` still resolves task state first, returns `None` for unknown tasks without
+  memory logs before reading persisted logs, preserves persisted-log priority, and returns a copied
+  in-memory log list as the fallback.
+- No public route response, task store SQL, task status behavior, task log text, SSE framing,
+  fallback polling, storage schema, legacy path, config semantics, or frontend hook behavior
+  changed.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_task_runtime_helpers -v
+uv run python -m py_compile backend\services\task_runtime.py
+uv run python -m unittest tests.test_task_runtime_helpers tests.test_task_store tests.test_task_routes_helpers -v
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+uv run python scripts\scan_postgres_compat_debt.py
+git diff --check
+```
+
+Result:
+
+- Characterization tests passed on the pre-refactor code before the helper extraction.
+- Focused task runtime tests passed: 28 tests.
+- Recommended task runtime gate passed: 47 tests, 14 PostgreSQL integration tests skipped by
+  configuration.
+- Full backend tests passed: 547 tests, 15 skipped.
+- Frontend build passed.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Git diff whitespace check passed.
+
 ## Stop Conditions
 
 Pause before editing if:

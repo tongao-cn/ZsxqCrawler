@@ -137,17 +137,25 @@ def get_task_state(task_id: str) -> Optional[Dict[str, Any]]:
     return _normalize_task(task)
 
 
+def _has_task_logs_locked(task_id: str) -> bool:
+    return task_id in task_logs
+
+
+def _task_logs_copy_locked(task_id: str) -> List[str]:
+    return list(task_logs.get(task_id, []))
+
+
 def get_task_logs_state(task_id: str) -> Optional[List[str]]:
     task = get_task_state(task_id)
     with _state_lock:
-        has_memory_logs = task_id in task_logs
+        has_memory_logs = _has_task_logs_locked(task_id)
     if not task and not has_memory_logs:
         return None
     persisted_logs = get_task_store().get_logs(task_id)
     if persisted_logs:
         return persisted_logs
     with _state_lock:
-        return list(task_logs.get(task_id, []))
+        return _task_logs_copy_locked(task_id)
 
 
 def cleanup_tasks(keep_latest: int = 100) -> Dict[str, int]:

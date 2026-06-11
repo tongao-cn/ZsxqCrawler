@@ -449,6 +449,33 @@ class TaskRuntimeHelperTests(unittest.TestCase):
             finally:
                 task_runtime.task_logs.pop("task-1", None)
 
+    def test_get_task_logs_state_prefers_persisted_logs_over_memory_logs(self):
+        from backend.services import task_runtime
+
+        store = FakeTaskStore()
+        store.tasks["task-1"] = {"task_id": "task-1", "status": "running", "message": "running"}
+
+        with (
+            patch("backend.services.task_runtime.get_task_store", return_value=store),
+            patch.object(store, "get_logs", return_value=["persisted"]),
+        ):
+            task_runtime.task_logs["task-1"] = ["memory"]
+            try:
+                self.assertEqual(["persisted"], task_runtime.get_task_logs_state("task-1"))
+            finally:
+                task_runtime.task_logs.pop("task-1", None)
+
+    def test_get_task_logs_state_returns_none_for_unknown_task_without_memory_logs(self):
+        from backend.services import task_runtime
+
+        store = FakeTaskStore()
+
+        with (
+            patch("backend.services.task_runtime.get_task_store", return_value=store),
+            patch.object(store, "get_logs", side_effect=AssertionError("logs should not be read")),
+        ):
+            self.assertIsNone(task_runtime.get_task_logs_state("missing-task"))
+
     def test_add_task_log_uses_persisted_log_text_for_memory_and_broadcast(self):
         from backend.services import task_runtime
 
