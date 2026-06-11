@@ -141,6 +141,26 @@ def _set_memory_task_locked(task_id: str, task: Dict[str, Any]) -> None:
     current_tasks[task_id] = task
 
 
+def _set_pending_memory_task_locked(
+    task_id: str,
+    task_type: str,
+    description: str,
+    now: datetime,
+    metadata: Optional[Dict[str, Any]] = None,
+    task: Optional[Dict[str, Any]] = None,
+) -> None:
+    _set_memory_task_locked(
+        task_id,
+        task or _build_pending_task_state(
+            task_id,
+            task_type,
+            description,
+            now,
+            metadata,
+        ),
+    )
+
+
 def _memory_tasks_snapshot_locked() -> List[tuple[str, Dict[str, Any]]]:
     return list(current_tasks.items())
 
@@ -194,16 +214,12 @@ def create_task(task_type: str, description: str, metadata: Optional[Dict[str, A
     now = datetime.now()
     with _state_lock:
         task_id = _allocate_task_id_locked(now)
-
-        _set_memory_task_locked(
+        _set_pending_memory_task_locked(
             task_id,
-            _build_pending_task_state(
-                task_id,
-                task_type,
-                description,
-                now,
-                metadata,
-            ),
+            task_type,
+            description,
+            now,
+            metadata,
         )
 
     store = get_task_store()
@@ -260,15 +276,13 @@ def create_ingestion_task(task_type: str, description: str, group_id: str) -> tu
     if existing:
         return None, _normalize_task(existing)
     with _state_lock:
-        _set_memory_task_locked(
+        _set_pending_memory_task_locked(
             task_id,
-            task or _build_pending_task_state(
-                task_id,
-                task_type,
-                description,
-                now,
-                metadata,
-            ),
+            task_type,
+            description,
+            now,
+            metadata,
+            task=task,
         )
         _initialize_task_tracking_locked(task_id)
     _persist_task_creation_tracking(task_id, description)

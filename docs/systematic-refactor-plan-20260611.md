@@ -2148,6 +2148,38 @@ Result:
   artifact names.
 - Git diff whitespace check passed.
 
+### 2026-06-11 - P5 pending memory task helper extraction
+
+Changed:
+
+- Extracted `_set_pending_memory_task_locked` in `backend/services/task_runtime.py`.
+- Reused it from `create_task` and `create_ingestion_task` to keep pending in-memory task
+  construction in one place.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Public task APIs, task IDs, status values, result fields, metadata, ingestion lock behavior,
+  fallback memory task behavior, log messages, stop flags, and persistence calls remain unchanged.
+- Creation ordering is intentionally preserved:
+  - `create_task` still allocates and records the memory pending task before `store.create_task`,
+    then initializes logs and stop flag after persistence.
+  - `create_ingestion_task` still writes memory state only after `create_task_with_lock` succeeds,
+    and still returns the normalized existing task without mutating memory when a lock conflict is
+    found.
+
+Verification:
+
+```powershell
+uv run python -m py_compile backend\services\task_runtime.py
+uv run python -m unittest tests.test_task_runtime_helpers -v
+```
+
+Result:
+
+- `py_compile` passed.
+- `tests.test_task_runtime_helpers`: 38 tests passed.
+
 ## Stop Conditions
 
 Pause before editing if:
