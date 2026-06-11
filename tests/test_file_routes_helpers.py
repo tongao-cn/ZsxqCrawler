@@ -352,6 +352,56 @@ class FileRoutesHelperTests(unittest.TestCase):
             task_group_id="group-1",
         )
 
+    def test_run_file_analysis_task_dedupes_ids_and_preserves_mixed_stats(self):
+        from backend.services import file_workflow_service
+
+        def analyze_side_effect(group_id, file_id, **_kwargs):
+            if file_id == 3:
+                raise RuntimeError("boom")
+            return {"cached": file_id == 2}
+
+        with (
+            patch("backend.services.file_workflow_service.update_task") as update_task,
+            patch("backend.services.file_workflow_service.add_task_log") as add_task_log,
+            patch("backend.services.file_workflow_service.is_task_stopped", return_value=False),
+            patch("backend.services.file_workflow_service.analyze_group_file", side_effect=analyze_side_effect) as analyze,
+        ):
+            file_workflow_service.run_file_analysis_task("task-1", "group-1", [1, 2, 1, 3], force=True)
+
+        self.assertEqual(
+            [("group-1", 1), ("group-1", 2), ("group-1", 3)],
+            [call.args[:2] for call in analyze.call_args_list],
+        )
+        self.assertTrue(all(call.kwargs["force"] is True for call in analyze.call_args_list))
+        update_task.assert_any_call(
+            "task-1",
+            "completed",
+            "文件分析完成",
+            {"analysis": {"total_files": 3, "completed": 1, "cached": 1, "failed": 1}},
+        )
+        self.assertIn(
+            ("task-1", "❌ 文件分析失败: 3, boom"),
+            [call.args for call in add_task_log.call_args_list],
+        )
+
+    def test_run_file_analysis_task_marks_task_failed_when_all_files_fail(self):
+        from backend.services import file_workflow_service
+
+        with (
+            patch("backend.services.file_workflow_service.update_task") as update_task,
+            patch("backend.services.file_workflow_service.add_task_log"),
+            patch("backend.services.file_workflow_service.is_task_stopped", return_value=False),
+            patch("backend.services.file_workflow_service.analyze_group_file", side_effect=RuntimeError("boom")),
+        ):
+            file_workflow_service.run_file_analysis_task("task-1", "group-1", [1], force=False)
+
+        update_task.assert_any_call(
+            "task-1",
+            "failed",
+            "文件分析全部失败",
+            {"analysis": {"total_files": 1, "completed": 0, "cached": 0, "failed": 1}},
+        )
+
     def test_enqueue_file_task_rejects_ingestion_conflict(self):
         from fastapi import HTTPException
 

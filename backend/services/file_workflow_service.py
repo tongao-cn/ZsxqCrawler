@@ -1013,6 +1013,32 @@ def run_sync_files_from_topics_task(task_id: str, group_id: str):
         _close_quietly(topics_db)
 
 
+def _analyze_group_file_with_defaults(group_id: str, file_id: int, force: bool) -> Dict[str, Any]:
+    return analyze_group_file(
+        group_id,
+        file_id,
+        force=force,
+        model=DEFAULT_FILE_ANALYSIS_MODEL,
+        api_base=DEFAULT_FILE_ANALYSIS_API_BASE,
+        wire_api=DEFAULT_FILE_ANALYSIS_WIRE_API,
+        reasoning_effort=DEFAULT_FILE_ANALYSIS_REASONING_EFFORT,
+    )
+
+
+def _record_file_analysis_result(stats: Dict[str, int], result: Dict[str, Any]) -> None:
+    if result.get("cached"):
+        stats["cached"] += 1
+    else:
+        stats["completed"] += 1
+
+
+def _finish_file_analysis_task(task_id: str, stats: Dict[str, int]) -> None:
+    if stats["failed"] and stats["completed"] == 0 and stats["cached"] == 0:
+        update_task(task_id, "failed", "文件分析全部失败", {"analysis": stats})
+    else:
+        update_task(task_id, "completed", "文件分析完成", {"analysis": stats})
+
+
 def run_file_analysis_task(
     task_id: str,
     group_id: str,
@@ -1035,27 +1061,13 @@ def run_file_analysis_task(
 
             try:
                 add_task_log(task_id, f"【{index}/{len(unique_file_ids)}】分析文件 ID: {file_id}")
-                result = analyze_group_file(
-                    group_id,
-                    file_id,
-                    force=force,
-                    model=DEFAULT_FILE_ANALYSIS_MODEL,
-                    api_base=DEFAULT_FILE_ANALYSIS_API_BASE,
-                    wire_api=DEFAULT_FILE_ANALYSIS_WIRE_API,
-                    reasoning_effort=DEFAULT_FILE_ANALYSIS_REASONING_EFFORT,
-                )
-                if result.get("cached"):
-                    stats["cached"] += 1
-                else:
-                    stats["completed"] += 1
+                result = _analyze_group_file_with_defaults(group_id, file_id, force)
+                _record_file_analysis_result(stats, result)
                 add_task_log(task_id, f"✅ 文件分析完成: {file_id}")
             except Exception as exc:
                 stats["failed"] += 1
                 add_task_log(task_id, f"❌ 文件分析失败: {file_id}, {exc}")
 
-        if stats["failed"] and stats["completed"] == 0 and stats["cached"] == 0:
-            update_task(task_id, "failed", "文件分析全部失败", {"analysis": stats})
-            return
-        update_task(task_id, "completed", "文件分析完成", {"analysis": stats})
+        _finish_file_analysis_task(task_id, stats)
     except Exception as e:
         _fail_file_task(task_id, f"文件分析任务失败: {e}", f"文件分析任务失败: {e}", {"analysis": stats})

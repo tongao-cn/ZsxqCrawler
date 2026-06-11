@@ -263,6 +263,42 @@ Result:
 - Frontend build passed.
 - PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
 
+### 2026-06-11 - P1 file analysis stats extraction
+
+Changed:
+
+- Added characterization coverage for `run_file_analysis_task` duplicate file-ID handling, mixed
+  completed/cached/failed stats, per-file failure logging, and completed task update behavior.
+- Added characterization coverage for the all-files-failed branch that marks the task as `failed`.
+- Extracted `_analyze_group_file_with_defaults`, `_record_file_analysis_result`, and
+  `_finish_file_analysis_task`.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- File-ID de-duplication, default analysis model/api options, cached-vs-completed stats, per-file
+  exception handling, all-failed error semantics, task update payload shape, and log text are
+  preserved.
+- No public API, prompt, storage schema, task cancellation, retry, legacy path, or fallback behavior
+  changed.
+
+Verification:
+
+```powershell
+uv run python -m py_compile backend\services\file_workflow_service.py
+uv run python -m unittest tests.test_file_routes_helpers -v
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+uv run python scripts\scan_postgres_compat_debt.py
+```
+
+Result:
+
+- Focused file route helper tests passed: 38 tests.
+- Full backend tests passed: 516 tests, 15 skipped.
+- Frontend build passed.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+
 ## Stop Conditions
 
 Pause before editing if:
