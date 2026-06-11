@@ -6,6 +6,7 @@ from backend.storage.zsxq_file_database_helpers import (
     _close_connection,
     _count_tables,
     _file_attachment_params,
+    _file_record_params,
     _group_id_param,
     _new_import_stats,
     _nullable_group_id_param,
@@ -98,17 +99,7 @@ class ZSXQFileDatabase:
             duration = excluded.duration,
             download_count = excluded.download_count,
             create_time = excluded.create_time
-        ''', (
-            file_data.get('file_id'),
-            _nullable_group_id_param(str(group_id)) if group_id is not None else None,
-            topic_id,
-            file_data.get('name', ''),
-            file_data.get('hash'),
-            file_data.get('size'),
-            file_data.get('duration'),
-            file_data.get('download_count'),
-            file_data.get('create_time')
-        ))
+        ''', _file_record_params(file_data, group_id, topic_id))
         return file_data.get('file_id')
     
     def insert_topic(self, topic_data: Dict[str, Any]) -> Optional[int]:

@@ -75,6 +75,24 @@ def _file_attachment_params(parent_id: Any, file_data: Dict[str, Any]) -> tuple[
     )
 
 
+def _file_record_params(
+    file_data: Dict[str, Any],
+    group_id: Optional[Any] = None,
+    topic_id: Optional[Any] = None,
+) -> tuple[Any, ...]:
+    return (
+        file_data.get('file_id'),
+        _nullable_group_id_param(str(group_id)) if group_id is not None else None,
+        topic_id,
+        file_data.get('name', ''),
+        file_data.get('hash'),
+        file_data.get('size'),
+        file_data.get('duration'),
+        file_data.get('download_count'),
+        file_data.get('create_time'),
+    )
+
+
 def _count_tables(cursor: Any, tables: Any = _STATS_TABLES, group_id: Optional[str] = None) -> Dict[str, Any]:
     stats = {}
     scoped_topic_ids_sql = "SELECT topic_id FROM topics WHERE group_id = ?"
