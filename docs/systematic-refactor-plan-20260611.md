@@ -3663,6 +3663,41 @@ Result:
 - PostgreSQL compatibility debt scan: no SQLite compatibility patterns found.
 - Frontend build is not planned because this slice only changes backend storage/helper code.
 
+### 2026-06-11 - P3 topic related payload helper extraction
+
+Changed:
+
+- Extracted `_insert_topic_related_payloads` from `insert_topic_detail`.
+- Added characterization coverage for the new helper's empty-payload skip behavior and
+  image/file/content-voice/video/comment write order.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- `insert_topic_detail` still writes `topic_details`, topic owner, images, files,
+  `content_voice`, video, comments, and then commits in the same order.
+- Empty image/file/comment lists and missing optional `content_voice`/video values still produce
+  no related insert calls.
+- SQL text, insert parameter helpers, method signatures, schema, compatibility layer, fallback
+  path, public API behavior, and commit behavior are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m py_compile backend\storage\zsxq_columns_database.py tests\test_zsxq_columns_database_helpers.py
+uv run python -m unittest tests.test_zsxq_columns_database_helpers -v
+uv run python -m unittest discover -s tests
+uv run python scripts\scan_postgres_compat_debt.py
+```
+
+Result:
+
+- `py_compile` passed.
+- `tests.test_zsxq_columns_database_helpers`: 38 tests passed.
+- Full backend unittest discovery: 597 tests passed, 15 skipped.
+- PostgreSQL compatibility debt scan: no SQLite compatibility patterns found.
+- Frontend build is not planned because this slice only changes backend storage/helper code.
+
 ## Stop Conditions
 
 Pause before editing if:

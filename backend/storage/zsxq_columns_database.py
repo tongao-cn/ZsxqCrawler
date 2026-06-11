@@ -192,34 +192,38 @@ class ZSXQColumnsDatabase:
         ''', _topic_detail_insert_params(group_id, topic_data, raw_json))
         
         self._insert_topic_owner(topic_id, talk)
-        
-        # 处理图片
+
+        self._insert_topic_related_payloads(topic_id, topic_data, talk)
+
+        self.conn.commit()
+        return topic_id
+
+    def _insert_topic_related_payloads(
+        self,
+        topic_id: int,
+        topic_data: Dict[str, Any],
+        talk: Dict[str, Any],
+    ):
+        """插入文章详情关联的图片、文件、视频和评论"""
         images = talk.get('images', [])
         for image in images:
             self._insert_image(topic_id, image)
         
-        # 处理文件
         files = talk.get('files', [])
         for file in files:
             self._insert_file(topic_id, file)
         
-        # 处理语音文件 (content_voice)
         content_voice = topic_data.get('content_voice')
         if content_voice:
             self._insert_file(topic_id, content_voice)
         
-        # 处理视频 (talk.video)
         video = talk.get('video')
         if video:
             self._insert_video(topic_id, video)
         
-        # 处理评论
         comments = topic_data.get('show_comments', [])
         for comment in comments:
             self._insert_comment(topic_id, comment)
-        
-        self.conn.commit()
-        return topic_id
 
     def _insert_topic_owner(self, topic_id: int, talk: Dict[str, Any]):
         """插入文章作者关联"""

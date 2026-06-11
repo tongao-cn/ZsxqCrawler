@@ -1111,6 +1111,47 @@ class ZSXQColumnsDatabaseHelperTests(unittest.TestCase):
         self.assertEqual([], db.cursor.calls)
         self.assertEqual([{"user_id": 0, "name": "missing"}], inserted_users)
 
+    def test_insert_topic_related_payloads_preserves_order_and_empty_skip_behavior(self):
+        from backend.storage.zsxq_columns_database import ZSXQColumnsDatabase
+
+        db = object.__new__(ZSXQColumnsDatabase)
+        calls = []
+        db._insert_image = lambda topic_id, image: calls.append(("image", topic_id, image))
+        db._insert_file = lambda topic_id, file: calls.append(("file", topic_id, file))
+        db._insert_video = lambda topic_id, video: calls.append(("video", topic_id, video))
+        db._insert_comment = lambda topic_id, comment: calls.append(("comment", topic_id, comment))
+
+        self.assertIsNone(
+            ZSXQColumnsDatabase._insert_topic_related_payloads(db, 202, {}, {})
+        )
+        self.assertEqual([], calls)
+
+        self.assertIsNone(
+            ZSXQColumnsDatabase._insert_topic_related_payloads(
+                db,
+                202,
+                {
+                    "content_voice": {"file_id": 402},
+                    "show_comments": [{"comment_id": 701}],
+                },
+                {
+                    "images": [{"image_id": 301}],
+                    "files": [{"file_id": 401}],
+                    "video": {"video_id": 501},
+                },
+            )
+        )
+        self.assertEqual(
+            [
+                ("image", 202, {"image_id": 301}),
+                ("file", 202, {"file_id": 401}),
+                ("file", 202, {"file_id": 402}),
+                ("video", 202, {"video_id": 501}),
+                ("comment", 202, {"comment_id": 701}),
+            ],
+            calls,
+        )
+
     def test_insert_topic_detail_preserves_related_insert_order(self):
         from backend.storage.zsxq_columns_database import ZSXQColumnsDatabase
 
