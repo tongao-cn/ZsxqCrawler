@@ -20,6 +20,7 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     classify_api_failure,
     classify_http_failure,
     content_disposition_filename,
+    download_progress_message,
     download_file_data,
     empty_import_stats,
     existing_file_matches,
@@ -258,6 +259,14 @@ class FileDownloaderFileDataHelperTests(unittest.TestCase):
             self.assertTrue(remove_partial_download(str(partial_path)))
             self.assertFalse(partial_path.exists())
             self.assertFalse(remove_partial_download(str(missing_path)))
+
+    def test_download_progress_message_preserves_known_total_messages(self):
+        self.assertEqual("   📊 进度: 100.0% (4/4 bytes)", download_progress_message(4, 4))
+        self.assertIsNone(download_progress_message(4, 8))
+
+    def test_download_progress_message_preserves_unknown_total_messages(self):
+        self.assertEqual("   📊 已下载: 4 bytes", download_progress_message(4, 0))
+        self.assertIsNone(download_progress_message(10 * 1024 * 1024, 0))
 
     def test_content_disposition_filename_extracts_plain_filename(self):
         self.assertEqual("memo.pdf", content_disposition_filename('attachment; filename="memo.pdf"'))

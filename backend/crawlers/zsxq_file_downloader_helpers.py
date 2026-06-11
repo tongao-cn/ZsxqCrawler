@@ -29,6 +29,7 @@ API_FAILURE_PERMISSION_DENIED_1030 = "permission_denied_1030"
 HTTP_FAILURE_RETRY = "retry"
 HTTP_FAILURE_NON_RETRY = "non_retry"
 HTTP_FAILURE_RETRY_EXHAUSTED = "retry_exhausted"
+DOWNLOAD_PROGRESS_INTERVAL_BYTES = 10 * 1024 * 1024
 
 
 def is_retryable_api_error(error_code: Any) -> bool:
@@ -190,6 +191,19 @@ def remove_partial_download(temp_path: str) -> bool:
         return False
     os.remove(temp_path)
     return True
+
+
+def download_progress_message(downloaded_size: int, total_size: int) -> Optional[str]:
+    if downloaded_size % DOWNLOAD_PROGRESS_INTERVAL_BYTES == 0 or downloaded_size == total_size:
+        if total_size > 0:
+            progress = (downloaded_size / total_size) * 100
+            return f"   📊 进度: {progress:.1f}% ({downloaded_size:,}/{total_size:,} bytes)"
+
+    if downloaded_size % DOWNLOAD_PROGRESS_INTERVAL_BYTES != 0 and downloaded_size != total_size:
+        if total_size == 0:
+            return f"   📊 已下载: {downloaded_size:,} bytes"
+
+    return None
 
 
 def content_disposition_filename(content_disposition: str) -> Optional[str]:

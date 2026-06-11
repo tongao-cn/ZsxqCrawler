@@ -28,6 +28,7 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     classify_api_failure,
     classify_http_failure,
     download_file_data,
+    download_progress_message,
     empty_import_stats,
     existing_file_matches,
     filter_files_newer_than,
@@ -623,11 +624,9 @@ class ZSXQFileDownloader:
                                 f.write(chunk)
                                 downloaded_size += len(chunk)
 
-                                # 显示进度（每10MB显示一次）
-                                if downloaded_size % (10 * 1024 * 1024) == 0 or downloaded_size == total_size:
-                                    if total_size > 0:
-                                        progress = (downloaded_size / total_size) * 100
-                                        self.log(f"   📊 进度: {progress:.1f}% ({downloaded_size:,}/{total_size:,} bytes)")
+                                progress_message = download_progress_message(downloaded_size, total_size)
+                                if progress_message:
+                                    self.log(progress_message)
 
                                 # 检查是否需要停止
                                 if self.check_stop():
@@ -640,10 +639,6 @@ class ZSXQFileDownloader:
                                     )
                                     remove_partial_download(temp_path)
                                     return False
-
-                                if downloaded_size % (10 * 1024 * 1024) != 0 and downloaded_size != total_size:
-                                    if total_size == 0:
-                                        self.log(f"   📊 已下载: {downloaded_size:,} bytes")
 
                     # 验证文件大小
                     final_size = os.path.getsize(temp_path)

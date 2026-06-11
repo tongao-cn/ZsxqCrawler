@@ -2778,6 +2778,40 @@ Result:
 - PostgreSQL compatibility debt scan: no SQLite compatibility patterns found.
 - Frontend build is not planned because this slice only changes backend crawler/helper code.
 
+### 2026-06-11 - P9 download progress message helper extraction
+
+Changed:
+
+- Added `download_progress_message` to `backend/crawlers/zsxq_file_downloader_helpers.py`.
+- Added focused helper coverage for known-size final progress, non-boundary known-size chunks,
+  unknown-size byte logging, and the 10 MB unknown-size boundary.
+- Replaced the nested progress-log conditions inside `download_file` with a helper call.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- The same progress strings are emitted for known-size downloads at completion or 10 MB intervals.
+- Unknown-size downloads still log byte progress only when the chunk total is not exactly on a 10 MB
+  boundary, matching the previous branch behavior.
+- No download, retry, stop, partial-file cleanup, signed URL, or status-update behavior was changed.
+
+Verification:
+
+```powershell
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py backend\crawlers\zsxq_file_downloader_helpers.py
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers -v
+uv run python -m unittest discover -s tests
+uv run python scripts\scan_postgres_compat_debt.py
+```
+
+Result:
+
+- `py_compile` passed.
+- `tests.test_zsxq_file_downloader_helpers`: 30 tests passed.
+- Full backend unittest discovery: 561 tests passed, 15 skipped.
+- PostgreSQL compatibility debt scan: no SQLite compatibility patterns found.
+- Frontend build is not planned because this slice only changes backend crawler/helper code.
+
 ## Stop Conditions
 
 Pause before editing if:
