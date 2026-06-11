@@ -37,6 +37,7 @@ from backend.storage.zsxq_columns_database_helpers import (
     _topic_image_row_to_dict,
     _topic_video_insert_params,
     _topic_video_row_to_dict,
+    _topic_owner_insert_params,
     _topic_child_delete_statements,
     _uncached_image_row_to_dict,
     _uncached_images_query,
@@ -190,17 +191,7 @@ class ZSXQColumnsDatabase:
                 updated_at = excluded.updated_at
         ''', _topic_detail_insert_params(group_id, topic_data, raw_json))
         
-        # 处理作者信息
-        if talk and talk.get('owner'):
-            owner = talk['owner']
-            user_id = self.insert_user(owner)
-            if user_id:
-                self.cursor.execute('''
-                    INSERT INTO topic_owners (topic_id, user_id, owner_type)
-                    VALUES (?, ?, 'talk')
-                    ON CONFLICT(topic_id, owner_type) DO UPDATE SET
-                        user_id = excluded.user_id
-                ''', (topic_id, user_id))
+        self._insert_topic_owner(topic_id, talk)
         
         # 处理图片
         images = talk.get('images', [])
@@ -229,6 +220,21 @@ class ZSXQColumnsDatabase:
         
         self.conn.commit()
         return topic_id
+
+    def _insert_topic_owner(self, topic_id: int, talk: Dict[str, Any]):
+        """插入文章作者关联"""
+        if not talk or not talk.get('owner'):
+            return
+
+        owner = talk['owner']
+        user_id = self.insert_user(owner)
+        if user_id:
+            self.cursor.execute('''
+                INSERT INTO topic_owners (topic_id, user_id, owner_type)
+                VALUES (?, ?, 'talk')
+                ON CONFLICT(topic_id, owner_type) DO UPDATE SET
+                    user_id = excluded.user_id
+            ''', _topic_owner_insert_params(topic_id, user_id))
     
     def _insert_image(self, topic_id: int, image_data: Dict[str, Any]):
         """插入图片信息"""

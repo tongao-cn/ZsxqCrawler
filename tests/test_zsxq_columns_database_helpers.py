@@ -25,6 +25,7 @@ from backend.storage.zsxq_columns_database import (
     _topic_file_row_to_dict,
     _topic_image_insert_params,
     _topic_image_row_to_dict,
+    _topic_owner_insert_params,
     _topic_video_insert_params,
     _topic_video_row_to_dict,
     _topic_child_delete_statements,
@@ -533,6 +534,9 @@ class ZSXQColumnsDatabaseHelperTests(unittest.TestCase):
             (202, 303, None, None, "", 0, 0, 0, False, False, None, None, None),
             _topic_detail_insert_params(303, {"topic_id": 202}, None),
         )
+
+    def test_topic_owner_insert_params_preserve_column_order(self):
+        self.assertEqual((202, 801), _topic_owner_insert_params(202, 801))
 
     def test_topic_media_insert_params_preserve_column_order_and_defaults(self):
         self.assertEqual(
@@ -1056,6 +1060,147 @@ class ZSXQColumnsDatabaseHelperTests(unittest.TestCase):
             detail_params,
         )
         self.assertEqual(1, db.conn.commits)
+
+    def test_insert_topic_owner_preserves_skip_and_insert_user_behavior(self):
+        from backend.storage.zsxq_columns_database import ZSXQColumnsDatabase
+
+        class FakeCursor:
+            def __init__(self):
+                self.calls = []
+
+            def execute(self, sql, params=()):
+                self.calls.append((" ".join(sql.split()), params))
+                return self
+
+        db = object.__new__(ZSXQColumnsDatabase)
+        db.cursor = FakeCursor()
+        inserted_users = []
+        db.insert_user = lambda user: inserted_users.append(user) or user.get("user_id")
+
+        self.assertIsNone(ZSXQColumnsDatabase._insert_topic_owner(db, 202, {}))
+        self.assertEqual([], db.cursor.calls)
+        self.assertEqual([], inserted_users)
+
+        self.assertIsNone(ZSXQColumnsDatabase._insert_topic_owner(db, 202, {"owner": {}}))
+        self.assertEqual([], db.cursor.calls)
+        self.assertEqual([], inserted_users)
+
+        self.assertIsNone(
+            ZSXQColumnsDatabase._insert_topic_owner(
+                db,
+                202,
+                {"owner": {"user_id": 801, "name": "owner"}},
+            )
+        )
+        owner_sql, owner_params = db.cursor.calls[-1]
+        self.assertIn("INSERT INTO topic_owners", owner_sql)
+        self.assertIn("ON CONFLICT(topic_id, owner_type) DO UPDATE SET", owner_sql)
+        self.assertEqual((202, 801), owner_params)
+        self.assertEqual([{"user_id": 801, "name": "owner"}], inserted_users)
+
+        db.cursor = FakeCursor()
+        inserted_users = []
+        db.insert_user = lambda user: inserted_users.append(user) and None
+        self.assertIsNone(
+            ZSXQColumnsDatabase._insert_topic_owner(
+                db,
+                202,
+                {"owner": {"user_id": 0, "name": "missing"}},
+            )
+        )
+        self.assertEqual([], db.cursor.calls)
+        self.assertEqual([{"user_id": 0, "name": "missing"}], inserted_users)
+
+    def test_insert_topic_detail_preserves_related_insert_order(self):
+        from backend.storage.zsxq_columns_database import ZSXQColumnsDatabase
+
+        class FakeCursor:
+            def __init__(self):
+                self.calls = []
+
+            def execute(self, sql, params=()):
+                normalized_sql = " ".join(sql.split())
+                if normalized_sql.startswith("INSERT INTO topic_details"):
+                    self.calls.append(("detail", params))
+                elif normalized_sql.startswith("INSERT INTO topic_owners"):
+                    self.calls.append(("owner", params))
+                else:
+                    self.calls.append(("sql", params))
+                return self
+
+        class FakeConnection:
+            def __init__(self, calls):
+                self.calls = calls
+
+            def commit(self):
+                self.calls.append(("commit", None))
+
+        db = object.__new__(ZSXQColumnsDatabase)
+        db.cursor = FakeCursor()
+        db.conn = FakeConnection(db.cursor.calls)
+
+        def insert_user(user):
+            db.cursor.calls.append(("insert_user", user))
+            return user.get("user_id")
+
+        def insert_image(topic_id, image):
+            db.cursor.calls.append(("image", topic_id, image))
+
+        def insert_file(topic_id, file):
+            db.cursor.calls.append(("file", topic_id, file))
+
+        def insert_video(topic_id, video):
+            db.cursor.calls.append(("video", topic_id, video))
+
+        def insert_comment(topic_id, comment):
+            db.cursor.calls.append(("comment", topic_id, comment))
+
+        db.insert_user = insert_user
+        db._insert_image = insert_image
+        db._insert_file = insert_file
+        db._insert_video = insert_video
+        db._insert_comment = insert_comment
+
+        self.assertEqual(
+            202,
+            ZSXQColumnsDatabase.insert_topic_detail(
+                db,
+                303,
+                {
+                    "topic_id": 202,
+                    "talk": {
+                        "text": "full text",
+                        "owner": {"user_id": 801, "name": "owner"},
+                        "images": [{"image_id": 301}],
+                        "files": [{"file_id": 401}],
+                        "video": {"video_id": 501},
+                    },
+                    "content_voice": {"file_id": 402},
+                    "show_comments": [{"comment_id": 701}],
+                },
+            ),
+        )
+
+        self.assertEqual(
+            [
+                "detail",
+                "insert_user",
+                "owner",
+                "image",
+                "file",
+                "file",
+                "video",
+                "comment",
+                "commit",
+            ],
+            [call[0] for call in db.cursor.calls],
+        )
+        self.assertEqual((202, 801), db.cursor.calls[2][1])
+        self.assertEqual(("image", 202, {"image_id": 301}), db.cursor.calls[3])
+        self.assertEqual(("file", 202, {"file_id": 401}), db.cursor.calls[4])
+        self.assertEqual(("file", 202, {"file_id": 402}), db.cursor.calls[5])
+        self.assertEqual(("video", 202, {"video_id": 501}), db.cursor.calls[6])
+        self.assertEqual(("comment", 202, {"comment_id": 701}), db.cursor.calls[7])
 
     def test_column_queries_are_scoped_by_group(self):
         from backend.storage.zsxq_columns_database import ZSXQColumnsDatabase

@@ -256,6 +256,10 @@ def _topic_detail_insert_params(
     )
 
 
+def _topic_owner_insert_params(topic_id: int, user_id: int) -> tuple[Any, ...]:
+    return (topic_id, user_id)
+
+
 def _topic_image_insert_params(topic_id: int, image_data: Dict[str, Any]) -> tuple[Any, ...]:
     thumbnail = image_data.get('thumbnail', {})
     large = image_data.get('large', {})

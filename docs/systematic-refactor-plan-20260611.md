@@ -3624,6 +3624,45 @@ Result:
 - PostgreSQL compatibility debt scan: no SQLite compatibility patterns found.
 - Frontend build is not planned because this slice only changes backend storage/helper code.
 
+### 2026-06-11 - P3 topic owner insert helper extraction
+
+Changed:
+
+- Added `_topic_owner_insert_params` to `backend/storage/zsxq_columns_database_helpers.py`.
+- Extracted `_insert_topic_owner` from `insert_topic_detail`.
+- Replaced inline `topic_owners` insert parameters with the helper.
+- Added characterization coverage for owner insert parameter order, no-owner skip behavior,
+  `insert_user` returning no ID, topic-owner SQL, and the full related insert order after
+  `topic_details`.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- `insert_topic_detail` still writes `topic_details` first, then owner, images, files,
+  `content_voice`, video, comments, and finally commits in the same order.
+- `_insert_topic_owner` preserves the existing skip behavior for missing/falsy `talk.owner`.
+- `insert_user` is still called before `topic_owners` insert and a falsy returned user ID still
+  suppresses the owner relation insert.
+- SQL text, conflict update clause, method signatures, default values, schema, compatibility
+  layer, fallback path, public API behavior, and commit behavior are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m py_compile backend\storage\zsxq_columns_database.py backend\storage\zsxq_columns_database_helpers.py tests\test_zsxq_columns_database_helpers.py
+uv run python -m unittest tests.test_zsxq_columns_database_helpers -v
+uv run python -m unittest discover -s tests
+uv run python scripts\scan_postgres_compat_debt.py
+```
+
+Result:
+
+- `py_compile` passed.
+- `tests.test_zsxq_columns_database_helpers`: 37 tests passed.
+- Full backend unittest discovery: 596 tests passed, 15 skipped.
+- PostgreSQL compatibility debt scan: no SQLite compatibility patterns found.
+- Frontend build is not planned because this slice only changes backend storage/helper code.
+
 ## Stop Conditions
 
 Pause before editing if:
