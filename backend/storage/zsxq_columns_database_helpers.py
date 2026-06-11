@@ -313,6 +313,41 @@ def _stats_count_queries(group_id: int) -> tuple[tuple[str, str, tuple[Any, ...]
     )
 
 
+def _crawl_log_update_parts(
+    columns_count: int = 0,
+    topics_count: int = 0,
+    details_count: int = 0,
+    files_count: int = 0,
+    status: Optional[str] = None,
+    error_message: Optional[str] = None,
+) -> tuple[list[str], list[Any]]:
+    updates = []
+    values = []
+
+    if columns_count:
+        updates.append('columns_count = ?')
+        values.append(columns_count)
+    if topics_count:
+        updates.append('topics_count = ?')
+        values.append(topics_count)
+    if details_count:
+        updates.append('details_count = ?')
+        values.append(details_count)
+    if files_count:
+        updates.append('files_count = ?')
+        values.append(files_count)
+    if status:
+        updates.append('status = ?')
+        values.append(status)
+        if status in ('completed', 'failed'):
+            updates.append('end_time = CURRENT_TIMESTAMP')
+    if error_message:
+        updates.append('error_message = ?')
+        values.append(error_message)
+
+    return updates, values
+
+
 def _group_id_param(group_id: Optional[str]) -> Any:
     value = str(group_id or "").strip()
     return int(value) if value.isdigit() else value

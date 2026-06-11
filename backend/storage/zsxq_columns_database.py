@@ -13,6 +13,7 @@ from backend.storage.zsxq_columns_database_helpers import (
     _column_row_to_dict,
     _column_topic_row_to_dict,
     _comment_image_row_to_dict,
+    _crawl_log_update_parts,
     _empty_stats,
     _group_id_param,
     _nullable_group_id_param,
@@ -667,29 +668,14 @@ class ZSXQColumnsDatabase:
                          details_count: int = 0, files_count: int = 0,
                          status: str = None, error_message: str = None):
         """更新采集日志"""
-        updates = []
-        values = []
-        
-        if columns_count:
-            updates.append('columns_count = ?')
-            values.append(columns_count)
-        if topics_count:
-            updates.append('topics_count = ?')
-            values.append(topics_count)
-        if details_count:
-            updates.append('details_count = ?')
-            values.append(details_count)
-        if files_count:
-            updates.append('files_count = ?')
-            values.append(files_count)
-        if status:
-            updates.append('status = ?')
-            values.append(status)
-            if status in ('completed', 'failed'):
-                updates.append('end_time = CURRENT_TIMESTAMP')
-        if error_message:
-            updates.append('error_message = ?')
-            values.append(error_message)
+        updates, values = _crawl_log_update_parts(
+            columns_count=columns_count,
+            topics_count=topics_count,
+            details_count=details_count,
+            files_count=files_count,
+            status=status,
+            error_message=error_message,
+        )
         
         if updates:
             values.append(log_id)

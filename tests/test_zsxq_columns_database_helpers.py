@@ -4,6 +4,7 @@ from backend.storage.zsxq_columns_database import (
     _column_row_to_dict,
     _column_topic_row_to_dict,
     _comment_image_row_to_dict,
+    _crawl_log_update_parts,
     _empty_stats,
     _nest_topic_comments,
     _pending_file_row_to_dict,
@@ -517,6 +518,47 @@ class ZSXQColumnsDatabaseHelperTests(unittest.TestCase):
         self.assertEqual(len(db.cursor.calls), 9)
         self.assertTrue(all(params == (303,) for _, params in db.cursor.calls))
 
+    def test_crawl_log_update_parts_preserve_field_and_value_order(self):
+        updates, values = _crawl_log_update_parts(
+            columns_count=1,
+            topics_count=2,
+            details_count=3,
+            files_count=4,
+            status="completed",
+            error_message="done",
+        )
+
+        self.assertEqual(
+            [
+                "columns_count = ?",
+                "topics_count = ?",
+                "details_count = ?",
+                "files_count = ?",
+                "status = ?",
+                "end_time = CURRENT_TIMESTAMP",
+                "error_message = ?",
+            ],
+            updates,
+        )
+        self.assertEqual([1, 2, 3, 4, "completed", "done"], values)
+
+    def test_crawl_log_update_parts_preserve_falsy_update_semantics(self):
+        updates, values = _crawl_log_update_parts(
+            columns_count=0,
+            topics_count=0,
+            details_count=0,
+            files_count=0,
+            status="",
+            error_message="",
+        )
+
+        self.assertEqual([], updates)
+        self.assertEqual([], values)
+
+        running_updates, running_values = _crawl_log_update_parts(status="running")
+        self.assertEqual(["status = ?"], running_updates)
+        self.assertEqual(["running"], running_values)
+
     def test_pending_queue_queries_preserve_group_filter_branches(self):
         video_sql, video_params = _pending_videos_query(303)
         file_sql, file_params = _pending_files_query(303)
@@ -637,6 +679,31 @@ class ZSXQColumnsDatabaseHelperTests(unittest.TestCase):
         comments_sql, comments_params = db.cursor.calls[-1]
         self.assertIn("WHERE c.topic_id = ? AND (? IS NULL OR c.group_id = ?)", comments_sql)
         self.assertEqual((202, 303, 303), comments_params)
+
+    def test_update_crawl_log_preserves_noop_when_no_update_parts(self):
+        from backend.storage.zsxq_columns_database import ZSXQColumnsDatabase
+
+        class FakeCursor:
+            def __init__(self):
+                self.calls = []
+
+            def execute(self, sql, params=()):
+                self.calls.append((" ".join(sql.split()), params))
+
+        class FakeConnection:
+            def __init__(self):
+                self.commits = 0
+
+            def commit(self):
+                self.commits += 1
+
+        db = object.__new__(ZSXQColumnsDatabase)
+        db.cursor = FakeCursor()
+        db.conn = FakeConnection()
+
+        self.assertIsNone(ZSXQColumnsDatabase.update_crawl_log(db, 7))
+        self.assertEqual([], db.cursor.calls)
+        self.assertEqual(0, db.conn.commits)
 
     def test_runtime_init_database_is_noop(self):
         from backend.storage.zsxq_columns_database import ZSXQColumnsDatabase
