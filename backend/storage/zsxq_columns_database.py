@@ -22,6 +22,7 @@ from backend.storage.zsxq_columns_database_helpers import (
     _pending_videos_query,
     _scope_group_id_param,
     _stats_count_queries,
+    _nest_topic_comments,
     _topic_comment_row_to_dict,
     _topic_detail_row_to_dict,
     _topic_file_row_to_dict,
@@ -566,15 +567,11 @@ class ZSXQColumnsDatabase:
             ORDER BY c.create_time ASC
         ''', (topic_id, scope_group_id, scope_group_id))
 
-        # 先收集所有评论，然后构建嵌套结构
-        all_comments = {}  # comment_id -> comment_data
-        parent_comments = []  # 顶级评论
-        child_comments = []   # 子评论（有parent_comment_id的）
+        comments = []
 
         for row in self.cursor.fetchall():
             comment = _topic_comment_row_to_dict(row)
             comment_id = comment['comment_id']
-            parent_comment_id = comment['parent_comment_id']
 
             # 获取评论图片
             self.cursor.execute('''
@@ -590,23 +587,9 @@ class ZSXQColumnsDatabase:
             if images:
                 comment['images'] = images
 
-            # 存储评论并分类
-            all_comments[comment_id] = comment
-            if parent_comment_id:
-                child_comments.append(comment)
-            else:
-                parent_comments.append(comment)
+            comments.append(comment)
 
-        # 构建嵌套结构：将子评论附加到父评论的 replied_comments 中
-        for child in child_comments:
-            parent_id = child.get("parent_comment_id")
-            if parent_id and parent_id in all_comments:
-                parent = all_comments[parent_id]
-                if "replied_comments" not in parent:
-                    parent["replied_comments"] = []
-                parent["replied_comments"].append(child)
-
-        return parent_comments
+        return _nest_topic_comments(comments)
     
     # ==================== 文件下载状态 ====================
     

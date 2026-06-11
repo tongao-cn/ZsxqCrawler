@@ -5,6 +5,7 @@ from backend.storage.zsxq_columns_database import (
     _column_topic_row_to_dict,
     _comment_image_row_to_dict,
     _empty_stats,
+    _nest_topic_comments,
     _pending_file_row_to_dict,
     _pending_files_query,
     _pending_video_row_to_dict,
@@ -406,6 +407,28 @@ class ZSXQColumnsDatabaseHelperTests(unittest.TestCase):
                 },
             },
         )
+
+    def test_nest_topic_comments_preserves_existing_nested_shape(self):
+        parent = {"comment_id": 1, "parent_comment_id": None, "text": "parent"}
+        child_before_parent = {"comment_id": 2, "parent_comment_id": 1, "text": "reply-a"}
+        parent_later = {"comment_id": 3, "parent_comment_id": None, "text": "parent-later"}
+        child_after_parent = {"comment_id": 4, "parent_comment_id": 3, "text": "reply-b"}
+        orphan_child = {"comment_id": 5, "parent_comment_id": 999, "text": "orphan"}
+
+        nested = _nest_topic_comments(
+            [
+                child_before_parent,
+                parent,
+                orphan_child,
+                parent_later,
+                child_after_parent,
+            ]
+        )
+
+        self.assertEqual([parent, parent_later], nested)
+        self.assertEqual([child_before_parent], parent["replied_comments"])
+        self.assertEqual([child_after_parent], parent_later["replied_comments"])
+        self.assertNotIn(orphan_child, nested)
 
     def test_empty_stats_returns_independent_default_dicts(self):
         first = _empty_stats()

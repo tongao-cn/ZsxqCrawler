@@ -191,6 +191,32 @@ def _topic_comment_row_to_dict(row) -> Dict[str, Any]:
     return comment
 
 
+def _nest_topic_comments(comments: list[Dict[str, Any]]) -> list[Dict[str, Any]]:
+    all_comments = {}
+    parent_comments = []
+    child_comments = []
+
+    for comment in comments:
+        comment_id = comment['comment_id']
+        parent_comment_id = comment['parent_comment_id']
+
+        all_comments[comment_id] = comment
+        if parent_comment_id:
+            child_comments.append(comment)
+        else:
+            parent_comments.append(comment)
+
+    for child in child_comments:
+        parent_id = child.get("parent_comment_id")
+        if parent_id and parent_id in all_comments:
+            parent = all_comments[parent_id]
+            if "replied_comments" not in parent:
+                parent["replied_comments"] = []
+            parent["replied_comments"].append(child)
+
+    return parent_comments
+
+
 def _pending_file_row_to_dict(row) -> Dict[str, Any]:
     return {
         'file_id': row[0],
