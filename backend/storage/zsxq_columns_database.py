@@ -30,6 +30,7 @@ from backend.storage.zsxq_columns_database_helpers import (
     _stats_count_queries,
     _nest_topic_comments,
     _topic_comment_insert_params,
+    _topic_comments_query,
     _topic_comment_row_to_dict,
     _topic_detail_insert_params,
     _topic_detail_row_to_dict,
@@ -461,18 +462,8 @@ class ZSXQColumnsDatabase:
     def get_topic_comments(self, topic_id: int, group_id: Optional[Any] = None) -> List[Dict[str, Any]]:
         """获取文章的所有评论（支持嵌套结构）"""
         scope_group_id = _scope_group_id_param(group_id if group_id is not None else self.group_id)
-        self.cursor.execute('''
-            SELECT c.comment_id, c.parent_comment_id, c.text, c.create_time,
-                   c.likes_count, c.rewards_count, c.replies_count, c.sticky,
-                   u.user_id, u.name, u.alias, u.avatar_url, u.location,
-                   r.user_id, r.name, r.alias, r.avatar_url
-            FROM comments c
-            LEFT JOIN users u ON c.owner_user_id = u.user_id
-            LEFT JOIN users r ON c.repliee_user_id = r.user_id
-            WHERE c.topic_id = ?
-              AND (? IS NULL OR c.group_id = ?)
-            ORDER BY c.create_time ASC
-        ''', (topic_id, scope_group_id, scope_group_id))
+        sql, params = _topic_comments_query(topic_id, scope_group_id)
+        self.cursor.execute(sql, params)
 
         comments = []
 

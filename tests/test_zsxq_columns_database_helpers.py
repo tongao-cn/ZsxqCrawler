@@ -20,6 +20,7 @@ from backend.storage.zsxq_columns_database import (
     _pending_videos_query,
     _stats_count_queries,
     _topic_comment_insert_params,
+    _topic_comments_query,
     _topic_comment_row_to_dict,
     _topic_detail_insert_params,
     _topic_detail_row_to_dict,
@@ -902,6 +903,18 @@ class ZSXQColumnsDatabaseHelperTests(unittest.TestCase):
         self.assertIn("AND (? IS NULL OR topic_id = ?)", self._sql(sql))
         self.assertEqual((701, 303, 202), params)
         self.assertEqual((701, None, 202), _comment_images_query(701, None, 202)[1])
+
+    def test_topic_comments_query_preserves_scope_params_joins_and_order(self):
+        sql, params = _topic_comments_query(202, 303)
+
+        self.assertIn("SELECT c.comment_id, c.parent_comment_id, c.text", self._sql(sql))
+        self.assertIn("FROM comments c", self._sql(sql))
+        self.assertIn("LEFT JOIN users u ON c.owner_user_id = u.user_id", self._sql(sql))
+        self.assertIn("LEFT JOIN users r ON c.repliee_user_id = r.user_id", self._sql(sql))
+        self.assertIn("WHERE c.topic_id = ? AND (? IS NULL OR c.group_id = ?)", self._sql(sql))
+        self.assertIn("ORDER BY c.create_time ASC", self._sql(sql))
+        self.assertEqual((202, 303, 303), params)
+        self.assertEqual((202, None, None), _topic_comments_query(202, None)[1])
 
     def test_download_status_update_helpers_preserve_truthy_branches(self):
         video_sql, video_params = _video_download_status_update(501, "completed", "https://v", "local.mp4")

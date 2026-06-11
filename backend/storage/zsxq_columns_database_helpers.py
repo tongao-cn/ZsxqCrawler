@@ -595,6 +595,24 @@ def _comment_images_query(
     )
 
 
+def _topic_comments_query(topic_id: int, scope_group_id: Any) -> tuple[str, tuple[Any, ...]]:
+    return (
+        '''
+            SELECT c.comment_id, c.parent_comment_id, c.text, c.create_time,
+                   c.likes_count, c.rewards_count, c.replies_count, c.sticky,
+                   u.user_id, u.name, u.alias, u.avatar_url, u.location,
+                   r.user_id, r.name, r.alias, r.avatar_url
+            FROM comments c
+            LEFT JOIN users u ON c.owner_user_id = u.user_id
+            LEFT JOIN users r ON c.repliee_user_id = r.user_id
+            WHERE c.topic_id = ?
+              AND (? IS NULL OR c.group_id = ?)
+            ORDER BY c.create_time ASC
+        ''',
+        (topic_id, scope_group_id, scope_group_id),
+    )
+
+
 def _video_download_status_update(
     video_id: int,
     status: str,
