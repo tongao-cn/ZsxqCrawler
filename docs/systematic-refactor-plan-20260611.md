@@ -1099,6 +1099,45 @@ Result:
 - PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
 - Git diff whitespace check passed.
 
+### 2026-06-11 - P7 unused Python data dependency removal
+
+Changed:
+
+- Removed the unused direct Python dependency `pandas` from `pyproject.toml`.
+- Updated `uv.lock`, which also removed `pandas`-only transitive lock entries:
+  `python-dateutil`, `pytz`, `six`, and `tzdata`.
+- Left `tomli`, `faster-whisper`, and other direct dependencies in place because current source
+  paths still use them or require them as compatibility/feature dependencies.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Source, script, test, README, and docs scans found no `pandas`, `pd.`, `DataFrame`, or related
+  transitive package usage before removal.
+- No backend route, storage schema, task behavior, fallback path, legacy path, AI output, or config
+  semantics changed.
+
+Verification:
+
+```powershell
+rg -n "pandas|pd\.|DataFrame|python-dateutil|dateutil|pytz|tzdata|\bsix\b" backend scripts tests README.md docs pyproject.toml uv.lock -g "*.py" -g "*.md" -g "*.toml" -g "*.lock"
+uv lock --check
+uv tree | rg "pandas|python-dateutil|pytz|tzdata|\bsix\b"
+uv run python -m unittest discover -s tests
+uv run python scripts\scan_postgres_compat_debt.py
+git diff --check
+```
+
+Result:
+
+- No source, script, test, README, docs, project, or lock references remain for `pandas` or the
+  removed pandas-only transitive packages.
+- `uv lock --check` passed.
+- `uv tree` has no remaining `pandas`, `python-dateutil`, `pytz`, `six`, or `tzdata` entries.
+- Full backend tests passed: 533 tests, 15 skipped.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Git diff whitespace check passed.
+
 ## Stop Conditions
 
 Pause before editing if:
