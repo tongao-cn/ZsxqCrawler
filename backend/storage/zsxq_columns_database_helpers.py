@@ -537,6 +537,46 @@ def _scope_group_id_param(group_id: Optional[Any]) -> Any:
     return _nullable_group_id_param(group_id)
 
 
+def _topic_images_query(topic_id: int, scope_group_id: Any) -> tuple[str, tuple[Any, ...]]:
+    return (
+        '''
+            SELECT image_id, type, thumbnail_url, thumbnail_width, thumbnail_height,
+                   large_url, large_width, large_height, original_url, original_width,
+                   original_height, original_size, local_path
+            FROM images
+            WHERE topic_id = ?
+              AND (? IS NULL OR topic_id IN (SELECT topic_id FROM topic_details WHERE group_id = ?))
+        ''',
+        (topic_id, scope_group_id, scope_group_id),
+    )
+
+
+def _topic_files_query(topic_id: int, scope_group_id: Any) -> tuple[str, tuple[Any, ...]]:
+    return (
+        '''
+            SELECT file_id, name, hash, size, duration, download_count,
+                   create_time, download_status, local_path, download_time
+            FROM files
+            WHERE topic_id = ?
+              AND (? IS NULL OR topic_id IN (SELECT topic_id FROM topic_details WHERE group_id = ?))
+        ''',
+        (topic_id, scope_group_id, scope_group_id),
+    )
+
+
+def _topic_videos_query(topic_id: int, scope_group_id: Any) -> tuple[str, tuple[Any, ...]]:
+    return (
+        '''
+            SELECT video_id, size, duration, cover_url, cover_width, cover_height,
+                   cover_local_path, video_url, download_status, local_path, download_time
+            FROM videos
+            WHERE topic_id = ?
+              AND (? IS NULL OR topic_id IN (SELECT topic_id FROM topic_details WHERE group_id = ?))
+        ''',
+        (topic_id, scope_group_id, scope_group_id),
+    )
+
+
 def _video_download_status_update(
     video_id: int,
     status: str,

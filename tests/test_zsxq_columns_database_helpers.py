@@ -23,11 +23,14 @@ from backend.storage.zsxq_columns_database import (
     _topic_detail_insert_params,
     _topic_detail_row_to_dict,
     _topic_file_insert_params,
+    _topic_files_query,
     _topic_file_row_to_dict,
     _topic_image_insert_params,
+    _topic_images_query,
     _topic_image_row_to_dict,
     _topic_owner_insert_params,
     _topic_video_insert_params,
+    _topic_videos_query,
     _topic_video_row_to_dict,
     _topic_child_delete_statements,
     _uncached_image_row_to_dict,
@@ -867,6 +870,29 @@ class ZSXQColumnsDatabaseHelperTests(unittest.TestCase):
         self.assertNotIn("AND td.group_id = ?", self._sql(image_sql))
         self.assertIsNone(image_params)
 
+    def test_topic_attachment_queries_preserve_scope_params_and_selects(self):
+        image_sql, image_params = _topic_images_query(202, 303)
+        self.assertIn("SELECT image_id, type, thumbnail_url", self._sql(image_sql))
+        self.assertIn("FROM images WHERE topic_id = ?", self._sql(image_sql))
+        self.assertIn("topic_details WHERE group_id = ?", self._sql(image_sql))
+        self.assertEqual((202, 303, 303), image_params)
+
+        file_sql, file_params = _topic_files_query(202, 303)
+        self.assertIn("SELECT file_id, name, hash, size, duration, download_count", self._sql(file_sql))
+        self.assertIn("FROM files WHERE topic_id = ?", self._sql(file_sql))
+        self.assertIn("topic_details WHERE group_id = ?", self._sql(file_sql))
+        self.assertEqual((202, 303, 303), file_params)
+
+        video_sql, video_params = _topic_videos_query(202, 303)
+        self.assertIn("SELECT video_id, size, duration, cover_url", self._sql(video_sql))
+        self.assertIn("FROM videos WHERE topic_id = ?", self._sql(video_sql))
+        self.assertIn("topic_details WHERE group_id = ?", self._sql(video_sql))
+        self.assertEqual((202, 303, 303), video_params)
+
+        self.assertEqual((202, None, None), _topic_images_query(202, None)[1])
+        self.assertEqual((202, None, None), _topic_files_query(202, None)[1])
+        self.assertEqual((202, None, None), _topic_videos_query(202, None)[1])
+
     def test_download_status_update_helpers_preserve_truthy_branches(self):
         video_sql, video_params = _video_download_status_update(501, "completed", "https://v", "local.mp4")
         self.assertIn(
@@ -1375,6 +1401,24 @@ class ZSXQColumnsDatabaseHelperTests(unittest.TestCase):
         detail_sql, detail_params = db.cursor.calls[-1]
         self.assertIn("WHERE td.topic_id = ? AND (? IS NULL OR td.group_id = ?)", detail_sql)
         self.assertEqual((202, 303, 303), detail_params)
+
+        self.assertEqual([], ZSXQColumnsDatabase.get_topic_images(db, 202))
+        images_sql, images_params = db.cursor.calls[-1]
+        self.assertIn("FROM images WHERE topic_id = ?", images_sql)
+        self.assertIn("topic_details WHERE group_id = ?", images_sql)
+        self.assertEqual((202, 303, 303), images_params)
+
+        self.assertEqual([], ZSXQColumnsDatabase.get_topic_files(db, 202))
+        files_sql, files_params = db.cursor.calls[-1]
+        self.assertIn("FROM files WHERE topic_id = ?", files_sql)
+        self.assertIn("topic_details WHERE group_id = ?", files_sql)
+        self.assertEqual((202, 303, 303), files_params)
+
+        self.assertEqual([], ZSXQColumnsDatabase.get_topic_videos(db, 202))
+        videos_sql, videos_params = db.cursor.calls[-1]
+        self.assertIn("FROM videos WHERE topic_id = ?", videos_sql)
+        self.assertIn("topic_details WHERE group_id = ?", videos_sql)
+        self.assertEqual((202, 303, 303), videos_params)
 
         self.assertEqual([], ZSXQColumnsDatabase.get_topic_comments(db, 202))
         comments_sql, comments_params = db.cursor.calls[-1]

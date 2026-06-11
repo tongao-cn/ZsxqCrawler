@@ -33,10 +33,13 @@ from backend.storage.zsxq_columns_database_helpers import (
     _topic_detail_insert_params,
     _topic_detail_row_to_dict,
     _topic_file_insert_params,
+    _topic_files_query,
     _topic_file_row_to_dict,
     _topic_image_insert_params,
+    _topic_images_query,
     _topic_image_row_to_dict,
     _topic_video_insert_params,
+    _topic_videos_query,
     _topic_video_row_to_dict,
     _topic_owner_insert_params,
     _topic_child_delete_statements,
@@ -409,40 +412,24 @@ class ZSXQColumnsDatabase:
     def get_topic_images(self, topic_id: int, group_id: Optional[Any] = None) -> List[Dict[str, Any]]:
         """获取文章的所有图片"""
         scope_group_id = _scope_group_id_param(group_id if group_id is not None else self.group_id)
-        self.cursor.execute('''
-            SELECT image_id, type, thumbnail_url, thumbnail_width, thumbnail_height,
-                   large_url, large_width, large_height, original_url, original_width,
-                   original_height, original_size, local_path
-            FROM images
-            WHERE topic_id = ?
-              AND (? IS NULL OR topic_id IN (SELECT topic_id FROM topic_details WHERE group_id = ?))
-        ''', (topic_id, scope_group_id, scope_group_id))
+        sql, params = _topic_images_query(topic_id, scope_group_id)
+        self.cursor.execute(sql, params)
         
         return [_topic_image_row_to_dict(row) for row in self.cursor.fetchall()]
     
     def get_topic_files(self, topic_id: int, group_id: Optional[Any] = None) -> List[Dict[str, Any]]:
         """获取文章的所有文件"""
         scope_group_id = _scope_group_id_param(group_id if group_id is not None else self.group_id)
-        self.cursor.execute('''
-            SELECT file_id, name, hash, size, duration, download_count, 
-                   create_time, download_status, local_path, download_time
-            FROM files
-            WHERE topic_id = ?
-              AND (? IS NULL OR topic_id IN (SELECT topic_id FROM topic_details WHERE group_id = ?))
-        ''', (topic_id, scope_group_id, scope_group_id))
+        sql, params = _topic_files_query(topic_id, scope_group_id)
+        self.cursor.execute(sql, params)
         
         return [_topic_file_row_to_dict(row) for row in self.cursor.fetchall()]
     
     def get_topic_videos(self, topic_id: int, group_id: Optional[Any] = None) -> List[Dict[str, Any]]:
         """获取文章的所有视频"""
         scope_group_id = _scope_group_id_param(group_id if group_id is not None else self.group_id)
-        self.cursor.execute('''
-            SELECT video_id, size, duration, cover_url, cover_width, cover_height,
-                   cover_local_path, video_url, download_status, local_path, download_time
-            FROM videos
-            WHERE topic_id = ?
-              AND (? IS NULL OR topic_id IN (SELECT topic_id FROM topic_details WHERE group_id = ?))
-        ''', (topic_id, scope_group_id, scope_group_id))
+        sql, params = _topic_videos_query(topic_id, scope_group_id)
+        self.cursor.execute(sql, params)
         
         return [_topic_video_row_to_dict(row) for row in self.cursor.fetchall()]
     
