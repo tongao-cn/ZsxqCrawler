@@ -537,6 +537,46 @@ def _scope_group_id_param(group_id: Optional[Any]) -> Any:
     return _nullable_group_id_param(group_id)
 
 
+def _columns_query(group_id: int) -> tuple[str, tuple[Any, ...]]:
+    return (
+        '''
+            SELECT column_id, group_id, name, cover_url, topics_count,
+                   create_time, last_topic_attach_time, imported_at
+            FROM columns
+            WHERE group_id = ?
+            ORDER BY create_time DESC
+        ''',
+        (group_id,),
+    )
+
+
+def _column_query(column_id: int, scope_group_id: Any) -> tuple[str, tuple[Any, ...]]:
+    return (
+        '''
+            SELECT column_id, group_id, name, cover_url, topics_count,
+                   create_time, last_topic_attach_time, imported_at
+            FROM columns
+            WHERE column_id = ? AND (? IS NULL OR group_id = ?)
+        ''',
+        (column_id, scope_group_id, scope_group_id),
+    )
+
+
+def _column_topics_query(column_id: int, scope_group_id: Any) -> tuple[str, tuple[Any, ...]]:
+    return (
+        '''
+            SELECT ct.topic_id, ct.column_id, ct.group_id, ct.title, ct.text,
+                   ct.create_time, ct.attached_to_column_time, ct.imported_at,
+                   CASE WHEN td.topic_id IS NOT NULL THEN 1 ELSE 0 END as has_detail
+            FROM column_topics ct
+            LEFT JOIN topic_details td ON ct.topic_id = td.topic_id AND ct.group_id = td.group_id
+            WHERE ct.column_id = ? AND (? IS NULL OR ct.group_id = ?)
+            ORDER BY ct.attached_to_column_time DESC
+        ''',
+        (column_id, scope_group_id, scope_group_id),
+    )
+
+
 def _topic_detail_query(topic_id: int, scope_group_id: Any) -> tuple[str, tuple[Any, ...]]:
     return (
         '''

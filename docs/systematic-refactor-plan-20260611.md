@@ -3882,6 +3882,46 @@ Result:
 - PostgreSQL compatibility debt scan: no SQLite compatibility patterns found.
 - Frontend build is not planned because this slice only changes backend storage/helper code.
 
+### 2026-06-11 - P3 column query helper extraction
+
+Changed:
+
+- Added `_columns_query`, `_column_query`, and `_column_topics_query` to
+  `backend/storage/zsxq_columns_database_helpers.py`.
+- Replaced inline SQL in `get_columns`, `get_column`, and `get_column_topics` with
+  helper-generated SQL/params.
+- Added characterization coverage for selected fields, detail join, group-scope params, and
+  `ORDER BY` clauses.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- `get_columns` still passes the caller-provided `group_id` directly and orders by
+  `create_time DESC`.
+- `get_column` and `get_column_topics` still normalize scope at the method boundary before
+  building SQL params.
+- `get_column_topics` still preserves the `topic_details` join on both `topic_id` and `group_id`,
+  `has_detail` expression, and `attached_to_column_time DESC` ordering.
+- Return shapes, row mappers, SQL semantics, method signatures, schema, compatibility layer,
+  fallback path, and public API behavior are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m py_compile backend\storage\zsxq_columns_database.py backend\storage\zsxq_columns_database_helpers.py tests\test_zsxq_columns_database_helpers.py
+uv run python -m unittest tests.test_zsxq_columns_database_helpers -v
+uv run python -m unittest discover -s tests
+uv run python scripts\scan_postgres_compat_debt.py
+```
+
+Result:
+
+- `py_compile` passed.
+- `tests.test_zsxq_columns_database_helpers`: 47 tests passed.
+- Full backend unittest discovery: 607 tests passed, 15 skipped.
+- PostgreSQL compatibility debt scan: no SQLite compatibility patterns found.
+- Frontend build is not planned because this slice only changes backend storage/helper code.
+
 ## Stop Conditions
 
 Pause before editing if:

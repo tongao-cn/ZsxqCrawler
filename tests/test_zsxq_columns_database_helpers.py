@@ -3,9 +3,12 @@ from unittest.mock import patch
 
 from backend.storage.zsxq_columns_database import (
     _column_insert_params,
+    _column_query,
     _column_row_to_dict,
     _column_topic_insert_params,
     _column_topic_row_to_dict,
+    _column_topics_query,
+    _columns_query,
     _comment_image_row_to_dict,
     _comment_images_query,
     _crawl_log_update_parts,
@@ -872,6 +875,32 @@ class ZSXQColumnsDatabaseHelperTests(unittest.TestCase):
         self.assertIn("WHERE i.local_path IS NULL AND i.original_url IS NOT NULL", self._sql(image_sql))
         self.assertNotIn("AND td.group_id = ?", self._sql(image_sql))
         self.assertIsNone(image_params)
+
+    def test_column_queries_preserve_scope_params_and_order(self):
+        columns_sql, columns_params = _columns_query(303)
+        self.assertIn("SELECT column_id, group_id, name, cover_url, topics_count", self._sql(columns_sql))
+        self.assertIn("FROM columns WHERE group_id = ?", self._sql(columns_sql))
+        self.assertIn("ORDER BY create_time DESC", self._sql(columns_sql))
+        self.assertEqual((303,), columns_params)
+
+        column_sql, column_params = _column_query(101, 303)
+        self.assertIn("FROM columns WHERE column_id = ? AND (? IS NULL OR group_id = ?)", self._sql(column_sql))
+        self.assertEqual((101, 303, 303), column_params)
+        self.assertEqual((101, None, None), _column_query(101, None)[1])
+
+    def test_column_topics_query_preserves_detail_join_scope_params_and_order(self):
+        sql, params = _column_topics_query(101, 303)
+
+        self.assertIn("SELECT ct.topic_id, ct.column_id, ct.group_id", self._sql(sql))
+        self.assertIn("CASE WHEN td.topic_id IS NOT NULL THEN 1 ELSE 0 END as has_detail", self._sql(sql))
+        self.assertIn(
+            "LEFT JOIN topic_details td ON ct.topic_id = td.topic_id AND ct.group_id = td.group_id",
+            self._sql(sql),
+        )
+        self.assertIn("WHERE ct.column_id = ? AND (? IS NULL OR ct.group_id = ?)", self._sql(sql))
+        self.assertIn("ORDER BY ct.attached_to_column_time DESC", self._sql(sql))
+        self.assertEqual((101, 303, 303), params)
+        self.assertEqual((101, None, None), _column_topics_query(101, None)[1])
 
     def test_topic_attachment_queries_preserve_scope_params_and_selects(self):
         image_sql, image_params = _topic_images_query(202, 303)

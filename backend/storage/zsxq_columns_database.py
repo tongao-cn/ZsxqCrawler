@@ -10,9 +10,12 @@ from typing import Dict, List, Any, Optional
 from backend.storage.db_compat import connect
 from backend.storage.zsxq_columns_database_helpers import (
     _column_insert_params,
+    _column_query,
     _column_row_to_dict,
     _column_topic_insert_params,
     _column_topic_row_to_dict,
+    _column_topics_query,
+    _columns_query,
     _comment_image_row_to_dict,
     _comment_images_query,
     _empty_clear_data_stats,
@@ -89,25 +92,16 @@ class ZSXQColumnsDatabase:
     
     def get_columns(self, group_id: int) -> List[Dict[str, Any]]:
         """获取群组的所有专栏目录"""
-        self.cursor.execute('''
-            SELECT column_id, group_id, name, cover_url, topics_count, 
-                   create_time, last_topic_attach_time, imported_at
-            FROM columns 
-            WHERE group_id = ?
-            ORDER BY create_time DESC
-        ''', (group_id,))
+        sql, params = _columns_query(group_id)
+        self.cursor.execute(sql, params)
         
         return [_column_row_to_dict(row) for row in self.cursor.fetchall()]
     
     def get_column(self, column_id: int, group_id: Optional[Any] = None) -> Optional[Dict[str, Any]]:
         """获取单个专栏目录"""
         scope_group_id = _scope_group_id_param(group_id if group_id is not None else self.group_id)
-        self.cursor.execute('''
-            SELECT column_id, group_id, name, cover_url, topics_count,
-                   create_time, last_topic_attach_time, imported_at
-            FROM columns
-            WHERE column_id = ? AND (? IS NULL OR group_id = ?)
-        ''', (column_id, scope_group_id, scope_group_id))
+        sql, params = _column_query(column_id, scope_group_id)
+        self.cursor.execute(sql, params)
         
         row = self.cursor.fetchone()
         return _column_row_to_dict(row) if row else None
@@ -137,15 +131,8 @@ class ZSXQColumnsDatabase:
     def get_column_topics(self, column_id: int, group_id: Optional[Any] = None) -> List[Dict[str, Any]]:
         """获取专栏下的所有文章列表"""
         scope_group_id = _scope_group_id_param(group_id if group_id is not None else self.group_id)
-        self.cursor.execute('''
-            SELECT ct.topic_id, ct.column_id, ct.group_id, ct.title, ct.text, 
-                   ct.create_time, ct.attached_to_column_time, ct.imported_at,
-                   CASE WHEN td.topic_id IS NOT NULL THEN 1 ELSE 0 END as has_detail
-            FROM column_topics ct
-            LEFT JOIN topic_details td ON ct.topic_id = td.topic_id AND ct.group_id = td.group_id
-            WHERE ct.column_id = ? AND (? IS NULL OR ct.group_id = ?)
-            ORDER BY ct.attached_to_column_time DESC
-        ''', (column_id, scope_group_id, scope_group_id))
+        sql, params = _column_topics_query(column_id, scope_group_id)
+        self.cursor.execute(sql, params)
         
         return [_column_topic_row_to_dict(row) for row in self.cursor.fetchall()]
     
