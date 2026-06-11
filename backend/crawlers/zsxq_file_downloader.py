@@ -31,6 +31,7 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     download_interval_plan,
     download_progress_message,
     download_retry_wait,
+    download_size_mismatch_detail,
     download_url_failure_detail,
     empty_import_stats,
     existing_file_matches,
@@ -642,9 +643,9 @@ class ZSXQFileDownloader:
 
                     # 验证文件大小
                     final_size = os.path.getsize(temp_path)
-                    if expected_size > 0 and final_size != expected_size:
-                        last_error_code = "size_mismatch"
-                        last_error = f"文件大小不匹配: 预期{expected_size:,}, 实际{final_size:,}"
+                    mismatch_detail = download_size_mismatch_detail(expected_size, final_size)
+                    if mismatch_detail:
+                        last_error_code, last_error = mismatch_detail
                         self.log(f"   ⚠️ {last_error}")
                         os.remove(temp_path)
                         continue

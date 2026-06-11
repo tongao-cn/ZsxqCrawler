@@ -249,6 +249,15 @@ def download_interval_plan(
     return None, (), False
 
 
+def download_size_mismatch_detail(expected_size: int, final_size: int) -> Optional[tuple[str, str]]:
+    if expected_size <= 0 or final_size == expected_size:
+        return None
+    return (
+        "size_mismatch",
+        f"文件大小不匹配: 预期{expected_size:,}, 实际{final_size:,}",
+    )
+
+
 def content_disposition_filename(content_disposition: str) -> Optional[str]:
     if "filename=" not in content_disposition:
         return None

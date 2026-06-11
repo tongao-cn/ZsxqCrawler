@@ -2915,6 +2915,39 @@ Result:
 - PostgreSQL compatibility debt scan: no SQLite compatibility patterns found.
 - Frontend build is not planned because this slice only changes backend crawler/helper code.
 
+### 2026-06-11 - P9 download size mismatch helper extraction
+
+Changed:
+
+- Added `download_size_mismatch_detail` to `backend/crawlers/zsxq_file_downloader_helpers.py`.
+- Replaced the inline size-mismatch error code/message construction in `download_file`.
+- Added focused helper coverage for mismatch details, expected-size-zero bypass, and exact-size pass.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Size mismatch still uses `size_mismatch` and the same formatted Chinese error message.
+- `expected_size <= 0` still bypasses validation.
+- Direct `.part` removal and retry `continue` remain in the original `download_file` control flow.
+- No retry, stop, signed URL, partial-file cleanup, fallback, or status-update behavior was changed.
+
+Verification:
+
+```powershell
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py backend\crawlers\zsxq_file_downloader_helpers.py
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers -v
+uv run python -m unittest discover -s tests
+uv run python scripts\scan_postgres_compat_debt.py
+```
+
+Result:
+
+- `py_compile` passed.
+- `tests.test_zsxq_file_downloader_helpers`: 37 tests passed.
+- Full backend unittest discovery: 573 tests passed, 15 skipped.
+- PostgreSQL compatibility debt scan: no SQLite compatibility patterns found.
+- Frontend build is not planned because this slice only changes backend crawler/helper code.
+
 ### 2026-06-11 - P3 columns database helper module split
 
 Changed:

@@ -35,6 +35,7 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     parse_create_time,
     remove_partial_download,
     download_retry_wait,
+    download_size_mismatch_detail,
     safe_download_filename,
     should_retry_api_error,
     should_retry_http_status,
@@ -317,6 +318,17 @@ class FileDownloaderFileDataHelperTests(unittest.TestCase):
             download_interval_plan(3, 10, 1.5, 60),
         )
         self.assertEqual((None, (), False), download_interval_plan(3, 10, 0, 60))
+
+    def test_download_size_mismatch_detail_preserves_error_contract(self):
+        self.assertEqual(
+            (
+                "size_mismatch",
+                "文件大小不匹配: 预期1,024, 实际512",
+            ),
+            download_size_mismatch_detail(1024, 512),
+        )
+        self.assertIsNone(download_size_mismatch_detail(0, 512))
+        self.assertIsNone(download_size_mismatch_detail(512, 512))
 
     def test_content_disposition_filename_extracts_plain_filename(self):
         self.assertEqual("memo.pdf", content_disposition_filename('attachment; filename="memo.pdf"'))
