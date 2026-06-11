@@ -241,6 +241,18 @@ def create_task(task_type: str, description: str, metadata: Optional[Dict[str, A
     return task_id
 
 
+def _has_ingestion_lock_identity(task: Dict[str, Any]) -> bool:
+    return task.get("ingestion_lock_key") == INGESTION_LOCK_KEY or task.get("type") in INGESTION_LOCK_TYPES
+
+
+def _matches_running_ingestion_task(task: Dict[str, Any], normalized_group_id: str) -> bool:
+    if not _is_active_task_status(task.get("status")):
+        return False
+    if not _has_ingestion_lock_identity(task):
+        return False
+    return normalize_group_id(task.get("group_id")) == normalized_group_id
+
+
 def find_running_ingestion_task(group_id: str, exclude_task_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
     normalized_group_id = normalize_group_id(group_id)
     if normalized_group_id is None:
@@ -249,11 +261,7 @@ def find_running_ingestion_task(group_id: str, exclude_task_id: Optional[str] = 
     for task in list_tasks():
         if exclude_task_id and task.get("task_id") == exclude_task_id:
             continue
-        if not _is_active_task_status(task.get("status")):
-            continue
-        if task.get("ingestion_lock_key") != INGESTION_LOCK_KEY and task.get("type") not in INGESTION_LOCK_TYPES:
-            continue
-        if normalize_group_id(task.get("group_id")) == normalized_group_id:
+        if _matches_running_ingestion_task(task, normalized_group_id):
             return task
     return None
 

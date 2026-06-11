@@ -2234,6 +2234,33 @@ Result:
 - `py_compile` passed.
 - `tests.test_task_runtime_helpers`: 38 tests passed.
 
+### 2026-06-11 - P5 running ingestion task match helper extraction
+
+Changed:
+
+- Extracted `_has_ingestion_lock_identity` and `_matches_running_ingestion_task` from
+  `find_running_ingestion_task`.
+- Kept `exclude_task_id` filtering in `find_running_ingestion_task` before the extracted matcher.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Active status filtering, `ingestion_lock_key` matching, legacy ingestion task-type fallback, and
+  normalized group-id comparison remain unchanged.
+- Existing lock-conflict behavior for same-group ingestion tasks is preserved.
+
+Verification:
+
+```powershell
+uv run python -m py_compile backend\services\task_runtime.py
+uv run python -m unittest tests.test_task_runtime_helpers -v
+```
+
+Result:
+
+- `py_compile` passed.
+- `tests.test_task_runtime_helpers`: 38 tests passed.
+
 ## Stop Conditions
 
 Pause before editing if:
