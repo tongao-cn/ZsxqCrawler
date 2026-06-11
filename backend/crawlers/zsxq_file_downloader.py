@@ -29,6 +29,7 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     classify_http_failure,
     download_file_data,
     download_progress_message,
+    download_url_failure_detail,
     empty_import_stats,
     existing_file_matches,
     filter_files_newer_than,
@@ -586,15 +587,12 @@ class ZSXQFileDownloader:
                 download_url = self.get_download_url(file_id)
                 if not download_url:
                     self.log(f"   ❌ 无法获取下载链接")
-                    error_detail = self.last_download_url_error or {
-                        "code": "download_url_unavailable",
-                        "message": "无法获取下载链接",
-                    }
+                    error_code, error_message = download_url_failure_detail(self.last_download_url_error)
                     self.file_db.update_file_download_status(
                         file_id,
                         'failed',
-                        error_code=str(error_detail.get("code") or "download_url_unavailable"),
-                        error_message=str(error_detail.get("message") or "无法获取下载链接"),
+                        error_code=error_code,
+                        error_message=error_message,
                     )
                     return False
 

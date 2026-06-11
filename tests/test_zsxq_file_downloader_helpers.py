@@ -21,6 +21,7 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     classify_http_failure,
     content_disposition_filename,
     download_progress_message,
+    download_url_failure_detail,
     download_file_data,
     empty_import_stats,
     existing_file_matches,
@@ -268,6 +269,20 @@ class FileDownloaderFileDataHelperTests(unittest.TestCase):
         self.assertEqual("   📊 已下载: 4 bytes", download_progress_message(4, 0))
         self.assertIsNone(download_progress_message(10 * 1024 * 1024, 0))
 
+    def test_download_url_failure_detail_preserves_defaults_and_api_errors(self):
+        self.assertEqual(
+            ("download_url_unavailable", "无法获取下载链接"),
+            download_url_failure_detail(None),
+        )
+        self.assertEqual(
+            ("1030", "mobile only"),
+            download_url_failure_detail({"code": 1030, "message": "mobile only"}),
+        )
+        self.assertEqual(
+            ("download_url_unavailable", "无法获取下载链接"),
+            download_url_failure_detail({"code": "", "message": ""}),
+        )
+
     def test_content_disposition_filename_extracts_plain_filename(self):
         self.assertEqual("memo.pdf", content_disposition_filename('attachment; filename="memo.pdf"'))
         self.assertIsNone(content_disposition_filename("attachment"))
@@ -415,6 +430,25 @@ class FileDownloaderDownloadTests(unittest.TestCase):
             self.assertTrue(result)
             self.assertTrue((Path(temp_dir) / "real.pdf").exists())
             self.assertEqual((101, "completed", expected_path), downloader.file_db.status_updates[-1][:3])
+
+    def test_download_file_marks_failed_when_download_url_missing(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            session = FakeDownloadSession([])
+            downloader = self._downloader_for_download(temp_dir, session)
+            downloader.get_download_url = lambda file_id: None
+            downloader.last_download_url_error = None
+
+            result = ZSXQFileDownloader.download_file(
+                downloader,
+                {"file": {"id": 101, "name": "memo.pdf", "size": 4, "download_count": 0}},
+            )
+
+            self.assertFalse(result)
+            self.assertEqual([], session.get_calls)
+            self.assertEqual(
+                (101, "failed", None, "download_url_unavailable", "无法获取下载链接"),
+                downloader.file_db.status_updates[-1],
+            )
 
     def test_download_file_retries_body_download_once(self):
         with tempfile.TemporaryDirectory() as temp_dir:

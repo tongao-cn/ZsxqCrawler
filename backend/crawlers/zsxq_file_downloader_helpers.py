@@ -206,6 +206,17 @@ def download_progress_message(downloaded_size: int, total_size: int) -> Optional
     return None
 
 
+def download_url_failure_detail(error_detail: Optional[Dict[str, Any]]) -> tuple[str, str]:
+    detail = error_detail or {
+        "code": "download_url_unavailable",
+        "message": "无法获取下载链接",
+    }
+    return (
+        str(detail.get("code") or "download_url_unavailable"),
+        str(detail.get("message") or "无法获取下载链接"),
+    )
+
+
 def content_disposition_filename(content_disposition: str) -> Optional[str]:
     if "filename=" not in content_disposition:
         return None

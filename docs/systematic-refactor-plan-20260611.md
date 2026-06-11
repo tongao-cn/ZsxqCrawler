@@ -2812,6 +2812,40 @@ Result:
 - PostgreSQL compatibility debt scan: no SQLite compatibility patterns found.
 - Frontend build is not planned because this slice only changes backend crawler/helper code.
 
+### 2026-06-11 - P9 download URL failure detail helper extraction
+
+Changed:
+
+- Added `download_url_failure_detail` to `backend/crawlers/zsxq_file_downloader_helpers.py`.
+- Added helper coverage for default failure details, API-provided details, and blank-value fallback.
+- Added `download_file` behavior coverage for the no-download-url path and its failed status update.
+- Replaced the inline no-download-url error detail construction in `download_file`.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Missing download URLs still mark the file as `failed` without making a body download request.
+- The default error code/message remain `download_url_unavailable` and `无法获取下载链接`.
+- API-provided details, including numeric codes such as `1030`, are still stringified before storage.
+- No retry, signed URL, stop, partial-file cleanup, or fallback behavior was removed.
+
+Verification:
+
+```powershell
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py backend\crawlers\zsxq_file_downloader_helpers.py
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers -v
+uv run python -m unittest discover -s tests
+uv run python scripts\scan_postgres_compat_debt.py
+```
+
+Result:
+
+- `py_compile` passed.
+- `tests.test_zsxq_file_downloader_helpers`: 32 tests passed.
+- Full backend unittest discovery: 563 tests passed, 15 skipped.
+- PostgreSQL compatibility debt scan: no SQLite compatibility patterns found.
+- Frontend build is not planned because this slice only changes backend crawler/helper code.
+
 ## Stop Conditions
 
 Pause before editing if:
