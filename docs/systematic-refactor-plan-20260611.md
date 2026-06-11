@@ -2669,6 +2669,41 @@ Result:
 - PostgreSQL compatibility debt scan: no SQLite compatibility patterns found.
 - Frontend build was not rerun because this slice only changes backend storage/helper code.
 
+### 2026-06-11 - P2 topic detail base loader extraction
+
+Changed:
+
+- Added `load_topic_detail_base` to `backend/storage/zsxq_database_helpers.py`.
+- Moved the existing `get_topic_detail` base topic/group query and base payload mapping from
+  `backend/storage/zsxq_database.py` into the helper.
+- Kept `_topic_detail_scope` and the `None` return for missing topic rows in
+  `backend/storage/zsxq_database.py`.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- The base query still uses the same generated `WHERE` clause, tuple parameters, selected columns,
+  `LEFT JOIN groups`, and base payload builder.
+- Missing topic rows still return `None` before any child queries run.
+- Existing scoped-query and detail payload tests cover this path.
+
+Verification:
+
+```powershell
+uv run python -m py_compile backend\storage\zsxq_database.py backend\storage\zsxq_database_helpers.py
+uv run python -m unittest tests.test_zsxq_database_helpers -v
+uv run python -m unittest discover -s tests
+uv run python scripts\scan_postgres_compat_debt.py
+```
+
+Result:
+
+- `py_compile` passed.
+- `tests.test_zsxq_database_helpers`: 19 tests passed.
+- Full backend unittest discovery: 557 tests passed, 15 skipped.
+- PostgreSQL compatibility debt scan: no SQLite compatibility patterns found.
+- Frontend build was not rerun because this slice only changes backend storage/helper code.
+
 ## Stop Conditions
 
 Pause before editing if:

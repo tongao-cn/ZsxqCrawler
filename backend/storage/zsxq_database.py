@@ -9,6 +9,7 @@ from backend.storage.zsxq_database_helpers import (
     format_tag_row,
     format_tag_topic_row,
     group_id_param,
+    load_topic_detail_base,
     load_topic_detail_comments,
     load_topic_detail_latest_likes,
     load_topic_detail_likes_detail,
@@ -16,7 +17,6 @@ from backend.storage.zsxq_database_helpers import (
     load_topic_detail_talk_payload,
     nullable_group_id_param,
     replace_file_topic_relation,
-    topic_detail_base_payload,
     topic_detail_scope,
     topic_file_payload_from_row,
     upsert_core_file,
@@ -1120,24 +1120,9 @@ class ZSXQDatabase:
             scoped_group_id, topic_scope_sql, topic_scope_params = _topic_detail_scope(topic_id, self.group_id)
 
             # 1. 获取基本话题信息和群组信息
-            self.cursor.execute(f'''
-                SELECT
-                    t.topic_id, t.type, t.title, t.create_time, t.digested, t.sticky,
-                    t.likes_count, t.tourist_likes_count, t.rewards_count, t.comments_count,
-                    t.reading_count, t.readers_count, t.answered, t.silenced, t.annotation,
-                    t.user_liked, t.user_subscribed,
-                    g.group_id, g.name as group_name, g.type as group_type, g.background_url
-                FROM topics t
-                LEFT JOIN groups g ON t.group_id = g.group_id
-                WHERE {topic_scope_sql}
-            ''', tuple(topic_scope_params))
-
-            topic_row = self.cursor.fetchone()
-            if not topic_row:
+            topic_detail = load_topic_detail_base(self.cursor, topic_scope_sql, topic_scope_params)
+            if topic_detail is None:
                 return None
-
-            # 构建基本话题信息
-            topic_detail = topic_detail_base_payload(topic_row)
 
             # 2. 获取话题内容（talk）
             talk_payload = load_topic_detail_talk_payload(self.cursor, topic_id, scoped_group_id)

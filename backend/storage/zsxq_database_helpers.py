@@ -206,6 +206,25 @@ def topic_detail_base_payload(row) -> Dict[str, Any]:
     }
 
 
+def load_topic_detail_base(cursor, topic_scope_sql: str, topic_scope_params: list[Any]) -> Optional[Dict[str, Any]]:
+    cursor.execute(f'''
+        SELECT
+            t.topic_id, t.type, t.title, t.create_time, t.digested, t.sticky,
+            t.likes_count, t.tourist_likes_count, t.rewards_count, t.comments_count,
+            t.reading_count, t.readers_count, t.answered, t.silenced, t.annotation,
+            t.user_liked, t.user_subscribed,
+            g.group_id, g.name as group_name, g.type as group_type, g.background_url
+        FROM topics t
+        LEFT JOIN groups g ON t.group_id = g.group_id
+        WHERE {topic_scope_sql}
+    ''', tuple(topic_scope_params))
+
+    topic_row = cursor.fetchone()
+    if not topic_row:
+        return None
+    return topic_detail_base_payload(topic_row)
+
+
 def topic_detail_talk_payload(row) -> Dict[str, Any]:
     return {
         "text": row[0],
