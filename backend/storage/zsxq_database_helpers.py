@@ -94,6 +94,40 @@ def topic_group_id_query(topic_id: int) -> tuple[str, tuple[Any, ...]]:
     return "SELECT group_id FROM topics WHERE topic_id = ? LIMIT 1", (topic_id,)
 
 
+def newest_topic_create_time_query(group_id: Optional[str], *, nullable_scope: bool = False) -> tuple[str, tuple[Any, ...]]:
+    scoped_group_id = nullable_group_id_param(group_id) if nullable_scope else group_id_param(group_id)
+    return (
+        """
+                SELECT create_time FROM topics
+                WHERE (? IS NULL OR group_id = ?)
+                  AND create_time IS NOT NULL AND create_time != ''
+                ORDER BY create_time DESC LIMIT 1
+            """,
+        (scoped_group_id, scoped_group_id),
+    )
+
+
+def oldest_topic_create_time_query(group_id: Optional[str], *, nullable_scope: bool = False) -> tuple[str, tuple[Any, ...]]:
+    scoped_group_id = nullable_group_id_param(group_id) if nullable_scope else group_id_param(group_id)
+    return (
+        """
+                SELECT create_time FROM topics
+                WHERE (? IS NULL OR group_id = ?)
+                  AND create_time IS NOT NULL AND create_time != ''
+                ORDER BY create_time ASC LIMIT 1
+            """,
+        (scoped_group_id, scoped_group_id),
+    )
+
+
+def topic_count_query(group_id: Optional[str]) -> tuple[str, tuple[Any, ...]]:
+    scoped_group_id = nullable_group_id_param(group_id)
+    return (
+        "SELECT COUNT(*) FROM topics WHERE (? IS NULL OR group_id = ?)",
+        (scoped_group_id, scoped_group_id),
+    )
+
+
 def replace_file_topic_relation(file_db, file_id: int, topic_id: int) -> int:
     file_db.cursor.execute(
         """

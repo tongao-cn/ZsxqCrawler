@@ -16,9 +16,12 @@ from backend.storage.zsxq_database_helpers import (
     load_topic_detail_likes_detail,
     load_topic_detail_qa,
     load_topic_detail_talk_payload,
+    newest_topic_create_time_query,
     nullable_group_id_param,
+    oldest_topic_create_time_query,
     replace_file_topic_relation,
     topic_detail_scope,
+    topic_count_query,
     topic_exists_query,
     topic_file_payload_from_row,
     topic_group_id_query,
@@ -64,6 +67,22 @@ def _file_exists_query(file_id: int, group_id: Optional[str]) -> tuple[str, tupl
 
 def _topic_group_id_query(topic_id: int) -> tuple[str, tuple[Any, ...]]:
     return topic_group_id_query(topic_id)
+
+
+def _newest_topic_create_time_query(
+    group_id: Optional[str], *, nullable_scope: bool = False
+) -> tuple[str, tuple[Any, ...]]:
+    return newest_topic_create_time_query(group_id, nullable_scope=nullable_scope)
+
+
+def _oldest_topic_create_time_query(
+    group_id: Optional[str], *, nullable_scope: bool = False
+) -> tuple[str, tuple[Any, ...]]:
+    return oldest_topic_create_time_query(group_id, nullable_scope=nullable_scope)
+
+
+def _topic_count_query(group_id: Optional[str]) -> tuple[str, tuple[Any, ...]]:
+    return topic_count_query(group_id)
 
 
 def _upsert_core_file(cursor, group_id: Optional[int], topic_id: int, file_data: Dict[str, Any]) -> Optional[int]:
@@ -393,30 +412,20 @@ class ZSXQDatabase:
         """获取话题时间戳范围信息"""
         try:
             # 获取最新话题时间
-            self.cursor.execute('''
-                SELECT create_time FROM topics 
-                WHERE (? IS NULL OR group_id = ?)
-                  AND create_time IS NOT NULL AND create_time != ''
-                ORDER BY create_time DESC LIMIT 1
-            ''', (_nullable_group_id_param(self.group_id), _nullable_group_id_param(self.group_id)))
+            sql, params = _newest_topic_create_time_query(self.group_id, nullable_scope=True)
+            self.cursor.execute(sql, params)
             newest_result = self.cursor.fetchone()
             newest_time = newest_result[0] if newest_result else None
             
             # 获取最老话题时间
-            self.cursor.execute('''
-                SELECT create_time FROM topics 
-                WHERE (? IS NULL OR group_id = ?)
-                  AND create_time IS NOT NULL AND create_time != ''
-                ORDER BY create_time ASC LIMIT 1
-            ''', (_nullable_group_id_param(self.group_id), _nullable_group_id_param(self.group_id)))
+            sql, params = _oldest_topic_create_time_query(self.group_id, nullable_scope=True)
+            self.cursor.execute(sql, params)
             oldest_result = self.cursor.fetchone()
             oldest_time = oldest_result[0] if oldest_result else None
             
             # 获取话题总数
-            self.cursor.execute(
-                'SELECT COUNT(*) FROM topics WHERE (? IS NULL OR group_id = ?)',
-                (_nullable_group_id_param(self.group_id), _nullable_group_id_param(self.group_id)),
-            )
+            sql, params = _topic_count_query(self.group_id)
+            self.cursor.execute(sql, params)
             total_topics = self.cursor.fetchone()[0]
             
             # 判断是否有数据
@@ -445,12 +454,8 @@ class ZSXQDatabase:
     def get_oldest_topic_timestamp(self) -> Optional[str]:
         """获取数据库中最老的话题时间戳"""
         try:
-            self.cursor.execute('''
-                SELECT create_time FROM topics 
-                WHERE (? IS NULL OR group_id = ?)
-                  AND create_time IS NOT NULL AND create_time != ''
-                ORDER BY create_time ASC LIMIT 1
-            ''', (_group_id_param(self.group_id), _group_id_param(self.group_id)))
+            sql, params = _oldest_topic_create_time_query(self.group_id)
+            self.cursor.execute(sql, params)
             result = self.cursor.fetchone()
             return result[0] if result else None
         except Exception as e:
@@ -460,12 +465,8 @@ class ZSXQDatabase:
     def get_newest_topic_timestamp(self) -> Optional[str]:
         """获取数据库中最新的话题时间戳"""
         try:
-            self.cursor.execute('''
-                SELECT create_time FROM topics 
-                WHERE (? IS NULL OR group_id = ?)
-                  AND create_time IS NOT NULL AND create_time != ''
-                ORDER BY create_time DESC LIMIT 1
-            ''', (_group_id_param(self.group_id), _group_id_param(self.group_id)))
+            sql, params = _newest_topic_create_time_query(self.group_id)
+            self.cursor.execute(sql, params)
             result = self.cursor.fetchone()
             return result[0] if result else None
         except Exception as e:

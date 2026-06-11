@@ -7,9 +7,12 @@ from backend.storage.zsxq_database import (
     _format_tag_row,
     _format_tag_topic_row,
     _group_id_param,
+    _newest_topic_create_time_query,
     _nullable_group_id_param,
+    _oldest_topic_create_time_query,
     _replace_file_topic_relation,
     _topic_detail_scope,
+    _topic_count_query,
     _topic_exists_query,
     _topic_file_payload_from_row,
     _topic_group_id_query,
@@ -34,6 +37,17 @@ class FakeCursor:
 
     def fetchall(self):
         return []
+
+
+class FakeTimestampCursor(FakeCursor):
+    def __init__(self, rows):
+        super().__init__()
+        self.rows = list(rows)
+
+    def fetchone(self):
+        if self.rows:
+            return self.rows.pop(0)
+        return None
 
 
 class FakeFileDatabase:
@@ -600,6 +614,71 @@ class ZSXQDatabaseHelperTests(unittest.TestCase):
         group_sql, group_params = _topic_group_id_query(202)
         self.assertEqual("SELECT group_id FROM topics WHERE topic_id = ? LIMIT 1", group_sql)
         self.assertEqual((202,), group_params)
+
+    def test_topic_timestamp_query_helpers_preserve_existing_scope_semantics(self):
+        newest_sql, newest_params = _newest_topic_create_time_query(None, nullable_scope=True)
+        self.assertIn("ORDER BY create_time DESC LIMIT 1", " ".join(newest_sql.split()))
+        self.assertEqual((None, None), newest_params)
+
+        oldest_sql, oldest_params = _oldest_topic_create_time_query(None)
+        self.assertIn("ORDER BY create_time ASC LIMIT 1", " ".join(oldest_sql.split()))
+        self.assertEqual(("", ""), oldest_params)
+
+        count_sql, count_params = _topic_count_query("303")
+        self.assertEqual("SELECT COUNT(*) FROM topics WHERE (? IS NULL OR group_id = ?)", count_sql)
+        self.assertEqual((303, 303), count_params)
+        self.assertEqual((None, None), _topic_count_query(None)[1])
+
+    def test_timestamp_range_info_uses_nullable_scope_and_preserves_response_shape(self):
+        from backend.storage.zsxq_database import ZSXQDatabase
+
+        cursor = FakeTimestampCursor([("new-time",), ("old-time",), (2,)])
+        db = object.__new__(ZSXQDatabase)
+        db.cursor = cursor
+        db.group_id = None
+
+        self.assertEqual(
+            {
+                "newest_time": "new-time",
+                "oldest_time": "old-time",
+                "newest_timestamp": "new-time",
+                "oldest_timestamp": "old-time",
+                "total_topics": 2,
+                "has_data": True,
+            },
+            ZSXQDatabase.get_timestamp_range_info(db),
+        )
+        self.assertEqual(
+            [
+                (
+                    "SELECT create_time FROM topics WHERE (? IS NULL OR group_id = ?) "
+                    "AND create_time IS NOT NULL AND create_time != '' ORDER BY create_time DESC LIMIT 1",
+                    (None, None),
+                ),
+                (
+                    "SELECT create_time FROM topics WHERE (? IS NULL OR group_id = ?) "
+                    "AND create_time IS NOT NULL AND create_time != '' ORDER BY create_time ASC LIMIT 1",
+                    (None, None),
+                ),
+                ("SELECT COUNT(*) FROM topics WHERE (? IS NULL OR group_id = ?)", (None, None)),
+            ],
+            cursor.calls,
+        )
+
+    def test_topic_timestamp_methods_keep_legacy_group_scope_for_empty_group(self):
+        from backend.storage.zsxq_database import ZSXQDatabase
+
+        newest_db = object.__new__(ZSXQDatabase)
+        newest_db.cursor = FakeTimestampCursor([("new-time",)])
+        newest_db.group_id = None
+        self.assertEqual("new-time", ZSXQDatabase.get_newest_topic_timestamp(newest_db))
+        self.assertEqual(("", ""), newest_db.cursor.calls[0][1])
+
+        oldest_db = object.__new__(ZSXQDatabase)
+        oldest_db.cursor = FakeTimestampCursor([("old-time",)])
+        oldest_db.group_id = None
+        self.assertEqual("old-time", ZSXQDatabase.get_oldest_topic_timestamp(oldest_db))
+        self.assertEqual(("", ""), oldest_db.cursor.calls[0][1])
 
     def test_import_topic_data_existing_topic_preserves_skip_and_file_sync(self):
         from backend.storage.zsxq_database import ZSXQDatabase

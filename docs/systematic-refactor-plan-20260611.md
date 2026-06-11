@@ -4261,6 +4261,50 @@ Result:
 - PostgreSQL compatibility debt scan: no SQLite compatibility patterns found.
 - Frontend build is not planned because this slice only changes backend storage/helper code.
 
+### 2026-06-11 - P2 topic timestamp query helper extraction
+
+Changed:
+
+- Added `newest_topic_create_time_query`, `oldest_topic_create_time_query`, and `topic_count_query`
+  to `backend/storage/zsxq_database_helpers.py`, with compatibility wrappers in
+  `backend/storage/zsxq_database.py`.
+- Replaced inline topic timestamp/count SQL in `get_timestamp_range_info`,
+  `get_oldest_topic_timestamp`, and `get_newest_topic_timestamp` with helper-returned SQL and
+  params.
+- Added characterization coverage for SQL order direction, count SQL shape, range response shape,
+  range call order, nullable scope params, and the legacy empty-group params used by the single
+  newest/oldest timestamp methods.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- `get_timestamp_range_info` still uses nullable group scope for newest, oldest, and count queries,
+  preserving unscoped behavior when `group_id` is empty or missing.
+- `get_oldest_topic_timestamp` and `get_newest_topic_timestamp` still use the legacy
+  `group_id_param(None) -> ""` behavior rather than nullable unscoped behavior.
+- All three methods keep their existing return shapes and exception fallback behavior.
+- No schema, config, compatibility, fallback, error handling, logging, or public API semantics were
+  changed.
+
+Verification:
+
+```powershell
+uv run python -m py_compile backend\storage\zsxq_database.py backend\storage\zsxq_database_helpers.py tests\test_zsxq_database_helpers.py
+uv run python -m unittest tests.test_zsxq_database_helpers -v
+uv run python -m unittest discover -s tests
+uv run python scripts\scan_postgres_compat_debt.py
+git diff --check
+```
+
+Result:
+
+- `py_compile` passed.
+- `tests.test_zsxq_database_helpers`: 25 tests passed.
+- Full backend unittest discovery: 628 tests passed, 15 skipped.
+- PostgreSQL compatibility debt scan: no SQLite compatibility patterns found.
+- `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
+- Frontend build is not planned because this slice only changes backend storage/helper code.
+
 ## Stop Conditions
 
 Pause before editing if:
