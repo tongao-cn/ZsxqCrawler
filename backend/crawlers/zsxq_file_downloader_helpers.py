@@ -281,6 +281,10 @@ def download_total_size(response_headers: Dict[str, Any]) -> int:
     return int(response_headers.get("content-length", 0))
 
 
+def partial_download_path(file_path: str) -> str:
+    return f"{file_path}.part"
+
+
 def content_disposition_filename(content_disposition: str) -> Optional[str]:
     if "filename=" not in content_disposition:
         return None

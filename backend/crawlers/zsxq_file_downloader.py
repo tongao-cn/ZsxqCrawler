@@ -44,6 +44,7 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     has_retry_attempt_remaining,
     normalize_date_range,
     page_crosses_stop_before,
+    partial_download_path,
     remove_partial_download,
     response_filename_override,
     safe_download_filename,
@@ -621,7 +622,7 @@ class ZSXQFileDownloader:
                     total_size = download_total_size(response.headers)
                     downloaded_size = 0
                     expected_size = download_expected_size(file_size, total_size)
-                    temp_path = f"{file_path}.part"
+                    temp_path = partial_download_path(file_path)
                     remove_partial_download(temp_path)
 
                     with open(temp_path, 'wb') as f:
@@ -675,7 +676,7 @@ class ZSXQFileDownloader:
             except Exception as e:
                 last_error_code, last_error = download_exception_detail(e)
                 self.log(f"   ❌ 下载异常: {e}")
-                temp_path = f"{file_path}.part"
+                temp_path = partial_download_path(file_path)
                 if remove_partial_download(temp_path):
                     self.log(f"   🗑️ 删除不完整文件")
 

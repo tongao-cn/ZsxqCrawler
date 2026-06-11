@@ -36,6 +36,7 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     is_retryable_http_status,
     normalize_date_range,
     page_crosses_stop_before,
+    partial_download_path,
     parse_create_time,
     remove_partial_download,
     download_retry_wait,
@@ -356,6 +357,9 @@ class FileDownloaderFileDataHelperTests(unittest.TestCase):
         self.assertEqual(0, download_total_size({}))
         with self.assertRaises(ValueError):
             download_total_size({"content-length": "not-a-number"})
+
+    def test_partial_download_path_appends_part_suffix(self):
+        self.assertEqual(r"C:\downloads\memo.pdf.part", partial_download_path(r"C:\downloads\memo.pdf"))
 
     def test_content_disposition_filename_extracts_plain_filename(self):
         self.assertEqual("memo.pdf", content_disposition_filename('attachment; filename="memo.pdf"'))
