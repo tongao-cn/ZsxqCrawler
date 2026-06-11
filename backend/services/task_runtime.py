@@ -477,9 +477,13 @@ def request_runtime_shutdown() -> None:
         runtime_task_threads.clear()
 
 
+def _task_stop_flag_locked(task_id: str) -> bool:
+    return task_stop_flags.get(task_id, False)
+
+
 def is_task_stopped(task_id: str) -> bool:
     with _state_lock:
-        memory_stopped = task_stop_flags.get(task_id, False)
+        memory_stopped = _task_stop_flag_locked(task_id)
     return memory_stopped or get_task_store().is_stopped(task_id)
 
 

@@ -30,6 +30,9 @@ class FakeTaskStore:
     def set_stop_flag(self, task_id, stopped=True):
         self.stop_flags[task_id] = stopped
 
+    def is_stopped(self, task_id):
+        return self.stop_flags.get(task_id, False)
+
     def add_log(self, task_id, message):
         self.logs.append((task_id, message))
         return message
@@ -483,6 +486,31 @@ class TaskRuntimeHelperTests(unittest.TestCase):
 
         self.assertEqual("cancelled", store.tasks["task-1"]["status"])
         self.assertEqual([], store.released_locks)
+
+    def test_is_task_stopped_short_circuits_when_memory_flag_is_set(self):
+        from backend.services import task_runtime
+
+        store = FakeTaskStore()
+        task_runtime.task_stop_flags["task-1"] = True
+
+        with (
+            patch("backend.services.task_runtime.get_task_store", return_value=store),
+            patch.object(store, "is_stopped", side_effect=AssertionError("store should not be read")),
+        ):
+            try:
+                self.assertTrue(task_runtime.is_task_stopped("task-1"))
+            finally:
+                task_runtime.task_stop_flags.pop("task-1", None)
+
+    def test_is_task_stopped_falls_back_to_persisted_stop_flag(self):
+        from backend.services import task_runtime
+
+        store = FakeTaskStore()
+        store.stop_flags["task-1"] = True
+
+        with patch("backend.services.task_runtime.get_task_store", return_value=store):
+            self.assertTrue(task_runtime.is_task_stopped("task-1"))
+            self.assertFalse(task_runtime.is_task_stopped("task-2"))
 
     def test_request_stop_for_resources_ignores_objects_without_stop_flag(self):
         from backend.services.task_runtime import _request_stop_for_resources

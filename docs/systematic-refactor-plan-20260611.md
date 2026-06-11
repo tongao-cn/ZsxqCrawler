@@ -1517,6 +1517,49 @@ Result:
 - PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
 - Git diff whitespace check passed.
 
+### 2026-06-11 - P5 task stop flag reader helper extraction
+
+Changed:
+
+- Added characterization coverage for `is_task_stopped()` short-circuiting when the in-memory stop
+  flag is already set.
+- Added characterization coverage for `is_task_stopped()` falling back to the persisted task-store
+  stop flag when no in-memory stop flag is set.
+- Extracted `_task_stop_flag_locked()` to isolate the locked in-memory stop-flag read from
+  `task_stop_flags`.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- `is_task_stopped()` still reads the in-memory stop flag under `_state_lock` and preserves the
+  existing short-circuit behavior before consulting `TaskStore.is_stopped()`.
+- No public route response, task store SQL, task status field, cancellation behavior, stop-flag
+  persistence, fallback polling, storage schema, legacy path, config semantics, or frontend hook
+  behavior changed.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_task_runtime_helpers -v
+uv run python -m py_compile backend\services\task_runtime.py
+uv run python -m unittest tests.test_task_runtime_helpers tests.test_task_store tests.test_task_routes_helpers -v
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+uv run python scripts\scan_postgres_compat_debt.py
+git diff --check
+```
+
+Result:
+
+- Characterization tests passed on the pre-refactor code before the helper extraction.
+- Focused task runtime tests passed: 25 tests.
+- Recommended task runtime gate passed: 44 tests, 14 PostgreSQL integration tests skipped by
+  configuration.
+- Full backend tests passed: 544 tests, 15 skipped.
+- Frontend build passed.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Git diff whitespace check passed.
+
 ## Stop Conditions
 
 Pause before editing if:
