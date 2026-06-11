@@ -2634,6 +2634,41 @@ Result:
 - PostgreSQL compatibility debt scan: no SQLite compatibility patterns found.
 - Frontend build was not rerun because this slice only changes backend storage/helper code.
 
+### 2026-06-11 - P2 topic talk row loader extraction
+
+Changed:
+
+- Added `load_topic_detail_talk_payload` to `backend/storage/zsxq_database_helpers.py`.
+- Moved the existing `get_topic_detail` talk-row lookup into the helper, alongside the already
+  extracted talk asset loader.
+- Kept assignment to `topic_detail["talk"]` in `backend/storage/zsxq_database.py` and guarded it
+  with `is not None`.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- A talk payload is still attached only when the talk row exists.
+- The talk-row query, topic id parameter, downstream image/file/article loaders, and returned payload
+  shape are unchanged.
+- Existing tests cover both no-talk detail reads and talk reads with images, files, and article.
+
+Verification:
+
+```powershell
+uv run python -m py_compile backend\storage\zsxq_database.py backend\storage\zsxq_database_helpers.py
+uv run python -m unittest tests.test_zsxq_database_helpers -v
+uv run python -m unittest discover -s tests
+uv run python scripts\scan_postgres_compat_debt.py
+```
+
+Result:
+
+- `py_compile` passed.
+- `tests.test_zsxq_database_helpers`: 19 tests passed.
+- Full backend unittest discovery: 557 tests passed, 15 skipped.
+- PostgreSQL compatibility debt scan: no SQLite compatibility patterns found.
+- Frontend build was not rerun because this slice only changes backend storage/helper code.
+
 ## Stop Conditions
 
 Pause before editing if:

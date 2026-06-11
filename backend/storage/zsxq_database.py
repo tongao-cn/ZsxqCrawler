@@ -13,7 +13,7 @@ from backend.storage.zsxq_database_helpers import (
     load_topic_detail_latest_likes,
     load_topic_detail_likes_detail,
     load_topic_detail_qa,
-    load_topic_detail_talk,
+    load_topic_detail_talk_payload,
     nullable_group_id_param,
     replace_file_topic_relation,
     topic_detail_base_payload,
@@ -1140,19 +1140,9 @@ class ZSXQDatabase:
             topic_detail = topic_detail_base_payload(topic_row)
 
             # 2. 获取话题内容（talk）
-            self.cursor.execute('''
-                SELECT
-                    t.text,
-                    u.user_id, u.name, u.alias, u.avatar_url, u.location, u.description
-                FROM talks t
-                LEFT JOIN users u ON t.owner_user_id = u.user_id
-                WHERE t.topic_id = ?
-                LIMIT 1
-            ''', (topic_id,))
-
-            talk_row = self.cursor.fetchone()
-            if talk_row:
-                topic_detail["talk"] = load_topic_detail_talk(self.cursor, topic_id, scoped_group_id, talk_row)
+            talk_payload = load_topic_detail_talk_payload(self.cursor, topic_id, scoped_group_id)
+            if talk_payload is not None:
+                topic_detail["talk"] = talk_payload
 
             # 3. 获取最新点赞
             topic_detail["latest_likes"] = load_topic_detail_latest_likes(self.cursor, topic_id, scoped_group_id)

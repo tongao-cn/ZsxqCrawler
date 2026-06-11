@@ -282,6 +282,23 @@ def load_topic_detail_talk(cursor, topic_id: int, scoped_group_id: Any, talk_row
     return build_topic_detail_talk(talk_row, images, files, article_row)
 
 
+def load_topic_detail_talk_payload(cursor, topic_id: int, scoped_group_id: Any) -> Optional[Dict[str, Any]]:
+    cursor.execute('''
+        SELECT
+            t.text,
+            u.user_id, u.name, u.alias, u.avatar_url, u.location, u.description
+        FROM talks t
+        LEFT JOIN users u ON t.owner_user_id = u.user_id
+        WHERE t.topic_id = ?
+        LIMIT 1
+    ''', (topic_id,))
+
+    talk_row = cursor.fetchone()
+    if not talk_row:
+        return None
+    return load_topic_detail_talk(cursor, topic_id, scoped_group_id, talk_row)
+
+
 def topic_detail_like_payload(row) -> Dict[str, Any]:
     return {
         "create_time": row[0],
