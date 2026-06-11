@@ -13,8 +13,12 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     API_FAILURE_PERMISSION_DENIED_1030,
     API_FAILURE_RETRY,
     API_FAILURE_RETRY_EXHAUSTED,
+    HTTP_FAILURE_NON_RETRY,
+    HTTP_FAILURE_RETRY,
+    HTTP_FAILURE_RETRY_EXHAUSTED,
     add_import_stats,
     classify_api_failure,
+    classify_http_failure,
     content_disposition_filename,
     download_file_data,
     empty_import_stats,
@@ -298,6 +302,11 @@ class FileDownloaderRetryHelperTests(unittest.TestCase):
         self.assertEqual(API_FAILURE_RETRY_EXHAUSTED, classify_api_failure("1059", 1, 2))
         self.assertEqual(API_FAILURE_NON_RETRY, classify_api_failure("N/A", 0, 2))
         self.assertEqual(API_FAILURE_PERMISSION_DENIED_1030, classify_api_failure(1030, 0, 2))
+
+    def test_classify_http_failure_distinguishes_retry_and_terminal_cases(self):
+        self.assertEqual(HTTP_FAILURE_RETRY, classify_http_failure(429, 0, 2))
+        self.assertEqual(HTTP_FAILURE_RETRY_EXHAUSTED, classify_http_failure(503, 1, 2))
+        self.assertEqual(HTTP_FAILURE_NON_RETRY, classify_http_failure(403, 0, 2))
 
     def test_prepare_retry_api_request_sleeps_counts_and_rotates_headers(self):
         downloader = object.__new__(ZSXQFileDownloader)

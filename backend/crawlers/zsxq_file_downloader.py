@@ -22,19 +22,20 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     API_FAILURE_NON_RETRY,
     API_FAILURE_PERMISSION_DENIED_1030,
     API_FAILURE_RETRY,
+    HTTP_FAILURE_NON_RETRY,
+    HTTP_FAILURE_RETRY,
     add_import_stats,
     classify_api_failure,
+    classify_http_failure,
     content_disposition_filename,
     download_file_data,
     empty_import_stats,
     existing_file_matches,
     filter_files_newer_than,
     has_retry_attempt_remaining,
-    is_retryable_http_status,
     normalize_date_range,
     page_crosses_stop_before,
     safe_download_filename,
-    should_retry_http_status,
     should_log_full_response,
     summarize_page_time_range,
 )
@@ -433,17 +434,16 @@ class ZSXQFileDownloader:
                         print(f"   🚫 非可重试错误，停止重试")
                         return None
                         
-                elif is_retryable_http_status(response.status_code):
+                else:
+                    http_failure_class = classify_http_failure(response.status_code, attempt, max_retries)
                     print(f"   ❌ HTTP错误: {response.status_code}")
                     print(f"   📄 响应内容: {redact_response_text(response.text, limit=200)}")
-                    if should_retry_http_status(response.status_code, attempt, max_retries):
+                    if http_failure_class == HTTP_FAILURE_RETRY:
                         print(f"   🔄 服务器错误，准备重试...")
                         continue
-                else:
-                    print(f"   ❌ HTTP错误: {response.status_code}")
-                    print(f"   📄 响应内容: {redact_response_text(response.text, limit=200)}")
-                    print(f"   🚫 非可重试HTTP错误，停止重试")
-                    return None
+                    if http_failure_class == HTTP_FAILURE_NON_RETRY:
+                        print(f"   🚫 非可重试HTTP错误，停止重试")
+                        return None
                     
             except Exception as e:
                 print(f"   ❌ 请求异常: {e}")
@@ -514,17 +514,16 @@ class ZSXQFileDownloader:
                             self.log(f"   🚫 非可重试错误，停止重试")
                             return None
                         
-                elif is_retryable_http_status(response.status_code):
+                else:
+                    http_failure_class = classify_http_failure(response.status_code, attempt, max_retries)
                     print(f"   ❌ HTTP错误: {response.status_code}")
                     print(f"   📄 响应内容: {redact_response_text(response.text, limit=200)}")
-                    if should_retry_http_status(response.status_code, attempt, max_retries):
+                    if http_failure_class == HTTP_FAILURE_RETRY:
                         print(f"   🔄 服务器错误，准备重试...")
                         continue
-                else:
-                    print(f"   ❌ HTTP错误: {response.status_code}")
-                    print(f"   📄 响应内容: {redact_response_text(response.text, limit=200)}")
-                    print(f"   🚫 非可重试HTTP错误，停止重试")
-                    return None
+                    if http_failure_class == HTTP_FAILURE_NON_RETRY:
+                        print(f"   🚫 非可重试HTTP错误，停止重试")
+                        return None
                     
             except Exception as e:
                 print(f"   ❌ 请求异常: {e}")

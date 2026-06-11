@@ -26,6 +26,9 @@ API_FAILURE_RETRY = "retry"
 API_FAILURE_NON_RETRY = "non_retry"
 API_FAILURE_RETRY_EXHAUSTED = "retry_exhausted"
 API_FAILURE_PERMISSION_DENIED_1030 = "permission_denied_1030"
+HTTP_FAILURE_RETRY = "retry"
+HTTP_FAILURE_NON_RETRY = "non_retry"
+HTTP_FAILURE_RETRY_EXHAUSTED = "retry_exhausted"
 
 
 def is_retryable_api_error(error_code: Any) -> bool:
@@ -60,6 +63,14 @@ def classify_api_failure(error_code: Any, attempt: int, max_retries: int) -> str
     if has_retry_attempt_remaining(attempt, max_retries):
         return API_FAILURE_RETRY
     return API_FAILURE_RETRY_EXHAUSTED
+
+
+def classify_http_failure(status_code: int, attempt: int, max_retries: int) -> str:
+    if not is_retryable_http_status(status_code):
+        return HTTP_FAILURE_NON_RETRY
+    if has_retry_attempt_remaining(attempt, max_retries):
+        return HTTP_FAILURE_RETRY
+    return HTTP_FAILURE_RETRY_EXHAUSTED
 
 
 def parse_create_time(value: Optional[str]) -> Optional[datetime.datetime]:
