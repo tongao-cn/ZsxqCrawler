@@ -36,6 +36,7 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     download_progress_message,
     download_retry_wait,
     download_size_mismatch_detail,
+    download_total_size,
     download_url_failure_detail,
     empty_import_stats,
     existing_file_matches,
@@ -617,7 +618,7 @@ class ZSXQFileDownloader:
                     self.log(f"   📝 从响应头获取到真实文件名: {file_name}")
 
                 if response.status_code == 200:
-                    total_size = int(response.headers.get('content-length', 0))
+                    total_size = download_total_size(response.headers)
                     downloaded_size = 0
                     expected_size = download_expected_size(file_size, total_size)
                     temp_path = f"{file_path}.part"

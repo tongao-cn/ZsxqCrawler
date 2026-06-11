@@ -40,6 +40,7 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     remove_partial_download,
     download_retry_wait,
     download_size_mismatch_detail,
+    download_total_size,
     safe_download_filename,
     should_retry_api_error,
     should_retry_http_status,
@@ -349,6 +350,12 @@ class FileDownloaderFileDataHelperTests(unittest.TestCase):
         self.assertEqual(1024, download_expected_size(1024, 2048))
         self.assertEqual(2048, download_expected_size(0, 2048))
         self.assertEqual(2048, download_expected_size(-1, 2048))
+
+    def test_download_total_size_preserves_header_parsing(self):
+        self.assertEqual(4096, download_total_size({"content-length": "4096"}))
+        self.assertEqual(0, download_total_size({}))
+        with self.assertRaises(ValueError):
+            download_total_size({"content-length": "not-a-number"})
 
     def test_content_disposition_filename_extracts_plain_filename(self):
         self.assertEqual("memo.pdf", content_disposition_filename('attachment; filename="memo.pdf"'))

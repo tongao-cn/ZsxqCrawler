@@ -277,6 +277,10 @@ def download_expected_size(file_size: int, total_size: int) -> int:
     return file_size if file_size > 0 else total_size
 
 
+def download_total_size(response_headers: Dict[str, Any]) -> int:
+    return int(response_headers.get("content-length", 0))
+
+
 def content_disposition_filename(content_disposition: str) -> Optional[str]:
     if "filename=" not in content_disposition:
         return None
