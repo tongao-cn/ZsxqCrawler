@@ -2564,6 +2564,40 @@ Result:
 - PostgreSQL compatibility debt scan: no SQLite compatibility patterns found.
 - Frontend build was not rerun because this slice only changes backend storage/helper code.
 
+### 2026-06-11 - P2 topic Q&A loader extraction
+
+Changed:
+
+- Added `load_topic_detail_qa` to `backend/storage/zsxq_database_helpers.py`.
+- Moved the existing `get_topic_detail` question and answer lookup block from
+  `backend/storage/zsxq_database.py` into the helper.
+- Kept the `topic_detail["type"] == "q&a"` guard in `backend/storage/zsxq_database.py`.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Q&A child queries still run only for `q&a` topics.
+- The question query, answer query, scoped group filters, parameter tuples, and payload builders are
+  unchanged.
+- Existing Q&A tests verify the two query parameter lists and returned question/answer payloads.
+
+Verification:
+
+```powershell
+uv run python -m py_compile backend\storage\zsxq_database.py backend\storage\zsxq_database_helpers.py
+uv run python -m unittest tests.test_zsxq_database_helpers -v
+uv run python -m unittest discover -s tests
+uv run python scripts\scan_postgres_compat_debt.py
+```
+
+Result:
+
+- `py_compile` passed.
+- `tests.test_zsxq_database_helpers`: 19 tests passed.
+- Full backend unittest discovery: 557 tests passed, 15 skipped.
+- PostgreSQL compatibility debt scan: no SQLite compatibility patterns found.
+- Frontend build was not rerun because this slice only changes backend storage/helper code.
+
 ## Stop Conditions
 
 Pause before editing if:

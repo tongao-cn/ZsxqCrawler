@@ -5,7 +5,6 @@ from typing import Dict, Any, Optional, List
 
 from backend.storage.db_compat import connect
 from backend.storage.zsxq_database_helpers import (
-    build_topic_detail_qa,
     build_topic_detail_comments,
     build_pagination,
     format_tag_row,
@@ -14,6 +13,7 @@ from backend.storage.zsxq_database_helpers import (
     load_topic_comment_images_map,
     load_topic_detail_latest_likes,
     load_topic_detail_likes_detail,
+    load_topic_detail_qa,
     load_topic_detail_talk,
     nullable_group_id_param,
     replace_file_topic_relation,
@@ -1184,41 +1184,7 @@ class ZSXQDatabase:
 
             # 6. 获取问答数据（如果是问答类型话题）
             if topic_detail["type"] == "q&a":
-                # 获取问题信息
-                self.cursor.execute('''
-                    SELECT
-                        q.text, q.expired, q.anonymous, q.owner_questions_count,
-                        q.owner_join_time, q.owner_status, q.owner_location,
-                        owner.user_id as owner_user_id, owner.name as owner_name,
-                        owner.alias as owner_alias, owner.avatar_url as owner_avatar_url,
-                        owner.location as owner_location_detail, owner.description as owner_description,
-                        questionee.user_id as questionee_user_id, questionee.name as questionee_name,
-                        questionee.alias as questionee_alias, questionee.avatar_url as questionee_avatar_url,
-                        questionee.location as questionee_location, questionee.description as questionee_description
-                    FROM questions q
-                    LEFT JOIN users owner ON q.owner_user_id = owner.user_id
-                    LEFT JOIN users questionee ON q.questionee_user_id = questionee.user_id
-                    WHERE q.topic_id = ?
-                      AND (? IS NULL OR q.topic_id IN (SELECT topic_id FROM topics WHERE group_id = ?))
-                    LIMIT 1
-                ''', (topic_id, scoped_group_id, scoped_group_id))
-
-                question_row = self.cursor.fetchone()
-
-                # 获取回答信息
-                self.cursor.execute('''
-                    SELECT
-                        a.text,
-                        u.user_id, u.name, u.alias, u.avatar_url, u.location, u.description
-                    FROM answers a
-                    LEFT JOIN users u ON a.owner_user_id = u.user_id
-                    WHERE a.topic_id = ?
-                      AND (? IS NULL OR a.topic_id IN (SELECT topic_id FROM topics WHERE group_id = ?))
-                    LIMIT 1
-                ''', (topic_id, scoped_group_id, scoped_group_id))
-
-                answer_row = self.cursor.fetchone()
-                topic_detail.update(build_topic_detail_qa(question_row, answer_row))
+                topic_detail.update(load_topic_detail_qa(self.cursor, topic_id, scoped_group_id))
 
             return topic_detail
 

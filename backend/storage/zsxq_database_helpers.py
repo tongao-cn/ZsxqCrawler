@@ -486,3 +486,39 @@ def build_topic_detail_qa(question_row, answer_row) -> Dict[str, Any]:
     if answer_row:
         qa_data["answer"] = topic_detail_answer_payload(answer_row)
     return qa_data
+
+
+def load_topic_detail_qa(cursor, topic_id: int, scoped_group_id: Any) -> Dict[str, Any]:
+    cursor.execute('''
+        SELECT
+            q.text, q.expired, q.anonymous, q.owner_questions_count,
+            q.owner_join_time, q.owner_status, q.owner_location,
+            owner.user_id as owner_user_id, owner.name as owner_name,
+            owner.alias as owner_alias, owner.avatar_url as owner_avatar_url,
+            owner.location as owner_location_detail, owner.description as owner_description,
+            questionee.user_id as questionee_user_id, questionee.name as questionee_name,
+            questionee.alias as questionee_alias, questionee.avatar_url as questionee_avatar_url,
+            questionee.location as questionee_location, questionee.description as questionee_description
+        FROM questions q
+        LEFT JOIN users owner ON q.owner_user_id = owner.user_id
+        LEFT JOIN users questionee ON q.questionee_user_id = questionee.user_id
+        WHERE q.topic_id = ?
+          AND (? IS NULL OR q.topic_id IN (SELECT topic_id FROM topics WHERE group_id = ?))
+        LIMIT 1
+    ''', (topic_id, scoped_group_id, scoped_group_id))
+
+    question_row = cursor.fetchone()
+
+    cursor.execute('''
+        SELECT
+            a.text,
+            u.user_id, u.name, u.alias, u.avatar_url, u.location, u.description
+        FROM answers a
+        LEFT JOIN users u ON a.owner_user_id = u.user_id
+        WHERE a.topic_id = ?
+          AND (? IS NULL OR a.topic_id IN (SELECT topic_id FROM topics WHERE group_id = ?))
+        LIMIT 1
+    ''', (topic_id, scoped_group_id, scoped_group_id))
+
+    answer_row = cursor.fetchone()
+    return build_topic_detail_qa(question_row, answer_row)
