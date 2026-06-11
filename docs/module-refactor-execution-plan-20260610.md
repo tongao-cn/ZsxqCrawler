@@ -22,6 +22,87 @@ Observed on 2026-06-10:
 - The working tree contains untracked temporary stock-analysis scripts/results. They are out of
   scope for this plan unless cleanup is explicitly requested.
 
+### Audit Refresh - 2026-06-11
+
+Observed on 2026-06-11 before the next cleanup round:
+
+- Current baseline verification passed:
+  - `uv run python -m unittest discover -s tests`: 476 tests passed, 15 skipped.
+  - `npm --prefix frontend run build`: passed.
+  - `uv run python scripts\scan_postgres_compat_debt.py`: no SQLite compatibility patterns found.
+- Recent `main` commits show that several earlier extraction slices have already landed:
+  - `470292f` Extract downloader API retry helpers
+  - `d6502a3` Extract stock analysis result builders
+  - `7567650` Extract daily stock trend hook
+  - `4c8f04d` Extract stock topic analysis panel hook
+  - `54a3157` Handle terminal task status before unmount
+- Current large-file hotspots from the 2026-06-11 scan:
+  - `backend/storage/zsxq_database.py`: about 1425 lines
+  - `backend/crawlers/zsxq_file_downloader.py`: about 1319 lines
+  - `backend/storage/zsxq_columns_database.py`: about 1046 lines
+  - `backend/services/stock_topic_analysis_service.py`: about 982 lines
+  - `backend/services/file_workflow_service.py`: about 882 lines
+  - `backend/services/a_share_analysis_service.py`: about 835 lines
+  - `backend/services/tdx_a_share_export_service.py`: about 708 lines
+  - `frontend/src/lib/api/types.ts`: about 640 lines
+  - `frontend/src/app/groups/[groupId]/page.tsx`: about 446 lines
+- Existing helper boundaries are active and should be extended rather than duplicated:
+  - `backend/crawlers/zsxq_file_downloader_helpers.py`
+  - `backend/services/stock_topic_analysis_helpers.py`
+  - `backend/services/stock_topic_analysis_payloads.py`
+  - `backend/storage/zsxq_file_database_helpers.py`
+- The same untracked root-level `tmp_stock_analysis_*` files remain out of scope. Do not move,
+  delete, stage, or reclassify them unless cleanup is explicitly requested.
+
+## Systematic Refactor Backlog
+
+Use this table to choose safe slices. Prefer lower-risk rows first unless a production bug points
+elsewhere.
+
+| Priority | Files or modules | Purpose | Behavior risk | Verification | New tests | Legacy, fallback, or compatibility handling |
+| --- | --- | --- | --- | --- | --- | --- |
+| P0 | Root `tmp_stock_analysis_*` files | Inventory only; do not clean by default | Low | `git status --short` | No | Preserve until the user explicitly asks for scratch cleanup |
+| P1 | `backend/crawlers/zsxq_file_downloader.py`, `backend/crawlers/zsxq_file_downloader_helpers.py` | Continue extracting retry, response, and failure-classification helpers | Low to medium | `py_compile` plus downloader helper tests | Yes, characterization first | Preserve retry counts, sleeps, User-Agent rotation, `1030`, `1059`, and log semantics |
+| P2 | `backend/services/stock_topic_analysis_service.py`, `backend/services/stock_topic_analysis_helpers.py`, `backend/services/stock_topic_analysis_payloads.py` | Move pure flow decisions and result builders out of orchestration | Low | stock topic service helper tests | Yes | Do not change prompts, AI output shape, checkpoint, rollback, or concurrency semantics |
+| P3 | `backend/services/file_workflow_service.py` | Extract task failure/status/path helpers and reduce nested error handling | Medium | file route and workflow helper tests | Yes | Preserve task statuses, lock behavior, error messages, and side effects |
+| P4 | `backend/storage/zsxq_file_database.py`, `backend/storage/zsxq_file_database_helpers.py` | Move payload and row mappers out of SQL methods | Medium | storage helper tests; PG smoke if SQL is touched | Yes | Do not change schema, `connect()`, `db_compat.py`, group-scope SQL, or runtime DDL behavior |
+| P5 | `backend/routes/group_routes.py`, `backend/services/crawl_service.py`, `backend/crawlers/official_topic_client.py` | Document and narrow official-vs-legacy crawl fallback boundaries | Medium | group, crawl, and official topic tests | Maybe | Keep legacy crawler as an explicit source; do not delete fallback without reachability proof |
+| P6 | `frontend/src/hooks/useTaskStatus.ts`, `frontend/src/components/TaskDock.tsx`, task list/log components | Consolidate SSE and fallback polling behavior | Medium | `npm --prefix frontend run build`; browser check for UI changes | Maybe | Preserve fallback polling and terminal-task handling semantics |
+| P7 | `frontend/src/lib/api/types.ts`, `frontend/src/lib/api/*` | Split large API type surfaces only when callers remain compatible | Medium | `npm --prefix frontend run build` | Maybe | Keep `frontend/src/lib/api.ts` compatibility facade intact |
+| P8 | `README.md`, `docs/project-architecture-roadmap.md`, active docs | Keep docs aligned with real module boundaries and verification commands | Low | grep references plus relevant builds/tests | No | Mark deprecated plans instead of deleting unless cleanup is in scope |
+
+## Legacy And Fallback Register
+
+Do not delete any item in this register during structural refactor slices. Each removal needs
+separate proof: no references, unreachable runtime path, equivalent coverage, and a focused test.
+
+| Area | Current role | Default action | Evidence or guardrail |
+| --- | --- | --- | --- |
+| Topic source `legacy` | Explicit cookie-based crawler path behind `topicSource=legacy` or legacy aliases | Keep | Route tests cover official path skipping legacy crawler and explicit legacy resolution |
+| Official topic MCP path | Default topic crawl path when configured | Keep | `OfficialTopicClient` and crawl service tests cover source selection and import behavior |
+| Group local fallback | Prevents frontend failure when official group lookup fails | Keep | `group_routes._build_group_info_fallback` tests cover fallback shape |
+| A-share local CSV fallback | Allows A-share analysis to continue when PostgreSQL storage is unavailable | Keep | A-share tests cover local read/write fallback |
+| `db_compat.py` | Narrow PostgreSQL connection and row-adaptation compatibility layer | Keep and avoid broad edits | Compatibility debt scan is clean; roadmap says no SQLite runtime behavior |
+| File downloader retry fallback | Handles retryable HTTP/API failures and signed URL/download failures | Keep | Downloader helper tests cover retry decisions and failure classification |
+| Task SSE fallback polling | Keeps frontend task status alive when SSE is unavailable or closes | Keep | `useTaskStatus` is a product behavior surface; build must pass after any changes |
+| Tongdaxin official API adapter | Active A-share export path through TdxQuant APIs | Keep | Do not reintroduce `.blk` or `blocknew.cfg` paths |
+
+## Behavior Locking Rules
+
+Before modifying a hotspot, define the current behavior in tests or in an existing verified helper
+test. Add characterization tests first when any of these are involved:
+
+- public API fields or response status codes;
+- task status, lock, cancellation, log, or terminal-state behavior;
+- prompt text, AI output schema, model-routing values, or JSON parsing;
+- PostgreSQL schema, SQL writes, group scoping, or runtime DDL policy;
+- fallback paths for official topic crawl, local group data, A-share local files, downloader retry,
+  or frontend task polling;
+- empty values, malformed payloads, missing fields, duplicate IDs, invalid dates, or external
+  dependency failures.
+
+The test should lock current behavior. Do not change business logic just to make a new test pass.
+
 ## Operating Rules
 
 1. Start each round by checking `git status --short` and recent commits.
@@ -309,11 +390,12 @@ Pause and reassess before editing if any of these occur:
 ## Recommended Next Work Round
 
 1. Phase 0 baseline freeze.
-2. Phase 1 slice 1: response logging decision helper.
-3. Phase 1 slice 2: API failure classification helper.
-4. Focused downloader verification.
-5. Commit downloader changes.
-6. Phase 2 slice 1: processed-topic reconciliation helper.
-7. Focused stock topic verification.
-8. Commit stock topic changes.
-9. Full verification gate.
+2. Phase 1 remaining slice: add or complete downloader HTTP failure classification only if the
+   current request loops still duplicate that decision.
+3. Add characterization tests for the exact downloader retry categories before editing loops.
+4. Focused downloader verification and a narrow commit if code changed.
+5. Phase 2 remaining slice: extract stock-topic analysis mode decision or another pure helper
+   that does not touch prompts, AI calls, checkpointing, rollback, or public fields.
+6. Focused stock topic verification and a narrow commit if code changed.
+7. Reassess P3 file workflow helpers only after P1/P2 are complete or consciously skipped.
+8. Full verification gate.
