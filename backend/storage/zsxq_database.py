@@ -9,17 +9,15 @@ from backend.storage.zsxq_database_helpers import (
     build_topic_detail_latest_likes,
     build_topic_detail_likes_detail,
     build_topic_detail_comments,
-    build_topic_detail_talk,
     build_pagination,
     format_tag_row,
     format_tag_topic_row,
     group_id_param,
     load_topic_comment_images_map,
+    load_topic_detail_talk,
     nullable_group_id_param,
     replace_file_topic_relation,
     topic_detail_base_payload,
-    topic_detail_file_payload,
-    topic_detail_image_payload,
     topic_detail_scope,
     topic_file_payload_from_row,
     upsert_core_file,
@@ -1155,43 +1153,7 @@ class ZSXQDatabase:
 
             talk_row = self.cursor.fetchone()
             if talk_row:
-                # 获取话题图片
-                self.cursor.execute('''
-                    SELECT
-                        image_id, type, thumbnail_url, thumbnail_width, thumbnail_height,
-                        large_url, large_width, large_height,
-                        original_url, original_width, original_height, original_size
-                    FROM images
-                    WHERE topic_id = ? AND comment_id IS NULL
-                      AND (? IS NULL OR topic_id IN (SELECT topic_id FROM topics WHERE group_id = ?))
-                    ORDER BY image_id
-                ''', (topic_id, scoped_group_id, scoped_group_id))
-
-                images = [topic_detail_image_payload(img_row) for img_row in self.cursor.fetchall()]
-
-                # 获取话题文件
-                self.cursor.execute('''
-                    SELECT
-                        tf.file_id, tf.name, tf.hash, tf.size, tf.duration, tf.download_count, tf.create_time
-                    FROM topic_files tf
-                    WHERE tf.topic_id = ?
-                      AND (? IS NULL OR tf.topic_id IN (SELECT topic_id FROM topics WHERE group_id = ?))
-                    ORDER BY file_id
-                ''', (topic_id, scoped_group_id, scoped_group_id))
-
-                files = [topic_detail_file_payload(file_row) for file_row in self.cursor.fetchall()]
-
-                # 读取文章信息（如有）
-                self.cursor.execute('''
-                    SELECT title, article_id, article_url, inline_article_url
-                    FROM articles
-                    WHERE topic_id = ?
-                      AND (? IS NULL OR topic_id IN (SELECT topic_id FROM topics WHERE group_id = ?))
-                    LIMIT 1
-                ''', (topic_id, scoped_group_id, scoped_group_id))
-                article_row = self.cursor.fetchone()
-
-                topic_detail["talk"] = build_topic_detail_talk(talk_row, images, files, article_row)
+                topic_detail["talk"] = load_topic_detail_talk(self.cursor, topic_id, scoped_group_id, talk_row)
 
             # 3. 获取最新点赞
             self.cursor.execute('''

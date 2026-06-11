@@ -245,6 +245,43 @@ def build_topic_detail_talk(
     return talk_data
 
 
+def load_topic_detail_talk(cursor, topic_id: int, scoped_group_id: Any, talk_row) -> Dict[str, Any]:
+    cursor.execute('''
+        SELECT
+            image_id, type, thumbnail_url, thumbnail_width, thumbnail_height,
+            large_url, large_width, large_height,
+            original_url, original_width, original_height, original_size
+        FROM images
+        WHERE topic_id = ? AND comment_id IS NULL
+          AND (? IS NULL OR topic_id IN (SELECT topic_id FROM topics WHERE group_id = ?))
+        ORDER BY image_id
+    ''', (topic_id, scoped_group_id, scoped_group_id))
+
+    images = [topic_detail_image_payload(img_row) for img_row in cursor.fetchall()]
+
+    cursor.execute('''
+        SELECT
+            tf.file_id, tf.name, tf.hash, tf.size, tf.duration, tf.download_count, tf.create_time
+        FROM topic_files tf
+        WHERE tf.topic_id = ?
+          AND (? IS NULL OR tf.topic_id IN (SELECT topic_id FROM topics WHERE group_id = ?))
+        ORDER BY file_id
+    ''', (topic_id, scoped_group_id, scoped_group_id))
+
+    files = [topic_detail_file_payload(file_row) for file_row in cursor.fetchall()]
+
+    cursor.execute('''
+        SELECT title, article_id, article_url, inline_article_url
+        FROM articles
+        WHERE topic_id = ?
+          AND (? IS NULL OR topic_id IN (SELECT topic_id FROM topics WHERE group_id = ?))
+        LIMIT 1
+    ''', (topic_id, scoped_group_id, scoped_group_id))
+    article_row = cursor.fetchone()
+
+    return build_topic_detail_talk(talk_row, images, files, article_row)
+
+
 def topic_detail_like_payload(row) -> Dict[str, Any]:
     return {
         "create_time": row[0],
