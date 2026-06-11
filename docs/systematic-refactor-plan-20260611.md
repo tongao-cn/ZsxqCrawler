@@ -2007,6 +2007,53 @@ Result:
 - PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
 - Git diff whitespace check passed.
 
+### 2026-06-11 - P5 memory task helper extraction
+
+Changed:
+
+- Extracted `_set_memory_task_locked()` for in-memory task writes during regular task creation and
+  ingestion task creation.
+- Extracted `_memory_tasks_snapshot_locked()` for runtime shutdown task snapshotting.
+- Reused existing characterization coverage for memory task shape, ingestion fallback memory task
+  creation, runtime shutdown cancellation, and runtime shutdown stop-flag ordering.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- `create_task()` still builds the same pending in-memory task before persisting it.
+- `create_ingestion_task()` still stores the task returned by `create_task_with_lock()`, or builds
+  the same pending fallback task when the store returns no task.
+- Runtime shutdown still snapshots `current_tasks` under `_state_lock` before stopping resources or
+  updating task statuses.
+- No public route response, task status field, cancellation behavior, shutdown snapshot ordering,
+  fallback polling, storage schema, legacy path, config semantics, or frontend hook behavior
+  changed.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_task_runtime_helpers.TaskRuntimeHelperTests.test_create_task_uses_persisted_sequence_and_initializes_runtime_state tests.test_task_runtime_helpers.TaskRuntimeHelperTests.test_create_ingestion_task_allows_different_group_when_no_conflict tests.test_task_runtime_helpers.TaskRuntimeHelperTests.test_create_ingestion_task_builds_memory_task_when_store_returns_no_task tests.test_task_runtime_helpers.TaskRuntimeHelperTests.test_request_runtime_shutdown_cancels_running_resources tests.test_task_runtime_helpers.TaskRuntimeHelperTests.test_request_runtime_shutdown_marks_stop_flags_before_stopping_resources -v
+uv run python -m py_compile backend\services\task_runtime.py
+uv run python -m unittest tests.test_task_runtime_helpers -v
+uv run python -m unittest tests.test_task_runtime_helpers tests.test_task_store tests.test_task_routes_helpers -v
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+uv run python scripts\scan_postgres_compat_debt.py
+git diff --check
+```
+
+Result:
+
+- Existing characterization tests passed before the helper extraction: 5 tests.
+- Post-refactor characterization tests passed: 5 tests.
+- Focused task runtime tests passed: 37 tests.
+- Recommended task runtime gate passed: 56 tests, 14 PostgreSQL integration tests skipped by
+  configuration.
+- Full backend tests passed: 556 tests, 15 skipped.
+- Frontend build passed.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Git diff whitespace check passed.
+
 ## Stop Conditions
 
 Pause before editing if:

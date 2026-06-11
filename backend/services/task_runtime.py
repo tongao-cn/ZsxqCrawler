@@ -137,6 +137,14 @@ def _memory_task_state_locked(task_id: str) -> Optional[Dict[str, Any]]:
     return current_tasks.get(task_id)
 
 
+def _set_memory_task_locked(task_id: str, task: Dict[str, Any]) -> None:
+    current_tasks[task_id] = task
+
+
+def _memory_tasks_snapshot_locked() -> List[tuple[str, Dict[str, Any]]]:
+    return list(current_tasks.items())
+
+
 def get_task_state(task_id: str) -> Optional[Dict[str, Any]]:
     task = get_task_store().get_task(task_id)
     if not task:
@@ -187,12 +195,15 @@ def create_task(task_type: str, description: str, metadata: Optional[Dict[str, A
     with _state_lock:
         task_id = _allocate_task_id_locked(now)
 
-        current_tasks[task_id] = _build_pending_task_state(
+        _set_memory_task_locked(
             task_id,
-            task_type,
-            description,
-            now,
-            metadata,
+            _build_pending_task_state(
+                task_id,
+                task_type,
+                description,
+                now,
+                metadata,
+            ),
         )
 
     store = get_task_store()
@@ -249,12 +260,15 @@ def create_ingestion_task(task_type: str, description: str, group_id: str) -> tu
     if existing:
         return None, _normalize_task(existing)
     with _state_lock:
-        current_tasks[task_id] = task or _build_pending_task_state(
+        _set_memory_task_locked(
             task_id,
-            task_type,
-            description,
-            now,
-            metadata,
+            task or _build_pending_task_state(
+                task_id,
+                task_type,
+                description,
+                now,
+                metadata,
+            ),
         )
         _initialize_task_tracking_locked(task_id)
     _persist_task_creation_tracking(task_id, description)
@@ -533,7 +547,7 @@ def enqueue_runtime_task(task_func: Callable[..., Any], task_id: str, *args: Any
 
 
 def _prepare_runtime_shutdown_snapshot_locked() -> tuple[List[tuple[str, Dict[str, Any]]], List[Any], List[Any]]:
-    tasks_snapshot = list(current_tasks.items())
+    tasks_snapshot = _memory_tasks_snapshot_locked()
     stopping_task_ids = [
         task_id
         for task_id, task in tasks_snapshot
