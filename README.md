@@ -83,14 +83,13 @@ uv sync
 uv run python -m backend.main
 
 # 2. 启动前端服务（新开终端窗口）
-cd frontend
-npm run dev
+npm --prefix frontend run dev
 ```
 
-如果前后端不在同一台机器/容器中，前端默认请求 `http://localhost:8208` 会导致 `Failed to fetch`，请在 `frontend/.env.local` 中配置后端地址（示例）：
+如果前后端不在同一台机器/容器中，前端默认请求 `http://localhost:8508` 会导致 `Failed to fetch`，请在 `frontend/.env.local` 中配置后端地址（示例）：
 
 ```bash
-NEXT_PUBLIC_API_BASE_URL=http://192.168.x.x:8208
+NEXT_PUBLIC_API_BASE_URL=http://192.168.x.x:8508
 ```
 
 后端 CORS 默认只允许来自 `http://localhost:18080` 和 `http://127.0.0.1:18080` 的浏览器请求；如果前端运行在其他地址，请在启动后端前设置 `CORS_ALLOW_ORIGINS`，多个来源用逗号分隔。

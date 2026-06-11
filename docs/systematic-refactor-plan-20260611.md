@@ -1138,6 +1138,42 @@ Result:
 - PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
 - Git diff whitespace check passed.
 
+### 2026-06-11 - P8 README runtime command alignment
+
+Changed:
+
+- Updated README frontend startup guidance to use the repository-standard root command:
+  `npm --prefix frontend run dev`.
+- Corrected the documented default frontend API target from `http://localhost:8208` to
+  `http://localhost:8508`, matching `frontend/src/lib/api/client.ts`, `frontend/next.config.ts`,
+  and `backend/main.py`.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- This is a documentation-only slice. No runtime code, route behavior, storage schema, task
+  behavior, fallback path, legacy path, AI output, dependency declaration, or config semantics
+  changed.
+
+Verification:
+
+```powershell
+rg -n "8208|8508|npm run dev|cd frontend|npm --prefix frontend" README.md frontend\package.json frontend\next.config.ts frontend\src\lib\api\client.ts backend\main.py
+npm --prefix frontend run build
+uv run python -m unittest discover -s tests
+uv run python scripts\scan_postgres_compat_debt.py
+git diff --check
+```
+
+Result:
+
+- README now documents `8508`, matching backend default port and frontend API defaults.
+- README no longer documents a root-to-frontend `cd frontend` startup sequence.
+- Frontend build passed.
+- Full backend tests passed: 533 tests, 15 skipped.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Git diff whitespace check passed.
+
 ## Stop Conditions
 
 Pause before editing if:
