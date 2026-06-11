@@ -158,6 +158,29 @@ def _comment_record_params(
     )
 
 
+def _latest_like_record_params(topic_id: int, owner_id: Optional[Any], like_data: Dict[str, Any]) -> tuple[Any, ...]:
+    return (
+        topic_id,
+        owner_id,
+        like_data.get('create_time'),
+    )
+
+
+def _like_emoji_record_params(topic_id: int, emoji_data: Dict[str, Any]) -> tuple[Any, ...]:
+    return (
+        topic_id,
+        emoji_data.get('emoji_key'),
+        emoji_data.get('likes_count', 0),
+    )
+
+
+def _user_liked_emoji_record_params(topic_id: int, emoji_key: str) -> tuple[Any, ...]:
+    return (
+        topic_id,
+        emoji_key,
+    )
+
+
 def _file_attachment_params(parent_id: Any, file_data: Dict[str, Any]) -> tuple[Any, ...]:
     return (
         parent_id,

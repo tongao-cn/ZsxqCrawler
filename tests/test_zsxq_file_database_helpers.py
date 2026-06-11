@@ -11,10 +11,13 @@ from backend.storage.zsxq_file_database import (
     _file_record_params,
     _group_record_params,
     _image_record_params,
+    _latest_like_record_params,
+    _like_emoji_record_params,
     _new_import_stats,
     _row_to_file_ai_analysis,
     _talk_record_params,
     _topic_record_params,
+    _user_liked_emoji_record_params,
     _user_record_params,
 )
 
@@ -369,6 +372,25 @@ class ZSXQFileDatabaseHelperTests(unittest.TestCase):
             _comment_record_params(None, 202, None, None, {"comment_id": 101}),
         )
 
+    def test_latest_like_record_params_keep_insert_column_order(self):
+        self.assertEqual(
+            (202, 9, "2026-06-10T12:00:00"),
+            _latest_like_record_params(202, 9, {"create_time": "2026-06-10T12:00:00"}),
+        )
+
+    def test_like_emoji_record_params_keep_insert_column_order(self):
+        self.assertEqual(
+            (202, "[ok]", 2),
+            _like_emoji_record_params(202, {"emoji_key": "[ok]", "likes_count": 2}),
+        )
+        self.assertEqual(
+            (202, "[default]", 0),
+            _like_emoji_record_params(202, {"emoji_key": "[default]"}),
+        )
+
+    def test_user_liked_emoji_record_params_keep_insert_column_order(self):
+        self.assertEqual((202, "[ok]"), _user_liked_emoji_record_params(202, "[ok]"))
+
     def test_count_tables_builds_stats_from_cursor_counts(self):
         cursor = FakeCursor({"files": 3, "topics": 2})
 
@@ -688,17 +710,30 @@ class ZSXQFileDatabaseHelperTests(unittest.TestCase):
             202,
             [{"owner": {"user_id": 9}, "create_time": "2026-01-01"}],
         )
+        _latest_delete_sql, latest_delete_params = db.cursor.calls[-2]
+        _latest_sql, latest_params = db.cursor.calls[-1]
         calls = "\n".join(sql for sql, _params in db.cursor.calls)
         self.assertIn("DELETE FROM latest_likes WHERE topic_id = ?", calls)
         self.assertIn("ON CONFLICT(topic_id, owner_user_id, create_time) DO NOTHING", calls)
+        self.assertEqual((202,), latest_delete_params)
+        self.assertEqual((202, 9, "2026-01-01"), latest_params)
 
         ZSXQFileDatabase.insert_like_emojis(
             db,
             202,
-            {"emojis": [{"emoji_key": "[ok]", "likes_count": 2}]},
+            {"emojis": [{"emoji_key": "[ok]", "likes_count": 2}, {"emoji_key": "[default]"}]},
         )
-        emoji_sql, _emoji_params = db.cursor.calls[-1]
-        self.assertIn("ON CONFLICT(topic_id, emoji_key) DO UPDATE SET", emoji_sql)
+        first_emoji_sql, first_emoji_params = db.cursor.calls[-2]
+        second_emoji_sql, second_emoji_params = db.cursor.calls[-1]
+        self.assertIn("ON CONFLICT(topic_id, emoji_key) DO UPDATE SET", first_emoji_sql)
+        self.assertIn("ON CONFLICT(topic_id, emoji_key) DO UPDATE SET", second_emoji_sql)
+        self.assertEqual((202, "[ok]", 2), first_emoji_params)
+        self.assertEqual((202, "[default]", 0), second_emoji_params)
+
+        ZSXQFileDatabase.insert_user_liked_emojis(db, 202, ["[ok]"])
+        user_emoji_sql, user_emoji_params = db.cursor.calls[-1]
+        self.assertIn("ON CONFLICT(topic_id, emoji_key) DO NOTHING", user_emoji_sql)
+        self.assertEqual((202, "[ok]"), user_emoji_params)
 
     def test_runtime_create_tables_and_migration_are_noops(self):
         from backend.storage.zsxq_file_database import ZSXQFileDatabase

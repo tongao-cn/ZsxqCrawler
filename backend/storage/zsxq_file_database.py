@@ -13,11 +13,14 @@ from backend.storage.zsxq_file_database_helpers import (
     _group_id_param,
     _image_record_params,
     _group_record_params,
+    _latest_like_record_params,
+    _like_emoji_record_params,
     _new_import_stats,
     _nullable_group_id_param,
     _row_to_file_ai_analysis,
     _talk_record_params,
     _topic_record_params,
+    _user_liked_emoji_record_params,
     _user_record_params,
 )
 
@@ -240,7 +243,7 @@ class ZSXQFileDatabase:
             INSERT INTO latest_likes (topic_id, owner_user_id, create_time)
             VALUES (?, ?, ?)
             ON CONFLICT(topic_id, owner_user_id, create_time) DO NOTHING
-            ''', (topic_id, owner_id, like.get('create_time')))
+            ''', _latest_like_record_params(topic_id, owner_id, like))
     
     def insert_comments(self, topic_id: int, comments_data: List[Dict[str, Any]]):
         """插入评论信息"""
@@ -293,7 +296,7 @@ class ZSXQFileDatabase:
             VALUES (?, ?, ?)
             ON CONFLICT(topic_id, emoji_key) DO UPDATE SET
                 likes_count = excluded.likes_count
-            ''', (topic_id, emoji.get('emoji_key'), emoji.get('likes_count', 0)))
+            ''', _like_emoji_record_params(topic_id, emoji))
     
     def insert_user_liked_emojis(self, topic_id: int, liked_emojis: List[str]):
         """插入用户点赞的表情"""
@@ -302,7 +305,7 @@ class ZSXQFileDatabase:
             INSERT INTO user_liked_emojis (topic_id, emoji_key)
             VALUES (?, ?)
             ON CONFLICT(topic_id, emoji_key) DO NOTHING
-            ''', (topic_id, emoji_key))
+            ''', _user_liked_emoji_record_params(topic_id, emoji_key))
     
     def insert_columns(self, topic_id: int, columns_data: List[Dict[str, Any]]):
         """插入栏目信息"""
