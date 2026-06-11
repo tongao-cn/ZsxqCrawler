@@ -4184,6 +4184,46 @@ Result:
 - PostgreSQL compatibility debt scan: no SQLite compatibility patterns found.
 - Frontend build is not planned because this slice only changes backend storage/helper code.
 
+### 2026-06-11 - P2 topic/file existence query helper extraction
+
+Changed:
+
+- Added `topic_exists_query` and `file_exists_query` to
+  `backend/storage/zsxq_database_helpers.py`, with compatibility wrappers in
+  `backend/storage/zsxq_database.py`.
+- Replaced duplicate-topic detection in `import_topic_data` and file-existence detection in
+  `backfill_topic_files_to_core_tables` with helper-returned SQL and params.
+- Added characterization coverage for SQL shape, `group_id_param` semantics, existing-topic skip
+  behavior, file-sync side effect, and no-commit/no-rollback behavior in the duplicate-topic path.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- The existing `group_id_param(None) -> ""` behavior is preserved for both existence queries.
+- Existing-topic imports still return `True`, still sync talk files when present, still print the
+  skip message, and still avoid the normal import write path.
+- Backfill still checks whether a file already exists before deciding whether to increment
+  `new_files`.
+- No schema, config, compatibility, fallback, error handling, logging, or public API semantics were
+  changed.
+
+Verification:
+
+```powershell
+uv run python -m py_compile backend\storage\zsxq_database.py backend\storage\zsxq_database_helpers.py tests\test_zsxq_database_helpers.py
+uv run python -m unittest tests.test_zsxq_database_helpers -v
+uv run python -m unittest discover -s tests
+uv run python scripts\scan_postgres_compat_debt.py
+```
+
+Result:
+
+- `py_compile` passed.
+- `tests.test_zsxq_database_helpers`: 21 tests passed.
+- Full backend unittest discovery: 624 tests passed, 15 skipped.
+- PostgreSQL compatibility debt scan: no SQLite compatibility patterns found.
+- Frontend build is not planned because this slice only changes backend storage/helper code.
+
 ## Stop Conditions
 
 Pause before editing if:

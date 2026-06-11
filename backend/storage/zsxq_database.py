@@ -6,6 +6,7 @@ from typing import Dict, Any, Optional, List
 from backend.storage.db_compat import connect
 from backend.storage.zsxq_database_helpers import (
     build_pagination,
+    file_exists_query,
     format_tag_row,
     format_tag_topic_row,
     group_id_param,
@@ -18,6 +19,7 @@ from backend.storage.zsxq_database_helpers import (
     nullable_group_id_param,
     replace_file_topic_relation,
     topic_detail_scope,
+    topic_exists_query,
     topic_file_payload_from_row,
     upsert_core_file,
 )
@@ -49,6 +51,14 @@ def _nullable_group_id_param(group_id: Optional[str]) -> Any:
 
 def _topic_detail_scope(topic_id: int, group_id: Optional[str]) -> tuple[Any, str, list[Any]]:
     return topic_detail_scope(topic_id, group_id)
+
+
+def _topic_exists_query(topic_id: int, group_id: Optional[str]) -> tuple[str, tuple[Any, ...]]:
+    return topic_exists_query(topic_id, group_id)
+
+
+def _file_exists_query(file_id: int, group_id: Optional[str]) -> tuple[str, tuple[Any, ...]]:
+    return file_exists_query(file_id, group_id)
 
 
 def _upsert_core_file(cursor, group_id: Optional[int], topic_id: int, file_data: Dict[str, Any]) -> Optional[int]:
@@ -83,10 +93,8 @@ class ZSXQDatabase:
                 return False
 
             # 如果话题已存在，直接跳过，避免重复写入或更新
-            self.cursor.execute(
-                'SELECT 1 FROM topics WHERE topic_id = ? AND (? IS NULL OR group_id = ?) LIMIT 1',
-                (topic_id, _group_id_param(self.group_id), _group_id_param(self.group_id)),
-            )
+            sql, params = _topic_exists_query(topic_id, self.group_id)
+            self.cursor.execute(sql, params)
             if self.cursor.fetchone():
                 if 'talk' in topic_data and topic_data['talk'] and 'files' in topic_data['talk']:
                     self._sync_topic_files_to_core_tables(topic_data, topic_data['talk']['files'])
@@ -1078,10 +1086,8 @@ class ZSXQDatabase:
                     group_name, group_type, background_url,
                 ) = row
 
-                self.cursor.execute(
-                    'SELECT 1 FROM files WHERE file_id = ? AND (? IS NULL OR group_id = ?) LIMIT 1',
-                    (file_id, _group_id_param(self.group_id), _group_id_param(self.group_id)),
-                )
+                sql, params = _file_exists_query(file_id, self.group_id)
+                self.cursor.execute(sql, params)
                 is_new_file = self.cursor.fetchone() is None
 
                 if group_id and group_name:

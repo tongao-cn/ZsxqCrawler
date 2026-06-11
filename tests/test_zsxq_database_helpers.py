@@ -1,13 +1,16 @@
 import unittest
+from unittest.mock import patch
 
 from backend.storage.zsxq_database import (
     _build_pagination,
+    _file_exists_query,
     _format_tag_row,
     _format_tag_topic_row,
     _group_id_param,
     _nullable_group_id_param,
     _replace_file_topic_relation,
     _topic_detail_scope,
+    _topic_exists_query,
     _topic_file_payload_from_row,
     _upsert_core_file,
 )
@@ -575,6 +578,52 @@ class ZSXQDatabaseHelperTests(unittest.TestCase):
             ("", "t.topic_id = ? AND t.group_id = ?", [202, ""]),
             _topic_detail_scope(202, ""),
         )
+
+    def test_existence_query_helpers_preserve_group_id_param_semantics(self):
+        topic_sql, topic_params = _topic_exists_query(202, "303")
+        self.assertEqual(
+            "SELECT 1 FROM topics WHERE topic_id = ? AND (? IS NULL OR group_id = ?) LIMIT 1",
+            topic_sql,
+        )
+        self.assertEqual((202, 303, 303), topic_params)
+        self.assertEqual((202, "", ""), _topic_exists_query(202, None)[1])
+
+        file_sql, file_params = _file_exists_query(101, "303")
+        self.assertEqual(
+            "SELECT 1 FROM files WHERE file_id = ? AND (? IS NULL OR group_id = ?) LIMIT 1",
+            file_sql,
+        )
+        self.assertEqual((101, 303, 303), file_params)
+        self.assertEqual((101, "", ""), _file_exists_query(101, None)[1])
+
+    def test_import_topic_data_existing_topic_preserves_skip_and_file_sync(self):
+        from backend.storage.zsxq_database import ZSXQDatabase
+
+        cursor = FakeCursor()
+        cursor.row = (1,)
+        db = object.__new__(ZSXQDatabase)
+        db.cursor = cursor
+        db.conn = FakeConnection()
+        db.group_id = "303"
+        synced = []
+        db._sync_topic_files_to_core_tables = lambda topic, files: synced.append((topic, files))
+
+        topic_data = {"topic_id": 202, "talk": {"files": [{"file_id": 101}]}}
+        with patch("builtins.print"):
+            self.assertTrue(ZSXQDatabase.import_topic_data(db, topic_data))
+
+        self.assertEqual(
+            [
+                (
+                    "SELECT 1 FROM topics WHERE topic_id = ? AND (? IS NULL OR group_id = ?) LIMIT 1",
+                    (202, 303, 303),
+                )
+            ],
+            cursor.calls,
+        )
+        self.assertEqual([(topic_data, [{"file_id": 101}])], synced)
+        self.assertEqual(0, db.conn.commits)
+        self.assertEqual(0, db.conn.rollbacks)
 
     def test_upsert_comment_writes_group_id_from_runtime_scope(self):
         from backend.storage.zsxq_database import ZSXQDatabase

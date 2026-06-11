@@ -74,6 +74,22 @@ def topic_detail_scope(topic_id: int, group_id: Optional[str]) -> tuple[Any, str
     return scoped_group_id, topic_scope_sql, topic_scope_params
 
 
+def topic_exists_query(topic_id: int, group_id: Optional[str]) -> tuple[str, tuple[Any, ...]]:
+    scoped_group_id = group_id_param(group_id)
+    return (
+        "SELECT 1 FROM topics WHERE topic_id = ? AND (? IS NULL OR group_id = ?) LIMIT 1",
+        (topic_id, scoped_group_id, scoped_group_id),
+    )
+
+
+def file_exists_query(file_id: int, group_id: Optional[str]) -> tuple[str, tuple[Any, ...]]:
+    scoped_group_id = group_id_param(group_id)
+    return (
+        "SELECT 1 FROM files WHERE file_id = ? AND (? IS NULL OR group_id = ?) LIMIT 1",
+        (file_id, scoped_group_id, scoped_group_id),
+    )
+
+
 def replace_file_topic_relation(file_db, file_id: int, topic_id: int) -> int:
     file_db.cursor.execute(
         """
