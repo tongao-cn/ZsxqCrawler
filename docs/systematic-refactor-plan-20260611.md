@@ -2426,6 +2426,39 @@ Result:
 - Combined task runtime/store/routes tests: 57 tests passed, 14 PostgreSQL integration tests
   skipped.
 
+### 2026-06-11 - P5 task runtime thread helper module extraction
+
+Changed:
+
+- Added `backend/services/task_runtime_threads.py` for runtime task thread and lock-heartbeat dict
+  operations.
+- Kept thread construction, daemon/thread names, heartbeat loop timing, coroutine execution, and
+  shutdown ordering in `backend/services/task_runtime.py`.
+- Kept `runtime_task_threads` and `runtime_task_heartbeats` in `task_runtime.py` for existing tests
+  and compatibility.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Ingestion heartbeat registration/stop, non-ingestion heartbeat skip, runtime task thread
+  registration/removal, async task execution, daemon thread names, and shutdown heartbeat/thread
+  cleanup remain unchanged.
+
+Verification:
+
+```powershell
+uv run python -m py_compile backend\services\task_runtime.py backend\services\task_runtime_threads.py
+uv run python -m unittest tests.test_task_runtime_helpers -v
+uv run python -m unittest tests.test_task_runtime_helpers tests.test_task_store tests.test_task_routes_helpers -v
+```
+
+Result:
+
+- `py_compile` passed.
+- `tests.test_task_runtime_helpers`: 38 tests passed.
+- Combined task runtime/store/routes tests: 57 tests passed, 14 PostgreSQL integration tests
+  skipped.
+
 ## Stop Conditions
 
 Pause before editing if:

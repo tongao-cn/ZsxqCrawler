@@ -47,6 +47,14 @@ from backend.services.task_runtime_status import (
     _normalize_task_status,
     _task_created_at_sort_value,
 )
+from backend.services.task_runtime_threads import (
+    clear_runtime_task_threads,
+    forget_runtime_task_thread,
+    pop_task_lock_heartbeat,
+    register_runtime_task_thread,
+    register_task_lock_heartbeat,
+    task_lock_heartbeat_ids,
+)
 from backend.storage.task_store import TaskStore
 
 
@@ -421,15 +429,15 @@ def _request_stop_for_task_resources(crawler: Any, downloader: Any) -> None:
 
 
 def _register_task_lock_heartbeat_locked(task_id: str, stop_event: threading.Event) -> None:
-    runtime_task_heartbeats[task_id] = stop_event
+    register_task_lock_heartbeat(runtime_task_heartbeats, task_id, stop_event)
 
 
 def _pop_task_lock_heartbeat_locked(task_id: str) -> Optional[threading.Event]:
-    return runtime_task_heartbeats.pop(task_id, None)
+    return pop_task_lock_heartbeat(runtime_task_heartbeats, task_id)
 
 
 def _task_lock_heartbeat_ids_locked() -> List[str]:
-    return list(runtime_task_heartbeats)
+    return task_lock_heartbeat_ids(runtime_task_heartbeats)
 
 
 def _start_task_lock_heartbeat(task_id: str) -> None:
@@ -467,15 +475,15 @@ def _request_stop_for_resources(resources: List[Any]) -> None:
 
 
 def _register_runtime_task_thread_locked(task_id: str, thread: threading.Thread) -> None:
-    runtime_task_threads[task_id] = thread
+    register_runtime_task_thread(runtime_task_threads, task_id, thread)
 
 
 def _forget_runtime_task_thread_locked(task_id: str) -> None:
-    runtime_task_threads.pop(task_id, None)
+    forget_runtime_task_thread(runtime_task_threads, task_id)
 
 
 def _clear_runtime_task_threads_locked() -> None:
-    runtime_task_threads.clear()
+    clear_runtime_task_threads(runtime_task_threads)
 
 
 def _run_runtime_task(
