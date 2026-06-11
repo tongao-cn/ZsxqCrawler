@@ -2,7 +2,9 @@ import unittest
 from unittest.mock import patch
 
 from backend.storage.zsxq_columns_database import (
+    _column_insert_params,
     _column_row_to_dict,
+    _column_topic_insert_params,
     _column_topic_row_to_dict,
     _comment_image_row_to_dict,
     _crawl_log_update_parts,
@@ -27,6 +29,7 @@ from backend.storage.zsxq_columns_database import (
     _topic_child_delete_statements,
     _uncached_image_row_to_dict,
     _uncached_images_query,
+    _user_insert_params,
 )
 
 
@@ -417,6 +420,79 @@ class ZSXQColumnsDatabaseHelperTests(unittest.TestCase):
             },
         )
 
+    def test_column_insert_params_preserve_column_order_and_defaults(self):
+        self.assertEqual(
+            (
+                101,
+                303,
+                "column name",
+                "cover-url",
+                9,
+                "2026-06-10T10:00:00",
+                "2026-06-10T11:00:00",
+            ),
+            _column_insert_params(
+                303,
+                {
+                    "column_id": 101,
+                    "name": "column name",
+                    "cover_url": "cover-url",
+                    "statistics": {"topics_count": 9},
+                    "create_time": "2026-06-10T10:00:00",
+                    "last_topic_attach_time": "2026-06-10T11:00:00",
+                },
+            ),
+        )
+        self.assertEqual(
+            (101, 303, "", None, 0, None, None),
+            _column_insert_params(303, {"column_id": 101}),
+        )
+
+    def test_column_topic_and_user_insert_params_preserve_column_order_and_defaults(self):
+        self.assertEqual(
+            (
+                202,
+                101,
+                303,
+                "topic title",
+                "topic text",
+                "2026-06-10T12:00:00",
+                "2026-06-10T13:00:00",
+            ),
+            _column_topic_insert_params(
+                101,
+                303,
+                {
+                    "topic_id": 202,
+                    "title": "topic title",
+                    "text": "topic text",
+                    "create_time": "2026-06-10T12:00:00",
+                    "attached_to_column_time": "2026-06-10T13:00:00",
+                },
+            ),
+        )
+        self.assertEqual(
+            (202, 101, 303, None, None, None, None),
+            _column_topic_insert_params(101, 303, {"topic_id": 202}),
+        )
+        self.assertEqual(
+            (801, "user name", "alias", "avatar-url", "description", "location"),
+            _user_insert_params(
+                {
+                    "user_id": 801,
+                    "name": "user name",
+                    "alias": "alias",
+                    "avatar_url": "avatar-url",
+                    "description": "description",
+                    "location": "location",
+                },
+            ),
+        )
+        self.assertEqual(
+            (801, "", None, None, None, None),
+            _user_insert_params({"user_id": 801}),
+        )
+
     def test_topic_media_insert_params_preserve_column_order_and_defaults(self):
         self.assertEqual(
             (
@@ -789,6 +865,85 @@ class ZSXQColumnsDatabaseHelperTests(unittest.TestCase):
         self.assertIsNone(ZSXQColumnsDatabase._insert_video(db, 202, {}))
         self.assertIsNone(ZSXQColumnsDatabase._insert_comment(db, 202, {}))
         self.assertEqual([], db.cursor.calls)
+
+    def test_column_topic_and_user_insert_methods_preserve_skip_params_and_commit(self):
+        from backend.storage.zsxq_columns_database import ZSXQColumnsDatabase
+
+        class FakeCursor:
+            def __init__(self):
+                self.calls = []
+
+            def execute(self, sql, params=()):
+                self.calls.append((" ".join(sql.split()), params))
+                return self
+
+        class FakeConnection:
+            def __init__(self):
+                self.commits = 0
+
+            def commit(self):
+                self.commits += 1
+
+        db = object.__new__(ZSXQColumnsDatabase)
+        db.cursor = FakeCursor()
+        db.conn = FakeConnection()
+
+        self.assertIsNone(ZSXQColumnsDatabase.insert_column(db, 303, {}))
+        self.assertEqual([], db.cursor.calls)
+        self.assertEqual(0, db.conn.commits)
+
+        self.assertEqual(
+            101,
+            ZSXQColumnsDatabase.insert_column(
+                db,
+                303,
+                {
+                    "column_id": 101,
+                    "name": "column name",
+                    "statistics": {"topics_count": 9},
+                },
+            ),
+        )
+        column_sql, column_params = db.cursor.calls[-1]
+        self.assertIn("INSERT INTO columns", column_sql)
+        self.assertIn("ON CONFLICT(column_id) DO UPDATE SET", column_sql)
+        self.assertEqual((101, 303, "column name", None, 9, None, None), column_params)
+        self.assertEqual(1, db.conn.commits)
+
+        calls_after_column = list(db.cursor.calls)
+        self.assertIsNone(ZSXQColumnsDatabase.insert_column_topic(db, 101, 303, {}))
+        self.assertEqual(calls_after_column, db.cursor.calls)
+        self.assertEqual(1, db.conn.commits)
+
+        self.assertEqual(
+            202,
+            ZSXQColumnsDatabase.insert_column_topic(
+                db,
+                101,
+                303,
+                {"topic_id": 202, "title": "topic title", "text": "topic text"},
+            ),
+        )
+        topic_sql, topic_params = db.cursor.calls[-1]
+        self.assertIn("INSERT INTO column_topics", topic_sql)
+        self.assertIn("ON CONFLICT(topic_id) DO UPDATE SET", topic_sql)
+        self.assertEqual((202, 101, 303, "topic title", "topic text", None, None), topic_params)
+        self.assertEqual(2, db.conn.commits)
+
+        calls_after_topic = list(db.cursor.calls)
+        self.assertIsNone(ZSXQColumnsDatabase.insert_user(db, {}))
+        self.assertEqual(calls_after_topic, db.cursor.calls)
+        self.assertEqual(2, db.conn.commits)
+
+        self.assertEqual(
+            801,
+            ZSXQColumnsDatabase.insert_user(db, {"user_id": 801, "name": "user name"}),
+        )
+        user_sql, user_params = db.cursor.calls[-1]
+        self.assertIn("INSERT INTO users", user_sql)
+        self.assertIn("ON CONFLICT(user_id) DO UPDATE SET", user_sql)
+        self.assertEqual((801, "user name", None, None, None, None), user_params)
+        self.assertEqual(2, db.conn.commits)
 
     def test_column_queries_are_scoped_by_group(self):
         from backend.storage.zsxq_columns_database import ZSXQColumnsDatabase

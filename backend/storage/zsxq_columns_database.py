@@ -9,7 +9,9 @@ from typing import Dict, List, Any, Optional
 
 from backend.storage.db_compat import connect
 from backend.storage.zsxq_columns_database_helpers import (
+    _column_insert_params,
     _column_row_to_dict,
+    _column_topic_insert_params,
     _column_topic_row_to_dict,
     _comment_image_row_to_dict,
     _empty_clear_data_stats,
@@ -37,6 +39,7 @@ from backend.storage.zsxq_columns_database_helpers import (
     _topic_child_delete_statements,
     _uncached_image_row_to_dict,
     _uncached_images_query,
+    _user_insert_params,
 )
 
 
@@ -59,8 +62,6 @@ class ZSXQColumnsDatabase:
         if not column_data or not column_data.get('column_id'):
             return None
         
-        statistics = column_data.get('statistics', {})
-        
         self.cursor.execute('''
             INSERT INTO columns 
             (column_id, group_id, name, cover_url, topics_count, create_time, last_topic_attach_time)
@@ -72,15 +73,7 @@ class ZSXQColumnsDatabase:
                 topics_count = excluded.topics_count,
                 create_time = excluded.create_time,
                 last_topic_attach_time = excluded.last_topic_attach_time
-        ''', (
-            column_data.get('column_id'),
-            group_id,
-            column_data.get('name', ''),
-            column_data.get('cover_url'),
-            statistics.get('topics_count', 0),
-            column_data.get('create_time'),
-            column_data.get('last_topic_attach_time')
-        ))
+        ''', _column_insert_params(group_id, column_data))
         self.conn.commit()
         return column_data.get('column_id')
     
@@ -127,15 +120,7 @@ class ZSXQColumnsDatabase:
                 text = excluded.text,
                 create_time = excluded.create_time,
                 attached_to_column_time = excluded.attached_to_column_time
-        ''', (
-            topic_data.get('topic_id'),
-            column_id,
-            group_id,
-            topic_data.get('title'),
-            topic_data.get('text'),
-            topic_data.get('create_time'),
-            topic_data.get('attached_to_column_time')
-        ))
+        ''', _column_topic_insert_params(column_id, group_id, topic_data))
         self.conn.commit()
         return topic_data.get('topic_id')
     
@@ -171,14 +156,7 @@ class ZSXQColumnsDatabase:
                 avatar_url = excluded.avatar_url,
                 description = excluded.description,
                 location = excluded.location
-        ''', (
-            user_data.get('user_id'),
-            user_data.get('name', ''),
-            user_data.get('alias'),
-            user_data.get('avatar_url'),
-            user_data.get('description'),
-            user_data.get('location')
-        ))
+        ''', _user_insert_params(user_data))
         return user_data.get('user_id')
     
     def insert_topic_detail(self, group_id: int, topic_data: Dict[str, Any], raw_json: str = None) -> Optional[int]:

@@ -191,6 +191,47 @@ def _topic_comment_row_to_dict(row) -> Dict[str, Any]:
     return comment
 
 
+def _column_insert_params(group_id: int, column_data: Dict[str, Any]) -> tuple[Any, ...]:
+    statistics = column_data.get('statistics', {})
+
+    return (
+        column_data.get('column_id'),
+        group_id,
+        column_data.get('name', ''),
+        column_data.get('cover_url'),
+        statistics.get('topics_count', 0),
+        column_data.get('create_time'),
+        column_data.get('last_topic_attach_time')
+    )
+
+
+def _column_topic_insert_params(
+    column_id: int,
+    group_id: int,
+    topic_data: Dict[str, Any],
+) -> tuple[Any, ...]:
+    return (
+        topic_data.get('topic_id'),
+        column_id,
+        group_id,
+        topic_data.get('title'),
+        topic_data.get('text'),
+        topic_data.get('create_time'),
+        topic_data.get('attached_to_column_time')
+    )
+
+
+def _user_insert_params(user_data: Dict[str, Any]) -> tuple[Any, ...]:
+    return (
+        user_data.get('user_id'),
+        user_data.get('name', ''),
+        user_data.get('alias'),
+        user_data.get('avatar_url'),
+        user_data.get('description'),
+        user_data.get('location')
+    )
+
+
 def _topic_image_insert_params(topic_id: int, image_data: Dict[str, Any]) -> tuple[Any, ...]:
     thumbnail = image_data.get('thumbnail', {})
     large = image_data.get('large', {})
