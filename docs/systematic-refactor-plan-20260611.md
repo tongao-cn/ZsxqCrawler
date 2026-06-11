@@ -3922,6 +3922,44 @@ Result:
 - PostgreSQL compatibility debt scan: no SQLite compatibility patterns found.
 - Frontend build is not planned because this slice only changes backend storage/helper code.
 
+### 2026-06-11 - P3 column/user insert statement helper extraction
+
+Changed:
+
+- Added `_column_insert_statement`, `_column_topic_insert_statement`, and
+  `_user_insert_statement` to `backend/storage/zsxq_columns_database_helpers.py`.
+- Replaced inline insert SQL in `insert_column`, `insert_column_topic`, and `insert_user` with
+  helper-returned SQL.
+- Added characterization coverage for target tables, column order, conflict keys, and update
+  fields.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Existing parameter helpers still build the execute params, and method-level skip behavior is
+  unchanged.
+- `insert_column` and `insert_column_topic` still commit after successful execute; `insert_user`
+  still does not commit.
+- Return values, SQL upsert semantics, method signatures, schema, compatibility layer, fallback
+  path, and public API behavior are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m py_compile backend\storage\zsxq_columns_database.py backend\storage\zsxq_columns_database_helpers.py tests\test_zsxq_columns_database_helpers.py
+uv run python -m unittest tests.test_zsxq_columns_database_helpers -v
+uv run python -m unittest discover -s tests
+uv run python scripts\scan_postgres_compat_debt.py
+```
+
+Result:
+
+- `py_compile` passed.
+- `tests.test_zsxq_columns_database_helpers`: 49 tests passed.
+- Full backend unittest discovery: 609 tests passed, 15 skipped.
+- PostgreSQL compatibility debt scan: no SQLite compatibility patterns found.
+- Frontend build is not planned because this slice only changes backend storage/helper code.
+
 ## Stop Conditions
 
 Pause before editing if:

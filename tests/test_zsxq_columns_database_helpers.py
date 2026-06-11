@@ -3,9 +3,11 @@ from unittest.mock import patch
 
 from backend.storage.zsxq_columns_database import (
     _column_insert_params,
+    _column_insert_statement,
     _column_query,
     _column_row_to_dict,
     _column_topic_insert_params,
+    _column_topic_insert_statement,
     _column_topic_row_to_dict,
     _column_topics_query,
     _columns_query,
@@ -42,6 +44,7 @@ from backend.storage.zsxq_columns_database import (
     _uncached_image_row_to_dict,
     _uncached_images_query,
     _user_insert_params,
+    _user_insert_statement,
     _video_download_status_update,
 )
 
@@ -461,6 +464,18 @@ class ZSXQColumnsDatabaseHelperTests(unittest.TestCase):
             _column_insert_params(303, {"column_id": 101}),
         )
 
+    def test_column_insert_statement_preserves_upsert_shape(self):
+        sql = self._sql(_column_insert_statement())
+
+        self.assertIn("INSERT INTO columns", sql)
+        self.assertIn(
+            "(column_id, group_id, name, cover_url, topics_count, create_time, last_topic_attach_time)",
+            sql,
+        )
+        self.assertIn("VALUES (?, ?, ?, ?, ?, ?, ?)", sql)
+        self.assertIn("ON CONFLICT(column_id) DO UPDATE SET", sql)
+        self.assertIn("last_topic_attach_time = excluded.last_topic_attach_time", sql)
+
     def test_column_topic_and_user_insert_params_preserve_column_order_and_defaults(self):
         self.assertEqual(
             (
@@ -505,6 +520,24 @@ class ZSXQColumnsDatabaseHelperTests(unittest.TestCase):
             (801, "", None, None, None, None),
             _user_insert_params({"user_id": 801}),
         )
+
+    def test_column_topic_and_user_insert_statements_preserve_upsert_shape(self):
+        topic_sql = self._sql(_column_topic_insert_statement())
+        user_sql = self._sql(_user_insert_statement())
+
+        self.assertIn("INSERT INTO column_topics", topic_sql)
+        self.assertIn(
+            "(topic_id, column_id, group_id, title, text, create_time, attached_to_column_time)",
+            topic_sql,
+        )
+        self.assertIn("ON CONFLICT(topic_id) DO UPDATE SET", topic_sql)
+        self.assertIn("attached_to_column_time = excluded.attached_to_column_time", topic_sql)
+
+        self.assertIn("INSERT INTO users", user_sql)
+        self.assertIn("(user_id, name, alias, avatar_url, description, location)", user_sql)
+        self.assertIn("VALUES (?, ?, ?, ?, ?, ?)", user_sql)
+        self.assertIn("ON CONFLICT(user_id) DO UPDATE SET", user_sql)
+        self.assertIn("location = excluded.location", user_sql)
 
     def test_topic_detail_insert_params_preserve_column_order_and_defaults(self):
         self.assertEqual(

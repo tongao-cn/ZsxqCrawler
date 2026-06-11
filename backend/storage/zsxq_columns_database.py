@@ -10,9 +10,11 @@ from typing import Dict, List, Any, Optional
 from backend.storage.db_compat import connect
 from backend.storage.zsxq_columns_database_helpers import (
     _column_insert_params,
+    _column_insert_statement,
     _column_query,
     _column_row_to_dict,
     _column_topic_insert_params,
+    _column_topic_insert_statement,
     _column_topic_row_to_dict,
     _column_topics_query,
     _columns_query,
@@ -52,6 +54,7 @@ from backend.storage.zsxq_columns_database_helpers import (
     _uncached_image_row_to_dict,
     _uncached_images_query,
     _user_insert_params,
+    _user_insert_statement,
     _video_download_status_update,
 )
 
@@ -75,18 +78,7 @@ class ZSXQColumnsDatabase:
         if not column_data or not column_data.get('column_id'):
             return None
         
-        self.cursor.execute('''
-            INSERT INTO columns 
-            (column_id, group_id, name, cover_url, topics_count, create_time, last_topic_attach_time)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT(column_id) DO UPDATE SET
-                group_id = excluded.group_id,
-                name = excluded.name,
-                cover_url = excluded.cover_url,
-                topics_count = excluded.topics_count,
-                create_time = excluded.create_time,
-                last_topic_attach_time = excluded.last_topic_attach_time
-        ''', _column_insert_params(group_id, column_data))
+        self.cursor.execute(_column_insert_statement(), _column_insert_params(group_id, column_data))
         self.conn.commit()
         return column_data.get('column_id')
     
@@ -113,18 +105,10 @@ class ZSXQColumnsDatabase:
         if not topic_data or not topic_data.get('topic_id'):
             return None
         
-        self.cursor.execute('''
-            INSERT INTO column_topics 
-            (topic_id, column_id, group_id, title, text, create_time, attached_to_column_time)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT(topic_id) DO UPDATE SET
-                column_id = excluded.column_id,
-                group_id = excluded.group_id,
-                title = excluded.title,
-                text = excluded.text,
-                create_time = excluded.create_time,
-                attached_to_column_time = excluded.attached_to_column_time
-        ''', _column_topic_insert_params(column_id, group_id, topic_data))
+        self.cursor.execute(
+            _column_topic_insert_statement(),
+            _column_topic_insert_params(column_id, group_id, topic_data),
+        )
         self.conn.commit()
         return topic_data.get('topic_id')
     
@@ -143,17 +127,7 @@ class ZSXQColumnsDatabase:
         if not user_data or not user_data.get('user_id'):
             return None
         
-        self.cursor.execute('''
-            INSERT INTO users 
-            (user_id, name, alias, avatar_url, description, location)
-            VALUES (?, ?, ?, ?, ?, ?)
-            ON CONFLICT(user_id) DO UPDATE SET
-                name = excluded.name,
-                alias = excluded.alias,
-                avatar_url = excluded.avatar_url,
-                description = excluded.description,
-                location = excluded.location
-        ''', _user_insert_params(user_data))
+        self.cursor.execute(_user_insert_statement(), _user_insert_params(user_data))
         return user_data.get('user_id')
     
     def insert_topic_detail(self, group_id: int, topic_data: Dict[str, Any], raw_json: str = None) -> Optional[int]:

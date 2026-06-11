@@ -537,6 +537,21 @@ def _scope_group_id_param(group_id: Optional[Any]) -> Any:
     return _nullable_group_id_param(group_id)
 
 
+def _column_insert_statement() -> str:
+    return '''
+            INSERT INTO columns
+            (column_id, group_id, name, cover_url, topics_count, create_time, last_topic_attach_time)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(column_id) DO UPDATE SET
+                group_id = excluded.group_id,
+                name = excluded.name,
+                cover_url = excluded.cover_url,
+                topics_count = excluded.topics_count,
+                create_time = excluded.create_time,
+                last_topic_attach_time = excluded.last_topic_attach_time
+        '''
+
+
 def _columns_query(group_id: int) -> tuple[str, tuple[Any, ...]]:
     return (
         '''
@@ -562,6 +577,21 @@ def _column_query(column_id: int, scope_group_id: Any) -> tuple[str, tuple[Any, 
     )
 
 
+def _column_topic_insert_statement() -> str:
+    return '''
+            INSERT INTO column_topics
+            (topic_id, column_id, group_id, title, text, create_time, attached_to_column_time)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(topic_id) DO UPDATE SET
+                column_id = excluded.column_id,
+                group_id = excluded.group_id,
+                title = excluded.title,
+                text = excluded.text,
+                create_time = excluded.create_time,
+                attached_to_column_time = excluded.attached_to_column_time
+        '''
+
+
 def _column_topics_query(column_id: int, scope_group_id: Any) -> tuple[str, tuple[Any, ...]]:
     return (
         '''
@@ -575,6 +605,20 @@ def _column_topics_query(column_id: int, scope_group_id: Any) -> tuple[str, tupl
         ''',
         (column_id, scope_group_id, scope_group_id),
     )
+
+
+def _user_insert_statement() -> str:
+    return '''
+            INSERT INTO users
+            (user_id, name, alias, avatar_url, description, location)
+            VALUES (?, ?, ?, ?, ?, ?)
+            ON CONFLICT(user_id) DO UPDATE SET
+                name = excluded.name,
+                alias = excluded.alias,
+                avatar_url = excluded.avatar_url,
+                description = excluded.description,
+                location = excluded.location
+        '''
 
 
 def _topic_detail_query(topic_id: int, scope_group_id: Any) -> tuple[str, tuple[Any, ...]]:
