@@ -3,6 +3,7 @@ import unittest
 from backend.storage.zsxq_file_database import (
     _FILE_AI_ANALYSIS_FIELDS,
     _close_connection,
+    _comment_record_params,
     _count_tables,
     _file_ai_analysis_params,
     _file_attachment_params,
@@ -343,6 +344,31 @@ class ZSXQFileDatabaseHelperTests(unittest.TestCase):
         )
         self.assertEqual((301, 202, None, None, None, None, None, None, None, None, None, None, None), _image_record_params(202, {"image_id": 301}))
 
+    def test_comment_record_params_keep_insert_column_order(self):
+        self.assertEqual(
+            (101, 303, 202, 9, 88, 10, "ok", "2026-06-10T12:00:00", 1, 2, 3, True),
+            _comment_record_params(
+                303,
+                202,
+                9,
+                10,
+                {
+                    "comment_id": 101,
+                    "parent_comment_id": 88,
+                    "text": "ok",
+                    "create_time": "2026-06-10T12:00:00",
+                    "likes_count": 1,
+                    "rewards_count": 2,
+                    "replies_count": 3,
+                    "sticky": True,
+                },
+            ),
+        )
+        self.assertEqual(
+            (101, None, 202, None, None, None, "", None, 0, 0, 0, False),
+            _comment_record_params(None, 202, None, None, {"comment_id": 101}),
+        )
+
     def test_count_tables_builds_stats_from_cursor_counts(self):
         cursor = FakeCursor({"files": 3, "topics": 2})
 
@@ -602,21 +628,49 @@ class ZSXQFileDatabaseHelperTests(unittest.TestCase):
         self.assertIn("file_id, group_id, status", insert_sql)
         self.assertEqual((101, 303, "completed"), insert_params[:3])
 
-    def test_insert_comments_writes_group_id_from_runtime_scope(self):
+    def test_insert_comments_uses_record_params_and_skips_missing_ids(self):
         from backend.storage.zsxq_file_database import ZSXQFileDatabase
 
         db = object.__new__(ZSXQFileDatabase)
         db.cursor = FakeCommentCursor()
         db.group_id = "303"
-        db.insert_user = lambda user: user.get("user_id") if user else None
+        users = []
 
-        db.insert_comments(202, [{"comment_id": 101, "owner": {"user_id": 9}, "text": "ok"}])
+        def fake_insert_user(user):
+            users.append(user)
+            return user.get("user_id") if user else None
 
+        db.insert_user = fake_insert_user
+
+        db.insert_comments(
+            202,
+            [
+                {"text": "missing id"},
+                {
+                    "comment_id": 101,
+                    "owner": {"user_id": 9},
+                    "repliee": {"user_id": 10},
+                    "parent_comment_id": 88,
+                    "text": "ok",
+                    "create_time": "2026-06-10T12:00:00",
+                    "likes_count": 1,
+                    "rewards_count": 2,
+                    "replies_count": 3,
+                    "sticky": True,
+                },
+            ],
+        )
+
+        self.assertEqual([{"user_id": 9}, {"user_id": 10}], users)
+        self.assertEqual(1, len(db.cursor.calls))
         sql, params = db.cursor.calls[-1]
         self.assertIn("INSERT INTO comments", sql)
         self.assertIn("ON CONFLICT(comment_id) DO UPDATE SET", sql)
         self.assertIn("comment_id, group_id, topic_id", sql)
-        self.assertEqual((101, 303, 202), params[:3])
+        self.assertEqual(
+            (101, 303, 202, 9, 88, 10, "ok", "2026-06-10T12:00:00", 1, 2, 3, True),
+            params,
+        )
 
     def test_content_child_writes_use_explicit_unique_semantics(self):
         from backend.storage.zsxq_file_database import ZSXQFileDatabase

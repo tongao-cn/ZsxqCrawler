@@ -4,6 +4,7 @@ from backend.storage.db_compat import connect
 from backend.storage.zsxq_file_database_helpers import (
     _FILE_AI_ANALYSIS_FIELDS,
     _close_connection,
+    _comment_record_params,
     _count_tables,
     _file_ai_analysis_params,
     _file_attachment_params,
@@ -271,20 +272,7 @@ class ZSXQFileDatabase:
                 rewards_count = excluded.rewards_count,
                 replies_count = excluded.replies_count,
                 sticky = excluded.sticky
-            ''', (
-                comment.get('comment_id'),
-                group_id,
-                topic_id,
-                owner_id,
-                comment.get('parent_comment_id'),
-                repliee_id,
-                comment.get('text', ''),
-                comment.get('create_time'),
-                comment.get('likes_count', 0),
-                comment.get('rewards_count', 0),
-                comment.get('replies_count', 0),
-                comment.get('sticky', False)
-            ))
+            ''', _comment_record_params(group_id, topic_id, owner_id, repliee_id, comment))
 
     def _resolve_topic_group_id(self, topic_id: int):
         if self.group_id:
