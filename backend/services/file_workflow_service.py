@@ -907,6 +907,59 @@ def run_filtered_file_download_task(
         _safe_remove_file_downloader(task_id)
 
 
+def _resolve_single_download_file_info(
+    task_id: str,
+    downloader: ZSXQFileDownloader,
+    group_id: str,
+    file_id: int,
+    file_name: Optional[str],
+    file_size: Optional[int],
+) -> Dict[str, Dict[str, Any]]:
+    downloader.file_db.cursor.execute(
+        """
+        SELECT file_id, name, size, download_count
+        FROM files
+        WHERE file_id = ? AND group_id = ?
+        """,
+        (file_id, _query_group_id(group_id)),
+    )
+
+    result = downloader.file_db.cursor.fetchone()
+    if result:
+        _, db_file_name, db_file_size, download_count = result
+        add_task_log(task_id, f"📄 从数据库获取文件信息: {db_file_name} ({db_file_size} bytes)")
+        return _build_download_file_info(file_id, db_file_name, db_file_size, download_count)
+    if file_name and file_size is not None:
+        add_task_log(task_id, f"📄 文件库未命中，使用请求中的文件信息: {file_name} ({file_size} bytes)")
+        return _build_download_file_info(file_id, file_name, file_size)
+
+    add_task_log(task_id, f"📄 直接下载文件 ID: {file_id}")
+    return _build_download_file_info(file_id, f"file_{file_id}", 0)
+
+
+def _complete_single_file_download(
+    task_id: str,
+    downloader: ZSXQFileDownloader,
+    file_id: int,
+    file_info: Dict[str, Dict[str, Any]],
+    result: Any,
+) -> None:
+    if result == "skipped":
+        add_task_log(task_id, "✅ 文件已存在，跳过下载")
+        update_task(task_id, "completed", "文件已存在")
+    elif result:
+        add_task_log(task_id, "✅ 文件下载成功")
+        actual_file_info = file_info["file"]
+        actual_file_name = actual_file_info.get("name", f"file_{file_id}")
+        safe_filename = _safe_filename(actual_file_name, f"file_{file_id}")
+        local_path = os.path.join(downloader.download_dir, safe_filename)
+        downloader.file_db.update_file_download_status(file_id, "completed", local_path)
+        update_task(task_id, "completed", "下载成功")
+    else:
+        add_task_log(task_id, "❌ 文件下载失败")
+        update_task(task_id, "failed", "下载失败")
+
+
 def run_single_file_download_task_with_info(
     task_id: str,
     group_id: str,
@@ -923,43 +976,16 @@ def run_single_file_download_task_with_info(
             add_task_log(task_id, "🛑 任务在初始化过程中被停止")
             return
 
-        downloader.file_db.cursor.execute(
-            """
-            SELECT file_id, name, size, download_count
-            FROM files
-            WHERE file_id = ? AND group_id = ?
-            """,
-            (file_id, _query_group_id(group_id)),
+        file_info = _resolve_single_download_file_info(
+            task_id,
+            downloader,
+            group_id,
+            file_id,
+            file_name,
+            file_size,
         )
-
-        result = downloader.file_db.cursor.fetchone()
-        if result:
-            _, db_file_name, db_file_size, download_count = result
-            add_task_log(task_id, f"📄 从数据库获取文件信息: {db_file_name} ({db_file_size} bytes)")
-            file_info = _build_download_file_info(file_id, db_file_name, db_file_size, download_count)
-        elif file_name and file_size is not None:
-            add_task_log(task_id, f"📄 文件库未命中，使用请求中的文件信息: {file_name} ({file_size} bytes)")
-            file_info = _build_download_file_info(file_id, file_name, file_size)
-        else:
-            add_task_log(task_id, f"📄 直接下载文件 ID: {file_id}")
-            file_info = _build_download_file_info(file_id, f"file_{file_id}", 0)
-
         result = downloader.download_file(file_info)
-
-        if result == "skipped":
-            add_task_log(task_id, "✅ 文件已存在，跳过下载")
-            update_task(task_id, "completed", "文件已存在")
-        elif result:
-            add_task_log(task_id, "✅ 文件下载成功")
-            actual_file_info = file_info["file"]
-            actual_file_name = actual_file_info.get("name", f"file_{file_id}")
-            safe_filename = _safe_filename(actual_file_name, f"file_{file_id}")
-            local_path = os.path.join(downloader.download_dir, safe_filename)
-            downloader.file_db.update_file_download_status(file_id, "completed", local_path)
-            update_task(task_id, "completed", "下载成功")
-        else:
-            add_task_log(task_id, "❌ 文件下载失败")
-            update_task(task_id, "failed", "下载失败")
+        _complete_single_file_download(task_id, downloader, file_id, file_info, result)
     except Exception as e:
         _rollback_downloader_file_db(downloader)
         _fail_file_task(task_id, f"任务执行失败: {e}", f"任务失败: {e}")

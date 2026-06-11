@@ -84,6 +84,39 @@ class FakeFileDownloadTaskDownloader:
         return "download-result"
 
 
+class FakeSingleFileDownloadTaskCursor:
+    def __init__(self, row):
+        self.row = row
+        self.executed = []
+
+    def execute(self, sql, params=()):
+        self.executed.append((sql, params))
+
+    def fetchone(self):
+        return self.row
+
+
+class FakeSingleFileDownloadTaskFileDb:
+    def __init__(self, row):
+        self.cursor = FakeSingleFileDownloadTaskCursor(row)
+        self.status_updates = []
+
+    def update_file_download_status(self, file_id, status, local_path):
+        self.status_updates.append((file_id, status, local_path))
+
+
+class FakeSingleFileDownloadTaskDownloader:
+    def __init__(self, row, download_result):
+        self.file_db = FakeSingleFileDownloadTaskFileDb(row)
+        self.download_dir = r"C:\downloads"
+        self.download_result = download_result
+        self.download_calls = []
+
+    def download_file(self, file_info):
+        self.download_calls.append(file_info)
+        return self.download_result
+
+
 class FileRoutesHelperTests(unittest.TestCase):
     def test_enqueue_file_task_creates_task_and_schedules_callback(self):
         background_tasks = FakeBackgroundTasks()
@@ -817,6 +850,68 @@ class FileRoutesHelperTests(unittest.TestCase):
         update_task.assert_any_call("task-1", "completed", "文件下载完成", {"downloaded_files": "download-result"})
         safe_remove.assert_called_once_with("task-1")
 
+    def test_run_single_file_download_task_uses_database_file_info_and_marks_completed(self):
+        downloader = FakeSingleFileDownloadTaskDownloader(
+            row=(123, "Db File.pdf", 456, 7),
+            download_result=True,
+        )
+
+        _create_downloader, update_task, add_task_log, safe_remove = self._run_single_file_download_case(downloader)
+
+        self.assertEqual(
+            [("SELECT file_id, name, size, download_count FROM files WHERE file_id = ? AND group_id = ?", (123, 123))],
+            [(" ".join(sql.split()), params) for sql, params in downloader.file_db.cursor.executed],
+        )
+        self.assertEqual(
+            [{"file": {"id": 123, "name": "Db File.pdf", "size": 456, "download_count": 7}}],
+            downloader.download_calls,
+        )
+        self.assertEqual([(123, "completed", r"C:\downloads\DbFile.pdf")], downloader.file_db.status_updates)
+        self.assertIn(
+            ("task-1", "📄 从数据库获取文件信息: Db File.pdf (456 bytes)"),
+            [call.args for call in add_task_log.call_args_list],
+        )
+        update_task.assert_any_call("task-1", "completed", "下载成功")
+        safe_remove.assert_called_once_with("task-1")
+
+    def test_run_single_file_download_task_uses_request_info_fallback_for_skipped_file(self):
+        downloader = FakeSingleFileDownloadTaskDownloader(row=None, download_result="skipped")
+
+        _create_downloader, update_task, add_task_log, safe_remove = self._run_single_file_download_case(
+            downloader,
+            file_name="Request File.pdf",
+            file_size=456,
+        )
+
+        self.assertEqual(
+            [{"file": {"id": 123, "name": "Request File.pdf", "size": 456, "download_count": 0}}],
+            downloader.download_calls,
+        )
+        self.assertEqual([], downloader.file_db.status_updates)
+        self.assertIn(
+            ("task-1", "📄 文件库未命中，使用请求中的文件信息: Request File.pdf (456 bytes)"),
+            [call.args for call in add_task_log.call_args_list],
+        )
+        update_task.assert_any_call("task-1", "completed", "文件已存在")
+        safe_remove.assert_called_once_with("task-1")
+
+    def test_run_single_file_download_task_uses_file_id_fallback_for_failed_file(self):
+        downloader = FakeSingleFileDownloadTaskDownloader(row=None, download_result=False)
+
+        _create_downloader, update_task, add_task_log, safe_remove = self._run_single_file_download_case(downloader)
+
+        self.assertEqual(
+            [{"file": {"id": 123, "name": "file_123", "size": 0, "download_count": 0}}],
+            downloader.download_calls,
+        )
+        self.assertEqual([], downloader.file_db.status_updates)
+        self.assertIn(
+            ("task-1", "📄 直接下载文件 ID: 123"),
+            [call.args for call in add_task_log.call_args_list],
+        )
+        update_task.assert_any_call("task-1", "failed", "下载失败")
+        safe_remove.assert_called_once_with("task-1")
+
     def test_load_filtered_download_file_records_keeps_default_search_and_limit_shape(self):
         class FakeCursor:
             def __init__(self):
@@ -920,6 +1015,26 @@ class FileRoutesHelperTests(unittest.TestCase):
         import asyncio
 
         return asyncio.run(coro)
+
+    def _run_single_file_download_case(self, downloader, file_name=None, file_size=None):
+        from backend.services.file_workflow_service import run_single_file_download_task_with_info
+
+        with (
+            patch("backend.services.file_workflow_service._create_file_downloader", return_value=downloader) as create_downloader,
+            patch("backend.services.file_workflow_service.update_task") as update_task,
+            patch("backend.services.file_workflow_service.add_task_log") as add_task_log,
+            patch("backend.services.file_workflow_service.is_task_stopped", return_value=False),
+            patch("backend.services.file_workflow_service._safe_remove_file_downloader") as safe_remove,
+        ):
+            run_single_file_download_task_with_info(
+                "task-1",
+                "123",
+                123,
+                file_name=file_name,
+                file_size=file_size,
+            )
+
+        return create_downloader, update_task, add_task_log, safe_remove
 
 
 if __name__ == "__main__":

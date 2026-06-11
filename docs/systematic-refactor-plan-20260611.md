@@ -225,6 +225,44 @@ Result:
 - Frontend build passed.
 - PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
 
+### 2026-06-11 - P1 single-file download fallback extraction
+
+Changed:
+
+- Added characterization coverage for `run_single_file_download_task_with_info` database-hit behavior,
+  including SQL parameters, downloader payload, completed file-status update, success task update,
+  and cleanup.
+- Added characterization coverage for the request-info fallback when the file library misses and
+  the downloader returns `skipped`.
+- Added characterization coverage for the bare file-ID fallback when both the database and request
+  metadata are unavailable and the downloader returns a failure value.
+- Extracted `_resolve_single_download_file_info` and `_complete_single_file_download`.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Database lookup SQL, request-info fallback, `file_{file_id}` fallback, log text, downloader payload,
+  skipped/success/failure task messages, and completed local-path update behavior are preserved.
+- The fallback paths remain intentionally retained and are now covered by characterization tests.
+- No public API, task cancellation, schema, retry, legacy path, or config behavior changed.
+
+Verification:
+
+```powershell
+uv run python -m py_compile backend\services\file_workflow_service.py
+uv run python -m unittest tests.test_file_routes_helpers -v
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+uv run python scripts\scan_postgres_compat_debt.py
+```
+
+Result:
+
+- Focused file route helper tests passed: 36 tests.
+- Full backend tests passed: 514 tests, 15 skipped.
+- Frontend build passed.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+
 ## Stop Conditions
 
 Pause before editing if:
