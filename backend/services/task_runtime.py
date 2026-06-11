@@ -296,11 +296,21 @@ def update_task(
 
     store.update_task(task_id, status, message, result=result, updated_at=now)
     add_task_log(task_id, f"状态更新: {message}")
-    if _is_runtime_terminal_status(status):
-        try:
-            store.release_task_lock(task_id, status, released_at=now)
-        except Exception as exc:
-            add_task_log(task_id, f"⚠️ 释放任务锁失败: {exc}")
+    _release_task_lock_on_terminal_status(task_id, status, now, store)
+
+
+def _release_task_lock_on_terminal_status(
+    task_id: str,
+    status: str,
+    released_at: datetime,
+    store: TaskStore,
+) -> None:
+    if not _is_runtime_terminal_status(status):
+        return
+    try:
+        store.release_task_lock(task_id, status, released_at=released_at)
+    except Exception as exc:
+        add_task_log(task_id, f"⚠️ 释放任务锁失败: {exc}")
 
 
 def register_task_crawler(task_id: str, crawler: Any) -> None:

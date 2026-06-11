@@ -1258,6 +1258,49 @@ Result:
 - PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
 - Git diff whitespace check passed.
 
+### 2026-06-11 - P5 terminal lock release helper extraction
+
+Changed:
+
+- Added characterization coverage for `update_task()` logging the existing
+  `⚠️ 释放任务锁失败: ...` message when `release_task_lock()` raises.
+- Extracted `_release_task_lock_on_terminal_status()` from `update_task()` to isolate terminal
+  lock release and its existing failure-log behavior.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- `update_task()` still normalizes `stopped` to `cancelled`, refuses to overwrite an already
+  cancelled task with a non-cancelled status, updates memory and persistent state, writes the same
+  status-update log, releases task locks only for runtime terminal statuses, and logs the same
+  lock-release failure message when release fails.
+- No public route response, task store SQL, task status normalization, task cancellation behavior,
+  SSE behavior, fallback polling, storage schema, legacy path, config semantics, or frontend hook
+  behavior changed.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_task_runtime_helpers -v
+uv run python -m py_compile backend\services\task_runtime.py
+uv run python -m unittest tests.test_task_runtime_helpers tests.test_task_store tests.test_task_routes_helpers -v
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+uv run python scripts\scan_postgres_compat_debt.py
+git diff --check
+```
+
+Result:
+
+- Characterization test passed on the pre-refactor code before the helper extraction.
+- Focused task runtime tests passed: 17 tests.
+- Recommended task runtime gate passed: 36 tests, 14 PostgreSQL integration tests skipped by
+  configuration.
+- Full backend tests passed: 536 tests, 15 skipped.
+- Frontend build passed.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Git diff whitespace check passed.
+
 ## Stop Conditions
 
 Pause before editing if:

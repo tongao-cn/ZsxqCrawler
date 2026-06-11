@@ -263,6 +263,32 @@ class TaskRuntimeHelperTests(unittest.TestCase):
         self.assertEqual("completed", store.tasks["task-1"]["status"])
         self.assertEqual([("task-1", "completed")], store.released_locks)
 
+    def test_update_task_logs_lock_release_failure(self):
+        from backend.services import task_runtime
+
+        store = FakeTaskStore()
+        store.tasks["task-1"] = {"task_id": "task-1", "status": "running", "message": "running"}
+
+        with (
+            patch("backend.services.task_runtime.get_task_store", return_value=store),
+            patch.object(store, "release_task_lock", side_effect=RuntimeError("boom")),
+        ):
+            task_runtime.current_tasks["task-1"] = dict(store.tasks["task-1"])
+            try:
+                task_runtime.update_task("task-1", "completed", "done")
+            finally:
+                task_runtime.current_tasks.pop("task-1", None)
+                task_runtime.task_stop_flags.pop("task-1", None)
+
+        self.assertEqual("completed", store.tasks["task-1"]["status"])
+        self.assertEqual(
+            [
+                ("task-1", "状态更新: done"),
+                ("task-1", "⚠️ 释放任务锁失败: boom"),
+            ],
+            store.logs,
+        )
+
     def test_get_task_logs_state_returns_memory_log_copy(self):
         from backend.services import task_runtime
 
