@@ -1301,6 +1301,47 @@ Result:
 - PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
 - Git diff whitespace check passed.
 
+### 2026-06-11 - P5 cleanup runtime tracking helper extraction
+
+Changed:
+
+- Added characterization coverage for `cleanup_tasks()` normalizing negative `keep_latest` to `0`
+  and forgetting only runtime tracking for tasks removed by the persistent store cleanup.
+- Extracted `_forget_task_tracking_locked()` to centralize cleanup of `current_tasks`,
+  `task_logs`, `task_stop_flags`, and `sse_connections` for removed task IDs.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- `cleanup_tasks()` still calls the persistent store cleanup first, derives remaining IDs from the
+  store after cleanup, and only removes runtime tracking for task IDs no longer present.
+- The persistent cleanup result shape, `keep_latest` normalization, task store SQL behavior,
+  cancellation behavior, SSE behavior, fallback polling, storage schema, legacy path, config
+  semantics, and frontend hook behavior are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_task_runtime_helpers -v
+uv run python -m py_compile backend\services\task_runtime.py
+uv run python -m unittest tests.test_task_runtime_helpers tests.test_task_store tests.test_task_routes_helpers -v
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+uv run python scripts\scan_postgres_compat_debt.py
+git diff --check
+```
+
+Result:
+
+- Characterization test passed on the pre-refactor code before the helper extraction.
+- Focused task runtime tests passed: 18 tests.
+- Recommended task runtime gate passed: 37 tests, 14 PostgreSQL integration tests skipped by
+  configuration.
+- Full backend tests passed: 537 tests, 15 skipped.
+- Frontend build passed.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Git diff whitespace check passed.
+
 ## Stop Conditions
 
 Pause before editing if:

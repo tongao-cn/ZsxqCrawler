@@ -17,8 +17,15 @@ class FakeTaskStore:
     def get_task(self, task_id):
         return self.tasks.get(task_id)
 
+    def list_tasks(self, limit=None):
+        tasks = list(self.tasks.values())
+        return tasks[:limit] if limit is not None else tasks
+
     def max_task_sequence(self):
         return self.max_sequence
+
+    def cleanup_completed(self, keep_latest=100):
+        return {"deleted_tasks": 0, "deleted_logs": 0}
 
     def set_stop_flag(self, task_id, stopped=True):
         self.stop_flags[task_id] = stopped
@@ -201,6 +208,55 @@ class TaskRuntimeHelperTests(unittest.TestCase):
         self.assertEqual([(task_id, "任务创建: collect")], store.logs)
         self.assertEqual(["任务创建: collect"], runtime_logs)
         self.assertEqual(False, runtime_stop_flag)
+
+    def test_cleanup_tasks_forgets_removed_runtime_tracking(self):
+        from backend.services import task_runtime
+        from backend.services.task_runtime import cleanup_tasks
+
+        store = FakeTaskStore()
+        tasks_before = [
+            {"task_id": "task-removed", "status": "completed"},
+            {"task_id": "task-kept", "status": "completed"},
+        ]
+        remaining_tasks = [{"task_id": "task-kept", "status": "completed"}]
+
+        try:
+            with (
+                patch("backend.services.task_runtime.get_task_store", return_value=store),
+                patch.object(store, "list_tasks", side_effect=[tasks_before, remaining_tasks]),
+                patch.object(
+                    store,
+                    "cleanup_completed",
+                    return_value={"deleted_tasks": 1, "deleted_logs": 2},
+                ) as cleanup_completed,
+            ):
+                task_runtime.current_tasks["task-removed"] = {"task_id": "task-removed"}
+                task_runtime.task_logs["task-removed"] = ["removed-log"]
+                task_runtime.task_stop_flags["task-removed"] = True
+                task_runtime.sse_connections["task-removed"] = [object()]
+                task_runtime.current_tasks["task-kept"] = {"task_id": "task-kept"}
+                task_runtime.task_logs["task-kept"] = ["kept-log"]
+                task_runtime.task_stop_flags["task-kept"] = False
+                task_runtime.sse_connections["task-kept"] = [object()]
+
+                result = cleanup_tasks(keep_latest=-5)
+
+                cleanup_completed.assert_called_once_with(keep_latest=0)
+                self.assertEqual({"deleted_tasks": 1, "deleted_logs": 2}, result)
+                self.assertNotIn("task-removed", task_runtime.current_tasks)
+                self.assertNotIn("task-removed", task_runtime.task_logs)
+                self.assertNotIn("task-removed", task_runtime.task_stop_flags)
+                self.assertNotIn("task-removed", task_runtime.sse_connections)
+                self.assertIn("task-kept", task_runtime.current_tasks)
+                self.assertIn("task-kept", task_runtime.task_logs)
+                self.assertIn("task-kept", task_runtime.task_stop_flags)
+                self.assertIn("task-kept", task_runtime.sse_connections)
+        finally:
+            for task_id_to_remove in ("task-removed", "task-kept"):
+                task_runtime.current_tasks.pop(task_id_to_remove, None)
+                task_runtime.task_logs.pop(task_id_to_remove, None)
+                task_runtime.task_stop_flags.pop(task_id_to_remove, None)
+                task_runtime.sse_connections.pop(task_id_to_remove, None)
 
     def test_stop_task_stops_registered_task_crawler(self):
         from backend.services import task_runtime

@@ -73,6 +73,13 @@ def _persist_task_creation_tracking(task_id: str, description: str, store: Optio
     add_task_log(task_id, f"任务创建: {description}")
 
 
+def _forget_task_tracking_locked(task_id: str) -> None:
+    current_tasks.pop(task_id, None)
+    task_logs.pop(task_id, None)
+    task_stop_flags.pop(task_id, None)
+    sse_connections.pop(task_id, None)
+
+
 def _normalize_task_status(status: str) -> str:
     return "cancelled" if status == "stopped" else status
 
@@ -133,10 +140,7 @@ def cleanup_tasks(keep_latest: int = 100) -> Dict[str, int]:
         task_id = task.get("task_id")
         if task_id and task_id not in remaining_ids:
             with _state_lock:
-                current_tasks.pop(task_id, None)
-                task_logs.pop(task_id, None)
-                task_stop_flags.pop(task_id, None)
-                sse_connections.pop(task_id, None)
+                _forget_task_tracking_locked(task_id)
 
     return result
 
