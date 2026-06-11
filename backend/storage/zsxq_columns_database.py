@@ -12,6 +12,7 @@ from backend.storage.zsxq_columns_database_helpers import (
     _column_row_to_dict,
     _column_topic_row_to_dict,
     _comment_image_row_to_dict,
+    _empty_clear_data_stats,
     _crawl_log_update_parts,
     _empty_stats,
     _group_id_param,
@@ -28,6 +29,7 @@ from backend.storage.zsxq_columns_database_helpers import (
     _topic_file_row_to_dict,
     _topic_image_row_to_dict,
     _topic_video_row_to_dict,
+    _topic_child_delete_statements,
     _uncached_image_row_to_dict,
     _uncached_images_query,
 )
@@ -700,16 +702,7 @@ class ZSXQColumnsDatabase:
     
     def clear_all_data(self, group_id: int) -> Dict[str, int]:
         """清空指定群组的所有专栏数据"""
-        stats = {
-            'columns_deleted': 0,
-            'topics_deleted': 0,
-            'details_deleted': 0,
-            'images_deleted': 0,
-            'files_deleted': 0,
-            'videos_deleted': 0,
-            'comments_deleted': 0,
-            'users_deleted': 0
-        }
+        stats = _empty_clear_data_stats()
         
         try:
             # 获取该群组的所有topic_id
@@ -719,24 +712,10 @@ class ZSXQColumnsDatabase:
             if topic_ids:
                 placeholders = ','.join('?' * len(topic_ids))
                 
-                # 删除评论
-                self.cursor.execute(f'DELETE FROM comments WHERE topic_id IN ({placeholders})', topic_ids)
-                stats['comments_deleted'] = self.cursor.rowcount
-                
-                # 删除视频
-                self.cursor.execute(f'DELETE FROM videos WHERE topic_id IN ({placeholders})', topic_ids)
-                stats['videos_deleted'] = self.cursor.rowcount
-                
-                # 删除文件
-                self.cursor.execute(f'DELETE FROM files WHERE topic_id IN ({placeholders})', topic_ids)
-                stats['files_deleted'] = self.cursor.rowcount
-                
-                # 删除图片
-                self.cursor.execute(f'DELETE FROM images WHERE topic_id IN ({placeholders})', topic_ids)
-                stats['images_deleted'] = self.cursor.rowcount
-                
-                # 删除topic_owners
-                self.cursor.execute(f'DELETE FROM topic_owners WHERE topic_id IN ({placeholders})', topic_ids)
+                for stat_key, sql in _topic_child_delete_statements(placeholders):
+                    self.cursor.execute(sql, topic_ids)
+                    if stat_key:
+                        stats[stat_key] = self.cursor.rowcount
             
             # 删除文章详情
             self.cursor.execute('DELETE FROM topic_details WHERE group_id = ?', (group_id,))

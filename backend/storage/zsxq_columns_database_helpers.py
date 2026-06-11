@@ -348,6 +348,29 @@ def _crawl_log_update_parts(
     return updates, values
 
 
+def _empty_clear_data_stats() -> Dict[str, int]:
+    return {
+        'columns_deleted': 0,
+        'topics_deleted': 0,
+        'details_deleted': 0,
+        'images_deleted': 0,
+        'files_deleted': 0,
+        'videos_deleted': 0,
+        'comments_deleted': 0,
+        'users_deleted': 0
+    }
+
+
+def _topic_child_delete_statements(placeholders: str) -> tuple[tuple[Optional[str], str], ...]:
+    return (
+        ('comments_deleted', f'DELETE FROM comments WHERE topic_id IN ({placeholders})'),
+        ('videos_deleted', f'DELETE FROM videos WHERE topic_id IN ({placeholders})'),
+        ('files_deleted', f'DELETE FROM files WHERE topic_id IN ({placeholders})'),
+        ('images_deleted', f'DELETE FROM images WHERE topic_id IN ({placeholders})'),
+        (None, f'DELETE FROM topic_owners WHERE topic_id IN ({placeholders})'),
+    )
+
+
 def _group_id_param(group_id: Optional[str]) -> Any:
     value = str(group_id or "").strip()
     return int(value) if value.isdigit() else value

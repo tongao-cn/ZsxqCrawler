@@ -3393,6 +3393,47 @@ Result:
 - PostgreSQL compatibility debt scan: no SQLite compatibility patterns found.
 - Frontend build is not planned because this slice only removes an unused backend import.
 
+### 2026-06-11 - P3 clear-data helper extraction
+
+Changed:
+
+- Added `_empty_clear_data_stats` and `_topic_child_delete_statements` to
+  `backend/storage/zsxq_columns_database_helpers.py`.
+- Replaced the inline clear-data stats literal and repeated topic child-delete statements in
+  `clear_all_data`.
+- Added characterization coverage for stats key order, independent stats dicts, topic child-delete
+  order, `topic_owners` non-counted behavior, method-level SQL order, rowcount-to-stats mapping,
+  rollback absence on success, and commit count.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- `clear_all_data` still selects topic ids first, then deletes comments, videos, files, images, and
+  topic owners in the same order when topic ids exist.
+- `topic_owners` deletion still has no returned stats counter.
+- Group-scoped deletes for topic details, column topics, columns, and crawl logs still run after
+  topic child deletes.
+- Success still commits once and returns the same stats shape; failure behavior and rollback path
+  were not changed.
+- No schema, compatibility layer, fallback path, or public API behavior was changed.
+
+Verification:
+
+```powershell
+uv run python -m py_compile backend\storage\zsxq_columns_database.py backend\storage\zsxq_columns_database_helpers.py tests\test_zsxq_columns_database_helpers.py
+uv run python -m unittest tests.test_zsxq_columns_database_helpers -v
+uv run python -m unittest discover -s tests
+uv run python scripts\scan_postgres_compat_debt.py
+```
+
+Result:
+
+- `py_compile` passed.
+- `tests.test_zsxq_columns_database_helpers`: 26 tests passed.
+- Full backend unittest discovery: 585 tests passed, 15 skipped.
+- PostgreSQL compatibility debt scan: no SQLite compatibility patterns found.
+- Frontend build is not planned because this slice only changes backend storage/helper code.
+
 ## Stop Conditions
 
 Pause before editing if:

@@ -1,10 +1,12 @@
 import unittest
+from unittest.mock import patch
 
 from backend.storage.zsxq_columns_database import (
     _column_row_to_dict,
     _column_topic_row_to_dict,
     _comment_image_row_to_dict,
     _crawl_log_update_parts,
+    _empty_clear_data_stats,
     _empty_stats,
     _nest_topic_comments,
     _pending_file_row_to_dict,
@@ -17,6 +19,7 @@ from backend.storage.zsxq_columns_database import (
     _topic_file_row_to_dict,
     _topic_image_row_to_dict,
     _topic_video_row_to_dict,
+    _topic_child_delete_statements,
     _uncached_image_row_to_dict,
     _uncached_images_query,
 )
@@ -559,6 +562,37 @@ class ZSXQColumnsDatabaseHelperTests(unittest.TestCase):
         self.assertEqual(["status = ?"], running_updates)
         self.assertEqual(["running"], running_values)
 
+    def test_clear_data_helpers_preserve_stats_and_topic_delete_order(self):
+        first = _empty_clear_data_stats()
+        second = _empty_clear_data_stats()
+        first["comments_deleted"] = 9
+
+        self.assertEqual(second["comments_deleted"], 0)
+        self.assertEqual(
+            [
+                "columns_deleted",
+                "topics_deleted",
+                "details_deleted",
+                "images_deleted",
+                "files_deleted",
+                "videos_deleted",
+                "comments_deleted",
+                "users_deleted",
+            ],
+            list(second),
+        )
+
+        statements = _topic_child_delete_statements("?,?")
+        self.assertEqual(
+            ["comments_deleted", "videos_deleted", "files_deleted", "images_deleted", None],
+            [stat_key for stat_key, _ in statements],
+        )
+        self.assertIn("DELETE FROM comments WHERE topic_id IN (?,?)", statements[0][1])
+        self.assertIn("DELETE FROM videos WHERE topic_id IN (?,?)", statements[1][1])
+        self.assertIn("DELETE FROM files WHERE topic_id IN (?,?)", statements[2][1])
+        self.assertIn("DELETE FROM images WHERE topic_id IN (?,?)", statements[3][1])
+        self.assertIn("DELETE FROM topic_owners WHERE topic_id IN (?,?)", statements[4][1])
+
     def test_pending_queue_queries_preserve_group_filter_branches(self):
         video_sql, video_params = _pending_videos_query(303)
         file_sql, file_params = _pending_files_query(303)
@@ -704,6 +738,87 @@ class ZSXQColumnsDatabaseHelperTests(unittest.TestCase):
         self.assertIsNone(ZSXQColumnsDatabase.update_crawl_log(db, 7))
         self.assertEqual([], db.cursor.calls)
         self.assertEqual(0, db.conn.commits)
+
+    def test_clear_all_data_preserves_delete_order_stats_and_commit(self):
+        from backend.storage.zsxq_columns_database import ZSXQColumnsDatabase
+
+        class FakeCursor:
+            def __init__(self):
+                self.calls = []
+                self.rowcount = 0
+
+            def execute(self, sql, params=()):
+                normalized_sql = " ".join(sql.split())
+                self.calls.append((normalized_sql, params))
+                rowcounts = {
+                    "DELETE FROM comments": 2,
+                    "DELETE FROM videos": 3,
+                    "DELETE FROM files": 4,
+                    "DELETE FROM images": 5,
+                    "DELETE FROM topic_owners": 6,
+                    "DELETE FROM topic_details": 7,
+                    "DELETE FROM column_topics": 8,
+                    "DELETE FROM columns": 9,
+                    "DELETE FROM crawl_log": 10,
+                }
+                for prefix, rowcount in rowcounts.items():
+                    if normalized_sql.startswith(prefix):
+                        self.rowcount = rowcount
+                        break
+                return self
+
+            def fetchall(self):
+                return [(10,), (11,)]
+
+        class FakeConnection:
+            def __init__(self):
+                self.commits = 0
+                self.rollbacks = 0
+
+            def commit(self):
+                self.commits += 1
+
+            def rollback(self):
+                self.rollbacks += 1
+
+        db = object.__new__(ZSXQColumnsDatabase)
+        db.cursor = FakeCursor()
+        db.conn = FakeConnection()
+
+        with patch("builtins.print"):
+            self.assertEqual(
+                {
+                    "columns_deleted": 9,
+                    "topics_deleted": 8,
+                    "details_deleted": 7,
+                    "images_deleted": 5,
+                    "files_deleted": 4,
+                    "videos_deleted": 3,
+                    "comments_deleted": 2,
+                    "users_deleted": 0,
+                },
+                ZSXQColumnsDatabase.clear_all_data(db, 303),
+            )
+        self.assertEqual(1, db.conn.commits)
+        self.assertEqual(0, db.conn.rollbacks)
+        self.assertEqual(
+            [
+                "SELECT topic_id FROM topic_details WHERE group_id = ?",
+                "DELETE FROM comments WHERE topic_id IN (?,?)",
+                "DELETE FROM videos WHERE topic_id IN (?,?)",
+                "DELETE FROM files WHERE topic_id IN (?,?)",
+                "DELETE FROM images WHERE topic_id IN (?,?)",
+                "DELETE FROM topic_owners WHERE topic_id IN (?,?)",
+                "DELETE FROM topic_details WHERE group_id = ?",
+                "DELETE FROM column_topics WHERE group_id = ?",
+                "DELETE FROM columns WHERE group_id = ?",
+                "DELETE FROM crawl_log WHERE group_id = ?",
+            ],
+            [sql for sql, _ in db.cursor.calls],
+        )
+        self.assertEqual((303,), db.cursor.calls[0][1])
+        self.assertTrue(all(params == [10, 11] for _, params in db.cursor.calls[1:6]))
+        self.assertTrue(all(params == (303,) for _, params in db.cursor.calls[6:]))
 
     def test_runtime_init_database_is_noop(self):
         from backend.storage.zsxq_columns_database import ZSXQColumnsDatabase
