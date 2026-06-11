@@ -90,6 +90,10 @@ def file_exists_query(file_id: int, group_id: Optional[str]) -> tuple[str, tuple
     )
 
 
+def topic_group_id_query(topic_id: int) -> tuple[str, tuple[Any, ...]]:
+    return "SELECT group_id FROM topics WHERE topic_id = ? LIMIT 1", (topic_id,)
+
+
 def replace_file_topic_relation(file_db, file_id: int, topic_id: int) -> int:
     file_db.cursor.execute(
         """

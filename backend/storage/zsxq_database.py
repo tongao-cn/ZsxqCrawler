@@ -21,6 +21,7 @@ from backend.storage.zsxq_database_helpers import (
     topic_detail_scope,
     topic_exists_query,
     topic_file_payload_from_row,
+    topic_group_id_query,
     upsert_core_file,
 )
 
@@ -59,6 +60,10 @@ def _topic_exists_query(topic_id: int, group_id: Optional[str]) -> tuple[str, tu
 
 def _file_exists_query(file_id: int, group_id: Optional[str]) -> tuple[str, tuple[Any, ...]]:
     return file_exists_query(file_id, group_id)
+
+
+def _topic_group_id_query(topic_id: int) -> tuple[str, tuple[Any, ...]]:
+    return topic_group_id_query(topic_id)
 
 
 def _upsert_core_file(cursor, group_id: Optional[int], topic_id: int, file_data: Dict[str, Any]) -> Optional[int]:
@@ -792,7 +797,8 @@ class ZSXQDatabase:
         if group_id:
             return _nullable_group_id_param(str(group_id))
         try:
-            self.cursor.execute('SELECT group_id FROM topics WHERE topic_id = ? LIMIT 1', (topic_id,))
+            sql, params = _topic_group_id_query(topic_id)
+            self.cursor.execute(sql, params)
             row = self.cursor.fetchone()
             return row[0] if row and row[0] is not None else None
         except Exception:

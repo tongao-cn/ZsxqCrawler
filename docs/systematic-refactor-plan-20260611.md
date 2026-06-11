@@ -4224,6 +4224,43 @@ Result:
 - PostgreSQL compatibility debt scan: no SQLite compatibility patterns found.
 - Frontend build is not planned because this slice only changes backend storage/helper code.
 
+### 2026-06-11 - P2 topic group lookup query helper extraction
+
+Changed:
+
+- Added `topic_group_id_query` to `backend/storage/zsxq_database_helpers.py`, with a compatibility
+  wrapper in `backend/storage/zsxq_database.py`.
+- Replaced inline topic group-id lookup SQL in `_resolve_topic_group_id` with helper-returned SQL
+  and params.
+- Added characterization coverage for explicit group priority, runtime group priority, database
+  lookup, missing row fallback, exception fallback, SQL shape, and parameter order.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- `_resolve_topic_group_id` still uses `explicit_group_id or self.group_id` before querying.
+- It still casts numeric group ids via `_nullable_group_id_param`, still returns `None` when no
+  topic group is found, and still swallows lookup exceptions by returning `None`.
+- No schema, config, compatibility, fallback, error handling, logging, or public API semantics were
+  changed.
+
+Verification:
+
+```powershell
+uv run python -m py_compile backend\storage\zsxq_database.py backend\storage\zsxq_database_helpers.py tests\test_zsxq_database_helpers.py
+uv run python -m unittest tests.test_zsxq_database_helpers -v
+uv run python -m unittest discover -s tests
+uv run python scripts\scan_postgres_compat_debt.py
+```
+
+Result:
+
+- `py_compile` passed.
+- `tests.test_zsxq_database_helpers`: 22 tests passed.
+- Full backend unittest discovery: 625 tests passed, 15 skipped.
+- PostgreSQL compatibility debt scan: no SQLite compatibility patterns found.
+- Frontend build is not planned because this slice only changes backend storage/helper code.
+
 ## Stop Conditions
 
 Pause before editing if:

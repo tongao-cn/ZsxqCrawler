@@ -12,6 +12,7 @@ from backend.storage.zsxq_database import (
     _topic_detail_scope,
     _topic_exists_query,
     _topic_file_payload_from_row,
+    _topic_group_id_query,
     _upsert_core_file,
 )
 
@@ -596,6 +597,10 @@ class ZSXQDatabaseHelperTests(unittest.TestCase):
         self.assertEqual((101, 303, 303), file_params)
         self.assertEqual((101, "", ""), _file_exists_query(101, None)[1])
 
+        group_sql, group_params = _topic_group_id_query(202)
+        self.assertEqual("SELECT group_id FROM topics WHERE topic_id = ? LIMIT 1", group_sql)
+        self.assertEqual((202,), group_params)
+
     def test_import_topic_data_existing_topic_preserves_skip_and_file_sync(self):
         from backend.storage.zsxq_database import ZSXQDatabase
 
@@ -624,6 +629,55 @@ class ZSXQDatabaseHelperTests(unittest.TestCase):
         self.assertEqual([(topic_data, [{"file_id": 101}])], synced)
         self.assertEqual(0, db.conn.commits)
         self.assertEqual(0, db.conn.rollbacks)
+
+    def test_resolve_topic_group_id_preserves_explicit_scope_lookup_and_exception_fallback(self):
+        from backend.storage.zsxq_database import ZSXQDatabase
+
+        class GroupLookupCursor:
+            def __init__(self, row=None, raises=False):
+                self.calls = []
+                self.row = row
+                self.raises = raises
+
+            def execute(self, sql, params=()):
+                self.calls.append((" ".join(sql.split()), params))
+                if self.raises:
+                    raise RuntimeError("temporary storage failure")
+                return self
+
+            def fetchone(self):
+                return self.row
+
+        explicit_db = object.__new__(ZSXQDatabase)
+        explicit_db.cursor = GroupLookupCursor((999,))
+        explicit_db.group_id = "303"
+        self.assertEqual(404, ZSXQDatabase._resolve_topic_group_id(explicit_db, 202, explicit_group_id="404"))
+        self.assertEqual([], explicit_db.cursor.calls)
+
+        scoped_db = object.__new__(ZSXQDatabase)
+        scoped_db.cursor = GroupLookupCursor((999,))
+        scoped_db.group_id = "303"
+        self.assertEqual(303, ZSXQDatabase._resolve_topic_group_id(scoped_db, 202))
+        self.assertEqual([], scoped_db.cursor.calls)
+
+        lookup_db = object.__new__(ZSXQDatabase)
+        lookup_db.cursor = GroupLookupCursor((303,))
+        lookup_db.group_id = None
+        self.assertEqual(303, ZSXQDatabase._resolve_topic_group_id(lookup_db, 202))
+        self.assertEqual(
+            [("SELECT group_id FROM topics WHERE topic_id = ? LIMIT 1", (202,))],
+            lookup_db.cursor.calls,
+        )
+
+        missing_db = object.__new__(ZSXQDatabase)
+        missing_db.cursor = GroupLookupCursor(None)
+        missing_db.group_id = None
+        self.assertIsNone(ZSXQDatabase._resolve_topic_group_id(missing_db, 202))
+
+        failing_db = object.__new__(ZSXQDatabase)
+        failing_db.cursor = GroupLookupCursor(raises=True)
+        failing_db.group_id = None
+        self.assertIsNone(ZSXQDatabase._resolve_topic_group_id(failing_db, 202))
 
     def test_upsert_comment_writes_group_id_from_runtime_scope(self):
         from backend.storage.zsxq_database import ZSXQDatabase
