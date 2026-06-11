@@ -1342,6 +1342,50 @@ Result:
 - PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
 - Git diff whitespace check passed.
 
+### 2026-06-11 - P5 pending task state builder extraction
+
+Changed:
+
+- Added characterization coverage for `create_ingestion_task()` when the task store returns no
+  task object and no conflict, preserving the in-memory pending-task fallback shape.
+- Extracted `_build_pending_task_state()` and reused it for ordinary task creation and the
+  ingestion-task fallback path.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Ordinary task creation still allocates the same task ID, writes the same pending memory fields,
+  passes the same metadata to the persistent store, initializes stop flags/logs in the same order,
+  and emits the same creation log text.
+- Ingestion task creation still preserves store-returned task objects when present and only builds
+  the fallback pending memory task when the store returns no task and no existing conflict.
+- No public route response, task store SQL, ingestion lock behavior, task ID allocation,
+  cancellation behavior, SSE behavior, fallback polling, storage schema, legacy path, config
+  semantics, or frontend hook behavior changed.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_task_runtime_helpers -v
+uv run python -m py_compile backend\services\task_runtime.py
+uv run python -m unittest tests.test_task_runtime_helpers tests.test_task_store tests.test_task_routes_helpers -v
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+uv run python scripts\scan_postgres_compat_debt.py
+git diff --check
+```
+
+Result:
+
+- Characterization test passed on the pre-refactor code before the helper extraction.
+- Focused task runtime tests passed: 19 tests.
+- Recommended task runtime gate passed: 38 tests, 14 PostgreSQL integration tests skipped by
+  configuration.
+- Full backend tests passed: 538 tests, 15 skipped.
+- Frontend build passed.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Git diff whitespace check passed.
+
 ## Stop Conditions
 
 Pause before editing if:

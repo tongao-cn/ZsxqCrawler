@@ -80,6 +80,27 @@ def _forget_task_tracking_locked(task_id: str) -> None:
     sse_connections.pop(task_id, None)
 
 
+def _build_pending_task_state(
+    task_id: str,
+    task_type: str,
+    description: str,
+    now: datetime,
+    metadata: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    task = {
+        "task_id": task_id,
+        "type": task_type,
+        "status": "pending",
+        "message": description,
+        "result": None,
+        "created_at": now,
+        "updated_at": now,
+    }
+    if metadata:
+        task.update(metadata)
+    return task
+
+
 def _normalize_task_status(status: str) -> str:
     return "cancelled" if status == "stopped" else status
 
@@ -150,17 +171,13 @@ def create_task(task_type: str, description: str, metadata: Optional[Dict[str, A
     with _state_lock:
         task_id = _allocate_task_id_locked(now)
 
-        current_tasks[task_id] = {
-            "task_id": task_id,
-            "type": task_type,
-            "status": "pending",
-            "message": description,
-            "result": None,
-            "created_at": now,
-            "updated_at": now,
-        }
-        if metadata:
-            current_tasks[task_id].update(metadata)
+        current_tasks[task_id] = _build_pending_task_state(
+            task_id,
+            task_type,
+            description,
+            now,
+            metadata,
+        )
 
     store = get_task_store()
     store.create_task(
@@ -216,16 +233,13 @@ def create_ingestion_task(task_type: str, description: str, group_id: str) -> tu
     if existing:
         return None, _normalize_task(existing)
     with _state_lock:
-        current_tasks[task_id] = task or {
-            "task_id": task_id,
-            "type": task_type,
-            "status": "pending",
-            "message": description,
-            "result": None,
-            "created_at": now,
-            "updated_at": now,
-            **metadata,
-        }
+        current_tasks[task_id] = task or _build_pending_task_state(
+            task_id,
+            task_type,
+            description,
+            now,
+            metadata,
+        )
         _initialize_task_tracking_locked(task_id)
     _persist_task_creation_tracking(task_id, description)
     return task_id, None

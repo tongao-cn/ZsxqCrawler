@@ -209,6 +209,54 @@ class TaskRuntimeHelperTests(unittest.TestCase):
         self.assertEqual(["任务创建: collect"], runtime_logs)
         self.assertEqual(False, runtime_stop_flag)
 
+    def test_create_ingestion_task_builds_memory_task_when_store_returns_no_task(self):
+        from backend.services import task_runtime
+        from backend.services.task_runtime import create_ingestion_task
+
+        store = FakeTaskStore()
+        original_counter = task_runtime.task_counter
+        task_id = None
+        memory_task = None
+        runtime_logs = None
+        runtime_stop_flag = None
+
+        with (
+            patch("backend.services.task_runtime.get_task_store", return_value=store),
+            patch.object(
+                store,
+                "create_task_with_lock",
+                return_value=(None, None),
+            ) as create_with_lock,
+        ):
+            task_runtime.task_counter = 0
+            try:
+                task_id, conflict = create_ingestion_task("collect_files", "collect", "166")
+                memory_task = dict(task_runtime.current_tasks[task_id])
+                runtime_logs = list(task_runtime.task_logs[task_id])
+                runtime_stop_flag = task_runtime.task_stop_flags[task_id]
+            finally:
+                if task_id:
+                    task_runtime.current_tasks.pop(task_id, None)
+                    task_runtime.task_logs.pop(task_id, None)
+                    task_runtime.task_stop_flags.pop(task_id, None)
+                task_runtime.task_counter = original_counter
+
+        self.assertTrue(task_id.startswith("task_1_"))
+        self.assertIsNone(conflict)
+        create_with_lock.assert_called_once()
+        self.assertEqual(task_id, memory_task["task_id"])
+        self.assertEqual("collect_files", memory_task["type"])
+        self.assertEqual("pending", memory_task["status"])
+        self.assertEqual("collect", memory_task["message"])
+        self.assertIsNone(memory_task["result"])
+        self.assertEqual(memory_task["created_at"], memory_task["updated_at"])
+        self.assertEqual("166", memory_task["group_id"])
+        self.assertEqual("ingestion", memory_task["ingestion_lock_key"])
+        self.assertEqual(False, store.stop_flags[task_id])
+        self.assertEqual([(task_id, "任务创建: collect")], store.logs)
+        self.assertEqual(["任务创建: collect"], runtime_logs)
+        self.assertEqual(False, runtime_stop_flag)
+
     def test_cleanup_tasks_forgets_removed_runtime_tracking(self):
         from backend.services import task_runtime
         from backend.services.task_runtime import cleanup_tasks
