@@ -62,6 +62,39 @@ def _topic_image_row_to_dict(row) -> Dict[str, Any]:
     }
 
 
+def _topic_file_row_to_dict(row) -> Dict[str, Any]:
+    return {
+        'file_id': row[0],
+        'name': row[1],
+        'hash': row[2],
+        'size': row[3],
+        'duration': row[4],
+        'download_count': row[5],
+        'create_time': row[6],
+        'download_status': row[7],
+        'local_path': row[8],
+        'download_time': row[9]
+    }
+
+
+def _topic_video_row_to_dict(row) -> Dict[str, Any]:
+    return {
+        'video_id': row[0],
+        'size': row[1],
+        'duration': row[2],
+        'cover': {
+            'url': row[3],
+            'width': row[4],
+            'height': row[5],
+            'local_path': row[6]
+        },
+        'video_url': row[7],
+        'download_status': row[8],
+        'local_path': row[9],
+        'download_time': row[10]
+    }
+
+
 def _topic_detail_row_to_dict(row) -> Dict[str, Any]:
     result = {
         'topic_id': row[0],
@@ -594,21 +627,7 @@ class ZSXQColumnsDatabase:
               AND (? IS NULL OR topic_id IN (SELECT topic_id FROM topic_details WHERE group_id = ?))
         ''', (topic_id, scope_group_id, scope_group_id))
         
-        files = []
-        for row in self.cursor.fetchall():
-            files.append({
-                'file_id': row[0],
-                'name': row[1],
-                'hash': row[2],
-                'size': row[3],
-                'duration': row[4],
-                'download_count': row[5],
-                'create_time': row[6],
-                'download_status': row[7],
-                'local_path': row[8],
-                'download_time': row[9]
-            })
-        return files
+        return [_topic_file_row_to_dict(row) for row in self.cursor.fetchall()]
     
     def get_topic_videos(self, topic_id: int, group_id: Optional[Any] = None) -> List[Dict[str, Any]]:
         """获取文章的所有视频"""
@@ -621,24 +640,7 @@ class ZSXQColumnsDatabase:
               AND (? IS NULL OR topic_id IN (SELECT topic_id FROM topic_details WHERE group_id = ?))
         ''', (topic_id, scope_group_id, scope_group_id))
         
-        videos = []
-        for row in self.cursor.fetchall():
-            videos.append({
-                'video_id': row[0],
-                'size': row[1],
-                'duration': row[2],
-                'cover': {
-                    'url': row[3],
-                    'width': row[4],
-                    'height': row[5],
-                    'local_path': row[6]
-                },
-                'video_url': row[7],
-                'download_status': row[8],
-                'local_path': row[9],
-                'download_time': row[10]
-            })
-        return videos
+        return [_topic_video_row_to_dict(row) for row in self.cursor.fetchall()]
     
     def update_video_cover_path(self, video_id: int, local_path: str):
         """更新视频封面本地缓存路径"""

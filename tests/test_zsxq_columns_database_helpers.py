@@ -5,7 +5,9 @@ from backend.storage.zsxq_columns_database import (
     _column_topic_row_to_dict,
     _empty_stats,
     _topic_detail_row_to_dict,
+    _topic_file_row_to_dict,
     _topic_image_row_to_dict,
+    _topic_video_row_to_dict,
 )
 
 
@@ -93,6 +95,70 @@ class ZSXQColumnsDatabaseHelperTests(unittest.TestCase):
                     "size": 2048,
                 },
                 "local_path": "cache/image.png",
+            },
+        )
+
+    def test_topic_file_row_to_dict_preserves_file_shape(self):
+        row = (
+            501,
+            "report.pdf",
+            "file-hash",
+            4096,
+            120,
+            7,
+            "2026-05-01T08:00:00+0800",
+            "downloaded",
+            "downloads/report.pdf",
+            "2026-05-02 12:00:00",
+        )
+
+        self.assertEqual(
+            _topic_file_row_to_dict(row),
+            {
+                "file_id": 501,
+                "name": "report.pdf",
+                "hash": "file-hash",
+                "size": 4096,
+                "duration": 120,
+                "download_count": 7,
+                "create_time": "2026-05-01T08:00:00+0800",
+                "download_status": "downloaded",
+                "local_path": "downloads/report.pdf",
+                "download_time": "2026-05-02 12:00:00",
+            },
+        )
+
+    def test_topic_video_row_to_dict_preserves_cover_shape(self):
+        row = (
+            601,
+            8192,
+            300,
+            "cover-url",
+            320,
+            180,
+            "cache/cover.jpg",
+            "video-url",
+            "pending",
+            "downloads/video.mp4",
+            "2026-05-03 12:00:00",
+        )
+
+        self.assertEqual(
+            _topic_video_row_to_dict(row),
+            {
+                "video_id": 601,
+                "size": 8192,
+                "duration": 300,
+                "cover": {
+                    "url": "cover-url",
+                    "width": 320,
+                    "height": 180,
+                    "local_path": "cache/cover.jpg",
+                },
+                "video_url": "video-url",
+                "download_status": "pending",
+                "local_path": "downloads/video.mp4",
+                "download_time": "2026-05-03 12:00:00",
             },
         )
 

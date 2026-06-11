@@ -517,6 +517,44 @@ Result:
 - PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
 - Git diff whitespace check passed.
 
+### 2026-06-11 - P3 column topic media row mapper extraction
+
+Changed:
+
+- Added characterization coverage for topic file and video row mapping, including the current file
+  response shape and the nested video `cover` payload shape.
+- Extracted `_topic_file_row_to_dict` and `_topic_video_row_to_dict` in
+  `backend/storage/zsxq_columns_database.py`.
+- Reused the helpers from `get_topic_files` and `get_topic_videos` while leaving SQL, scoped query
+  parameters, ordering, and return field names unchanged.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- File payload fields, video payload fields, nested cover shape, empty-list behavior, and group
+  scope semantics are preserved.
+- No schema, public API, storage write path, fallback behavior, legacy compatibility path, or config
+  semantics changed.
+
+Verification:
+
+```powershell
+uv run python -m py_compile backend\storage\zsxq_columns_database.py
+uv run python -m unittest tests.test_zsxq_columns_database_helpers -v
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+uv run python scripts\scan_postgres_compat_debt.py
+git diff --check
+```
+
+Result:
+
+- Focused column database helper tests passed: 11 tests.
+- Full backend tests passed: 524 tests, 15 skipped.
+- Frontend build passed.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Git diff whitespace check passed.
+
 ## Stop Conditions
 
 Pause before editing if:
