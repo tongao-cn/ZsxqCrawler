@@ -204,6 +204,21 @@ def _solution_record_params(topic_id: int, owner_id: Optional[Any], solution_dat
     )
 
 
+def _api_response_record_params(response_data: Dict[str, Any], files_count: int) -> tuple[Any, ...]:
+    return (
+        response_data.get('succeeded', False),
+        response_data.get('resp_data', {}).get('index'),
+        files_count,
+    )
+
+
+def _file_topic_relation_params(file_id: Any, topic_id: Any) -> tuple[Any, ...]:
+    return (
+        file_id,
+        topic_id,
+    )
+
+
 def _file_attachment_params(parent_id: Any, file_data: Dict[str, Any]) -> tuple[Any, ...]:
     return (
         parent_id,

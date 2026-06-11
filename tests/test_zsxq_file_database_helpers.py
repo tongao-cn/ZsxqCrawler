@@ -2,6 +2,7 @@ import unittest
 
 from backend.storage.zsxq_file_database import (
     _FILE_AI_ANALYSIS_FIELDS,
+    _api_response_record_params,
     _close_connection,
     _column_record_params,
     _comment_record_params,
@@ -10,6 +11,7 @@ from backend.storage.zsxq_file_database import (
     _file_attachment_params,
     _file_download_status_params,
     _file_record_params,
+    _file_topic_relation_params,
     _group_record_params,
     _image_record_params,
     _latest_like_record_params,
@@ -409,6 +411,16 @@ class ZSXQFileDatabaseHelperTests(unittest.TestCase):
         )
         self.assertEqual((202, None, None, ""), _solution_record_params(202, None, {}))
 
+    def test_api_response_record_params_keep_insert_column_order(self):
+        self.assertEqual(
+            (True, "next", 2),
+            _api_response_record_params({"succeeded": True, "resp_data": {"index": "next"}}, 2),
+        )
+        self.assertEqual((False, None, 0), _api_response_record_params({}, 0))
+
+    def test_file_topic_relation_params_keep_sql_column_order(self):
+        self.assertEqual((101, 202), _file_topic_relation_params(101, 202))
+
     def test_count_tables_builds_stats_from_cursor_counts(self):
         cursor = FakeCursor({"files": 3, "topics": 2})
 
@@ -483,7 +495,10 @@ class ZSXQFileDatabaseHelperTests(unittest.TestCase):
         self.assertEqual(1, stats["files"])
         self.assertEqual(1, stats["topics"])
         self.assertEqual(1, stats["groups"])
+        self.assertIn(("api_response", (True, "next", 1)), fake.calls)
         self.assertIn(("file", 101, 303, 202), fake.calls)
+        self.assertIn(("delete_relation", (101, 202)), fake.calls)
+        self.assertIn(("insert_relation", (101, 202)), fake.calls)
 
     def test_insert_file_writes_group_and_topic_ids(self):
         from backend.storage.zsxq_file_database import ZSXQFileDatabase

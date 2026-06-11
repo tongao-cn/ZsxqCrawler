@@ -3,6 +3,7 @@ from typing import Dict, List, Any, Optional
 from backend.storage.db_compat import connect
 from backend.storage.zsxq_file_database_helpers import (
     _FILE_AI_ANALYSIS_FIELDS,
+    _api_response_record_params,
     _close_connection,
     _column_record_params,
     _comment_record_params,
@@ -11,6 +12,7 @@ from backend.storage.zsxq_file_database_helpers import (
     _file_attachment_params,
     _file_download_status_params,
     _file_record_params,
+    _file_topic_relation_params,
     _group_id_param,
     _image_record_params,
     _group_record_params,
@@ -376,11 +378,7 @@ class ZSXQFileDatabase:
             self.cursor.execute('''
             INSERT INTO api_responses (succeeded, index_value, files_count)
             VALUES (?, ?, ?)
-            ''', (
-                response_data.get('succeeded', False),
-                response_data.get('resp_data', {}).get('index'),
-                len(files_data)
-            ))
+            ''', _api_response_record_params(response_data, len(files_data)))
             
             # 处理每个文件和关联的话题
             for item in files_data:
@@ -461,13 +459,13 @@ class ZSXQFileDatabase:
                     self.cursor.execute('''
                     DELETE FROM file_topic_relations
                     WHERE file_id = ? AND topic_id = ?
-                    ''', (file_id, topic_id))
+                    ''', _file_topic_relation_params(file_id, topic_id))
 
                     self.cursor.execute('''
                     INSERT INTO file_topic_relations (file_id, topic_id)
                     VALUES (?, ?)
                     ON CONFLICT(file_id, topic_id) DO NOTHING
-                    ''', (file_id, topic_id))
+                    ''', _file_topic_relation_params(file_id, topic_id))
 
                     if file_id:
                         self.insert_topic_files(topic_id, [file_data])
