@@ -11,6 +11,7 @@ from backend.storage.zsxq_database import (
     _nullable_group_id_param,
     _oldest_topic_create_time_query,
     _replace_file_topic_relation,
+    _topic_create_time_by_id_query,
     _topic_detail_scope,
     _topic_count_query,
     _topic_exists_query,
@@ -615,6 +616,10 @@ class ZSXQDatabaseHelperTests(unittest.TestCase):
         self.assertEqual("SELECT group_id FROM topics WHERE topic_id = ? LIMIT 1", group_sql)
         self.assertEqual((202,), group_params)
 
+        create_time_sql, create_time_params = _topic_create_time_by_id_query(202)
+        self.assertEqual("SELECT create_time FROM topics WHERE topic_id = ?", create_time_sql)
+        self.assertEqual((202,), create_time_params)
+
     def test_topic_timestamp_query_helpers_preserve_existing_scope_semantics(self):
         newest_sql, newest_params = _newest_topic_create_time_query(None, nullable_scope=True)
         self.assertIn("ORDER BY create_time DESC LIMIT 1", " ".join(newest_sql.split()))
@@ -772,6 +777,48 @@ class ZSXQDatabaseHelperTests(unittest.TestCase):
         self.assertIn("ON CONFLICT(comment_id) DO UPDATE SET", sql)
         self.assertIn("comment_id, group_id, topic_id", sql)
         self.assertEqual((101, 303, 202), params[:3])
+
+    def test_upsert_article_uses_topic_create_time_and_preserves_empty_payload_skip(self):
+        from backend.storage.zsxq_database import ZSXQDatabase
+
+        empty_db = object.__new__(ZSXQDatabase)
+        empty_db.cursor = FakeCursor()
+        ZSXQDatabase._upsert_article(empty_db, 202, {})
+        self.assertEqual([], empty_db.cursor.calls)
+
+        article_db = object.__new__(ZSXQDatabase)
+        article_db.cursor = FakeCursor()
+        article_db.cursor.row = ("2026-05-07T10:00:00.000+0800",)
+
+        ZSXQDatabase._upsert_article(
+            article_db,
+            202,
+            {
+                "title": "article title",
+                "article_id": "401",
+                "article_url": "article-url",
+                "inline_article_url": "inline-url",
+            },
+        )
+
+        self.assertEqual(
+            ("SELECT create_time FROM topics WHERE topic_id = ?", (202,)),
+            article_db.cursor.calls[0],
+        )
+        article_sql, article_params = article_db.cursor.calls[1]
+        self.assertIn("INSERT INTO articles", article_sql)
+        self.assertIn("ON CONFLICT(topic_id) DO UPDATE SET", article_sql)
+        self.assertEqual(
+            (
+                202,
+                "article title",
+                "401",
+                "article-url",
+                "inline-url",
+                "2026-05-07T10:00:00.000+0800",
+            ),
+            article_params,
+        )
 
     def test_content_child_writes_use_explicit_unique_semantics(self):
         from backend.storage.zsxq_database import ZSXQDatabase

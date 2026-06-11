@@ -4305,6 +4305,48 @@ Result:
 - `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
 - Frontend build is not planned because this slice only changes backend storage/helper code.
 
+### 2026-06-11 - P2 article topic create-time query helper extraction
+
+Changed:
+
+- Added `topic_create_time_by_id_query` to `backend/storage/zsxq_database_helpers.py`, with a
+  compatibility wrapper in `backend/storage/zsxq_database.py`.
+- Replaced inline article create-time lookup SQL in `_upsert_article` with helper-returned SQL and
+  params.
+- Added characterization coverage for SQL shape, params, empty article payload skip behavior, topic
+  `create_time` lookup, and `INSERT INTO articles` params using the fetched topic time as
+  `created_at`.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- `_upsert_article` still returns before any database call when both title and article id are empty.
+- Article `created_at` still comes from `topics.create_time` when present and still falls back to an
+  empty string when the topic row is missing.
+- The article insert/upsert statement, conflict target, params order, and update assignments were
+  not changed.
+- No schema, config, compatibility, fallback, error handling, logging, or public API semantics were
+  changed.
+
+Verification:
+
+```powershell
+uv run python -m py_compile backend\storage\zsxq_database.py backend\storage\zsxq_database_helpers.py tests\test_zsxq_database_helpers.py
+uv run python -m unittest tests.test_zsxq_database_helpers -v
+uv run python -m unittest discover -s tests
+uv run python scripts\scan_postgres_compat_debt.py
+git diff --check
+```
+
+Result:
+
+- `py_compile` passed.
+- `tests.test_zsxq_database_helpers`: 26 tests passed.
+- Full backend unittest discovery: 629 tests passed, 15 skipped.
+- PostgreSQL compatibility debt scan: no SQLite compatibility patterns found.
+- `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
+- Frontend build is not planned because this slice only changes backend storage/helper code.
+
 ## Stop Conditions
 
 Pause before editing if:

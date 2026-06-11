@@ -94,6 +94,10 @@ def topic_group_id_query(topic_id: int) -> tuple[str, tuple[Any, ...]]:
     return "SELECT group_id FROM topics WHERE topic_id = ? LIMIT 1", (topic_id,)
 
 
+def topic_create_time_by_id_query(topic_id: int) -> tuple[str, tuple[Any, ...]]:
+    return "SELECT create_time FROM topics WHERE topic_id = ?", (topic_id,)
+
+
 def newest_topic_create_time_query(group_id: Optional[str], *, nullable_scope: bool = False) -> tuple[str, tuple[Any, ...]]:
     scoped_group_id = nullable_group_id_param(group_id) if nullable_scope else group_id_param(group_id)
     return (

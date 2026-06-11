@@ -20,6 +20,7 @@ from backend.storage.zsxq_database_helpers import (
     nullable_group_id_param,
     oldest_topic_create_time_query,
     replace_file_topic_relation,
+    topic_create_time_by_id_query,
     topic_detail_scope,
     topic_count_query,
     topic_exists_query,
@@ -67,6 +68,10 @@ def _file_exists_query(file_id: int, group_id: Optional[str]) -> tuple[str, tupl
 
 def _topic_group_id_query(topic_id: int) -> tuple[str, tuple[Any, ...]]:
     return topic_group_id_query(topic_id)
+
+
+def _topic_create_time_by_id_query(topic_id: int) -> tuple[str, tuple[Any, ...]]:
+    return topic_create_time_by_id_query(topic_id)
 
 
 def _newest_topic_create_time_query(
@@ -967,9 +972,8 @@ class ZSXQDatabase:
             return
         
         # 获取话题的创建时间作为文章创建时间
-        self.cursor.execute('''
-            SELECT create_time FROM topics WHERE topic_id = ?
-        ''', (topic_id,))
+        sql, params = _topic_create_time_by_id_query(topic_id)
+        self.cursor.execute(sql, params)
         result = self.cursor.fetchone()
         created_at = result[0] if result else ''
         
