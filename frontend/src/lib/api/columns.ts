@@ -1,5 +1,5 @@
 import { GroupsApiClient } from './groups';
-import type { ColumnComment, ColumnInfo, ColumnTopic, ColumnTopicDetail, ColumnsFetchSettings, ColumnsStats } from './types';
+import type { ColumnComment, ColumnInfo, ColumnTopic, ColumnTopicDetail, ColumnsFetchSettings, ColumnsStats } from './columnTypes';
 
 export class ColumnsApiClient extends GroupsApiClient {
   async getGroupColumns(groupId: number | string): Promise<{
@@ -67,4 +67,3 @@ export class ColumnsApiClient extends GroupsApiClient {
     });
   }
 }
-

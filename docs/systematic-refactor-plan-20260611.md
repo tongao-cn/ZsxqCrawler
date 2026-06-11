@@ -915,6 +915,42 @@ Result:
 - PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
 - Git diff whitespace check passed.
 
+### 2026-06-11 - P6 column API type surface split
+
+Changed:
+
+- Added `frontend/src/lib/api/columnTypes.ts` for column-workbench frontend API types:
+  `ColumnInfo`, `ColumnTopic`, `ColumnTopicDetail`, `ColumnImage`, `ColumnVideo`, `ColumnFile`,
+  `ColumnComment`, `ColumnsStats`, and `ColumnsFetchSettings`.
+- Kept `frontend/src/lib/api/types.ts` as the compatibility facade by re-exporting those column
+  types.
+- Updated `frontend/src/lib/api/columns.ts` to import column-specific types from `columnTypes.ts`.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Public frontend import path `@/lib/api`, exported type names, column list/detail/comment/media
+  shapes, column fetch settings shape, request URLs, request bodies, and runtime behavior are
+  preserved.
+- No backend route, storage schema, task behavior, SSE behavior, fallback polling, legacy path, or
+  config semantics changed.
+
+Verification:
+
+```powershell
+npm --prefix frontend run build
+uv run python -m unittest discover -s tests
+uv run python scripts\scan_postgres_compat_debt.py
+git diff --check
+```
+
+Result:
+
+- Frontend build passed.
+- Full backend tests passed: 533 tests, 15 skipped.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Git diff whitespace check passed.
+
 ## Stop Conditions
 
 Pause before editing if:
