@@ -27,7 +27,6 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     add_import_stats,
     classify_api_failure,
     classify_http_failure,
-    content_disposition_filename,
     download_file_data,
     empty_import_stats,
     existing_file_matches,
@@ -35,6 +34,7 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     has_retry_attempt_remaining,
     normalize_date_range,
     page_crosses_stop_before,
+    response_filename_override,
     safe_download_filename,
     should_log_full_response,
     summarize_page_time_range,
@@ -599,14 +599,15 @@ class ZSXQFileDownloader:
                 self.log(f"   🚀 开始下载...")
                 response = self.session.get(download_url, timeout=300, stream=True)
 
-                # 如果文件名是默认的，尝试从响应头获取真实文件名
-                if file_name.startswith('file_') and 'content-disposition' in response.headers:
-                    real_filename = content_disposition_filename(response.headers['content-disposition'])
-                    if real_filename:
-                        file_name = real_filename
-                        safe_filename = safe_download_filename(file_name, file_id)
-                        file_path = os.path.join(self.download_dir, safe_filename)
-                        self.log(f"   📝 从响应头获取到真实文件名: {file_name}")
+                filename_override = response_filename_override(
+                    file_name,
+                    file_id,
+                    self.download_dir,
+                    response.headers,
+                )
+                if filename_override:
+                    file_name, safe_filename, file_path = filename_override
+                    self.log(f"   📝 从响应头获取到真实文件名: {file_name}")
 
                 if response.status_code == 200:
                     total_size = int(response.headers.get('content-length', 0))

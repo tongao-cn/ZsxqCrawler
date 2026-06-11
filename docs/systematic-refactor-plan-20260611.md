@@ -60,6 +60,7 @@ Observed on 2026-06-11:
 | P6 | `frontend/src/lib/api/types.ts`, `frontend/src/lib/api/*` | Split API type surface by domain while keeping compatibility facade | Medium | `npm --prefix frontend run build` | Maybe | Keep `frontend/src/lib/api.ts` exports |
 | P7 | `frontend/package.json`, `pyproject.toml` | Audit suspicious direct dependencies in isolated slices | Low-medium | `npm ls`; frontend build; lock diff review | No | Do not mix dependency cleanup with behavior refactors |
 | P8 | `README.md`, `docs/project-architecture-roadmap.md` | Keep docs aligned with final module boundaries and verification commands | Low | grep references; relevant tests/builds | No | Archive stale plans only when cleanup is in scope |
+| P9 | `backend/crawlers/zsxq_file_downloader.py` | Extract tested download filename, retry, and file-body helpers from the large crawler class | Medium | `py_compile`; `tests.test_zsxq_file_downloader_helpers`; full backend tests | Yes | Preserve signed URL, retry, stop, partial-file cleanup, and status-update behavior |
 
 ## First Execution Slice
 
@@ -2703,6 +2704,42 @@ Result:
 - Full backend unittest discovery: 557 tests passed, 15 skipped.
 - PostgreSQL compatibility debt scan: no SQLite compatibility patterns found.
 - Frontend build was not rerun because this slice only changes backend storage/helper code.
+
+### 2026-06-11 - P9 download response filename helper extraction
+
+Changed:
+
+- Added characterization coverage for `download_file` using `content-disposition` to replace a
+  default `file_...` name with the real response filename.
+- Added `response_filename_override` to `backend/crawlers/zsxq_file_downloader_helpers.py`.
+- Replaced the inline response-header filename override block in
+  `backend/crawlers/zsxq_file_downloader.py` with the helper call.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- The override still runs only when the current name starts with `file_` and the response has a
+  `content-disposition` header with a filename.
+- Safe filename normalization, final file path, completion status update path, retry loop, stop
+  checks, and partial-file cleanup are unchanged.
+- No legacy, fallback, signed URL, or retry behavior was removed.
+
+Verification:
+
+```powershell
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py backend\crawlers\zsxq_file_downloader_helpers.py
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers -v
+uv run python -m unittest discover -s tests
+uv run python scripts\scan_postgres_compat_debt.py
+```
+
+Result:
+
+- `py_compile` passed.
+- `tests.test_zsxq_file_downloader_helpers`: 27 tests passed.
+- Full backend unittest discovery: 558 tests passed, 15 skipped.
+- PostgreSQL compatibility debt scan: no SQLite compatibility patterns found.
+- Frontend build is not planned because this slice only changes backend crawler/helper code.
 
 ## Stop Conditions
 

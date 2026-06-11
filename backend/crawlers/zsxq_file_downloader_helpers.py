@@ -195,6 +195,24 @@ def content_disposition_filename(content_disposition: str) -> Optional[str]:
     return real_filename or None
 
 
+def response_filename_override(
+    file_name: str,
+    file_id: Any,
+    download_dir: str,
+    response_headers: Dict[str, Any],
+) -> Optional[Tuple[str, str, str]]:
+    if not file_name.startswith("file_") or "content-disposition" not in response_headers:
+        return None
+
+    real_filename = content_disposition_filename(response_headers["content-disposition"])
+    if not real_filename:
+        return None
+
+    safe_filename = safe_download_filename(real_filename, file_id)
+    file_path = os.path.join(download_dir, safe_filename)
+    return real_filename, safe_filename, file_path
+
+
 def empty_import_stats() -> Dict[str, int]:
     return {key: 0 for key in IMPORT_STAT_KEYS}
 

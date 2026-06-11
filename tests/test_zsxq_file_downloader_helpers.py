@@ -72,10 +72,12 @@ class FakeDownloadFileDb:
 
 
 class FakeDownloadResponse:
-    def __init__(self, status_code, chunks=b""):
+    def __init__(self, status_code, chunks=b"", headers=None):
         self.status_code = status_code
         self._chunks = chunks
         self.headers = {"content-length": str(len(chunks))} if chunks else {}
+        if headers:
+            self.headers.update(headers)
 
     def iter_content(self, chunk_size=8192):
         yield self._chunks
@@ -373,6 +375,26 @@ class FileDownloaderDownloadTests(unittest.TestCase):
             self.assertTrue(session.get_calls)
             self.assertEqual("https://download.test/101", session.get_calls[0][0])
             self.assertEqual((101, "completed"), downloader.file_db.status_updates[-1][:2])
+
+    def test_download_file_uses_content_disposition_for_default_filename(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            response = FakeDownloadResponse(
+                200,
+                b"memo",
+                headers={"content-disposition": 'attachment; filename="real.pdf"'},
+            )
+            session = FakeDownloadSession([response])
+            downloader = self._downloader_for_download(temp_dir, session)
+
+            result = ZSXQFileDownloader.download_file(
+                downloader,
+                {"file": {"id": 101, "name": "file_101", "size": 4, "download_count": 0}},
+            )
+
+            expected_path = str(Path(temp_dir) / "real.pdf")
+            self.assertTrue(result)
+            self.assertTrue((Path(temp_dir) / "real.pdf").exists())
+            self.assertEqual((101, "completed", expected_path), downloader.file_db.status_updates[-1][:3])
 
     def test_download_file_retries_body_download_once(self):
         with tempfile.TemporaryDirectory() as temp_dir:
