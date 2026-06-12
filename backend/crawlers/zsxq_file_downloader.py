@@ -581,9 +581,7 @@ class ZSXQFileDownloader:
         for attempt in range(download_retries):
             try:
                 if attempt > 0:
-                    retry_delay, retry_message = download_retry_wait(attempt, download_retries)
-                    self.log(retry_message)
-                    time.sleep(retry_delay)
+                    self._wait_before_download_retry(attempt, download_retries)
 
                 download_url = self.get_download_url(file_id)
                 if not download_url:
@@ -756,6 +754,11 @@ class ZSXQFileDownloader:
         if remove_partial_download(temp_path):
             self.log(f"   🗑️ 删除不完整文件")
         return error_code, error_message
+
+    def _wait_before_download_retry(self, attempt: int, download_retries: int) -> None:
+        retry_delay, retry_message = download_retry_wait(attempt, download_retries)
+        self.log(retry_message)
+        time.sleep(retry_delay)
 
     def _handle_download_size_mismatch(
         self,

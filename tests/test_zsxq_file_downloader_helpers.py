@@ -775,6 +775,20 @@ class FileDownloaderDownloadTests(unittest.TestCase):
                 downloader.logs,
             )
 
+    def test_wait_before_download_retry_preserves_log_and_delay(self):
+        downloader = object.__new__(ZSXQFileDownloader)
+        downloader.logs = []
+        downloader.log = downloader.logs.append
+
+        with patch("backend.crawlers.zsxq_file_downloader.time.sleep") as sleep:
+            ZSXQFileDownloader._wait_before_download_retry(downloader, 2, 5)
+
+        sleep.assert_called_once_with(4)
+        self.assertEqual(
+            ["   🔄 文件下载重试 3/5，等待 4 秒..."],
+            downloader.logs,
+        )
+
     def test_write_download_response_body_preserves_progress_stop_and_empty_chunks(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir) / "memo.pdf.part"
@@ -910,6 +924,28 @@ class FileDownloaderDownloadTests(unittest.TestCase):
             self.assertTrue(result)
             self.assertEqual(2, len(session.get_calls))
             self.assertEqual((101, "completed"), downloader.file_db.status_updates[-1][:2])
+
+    def test_download_file_preserves_retry_wait_log_and_delay(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            session = FakeDownloadSession([
+                FakeDownloadResponse(500),
+                FakeDownloadResponse(200, b"memo"),
+            ])
+            downloader = self._downloader_for_download(temp_dir, session)
+
+            with patch("backend.crawlers.zsxq_file_downloader.time.sleep") as sleep:
+                result = ZSXQFileDownloader.download_file(
+                    downloader,
+                    {"file": {"id": 101, "name": "memo.pdf", "size": 4, "download_count": 0}},
+                )
+
+            self.assertTrue(result)
+            sleep.assert_called_once_with(2)
+            self.assertIn("   🔄 文件下载重试 2/3，等待 2 秒...", downloader.logs)
+            self.assertLess(
+                downloader.logs.index("   ❌ 下载失败: HTTP 500"),
+                downloader.logs.index("   🔄 文件下载重试 2/3，等待 2 秒..."),
+            )
 
     def test_download_file_marks_final_failure_after_http_retries(self):
         with tempfile.TemporaryDirectory() as temp_dir:

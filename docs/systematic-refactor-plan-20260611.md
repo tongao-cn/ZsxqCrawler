@@ -6336,6 +6336,49 @@ Result:
 - Frontend build passed, including Next.js lint/type checks.
 - `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
 
+### 2026-06-12 - P9 file downloader retry wait helper
+
+Changed:
+
+- Added characterization coverage that a retrying body download still logs the retry wait message
+  and sleeps for the existing computed delay.
+- Added direct helper coverage for retry wait log and delay mapping.
+- Added `ZSXQFileDownloader._wait_before_download_retry` and reused it from `download_file`.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Retry attempts still use `download_retry_wait(attempt, download_retries)`, so attempt 1 still
+  logs `"   🔄 文件下载重试 2/3，等待 2 秒..."` and sleeps for 2 seconds.
+- The retry wait still occurs after the previous failure log and before the next signed-URL lookup.
+- Download URL failures, HTTP/body exceptions, response filename override, body progress/stop
+  handling, size mismatch handling, success finalization, schema/config/API behavior, and public
+  API behavior are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_download_file_preserves_retry_wait_log_and_delay tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_download_file_retries_body_download_once -v
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_wait_before_download_retry_preserves_log_and_delay tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_download_file_preserves_retry_wait_log_and_delay tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_download_file_retries_body_download_once tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_download_file_marks_final_failure_after_http_retries -v
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+git diff --check
+```
+
+Result:
+
+- Pre-refactor retry-wait characterization tests passed against the original inline branch.
+- `py_compile` passed.
+- Focused retry-wait/download tests passed.
+- `tests.test_zsxq_file_downloader_helpers`: 67 tests passed.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Full backend unittest discovery: 709 tests passed, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+- `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
+
 ## Stop Conditions
 
 Pause before editing if:
