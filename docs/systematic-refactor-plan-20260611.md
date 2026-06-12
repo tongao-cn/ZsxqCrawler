@@ -8778,6 +8778,53 @@ Result:
 - Frontend build passed, including Next.js lint/type checks.
 - `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
 
+### 2026-06-12 - P4 legacy time-range non-empty page result
+
+Changed:
+
+- Reused existing legacy time-range characterization coverage for filtered-page continuation,
+  invalid oldest timestamp cursor fallback, out-of-range pages with no stored topics, and
+  before-start termination.
+- Added `_LegacyTimeRangeNonEmptyPageResult` in `backend/services/crawl_service.py`.
+- Changed `_process_legacy_time_range_non_empty_page` from a positional tuple return to a named
+  result with `last_time_dt_in_page`, `end_time_param`, and `reached_before_start`.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- The helper still returns the same three control values used by the outer loop; only the internal
+  representation changed from positional unpacking to named fields.
+- Filtered topics, page stats, page summary logs, `end_time` cursor updates, invalid timestamp
+  fallback, before-start logging, `check_page_long_delay` call conditions, empty pages, expired
+  responses, retry behavior, public API behavior, task status semantics, schema/config behavior,
+  official MCP HTTP behavior, and cookie-based crawler behavior are unchanged.
+- No legacy/fallback behavior was removed.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_crawl_routes_helpers.CrawlRoutesHelperTests.test_legacy_time_range_filters_topics_and_advances_end_time tests.test_crawl_routes_helpers.CrawlRoutesHelperTests.test_legacy_time_range_keeps_invalid_oldest_time_as_next_end_time tests.test_crawl_routes_helpers.CrawlRoutesHelperTests.test_legacy_time_range_counts_unstored_out_of_range_page tests.test_crawl_routes_helpers.CrawlRoutesHelperTests.test_legacy_time_range_stops_when_page_is_before_start_time -v
+uv run python -m py_compile backend\services\crawl_service.py tests\test_crawl_routes_helpers.py
+uv run python scripts\scan_postgres_compat_debt.py
+uv run python -m unittest tests.test_crawl_routes_helpers -v
+uv run python -m unittest tests.test_official_topic_client_helpers -v
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+git diff --check
+```
+
+Result:
+
+- Pre-change focused filtered-page, invalid-cursor, out-of-range, and before-start tests passed.
+- The same focused tests passed after replacing the positional tuple with a named result.
+- `py_compile` passed.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- `tests.test_crawl_routes_helpers`: 45 tests passed.
+- `tests.test_official_topic_client_helpers`: 16 tests passed.
+- Full backend unittest discovery: 761 tests passed, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+- `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
+
 ## Stop Conditions
 
 Pause before editing if:

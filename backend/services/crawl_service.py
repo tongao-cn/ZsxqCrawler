@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 from datetime import time, datetime, timedelta, timezone
-from typing import Any, Callable, Optional
+from typing import Any, Callable, NamedTuple, Optional
 
 from backend.core.account_context import get_cookie_for_group
 from backend.crawlers.official_topic_client import (
@@ -37,6 +37,11 @@ OFFICIAL_CRAWL_COMPLETION_MESSAGES = {
     "incremental": "官方增量采集完成",
     "all": "官方全量采集完成",
 }
+
+class _LegacyTimeRangeNonEmptyPageResult(NamedTuple):
+    last_time_dt_in_page: Optional[datetime]
+    end_time_param: Optional[str]
+    reached_before_start: bool
 
 def _should_stop_task(task_id: str) -> bool:
     return is_task_stopped(task_id)
@@ -327,7 +332,7 @@ def _process_legacy_time_range_non_empty_page(
     topics: list[dict[str, Any]],
     start_dt: datetime,
     end_dt: datetime,
-) -> tuple[Optional[datetime], Optional[str], bool]:
+) -> _LegacyTimeRangeNonEmptyPageResult:
     filtered, last_time_dt_in_page = _filter_legacy_topics_by_time_range(
         topics, start_dt, end_dt
     )
@@ -339,7 +344,11 @@ def _process_legacy_time_range_non_empty_page(
     )
     if not reached_before_start:
         crawler.check_page_long_delay()
-    return last_time_dt_in_page, next_end_time_param, reached_before_start
+    return _LegacyTimeRangeNonEmptyPageResult(
+        last_time_dt_in_page=last_time_dt_in_page,
+        end_time_param=next_end_time_param,
+        reached_before_start=reached_before_start,
+    )
 
 def _empty_legacy_time_range_stats() -> dict[str, int]:
     return {"new_topics": 0, "updated_topics": 0, "errors": 0, "pages": 0}
@@ -862,11 +871,7 @@ def run_crawl_time_range_task(task_id: str, group_id: str, request: Any):
                     reached_end = True
                     break
 
-                (
-                    last_time_dt_in_page,
-                    end_time_param,
-                    reached_before_start,
-                ) = _process_legacy_time_range_non_empty_page(
+                page_result = _process_legacy_time_range_non_empty_page(
                     task_id,
                     crawler,
                     total_stats,
@@ -874,9 +879,11 @@ def run_crawl_time_range_task(task_id: str, group_id: str, request: Any):
                     start_dt,
                     end_dt,
                 )
+                last_time_dt_in_page = page_result.last_time_dt_in_page
+                end_time_param = page_result.end_time_param
                 page_processed = True
 
-                if reached_before_start:
+                if page_result.reached_before_start:
                     break
                 break
 
