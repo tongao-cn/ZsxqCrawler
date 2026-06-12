@@ -261,6 +261,60 @@ def talk_insert_statement(topic_id: int, talk_data: Dict[str, Any], created_at: 
     )
 
 
+def image_insert_statement(
+    topic_id: int,
+    image_data: Dict[str, Any],
+    comment_id: Optional[int],
+    created_at: str,
+    *,
+    missing_numeric_default: Any = None,
+) -> tuple[str, tuple[Any, ...]]:
+    thumbnail = image_data.get("thumbnail", {})
+    large = image_data.get("large", {})
+    original = image_data.get("original", {})
+    return (
+        """
+            INSERT INTO images
+            (image_id, topic_id, comment_id, type, thumbnail_url, thumbnail_width, thumbnail_height,
+             large_url, large_width, large_height, original_url, original_width, original_height,
+             original_size, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(image_id) DO UPDATE SET
+                topic_id = excluded.topic_id,
+                comment_id = excluded.comment_id,
+                type = excluded.type,
+                thumbnail_url = excluded.thumbnail_url,
+                thumbnail_width = excluded.thumbnail_width,
+                thumbnail_height = excluded.thumbnail_height,
+                large_url = excluded.large_url,
+                large_width = excluded.large_width,
+                large_height = excluded.large_height,
+                original_url = excluded.original_url,
+                original_width = excluded.original_width,
+                original_height = excluded.original_height,
+                original_size = excluded.original_size,
+                created_at = excluded.created_at
+        """,
+        (
+            image_data.get("image_id"),
+            topic_id,
+            comment_id,
+            image_data.get("type", ""),
+            thumbnail.get("url", ""),
+            thumbnail.get("width", missing_numeric_default),
+            thumbnail.get("height", missing_numeric_default),
+            large.get("url", ""),
+            large.get("width", missing_numeric_default),
+            large.get("height", missing_numeric_default),
+            original.get("url", ""),
+            original.get("width", missing_numeric_default),
+            original.get("height", missing_numeric_default),
+            original.get("size", missing_numeric_default),
+            created_at,
+        ),
+    )
+
+
 def update_tag_hid_statement(tag_id: int, hid: str) -> tuple[str, tuple[Any, ...]]:
     return "UPDATE tags SET hid = ? WHERE tag_id = ?", (hid, tag_id)
 

@@ -4647,6 +4647,51 @@ Result:
 - `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
 - Frontend build is not planned because this slice only changes backend storage/helper code.
 
+### 2026-06-12 - P2 image insert statement helper extraction
+
+Changed:
+
+- Added `image_insert_statement` to `backend/storage/zsxq_database_helpers.py`, with a
+  compatibility wrapper in `backend/storage/zsxq_database.py`.
+- Replaced duplicated inline `INSERT INTO images` SQL and params in `_upsert_image` and
+  `_import_comment_images` with helper-returned SQL and params.
+- Added characterization coverage for helper SQL shape, full parameter order, missing-image skip,
+  generated Beijing-time `created_at` format, and the two historical numeric-default paths.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- `_upsert_image` still returns before any database call when `image_id` is missing/falsy.
+- `_import_comment_images` still skips individual images without `image_id` and continues the loop.
+- Both paths still write the same `images` columns and update the same fields on
+  `ON CONFLICT(image_id)`.
+- The duplicated SQL was unified, but the historical default difference is preserved explicitly:
+  `_upsert_image` keeps missing width/height/size values as `None`, while `_import_comment_images`
+  keeps missing width/height/size values as `0`.
+- Timestamp formatting remains the existing Beijing-time `YYYY-MM-DDTHH:MM:SS.mmm+0800` string
+  generated in the calling methods.
+- No schema, config, compatibility, fallback, error handling, logging, commit order, or public API
+  semantics were changed.
+
+Verification:
+
+```powershell
+uv run python -m py_compile backend\storage\zsxq_database.py backend\storage\zsxq_database_helpers.py tests\test_zsxq_database_helpers.py
+uv run python -m unittest tests.test_zsxq_database_helpers -v
+uv run python -m unittest discover -s tests
+uv run python scripts\scan_postgres_compat_debt.py
+git diff --check
+```
+
+Result:
+
+- `py_compile` passed.
+- `tests.test_zsxq_database_helpers`: 43 tests passed.
+- Full backend unittest discovery: 646 tests passed, 15 skipped.
+- PostgreSQL compatibility debt scan: no SQLite compatibility patterns found.
+- `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
+- Frontend build is not planned because this slice only changes backend storage/helper code.
+
 ## Stop Conditions
 
 Pause before editing if:

@@ -11,6 +11,7 @@ from backend.storage.zsxq_database_helpers import (
     format_tag_topic_row,
     group_id_param,
     group_insert_statement,
+    image_insert_statement,
     insert_tag_statement,
     insert_topic_tag_statement,
     load_topic_detail_base,
@@ -94,6 +95,23 @@ def _topic_stats_update_statement(
 
 def _talk_insert_statement(topic_id: int, talk_data: Dict[str, Any], created_at: str) -> tuple[str, tuple[Any, ...]]:
     return talk_insert_statement(topic_id, talk_data, created_at)
+
+
+def _image_insert_statement(
+    topic_id: int,
+    image_data: Dict[str, Any],
+    comment_id: Optional[int],
+    created_at: str,
+    *,
+    missing_numeric_default: Any = None,
+) -> tuple[str, tuple[Any, ...]]:
+    return image_insert_statement(
+        topic_id,
+        image_data,
+        comment_id,
+        created_at,
+        missing_numeric_default=missing_numeric_default,
+    )
 
 
 def _update_tag_hid_statement(tag_id: int, hid: str) -> tuple[str, tuple[Any, ...]]:
@@ -530,52 +548,13 @@ class ZSXQDatabase:
         if not image_id:
             return
         
-        thumbnail = image_data.get('thumbnail', {})
-        large = image_data.get('large', {})
-        original = image_data.get('original', {})
-        
         # 获取当前时间作为created_at（使用东八区时间格式）
         from datetime import datetime, timezone, timedelta
         beijing_tz = timezone(timedelta(hours=8))
         current_time = datetime.now(beijing_tz).strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + '+0800'
         
-        self.cursor.execute('''
-            INSERT INTO images 
-            (image_id, topic_id, comment_id, type, thumbnail_url, thumbnail_width, thumbnail_height,
-             large_url, large_width, large_height, original_url, original_width, original_height, original_size, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT(image_id) DO UPDATE SET
-                topic_id = excluded.topic_id,
-                comment_id = excluded.comment_id,
-                type = excluded.type,
-                thumbnail_url = excluded.thumbnail_url,
-                thumbnail_width = excluded.thumbnail_width,
-                thumbnail_height = excluded.thumbnail_height,
-                large_url = excluded.large_url,
-                large_width = excluded.large_width,
-                large_height = excluded.large_height,
-                original_url = excluded.original_url,
-                original_width = excluded.original_width,
-                original_height = excluded.original_height,
-                original_size = excluded.original_size,
-                created_at = excluded.created_at
-        ''', (
-            image_id,
-            topic_id,
-            comment_id,
-            image_data.get('type', ''),
-            thumbnail.get('url', ''),
-            thumbnail.get('width'),
-            thumbnail.get('height'),
-            large.get('url', ''),
-            large.get('width'),
-            large.get('height'),
-            original.get('url', ''),
-            original.get('width'),
-            original.get('height'),
-            original.get('size'),
-            current_time
-        ))
+        sql, params = _image_insert_statement(topic_id, image_data, comment_id, current_time)
+        self.cursor.execute(sql, params)
 
     
     def _import_likes(self, topic_id: int, topic_data: Dict[str, Any]):
@@ -783,44 +762,14 @@ class ZSXQDatabase:
             beijing_tz = timezone(timedelta(hours=8))
             current_time = datetime.now(beijing_tz).strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + '+0800'
 
-            self.cursor.execute('''
-                INSERT INTO images
-                (image_id, topic_id, comment_id, type, thumbnail_url, thumbnail_width, thumbnail_height,
-                 large_url, large_width, large_height, original_url, original_width, original_height,
-                 original_size, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ON CONFLICT(image_id) DO UPDATE SET
-                    topic_id = excluded.topic_id,
-                    comment_id = excluded.comment_id,
-                    type = excluded.type,
-                    thumbnail_url = excluded.thumbnail_url,
-                    thumbnail_width = excluded.thumbnail_width,
-                    thumbnail_height = excluded.thumbnail_height,
-                    large_url = excluded.large_url,
-                    large_width = excluded.large_width,
-                    large_height = excluded.large_height,
-                    original_url = excluded.original_url,
-                    original_width = excluded.original_width,
-                    original_height = excluded.original_height,
-                    original_size = excluded.original_size,
-                    created_at = excluded.created_at
-            ''', (
-                image.get('image_id'),
+            sql, params = _image_insert_statement(
                 topic_id,
+                image,
                 comment_id,
-                image.get('type', ''),
-                image.get('thumbnail', {}).get('url', ''),
-                image.get('thumbnail', {}).get('width', 0),
-                image.get('thumbnail', {}).get('height', 0),
-                image.get('large', {}).get('url', ''),
-                image.get('large', {}).get('width', 0),
-                image.get('large', {}).get('height', 0),
-                image.get('original', {}).get('url', ''),
-                image.get('original', {}).get('width', 0),
-                image.get('original', {}).get('height', 0),
-                image.get('original', {}).get('size', 0),
-                current_time
-            ))
+                current_time,
+                missing_numeric_default=0,
+            )
+            self.cursor.execute(sql, params)
 
     def _upsert_question(self, topic_id: int, question_data: Dict[str, Any]):
         """插入或更新问题信息"""

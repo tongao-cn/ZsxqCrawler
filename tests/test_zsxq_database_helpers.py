@@ -8,6 +8,7 @@ from backend.storage.zsxq_database import (
     _format_tag_topic_row,
     _group_id_param,
     _group_insert_statement,
+    _image_insert_statement,
     _insert_tag_statement,
     _insert_topic_tag_statement,
     _newest_topic_create_time_query,
@@ -757,6 +758,84 @@ class ZSXQDatabaseHelperTests(unittest.TestCase):
         )
         self.assertEqual((202, 901, "body", "2026-06-12T10:00:00.000+0800"), params)
 
+    def test_image_insert_statement_helper_preserves_sql_shape_and_default_params(self):
+        sql, params = _image_insert_statement(
+            202,
+            {
+                "image_id": 701,
+                "type": "image",
+                "thumbnail": {"url": "thumb.jpg"},
+                "large": {"url": "large.jpg"},
+                "original": {"url": "origin.jpg"},
+            },
+            None,
+            "2026-06-12T10:00:00.000+0800",
+        )
+
+        self.assertEqual(
+            "INSERT INTO images (image_id, topic_id, comment_id, type, thumbnail_url, "
+            "thumbnail_width, thumbnail_height, large_url, large_width, large_height, "
+            "original_url, original_width, original_height, original_size, created_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
+            "ON CONFLICT(image_id) DO UPDATE SET topic_id = excluded.topic_id, "
+            "comment_id = excluded.comment_id, type = excluded.type, "
+            "thumbnail_url = excluded.thumbnail_url, thumbnail_width = excluded.thumbnail_width, "
+            "thumbnail_height = excluded.thumbnail_height, large_url = excluded.large_url, "
+            "large_width = excluded.large_width, large_height = excluded.large_height, "
+            "original_url = excluded.original_url, original_width = excluded.original_width, "
+            "original_height = excluded.original_height, original_size = excluded.original_size, "
+            "created_at = excluded.created_at",
+            " ".join(sql.split()),
+        )
+        self.assertEqual(
+            (
+                701,
+                202,
+                None,
+                "image",
+                "thumb.jpg",
+                None,
+                None,
+                "large.jpg",
+                None,
+                None,
+                "origin.jpg",
+                None,
+                None,
+                None,
+                "2026-06-12T10:00:00.000+0800",
+            ),
+            params,
+        )
+
+        _comment_sql, comment_params = _image_insert_statement(
+            202,
+            {"image_id": 702},
+            11,
+            "2026-06-12T10:00:00.000+0800",
+            missing_numeric_default=0,
+        )
+        self.assertEqual(
+            (
+                702,
+                202,
+                11,
+                "",
+                "",
+                0,
+                0,
+                "",
+                0,
+                0,
+                "",
+                0,
+                0,
+                0,
+                "2026-06-12T10:00:00.000+0800",
+            ),
+            comment_params,
+        )
+
     def test_replace_file_topic_relation_deletes_then_inserts(self):
         file_db = FakeFileDatabase()
 
@@ -1114,6 +1193,78 @@ class ZSXQDatabaseHelperTests(unittest.TestCase):
         )
         self.assertEqual((202, 901, "body"), talk_params[:3])
         self.assertRegex(talk_params[3], r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}\+0800$")
+
+    def test_image_writes_preserve_skip_paths_and_distinct_numeric_defaults(self):
+        from backend.storage.zsxq_database import ZSXQDatabase
+
+        db = object.__new__(ZSXQDatabase)
+        db.cursor = FakeCursor()
+
+        ZSXQDatabase._upsert_image(db, 202, {})
+        self.assertEqual([], db.cursor.calls)
+
+        ZSXQDatabase._upsert_image(
+            db,
+            202,
+            {
+                "image_id": 701,
+                "type": "image",
+                "thumbnail": {"url": "thumb.jpg"},
+                "large": {"url": "large.jpg"},
+                "original": {"url": "origin.jpg"},
+            },
+        )
+        image_sql, image_params = db.cursor.calls[0]
+        self.assertIn("INSERT INTO images", image_sql)
+        self.assertIn("ON CONFLICT(image_id) DO UPDATE SET", image_sql)
+        self.assertEqual(
+            (
+                701,
+                202,
+                None,
+                "image",
+                "thumb.jpg",
+                None,
+                None,
+                "large.jpg",
+                None,
+                None,
+                "origin.jpg",
+                None,
+                None,
+                None,
+            ),
+            image_params[:14],
+        )
+        self.assertRegex(image_params[14], r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}\+0800$")
+
+        comment_db = object.__new__(ZSXQDatabase)
+        comment_db.cursor = FakeCursor()
+
+        ZSXQDatabase._import_comment_images(comment_db, 202, 11, [{}, {"image_id": 702}])
+
+        comment_sql, comment_params = comment_db.cursor.calls[0]
+        self.assertIn("INSERT INTO images", comment_sql)
+        self.assertEqual(
+            (
+                702,
+                202,
+                11,
+                "",
+                "",
+                0,
+                0,
+                "",
+                0,
+                0,
+                "",
+                0,
+                0,
+                0,
+            ),
+            comment_params[:14],
+        )
+        self.assertRegex(comment_params[14], r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}\+0800$")
 
     def test_update_topic_stats_preserves_skip_rowcount_and_exception_branches(self):
         from backend.storage.zsxq_database import ZSXQDatabase
