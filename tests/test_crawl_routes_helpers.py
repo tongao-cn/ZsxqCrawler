@@ -444,6 +444,16 @@ class CrawlRoutesHelperTests(unittest.TestCase):
         self.assertIsNone(_official_next_page_cursor({"has_more": True, "next_end_time": "same"}, "same"))
         self.assertEqual("next", _official_next_page_cursor({"has_more": True, "next_end_time": "next"}, "same"))
 
+    @unittest.skipUnless(HAS_CRAWL_ROUTE_DEPS, "crawl route dependencies are not installed")
+    def test_official_per_page_limit_preserves_default_and_cap(self):
+        from backend.services.crawl_service import _official_per_page_limit
+
+        self.assertEqual(20, _official_per_page_limit(None))
+        self.assertEqual(20, _official_per_page_limit(0))
+        self.assertEqual(1, _official_per_page_limit(1))
+        self.assertEqual(30, _official_per_page_limit(30))
+        self.assertEqual(30, _official_per_page_limit(31))
+
 
 if __name__ == "__main__":
     unittest.main()

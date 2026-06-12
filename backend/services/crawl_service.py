@@ -267,6 +267,9 @@ def _official_next_page_cursor(payload: dict[str, Any], current_cursor: Optional
         return None
     return _official_page_cursor(payload, current_cursor)
 
+def _official_per_page_limit(per_page: Optional[int]) -> int:
+    return min(per_page or 20, 30)
+
 def _official_start_cursor_from_oldest(db: ZSXQDatabase, task_id: str, allow_empty: bool) -> Optional[str]:
     timestamp_info = db.get_timestamp_range_info()
     if not timestamp_info["has_data"]:
@@ -294,7 +297,7 @@ def _run_official_crawl_time_range_task(
     add_task_log(task_id, "🔁 使用官方话题采集流程（MCP HTTP）")
     client = OfficialTopicClient(log_callback=lambda message: add_task_log(task_id, message))
     db = ZSXQDatabase(group_id)
-    per_page = min(request.perPage or 20, 30)
+    per_page = _official_per_page_limit(request.perPage)
     if request.perPage and request.perPage > 30:
         add_task_log(task_id, "ℹ️ 官方接口单页上限按 30 处理")
 
@@ -349,7 +352,7 @@ def _run_official_crawl_pages_task(
 ) -> None:
     client = OfficialTopicClient(log_callback=lambda message: add_task_log(task_id, message))
     db = ZSXQDatabase(group_id)
-    per_page = min(per_page or 20, 30)
+    per_page = _official_per_page_limit(per_page)
     cursor = start_cursor
     total_stats = _empty_official_crawl_stats()
     seen_topic_ids: set[int] = set()
