@@ -48,6 +48,23 @@ def iter_topic_user_payloads_from_data(topic_data: Dict[str, Any]) -> Iterator[A
                 yield comment["repliee"]
 
 
+def topic_image_payloads_from_data(topic_data: Dict[str, Any]) -> list[tuple[Any, Optional[Any]]]:
+    images_to_import = []
+
+    if "talk" in topic_data and topic_data["talk"] and "images" in topic_data["talk"]:
+        for img in topic_data["talk"]["images"]:
+            images_to_import.append((img, None))
+
+    if "show_comments" in topic_data:
+        for comment in topic_data["show_comments"]:
+            if "images" in comment:
+                comment_id = comment.get("comment_id")
+                for img in comment["images"]:
+                    images_to_import.append((img, comment_id))
+
+    return images_to_import
+
+
 def format_tag_row(row) -> Dict[str, Any]:
     return {
         "tag_id": row[0],

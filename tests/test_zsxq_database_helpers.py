@@ -39,6 +39,7 @@ from backend.storage.zsxq_database import (
     _topic_file_payload_from_row,
     _topic_file_insert_statement,
     _topic_group_id_query,
+    _topic_image_payloads_from_data,
     _topic_insert_statement,
     _topic_stats_update_statement,
     _topic_tags_from_data,
@@ -526,6 +527,29 @@ class ZSXQDatabaseHelperTests(unittest.TestCase):
                         ],
                     }
                 )
+            ),
+        )
+
+    def test_topic_image_payloads_from_data_preserves_collection_order(self):
+        talk_image = {"image_id": 1}
+        comment_image = {"image_id": 2}
+        missing_comment_id_image = {"image_id": 3}
+
+        self.assertEqual(
+            [
+                (talk_image, None),
+                (comment_image, 301),
+                (missing_comment_id_image, None),
+            ],
+            _topic_image_payloads_from_data(
+                {
+                    "talk": {"images": [talk_image]},
+                    "show_comments": [
+                        {"comment_id": 301, "images": [comment_image]},
+                        {"images": [missing_comment_id_image]},
+                        {},
+                    ],
+                }
             ),
         )
 
@@ -1658,6 +1682,43 @@ class ZSXQDatabaseHelperTests(unittest.TestCase):
                 empty_like_owner,
                 comment_owner,
                 repliee,
+            ],
+            calls,
+        )
+
+    def test_import_images_preserves_existing_collection_order(self):
+        from backend.storage.zsxq_database import ZSXQDatabase
+
+        db = object.__new__(ZSXQDatabase)
+        calls = []
+        db._upsert_image = lambda topic_id, image_data, comment_id=None: calls.append(
+            (topic_id, image_data, comment_id)
+        )
+
+        talk_image_1 = {"image_id": 1}
+        talk_image_2 = {"image_id": 2}
+        comment_image = {"image_id": 3}
+        comment_image_without_id = {"image_id": 4}
+
+        ZSXQDatabase._import_images(
+            db,
+            202,
+            {
+                "talk": {"images": [talk_image_1, talk_image_2]},
+                "show_comments": [
+                    {"comment_id": 301, "images": [comment_image]},
+                    {"images": [comment_image_without_id]},
+                    {},
+                ],
+            },
+        )
+
+        self.assertEqual(
+            [
+                (202, talk_image_1, None),
+                (202, talk_image_2, None),
+                (202, comment_image, 301),
+                (202, comment_image_without_id, None),
             ],
             calls,
         )

@@ -48,6 +48,7 @@ from backend.storage.zsxq_database_helpers import (
     topic_file_payload_from_row,
     topic_file_insert_statement,
     topic_group_id_query,
+    topic_image_payloads_from_data,
     topic_insert_statement,
     topic_stats_update_statement,
     topics_by_tag_query,
@@ -81,6 +82,10 @@ def _topic_tags_from_data(topic_data: Dict[str, Any]) -> set[tuple[str, str]]:
 
 def _iter_topic_user_payloads_from_data(topic_data: Dict[str, Any]):
     return iter_topic_user_payloads_from_data(topic_data)
+
+
+def _topic_image_payloads_from_data(topic_data: Dict[str, Any]) -> list[tuple[Any, Optional[Any]]]:
+    return topic_image_payloads_from_data(topic_data)
 
 
 def _tag_id_by_name_query(group_id: int, tag_name: str) -> tuple[str, tuple[Any, ...]]:
@@ -587,23 +592,8 @@ class ZSXQDatabase:
     
     def _import_images(self, topic_id: int, topic_data: Dict[str, Any]):
         """导入图片信息"""
-        images_to_import = []
-        
-        # 从talk中获取图片
-        if 'talk' in topic_data and topic_data['talk'] and 'images' in topic_data['talk']:
-            for img in topic_data['talk']['images']:
-                images_to_import.append((img, None))  # (image_data, comment_id)
-        
-        # 从comments中获取图片
-        if 'show_comments' in topic_data:
-            for comment in topic_data['show_comments']:
-                if 'images' in comment:
-                    comment_id = comment.get('comment_id')
-                    for img in comment['images']:
-                        images_to_import.append((img, comment_id))
-        
         # 导入所有图片
-        for img_data, comment_id in images_to_import:
+        for img_data, comment_id in _topic_image_payloads_from_data(topic_data):
             self._upsert_image(topic_id, img_data, comment_id)
     
     def _upsert_image(self, topic_id: int, image_data: Dict[str, Any], comment_id: Optional[int] = None):
