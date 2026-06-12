@@ -51,6 +51,7 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     summarize_page_time_range,
     time_collection_final_summary,
     time_collection_mode,
+    time_collection_next_page_plan,
     time_dedupe_page_plan,
 )
 
@@ -291,6 +292,55 @@ class FileDownloaderPaginationTests(unittest.TestCase):
         self.assertIn("   🔄 过滤掉1个旧数据，只插入1个新数据", downloader.logs)
         self.assertIn("   ✅ 已插入本页新数据，后续页面均为旧数据，停止收集", downloader.logs)
         self.assertNotIn("   ⏭️ 下一页时间戳: next-page", downloader.logs)
+
+    def test_collect_files_by_time_preserves_next_index_sleep_and_last_page_log(self):
+        pages = [
+            {
+                "resp_data": {
+                    "index": "next-page",
+                    "files": [{"file": {"file_id": 101, "create_time": "2026-05-03T10:00:00"}}],
+                },
+            },
+            {
+                "resp_data": {
+                    "index": None,
+                    "files": [{"file": {"file_id": 102, "create_time": "2026-05-02T10:00:00"}}],
+                },
+            },
+        ]
+        downloader = object.__new__(ZSXQFileDownloader)
+        downloader.group_id = "511"
+        downloader.file_db = TimeDedupeFileDb(None, initial_files=0, final_files=2)
+        downloader.logs = []
+        downloader.fetch_calls = []
+        downloader.log = downloader.logs.append
+        downloader.check_stop = lambda: False
+
+        def fetch_file_list(**kwargs):
+            downloader.fetch_calls.append(kwargs)
+            return pages.pop(0)
+
+        downloader.fetch_file_list = fetch_file_list
+
+        with (
+            patch("backend.crawlers.zsxq_file_downloader.random.uniform", return_value=2.5),
+            patch("backend.crawlers.zsxq_file_downloader.time.sleep") as sleep,
+        ):
+            stats = ZSXQFileDownloader.collect_files_by_time(downloader)
+
+        self.assertEqual(
+            [
+                {"count": 20, "index": None, "sort": "by_create_time"},
+                {"count": 20, "index": "next-page", "sort": "by_create_time"},
+            ],
+            downloader.fetch_calls,
+        )
+        sleep.assert_called_once_with(2.5)
+        self.assertIn("   ⏭️ 下一页时间戳: next-page", downloader.logs)
+        self.assertIn("📭 已到达最后一页", downloader.logs)
+        self.assertEqual(2, stats["total_files"])
+        self.assertEqual(2, stats["new_files"])
+        self.assertEqual(2, stats["pages"])
 
 
 class FileDownloaderBatchDownloadTests(unittest.TestCase):
@@ -556,6 +606,17 @@ class FileDownloaderTimeHelperTests(unittest.TestCase):
         heat_mode = time_collection_mode("by_download_count", False, None)
         self.assertFalse(heat_mode["enable_time_dedupe"])
         self.assertIsNone(heat_mode["mode_message"])
+
+    def test_time_collection_next_page_plan_preserves_messages_and_next_index(self):
+        next_plan = time_collection_next_page_plan("next-page")
+        self.assertTrue(next_plan["has_next"])
+        self.assertEqual("next-page", next_plan["next_index"])
+        self.assertEqual("   ⏭️ 下一页时间戳: next-page", next_plan["message"])
+
+        terminal_plan = time_collection_next_page_plan(None)
+        self.assertFalse(terminal_plan["has_next"])
+        self.assertIsNone(terminal_plan["next_index"])
+        self.assertEqual("📭 已到达最后一页", terminal_plan["message"])
 
     def test_page_crosses_stop_before_returns_oldest_time(self):
         crossed, oldest = page_crosses_stop_before(

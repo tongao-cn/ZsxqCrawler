@@ -209,6 +209,20 @@ def time_collection_mode(
     }
 
 
+def time_collection_next_page_plan(next_index: Any) -> Dict[str, Any]:
+    if next_index:
+        return {
+            "has_next": True,
+            "next_index": next_index,
+            "message": f"   ⏭️ 下一页时间戳: {next_index}",
+        }
+    return {
+        "has_next": False,
+        "next_index": None,
+        "message": "📭 已到达最后一页",
+    }
+
+
 def summarize_page_time_range(files: list[Dict[str, Any]]) -> tuple[Optional[str], Optional[str]]:
     timestamps: list[datetime.datetime] = []
     for item in files:

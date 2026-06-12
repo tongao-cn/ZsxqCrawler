@@ -7017,6 +7017,53 @@ Result:
 - Frontend build passed, including Next.js lint/type checks.
 - `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
 
+### 2026-06-12 - P9 file downloader next-page plan helper
+
+Changed:
+
+- Added a characterization test for `collect_files_by_time` next-page behavior before changing
+  production code.
+- Locked the first-page `next_index` handoff to the second page request, one page-between sleep,
+  next-page log message, terminal last-page log message, and two-page result count.
+- Extracted `time_collection_next_page_plan` into
+  `backend/crawlers/zsxq_file_downloader_helpers.py` and reused it from `collect_files_by_time`.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Truthy `next_index` handling, falsy terminal-page handling, log text, sleep timing call site,
+  random delay range, page count, fetch argument order, schema/config/API behavior, and public API
+  behavior are unchanged.
+- The outer `collect_files_by_time` method still owns fetch/import side effects, stop checks,
+  time-dedupe filtering, stop-before-date checks, sleep execution, fallback/legacy behavior, and
+  final summary.
+- This does not introduce, remove, or alter legacy/fallback behavior.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderPaginationTests.test_collect_files_by_time_preserves_next_index_sleep_and_last_page_log tests.test_zsxq_file_downloader_helpers.FileDownloaderPaginationTests.test_collect_files_by_time_filters_old_files_and_stops_after_mixed_page -v
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderTimeHelperTests.test_time_collection_next_page_plan_preserves_messages_and_next_index tests.test_zsxq_file_downloader_helpers.FileDownloaderPaginationTests.test_collect_files_by_time_preserves_next_index_sleep_and_last_page_log tests.test_zsxq_file_downloader_helpers.FileDownloaderPaginationTests.test_collect_files_by_time_filters_old_files_and_stops_after_mixed_page -v
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py backend\crawlers\zsxq_file_downloader_helpers.py tests\test_zsxq_file_downloader_helpers.py
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+git diff --check
+```
+
+Result:
+
+- The new next-page characterization test passed before helper extraction.
+- Focused next-page helper, next-page collection, and mixed-page collection tests passed after
+  extraction.
+- `py_compile` passed.
+- `tests.test_zsxq_file_downloader_helpers`: 89 tests passed.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Full backend unittest discovery: 731 tests passed, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+- `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
+
 ## Stop Conditions
 
 Pause before editing if:

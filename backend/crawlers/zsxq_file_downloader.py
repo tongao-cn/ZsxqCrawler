@@ -53,6 +53,7 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     summarize_page_time_range,
     time_collection_final_summary,
     time_collection_mode,
+    time_collection_next_page_plan,
     time_dedupe_page_plan,
 )
 from backend.storage.postgres_core_schema import CORE_SCHEMA
@@ -1269,14 +1270,12 @@ class ZSXQFileDownloader:
                         )
                         break
                 
-                # 准备下一页
-                if next_index:
-                    current_index = next_index
-                    self.log(f"   ⏭️ 下一页时间戳: {current_index}")
-                    # 页面间短暂延迟
+                next_page = time_collection_next_page_plan(next_index)
+                self.log(next_page["message"])
+                if next_page["has_next"]:
+                    current_index = next_page["next_index"]
                     time.sleep(random.uniform(2, 5))
                 else:
-                    self.log("📭 已到达最后一页")
                     break
 
         except KeyboardInterrupt:
