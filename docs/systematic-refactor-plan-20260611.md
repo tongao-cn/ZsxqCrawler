@@ -7147,6 +7147,49 @@ Result:
 - Frontend build passed, including Next.js lint/type checks.
 - `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
 
+### 2026-06-12 - P4 official crawl page dedupe helper
+
+Changed:
+
+- Added direct helper coverage for official crawl page-level topic de-duplication.
+- Extracted `_dedupe_official_page_topics` in `backend/services/crawl_service.py` and reused it
+  from both official time-range and official pages crawl paths.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Topic order, first-seen topic retention, duplicate counting, and the existing missing/zero
+  `topic_id` behavior are unchanged.
+- Time-range filtering still happens after de-duplication, and latest-mode existing-topic checks
+  still happen after de-duplication.
+- Official request/import loops, cursor handling, task stop checks, schema/config/API behavior,
+  public API behavior, and legacy cookie-based crawler behavior are unchanged.
+- This does not introduce, remove, or alter legacy/fallback behavior.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_crawl_routes_helpers.CrawlRoutesHelperTests.test_dedupe_official_page_topics_preserves_seen_and_missing_id_semantics -v
+uv run python -m unittest tests.test_crawl_routes_helpers -v
+uv run python -m py_compile backend\services\crawl_service.py tests\test_crawl_routes_helpers.py
+uv run python -m unittest tests.test_official_topic_client_helpers -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+git diff --check
+```
+
+Result:
+
+- New official page de-duplication helper test passed.
+- `tests.test_crawl_routes_helpers`: 19 tests passed.
+- `py_compile` passed.
+- `tests.test_official_topic_client_helpers`: 16 tests passed.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Full backend unittest discovery: 735 tests passed, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+- `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
+
 ## Stop Conditions
 
 Pause before editing if:

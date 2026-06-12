@@ -241,6 +241,21 @@ def _add_official_page_stats(total_stats: dict[str, Any], page_stats: dict[str, 
     total_stats["errors"] += page_stats["errors"]
     total_stats["pages"] += 1
 
+def _dedupe_official_page_topics(
+    topics: list[dict[str, Any]],
+    seen_topic_ids: set[int],
+    total_stats: dict[str, Any],
+) -> list[dict[str, Any]]:
+    unique_topics = []
+    for topic in topics:
+        topic_id = int(topic.get("topic_id") or 0)
+        if topic_id in seen_topic_ids:
+            total_stats["duplicates"] += 1
+            continue
+        seen_topic_ids.add(topic_id)
+        unique_topics.append(topic)
+    return unique_topics
+
 def _official_page_cursor(payload: dict[str, Any], current_cursor: Optional[str]) -> Optional[str]:
     next_cursor = payload.get("next_end_time")
     if not next_cursor or next_cursor == current_cursor:
@@ -295,13 +310,7 @@ def _run_official_crawl_time_range_task(
 
         filtered: list[dict[str, Any]] = []
         oldest_dt = None
-        for topic in topics:
-            topic_id = int(topic.get("topic_id") or 0)
-            if topic_id in seen_topic_ids:
-                total_stats["duplicates"] += 1
-                continue
-            seen_topic_ids.add(topic_id)
-
+        for topic in _dedupe_official_page_topics(topics, seen_topic_ids, total_stats):
             dt = _topic_time(topic)
             if dt:
                 oldest_dt = dt
@@ -351,14 +360,7 @@ def _run_official_crawl_pages_task(
             add_task_log(task_id, "📭 无更多数据，任务结束")
             break
 
-        unique_topics = []
-        for topic in topics:
-            topic_id = int(topic.get("topic_id") or 0)
-            if topic_id in seen_topic_ids:
-                total_stats["duplicates"] += 1
-                continue
-            seen_topic_ids.add(topic_id)
-            unique_topics.append(topic)
+        unique_topics = _dedupe_official_page_topics(topics, seen_topic_ids, total_stats)
 
         topics_to_import = unique_topics
         if mode == "latest":

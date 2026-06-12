@@ -409,6 +409,32 @@ class CrawlRoutesHelperTests(unittest.TestCase):
             total_stats,
         )
 
+    @unittest.skipUnless(HAS_CRAWL_ROUTE_DEPS, "crawl route dependencies are not installed")
+    def test_dedupe_official_page_topics_preserves_seen_and_missing_id_semantics(self):
+        from backend.services.crawl_service import _dedupe_official_page_topics, _empty_official_crawl_stats
+
+        total_stats = _empty_official_crawl_stats()
+        seen_topic_ids: set[int] = set()
+        first_topic = {"topic_id": "10", "title": "first"}
+        missing_id_topic = {"title": "missing id"}
+        last_topic = {"topic_id": 11, "title": "last"}
+
+        unique_topics = _dedupe_official_page_topics(
+            [
+                first_topic,
+                {"topic_id": 10, "title": "duplicate first"},
+                missing_id_topic,
+                {"topic_id": 0, "title": "duplicate missing id"},
+                last_topic,
+            ],
+            seen_topic_ids,
+            total_stats,
+        )
+
+        self.assertEqual([first_topic, missing_id_topic, last_topic], unique_topics)
+        self.assertEqual({0, 10, 11}, seen_topic_ids)
+        self.assertEqual(2, total_stats["duplicates"])
+
 
 if __name__ == "__main__":
     unittest.main()
