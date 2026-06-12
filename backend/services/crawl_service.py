@@ -219,6 +219,19 @@ def _legacy_next_end_time(topics: list[dict[str, Any]], timestamp_offset_ms: int
     except Exception:
         return oldest_in_page
 
+def _store_legacy_time_range_page(
+    crawler: Any,
+    total_stats: dict[str, int],
+    filtered: list[dict[str, Any]],
+) -> None:
+    if filtered:
+        filtered_data = {"succeeded": True, "resp_data": {"topics": filtered}}
+        page_stats = crawler.store_batch_data(filtered_data)
+        total_stats["new_topics"] += page_stats.get("new_topics", 0)
+        total_stats["updated_topics"] += page_stats.get("updated_topics", 0)
+        total_stats["errors"] += page_stats.get("errors", 0)
+    total_stats["pages"] += 1
+
 def _query_group_id(group_id: str) -> Any:
     value = str(group_id or "").strip()
     return int(value) if value.isdigit() else value
@@ -738,14 +751,7 @@ def run_crawl_time_range_task(task_id: str, group_id: str, request: Any):
 
                 add_task_log(task_id, f"📄 本页获取 {len(topics)} 个话题，区间内 {len(filtered)} 个")
 
-                if filtered:
-                    filtered_data = {"succeeded": True, "resp_data": {"topics": filtered}}
-                    page_stats = crawler.store_batch_data(filtered_data)
-                    total_stats["new_topics"] += page_stats.get("new_topics", 0)
-                    total_stats["updated_topics"] += page_stats.get("updated_topics", 0)
-                    total_stats["errors"] += page_stats.get("errors", 0)
-
-                total_stats["pages"] += 1
+                _store_legacy_time_range_page(crawler, total_stats, filtered)
                 page_processed = True
 
                 end_time_param = _legacy_next_end_time(topics, crawler.timestamp_offset_ms)
