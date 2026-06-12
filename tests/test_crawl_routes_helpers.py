@@ -459,6 +459,19 @@ class CrawlRoutesHelperTests(unittest.TestCase):
             _official_topic_comments_count({"counts": {"comments": "not-a-number"}})
 
     @unittest.skipUnless(HAS_CRAWL_ROUTE_DEPS, "crawl route dependencies are not installed")
+    def test_add_official_import_result_preserves_status_mapping(self):
+        from backend.services.crawl_service import _add_official_import_result
+
+        stats = {"new_topics": 0, "updated_topics": 0, "errors": 0}
+
+        _add_official_import_result(stats, "new")
+        _add_official_import_result(stats, "updated")
+        _add_official_import_result(stats, "error")
+        _add_official_import_result(stats, "unexpected")
+
+        self.assertEqual({"new_topics": 1, "updated_topics": 1, "errors": 2}, stats)
+
+    @unittest.skipUnless(HAS_CRAWL_ROUTE_DEPS, "crawl route dependencies are not installed")
     def test_official_import_topics_preserves_comment_count_stats_and_commit(self):
         from backend.services.crawl_service import _official_import_topics
 
