@@ -5709,6 +5709,52 @@ Result:
 - PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
 - `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
 
+### 2026-06-12 - P3 column comment user iterator helper
+
+Changed:
+
+- Added characterization coverage for `ZSXQColumnsDatabase._insert_comment` owner/repliee user-upsert
+  order, falsey owner/repliee skip behavior, group-resolution order, and final SQL parameters.
+- Added `_iter_topic_comment_user_payloads` to
+  `backend/storage/zsxq_columns_database_helpers.py`.
+- Reused the helper from `_insert_comment`, keeping the method responsible for `insert_user`
+  execution, group resolution, and the existing comment upsert statement.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Comment owner is still upserted before repliee when both are truthy.
+- Falsey owner/repliee payloads are still skipped and produce `None` user IDs.
+- Group scope is still resolved after user handling and before the comment insert.
+- Comment insert SQL, parameter order, missing-ID early return, fallback group resolution,
+  schema/config semantics, logging, and public API behavior are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_columns_database_helpers.ZSXQColumnsDatabaseHelperTests.test_insert_comment_writes_group_id_from_runtime_scope -v
+uv run python -m unittest tests.test_zsxq_columns_database_helpers.ZSXQColumnsDatabaseHelperTests.test_insert_comment_preserves_user_upsert_order_and_falsey_skip -v
+uv run python -m py_compile backend\storage\zsxq_columns_database.py backend\storage\zsxq_columns_database_helpers.py tests\test_zsxq_columns_database_helpers.py
+uv run python -m unittest tests.test_zsxq_columns_database_helpers.ZSXQColumnsDatabaseHelperTests.test_iter_topic_comment_user_payloads_preserves_owner_repliee_order tests.test_zsxq_columns_database_helpers.ZSXQColumnsDatabaseHelperTests.test_insert_comment_preserves_user_upsert_order_and_falsey_skip tests.test_zsxq_columns_database_helpers.ZSXQColumnsDatabaseHelperTests.test_insert_comment_writes_group_id_from_runtime_scope -v
+uv run python -m unittest tests.test_zsxq_columns_database_helpers -v
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+uv run python scripts\scan_postgres_compat_debt.py
+git diff --check
+```
+
+Result:
+
+- Pre-refactor characterization tests passed against the original inline `_insert_comment`
+  implementation.
+- `py_compile` passed.
+- Focused helper/class tests passed.
+- `tests.test_zsxq_columns_database_helpers`: 67 tests passed.
+- Full backend unittest discovery: 683 tests passed, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
+
 ## Stop Conditions
 
 Pause before editing if:

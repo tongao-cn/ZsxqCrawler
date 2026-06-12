@@ -32,6 +32,7 @@ from backend.storage.zsxq_columns_database_helpers import (
     _image_local_path_update,
     _iter_topic_related_payloads,
     _iter_topic_comment_import_payloads,
+    _iter_topic_comment_user_payloads,
     _nullable_group_id_param,
     _pending_file_row_to_dict,
     _pending_files_query,
@@ -231,13 +232,15 @@ class ZSXQColumnsDatabase:
         if not comment_data or not comment_data.get('comment_id'):
             return
         
-        # 处理评论作者
-        owner = comment_data.get('owner', {})
-        owner_id = self.insert_user(owner) if owner else None
-        
-        # 处理被回复者
-        repliee = comment_data.get('repliee', {})
-        repliee_id = self.insert_user(repliee) if repliee else None
+        owner_id = None
+        repliee_id = None
+        for user_type, user in _iter_topic_comment_user_payloads(comment_data):
+            user_id = self.insert_user(user)
+            if user_type == 'owner':
+                owner_id = user_id
+            elif user_type == 'repliee':
+                repliee_id = user_id
+
         group_id = self._resolve_topic_group_id(topic_id)
         
         self.cursor.execute(

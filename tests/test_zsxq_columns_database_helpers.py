@@ -23,6 +23,7 @@ from backend.storage.zsxq_columns_database import (
     _image_local_path_update,
     _iter_topic_related_payloads,
     _iter_topic_comment_import_payloads,
+    _iter_topic_comment_user_payloads,
     _group_topic_ids_query,
     _nest_topic_comments,
     _pending_file_row_to_dict,
@@ -1312,6 +1313,96 @@ class ZSXQColumnsDatabaseHelperTests(unittest.TestCase):
         self.assertIn("ON CONFLICT(comment_id) DO UPDATE SET", sql)
         self.assertIn("comment_id, group_id, topic_id", sql)
         self.assertEqual((101, 303, 202, 9, None, None, "ok", None, 0, 0, 0, False), params)
+
+    def test_insert_comment_preserves_user_upsert_order_and_falsey_skip(self):
+        from backend.storage.zsxq_columns_database import ZSXQColumnsDatabase
+
+        class FakeCursor:
+            def __init__(self):
+                self.calls = []
+
+            def execute(self, sql, params=()):
+                self.calls.append(("execute", " ".join(sql.split()), params))
+                return self
+
+        db = object.__new__(ZSXQColumnsDatabase)
+        db.cursor = FakeCursor()
+        calls = []
+
+        def insert_user(user):
+            calls.append(("insert_user", user))
+            return user.get("user_id")
+
+        def resolve_topic_group_id(topic_id):
+            calls.append(("resolve_group", topic_id))
+            return 303
+
+        db.insert_user = insert_user
+        db._resolve_topic_group_id = resolve_topic_group_id
+
+        self.assertIsNone(
+            ZSXQColumnsDatabase._insert_comment(
+                db,
+                202,
+                {
+                    "comment_id": 701,
+                    "owner": {"user_id": 801, "name": "owner"},
+                    "repliee": {"user_id": 901, "name": "repliee"},
+                    "text": "comment text",
+                },
+            )
+        )
+
+        self.assertEqual(
+            [
+                ("insert_user", {"user_id": 801, "name": "owner"}),
+                ("insert_user", {"user_id": 901, "name": "repliee"}),
+                ("resolve_group", 202),
+            ],
+            calls,
+        )
+        sql_call = db.cursor.calls[-1]
+        self.assertEqual("execute", sql_call[0])
+        self.assertIn("INSERT INTO comments", sql_call[1])
+        self.assertEqual(
+            (701, 303, 202, 801, None, 901, "comment text", None, 0, 0, 0, False),
+            sql_call[2],
+        )
+
+        db.cursor = FakeCursor()
+        calls = []
+        self.assertIsNone(
+            ZSXQColumnsDatabase._insert_comment(
+                db,
+                202,
+                {"comment_id": 702, "owner": {}, "repliee": None},
+            )
+        )
+        self.assertEqual([("resolve_group", 202)], calls)
+        self.assertEqual(
+            (702, 303, 202, None, None, None, "", None, 0, 0, 0, False),
+            db.cursor.calls[-1][2],
+        )
+
+    def test_iter_topic_comment_user_payloads_preserves_owner_repliee_order(self):
+        self.assertEqual([], list(_iter_topic_comment_user_payloads({})))
+        self.assertEqual(
+            [],
+            list(_iter_topic_comment_user_payloads({"owner": {}, "repliee": None})),
+        )
+
+        comment = {
+            "owner": {"user_id": 801, "name": "owner"},
+            "repliee": {"user_id": 901, "name": "repliee"},
+        }
+
+        self.assertEqual(
+            [
+                ("owner", comment["owner"]),
+                ("repliee", comment["repliee"]),
+            ],
+            list(_iter_topic_comment_user_payloads(comment)),
+        )
 
     def test_import_comments_preserves_order_parent_mutation_and_commit(self):
         from backend.storage.zsxq_columns_database import ZSXQColumnsDatabase

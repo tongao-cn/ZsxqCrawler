@@ -354,6 +354,18 @@ def _iter_topic_related_payloads(
         yield 'comment', comment
 
 
+def _iter_topic_comment_user_payloads(
+    comment_data: Dict[str, Any],
+) -> Iterator[tuple[str, Dict[str, Any]]]:
+    owner = comment_data.get('owner', {})
+    if owner:
+        yield 'owner', owner
+
+    repliee = comment_data.get('repliee', {})
+    if repliee:
+        yield 'repliee', repliee
+
+
 def _iter_topic_comment_import_payloads(
     comments: list[Dict[str, Any]],
 ) -> Iterator[Dict[str, Any]]:
