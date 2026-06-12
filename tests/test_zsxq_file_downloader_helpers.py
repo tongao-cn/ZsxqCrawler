@@ -106,8 +106,11 @@ class FakeChunkedDownloadResponse(FakeDownloadResponse):
 
 
 class FakeFailingBodyDownloadResponse(FakeDownloadResponse):
-    def __init__(self):
-        super().__init__(200, b"", headers={"content-length": "4"})
+    def __init__(self, headers=None):
+        response_headers = {"content-length": "4"}
+        if headers:
+            response_headers.update(headers)
+        super().__init__(200, b"", headers=response_headers)
 
     def iter_content(self, chunk_size=8192):
         yield b"pa"
@@ -1392,6 +1395,31 @@ class FileDownloaderDownloadTests(unittest.TestCase):
             self.assertIn("   🚫 文件下载重试3次仍失败: stream down", downloader.logs)
             self.assertFalse((Path(temp_dir) / "memo.pdf").exists())
             self.assertFalse((Path(temp_dir) / "memo.pdf.part").exists())
+
+    def test_download_file_cleans_overridden_partial_file_after_body_exception(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            override_header = {"content-disposition": 'attachment; filename="real.pdf"'}
+            session = FakeDownloadSession([
+                FakeFailingBodyDownloadResponse(headers=override_header),
+                FakeFailingBodyDownloadResponse(headers=override_header),
+                FakeFailingBodyDownloadResponse(headers=override_header),
+            ])
+            downloader = self._downloader_for_download(temp_dir, session)
+
+            with patch("backend.crawlers.zsxq_file_downloader.time.sleep"):
+                result = ZSXQFileDownloader.download_file(
+                    downloader,
+                    {"file": {"id": 101, "name": "file_101", "size": 4, "download_count": 0}},
+                )
+
+            self.assertFalse(result)
+            self.assertEqual(
+                (101, "failed", None, "download_exception", "stream down"),
+                downloader.file_db.status_updates[-1],
+            )
+            self.assertIn("   📝 从响应头获取到真实文件名: real.pdf", downloader.logs)
+            self.assertFalse((Path(temp_dir) / "file_101.part").exists())
+            self.assertFalse((Path(temp_dir) / "real.pdf.part").exists())
 
     def test_mark_download_url_unavailable_preserves_default_and_api_error_details(self):
         downloader = object.__new__(ZSXQFileDownloader)

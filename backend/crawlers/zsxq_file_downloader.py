@@ -778,25 +778,28 @@ class ZSXQFileDownloader:
         safe_filename: str,
         file_path: str,
     ) -> tuple[Optional[bool], Optional[tuple[str, str]], str, str, str]:
-        filename_override = self._apply_response_filename_override(
-            file_name,
-            file_id,
-            response.headers,
-        )
-        if filename_override:
-            file_name, safe_filename, file_path = filename_override
-
-        if response.status_code == 200:
-            success_result, failure_detail = self._handle_successful_download_response(
-                response,
+        try:
+            filename_override = self._apply_response_filename_override(
+                file_name,
                 file_id,
-                file_size,
-                safe_filename,
-                file_path,
+                response.headers,
             )
-            return success_result, failure_detail, file_name, safe_filename, file_path
+            if filename_override:
+                file_name, safe_filename, file_path = filename_override
 
-        failure_detail = self._record_download_http_failure(response.status_code)
+            if response.status_code == 200:
+                success_result, failure_detail = self._handle_successful_download_response(
+                    response,
+                    file_id,
+                    file_size,
+                    safe_filename,
+                    file_path,
+                )
+                return success_result, failure_detail, file_name, safe_filename, file_path
+
+            failure_detail = self._record_download_http_failure(response.status_code)
+        except Exception as exc:
+            failure_detail = self._record_download_exception(exc, file_path)
         return None, failure_detail, file_name, safe_filename, file_path
 
     def _prepare_download_body_target(

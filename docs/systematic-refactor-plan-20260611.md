@@ -6665,6 +6665,52 @@ Result:
 - Frontend build passed, including Next.js lint/type checks.
 - `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
 
+### 2026-06-12 - P9 file downloader overridden partial cleanup repair
+
+Changed:
+
+- Added regression coverage for body-write exceptions after a `Content-Disposition` filename
+  override.
+- Updated `FakeFailingBodyDownloadResponse` to accept response headers for exception-path tests.
+- Updated `ZSXQFileDownloader._handle_download_response` so response-handling exceptions record
+  cleanup using the current response-overridden `file_path`.
+
+Behavior impact:
+
+- Intended behavior change: restores pre-refactor behavior for an exception path affected by the
+  previous response-dispatch extraction.
+- Body-write exceptions after response filename override now remove the overridden `.part` file,
+  preserving the earlier inline-order cleanup semantics.
+- The existing `download_exception` error code/message, retry count, final failure status update,
+  response filename override log, HTTP failure path, success path, size mismatch path, signed URL
+  lookup, request options, schema/config/API behavior, and public API behavior are unchanged.
+- This does not introduce a new fallback or compatibility path.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_download_file_cleans_overridden_partial_file_after_body_exception -v
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_download_file_cleans_overridden_partial_file_after_body_exception tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_download_file_cleans_partial_file_after_body_exception_retries tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_handle_download_response_preserves_override_http_failure_and_success_paths tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_download_file_applies_response_filename_override_before_http_failure -v
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+git diff --check
+```
+
+Result:
+
+- The new regression test failed against the previous response-dispatch extraction because
+  `real.pdf.part` was left behind, then passed after the cleanup-path repair.
+- `py_compile` passed.
+- Focused response-dispatch/exception-cleanup tests passed.
+- `tests.test_zsxq_file_downloader_helpers`: 78 tests passed.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Full backend unittest discovery: 720 tests passed, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+- `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
+
 ## Stop Conditions
 
 Pause before editing if:
