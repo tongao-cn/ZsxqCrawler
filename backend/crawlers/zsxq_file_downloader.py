@@ -647,13 +647,11 @@ class ZSXQFileDownloader:
                 if remove_partial_download(temp_path):
                     self.log(f"   🗑️ 删除不完整文件")
 
-        self.log(f"   🚫 文件下载重试{download_retries}次仍失败: {last_error}")
-        error_code, error_message = download_final_failure_detail(last_error_code, last_error)
-        self.file_db.update_file_download_status(
+        self._mark_download_failed_after_retries(
             file_id,
-            'failed',
-            error_code=error_code,
-            error_message=error_message,
+            download_retries,
+            last_error_code,
+            last_error,
         )
         return False
 
@@ -674,6 +672,22 @@ class ZSXQFileDownloader:
 
         self.log(f"   ⚠️ 文件已存在但大小不匹配，重新下载")
         return None
+
+    def _mark_download_failed_after_retries(
+        self,
+        file_id: int,
+        download_retries: int,
+        last_error_code: Optional[str],
+        last_error: Optional[str],
+    ) -> None:
+        self.log(f"   🚫 文件下载重试{download_retries}次仍失败: {last_error}")
+        error_code, error_message = download_final_failure_detail(last_error_code, last_error)
+        self.file_db.update_file_download_status(
+            file_id,
+            'failed',
+            error_code=error_code,
+            error_message=error_message,
+        )
 
     def _complete_successful_download(
         self,

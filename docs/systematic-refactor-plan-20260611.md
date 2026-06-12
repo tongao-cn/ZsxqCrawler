@@ -6066,6 +6066,50 @@ Result:
 - Frontend build passed, including Next.js lint/type checks.
 - `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
 
+### 2026-06-12 - P9 file downloader final failure helper
+
+Changed:
+
+- Added characterization coverage for repeated HTTP download failures reaching the final
+  after-retries failure path.
+- Added direct helper coverage for explicit last-error details and default final-failure details.
+- Added `ZSXQFileDownloader._mark_download_failed_after_retries` and reused it from
+  `download_file`.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Repeated HTTP failures still attempt the configured three downloads and preserve the final
+  `http_status` / `HTTP 500` status update.
+- Missing last-error details still fall back to `download_failed` / `文件下载失败`.
+- Download URL early failure, retry sleep behavior, size-mismatch retry behavior, exception partial
+  cleanup, stop handling, schema/config/API behavior, and public API behavior are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_download_file_marks_final_failure_after_http_retries tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_download_file_retries_body_download_once tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_download_file_retries_and_fails_on_size_mismatch tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_download_file_marks_failed_when_download_url_missing -v
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_mark_download_failed_after_retries_preserves_error_detail_defaults tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_download_file_marks_final_failure_after_http_retries tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_download_file_retries_body_download_once tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_download_file_retries_and_fails_on_size_mismatch tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_download_file_marks_failed_when_download_url_missing -v
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+git diff --check
+```
+
+Result:
+
+- Pre-refactor final-failure characterization tests passed against the original inline final
+  failure branch.
+- `py_compile` passed.
+- Focused final-failure/download tests passed.
+- `tests.test_zsxq_file_downloader_helpers`: 55 tests passed.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Full backend unittest discovery: 697 tests passed, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+- `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
+
 ## Stop Conditions
 
 Pause before editing if:

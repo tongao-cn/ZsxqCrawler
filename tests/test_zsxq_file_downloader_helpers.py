@@ -789,6 +789,68 @@ class FileDownloaderDownloadTests(unittest.TestCase):
             self.assertEqual(2, len(session.get_calls))
             self.assertEqual((101, "completed"), downloader.file_db.status_updates[-1][:2])
 
+    def test_download_file_marks_final_failure_after_http_retries(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            session = FakeDownloadSession([
+                FakeDownloadResponse(500),
+                FakeDownloadResponse(500),
+                FakeDownloadResponse(500),
+            ])
+            downloader = self._downloader_for_download(temp_dir, session)
+
+            with patch("backend.crawlers.zsxq_file_downloader.time.sleep"):
+                result = ZSXQFileDownloader.download_file(
+                    downloader,
+                    {"file": {"id": 101, "name": "memo.pdf", "size": 4, "download_count": 0}},
+                )
+
+            self.assertFalse(result)
+            self.assertEqual(3, len(session.get_calls))
+            self.assertEqual(
+                (101, "failed", None, "http_status", "HTTP 500"),
+                downloader.file_db.status_updates[-1],
+            )
+            self.assertIn("   🚫 文件下载重试3次仍失败: HTTP 500", downloader.logs)
+            self.assertFalse((Path(temp_dir) / "memo.pdf").exists())
+            self.assertFalse((Path(temp_dir) / "memo.pdf.part").exists())
+
+    def test_mark_download_failed_after_retries_preserves_error_detail_defaults(self):
+        downloader = object.__new__(ZSXQFileDownloader)
+        downloader.file_db = FakeDownloadFileDb()
+        downloader.logs = []
+        downloader.log = downloader.logs.append
+
+        ZSXQFileDownloader._mark_download_failed_after_retries(
+            downloader,
+            101,
+            3,
+            "http_status",
+            "HTTP 500",
+        )
+        ZSXQFileDownloader._mark_download_failed_after_retries(
+            downloader,
+            102,
+            3,
+            None,
+            None,
+        )
+
+        self.assertEqual(
+            (101, "failed", None, "http_status", "HTTP 500"),
+            downloader.file_db.status_updates[0],
+        )
+        self.assertEqual(
+            (102, "failed", None, "download_failed", "文件下载失败"),
+            downloader.file_db.status_updates[1],
+        )
+        self.assertEqual(
+            [
+                "   🚫 文件下载重试3次仍失败: HTTP 500",
+                "   🚫 文件下载重试3次仍失败: None",
+            ],
+            downloader.logs,
+        )
+
     def test_download_file_retries_and_fails_on_size_mismatch(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             session = FakeDownloadSession([
