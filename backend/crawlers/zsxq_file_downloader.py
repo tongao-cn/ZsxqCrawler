@@ -568,9 +568,8 @@ class ZSXQFileDownloader:
                 if attempt > 0:
                     self._wait_before_download_retry(attempt, download_retries)
 
-                download_url = self.get_download_url(file_id)
+                download_url = self._get_download_url_or_mark_unavailable(file_id)
                 if not download_url:
-                    self._mark_download_url_unavailable(file_id)
                     return False
 
                 response = self._request_download_response(download_url)
@@ -662,6 +661,14 @@ class ZSXQFileDownloader:
             return "skipped"  # 返回特殊值表示跳过
 
         self.log(f"   ⚠️ 文件已存在但大小不匹配，重新下载")
+        return None
+
+    def _get_download_url_or_mark_unavailable(self, file_id: int) -> Optional[str]:
+        download_url = self.get_download_url(file_id)
+        if download_url:
+            return download_url
+
+        self._mark_download_url_unavailable(file_id)
         return None
 
     def _mark_download_url_unavailable(self, file_id: int) -> None:

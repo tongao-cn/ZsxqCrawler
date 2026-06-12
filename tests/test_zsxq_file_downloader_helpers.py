@@ -1041,6 +1041,38 @@ class FileDownloaderDownloadTests(unittest.TestCase):
             )
             self.assertIn("   ❌ 无法获取下载链接", downloader.logs)
 
+    def test_get_download_url_or_mark_unavailable_preserves_success_and_failure_paths(self):
+        downloader = object.__new__(ZSXQFileDownloader)
+        downloader.file_db = FakeDownloadFileDb()
+        downloader.logs = []
+        downloader.log = downloader.logs.append
+        downloader.last_download_url_error = None
+        requested_file_ids = []
+
+        def successful_url(file_id):
+            requested_file_ids.append(file_id)
+            return f"https://download.test/{file_id}"
+
+        downloader.get_download_url = successful_url
+        self.assertEqual(
+            "https://download.test/101",
+            ZSXQFileDownloader._get_download_url_or_mark_unavailable(downloader, 101),
+        )
+        self.assertEqual([101], requested_file_ids)
+        self.assertEqual([], downloader.file_db.status_updates)
+        self.assertEqual([], downloader.logs)
+
+        downloader.last_download_url_error = {"code": 1030, "message": "mobile only"}
+        downloader.get_download_url = lambda file_id: None
+        self.assertIsNone(
+            ZSXQFileDownloader._get_download_url_or_mark_unavailable(downloader, 102)
+        )
+        self.assertEqual(
+            (102, "failed", None, "1030", "mobile only"),
+            downloader.file_db.status_updates[-1],
+        )
+        self.assertEqual(["   ❌ 无法获取下载链接"], downloader.logs)
+
     def test_download_file_retries_body_download_once(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             session = FakeDownloadSession([
