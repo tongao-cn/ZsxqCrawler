@@ -271,6 +271,20 @@ def _legacy_time_range_reached_before_start(
 ) -> bool:
     return last_time_dt_in_page is not None and last_time_dt_in_page < start_dt
 
+def _fetch_legacy_time_range_page(
+    crawler: Any,
+    per_page: int,
+    begin_time_param: str,
+    end_time_param: Optional[str],
+) -> Any:
+    return crawler.fetch_topics_safe(
+        scope="all",
+        count=per_page,
+        begin_time=begin_time_param,
+        end_time=end_time_param,
+        is_historical=True,
+    )
+
 def _query_group_id(group_id: str) -> Any:
     value = str(group_id or "").strip()
     return int(value) if value.isdigit() else value
@@ -759,12 +773,11 @@ def run_crawl_time_range_task(task_id: str, group_id: str, request: Any):
                 if is_task_stopped(task_id):
                     break
 
-                data = crawler.fetch_topics_safe(
-                    scope="all",
-                    count=per_page,
-                    begin_time=begin_time_param,
-                    end_time=end_time_param,
-                    is_historical=True,
+                data = _fetch_legacy_time_range_page(
+                    crawler,
+                    per_page,
+                    begin_time_param,
+                    end_time_param,
                 )
 
                 if data and isinstance(data, dict) and data.get("expired"):
