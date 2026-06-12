@@ -9517,6 +9517,55 @@ Result:
 - Frontend build passed, including Next.js lint/type checks.
 - `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
 
+### 2026-06-12 - P4 topic pagination latest retry offset reuse
+
+Changed:
+
+- Reused existing `_offset_zsxq_end_time` coverage before editing
+  `backend/crawlers/topic_pagination.py`.
+- Replaced the last inline millisecond timestamp-offset block in
+  `crawl_latest_until_complete` retry handling with `_offset_zsxq_end_time`.
+- Confirmed by grep that `topic_pagination.py` now keeps ZSXQ timestamp parsing/formatting in the
+  shared offset helper path.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- The latest-record retry branch still subtracts `self.timestamp_offset_ms`, preserves the `+0800`
+  no-colon timestamp format, keeps the same exception fallback log, and keeps the same retry/stop
+  flow.
+- Public API behavior, task status semantics, schema/config behavior, official MCP HTTP behavior,
+  legacy cookie crawler behavior, and fallback behavior are otherwise unchanged.
+- No legacy/fallback behavior was removed.
+- Existing dirty downloader risk-log files and scripts remain outside this P4 slice.
+
+Verification:
+
+```powershell
+uv run python -m py_compile backend\crawlers\topic_pagination.py tests\test_zsxq_interactive_crawler_helpers.py
+uv run python -m unittest tests.test_zsxq_interactive_crawler_helpers -v
+git grep -n -e "from datetime import datetime, timedelta" -e "dt = datetime.fromisoformat" -- backend/crawlers/topic_pagination.py
+uv run python scripts\scan_postgres_compat_debt.py
+uv run python -m unittest tests.test_zsxq_interactive_crawler_helpers -v
+uv run python -m unittest tests.test_crawl_routes_helpers -v
+uv run python -m unittest discover -s tests
+cmd.exe /d /c npm --prefix frontend run build
+git diff --check
+```
+
+Result:
+
+- Focused pagination helper tests passed after helper reuse.
+- `py_compile` passed.
+- Grep confirmed `topic_pagination.py` has no remaining inline datetime/timedelta offset block;
+  the only `datetime.fromisoformat` match is inside the shared formatter helper.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- `tests.test_zsxq_interactive_crawler_helpers`: 5 tests passed.
+- `tests.test_crawl_routes_helpers`: 54 tests passed.
+- Full backend unittest discovery: 771 tests passed, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+- `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
+
 ## Stop Conditions
 
 Pause before editing if:

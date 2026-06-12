@@ -714,10 +714,7 @@ class TopicPaginationMixin:
                     # 调整时间戳用于重试
                     if end_time:
                         try:
-                            from datetime import datetime, timedelta
-                            dt = datetime.fromisoformat(end_time.replace('+0800', '+08:00'))
-                            dt = dt - timedelta(milliseconds=self.timestamp_offset_ms)
-                            end_time = dt.strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + '+0800'
+                            end_time = _offset_zsxq_end_time(end_time, self.timestamp_offset_ms)
                         except Exception as e:
                             print(f"   ⚠️ 时间戳调整失败: {e}")
 
