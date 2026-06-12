@@ -8730,6 +8730,54 @@ Result:
 - Frontend build passed, including Next.js lint/type checks.
 - `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
 
+### 2026-06-12 - P4 legacy time-range non-empty page helper
+
+Changed:
+
+- Reused existing legacy time-range characterization coverage for filtered-page continuation,
+  invalid oldest timestamp cursor fallback, out-of-range pages with no stored topics, and
+  before-start termination.
+- Extracted `_process_legacy_time_range_non_empty_page` in
+  `backend/services/crawl_service.py`.
+- Kept the original non-empty-page side-effect order: filter topics, log page summary, store
+  filtered topics, compute next end-time cursor, evaluate/log before-start termination, then run
+  the crawler long-delay check only when before-start was not reached.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Filtered topics, page stats, page summary logs, `end_time` cursor updates, invalid timestamp
+  fallback, before-start logging, and `check_page_long_delay` call conditions are unchanged.
+- Empty pages, expired responses, retry failures, max-retry termination, outer-stop completion,
+  public API behavior, task status semantics, schema/config behavior, official MCP HTTP behavior,
+  and cookie-based crawler behavior are unchanged.
+- No legacy/fallback behavior was removed.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_crawl_routes_helpers.CrawlRoutesHelperTests.test_legacy_time_range_filters_topics_and_advances_end_time tests.test_crawl_routes_helpers.CrawlRoutesHelperTests.test_legacy_time_range_keeps_invalid_oldest_time_as_next_end_time tests.test_crawl_routes_helpers.CrawlRoutesHelperTests.test_legacy_time_range_counts_unstored_out_of_range_page tests.test_crawl_routes_helpers.CrawlRoutesHelperTests.test_legacy_time_range_stops_when_page_is_before_start_time -v
+uv run python -m py_compile backend\services\crawl_service.py tests\test_crawl_routes_helpers.py
+uv run python scripts\scan_postgres_compat_debt.py
+uv run python -m unittest tests.test_crawl_routes_helpers -v
+uv run python -m unittest tests.test_official_topic_client_helpers -v
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+git diff --check
+```
+
+Result:
+
+- Pre-extraction focused filtered-page, invalid-cursor, out-of-range, and before-start tests passed.
+- The same focused tests passed after helper extraction.
+- `py_compile` passed.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- `tests.test_crawl_routes_helpers`: 45 tests passed.
+- `tests.test_official_topic_client_helpers`: 16 tests passed.
+- Full backend unittest discovery: 761 tests passed, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+- `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
+
 ## Stop Conditions
 
 Pause before editing if:

@@ -320,6 +320,27 @@ def _log_legacy_time_range_page_summary(
 ) -> None:
     add_task_log(task_id, f"📄 本页获取 {len(topics)} 个话题，区间内 {len(filtered)} 个")
 
+def _process_legacy_time_range_non_empty_page(
+    task_id: str,
+    crawler: Any,
+    total_stats: dict[str, int],
+    topics: list[dict[str, Any]],
+    start_dt: datetime,
+    end_dt: datetime,
+) -> tuple[Optional[datetime], Optional[str], bool]:
+    filtered, last_time_dt_in_page = _filter_legacy_topics_by_time_range(
+        topics, start_dt, end_dt
+    )
+    _log_legacy_time_range_page_summary(task_id, topics, filtered)
+    _store_legacy_time_range_page(crawler, total_stats, filtered)
+    next_end_time_param = _legacy_next_end_time(topics, crawler.timestamp_offset_ms)
+    reached_before_start = _legacy_time_range_reached_before_start_with_log(
+        task_id, last_time_dt_in_page, start_dt
+    )
+    if not reached_before_start:
+        crawler.check_page_long_delay()
+    return last_time_dt_in_page, next_end_time_param, reached_before_start
+
 def _empty_legacy_time_range_stats() -> dict[str, int]:
     return {"new_topics": 0, "updated_topics": 0, "errors": 0, "pages": 0}
 
@@ -841,21 +862,22 @@ def run_crawl_time_range_task(task_id: str, group_id: str, request: Any):
                     reached_end = True
                     break
 
-                filtered, last_time_dt_in_page = _filter_legacy_topics_by_time_range(topics, start_dt, end_dt)
-
-                _log_legacy_time_range_page_summary(task_id, topics, filtered)
-
-                _store_legacy_time_range_page(crawler, total_stats, filtered)
+                (
+                    last_time_dt_in_page,
+                    end_time_param,
+                    reached_before_start,
+                ) = _process_legacy_time_range_non_empty_page(
+                    task_id,
+                    crawler,
+                    total_stats,
+                    topics,
+                    start_dt,
+                    end_dt,
+                )
                 page_processed = True
 
-                end_time_param = _legacy_next_end_time(topics, crawler.timestamp_offset_ms)
-
-                if _legacy_time_range_reached_before_start_with_log(
-                    task_id, last_time_dt_in_page, start_dt
-                ):
+                if reached_before_start:
                     break
-
-                crawler.check_page_long_delay()
                 break
 
             if _legacy_time_range_page_failed(task_id, page_processed):
