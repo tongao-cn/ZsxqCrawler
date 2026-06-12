@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+import urllib.parse
 from typing import Any, Dict, Optional
 
 
@@ -50,6 +52,42 @@ def format_tag_topic_row(topic) -> Dict[str, Any]:
             }
 
     return topic_data
+
+
+def topic_tags_from_data(topic_data: Dict[str, Any]) -> set[tuple[str, str]]:
+    text_contents = []
+
+    if "talk" in topic_data and topic_data["talk"] and "text" in topic_data["talk"]:
+        text_contents.append(topic_data["talk"]["text"])
+
+    if "question" in topic_data and topic_data["question"] and "text" in topic_data["question"]:
+        text_contents.append(topic_data["question"]["text"])
+
+    if "answer" in topic_data and topic_data["answer"] and "text" in topic_data["answer"]:
+        text_contents.append(topic_data["answer"]["text"])
+
+    if "show_comments" in topic_data:
+        for comment in topic_data["show_comments"]:
+            if "text" in comment:
+                text_contents.append(comment["text"])
+
+    tags = set()
+    for text in text_contents:
+        if not text:
+            continue
+
+        tag_pattern = r'<e\s+type="hashtag"\s+hid="([^"]+)"\s+title="([^"]+)"\s*/>'
+        matches = re.findall(tag_pattern, text)
+        for hid, encoded_title in matches:
+            try:
+                tag_name = urllib.parse.unquote(encoded_title)
+                tag_name = tag_name.strip("#")
+                if tag_name:
+                    tags.add((tag_name, hid))
+            except Exception as e:
+                print(f"解码标签失败: {e}")
+
+    return tags
 
 
 def tag_id_by_name_query(group_id: int, tag_name: str) -> tuple[str, tuple[Any, ...]]:

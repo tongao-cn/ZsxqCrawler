@@ -5107,6 +5107,53 @@ Result:
 - `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
 - Frontend build is not planned because this slice only changes backend storage/helper code.
 
+### 2026-06-12 - P2 topic hashtag extraction helper
+
+Changed:
+
+- Added `topic_tags_from_data` to `backend/storage/zsxq_database_helpers.py`, with a compatibility
+  wrapper in `backend/storage/zsxq_database.py`.
+- Replaced the inline text-source collection, hashtag regex matching, URL decoding, `#` stripping,
+  and dedupe logic in `_import_tags` with the helper output.
+- Added characterization coverage for missing-group skip, talk/question/answer/comment sources,
+  URL-decoded names, duplicate hashtags, empty decoded names, and link behavior when `_upsert_tag`
+  returns no tag ID.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- `_import_tags` still returns before tag extraction when `topic_data.group.group_id` is missing.
+- The helper still reads hashtag markup from talk text, question text, answer text, and
+  `show_comments[*].text`.
+- Hashtag titles are still URL-decoded, leading/trailing `#` characters are stripped, empty names
+  are skipped, and duplicates collapse through set semantics.
+- Decode failures still print the same `解码标签失败:` prefix.
+- `_import_tags` still calls `_upsert_tag(group_id, tag_name, hid)` and links only when a truthy
+  tag ID is returned.
+- No schema, config, compatibility, fallback, error handling, logging, commit order, or public API
+  semantics were changed.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_database_helpers -v
+uv run python -m py_compile backend\storage\zsxq_database.py backend\storage\zsxq_database_helpers.py tests\test_zsxq_database_helpers.py
+uv run python -m unittest tests.test_zsxq_database_helpers -v
+uv run python -m unittest discover -s tests
+uv run python scripts\scan_postgres_compat_debt.py
+git diff --check
+```
+
+Result:
+
+- Pre-refactor characterization run passed against the original inline `_import_tags` implementation.
+- `py_compile` passed.
+- `tests.test_zsxq_database_helpers`: 62 tests passed.
+- Full backend unittest discovery: 665 tests passed, 15 skipped.
+- PostgreSQL compatibility debt scan: no SQLite compatibility patterns found.
+- `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
+- Frontend build is not planned because this slice only changes backend storage/helper code.
+
 ## Stop Conditions
 
 Pause before editing if:

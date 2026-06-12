@@ -49,6 +49,7 @@ from backend.storage.zsxq_database_helpers import (
     topic_insert_statement,
     topic_stats_update_statement,
     topics_by_tag_query,
+    topic_tags_from_data,
     update_tag_hid_statement,
     upsert_core_file,
     user_liked_emoji_insert_statement,
@@ -66,6 +67,10 @@ def _format_tag_row(row) -> Dict[str, Any]:
 
 def _format_tag_topic_row(topic) -> Dict[str, Any]:
     return format_tag_topic_row(topic)
+
+
+def _topic_tags_from_data(topic_data: Dict[str, Any]) -> set[tuple[str, str]]:
+    return topic_tags_from_data(topic_data)
 
 
 def _tag_id_by_name_query(group_id: int, tag_name: str) -> tuple[str, tuple[Any, ...]]:
@@ -1029,54 +1034,12 @@ class ZSXQDatabase:
     
     def _import_tags(self, topic_id: int, topic_data: Dict[str, Any]):
         """从话题数据中提取并导入标签信息"""
-        import re
-        
         group_id = topic_data.get('group', {}).get('group_id')
         if not group_id:
             return
-        
-        # 收集所有可能包含标签的文本内容
-        text_contents = []
-        
-        # 从talk内容中提取
-        if 'talk' in topic_data and topic_data['talk'] and 'text' in topic_data['talk']:
-            text_contents.append(topic_data['talk']['text'])
-        
-        # 从question内容中提取
-        if 'question' in topic_data and topic_data['question'] and 'text' in topic_data['question']:
-            text_contents.append(topic_data['question']['text'])
-        
-        # 从answer内容中提取
-        if 'answer' in topic_data and topic_data['answer'] and 'text' in topic_data['answer']:
-            text_contents.append(topic_data['answer']['text'])
-        
-        # 从评论中提取
-        if 'show_comments' in topic_data:
-            for comment in topic_data['show_comments']:
-                if 'text' in comment:
-                    text_contents.append(comment['text'])
-        
-        # 提取所有标签
-        all_tags = set()
-        for text in text_contents:
-            if text:
-                # 使用正则表达式提取标签 <e type="hashtag" hid="..." title="..." />
-                tag_pattern = r'<e\s+type="hashtag"\s+hid="([^"]+)"\s+title="([^"]+)"\s*/>'
-                matches = re.findall(tag_pattern, text)
-                for hid, encoded_title in matches:
-                    try:
-                        # 解码标签名称
-                        import urllib.parse
-                        tag_name = urllib.parse.unquote(encoded_title)
-                        # 移除可能的#符号
-                        tag_name = tag_name.strip('#')
-                        if tag_name:
-                            all_tags.add((tag_name, hid))
-                    except Exception as e:
-                        print(f"解码标签失败: {e}")
-        
+
         # 为每个标签创建或更新数据库记录
-        for tag_name, hid in all_tags:
+        for tag_name, hid in _topic_tags_from_data(topic_data):
             tag_id = self._upsert_tag(group_id, tag_name, hid)
             if tag_id:
                 self._link_topic_tag(topic_id, tag_id)

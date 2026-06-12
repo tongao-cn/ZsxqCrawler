@@ -39,6 +39,7 @@ from backend.storage.zsxq_database import (
     _topic_group_id_query,
     _topic_insert_statement,
     _topic_stats_update_statement,
+    _topic_tags_from_data,
     _topics_by_tag_query,
     _update_tag_hid_statement,
     _upsert_core_file,
@@ -542,6 +543,23 @@ class ZSXQDatabaseHelperTests(unittest.TestCase):
         self.assertNotIn("talk_text", topic)
         self.assertFalse(topic["digested"])
         self.assertFalse(topic["sticky"])
+
+    def test_topic_tags_from_data_preserves_sources_decode_dedupe_and_empty_title_skip(self):
+        tags = _topic_tags_from_data(
+            {
+                "talk": {"text": '<e type="hashtag" hid="h1" title="%23AI" />'},
+                "question": {"text": '<e type="hashtag" hid="h2" title="Question" />'},
+                "answer": {"text": '<e type="hashtag" hid="h3" title="%E7%AD%94%E6%A1%88" />'},
+                "show_comments": [
+                    {"text": '<e type="hashtag" hid="h1" title="%23AI" />'},
+                    {"text": '<e type="hashtag" hid="h4" title="%23" />'},
+                    {"text": ""},
+                    {},
+                ],
+            }
+        )
+
+        self.assertEqual({("AI", "h1"), ("Question", "h2"), ("答案", "h3")}, tags)
 
     def test_tag_statement_helpers_preserve_sql_shape_and_params(self):
         lookup_sql, lookup_params = _tag_id_by_name_query(303, "AI")
@@ -2110,6 +2128,59 @@ class ZSXQDatabaseHelperTests(unittest.TestCase):
         )
         self.assertEqual((202, 501, "", "", 0, 0, 0, ""), topic_file_params[:8])
         self.assertRegex(topic_file_params[8], r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}\+0800$")
+
+    def test_import_tags_preserves_text_sources_decode_dedupe_and_link_behavior(self):
+        from backend.storage.zsxq_database import ZSXQDatabase
+
+        missing_group_db = object.__new__(ZSXQDatabase)
+        missing_calls = []
+        missing_group_db._upsert_tag = lambda group_id, tag_name, hid: missing_calls.append((group_id, tag_name, hid))
+        missing_group_db._link_topic_tag = lambda topic_id, tag_id: missing_calls.append((topic_id, tag_id))
+
+        ZSXQDatabase._import_tags(
+            missing_group_db,
+            202,
+            {"talk": {"text": '<e type="hashtag" hid="h1" title="%23AI" />'}},
+        )
+
+        self.assertEqual([], missing_calls)
+
+        db = object.__new__(ZSXQDatabase)
+        upsert_calls = []
+        link_calls = []
+
+        def fake_upsert_tag(group_id, tag_name, hid):
+            upsert_calls.append((group_id, tag_name, hid))
+            return {"h1": 7, "h2": None, "h3": 9}[hid]
+
+        db._upsert_tag = fake_upsert_tag
+        db._link_topic_tag = lambda topic_id, tag_id: link_calls.append((topic_id, tag_id))
+
+        ZSXQDatabase._import_tags(
+            db,
+            202,
+            {
+                "group": {"group_id": 303},
+                "talk": {"text": '<e type="hashtag" hid="h1" title="%23AI" />'},
+                "question": {"text": '<e type="hashtag" hid="h2" title="Question" />'},
+                "answer": {"text": '<e type="hashtag" hid="h3" title="%E7%AD%94%E6%A1%88" />'},
+                "show_comments": [
+                    {"text": '<e type="hashtag" hid="h1" title="%23AI" />'},
+                    {"text": ""},
+                    {},
+                ],
+            },
+        )
+
+        self.assertEqual(
+            {
+                (303, "AI", "h1"),
+                (303, "Question", "h2"),
+                (303, "答案", "h3"),
+            },
+            set(upsert_calls),
+        )
+        self.assertEqual({(202, 7), (202, 9)}, set(link_calls))
 
     def test_upsert_tag_preserves_existing_update_insert_and_missing_return_branches(self):
         from backend.storage.zsxq_database import ZSXQDatabase
