@@ -6203,6 +6203,51 @@ Result:
 - Frontend build passed, including Next.js lint/type checks.
 - `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
 
+### 2026-06-12 - P9 file downloader response filename override helper
+
+Changed:
+
+- Added characterization coverage that a named file ignores `Content-Disposition` filename
+  overrides and keeps its original target path.
+- Added direct helper coverage for response filename override and no-op paths.
+- Added `ZSXQFileDownloader._apply_response_filename_override` and reused it from
+  `download_file`.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Default `file_...` names still use `Content-Disposition` filename when present and parsable.
+- Existing real file names still ignore `Content-Disposition` and keep their original target path.
+- The override branch still logs `"   📝 从响应头获取到真实文件名: ..."` only when an override is
+  actually applied.
+- Download URL failures, HTTP/body failures, size mismatch handling, partial cleanup, stop
+  handling, success finalization, schema/config/API behavior, and public API behavior are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_download_file_uses_content_disposition_for_default_filename tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_download_file_keeps_named_file_despite_content_disposition tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_download_file_finalizes_success_with_status_counters_logs_and_interval -v
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_apply_response_filename_override_preserves_override_and_noop_paths tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_download_file_uses_content_disposition_for_default_filename tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_download_file_keeps_named_file_despite_content_disposition tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_download_file_finalizes_success_with_status_counters_logs_and_interval -v
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+git diff --check
+```
+
+Result:
+
+- Pre-refactor filename override characterization tests passed against the original inline
+  response-header branch.
+- `py_compile` passed.
+- Focused response-filename/download tests passed.
+- `tests.test_zsxq_file_downloader_helpers`: 61 tests passed.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Full backend unittest discovery: 703 tests passed, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+- `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
+
 ## Stop Conditions
 
 Pause before editing if:

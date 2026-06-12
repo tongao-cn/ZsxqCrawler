@@ -585,6 +585,28 @@ class FileDownloaderDownloadTests(unittest.TestCase):
             self.assertTrue((Path(temp_dir) / "real.pdf").exists())
             self.assertEqual((101, "completed", expected_path), downloader.file_db.status_updates[-1][:3])
 
+    def test_download_file_keeps_named_file_despite_content_disposition(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            response = FakeDownloadResponse(
+                200,
+                b"memo",
+                headers={"content-disposition": 'attachment; filename="real.pdf"'},
+            )
+            session = FakeDownloadSession([response])
+            downloader = self._downloader_for_download(temp_dir, session)
+
+            result = ZSXQFileDownloader.download_file(
+                downloader,
+                {"file": {"id": 101, "name": "memo.pdf", "size": 4, "download_count": 0}},
+            )
+
+            expected_path = str(Path(temp_dir) / "memo.pdf")
+            self.assertTrue(result)
+            self.assertTrue((Path(temp_dir) / "memo.pdf").exists())
+            self.assertFalse((Path(temp_dir) / "real.pdf").exists())
+            self.assertEqual((101, "completed", expected_path), downloader.file_db.status_updates[-1][:3])
+            self.assertNotIn("   📝 从响应头获取到真实文件名: real.pdf", downloader.logs)
+
     def test_download_file_preserves_progress_for_chunked_body_download(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             session = FakeDownloadSession([FakeChunkedDownloadResponse([b"memo", b""])])
@@ -672,6 +694,30 @@ class FileDownloaderDownloadTests(unittest.TestCase):
                 ],
                 downloader.logs,
             )
+
+    def test_apply_response_filename_override_preserves_override_and_noop_paths(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            downloader = object.__new__(ZSXQFileDownloader)
+            downloader.download_dir = temp_dir
+            downloader.logs = []
+            downloader.log = downloader.logs.append
+
+            override = ZSXQFileDownloader._apply_response_filename_override(
+                downloader,
+                "file_101",
+                101,
+                {"content-disposition": 'attachment; filename="real?.pdf"'},
+            )
+            noop = ZSXQFileDownloader._apply_response_filename_override(
+                downloader,
+                "memo.pdf",
+                102,
+                {"content-disposition": 'attachment; filename="ignored.pdf"'},
+            )
+
+            self.assertEqual(("real?.pdf", "real.pdf", str(Path(temp_dir) / "real.pdf")), override)
+            self.assertIsNone(noop)
+            self.assertEqual(["   📝 从响应头获取到真实文件名: real?.pdf"], downloader.logs)
 
     def test_write_download_response_body_preserves_progress_stop_and_empty_chunks(self):
         with tempfile.TemporaryDirectory() as temp_dir:

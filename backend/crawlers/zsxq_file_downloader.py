@@ -593,15 +593,13 @@ class ZSXQFileDownloader:
                 self.log(f"   🚀 开始下载...")
                 response = self.session.get(download_url, timeout=300, stream=True)
 
-                filename_override = response_filename_override(
+                filename_override = self._apply_response_filename_override(
                     file_name,
                     file_id,
-                    self.download_dir,
                     response.headers,
                 )
                 if filename_override:
                     file_name, safe_filename, file_path = filename_override
-                    self.log(f"   📝 从响应头获取到真实文件名: {file_name}")
 
                 if response.status_code == 200:
                     total_size = download_total_size(response.headers)
@@ -731,6 +729,25 @@ class ZSXQFileDownloader:
                         return None
 
         return downloaded_size
+
+    def _apply_response_filename_override(
+        self,
+        file_name: str,
+        file_id: int,
+        response_headers: Dict[str, Any],
+    ) -> Optional[tuple[str, str, str]]:
+        filename_override = response_filename_override(
+            file_name,
+            file_id,
+            self.download_dir,
+            response_headers,
+        )
+        if not filename_override:
+            return None
+
+        real_filename, _safe_filename, _file_path = filename_override
+        self.log(f"   📝 从响应头获取到真实文件名: {real_filename}")
+        return filename_override
 
     def _handle_download_size_mismatch(
         self,
