@@ -5886,6 +5886,51 @@ Result:
 - PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
 - `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
 
+### 2026-06-12 - P9 file downloader target path helper
+
+Changed:
+
+- Added characterization coverage for `ZSXQFileDownloader.download_file` local target-path behavior
+  when the source filename contains characters filtered by the existing safe-filename rule.
+- Added `download_target_path` to `backend/crawlers/zsxq_file_downloader_helpers.py`.
+- Reused the helper from `ZSXQFileDownloader.download_file` for initial safe filename and local
+  target path construction.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- The safe filename rule is unchanged and still allows alphanumeric characters plus
+  `._-（）()[]{}`.
+- The fallback filename for fully filtered names remains `file_{file_id}`.
+- Content-Disposition filename override behavior remains separate and unchanged.
+- Existing retry behavior, signed URL handling, partial-file cleanup, stop handling, download status
+  updates, SQL/storage side effects, config semantics, and public API behavior are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_download_file_uses_safe_filename_for_local_target -v
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py backend\crawlers\zsxq_file_downloader_helpers.py tests\test_zsxq_file_downloader_helpers.py
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderFileDataHelperTests.test_download_target_path_reuses_safe_filename_contract tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_download_file_uses_safe_filename_for_local_target tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_download_file_uses_content_disposition_for_default_filename -v
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers -v
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+uv run python scripts\scan_postgres_compat_debt.py
+git diff --check
+```
+
+Result:
+
+- Pre-refactor safe-target-path characterization test passed against the original inline filename
+  and path construction.
+- `py_compile` passed.
+- Focused target-path and content-disposition tests passed.
+- `tests.test_zsxq_file_downloader_helpers`: 46 tests passed.
+- Full backend unittest discovery: 688 tests passed, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
+
 ## Stop Conditions
 
 Pause before editing if:

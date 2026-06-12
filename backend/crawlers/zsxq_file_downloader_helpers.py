@@ -168,6 +168,11 @@ def safe_download_filename(file_name: Any, file_id: Any) -> str:
     return safe_filename
 
 
+def download_target_path(download_dir: str, file_name: Any, file_id: Any) -> tuple[str, str]:
+    safe_filename = safe_download_filename(file_name, file_id)
+    return safe_filename, os.path.join(download_dir, safe_filename)
+
+
 def download_file_data(file_info: Dict[str, Any]) -> Dict[str, Any]:
     file_data = file_info.get("file", {}) or {}
     return {

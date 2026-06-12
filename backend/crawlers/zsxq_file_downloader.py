@@ -36,6 +36,7 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     download_progress_message,
     download_retry_wait,
     download_size_mismatch_detail,
+    download_target_path,
     download_total_size,
     download_url_failure_detail,
     empty_import_stats,
@@ -47,7 +48,6 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     partial_download_path,
     remove_partial_download,
     response_filename_override,
-    safe_download_filename,
     should_log_full_response,
     summarize_page_time_range,
 )
@@ -567,10 +567,7 @@ class ZSXQFileDownloader:
             self.log("🛑 下载任务被停止")
             return False
         
-        # 清理文件名（移除非法字符）
-        safe_filename = safe_download_filename(file_name, file_id)
-        
-        file_path = os.path.join(self.download_dir, safe_filename)
+        safe_filename, file_path = download_target_path(self.download_dir, file_name, file_id)
         
         # 🚀 优化：先检查本地文件，避免无意义的API请求
         file_exists, size_matches, _existing_size = existing_file_matches(file_path, file_size)

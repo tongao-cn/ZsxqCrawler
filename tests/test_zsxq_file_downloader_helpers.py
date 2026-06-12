@@ -28,6 +28,7 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     download_url_failure_detail,
     download_file_data,
     download_interval_plan,
+    download_target_path,
     empty_import_stats,
     existing_file_matches,
     filter_files_newer_than,
@@ -249,6 +250,16 @@ class FileDownloaderFileDataHelperTests(unittest.TestCase):
     def test_safe_download_filename_keeps_supported_characters(self):
         self.assertEqual("memo（）[v1].pdf", safe_download_filename("memo（）[v1].pdf", 101))
         self.assertEqual("file_101", safe_download_filename("///", 101))
+
+    def test_download_target_path_reuses_safe_filename_contract(self):
+        self.assertEqual(
+            ("..memo.pdf", str(Path("downloads") / "..memo.pdf")),
+            download_target_path("downloads", "../memo?.pdf", 101),
+        )
+        self.assertEqual(
+            ("file_101", str(Path("downloads") / "file_101")),
+            download_target_path("downloads", "///", 101),
+        )
 
     def test_existing_file_matches_size_or_nonzero_unknown_size(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -488,6 +499,21 @@ class FileDownloaderDownloadTests(unittest.TestCase):
             self.assertTrue(session.get_calls)
             self.assertEqual("https://download.test/101", session.get_calls[0][0])
             self.assertEqual((101, "completed"), downloader.file_db.status_updates[-1][:2])
+
+    def test_download_file_uses_safe_filename_for_local_target(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            session = FakeDownloadSession([FakeDownloadResponse(200, b"memo")])
+            downloader = self._downloader_for_download(temp_dir, session)
+
+            result = ZSXQFileDownloader.download_file(
+                downloader,
+                {"file": {"id": 101, "name": "../memo?.pdf", "size": 4, "download_count": 0}},
+            )
+
+            expected_path = str(Path(temp_dir) / "..memo.pdf")
+            self.assertTrue(result)
+            self.assertTrue((Path(temp_dir) / "..memo.pdf").exists())
+            self.assertEqual((101, "completed", expected_path), downloader.file_db.status_updates[-1][:3])
 
     def test_download_file_uses_content_disposition_for_default_filename(self):
         with tempfile.TemporaryDirectory() as temp_dir:
