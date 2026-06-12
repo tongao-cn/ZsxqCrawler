@@ -48,6 +48,7 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     should_retry_http_status,
     should_log_full_response,
     summarize_page_time_range,
+    time_dedupe_page_plan,
 )
 
 
@@ -96,6 +97,34 @@ class QueryCaptureFileDb:
 
     def fetchall(self):
         return list(self.rows)
+
+
+class TimeDedupeFileDb:
+    def __init__(self, latest_time, initial_files=10, final_files=11):
+        self.cursor = self
+        self.latest_time = latest_time
+        self.initial_files = initial_files
+        self.final_files = final_files
+        self.stats_calls = 0
+        self.executed = []
+        self.imported_responses = []
+
+    def execute(self, query, params=()):
+        self.executed.append((query, tuple(params)))
+        return self
+
+    def fetchone(self):
+        return (self.latest_time,)
+
+    def get_database_stats(self):
+        self.stats_calls += 1
+        if self.stats_calls == 1:
+            return {"files": self.initial_files}
+        return {"files": self.final_files, "topics": 2}
+
+    def import_file_response(self, data):
+        self.imported_responses.append(data)
+        return {"files": 1, "topics": 2}
 
 
 class FakeDownloadResponse:
@@ -216,6 +245,43 @@ class FileDownloaderPaginationTests(unittest.TestCase):
         self.assertEqual(1, len(downloader.fetch_calls))
         self.assertEqual(1, downloader.file_db.import_calls)
         self.assertEqual(0, stats["files"])
+
+    def test_collect_files_by_time_filters_old_files_and_stops_after_mixed_page(self):
+        files = [
+            {"file": {"file_id": 101, "create_time": "2026-05-03T10:00:00"}},
+            {"file": {"file_id": 102, "create_time": "2026-05-01T10:00:00"}},
+        ]
+        downloader = object.__new__(ZSXQFileDownloader)
+        downloader.group_id = "511"
+        downloader.file_db = TimeDedupeFileDb("2026-05-02T00:00:00")
+        downloader.logs = []
+        downloader.fetch_calls = []
+        downloader.log = downloader.logs.append
+        downloader.check_stop = lambda: False
+
+        def fetch_file_list(**kwargs):
+            downloader.fetch_calls.append(kwargs)
+            return {"resp_data": {"index": "next-page", "files": list(files)}}
+
+        downloader.fetch_file_list = fetch_file_list
+
+        stats = ZSXQFileDownloader.collect_files_by_time(downloader)
+
+        imported_files = downloader.file_db.imported_responses[0]["resp_data"]["files"]
+        self.assertEqual([101], [item["file"]["file_id"] for item in imported_files])
+        self.assertEqual(1, len(downloader.fetch_calls))
+        self.assertEqual([{"count": 20, "index": None, "sort": "by_create_time"}], downloader.fetch_calls)
+        self.assertEqual(2, downloader.file_db.stats_calls)
+        self.assertEqual(11, stats["total_files"])
+        self.assertEqual(1, stats["new_files"])
+        self.assertEqual(1, stats["pages"])
+        self.assertEqual(1, stats["files"])
+        self.assertEqual(2, stats["topics"])
+        self.assertIn("   📅 数据库最新文件时间: 2026-05-02T00:00:00", downloader.logs)
+        self.assertIn("   📊 时间分析: 新于数据库1个, 旧于或等于数据库1个", downloader.logs)
+        self.assertIn("   🔄 过滤掉1个旧数据，只插入1个新数据", downloader.logs)
+        self.assertIn("   ✅ 已插入本页新数据，后续页面均为旧数据，停止收集", downloader.logs)
+        self.assertNotIn("   ⏭️ 下一页时间戳: next-page", downloader.logs)
 
 
 class FileDownloaderBatchDownloadTests(unittest.TestCase):
@@ -403,6 +469,34 @@ class FileDownloaderTimeHelperTests(unittest.TestCase):
 
         self.assertEqual([1], [item["file"]["file_id"] for item in newer_files])
         self.assertEqual(2, older_count)
+
+    def test_time_dedupe_page_plan_flags_mixed_and_all_old_pages(self):
+        mixed_plan = time_dedupe_page_plan(
+            [
+                {"file": {"file_id": 1, "create_time": "2026-05-03T00:00:00"}},
+                {"file": {"file_id": 2, "create_time": "2026-05-01T00:00:00"}},
+            ],
+            "2026-05-02T00:00:00",
+        )
+
+        self.assertEqual([1], [item["file"]["file_id"] for item in mixed_plan["newer_files"]])
+        self.assertEqual(1, mixed_plan["newer_count"])
+        self.assertEqual(1, mixed_plan["older_count"])
+        self.assertFalse(mixed_plan["should_stop_before_insert"])
+        self.assertTrue(mixed_plan["should_filter_before_insert"])
+        self.assertTrue(mixed_plan["should_stop_after_insert"])
+
+        old_plan = time_dedupe_page_plan(
+            [{"file": {"file_id": 3, "create_time": "2026-05-01T00:00:00"}}],
+            "2026-05-02T00:00:00",
+        )
+
+        self.assertEqual([], old_plan["newer_files"])
+        self.assertEqual(0, old_plan["newer_count"])
+        self.assertEqual(1, old_plan["older_count"])
+        self.assertTrue(old_plan["should_stop_before_insert"])
+        self.assertFalse(old_plan["should_filter_before_insert"])
+        self.assertFalse(old_plan["should_stop_after_insert"])
 
     def test_page_crosses_stop_before_returns_oldest_time(self):
         crossed, oldest = page_crosses_stop_before(

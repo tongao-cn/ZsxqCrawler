@@ -205,6 +205,19 @@ def filter_files_newer_than(files: list[Dict[str, Any]], latest_time: str) -> tu
     return newer_files, len(files) - len(newer_files)
 
 
+def time_dedupe_page_plan(files: list[Dict[str, Any]], latest_time: str) -> Dict[str, Any]:
+    newer_files, older_count = filter_files_newer_than(files, latest_time)
+    newer_count = len(newer_files)
+    return {
+        "newer_files": newer_files,
+        "newer_count": newer_count,
+        "older_count": older_count,
+        "should_stop_before_insert": newer_count == 0,
+        "should_filter_before_insert": newer_count > 0 and older_count > 0,
+        "should_stop_after_insert": newer_count > 0 and older_count > 0,
+    }
+
+
 def page_crosses_stop_before(
     files: list[Dict[str, Any]],
     stop_before_time: datetime.datetime,
