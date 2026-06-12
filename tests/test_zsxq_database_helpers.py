@@ -2,6 +2,7 @@ import unittest
 from unittest.mock import patch
 
 from backend.storage.zsxq_database import (
+    _answer_insert_statement,
     _build_pagination,
     _comment_insert_statement,
     _delete_latest_likes_statement,
@@ -19,6 +20,7 @@ from backend.storage.zsxq_database import (
     _newest_topic_create_time_query,
     _nullable_group_id_param,
     _oldest_topic_create_time_query,
+    _question_insert_statement,
     _refresh_tag_topic_count_statement,
     _replace_file_topic_relation,
     _talk_insert_statement,
@@ -960,6 +962,78 @@ class ZSXQDatabaseHelperTests(unittest.TestCase):
         _default_sql, default_params = _comment_insert_statement(202, 102, None, None, None, {}, "now")
         self.assertEqual((102, None, 202, None, None, None, "", "", 0, 0, 0, False, "now"), default_params)
 
+    def test_question_and_answer_insert_statement_helpers_preserve_sql_shape_and_params(self):
+        question_sql, question_params = _question_insert_statement(
+            202,
+            None,
+            902,
+            True,
+            {
+                "text": "anonymous question",
+                "expired": True,
+                "owner_detail": {
+                    "questions_count": 7,
+                    "estimated_join_time": "2024-01-01T00:00:00.000+0800",
+                    "status": "active",
+                },
+                "owner_location": "Shanghai",
+            },
+            "2026-06-12T10:00:00.000+0800",
+        )
+
+        self.assertEqual(
+            "INSERT INTO questions (topic_id, owner_user_id, questionee_user_id, text, "
+            "expired, anonymous, owner_questions_count, owner_join_time, owner_status, "
+            "owner_location, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
+            "ON CONFLICT(topic_id) DO UPDATE SET owner_user_id = excluded.owner_user_id, "
+            "questionee_user_id = excluded.questionee_user_id, text = excluded.text, "
+            "expired = excluded.expired, anonymous = excluded.anonymous, "
+            "owner_questions_count = excluded.owner_questions_count, "
+            "owner_join_time = excluded.owner_join_time, owner_status = excluded.owner_status, "
+            "owner_location = excluded.owner_location, created_at = excluded.created_at",
+            " ".join(question_sql.split()),
+        )
+        self.assertEqual(
+            (
+                202,
+                None,
+                902,
+                "anonymous question",
+                True,
+                True,
+                7,
+                "2024-01-01T00:00:00.000+0800",
+                "active",
+                "Shanghai",
+                "2026-06-12T10:00:00.000+0800",
+            ),
+            question_params,
+        )
+
+        _default_question_sql, default_question_params = _question_insert_statement(
+            202,
+            901,
+            None,
+            False,
+            {},
+            "now",
+        )
+        self.assertEqual((202, 901, None, "", False, False, None, "", "", "", "now"), default_question_params)
+
+        answer_sql, answer_params = _answer_insert_statement(
+            202,
+            901,
+            {"text": "answer text"},
+            "2026-06-12T10:00:00.000+0800",
+        )
+        self.assertEqual(
+            "INSERT INTO answers (topic_id, owner_user_id, text, created_at) VALUES (?, ?, ?, ?) "
+            "ON CONFLICT(topic_id) DO UPDATE SET owner_user_id = excluded.owner_user_id, "
+            "text = excluded.text, created_at = excluded.created_at",
+            " ".join(answer_sql.split()),
+        )
+        self.assertEqual((202, 901, "answer text", "2026-06-12T10:00:00.000+0800"), answer_params)
+
     def test_replace_file_topic_relation_deletes_then_inserts(self):
         file_db = FakeFileDatabase()
 
@@ -1658,6 +1732,93 @@ class ZSXQDatabaseHelperTests(unittest.TestCase):
 
         _default_sql, default_params = default_db.cursor.calls[0]
         self.assertEqual((102, None, 202, None, None, None, "", "", 0, 0, 0, False), default_params[:12])
+
+    def test_upsert_question_preserves_anonymous_skip_defaults_and_owner_detail_fallback(self):
+        from backend.storage.zsxq_database import ZSXQDatabase
+
+        empty_db = object.__new__(ZSXQDatabase)
+        empty_db.cursor = FakeCursor()
+        ZSXQDatabase._upsert_question(empty_db, 202, {})
+        self.assertEqual([], empty_db.cursor.calls)
+
+        db = object.__new__(ZSXQDatabase)
+        db.cursor = FakeCursor()
+
+        ZSXQDatabase._upsert_question(
+            db,
+            202,
+            {
+                "text": "anonymous question",
+                "questionee": {"user_id": 902},
+                "anonymous": True,
+                "expired": True,
+                "owner_detail": {
+                    "questions_count": 7,
+                    "estimated_join_time": "2024-01-01T00:00:00.000+0800",
+                    "status": "active",
+                },
+                "owner_location": "Shanghai",
+            },
+        )
+
+        question_sql, question_params = db.cursor.calls[0]
+        self.assertEqual(
+            "INSERT INTO questions (topic_id, owner_user_id, questionee_user_id, text, "
+            "expired, anonymous, owner_questions_count, owner_join_time, owner_status, "
+            "owner_location, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
+            "ON CONFLICT(topic_id) DO UPDATE SET owner_user_id = excluded.owner_user_id, "
+            "questionee_user_id = excluded.questionee_user_id, text = excluded.text, "
+            "expired = excluded.expired, anonymous = excluded.anonymous, "
+            "owner_questions_count = excluded.owner_questions_count, "
+            "owner_join_time = excluded.owner_join_time, owner_status = excluded.owner_status, "
+            "owner_location = excluded.owner_location, created_at = excluded.created_at",
+            question_sql,
+        )
+        self.assertEqual(
+            (
+                202,
+                None,
+                902,
+                "anonymous question",
+                True,
+                True,
+                7,
+                "2024-01-01T00:00:00.000+0800",
+                "active",
+                "Shanghai",
+            ),
+            question_params[:10],
+        )
+        self.assertRegex(question_params[10], r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}\+0800$")
+
+        default_db = object.__new__(ZSXQDatabase)
+        default_db.cursor = FakeCursor()
+        ZSXQDatabase._upsert_question(default_db, 202, {"owner": {"user_id": 901}})
+        _default_sql, default_params = default_db.cursor.calls[0]
+        self.assertEqual((202, 901, None, "", False, False, None, "", "", ""), default_params[:10])
+
+    def test_upsert_answer_preserves_skip_defaults_and_insert_params(self):
+        from backend.storage.zsxq_database import ZSXQDatabase
+
+        empty_db = object.__new__(ZSXQDatabase)
+        empty_db.cursor = FakeCursor()
+        ZSXQDatabase._upsert_answer(empty_db, 202, {})
+        self.assertEqual([], empty_db.cursor.calls)
+
+        db = object.__new__(ZSXQDatabase)
+        db.cursor = FakeCursor()
+
+        ZSXQDatabase._upsert_answer(db, 202, {"owner": {"user_id": 901}, "text": "answer text"})
+
+        answer_sql, answer_params = db.cursor.calls[0]
+        self.assertEqual(
+            "INSERT INTO answers (topic_id, owner_user_id, text, created_at) VALUES (?, ?, ?, ?) "
+            "ON CONFLICT(topic_id) DO UPDATE SET owner_user_id = excluded.owner_user_id, "
+            "text = excluded.text, created_at = excluded.created_at",
+            answer_sql,
+        )
+        self.assertEqual((202, 901, "answer text"), answer_params[:3])
+        self.assertRegex(answer_params[3], r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}\+0800$")
 
     def test_upsert_article_uses_topic_create_time_and_preserves_empty_payload_skip(self):
         from backend.storage.zsxq_database import ZSXQDatabase

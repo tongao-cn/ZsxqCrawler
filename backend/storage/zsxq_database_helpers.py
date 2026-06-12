@@ -451,6 +451,74 @@ def comment_insert_statement(
     )
 
 
+def question_insert_statement(
+    topic_id: int,
+    owner_user_id: Any,
+    questionee_user_id: Any,
+    is_anonymous: bool,
+    question_data: Dict[str, Any],
+    created_at: str,
+) -> tuple[str, tuple[Any, ...]]:
+    owner_detail = question_data.get("owner_detail", {})
+    return (
+        """
+            INSERT INTO questions
+            (topic_id, owner_user_id, questionee_user_id, text, expired, anonymous,
+             owner_questions_count, owner_join_time, owner_status, owner_location, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(topic_id) DO UPDATE SET
+                owner_user_id = excluded.owner_user_id,
+                questionee_user_id = excluded.questionee_user_id,
+                text = excluded.text,
+                expired = excluded.expired,
+                anonymous = excluded.anonymous,
+                owner_questions_count = excluded.owner_questions_count,
+                owner_join_time = excluded.owner_join_time,
+                owner_status = excluded.owner_status,
+                owner_location = excluded.owner_location,
+                created_at = excluded.created_at
+        """,
+        (
+            topic_id,
+            owner_user_id,
+            questionee_user_id,
+            question_data.get("text", ""),
+            question_data.get("expired", False),
+            is_anonymous,
+            owner_detail.get("questions_count"),
+            owner_detail.get("join_time", owner_detail.get("estimated_join_time", "")),
+            owner_detail.get("status", ""),
+            question_data.get("owner_location", ""),
+            created_at,
+        ),
+    )
+
+
+def answer_insert_statement(
+    topic_id: int,
+    owner_user_id: Any,
+    answer_data: Dict[str, Any],
+    created_at: str,
+) -> tuple[str, tuple[Any, ...]]:
+    return (
+        """
+            INSERT INTO answers
+            (topic_id, owner_user_id, text, created_at)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(topic_id) DO UPDATE SET
+                owner_user_id = excluded.owner_user_id,
+                text = excluded.text,
+                created_at = excluded.created_at
+        """,
+        (
+            topic_id,
+            owner_user_id,
+            answer_data.get("text", ""),
+            created_at,
+        ),
+    )
+
+
 def update_tag_hid_statement(tag_id: int, hid: str) -> tuple[str, tuple[Any, ...]]:
     return "UPDATE tags SET hid = ? WHERE tag_id = ?", (hid, tag_id)
 

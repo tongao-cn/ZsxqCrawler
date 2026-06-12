@@ -4873,6 +4873,56 @@ Result:
 - `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
 - Frontend build is not planned because this slice only changes backend storage/helper code.
 
+### 2026-06-12 - P2 Q&A insert statement helper extraction
+
+Changed:
+
+- Added `question_insert_statement` and `answer_insert_statement` to
+  `backend/storage/zsxq_database_helpers.py`, with compatibility wrappers in
+  `backend/storage/zsxq_database.py`.
+- Replaced inline `INSERT INTO questions` and `INSERT INTO answers` SQL and params in
+  `_upsert_question` and `_upsert_answer` with helper-returned SQL and params.
+- Added characterization coverage for anonymous question writes, missing-question skip,
+  answer missing-owner skip, `owner_detail.estimated_join_time` fallback, Q&A defaults,
+  generated Beijing-time `created_at`, and full helper SQL/parameter order.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- `_upsert_question` still skips only when both `owner.user_id` and question `text` are missing.
+- Anonymous questions can still write with `owner_user_id=None` when text exists.
+- `owner_detail.join_time` still has priority over `owner_detail.estimated_join_time`, which still
+  falls back to an empty string when both are absent.
+- Question defaults for `text`, `expired`, `anonymous`, `owner_questions_count`, `owner_status`, and
+  `owner_location` are preserved.
+- `_upsert_answer` still returns before any database call when `owner.user_id` is missing/falsy.
+- Answer text still defaults to an empty string, and both Q&A writes keep the same
+  `ON CONFLICT(topic_id) DO UPDATE SET` update lists.
+- Timestamp formatting remains the existing Beijing-time `YYYY-MM-DDTHH:MM:SS.mmm+0800` string.
+- No schema, config, compatibility, fallback, error handling, logging, commit order, or public API
+  semantics were changed.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_database_helpers -v
+uv run python -m py_compile backend\storage\zsxq_database.py backend\storage\zsxq_database_helpers.py tests\test_zsxq_database_helpers.py
+uv run python -m unittest tests.test_zsxq_database_helpers -v
+uv run python -m unittest discover -s tests
+uv run python scripts\scan_postgres_compat_debt.py
+git diff --check
+```
+
+Result:
+
+- Pre-refactor characterization run passed against the original implementation.
+- `py_compile` passed.
+- `tests.test_zsxq_database_helpers`: 53 tests passed.
+- Full backend unittest discovery: 656 tests passed, 15 skipped.
+- PostgreSQL compatibility debt scan: no SQLite compatibility patterns found.
+- `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
+- Frontend build is not planned because this slice only changes backend storage/helper code.
+
 ## Stop Conditions
 
 Pause before editing if:

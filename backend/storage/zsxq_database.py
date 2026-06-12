@@ -5,6 +5,7 @@ from typing import Dict, Any, Optional, List
 
 from backend.storage.db_compat import connect
 from backend.storage.zsxq_database_helpers import (
+    answer_insert_statement,
     build_pagination,
     comment_insert_statement,
     delete_latest_likes_statement,
@@ -28,6 +29,7 @@ from backend.storage.zsxq_database_helpers import (
     newest_topic_create_time_query,
     nullable_group_id_param,
     oldest_topic_create_time_query,
+    question_insert_statement,
     refresh_tag_topic_count_statement,
     replace_file_topic_relation,
     tag_id_by_name_query,
@@ -172,6 +174,33 @@ def _comment_insert_statement(
         comment_data,
         imported_at,
     )
+
+
+def _question_insert_statement(
+    topic_id: int,
+    owner_user_id: Any,
+    questionee_user_id: Any,
+    is_anonymous: bool,
+    question_data: Dict[str, Any],
+    created_at: str,
+) -> tuple[str, tuple[Any, ...]]:
+    return question_insert_statement(
+        topic_id,
+        owner_user_id,
+        questionee_user_id,
+        is_anonymous,
+        question_data,
+        created_at,
+    )
+
+
+def _answer_insert_statement(
+    topic_id: int,
+    owner_user_id: Any,
+    answer_data: Dict[str, Any],
+    created_at: str,
+) -> tuple[str, tuple[Any, ...]]:
+    return answer_insert_statement(topic_id, owner_user_id, answer_data, created_at)
 
 
 def _update_tag_hid_statement(tag_id: int, hid: str) -> tuple[str, tuple[Any, ...]]:
@@ -780,42 +809,20 @@ class ZSXQDatabase:
         if not owner_user_id and not question_data.get('text'):
             return
 
-        owner_detail = question_data.get('owner_detail', {})
-
         # 获取当前时间作为created_at（使用东八区时间格式）
         from datetime import datetime, timezone, timedelta
         beijing_tz = timezone(timedelta(hours=8))
         current_time = datetime.now(beijing_tz).strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + '+0800'
 
-        self.cursor.execute('''
-            INSERT INTO questions
-            (topic_id, owner_user_id, questionee_user_id, text, expired, anonymous,
-             owner_questions_count, owner_join_time, owner_status, owner_location, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT(topic_id) DO UPDATE SET
-                owner_user_id = excluded.owner_user_id,
-                questionee_user_id = excluded.questionee_user_id,
-                text = excluded.text,
-                expired = excluded.expired,
-                anonymous = excluded.anonymous,
-                owner_questions_count = excluded.owner_questions_count,
-                owner_join_time = excluded.owner_join_time,
-                owner_status = excluded.owner_status,
-                owner_location = excluded.owner_location,
-                created_at = excluded.created_at
-        ''', (
+        sql, params = _question_insert_statement(
             topic_id,
-            owner_user_id,  # 对于匿名用户可能为 None
+            owner_user_id,
             questionee_user_id,
-            question_data.get('text', ''),
-            question_data.get('expired', False),
             is_anonymous,
-            owner_detail.get('questions_count'),
-            owner_detail.get('join_time', owner_detail.get('estimated_join_time', '')),  # 支持 estimated_join_time
-            owner_detail.get('status', ''),
-            question_data.get('owner_location', ''),
-            current_time
-        ))
+            question_data,
+            current_time,
+        )
+        self.cursor.execute(sql, params)
 
     
     def _upsert_answer(self, topic_id: int, answer_data: Dict[str, Any]):
@@ -830,20 +837,13 @@ class ZSXQDatabase:
         beijing_tz = timezone(timedelta(hours=8))
         current_time = datetime.now(beijing_tz).strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + '+0800'
         
-        self.cursor.execute('''
-            INSERT INTO answers 
-            (topic_id, owner_user_id, text, created_at)
-            VALUES (?, ?, ?, ?)
-            ON CONFLICT(topic_id) DO UPDATE SET
-                owner_user_id = excluded.owner_user_id,
-                text = excluded.text,
-                created_at = excluded.created_at
-        ''', (
+        sql, params = _answer_insert_statement(
             topic_id,
             owner_user_id,
-            answer_data.get('text', ''),
-            current_time
-        ))
+            answer_data,
+            current_time,
+        )
+        self.cursor.execute(sql, params)
 
     
     def _import_articles(self, topic_id: int, topic_data: Dict[str, Any]):
