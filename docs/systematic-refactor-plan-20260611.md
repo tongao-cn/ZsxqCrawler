@@ -4390,6 +4390,48 @@ Result:
 - `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
 - Frontend build is not planned because this slice only changes backend storage/helper code.
 
+### 2026-06-12 - P2 tag link statement helper extraction
+
+Changed:
+
+- Added `insert_topic_tag_statement` and `refresh_tag_topic_count_statement` to
+  `backend/storage/zsxq_database_helpers.py`, with compatibility wrappers in
+  `backend/storage/zsxq_database.py`.
+- Replaced inline topic-tag insert and tag topic-count refresh SQL in `_link_topic_tag` with
+  helper-returned SQL and params.
+- Added characterization coverage for SQL shape, params, generated Beijing-time `created_at`,
+  insert-before-count-refresh call order, and the existing exception-swallowing print path.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- `_link_topic_tag` still inserts `(topic_id, tag_id, created_at)` with
+  `ON CONFLICT(topic_id, tag_id) DO NOTHING`, then refreshes `tags.topic_count` from
+  `topic_tags`.
+- It still has no return value and still catches exceptions by printing `关联话题标签失败: ...`
+  without re-raising.
+- No schema, config, compatibility, fallback, error handling, logging, or public API semantics were
+  changed.
+
+Verification:
+
+```powershell
+uv run python -m py_compile backend\storage\zsxq_database.py backend\storage\zsxq_database_helpers.py tests\test_zsxq_database_helpers.py
+uv run python -m unittest tests.test_zsxq_database_helpers -v
+uv run python -m unittest discover -s tests
+uv run python scripts\scan_postgres_compat_debt.py
+git diff --check
+```
+
+Result:
+
+- `py_compile` passed.
+- `tests.test_zsxq_database_helpers`: 29 tests passed.
+- Full backend unittest discovery: 632 tests passed, 15 skipped.
+- PostgreSQL compatibility debt scan: no SQLite compatibility patterns found.
+- `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
+- Frontend build is not planned because this slice only changes backend storage/helper code.
+
 ## Stop Conditions
 
 Pause before editing if:

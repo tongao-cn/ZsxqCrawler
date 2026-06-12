@@ -73,6 +73,28 @@ def insert_tag_statement(
     )
 
 
+def insert_topic_tag_statement(topic_id: int, tag_id: int, created_at: str) -> tuple[str, tuple[Any, ...]]:
+    return (
+        """
+                INSERT INTO topic_tags (topic_id, tag_id, created_at)
+                VALUES (?, ?, ?)
+                ON CONFLICT(topic_id, tag_id) DO NOTHING
+            """,
+        (topic_id, tag_id, created_at),
+    )
+
+
+def refresh_tag_topic_count_statement(tag_id: int) -> tuple[str, tuple[Any, ...]]:
+    return (
+        """
+                UPDATE tags SET topic_count = (
+                    SELECT COUNT(*) FROM topic_tags WHERE tag_id = ?
+                ) WHERE tag_id = ?
+            """,
+        (tag_id, tag_id),
+    )
+
+
 def group_id_param(group_id: Optional[str]) -> Any:
     value = str(group_id or "").strip()
     return int(value) if value.isdigit() else value

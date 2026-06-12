@@ -11,6 +11,7 @@ from backend.storage.zsxq_database_helpers import (
     format_tag_topic_row,
     group_id_param,
     insert_tag_statement,
+    insert_topic_tag_statement,
     load_topic_detail_base,
     load_topic_detail_comments,
     load_topic_detail_latest_likes,
@@ -20,6 +21,7 @@ from backend.storage.zsxq_database_helpers import (
     newest_topic_create_time_query,
     nullable_group_id_param,
     oldest_topic_create_time_query,
+    refresh_tag_topic_count_statement,
     replace_file_topic_relation,
     tag_id_by_name_query,
     topic_create_time_by_id_query,
@@ -57,6 +59,16 @@ def _insert_tag_statement(
     group_id: int, tag_name: str, hid: Optional[str], created_at: str
 ) -> tuple[str, tuple[Any, ...]]:
     return insert_tag_statement(group_id, tag_name, hid, created_at)
+
+
+def _insert_topic_tag_statement(
+    topic_id: int, tag_id: int, created_at: str
+) -> tuple[str, tuple[Any, ...]]:
+    return insert_topic_tag_statement(topic_id, tag_id, created_at)
+
+
+def _refresh_tag_topic_count_statement(tag_id: int) -> tuple[str, tuple[Any, ...]]:
+    return refresh_tag_topic_count_statement(tag_id)
 
 
 def _replace_file_topic_relation(file_db, file_id: int, topic_id: int) -> int:
@@ -1273,18 +1285,12 @@ class ZSXQDatabase:
             beijing_tz = timezone(timedelta(hours=8))
             current_time = datetime.now(beijing_tz).strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + '+0800'
             
-            self.cursor.execute('''
-                INSERT INTO topic_tags (topic_id, tag_id, created_at)
-                VALUES (?, ?, ?)
-                ON CONFLICT(topic_id, tag_id) DO NOTHING
-            ''', (topic_id, tag_id, current_time))
+            sql, params = _insert_topic_tag_statement(topic_id, tag_id, current_time)
+            self.cursor.execute(sql, params)
             
             # 更新标签的话题计数
-            self.cursor.execute('''
-                UPDATE tags SET topic_count = (
-                    SELECT COUNT(*) FROM topic_tags WHERE tag_id = ?
-                ) WHERE tag_id = ?
-            ''', (tag_id, tag_id))
+            sql, params = _refresh_tag_topic_count_statement(tag_id)
+            self.cursor.execute(sql, params)
             
         except Exception as e:
             print(f"关联话题标签失败: {e}")

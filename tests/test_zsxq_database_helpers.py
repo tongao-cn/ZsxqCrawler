@@ -8,9 +8,11 @@ from backend.storage.zsxq_database import (
     _format_tag_topic_row,
     _group_id_param,
     _insert_tag_statement,
+    _insert_topic_tag_statement,
     _newest_topic_create_time_query,
     _nullable_group_id_param,
     _oldest_topic_create_time_query,
+    _refresh_tag_topic_count_statement,
     _replace_file_topic_relation,
     _tag_id_by_name_query,
     _topic_create_time_by_id_query,
@@ -56,6 +58,12 @@ class FakeTimestampCursor(FakeCursor):
 
 class FakeSequenceCursor(FakeTimestampCursor):
     pass
+
+
+class FakeFailingExecuteCursor(FakeCursor):
+    def execute(self, query, params=()):
+        super().execute(query, params)
+        raise RuntimeError("temporary tag-link failure")
 
 
 class FakeFileDatabase:
@@ -492,6 +500,26 @@ class ZSXQDatabaseHelperTests(unittest.TestCase):
         )
         self.assertEqual((303, "AI", "hid-1", "2026-06-12T10:00:00.000+0800"), insert_params)
 
+        topic_tag_sql, topic_tag_params = _insert_topic_tag_statement(
+            202,
+            7,
+            "2026-06-12T10:00:00.000+0800",
+        )
+        self.assertEqual(
+            "INSERT INTO topic_tags (topic_id, tag_id, created_at) VALUES (?, ?, ?) "
+            "ON CONFLICT(topic_id, tag_id) DO NOTHING",
+            " ".join(topic_tag_sql.split()),
+        )
+        self.assertEqual((202, 7, "2026-06-12T10:00:00.000+0800"), topic_tag_params)
+
+        count_sql, count_params = _refresh_tag_topic_count_statement(7)
+        self.assertEqual(
+            "UPDATE tags SET topic_count = ( SELECT COUNT(*) FROM topic_tags WHERE tag_id = ? ) "
+            "WHERE tag_id = ?",
+            " ".join(count_sql.split()),
+        )
+        self.assertEqual((7, 7), count_params)
+
     def test_replace_file_topic_relation_deletes_then_inserts(self):
         file_db = FakeFileDatabase()
 
@@ -885,6 +913,39 @@ class ZSXQDatabaseHelperTests(unittest.TestCase):
         missing_return_db = object.__new__(ZSXQDatabase)
         missing_return_db.cursor = FakeSequenceCursor([None, None])
         self.assertIsNone(ZSXQDatabase._upsert_tag(missing_return_db, 303, "AI", "hid-3"))
+
+    def test_link_topic_tag_inserts_relation_refreshes_count_and_swallows_errors(self):
+        from backend.storage.zsxq_database import ZSXQDatabase
+
+        db = object.__new__(ZSXQDatabase)
+        db.cursor = FakeCursor()
+
+        ZSXQDatabase._link_topic_tag(db, 202, 7)
+
+        self.assertEqual(2, len(db.cursor.calls))
+        insert_sql, insert_params = db.cursor.calls[0]
+        self.assertEqual(
+            "INSERT INTO topic_tags (topic_id, tag_id, created_at) VALUES (?, ?, ?) "
+            "ON CONFLICT(topic_id, tag_id) DO NOTHING",
+            insert_sql,
+        )
+        self.assertEqual((202, 7), insert_params[:2])
+        self.assertRegex(insert_params[2], r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}\+0800$")
+        self.assertEqual(
+            (
+                "UPDATE tags SET topic_count = ( SELECT COUNT(*) FROM topic_tags WHERE tag_id = ? ) "
+                "WHERE tag_id = ?",
+                (7, 7),
+            ),
+            db.cursor.calls[1],
+        )
+
+        failing_db = object.__new__(ZSXQDatabase)
+        failing_db.cursor = FakeFailingExecuteCursor()
+        with patch("builtins.print") as mocked_print:
+            self.assertIsNone(ZSXQDatabase._link_topic_tag(failing_db, 202, 7))
+        mocked_print.assert_called_once()
+        self.assertEqual(1, len(failing_db.cursor.calls))
 
     def test_content_child_writes_use_explicit_unique_semantics(self):
         from backend.storage.zsxq_database import ZSXQDatabase
