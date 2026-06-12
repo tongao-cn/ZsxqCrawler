@@ -50,6 +50,7 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     response_filename_override,
     should_log_full_response,
     summarize_page_time_range,
+    time_collection_final_summary,
     time_dedupe_page_plan,
 )
 from backend.storage.postgres_core_schema import CORE_SCHEMA
@@ -1288,28 +1289,25 @@ class ZSXQFileDownloader:
 
         # 最终统计
         final_stats = self.file_db.get_database_stats()
-        final_files = final_stats.get('files', 0)
-        new_files = final_files - initial_files
+        summary = time_collection_final_summary(
+            final_stats,
+            initial_files,
+            total_imported_stats,
+            page_count,
+        )
 
         self.log(f"🎉 完整文件列表收集完成:")
         self.log(f"   📊 处理页数: {page_count}")
-        self.log(f"   📁 新增文件: {new_files} (总计: {final_files})")
+        self.log(f"   📁 新增文件: {summary['new_files']} (总计: {summary['final_files']})")
         self.log(f"   📋 累计导入统计:")
-        for key, value in total_imported_stats.items():
-            if value > 0:
-                self.log(f"      {key}: +{value}")
+        for key, value in summary["imported_items"]:
+            self.log(f"      {key}: +{value}")
 
         self.log("   📚 当前数据库状态:")
-        for table, count in final_stats.items():
-            if count > 0:
-                self.log(f"      {table}: {count}")
-        
-        return {
-            'total_files': final_files,
-            'new_files': new_files,
-            'pages': page_count,
-            **total_imported_stats
-        }
+        for table, count in summary["database_items"]:
+            self.log(f"      {table}: {count}")
+
+        return summary["result"]
     
     def collect_incremental_files(self) -> Dict[str, int]:
         """增量收集：从数据库最老时间戳开始继续收集"""

@@ -218,6 +218,28 @@ def time_dedupe_page_plan(files: list[Dict[str, Any]], latest_time: str) -> Dict
     }
 
 
+def time_collection_final_summary(
+    final_stats: Dict[str, int],
+    initial_files: int,
+    total_imported_stats: Dict[str, int],
+    page_count: int,
+) -> Dict[str, Any]:
+    final_files = final_stats.get("files", 0)
+    new_files = final_files - initial_files
+    return {
+        "final_files": final_files,
+        "new_files": new_files,
+        "imported_items": tuple((key, value) for key, value in total_imported_stats.items() if value > 0),
+        "database_items": tuple((table, count) for table, count in final_stats.items() if count > 0),
+        "result": {
+            "total_files": final_files,
+            "new_files": new_files,
+            "pages": page_count,
+            **total_imported_stats,
+        },
+    }
+
+
 def page_crosses_stop_before(
     files: list[Dict[str, Any]],
     stop_before_time: datetime.datetime,

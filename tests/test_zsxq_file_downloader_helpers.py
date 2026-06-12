@@ -48,6 +48,7 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     should_retry_http_status,
     should_log_full_response,
     summarize_page_time_range,
+    time_collection_final_summary,
     time_dedupe_page_plan,
 )
 
@@ -497,6 +498,31 @@ class FileDownloaderTimeHelperTests(unittest.TestCase):
         self.assertTrue(old_plan["should_stop_before_insert"])
         self.assertFalse(old_plan["should_filter_before_insert"])
         self.assertFalse(old_plan["should_stop_after_insert"])
+
+    def test_time_collection_final_summary_preserves_result_and_positive_log_items(self):
+        total_imported_stats = empty_import_stats()
+        total_imported_stats.update({"files": 2, "topics": 0, "users": 1})
+
+        summary = time_collection_final_summary(
+            {"files": 12, "topics": 3, "users": 0},
+            initial_files=10,
+            total_imported_stats=total_imported_stats,
+            page_count=4,
+        )
+
+        self.assertEqual(12, summary["final_files"])
+        self.assertEqual(2, summary["new_files"])
+        self.assertEqual((("files", 2), ("users", 1)), summary["imported_items"])
+        self.assertEqual((("files", 12), ("topics", 3)), summary["database_items"])
+        self.assertEqual(
+            {
+                "total_files": 12,
+                "new_files": 2,
+                "pages": 4,
+                **total_imported_stats,
+            },
+            summary["result"],
+        )
 
     def test_page_crosses_stop_before_returns_oldest_time(self):
         crossed, oldest = page_crosses_stop_before(

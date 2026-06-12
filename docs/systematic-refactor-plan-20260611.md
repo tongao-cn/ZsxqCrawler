@@ -6888,6 +6888,48 @@ Result:
 - Frontend build passed, including Next.js lint/type checks.
 - `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
 
+### 2026-06-12 - P9 file downloader time collection final summary helper
+
+Changed:
+
+- Added direct helper coverage for `collect_files_by_time` final summary calculation.
+- Locked the final total/new file counts, page count, imported-stat return shape, and positive-only
+  log item filtering used by the final collection summary.
+- Extracted `time_collection_final_summary` into
+  `backend/crawlers/zsxq_file_downloader_helpers.py` and reused it from `collect_files_by_time`.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Final database stat lookup, new-file delta calculation, returned keys, imported-stat expansion,
+  positive-only imported-stat logs, positive-only database-state logs, page count, schema/config/API
+  behavior, and public API behavior are unchanged.
+- The outer `collect_files_by_time` loop still owns stop checks, fetch failures, time dedupe,
+  import exception handling, stop-before-date checks, next-page sleep, and final log messages.
+- This does not introduce, remove, or alter legacy/fallback behavior.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderTimeHelperTests.test_time_collection_final_summary_preserves_result_and_positive_log_items tests.test_zsxq_file_downloader_helpers.FileDownloaderPaginationTests.test_collect_files_by_time_filters_old_files_and_stops_after_mixed_page -v
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py backend\crawlers\zsxq_file_downloader_helpers.py tests\test_zsxq_file_downloader_helpers.py
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+git diff --check
+```
+
+Result:
+
+- Focused final-summary helper and mixed-page collection tests passed.
+- `py_compile` passed.
+- `tests.test_zsxq_file_downloader_helpers`: 85 tests passed.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Full backend unittest discovery: 727 tests passed, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+- `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
+
 ## Stop Conditions
 
 Pause before editing if:
