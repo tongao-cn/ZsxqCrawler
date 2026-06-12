@@ -273,6 +273,16 @@ def _legacy_time_range_reached_before_start(
 ) -> bool:
     return last_time_dt_in_page is not None and last_time_dt_in_page < start_dt
 
+def _legacy_time_range_reached_before_start_with_log(
+    task_id: str,
+    last_time_dt_in_page: Optional[datetime],
+    start_dt: datetime,
+) -> bool:
+    if not _legacy_time_range_reached_before_start(last_time_dt_in_page, start_dt):
+        return False
+    add_task_log(task_id, "✅ 已到达起始时间之前，任务结束")
+    return True
+
 def _legacy_time_range_should_finish(
     reached_end: bool,
     last_time_dt_in_page: Optional[datetime],
@@ -835,8 +845,9 @@ def run_crawl_time_range_task(task_id: str, group_id: str, request: Any):
 
                 end_time_param = _legacy_next_end_time(topics, crawler.timestamp_offset_ms)
 
-                if _legacy_time_range_reached_before_start(last_time_dt_in_page, start_dt):
-                    add_task_log(task_id, "✅ 已到达起始时间之前，任务结束")
+                if _legacy_time_range_reached_before_start_with_log(
+                    task_id, last_time_dt_in_page, start_dt
+                ):
                     break
 
                 crawler.check_page_long_delay()
