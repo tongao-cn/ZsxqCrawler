@@ -21,6 +21,7 @@ from backend.storage.zsxq_columns_database import (
     _file_download_status_update,
     _group_clear_delete_statements,
     _image_local_path_update,
+    _iter_topic_comment_import_payloads,
     _group_topic_ids_query,
     _nest_topic_comments,
     _pending_file_row_to_dict,
@@ -1310,6 +1311,86 @@ class ZSXQColumnsDatabaseHelperTests(unittest.TestCase):
         self.assertIn("ON CONFLICT(comment_id) DO UPDATE SET", sql)
         self.assertIn("comment_id, group_id, topic_id", sql)
         self.assertEqual((101, 303, 202, 9, None, None, "ok", None, 0, 0, 0, False), params)
+
+    def test_import_comments_preserves_order_parent_mutation_and_commit(self):
+        from backend.storage.zsxq_columns_database import ZSXQColumnsDatabase
+
+        class FakeConnection:
+            def __init__(self):
+                self.commits = 0
+
+            def commit(self):
+                self.commits += 1
+
+        empty_db = object.__new__(ZSXQColumnsDatabase)
+        empty_db.conn = FakeConnection()
+        empty_calls = []
+        empty_db._insert_comment = lambda topic_id, comment: empty_calls.append((topic_id, comment))
+
+        self.assertEqual(0, ZSXQColumnsDatabase.import_comments(empty_db, 202, []))
+        self.assertEqual([], empty_calls)
+        self.assertEqual(0, empty_db.conn.commits)
+
+        db = object.__new__(ZSXQColumnsDatabase)
+        db.conn = FakeConnection()
+        inserted = []
+        db._insert_comment = lambda topic_id, comment: inserted.append((topic_id, comment))
+
+        comments = [
+            {
+                "comment_id": 701,
+                "text": "parent",
+                "replied_comments": [
+                    {"comment_id": 702, "text": "reply without parent"},
+                    {"comment_id": 703, "parent_comment_id": 999, "text": "reply with parent"},
+                ],
+            },
+            {
+                "comment_id": 704,
+                "text": "second parent",
+                "replied_comments": [],
+            },
+        ]
+
+        self.assertEqual(4, ZSXQColumnsDatabase.import_comments(db, 202, comments))
+
+        self.assertEqual(
+            [
+                (202, comments[0]),
+                (202, comments[0]["replied_comments"][0]),
+                (202, comments[0]["replied_comments"][1]),
+                (202, comments[1]),
+            ],
+            inserted,
+        )
+        self.assertEqual(701, comments[0]["replied_comments"][0]["parent_comment_id"])
+        self.assertEqual(999, comments[0]["replied_comments"][1]["parent_comment_id"])
+        self.assertEqual(1, db.conn.commits)
+
+    def test_iter_topic_comment_import_payloads_preserves_order_and_parent_mutation(self):
+        comments = [
+            {
+                "comment_id": 701,
+                "replied_comments": [
+                    {"comment_id": 702},
+                    {"comment_id": 703, "parent_comment_id": 999},
+                ],
+            },
+            {"comment_id": 704},
+        ]
+
+        self.assertEqual(
+            [
+                comments[0],
+                comments[0]["replied_comments"][0],
+                comments[0]["replied_comments"][1],
+                comments[1],
+            ],
+            list(_iter_topic_comment_import_payloads(comments)),
+        )
+        self.assertEqual(701, comments[0]["replied_comments"][0]["parent_comment_id"])
+        self.assertEqual(999, comments[0]["replied_comments"][1]["parent_comment_id"])
+        self.assertEqual([], list(_iter_topic_comment_import_payloads([])))
 
     def test_insert_media_and_comment_helpers_preserve_missing_id_skip_behavior(self):
         from backend.storage.zsxq_columns_database import ZSXQColumnsDatabase

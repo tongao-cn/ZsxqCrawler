@@ -30,6 +30,7 @@ from backend.storage.zsxq_columns_database_helpers import (
     _group_id_param,
     _group_topic_ids_query,
     _image_local_path_update,
+    _iter_topic_comment_import_payloads,
     _nullable_group_id_param,
     _pending_file_row_to_dict,
     _pending_files_query,
@@ -270,19 +271,9 @@ class ZSXQColumnsDatabase:
             return 0
 
         count = 0
-        for comment in comments:
-            # 插入主评论
+        for comment in _iter_topic_comment_import_payloads(comments):
             self._insert_comment(topic_id, comment)
             count += 1
-
-            # 插入嵌套的回复评论
-            replied_comments = comment.get('replied_comments', [])
-            for reply in replied_comments:
-                # 确保子评论有正确的 parent_comment_id
-                if not reply.get('parent_comment_id'):
-                    reply['parent_comment_id'] = comment.get('comment_id')
-                self._insert_comment(topic_id, reply)
-                count += 1
 
         self.conn.commit()
         return count

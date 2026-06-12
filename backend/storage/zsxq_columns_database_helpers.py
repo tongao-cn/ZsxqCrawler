@@ -1,6 +1,6 @@
 """Helper functions for ZSXQ columns storage."""
 
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Iterator, Optional
 
 
 def _column_row_to_dict(row) -> Dict[str, Any]:
@@ -330,6 +330,18 @@ def _topic_comment_insert_params(
         comment_data.get('replies_count', 0),
         comment_data.get('sticky', False)
     )
+
+
+def _iter_topic_comment_import_payloads(
+    comments: list[Dict[str, Any]],
+) -> Iterator[Dict[str, Any]]:
+    for comment in comments:
+        yield comment
+
+        for reply in comment.get('replied_comments', []):
+            if not reply.get('parent_comment_id'):
+                reply['parent_comment_id'] = comment.get('comment_id')
+            yield reply
 
 
 def _nest_topic_comments(comments: list[Dict[str, Any]]) -> list[Dict[str, Any]]:
