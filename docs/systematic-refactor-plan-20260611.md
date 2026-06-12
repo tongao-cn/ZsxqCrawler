@@ -5800,6 +5800,50 @@ Result:
 - PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
 - `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
 
+### 2026-06-12 - P3 column pending queue executor extraction
+
+Changed:
+
+- Added characterization coverage for `get_pending_videos`, `get_pending_files`, and
+  `get_uncached_images`, including scoped execute arity, unscoped execute arity, and returned row
+  shapes.
+- Added `ZSXQColumnsDatabase._fetch_optional_params_rows`.
+- Reused the helper from the three pending/cache queue readers to remove repeated optional-param
+  execute/fetchall branches.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Scoped queue queries still call `execute(sql, params)` with the same parameter tuple.
+- Unscoped queue queries still call `execute(sql)` without passing `None` as a params argument.
+- Pending video, pending file, and uncached image row shapes are preserved.
+- Existing SQL, schema, config, fallback behavior, logging, and public API behavior are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_columns_database_helpers.ZSXQColumnsDatabaseHelperTests.test_pending_queue_methods_preserve_execute_arity_and_row_shapes -v
+uv run python -m py_compile backend\storage\zsxq_columns_database.py tests\test_zsxq_columns_database_helpers.py
+uv run python -m unittest tests.test_zsxq_columns_database_helpers.ZSXQColumnsDatabaseHelperTests.test_pending_queue_methods_preserve_execute_arity_and_row_shapes tests.test_zsxq_columns_database_helpers.ZSXQColumnsDatabaseHelperTests.test_pending_queue_queries_preserve_group_filter_branches tests.test_zsxq_columns_database_helpers.ZSXQColumnsDatabaseHelperTests.test_pending_queue_queries_preserve_unscoped_branches -v
+uv run python -m unittest tests.test_zsxq_columns_database_helpers -v
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+uv run python scripts\scan_postgres_compat_debt.py
+git diff --check
+```
+
+Result:
+
+- Pre-refactor pending/cache queue method characterization test passed against the original inline
+  execute/fetchall branches.
+- `py_compile` passed.
+- Focused pending queue tests passed.
+- `tests.test_zsxq_columns_database_helpers`: 69 tests passed.
+- Full backend unittest discovery: 685 tests passed, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
+
 ## Stop Conditions
 
 Pause before editing if:

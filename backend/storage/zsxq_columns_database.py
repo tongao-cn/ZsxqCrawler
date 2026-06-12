@@ -333,16 +333,18 @@ class ZSXQColumnsDatabase:
         sql, params = _video_download_status_update(video_id, status, video_url, local_path)
         self.cursor.execute(sql, params)
         self.conn.commit()
-    
-    def get_pending_videos(self, group_id: int = None) -> List[Dict[str, Any]]:
-        """获取待下载的视频列表"""
-        sql, params = _pending_videos_query(group_id)
+
+    def _fetch_optional_params_rows(self, sql: str, params: Any):
         if params:
             self.cursor.execute(sql, params)
         else:
             self.cursor.execute(sql)
-        
-        return [_pending_video_row_to_dict(row) for row in self.cursor.fetchall()]
+        return self.cursor.fetchall()
+
+    def get_pending_videos(self, group_id: int = None) -> List[Dict[str, Any]]:
+        """获取待下载的视频列表"""
+        sql, params = _pending_videos_query(group_id)
+        return [_pending_video_row_to_dict(row) for row in self._fetch_optional_params_rows(sql, params)]
 
     def _load_topic_comment_images(
         self,
@@ -386,12 +388,7 @@ class ZSXQColumnsDatabase:
     def get_pending_files(self, group_id: int = None) -> List[Dict[str, Any]]:
         """获取待下载的文件列表"""
         sql, params = _pending_files_query(group_id)
-        if params:
-            self.cursor.execute(sql, params)
-        else:
-            self.cursor.execute(sql)
-        
-        return [_pending_file_row_to_dict(row) for row in self.cursor.fetchall()]
+        return [_pending_file_row_to_dict(row) for row in self._fetch_optional_params_rows(sql, params)]
     
     # ==================== 图片缓存 ====================
     
@@ -404,12 +401,7 @@ class ZSXQColumnsDatabase:
     def get_uncached_images(self, group_id: int = None) -> List[Dict[str, Any]]:
         """获取未缓存的图片列表"""
         sql, params = _uncached_images_query(group_id)
-        if params:
-            self.cursor.execute(sql, params)
-        else:
-            self.cursor.execute(sql)
-        
-        return [_uncached_image_row_to_dict(row) for row in self.cursor.fetchall()]
+        return [_uncached_image_row_to_dict(row) for row in self._fetch_optional_params_rows(sql, params)]
     
     # ==================== 统计信息 ====================
     

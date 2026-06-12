@@ -1017,6 +1017,75 @@ class ZSXQColumnsDatabaseHelperTests(unittest.TestCase):
         self.assertNotIn("AND td.group_id = ?", self._sql(image_sql))
         self.assertIsNone(image_params)
 
+    def test_pending_queue_methods_preserve_execute_arity_and_row_shapes(self):
+        from backend.storage.zsxq_columns_database import ZSXQColumnsDatabase
+
+        class FakeCursor:
+            def __init__(self):
+                self.calls = []
+                self.fetchall_results = [
+                    [(501, 202, 4096, 30, "cover-url", 303)],
+                    [(401, 202, "file.pdf", 8192, "hash", 304)],
+                    [(301, 202, "original-url", 305)],
+                ]
+
+            def execute(self, *args):
+                self.calls.append(args)
+
+            def fetchall(self):
+                return self.fetchall_results.pop(0)
+
+        db = object.__new__(ZSXQColumnsDatabase)
+        db.cursor = FakeCursor()
+
+        self.assertEqual(
+            [
+                {
+                    "video_id": 501,
+                    "topic_id": 202,
+                    "size": 4096,
+                    "duration": 30,
+                    "cover_url": "cover-url",
+                    "group_id": 303,
+                }
+            ],
+            ZSXQColumnsDatabase.get_pending_videos(db, 303),
+        )
+        self.assertEqual(
+            [
+                {
+                    "file_id": 401,
+                    "topic_id": 202,
+                    "name": "file.pdf",
+                    "size": 8192,
+                    "hash": "hash",
+                    "group_id": 304,
+                }
+            ],
+            ZSXQColumnsDatabase.get_pending_files(db),
+        )
+        self.assertEqual(
+            [
+                {
+                    "image_id": 301,
+                    "topic_id": 202,
+                    "original_url": "original-url",
+                    "group_id": 305,
+                }
+            ],
+            ZSXQColumnsDatabase.get_uncached_images(db),
+        )
+
+        self.assertEqual(2, len(db.cursor.calls[0]))
+        self.assertIn("WHERE v.download_status = 'pending' AND td.group_id = ?", self._sql(db.cursor.calls[0][0]))
+        self.assertEqual((303,), db.cursor.calls[0][1])
+        self.assertEqual(1, len(db.cursor.calls[1]))
+        self.assertIn("WHERE f.download_status = 'pending'", self._sql(db.cursor.calls[1][0]))
+        self.assertNotIn("AND td.group_id = ?", self._sql(db.cursor.calls[1][0]))
+        self.assertEqual(1, len(db.cursor.calls[2]))
+        self.assertIn("WHERE i.local_path IS NULL AND i.original_url IS NOT NULL", self._sql(db.cursor.calls[2][0]))
+        self.assertNotIn("AND td.group_id = ?", self._sql(db.cursor.calls[2][0]))
+
     def test_column_queries_preserve_scope_params_and_order(self):
         columns_sql, columns_params = _columns_query(303)
         self.assertIn("SELECT column_id, group_id, name, cover_url, topics_count", self._sql(columns_sql))
