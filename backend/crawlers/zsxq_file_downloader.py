@@ -889,6 +889,42 @@ class ZSXQFileDownloader:
             self.current_batch_count = 0  # 重置批次计数
             self.log(messages[1])
 
+    def _download_batch_file_item(
+        self,
+        file_info: Dict[str, Any],
+        item_number: int,
+        max_files: Optional[int],
+        has_more_in_batch: bool,
+        downloaded_in_batch: int,
+        stats: Dict[str, int],
+    ) -> int:
+        file_data = file_info.get('file', {})
+        file_name = file_data.get('name', 'Unknown')
+
+        if max_files is None:
+            self.log(f"【第{item_number}个文件】{file_name}")
+        else:
+            self.log(f"【{item_number}/{max_files}】{file_name}")
+
+        result = self.download_file(file_info)
+
+        if result == "skipped":
+            stats['skipped'] += 1
+            self.log(f"   ⚠️ 文件已跳过，继续下一个")
+        elif result:
+            stats['downloaded'] += 1
+            downloaded_in_batch += 1
+            self.check_long_delay()
+
+            not_reached_limit = max_files is None or downloaded_in_batch < max_files
+            if has_more_in_batch and not_reached_limit:
+                self.download_delay()
+        else:
+            stats['failed'] += 1
+
+        stats['total_files'] += 1
+        return downloaded_in_batch
+
     def download_files_batch(self, max_files: Optional[int] = None, start_index: Optional[str] = None) -> Dict[str, int]:
         """批量下载文件"""
         if max_files is None:
@@ -935,36 +971,14 @@ class ZSXQFileDownloader:
                 if max_files is not None and downloaded_in_batch >= max_files:
                     break
 
-                file_data = file_info.get('file', {})
-                file_name = file_data.get('name', 'Unknown')
-
-                if max_files is None:
-                    self.log(f"【第{downloaded_in_batch + 1}个文件】{file_name}")
-                else:
-                    self.log(f"【{downloaded_in_batch + 1}/{max_files}】{file_name}")
-
-                # 下载文件
-                result = self.download_file(file_info)
-
-                if result == "skipped":
-                    stats['skipped'] += 1
-                    self.log(f"   ⚠️ 文件已跳过，继续下一个")
-                elif result:
-                    stats['downloaded'] += 1
-                    downloaded_in_batch += 1
-
-                    # 检查长休眠
-                    self.check_long_delay()
-
-                    # 如果不是最后一个文件，进行下载间隔
-                    has_more_in_batch = (i + 1) < len(files)
-                    not_reached_limit = max_files is None or downloaded_in_batch < max_files
-                    if has_more_in_batch and not_reached_limit:
-                        self.download_delay()
-                else:
-                    stats['failed'] += 1
-                
-                stats['total_files'] += 1
+                downloaded_in_batch = self._download_batch_file_item(
+                    file_info,
+                    downloaded_in_batch + 1,
+                    max_files,
+                    (i + 1) < len(files),
+                    downloaded_in_batch,
+                    stats,
+                )
             
             # 准备下一页
             should_continue = max_files is None or downloaded_in_batch < max_files

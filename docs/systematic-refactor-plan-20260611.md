@@ -6798,6 +6798,51 @@ Result:
 - Frontend build passed, including Next.js lint/type checks.
 - `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
 
+### 2026-06-12 - P9 file downloader batch item helper
+
+Changed:
+
+- Added characterization coverage for `download_files_batch` result handling across skipped,
+  successful, and failed per-file download results.
+- Locked the current batch-download payload pass-through, fetched page arguments, skip/download/fail
+  counters, successful-download interval side effects, and repeated display index after a skipped
+  file.
+- Extracted `ZSXQFileDownloader._download_batch_file_item` and reused it from the batch download
+  loop.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Batch start logs, per-file display labels, skip/download/failure counters, total processed count,
+  successful-download long-delay check, inter-file download delay, page fetch arguments, final
+  summary logs, schema/config/API behavior, and public API behavior are unchanged.
+- The outer `download_files_batch` loop still owns stop checks, max-success limit checks, next-page
+  sleep, and page traversal, preserving existing pagination and stop semantics.
+- This does not introduce, remove, or alter legacy/fallback behavior.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderBatchDownloadTests -v
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+git diff --check
+```
+
+Result:
+
+- The new batch-download result-handling characterization test passed before and after helper
+  extraction.
+- `py_compile` passed.
+- `tests.test_zsxq_file_downloader_helpers`: 82 tests passed.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Full backend unittest discovery: 724 tests passed, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+- `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
+
 ## Stop Conditions
 
 Pause before editing if:

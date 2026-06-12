@@ -218,6 +218,55 @@ class FileDownloaderPaginationTests(unittest.TestCase):
         self.assertEqual(0, stats["files"])
 
 
+class FileDownloaderBatchDownloadTests(unittest.TestCase):
+    def _downloader_for_batch(self, files):
+        downloader = object.__new__(ZSXQFileDownloader)
+        downloader.logs = []
+        downloader.log = downloader.logs.append
+        downloader.check_stop = lambda: False
+        downloader.fetch_calls = []
+
+        def fetch_file_list(**kwargs):
+            downloader.fetch_calls.append(kwargs)
+            return {"resp_data": {"files": files, "index": None}}
+
+        downloader.fetch_file_list = fetch_file_list
+        return downloader
+
+    def test_download_files_batch_preserves_result_stats_payloads_and_delays(self):
+        files = [
+            {"file": {"id": 101, "name": "skip.pdf"}},
+            {"file": {"id": 102, "name": "ok.pdf"}},
+            {"file": {"id": 103, "name": "bad.pdf"}},
+        ]
+        downloader = self._downloader_for_batch(files)
+        payloads = []
+        results = ["skipped", True, False]
+        interval_events = []
+
+        def download_file(file_info):
+            payloads.append(file_info)
+            return results.pop(0)
+
+        downloader.download_file = download_file
+        downloader.check_long_delay = lambda: interval_events.append("long")
+        downloader.download_delay = lambda: interval_events.append("delay")
+
+        stats = ZSXQFileDownloader.download_files_batch(downloader, max_files=2, start_index="start")
+
+        self.assertEqual({"total_files": 3, "downloaded": 1, "skipped": 1, "failed": 1}, stats)
+        self.assertEqual([{"count": 20, "index": "start"}], downloader.fetch_calls)
+        self.assertEqual(files, payloads)
+        self.assertEqual(["long", "delay"], interval_events)
+        self.assertIn("📥 开始批量下载文件 (最多2个)", downloader.logs)
+        self.assertIn("📋 当前批次: 3 个文件", downloader.logs)
+        self.assertIn("【1/2】skip.pdf", downloader.logs)
+        self.assertIn("【1/2】ok.pdf", downloader.logs)
+        self.assertIn("【2/2】bad.pdf", downloader.logs)
+        self.assertIn("   ⚠️ 文件已跳过，继续下一个", downloader.logs)
+        self.assertEqual("   ❌ 失败: 1", downloader.logs[-1])
+
+
 class FileDownloaderDatabaseDownloadTests(unittest.TestCase):
     def _downloader_for_query_capture(self, group_id="511", rows=()):
         downloader = object.__new__(ZSXQFileDownloader)
