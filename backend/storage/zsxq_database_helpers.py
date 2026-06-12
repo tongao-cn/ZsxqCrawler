@@ -153,6 +153,59 @@ def user_insert_statement(user_data: Dict[str, Any], created_at: str) -> tuple[s
     )
 
 
+def topic_insert_statement(topic_data: Dict[str, Any], imported_at: str) -> tuple[str, tuple[Any, ...]]:
+    return (
+        """
+            INSERT INTO topics
+            (topic_id, group_id, type, title, create_time, digested, sticky,
+             likes_count, tourist_likes_count, rewards_count, comments_count,
+             reading_count, readers_count, answered, silenced, annotation,
+             user_liked, user_subscribed, imported_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(topic_id) DO UPDATE SET
+                group_id = excluded.group_id,
+                type = excluded.type,
+                title = excluded.title,
+                create_time = excluded.create_time,
+                digested = excluded.digested,
+                sticky = excluded.sticky,
+                likes_count = excluded.likes_count,
+                tourist_likes_count = excluded.tourist_likes_count,
+                rewards_count = excluded.rewards_count,
+                comments_count = excluded.comments_count,
+                reading_count = excluded.reading_count,
+                readers_count = excluded.readers_count,
+                answered = excluded.answered,
+                silenced = excluded.silenced,
+                annotation = excluded.annotation,
+                user_liked = excluded.user_liked,
+                user_subscribed = excluded.user_subscribed,
+                imported_at = excluded.imported_at
+        """,
+        (
+            topic_data.get("topic_id"),
+            topic_data.get("group", {}).get("group_id", ""),
+            topic_data.get("type", ""),
+            topic_data.get("title", ""),
+            topic_data.get("create_time", ""),
+            topic_data.get("digested", False),
+            topic_data.get("sticky", False),
+            topic_data.get("likes_count", 0),
+            topic_data.get("tourist_likes_count", 0),
+            topic_data.get("rewards_count", 0),
+            topic_data.get("comments_count", 0),
+            topic_data.get("reading_count", 0),
+            topic_data.get("readers_count", 0),
+            topic_data.get("answered", False),
+            topic_data.get("silenced", False),
+            topic_data.get("annotation", ""),
+            topic_data.get("user_liked", False),
+            topic_data.get("user_subscribed", False),
+            imported_at,
+        ),
+    )
+
+
 def update_tag_hid_statement(tag_id: int, hid: str) -> tuple[str, tuple[Any, ...]]:
     return "UPDATE tags SET hid = ? WHERE tag_id = ?", (hid, tag_id)
 

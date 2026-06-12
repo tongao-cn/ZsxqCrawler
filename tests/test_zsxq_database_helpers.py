@@ -24,6 +24,7 @@ from backend.storage.zsxq_database import (
     _topic_exists_query,
     _topic_file_payload_from_row,
     _topic_group_id_query,
+    _topic_insert_statement,
     _topics_by_tag_query,
     _update_tag_hid_statement,
     _upsert_core_file,
@@ -627,6 +628,72 @@ class ZSXQDatabaseHelperTests(unittest.TestCase):
             user_params,
         )
 
+    def test_topic_insert_statement_helper_preserves_sql_shape_and_params(self):
+        topic_sql, topic_params = _topic_insert_statement(
+            {
+                "topic_id": 202,
+                "group": {"group_id": 303},
+                "type": "talk",
+                "title": "title",
+                "create_time": "2026-05-07T10:00:00.000+0800",
+                "digested": True,
+                "sticky": True,
+                "likes_count": 1,
+                "tourist_likes_count": 2,
+                "rewards_count": 3,
+                "comments_count": 4,
+                "reading_count": 5,
+                "readers_count": 6,
+                "answered": True,
+                "silenced": True,
+                "annotation": "note",
+                "user_liked": True,
+                "user_subscribed": True,
+            },
+            "2026-06-12T10:00:00.000+0800",
+        )
+
+        self.assertEqual(
+            "INSERT INTO topics (topic_id, group_id, type, title, create_time, digested, sticky, "
+            "likes_count, tourist_likes_count, rewards_count, comments_count, reading_count, "
+            "readers_count, answered, silenced, annotation, user_liked, user_subscribed, imported_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
+            "ON CONFLICT(topic_id) DO UPDATE SET group_id = excluded.group_id, type = excluded.type, "
+            "title = excluded.title, create_time = excluded.create_time, digested = excluded.digested, "
+            "sticky = excluded.sticky, likes_count = excluded.likes_count, "
+            "tourist_likes_count = excluded.tourist_likes_count, rewards_count = excluded.rewards_count, "
+            "comments_count = excluded.comments_count, reading_count = excluded.reading_count, "
+            "readers_count = excluded.readers_count, answered = excluded.answered, "
+            "silenced = excluded.silenced, annotation = excluded.annotation, "
+            "user_liked = excluded.user_liked, user_subscribed = excluded.user_subscribed, "
+            "imported_at = excluded.imported_at",
+            " ".join(topic_sql.split()),
+        )
+        self.assertEqual(
+            (
+                202,
+                303,
+                "talk",
+                "title",
+                "2026-05-07T10:00:00.000+0800",
+                True,
+                True,
+                1,
+                2,
+                3,
+                4,
+                5,
+                6,
+                True,
+                True,
+                "note",
+                True,
+                True,
+                "2026-06-12T10:00:00.000+0800",
+            ),
+            topic_params,
+        )
+
     def test_replace_file_topic_relation_deletes_then_inserts(self):
         file_db = FakeFileDatabase()
 
@@ -922,6 +989,45 @@ class ZSXQDatabaseHelperTests(unittest.TestCase):
         )
         self.assertEqual((901, "Alice", "", "", "", "", ""), user_params[:7])
         self.assertRegex(user_params[7], r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}\+0800$")
+
+    def test_upsert_topic_preserves_skip_defaults_and_insert_params(self):
+        from backend.storage.zsxq_database import ZSXQDatabase
+
+        db = object.__new__(ZSXQDatabase)
+        db.cursor = FakeCursor()
+
+        ZSXQDatabase._upsert_topic(db, {})
+        self.assertEqual([], db.cursor.calls)
+
+        ZSXQDatabase._upsert_topic(db, {"topic_id": 202, "title": "title"})
+
+        topic_sql, topic_params = db.cursor.calls[0]
+        self.assertIn("INSERT INTO topics", topic_sql)
+        self.assertIn("ON CONFLICT(topic_id) DO UPDATE SET", topic_sql)
+        self.assertEqual(
+            (
+                202,
+                "",
+                "",
+                "title",
+                "",
+                False,
+                False,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                False,
+                False,
+                "",
+                False,
+                False,
+            ),
+            topic_params[:18],
+        )
+        self.assertRegex(topic_params[18], r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}\+0800$")
 
     def test_resolve_topic_group_id_preserves_explicit_scope_lookup_and_exception_fallback(self):
         from backend.storage.zsxq_database import ZSXQDatabase
