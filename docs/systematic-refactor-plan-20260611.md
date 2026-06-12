@@ -5058,6 +5058,55 @@ Result:
 - `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
 - Frontend build is not planned because this slice only changes backend storage/helper code.
 
+### 2026-06-12 - P2 database stats count query helper extraction
+
+Changed:
+
+- Added `database_stats_count_query` to `backend/storage/zsxq_database_helpers.py`, with a
+  compatibility wrapper in `backend/storage/zsxq_database.py`.
+- Replaced the inline query-selection branches in `get_database_stats` with helper-returned SQL
+  and params.
+- Added characterization coverage for unscoped stats queries, group-scoped direct table queries,
+  scoped `users` distinct-union query, topic-scoped child-table queries, and per-table exception
+  fallback.
+- Added direct helper coverage for unscoped, direct group scope, child-table scope, and scoped
+  `users` query branches.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- `get_database_stats` still uses the same table list in the same order.
+- Unscoped stats still execute `SELECT COUNT(*) FROM <table>` with no params.
+- Group-scoped `groups`, `topics`, and `comments` still filter directly by `group_id`.
+- Group-scoped `users` still uses the same `COUNT(DISTINCT user_id)` union over talks, comments,
+  questions, questionees, and answers.
+- Other group-scoped tables still filter by topics in the same group.
+- Per-table exception handling still prints the same error prefix and returns `0` for that table
+  while continuing the remaining tables.
+- No schema, config, compatibility, fallback, error handling, logging, commit order, or public API
+  semantics were changed.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_database_helpers -v
+uv run python -m py_compile backend\storage\zsxq_database.py backend\storage\zsxq_database_helpers.py tests\test_zsxq_database_helpers.py
+uv run python -m unittest tests.test_zsxq_database_helpers -v
+uv run python -m unittest discover -s tests
+uv run python scripts\scan_postgres_compat_debt.py
+git diff --check
+```
+
+Result:
+
+- Pre-refactor characterization run passed against the original inline query branches.
+- `py_compile` passed.
+- `tests.test_zsxq_database_helpers`: 60 tests passed.
+- Full backend unittest discovery: 663 tests passed, 15 skipped.
+- PostgreSQL compatibility debt scan: no SQLite compatibility patterns found.
+- `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
+- Frontend build is not planned because this slice only changes backend storage/helper code.
+
 ## Stop Conditions
 
 Pause before editing if:

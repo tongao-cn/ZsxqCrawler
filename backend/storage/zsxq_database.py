@@ -9,6 +9,7 @@ from backend.storage.zsxq_database_helpers import (
     article_insert_statement,
     build_pagination,
     comment_insert_statement,
+    database_stats_count_query,
     delete_latest_likes_statement,
     file_exists_query,
     format_tag_row,
@@ -292,6 +293,10 @@ def _topic_count_query(group_id: Optional[str]) -> tuple[str, tuple[Any, ...]]:
     return topic_count_query(group_id)
 
 
+def _database_stats_count_query(table: str, group_id: Optional[str]) -> tuple[str, tuple[Any, ...]]:
+    return database_stats_count_query(table, group_id)
+
+
 def _upsert_core_file(cursor, group_id: Optional[int], topic_id: int, file_data: Dict[str, Any]) -> Optional[int]:
     return upsert_core_file(cursor, group_id, topic_id, file_data)
 
@@ -478,40 +483,8 @@ class ZSXQDatabase:
 
         for table in tables:
             try:
-                if self.group_id is None:
-                    self.cursor.execute(f'SELECT COUNT(*) FROM {table}')
-                elif table in {'groups', 'topics', 'comments'}:
-                    self.cursor.execute(f'SELECT COUNT(*) FROM {table} WHERE group_id = ?', (_group_id_param(self.group_id),))
-                elif table == 'users':
-                    self.cursor.execute(
-                        '''
-                        SELECT COUNT(DISTINCT user_id)
-                        FROM (
-                            SELECT owner_user_id AS user_id FROM talks WHERE topic_id IN (SELECT topic_id FROM topics WHERE group_id = ?)
-                            UNION
-                            SELECT owner_user_id AS user_id FROM comments WHERE topic_id IN (SELECT topic_id FROM topics WHERE group_id = ?)
-                            UNION
-                            SELECT owner_user_id AS user_id FROM questions WHERE topic_id IN (SELECT topic_id FROM topics WHERE group_id = ?)
-                            UNION
-                            SELECT questionee_user_id AS user_id FROM questions WHERE topic_id IN (SELECT topic_id FROM topics WHERE group_id = ?)
-                            UNION
-                            SELECT owner_user_id AS user_id FROM answers WHERE topic_id IN (SELECT topic_id FROM topics WHERE group_id = ?)
-                        ) scoped_users
-                        WHERE user_id IS NOT NULL
-                        ''',
-                        (
-                            _group_id_param(self.group_id),
-                            _group_id_param(self.group_id),
-                            _group_id_param(self.group_id),
-                            _group_id_param(self.group_id),
-                            _group_id_param(self.group_id),
-                        ),
-                    )
-                else:
-                    self.cursor.execute(
-                        f'SELECT COUNT(*) FROM {table} WHERE topic_id IN (SELECT topic_id FROM topics WHERE group_id = ?)',
-                        (_group_id_param(self.group_id),),
-                    )
+                sql, params = _database_stats_count_query(table, self.group_id)
+                self.cursor.execute(sql, params)
                 stats[table] = self.cursor.fetchone()[0]
             except Exception as e:
                 print(f"获取表 {table} 统计信息失败: {e}")

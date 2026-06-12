@@ -701,6 +701,40 @@ def topic_count_query(group_id: Optional[str]) -> tuple[str, tuple[Any, ...]]:
     )
 
 
+def database_stats_count_query(table: str, group_id: Optional[str]) -> tuple[str, tuple[Any, ...]]:
+    if group_id is None:
+        return f"SELECT COUNT(*) FROM {table}", ()
+
+    scoped_group_id = group_id_param(group_id)
+    if table in {"groups", "topics", "comments"}:
+        return f"SELECT COUNT(*) FROM {table} WHERE group_id = ?", (scoped_group_id,)
+
+    if table == "users":
+        return (
+            """
+                        SELECT COUNT(DISTINCT user_id)
+                        FROM (
+                            SELECT owner_user_id AS user_id FROM talks WHERE topic_id IN (SELECT topic_id FROM topics WHERE group_id = ?)
+                            UNION
+                            SELECT owner_user_id AS user_id FROM comments WHERE topic_id IN (SELECT topic_id FROM topics WHERE group_id = ?)
+                            UNION
+                            SELECT owner_user_id AS user_id FROM questions WHERE topic_id IN (SELECT topic_id FROM topics WHERE group_id = ?)
+                            UNION
+                            SELECT questionee_user_id AS user_id FROM questions WHERE topic_id IN (SELECT topic_id FROM topics WHERE group_id = ?)
+                            UNION
+                            SELECT owner_user_id AS user_id FROM answers WHERE topic_id IN (SELECT topic_id FROM topics WHERE group_id = ?)
+                        ) scoped_users
+                        WHERE user_id IS NOT NULL
+                        """,
+            (scoped_group_id, scoped_group_id, scoped_group_id, scoped_group_id, scoped_group_id),
+        )
+
+    return (
+        f"SELECT COUNT(*) FROM {table} WHERE topic_id IN (SELECT topic_id FROM topics WHERE group_id = ?)",
+        (scoped_group_id,),
+    )
+
+
 def replace_file_topic_relation(file_db, file_id: int, topic_id: int) -> int:
     file_db.cursor.execute(
         """

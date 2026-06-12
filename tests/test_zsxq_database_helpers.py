@@ -6,6 +6,7 @@ from backend.storage.zsxq_database import (
     _article_insert_statement,
     _build_pagination,
     _comment_insert_statement,
+    _database_stats_count_query,
     _delete_latest_likes_statement,
     _file_exists_query,
     _format_tag_row,
@@ -152,6 +153,22 @@ class FakeBackfillCursor(FakeCursor):
         if "SELECT 1 FROM files" in self.last_query:
             return None
         return self.row
+
+
+class FakeDatabaseStatsCursor(FakeCursor):
+    def __init__(self, fail_on_query_part=None):
+        super().__init__()
+        self.fail_on_query_part = fail_on_query_part
+
+    def execute(self, query, params=()):
+        super().execute(query, params)
+        normalized = self.calls[-1][0]
+        if self.fail_on_query_part and self.fail_on_query_part in normalized:
+            raise RuntimeError("temporary stats failure")
+        return self
+
+    def fetchone(self):
+        return (len(self.calls),)
 
 
 class FakeTopicDetailCursor(FakeCursor):
@@ -1314,6 +1331,88 @@ class ZSXQDatabaseHelperTests(unittest.TestCase):
         self.assertEqual("SELECT COUNT(*) FROM topics WHERE (? IS NULL OR group_id = ?)", count_sql)
         self.assertEqual((303, 303), count_params)
         self.assertEqual((None, None), _topic_count_query(None)[1])
+
+    def test_database_stats_count_query_preserves_branch_shapes(self):
+        self.assertEqual(("SELECT COUNT(*) FROM groups", ()), _database_stats_count_query("groups", None))
+        self.assertEqual(
+            ("SELECT COUNT(*) FROM groups WHERE group_id = ?", (303,)),
+            _database_stats_count_query("groups", "303"),
+        )
+        self.assertEqual(
+            (
+                "SELECT COUNT(*) FROM talks WHERE topic_id IN (SELECT topic_id FROM topics WHERE group_id = ?)",
+                (303,),
+            ),
+            _database_stats_count_query("talks", "303"),
+        )
+
+        users_sql, users_params = _database_stats_count_query("users", "303")
+        self.assertEqual(
+            "SELECT COUNT(DISTINCT user_id) FROM ( "
+            "SELECT owner_user_id AS user_id FROM talks WHERE topic_id IN (SELECT topic_id FROM topics WHERE group_id = ?) "
+            "UNION SELECT owner_user_id AS user_id FROM comments WHERE topic_id IN (SELECT topic_id FROM topics WHERE group_id = ?) "
+            "UNION SELECT owner_user_id AS user_id FROM questions WHERE topic_id IN (SELECT topic_id FROM topics WHERE group_id = ?) "
+            "UNION SELECT questionee_user_id AS user_id FROM questions WHERE topic_id IN (SELECT topic_id FROM topics WHERE group_id = ?) "
+            "UNION SELECT owner_user_id AS user_id FROM answers WHERE topic_id IN (SELECT topic_id FROM topics WHERE group_id = ?) "
+            ") scoped_users WHERE user_id IS NOT NULL",
+            " ".join(users_sql.split()),
+        )
+        self.assertEqual((303, 303, 303, 303, 303), users_params)
+
+    def test_get_database_stats_preserves_unscoped_and_scoped_queries(self):
+        from backend.storage.zsxq_database import ZSXQDatabase
+
+        unscoped_db = object.__new__(ZSXQDatabase)
+        unscoped_db.cursor = FakeDatabaseStatsCursor()
+        unscoped_db.group_id = None
+
+        unscoped_stats = ZSXQDatabase.get_database_stats(unscoped_db)
+
+        self.assertEqual(12, len(unscoped_stats))
+        self.assertEqual(("SELECT COUNT(*) FROM groups", ()), unscoped_db.cursor.calls[0])
+        self.assertEqual(("SELECT COUNT(*) FROM users", ()), unscoped_db.cursor.calls[1])
+        self.assertEqual(("SELECT COUNT(*) FROM answers", ()), unscoped_db.cursor.calls[-1])
+
+        scoped_db = object.__new__(ZSXQDatabase)
+        scoped_db.cursor = FakeDatabaseStatsCursor()
+        scoped_db.group_id = "303"
+
+        scoped_stats = ZSXQDatabase.get_database_stats(scoped_db)
+
+        self.assertEqual(12, len(scoped_stats))
+        self.assertEqual(("SELECT COUNT(*) FROM groups WHERE group_id = ?", (303,)), scoped_db.cursor.calls[0])
+        users_sql, users_params = scoped_db.cursor.calls[1]
+        self.assertEqual(
+            "SELECT COUNT(DISTINCT user_id) FROM ( "
+            "SELECT owner_user_id AS user_id FROM talks WHERE topic_id IN (SELECT topic_id FROM topics WHERE group_id = ?) "
+            "UNION SELECT owner_user_id AS user_id FROM comments WHERE topic_id IN (SELECT topic_id FROM topics WHERE group_id = ?) "
+            "UNION SELECT owner_user_id AS user_id FROM questions WHERE topic_id IN (SELECT topic_id FROM topics WHERE group_id = ?) "
+            "UNION SELECT questionee_user_id AS user_id FROM questions WHERE topic_id IN (SELECT topic_id FROM topics WHERE group_id = ?) "
+            "UNION SELECT owner_user_id AS user_id FROM answers WHERE topic_id IN (SELECT topic_id FROM topics WHERE group_id = ?) "
+            ") scoped_users WHERE user_id IS NOT NULL",
+            users_sql,
+        )
+        self.assertEqual((303, 303, 303, 303, 303), users_params)
+        self.assertEqual(("SELECT COUNT(*) FROM topics WHERE group_id = ?", (303,)), scoped_db.cursor.calls[2])
+        self.assertEqual(
+            ("SELECT COUNT(*) FROM talks WHERE topic_id IN (SELECT topic_id FROM topics WHERE group_id = ?)", (303,)),
+            scoped_db.cursor.calls[3],
+        )
+        self.assertEqual(("SELECT COUNT(*) FROM comments WHERE group_id = ?", (303,)), scoped_db.cursor.calls[9])
+
+    def test_get_database_stats_preserves_per_table_exception_fallback(self):
+        from backend.storage.zsxq_database import ZSXQDatabase
+
+        db = object.__new__(ZSXQDatabase)
+        db.cursor = FakeDatabaseStatsCursor(fail_on_query_part="FROM users")
+        db.group_id = None
+
+        stats = ZSXQDatabase.get_database_stats(db)
+
+        self.assertEqual(1, stats["groups"])
+        self.assertEqual(0, stats["users"])
+        self.assertEqual(3, stats["topics"])
+        self.assertEqual(12, len(stats))
 
     def test_timestamp_range_info_uses_nullable_scope_and_preserves_response_shape(self):
         from backend.storage.zsxq_database import ZSXQDatabase
