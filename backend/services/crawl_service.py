@@ -627,6 +627,17 @@ def _official_next_page_cursor(payload: dict[str, Any], current_cursor: Optional
         return None
     return _official_page_cursor(payload, current_cursor)
 
+def _official_next_cursor_or_log_end(
+    task_id: str,
+    payload: dict[str, Any],
+    current_cursor: Optional[str],
+) -> Optional[str]:
+    next_cursor = _official_next_page_cursor(payload, current_cursor)
+    if next_cursor:
+        return next_cursor
+    add_task_log(task_id, "✅ 官方分页已无更多数据")
+    return None
+
 def _official_pages_remaining(pages: Optional[int], total_stats: dict[str, Any]) -> bool:
     return pages is None or total_stats["pages"] < pages
 
@@ -715,9 +726,8 @@ def _run_official_crawl_time_range_task(
         page_stats = _official_import_topics(db, client, group_id, filtered, task_id)
         _add_official_page_stats(total_stats, page_stats)
 
-        next_cursor = _official_next_page_cursor(payload, cursor)
+        next_cursor = _official_next_cursor_or_log_end(task_id, payload, cursor)
         if not next_cursor:
-            add_task_log(task_id, "✅ 官方分页已无更多数据")
             break
         cursor = next_cursor
 
@@ -769,9 +779,8 @@ def _run_official_crawl_pages_task(
         page_stats = _official_import_topics(db, client, group_id, topics_to_import, task_id)
         _add_official_page_stats(total_stats, page_stats)
 
-        next_cursor = _official_next_page_cursor(payload, cursor)
+        next_cursor = _official_next_cursor_or_log_end(task_id, payload, cursor)
         if not next_cursor:
-            add_task_log(task_id, "✅ 官方分页已无更多数据")
             break
         cursor = next_cursor
 

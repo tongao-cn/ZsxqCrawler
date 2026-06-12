@@ -1149,6 +1149,31 @@ class CrawlRoutesHelperTests(unittest.TestCase):
         self.assertEqual("next", _official_next_page_cursor({"has_more": True, "next_end_time": "next"}, "same"))
 
     @unittest.skipUnless(HAS_CRAWL_ROUTE_DEPS, "crawl route dependencies are not installed")
+    def test_official_next_cursor_or_log_end_preserves_cursor_and_end_log(self):
+        from backend.services.crawl_service import _official_next_cursor_or_log_end
+
+        with patch("backend.services.crawl_service.add_task_log") as add_task_log:
+            self.assertEqual(
+                "next",
+                _official_next_cursor_or_log_end(
+                    "task-1",
+                    {"has_more": True, "next_end_time": "next"},
+                    "cursor",
+                ),
+            )
+            add_task_log.assert_not_called()
+
+            self.assertIsNone(
+                _official_next_cursor_or_log_end(
+                    "task-1",
+                    {"has_more": False, "next_end_time": "next"},
+                    "cursor",
+                )
+            )
+
+        add_task_log.assert_called_once_with("task-1", "✅ 官方分页已无更多数据")
+
+    @unittest.skipUnless(HAS_CRAWL_ROUTE_DEPS, "crawl route dependencies are not installed")
     def test_official_pages_remaining_preserves_unbounded_and_limit_semantics(self):
         from backend.services.crawl_service import _official_pages_remaining
 

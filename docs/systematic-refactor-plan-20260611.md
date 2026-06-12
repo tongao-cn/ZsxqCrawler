@@ -9031,6 +9031,57 @@ Result:
 - Frontend build passed, including Next.js lint/type checks.
 - `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
 
+### 2026-06-12 - P4 official next cursor helper
+
+Changed:
+
+- Reused existing official crawl route/helper coverage, then added characterization coverage for
+  official next-cursor continuation and end-of-pagination log behavior.
+- Added `_official_next_cursor_or_log_end` in `backend/services/crawl_service.py`.
+- Reused the helper from both official time-range crawling and the shared official page crawling
+  loop, keeping the existing `✅ 官方分页已无更多数据` log message in one place.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Official pages with a moving next cursor still continue with that cursor and do not log the
+  pagination-end message.
+- Official pages without `has_more`, without a usable next cursor, or with a non-moving cursor still
+  log `✅ 官方分页已无更多数据` and terminate the current page loop.
+- Official latest, incremental, historical, all, and time-range flows still use the same client
+  construction, page fetch shape, empty-page handling, per-page cap, cursor handling, duplicate
+  accounting, latest-mode existing-topic filtering, import stats, completion messages, and
+  time-range filtering.
+- Public API behavior, task status semantics, schema/config behavior, official MCP HTTP behavior,
+  legacy cookie crawler behavior, and fallback behavior are unchanged.
+- No legacy/fallback behavior was removed.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_crawl_routes_helpers -v
+uv run python -m py_compile backend\services\crawl_service.py tests\test_crawl_routes_helpers.py
+uv run python -m unittest tests.test_crawl_routes_helpers.CrawlRoutesHelperTests.test_official_next_cursor_or_log_end_preserves_cursor_and_end_log tests.test_crawl_routes_helpers.CrawlRoutesHelperTests.test_official_next_page_cursor_requires_has_more_and_moving_cursor tests.test_crawl_routes_helpers.CrawlRoutesHelperTests.test_official_topic_page_empty_preserves_log_and_truthiness tests.test_crawl_routes_helpers.CrawlRoutesHelperTests.test_fetch_official_topic_page_preserves_call_shape_and_payload_topics -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run python -m unittest tests.test_crawl_routes_helpers -v
+uv run python -m unittest tests.test_official_topic_client_helpers -v
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+git diff --check
+```
+
+Result:
+
+- Pre-extraction `tests.test_crawl_routes_helpers`: 47 tests passed.
+- Focused official next-cursor/page helper tests passed after helper extraction.
+- `py_compile` passed.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- `tests.test_crawl_routes_helpers`: 48 tests passed.
+- `tests.test_official_topic_client_helpers`: 16 tests passed.
+- Full backend unittest discovery: 764 tests passed, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+- `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
+
 ## Stop Conditions
 
 Pause before editing if:
