@@ -18,6 +18,7 @@ from backend.storage.zsxq_database import (
     _insert_tag_statement,
     _insert_topic_tag_statement,
     _iter_topic_user_payloads_from_data,
+    _iter_valid_latest_like_payloads,
     _iter_valid_like_emoji_payloads,
     _iter_valid_user_liked_emoji_keys,
     _like_emoji_insert_statement,
@@ -577,6 +578,25 @@ class ZSXQDatabaseHelperTests(unittest.TestCase):
         self.assertEqual(
             ["[ok]", "[fire]"],
             list(_iter_valid_user_liked_emoji_keys(["", "[ok]", None, False, "[fire]"])),
+        )
+
+    def test_iter_valid_latest_like_payloads_filters_missing_user_ids(self):
+        valid_first = {"owner": {"user_id": 901}, "create_time": "time-1"}
+        valid_second = {"owner": {"user_id": 902}, "create_time": "time-2"}
+
+        self.assertEqual(
+            [(valid_first, 901), (valid_second, 902)],
+            list(
+                _iter_valid_latest_like_payloads(
+                    [
+                        {},
+                        {"owner": {}},
+                        {"owner": {"user_id": 0}},
+                        valid_first,
+                        valid_second,
+                    ]
+                )
+            ),
         )
 
     def test_format_tag_row_keeps_existing_fields(self):

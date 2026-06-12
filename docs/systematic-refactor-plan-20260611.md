@@ -5385,6 +5385,55 @@ Result:
 - `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
 - Frontend build is not planned because this slice only changes backend storage/helper code.
 
+### 2026-06-12 - P2 latest like iterator helper
+
+Changed:
+
+- Added `iter_valid_latest_like_payloads` to `backend/storage/zsxq_database_helpers.py`,
+  with a compatibility wrapper in `backend/storage/zsxq_database.py`.
+- Replaced the inline `_import_likes` owner/user ID filtering with the helper output.
+- Added direct helper coverage for missing owner, missing user ID, falsey user ID, and valid
+  like payload ordering.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- `_import_likes` still returns before processing when `latest_likes` is missing.
+- The `latest_likes` delete statement still runs before any per-like insert when the key is
+  present, including an empty list.
+- Likes with missing or falsey `owner.user_id` are still skipped, and valid likes keep their
+  original order.
+- The helper is lazy, so timestamp generation and both `likes`/`latest_likes` SQL writes still
+  occur only when a valid like payload is reached.
+- The existing no-op non-empty `latest_likes` branch remains in the class method to preserve the
+  original control-flow shape.
+- Existing SQL, schema, config, fallback behavior, error handling, logging, commit/rollback
+  behavior, and public API semantics are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_import_likes_preserves_delete_skip_and_insert_order -v
+uv run python -m py_compile backend\storage\zsxq_database.py backend\storage\zsxq_database_helpers.py tests\test_zsxq_database_helpers.py
+uv run python -m unittest tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_iter_valid_latest_like_payloads_filters_missing_user_ids tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_import_likes_preserves_delete_skip_and_insert_order -v
+uv run python -m unittest tests.test_zsxq_database_helpers -v
+uv run python -m unittest discover -s tests
+uv run python scripts\scan_postgres_compat_debt.py
+git diff --check
+```
+
+Result:
+
+- Pre-refactor characterization test passed against the original inline `_import_likes`
+  implementation.
+- `py_compile` passed.
+- Focused helper/import tests passed.
+- `tests.test_zsxq_database_helpers`: 70 tests passed.
+- Full backend unittest discovery: 673 tests passed, 15 skipped.
+- PostgreSQL compatibility debt scan: no SQLite compatibility patterns found.
+- `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
+- Frontend build is not planned because this slice only changes backend storage/helper code.
+
 ## Stop Conditions
 
 Pause before editing if:

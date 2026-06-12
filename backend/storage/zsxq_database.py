@@ -21,6 +21,7 @@ from backend.storage.zsxq_database_helpers import (
     insert_tag_statement,
     insert_topic_tag_statement,
     iter_topic_user_payloads_from_data,
+    iter_valid_latest_like_payloads,
     iter_valid_like_emoji_payloads,
     iter_valid_user_liked_emoji_keys,
     like_emoji_insert_statement,
@@ -96,6 +97,10 @@ def _iter_valid_like_emoji_payloads(emojis):
 
 def _iter_valid_user_liked_emoji_keys(emoji_keys):
     return iter_valid_user_liked_emoji_keys(emoji_keys)
+
+
+def _iter_valid_latest_like_payloads(latest_likes):
+    return iter_valid_latest_like_payloads(latest_likes)
 
 
 def _tag_id_by_name_query(group_id: int, tag_name: str) -> tuple[str, tuple[Any, ...]]:
@@ -626,18 +631,15 @@ class ZSXQDatabase:
 
         sql, params = _delete_latest_likes_statement(topic_id)
         self.cursor.execute(sql, params)
-        
-        for like in topic_data['latest_likes']:
-            owner = like.get('owner', {})
-            user_id = owner.get('user_id')
-            if user_id:
-                # 获取当前时间作为imported_at（使用东八区时间格式）
-                current_time = _beijing_now_timestamp()
-                
-                sql, params = _like_insert_statement(topic_id, user_id, like, current_time)
-                self.cursor.execute(sql, params)
-                sql, params = _latest_like_insert_statement(topic_id, user_id, like, current_time)
-                self.cursor.execute(sql, params)
+
+        for like, user_id in _iter_valid_latest_like_payloads(topic_data['latest_likes']):
+            # 获取当前时间作为imported_at（使用东八区时间格式）
+            current_time = _beijing_now_timestamp()
+
+            sql, params = _like_insert_statement(topic_id, user_id, like, current_time)
+            self.cursor.execute(sql, params)
+            sql, params = _latest_like_insert_statement(topic_id, user_id, like, current_time)
+            self.cursor.execute(sql, params)
         
         if topic_data['latest_likes']:
             pass  # 数据已导入，无需额外日志

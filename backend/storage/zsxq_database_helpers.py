@@ -77,6 +77,14 @@ def iter_valid_user_liked_emoji_keys(emoji_keys) -> Iterator[Any]:
             yield emoji_key
 
 
+def iter_valid_latest_like_payloads(latest_likes) -> Iterator[tuple[Any, Any]]:
+    for like in latest_likes:
+        owner = like.get("owner", {})
+        user_id = owner.get("user_id")
+        if user_id:
+            yield like, user_id
+
+
 def format_tag_row(row) -> Dict[str, Any]:
     return {
         "tag_id": row[0],
