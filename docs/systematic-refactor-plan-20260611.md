@@ -8402,6 +8402,51 @@ Result:
 - Frontend build passed, including Next.js lint/type checks.
 - `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
 
+### 2026-06-12 - P4 legacy time-range stats helper
+
+Changed:
+
+- Reused existing legacy time-range tests that assert completed stats payloads across empty,
+  filtered, retry, max-retry, and outer-stop paths.
+- Extracted `_empty_legacy_time_range_stats` in `backend/services/crawl_service.py`.
+- Kept all stats mutation, page counting, retry error counting, and task completion decisions at
+  the original call sites.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Legacy time-range tasks still start with
+  `{"new_topics": 0, "updated_topics": 0, "errors": 0, "pages": 0}`.
+- Empty pages, filtered page storage, retry failures, max-retry failures, outer-stop completion,
+  before-start stopping, expired handling, public API behavior, task status semantics,
+  schema/config behavior, official MCP HTTP behavior, and cookie-based crawler behavior are
+  unchanged.
+- No legacy/fallback behavior was removed.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_crawl_routes_helpers.CrawlRoutesHelperTests.test_time_range_crawl_stops_after_empty_page tests.test_crawl_routes_helpers.CrawlRoutesHelperTests.test_legacy_time_range_filters_topics_and_advances_end_time tests.test_crawl_routes_helpers.CrawlRoutesHelperTests.test_legacy_time_range_retries_failed_page_fetch tests.test_crawl_routes_helpers.CrawlRoutesHelperTests.test_legacy_time_range_stops_after_max_failed_page_fetches tests.test_crawl_routes_helpers.CrawlRoutesHelperTests.test_legacy_time_range_outer_stop_completes_without_fetching -v
+uv run python -m py_compile backend\services\crawl_service.py tests\test_crawl_routes_helpers.py
+uv run python scripts\scan_postgres_compat_debt.py
+uv run python -m unittest tests.test_crawl_routes_helpers -v
+uv run python -m unittest tests.test_official_topic_client_helpers -v
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+git diff --check
+```
+
+Result:
+
+- Focused stats-payload tests passed after helper extraction.
+- `py_compile` passed.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- `tests.test_crawl_routes_helpers`: 44 tests passed.
+- `tests.test_official_topic_client_helpers`: 16 tests passed.
+- Full backend unittest discovery: 760 tests passed, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+- `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
+
 ## Stop Conditions
 
 Pause before editing if:

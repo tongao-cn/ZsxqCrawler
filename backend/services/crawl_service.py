@@ -295,6 +295,9 @@ def _log_legacy_time_range_page_summary(
 ) -> None:
     add_task_log(task_id, f"📄 本页获取 {len(topics)} 个话题，区间内 {len(filtered)} 个")
 
+def _empty_legacy_time_range_stats() -> dict[str, int]:
+    return {"new_topics": 0, "updated_topics": 0, "errors": 0, "pages": 0}
+
 def _query_group_id(group_id: str) -> Any:
     value = str(group_id or "").strip()
     return int(value) if value.isdigit() else value
@@ -765,7 +768,7 @@ def run_crawl_time_range_task(task_id: str, group_id: str, request: Any):
         crawler = _prepare_legacy_crawler(task_id, group_id, request, require_overrides=True)
 
         per_page = request.perPage or 20
-        total_stats = {"new_topics": 0, "updated_topics": 0, "errors": 0, "pages": 0}
+        total_stats = _empty_legacy_time_range_stats()
         begin_time_param = _format_zsxq_time(start_dt)
         end_time_param = _format_zsxq_time(end_dt)
         max_retries_per_page = 10
