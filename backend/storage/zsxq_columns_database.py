@@ -343,6 +343,16 @@ class ZSXQColumnsDatabase:
             self.cursor.execute(sql)
         
         return [_pending_video_row_to_dict(row) for row in self.cursor.fetchall()]
+
+    def _load_topic_comment_images(
+        self,
+        comment_id: int,
+        scope_group_id: Any,
+        topic_id: int,
+    ) -> List[Dict[str, Any]]:
+        sql, params = _comment_images_query(comment_id, scope_group_id, topic_id)
+        self.cursor.execute(sql, params)
+        return [_comment_image_row_to_dict(row) for row in self.cursor.fetchall()]
     
     def get_topic_comments(self, topic_id: int, group_id: Optional[Any] = None) -> List[Dict[str, Any]]:
         """获取文章的所有评论（支持嵌套结构）"""
@@ -356,10 +366,7 @@ class ZSXQColumnsDatabase:
             comment = _topic_comment_row_to_dict(row)
             comment_id = comment['comment_id']
 
-            sql, params = _comment_images_query(comment_id, scope_group_id, topic_id)
-            self.cursor.execute(sql, params)
-
-            images = [_comment_image_row_to_dict(img_row) for img_row in self.cursor.fetchall()]
+            images = self._load_topic_comment_images(comment_id, scope_group_id, topic_id)
             if images:
                 comment['images'] = images
 

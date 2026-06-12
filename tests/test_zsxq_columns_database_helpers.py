@@ -2046,6 +2046,68 @@ class ZSXQColumnsDatabaseHelperTests(unittest.TestCase):
         self.assertIn("FROM images WHERE comment_id = ?", db.cursor.calls[2][0])
         self.assertEqual((702, 303, 202), db.cursor.calls[2][1])
 
+    def test_load_topic_comment_images_preserves_query_params_and_shape(self):
+        from backend.storage.zsxq_columns_database import ZSXQColumnsDatabase
+
+        class FakeCursor:
+            def __init__(self):
+                self.calls = []
+                self.fetchall_results = [
+                    [
+                        (
+                            301,
+                            "image",
+                            "thumb-url",
+                            10,
+                            20,
+                            "large-url",
+                            30,
+                            40,
+                            "original-url",
+                            50,
+                            60,
+                            70,
+                        )
+                    ],
+                    [],
+                ]
+
+            def execute(self, sql, params=()):
+                self.calls.append((" ".join(sql.split()), params))
+                return self
+
+            def fetchall(self):
+                return self.fetchall_results.pop(0)
+
+        db = object.__new__(ZSXQColumnsDatabase)
+        db.cursor = FakeCursor()
+
+        self.assertEqual(
+            [
+                {
+                    "image_id": 301,
+                    "type": "image",
+                    "thumbnail": {"url": "thumb-url", "width": 10, "height": 20},
+                    "large": {"url": "large-url", "width": 30, "height": 40},
+                    "original": {
+                        "url": "original-url",
+                        "width": 50,
+                        "height": 60,
+                        "size": 70,
+                    },
+                }
+            ],
+            ZSXQColumnsDatabase._load_topic_comment_images(db, 701, 303, 202),
+        )
+        self.assertIn("FROM images WHERE comment_id = ?", db.cursor.calls[0][0])
+        self.assertEqual((701, 303, 202), db.cursor.calls[0][1])
+
+        self.assertEqual(
+            [],
+            ZSXQColumnsDatabase._load_topic_comment_images(db, 702, None, 202),
+        )
+        self.assertEqual((702, None, 202), db.cursor.calls[1][1])
+
     def test_start_crawl_log_preserves_insert_params_commit_and_none_row(self):
         from backend.storage.zsxq_columns_database import ZSXQColumnsDatabase
 

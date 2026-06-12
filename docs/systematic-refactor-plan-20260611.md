@@ -5755,6 +5755,51 @@ Result:
 - PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
 - `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
 
+### 2026-06-12 - P3 column comment image loader extraction
+
+Changed:
+
+- Added `_load_topic_comment_images` to `backend/storage/zsxq_columns_database.py`.
+- Reused the method from `ZSXQColumnsDatabase.get_topic_comments`, leaving the outer method
+  responsible for comment query execution, optional `images` attachment, and nesting.
+- Added direct characterization coverage for comment-image query parameters, row mapping shape, and
+  empty image results.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- `get_topic_comments` still queries base comments first and then queries images once per comment in
+  comment order.
+- Comments with images still receive an `images` field; comments without images still omit that
+  field.
+- Nested comment shape, scoped image-query parameters, row mapping, SQL, fallback behavior, schema
+  semantics, config semantics, logging, and public API behavior are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_columns_database_helpers.ZSXQColumnsDatabaseHelperTests.test_topic_comments_preserve_comment_image_queries_and_nested_shape -v
+uv run python -m py_compile backend\storage\zsxq_columns_database.py tests\test_zsxq_columns_database_helpers.py
+uv run python -m unittest tests.test_zsxq_columns_database_helpers.ZSXQColumnsDatabaseHelperTests.test_load_topic_comment_images_preserves_query_params_and_shape tests.test_zsxq_columns_database_helpers.ZSXQColumnsDatabaseHelperTests.test_topic_comments_preserve_comment_image_queries_and_nested_shape -v
+uv run python -m unittest tests.test_zsxq_columns_database_helpers -v
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+uv run python scripts\scan_postgres_compat_debt.py
+git diff --check
+```
+
+Result:
+
+- Pre-refactor `get_topic_comments` characterization test passed against the original inline
+  comment-image loading implementation.
+- `py_compile` passed.
+- Focused image-loader/comment tests passed.
+- `tests.test_zsxq_columns_database_helpers`: 68 tests passed.
+- Full backend unittest discovery: 684 tests passed, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
+
 ## Stop Conditions
 
 Pause before editing if:
