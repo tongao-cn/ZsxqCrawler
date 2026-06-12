@@ -15,6 +15,7 @@ from backend.storage.zsxq_database_helpers import (
     image_insert_statement,
     insert_tag_statement,
     insert_topic_tag_statement,
+    like_emoji_insert_statement,
     latest_like_insert_statement,
     like_insert_statement,
     load_topic_detail_base,
@@ -137,6 +138,14 @@ def _latest_like_insert_statement(
     created_at: str,
 ) -> tuple[str, tuple[Any, ...]]:
     return latest_like_insert_statement(topic_id, user_id, like_data, created_at)
+
+
+def _like_emoji_insert_statement(
+    topic_id: int,
+    emoji_data: Dict[str, Any],
+    created_at: str,
+) -> tuple[str, tuple[Any, ...]]:
+    return like_emoji_insert_statement(topic_id, emoji_data, created_at)
 
 
 def _update_tag_hid_statement(tag_id: int, hid: str) -> tuple[str, tuple[Any, ...]]:
@@ -614,26 +623,14 @@ class ZSXQDatabase:
         
         for emoji in topic_data['likes_detail']['emojis']:
             emoji_key = emoji.get('emoji_key')
-            likes_count = emoji.get('likes_count', 0)
             if emoji_key:
                 # 获取当前时间作为created_at（使用东八区时间格式）
                 from datetime import datetime, timezone, timedelta
                 beijing_tz = timezone(timedelta(hours=8))
                 current_time = datetime.now(beijing_tz).strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + '+0800'
                 
-                self.cursor.execute('''
-                    INSERT INTO like_emojis 
-                    (topic_id, emoji_key, likes_count, created_at)
-                    VALUES (?, ?, ?, ?)
-                    ON CONFLICT(topic_id, emoji_key) DO UPDATE SET
-                        likes_count = excluded.likes_count,
-                        created_at = excluded.created_at
-                ''', (
-                    topic_id,
-                    emoji_key,
-                    likes_count,
-                    current_time
-                ))
+                sql, params = _like_emoji_insert_statement(topic_id, emoji, current_time)
+                self.cursor.execute(sql, params)
         
         if topic_data['likes_detail']['emojis']:
             pass  # 数据已导入，无需额外日志

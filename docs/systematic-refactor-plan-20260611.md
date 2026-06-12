@@ -4738,6 +4738,51 @@ Result:
 - `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
 - Frontend build is not planned because this slice only changes backend storage/helper code.
 
+### 2026-06-12 - P2 like emoji insert statement helper extraction
+
+Changed:
+
+- Added `like_emoji_insert_statement` to `backend/storage/zsxq_database_helpers.py`, with a
+  compatibility wrapper in `backend/storage/zsxq_database.py`.
+- Replaced inline `INSERT INTO like_emojis` SQL and params in `_import_like_emojis` with
+  helper-returned SQL and params.
+- Added characterization coverage for helper SQL shape, parameter order, missing `likes_detail`
+  skip, missing `emojis` skip, empty-list skip, missing `emoji_key` skip, default `likes_count=0`,
+  and generated Beijing-time `created_at` format.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- `_import_like_emojis` still returns before any database call when `likes_detail` is absent or
+  does not contain `emojis`.
+- Empty `emojis` lists still produce no database writes.
+- Individual emoji entries without a truthy `emoji_key` are still skipped.
+- Valid emoji entries still upsert the same `like_emojis` fields using
+  `ON CONFLICT(topic_id, emoji_key)`, preserving the existing `likes_count` default of `0`.
+- Timestamp formatting remains the existing Beijing-time `YYYY-MM-DDTHH:MM:SS.mmm+0800` string
+  generated inside the per-emoji branch.
+- No schema, config, compatibility, fallback, error handling, logging, commit order, or public API
+  semantics were changed.
+
+Verification:
+
+```powershell
+uv run python -m py_compile backend\storage\zsxq_database.py backend\storage\zsxq_database_helpers.py tests\test_zsxq_database_helpers.py
+uv run python -m unittest tests.test_zsxq_database_helpers -v
+uv run python -m unittest discover -s tests
+uv run python scripts\scan_postgres_compat_debt.py
+git diff --check
+```
+
+Result:
+
+- `py_compile` passed.
+- `tests.test_zsxq_database_helpers`: 47 tests passed.
+- Full backend unittest discovery: 650 tests passed, 15 skipped.
+- PostgreSQL compatibility debt scan: no SQLite compatibility patterns found.
+- `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
+- Frontend build is not planned because this slice only changes backend storage/helper code.
+
 ## Stop Conditions
 
 Pause before editing if:

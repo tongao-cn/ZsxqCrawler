@@ -369,6 +369,29 @@ def latest_like_insert_statement(
     )
 
 
+def like_emoji_insert_statement(
+    topic_id: int,
+    emoji_data: Dict[str, Any],
+    created_at: str,
+) -> tuple[str, tuple[Any, ...]]:
+    return (
+        """
+            INSERT INTO like_emojis
+            (topic_id, emoji_key, likes_count, created_at)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(topic_id, emoji_key) DO UPDATE SET
+                likes_count = excluded.likes_count,
+                created_at = excluded.created_at
+        """,
+        (
+            topic_id,
+            emoji_data.get("emoji_key"),
+            emoji_data.get("likes_count", 0),
+            created_at,
+        ),
+    )
+
+
 def update_tag_hid_statement(tag_id: int, hid: str) -> tuple[str, tuple[Any, ...]]:
     return "UPDATE tags SET hid = ? WHERE tag_id = ?", (hid, tag_id)
 

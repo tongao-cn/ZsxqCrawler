@@ -12,6 +12,7 @@ from backend.storage.zsxq_database import (
     _image_insert_statement,
     _insert_tag_statement,
     _insert_topic_tag_statement,
+    _like_emoji_insert_statement,
     _latest_like_insert_statement,
     _like_insert_statement,
     _newest_topic_create_time_query,
@@ -877,6 +878,21 @@ class ZSXQDatabaseHelperTests(unittest.TestCase):
         )
         self.assertEqual((202, 901, "", "2026-06-12T10:00:00.000+0800"), latest_params)
 
+    def test_like_emoji_insert_statement_helper_preserves_sql_shape_and_defaults(self):
+        sql, params = _like_emoji_insert_statement(
+            202,
+            {"emoji_key": "[ok]"},
+            "2026-06-12T10:00:00.000+0800",
+        )
+
+        self.assertEqual(
+            "INSERT INTO like_emojis (topic_id, emoji_key, likes_count, created_at) "
+            "VALUES (?, ?, ?, ?) ON CONFLICT(topic_id, emoji_key) DO UPDATE SET "
+            "likes_count = excluded.likes_count, created_at = excluded.created_at",
+            " ".join(sql.split()),
+        )
+        self.assertEqual((202, "[ok]", 0, "2026-06-12T10:00:00.000+0800"), params)
+
     def test_replace_file_topic_relation_deletes_then_inserts(self):
         file_db = FakeFileDatabase()
 
@@ -1353,6 +1369,33 @@ class ZSXQDatabaseHelperTests(unittest.TestCase):
         )
         self.assertEqual((202, 901, "2026-01-01T10:00:00.000+0800"), latest_params[:3])
         self.assertRegex(latest_params[3], r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}\+0800$")
+
+    def test_import_like_emojis_preserves_skip_defaults_and_upsert_params(self):
+        from backend.storage.zsxq_database import ZSXQDatabase
+
+        db = object.__new__(ZSXQDatabase)
+        db.cursor = FakeCursor()
+
+        ZSXQDatabase._import_like_emojis(db, 202, {})
+        ZSXQDatabase._import_like_emojis(db, 202, {"likes_detail": {}})
+        ZSXQDatabase._import_like_emojis(db, 202, {"likes_detail": {"emojis": []}})
+        self.assertEqual([], db.cursor.calls)
+
+        ZSXQDatabase._import_like_emojis(
+            db,
+            202,
+            {"likes_detail": {"emojis": [{"likes_count": 9}, {"emoji_key": "[ok]"}]}},
+        )
+
+        emoji_sql, emoji_params = db.cursor.calls[0]
+        self.assertEqual(
+            "INSERT INTO like_emojis (topic_id, emoji_key, likes_count, created_at) "
+            "VALUES (?, ?, ?, ?) ON CONFLICT(topic_id, emoji_key) DO UPDATE SET "
+            "likes_count = excluded.likes_count, created_at = excluded.created_at",
+            emoji_sql,
+        )
+        self.assertEqual((202, "[ok]", 0), emoji_params[:3])
+        self.assertRegex(emoji_params[3], r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}\+0800$")
 
     def test_update_topic_stats_preserves_skip_rowcount_and_exception_branches(self):
         from backend.storage.zsxq_database import ZSXQDatabase
