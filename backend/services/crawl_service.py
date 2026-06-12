@@ -610,6 +610,12 @@ def _fetch_official_topic_page(
     )
     return _OfficialTopicPage(payload=payload, topics=official_payload_topics(payload))
 
+def _official_topic_page_empty(task_id: str, topics: list[dict[str, Any]]) -> bool:
+    if topics:
+        return False
+    add_task_log(task_id, "📭 无更多数据，任务结束")
+    return True
+
 def _official_page_cursor(payload: dict[str, Any], current_cursor: Optional[str]) -> Optional[str]:
     next_cursor = payload.get("next_end_time")
     if not next_cursor or next_cursor == current_cursor:
@@ -698,8 +704,7 @@ def _run_official_crawl_time_range_task(
         page = _fetch_official_topic_page(client, group_id, per_page, cursor)
         payload = page.payload
         topics = page.topics
-        if not topics:
-            add_task_log(task_id, "📭 无更多数据，任务结束")
+        if _official_topic_page_empty(task_id, topics):
             break
 
         unique_topics = _dedupe_official_page_topics(topics, seen_topic_ids, total_stats)
@@ -745,8 +750,7 @@ def _run_official_crawl_pages_task(
         page = _fetch_official_topic_page(client, group_id, per_page, cursor)
         payload = page.payload
         topics = page.topics
-        if not topics:
-            add_task_log(task_id, "📭 无更多数据，任务结束")
+        if _official_topic_page_empty(task_id, topics):
             break
 
         unique_topics = _dedupe_official_page_topics(topics, seen_topic_ids, total_stats)

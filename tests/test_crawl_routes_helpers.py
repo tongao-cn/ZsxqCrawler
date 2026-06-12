@@ -1284,6 +1284,18 @@ class CrawlRoutesHelperTests(unittest.TestCase):
             client.calls,
         )
 
+    @unittest.skipUnless(HAS_CRAWL_ROUTE_DEPS, "crawl route dependencies are not installed")
+    def test_official_topic_page_empty_preserves_log_and_truthiness(self):
+        from backend.services.crawl_service import _official_topic_page_empty
+
+        with patch("backend.services.crawl_service.add_task_log") as add_task_log:
+            self.assertFalse(_official_topic_page_empty("task-1", [{"topic_id": 1}]))
+            add_task_log.assert_not_called()
+
+            self.assertTrue(_official_topic_page_empty("task-1", []))
+
+        add_task_log.assert_called_once_with("task-1", "📭 无更多数据，任务结束")
+
 
 if __name__ == "__main__":
     unittest.main()
