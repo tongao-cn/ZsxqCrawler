@@ -574,30 +574,26 @@ class ZSXQFileDownloader:
 
                 response = self._request_download_response(download_url)
 
-                filename_override = self._apply_response_filename_override(
+                (
+                    success_result,
+                    failure_detail,
                     file_name,
+                    safe_filename,
+                    file_path,
+                ) = self._handle_download_response(
+                    response,
                     file_id,
-                    response.headers,
+                    file_name,
+                    file_size,
+                    safe_filename,
+                    file_path,
                 )
-                if filename_override:
-                    file_name, safe_filename, file_path = filename_override
-
-                if response.status_code == 200:
-                    success_result, failure_detail = self._handle_successful_download_response(
-                        response,
-                        file_id,
-                        file_size,
-                        safe_filename,
-                        file_path,
-                    )
-                    if success_result is False:
-                        return False
-                    if failure_detail:
-                        last_error_code, last_error = failure_detail
-                        continue
-                    return True
-
-                last_error_code, last_error = self._record_download_http_failure(response.status_code)
+                if success_result is False:
+                    return False
+                if failure_detail:
+                    last_error_code, last_error = failure_detail
+                    continue
+                return True
 
             except Exception as e:
                 last_error_code, last_error = self._record_download_exception(e, file_path)
@@ -772,6 +768,36 @@ class ZSXQFileDownloader:
     def _request_download_response(self, download_url: str) -> Any:
         self.log(f"   🚀 开始下载...")
         return self.session.get(download_url, timeout=300, stream=True)
+
+    def _handle_download_response(
+        self,
+        response,
+        file_id: int,
+        file_name: str,
+        file_size: int,
+        safe_filename: str,
+        file_path: str,
+    ) -> tuple[Optional[bool], Optional[tuple[str, str]], str, str, str]:
+        filename_override = self._apply_response_filename_override(
+            file_name,
+            file_id,
+            response.headers,
+        )
+        if filename_override:
+            file_name, safe_filename, file_path = filename_override
+
+        if response.status_code == 200:
+            success_result, failure_detail = self._handle_successful_download_response(
+                response,
+                file_id,
+                file_size,
+                safe_filename,
+                file_path,
+            )
+            return success_result, failure_detail, file_name, safe_filename, file_path
+
+        failure_detail = self._record_download_http_failure(response.status_code)
+        return None, failure_detail, file_name, safe_filename, file_path
 
     def _prepare_download_body_target(
         self,

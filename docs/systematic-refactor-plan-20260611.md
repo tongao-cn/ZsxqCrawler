@@ -6617,6 +6617,54 @@ Result:
 - Frontend build passed, including Next.js lint/type checks.
 - `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
 
+### 2026-06-12 - P9 file downloader response dispatch helper
+
+Changed:
+
+- Added characterization coverage that a non-200 response with `Content-Disposition` still applies
+  the response filename override before recording the HTTP failure.
+- Added direct helper coverage for response dispatch across non-200 filename override plus HTTP
+  failure, and HTTP 200 success completion.
+- Added `ZSXQFileDownloader._handle_download_response` and reused it from `download_file`.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Response filename override is still evaluated before status-code dispatch, including non-200
+  responses.
+- HTTP 200 responses still flow through the existing successful-response helper, preserving body
+  writing, stop handling, size mismatch retry, finalization, counters, and interval behavior.
+- Non-200 responses still record the same HTTP failure detail and retry through the existing outer
+  retry loop.
+- Updated file-name/path values still persist into later retry attempts after a response-header
+  filename override.
+- Signed URL lookup, request options, exception cleanup, final failure handling, schema/config/API
+  behavior, and public API behavior are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_download_file_applies_response_filename_override_before_http_failure -v
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_handle_download_response_preserves_override_http_failure_and_success_paths tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_download_file_applies_response_filename_override_before_http_failure tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_download_file_finalizes_success_with_status_counters_logs_and_interval tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_download_file_marks_final_failure_after_http_retries -v
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+git diff --check
+```
+
+Result:
+
+- Pre-refactor response-dispatch characterization test passed against the original inline branch.
+- `py_compile` passed.
+- Focused response-dispatch/download tests passed.
+- `tests.test_zsxq_file_downloader_helpers`: 77 tests passed.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Full backend unittest discovery: 719 tests passed, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+- `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
+
 ## Stop Conditions
 
 Pause before editing if:

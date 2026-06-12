@@ -896,6 +896,64 @@ class FileDownloaderDownloadTests(unittest.TestCase):
         self.assertEqual([("https://download.test/101", 300, True)], session.get_calls)
         self.assertEqual(["   🚀 开始下载..."], downloader.logs)
 
+    def test_handle_download_response_preserves_override_http_failure_and_success_paths(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            downloader = object.__new__(ZSXQFileDownloader)
+            downloader.download_dir = temp_dir
+            downloader.file_db = FakeDownloadFileDb()
+            downloader.logs = []
+            downloader.log = downloader.logs.append
+            downloader.check_stop = lambda: False
+            downloader.download_count = 0
+            downloader.current_batch_count = 0
+            downloader._apply_download_intervals = lambda: None
+
+            http_failure = ZSXQFileDownloader._handle_download_response(
+                downloader,
+                FakeDownloadResponse(
+                    500,
+                    headers={"content-disposition": 'attachment; filename="real?.pdf"'},
+                ),
+                101,
+                "file_101",
+                4,
+                "file_101",
+                str(Path(temp_dir) / "file_101"),
+            )
+
+            self.assertEqual(
+                (
+                    None,
+                    ("http_status", "HTTP 500"),
+                    "real?.pdf",
+                    "real.pdf",
+                    str(Path(temp_dir) / "real.pdf"),
+                ),
+                http_failure,
+            )
+            self.assertEqual(
+                ["   📝 从响应头获取到真实文件名: real?.pdf", "   ❌ 下载失败: HTTP 500"],
+                downloader.logs,
+            )
+            self.assertEqual([], downloader.file_db.status_updates)
+
+            downloader.logs = []
+            downloader.log = downloader.logs.append
+            success_path = Path(temp_dir) / "memo.pdf"
+            success = ZSXQFileDownloader._handle_download_response(
+                downloader,
+                FakeDownloadResponse(200, b"memo"),
+                102,
+                "memo.pdf",
+                4,
+                "memo.pdf",
+                str(success_path),
+            )
+
+            self.assertEqual((True, None, "memo.pdf", "memo.pdf", str(success_path)), success)
+            self.assertEqual(b"memo", success_path.read_bytes())
+            self.assertEqual((102, "completed", str(success_path)), downloader.file_db.status_updates[-1][:3])
+
     def test_prepare_download_body_target_preserves_sizes_temp_path_and_cleanup(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             file_path = Path(temp_dir) / "memo.pdf"
@@ -1228,6 +1286,36 @@ class FileDownloaderDownloadTests(unittest.TestCase):
                 downloader.logs.index("   ❌ 下载失败: HTTP 500"),
                 downloader.logs.index("   🔄 文件下载重试 2/3，等待 2 秒..."),
             )
+
+    def test_download_file_applies_response_filename_override_before_http_failure(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            session = FakeDownloadSession([
+                FakeDownloadResponse(
+                    500,
+                    headers={"content-disposition": 'attachment; filename="real?.pdf"'},
+                ),
+                FakeDownloadResponse(500),
+                FakeDownloadResponse(500),
+            ])
+            downloader = self._downloader_for_download(temp_dir, session)
+
+            with patch("backend.crawlers.zsxq_file_downloader.time.sleep"):
+                result = ZSXQFileDownloader.download_file(
+                    downloader,
+                    {"file": {"id": 101, "name": "file_101", "size": 4, "download_count": 0}},
+                )
+
+            self.assertFalse(result)
+            self.assertEqual(3, len(session.get_calls))
+            self.assertEqual(
+                (101, "failed", None, "http_status", "HTTP 500"),
+                downloader.file_db.status_updates[-1],
+            )
+            self.assertLess(
+                downloader.logs.index("   📝 从响应头获取到真实文件名: real?.pdf"),
+                downloader.logs.index("   ❌ 下载失败: HTTP 500"),
+            )
+            self.assertFalse((Path(temp_dir) / "real.pdf").exists())
 
     def test_download_file_marks_final_failure_after_http_retries(self):
         with tempfile.TemporaryDirectory() as temp_dir:
