@@ -225,6 +225,16 @@ def _official_import_topics(
     db.conn.commit()
     return stats
 
+def _empty_official_crawl_stats() -> dict[str, Any]:
+    return {
+        "new_topics": 0,
+        "updated_topics": 0,
+        "errors": 0,
+        "pages": 0,
+        "duplicates": 0,
+        "source": "official",
+    }
+
 def _official_page_cursor(payload: dict[str, Any], current_cursor: Optional[str]) -> Optional[str]:
     next_cursor = payload.get("next_end_time")
     if not next_cursor or next_cursor == current_cursor:
@@ -264,14 +274,7 @@ def _run_official_crawl_time_range_task(
 
     cursor = _format_zsxq_time(end_dt)
     seen_topic_ids: set[int] = set()
-    total_stats = {
-        "new_topics": 0,
-        "updated_topics": 0,
-        "errors": 0,
-        "pages": 0,
-        "duplicates": 0,
-        "source": "official",
-    }
+    total_stats = _empty_official_crawl_stats()
 
     while True:
         if is_task_stopped(task_id):
@@ -331,14 +334,7 @@ def _run_official_crawl_pages_task(
     db = ZSXQDatabase(group_id)
     per_page = min(per_page or 20, 30)
     cursor = start_cursor
-    total_stats = {
-        "new_topics": 0,
-        "updated_topics": 0,
-        "errors": 0,
-        "pages": 0,
-        "duplicates": 0,
-        "source": "official",
-    }
+    total_stats = _empty_official_crawl_stats()
     seen_topic_ids: set[int] = set()
 
     while pages is None or total_stats["pages"] < pages:

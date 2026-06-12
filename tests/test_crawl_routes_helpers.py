@@ -365,6 +365,27 @@ class CrawlRoutesHelperTests(unittest.TestCase):
             {"expired": True, "code": 1059, "message": "expired"},
         )
 
+    @unittest.skipUnless(HAS_CRAWL_ROUTE_DEPS, "crawl route dependencies are not installed")
+    def test_empty_official_crawl_stats_preserves_shape_and_independent_instances(self):
+        from backend.services.crawl_service import _empty_official_crawl_stats
+
+        first = _empty_official_crawl_stats()
+        second = _empty_official_crawl_stats()
+
+        self.assertEqual(
+            {
+                "new_topics": 0,
+                "updated_topics": 0,
+                "errors": 0,
+                "pages": 0,
+                "duplicates": 0,
+                "source": "official",
+            },
+            first,
+        )
+        first["pages"] = 1
+        self.assertEqual(0, second["pages"])
+
 
 if __name__ == "__main__":
     unittest.main()
