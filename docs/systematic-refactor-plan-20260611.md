@@ -4604,6 +4604,49 @@ Result:
 - `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
 - Frontend build is not planned because this slice only changes backend storage/helper code.
 
+### 2026-06-12 - P2 talk insert statement helper extraction
+
+Changed:
+
+- Added `talk_insert_statement` to `backend/storage/zsxq_database_helpers.py`, with a
+  compatibility wrapper in `backend/storage/zsxq_database.py`.
+- Replaced inline `INSERT INTO talks` SQL and params in `_upsert_talk` with helper-returned SQL
+  and params.
+- Added characterization coverage for helper SQL shape, parameter order, empty payload skip,
+  missing `owner.user_id` skip, and generated Beijing-time `created_at` format.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- `_upsert_talk` still returns before any database call when `talk_data` is empty or
+  `owner.user_id` is missing/falsy.
+- It still writes the same `talks` columns, preserves the original `owner.user_id` extraction,
+  keeps the existing empty-string default for `text`, and updates the same fields on
+  `ON CONFLICT(topic_id)`.
+- Timestamp formatting remains the existing Beijing-time `YYYY-MM-DDTHH:MM:SS.mmm+0800` string
+  generated in `_upsert_talk`.
+- No schema, config, compatibility, fallback, error handling, logging, commit order, or public API
+  semantics were changed.
+
+Verification:
+
+```powershell
+uv run python -m py_compile backend\storage\zsxq_database.py backend\storage\zsxq_database_helpers.py tests\test_zsxq_database_helpers.py
+uv run python -m unittest tests.test_zsxq_database_helpers -v
+uv run python -m unittest discover -s tests
+uv run python scripts\scan_postgres_compat_debt.py
+git diff --check
+```
+
+Result:
+
+- `py_compile` passed.
+- `tests.test_zsxq_database_helpers`: 41 tests passed.
+- Full backend unittest discovery: 644 tests passed, 15 skipped.
+- PostgreSQL compatibility debt scan: no SQLite compatibility patterns found.
+- `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
+- Frontend build is not planned because this slice only changes backend storage/helper code.
+
 ## Stop Conditions
 
 Pause before editing if:

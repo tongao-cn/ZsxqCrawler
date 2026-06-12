@@ -15,6 +15,7 @@ from backend.storage.zsxq_database import (
     _oldest_topic_create_time_query,
     _refresh_tag_topic_count_statement,
     _replace_file_topic_relation,
+    _talk_insert_statement,
     _tag_id_by_name_query,
     _tags_by_group_query,
     _topic_create_time_by_id_query,
@@ -740,6 +741,22 @@ class ZSXQDatabaseHelperTests(unittest.TestCase):
             params,
         )
 
+    def test_talk_insert_statement_helper_preserves_sql_shape_and_params(self):
+        sql, params = _talk_insert_statement(
+            202,
+            {"owner": {"user_id": 901}, "text": "body"},
+            "2026-06-12T10:00:00.000+0800",
+        )
+
+        self.assertEqual(
+            "INSERT INTO talks (topic_id, owner_user_id, text, created_at) "
+            "VALUES (?, ?, ?, ?) ON CONFLICT(topic_id) DO UPDATE SET "
+            "owner_user_id = excluded.owner_user_id, text = excluded.text, "
+            "created_at = excluded.created_at",
+            " ".join(sql.split()),
+        )
+        self.assertEqual((202, 901, "body", "2026-06-12T10:00:00.000+0800"), params)
+
     def test_replace_file_topic_relation_deletes_then_inserts(self):
         file_db = FakeFileDatabase()
 
@@ -1074,6 +1091,29 @@ class ZSXQDatabaseHelperTests(unittest.TestCase):
             topic_params[:18],
         )
         self.assertRegex(topic_params[18], r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}\+0800$")
+
+    def test_upsert_talk_preserves_skip_and_insert_params(self):
+        from backend.storage.zsxq_database import ZSXQDatabase
+
+        db = object.__new__(ZSXQDatabase)
+        db.cursor = FakeCursor()
+
+        ZSXQDatabase._upsert_talk(db, 202, {})
+        ZSXQDatabase._upsert_talk(db, 202, {"owner": {}})
+        self.assertEqual([], db.cursor.calls)
+
+        ZSXQDatabase._upsert_talk(db, 202, {"owner": {"user_id": 901}, "text": "body"})
+
+        talk_sql, talk_params = db.cursor.calls[0]
+        self.assertEqual(
+            "INSERT INTO talks (topic_id, owner_user_id, text, created_at) "
+            "VALUES (?, ?, ?, ?) ON CONFLICT(topic_id) DO UPDATE SET "
+            "owner_user_id = excluded.owner_user_id, text = excluded.text, "
+            "created_at = excluded.created_at",
+            talk_sql,
+        )
+        self.assertEqual((202, 901, "body"), talk_params[:3])
+        self.assertRegex(talk_params[3], r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}\+0800$")
 
     def test_update_topic_stats_preserves_skip_rowcount_and_exception_branches(self):
         from backend.storage.zsxq_database import ZSXQDatabase

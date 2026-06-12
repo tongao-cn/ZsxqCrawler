@@ -241,6 +241,26 @@ def topic_stats_update_statement(
     )
 
 
+def talk_insert_statement(topic_id: int, talk_data: Dict[str, Any], created_at: str) -> tuple[str, tuple[Any, ...]]:
+    return (
+        """
+            INSERT INTO talks
+            (topic_id, owner_user_id, text, created_at)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(topic_id) DO UPDATE SET
+                owner_user_id = excluded.owner_user_id,
+                text = excluded.text,
+                created_at = excluded.created_at
+        """,
+        (
+            topic_id,
+            talk_data.get("owner", {}).get("user_id"),
+            talk_data.get("text", ""),
+            created_at,
+        ),
+    )
+
+
 def update_tag_hid_statement(tag_id: int, hid: str) -> tuple[str, tuple[Any, ...]]:
     return "UPDATE tags SET hid = ? WHERE tag_id = ?", (hid, tag_id)
 

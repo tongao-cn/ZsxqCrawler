@@ -25,6 +25,7 @@ from backend.storage.zsxq_database_helpers import (
     refresh_tag_topic_count_statement,
     replace_file_topic_relation,
     tag_id_by_name_query,
+    talk_insert_statement,
     tags_by_group_query,
     topic_create_time_by_id_query,
     topic_count_by_tag_query,
@@ -89,6 +90,10 @@ def _topic_stats_update_statement(
     imported_at: str,
 ) -> tuple[str, tuple[Any, ...]]:
     return topic_stats_update_statement(topic_data, topic_id, scoped_group_id, imported_at)
+
+
+def _talk_insert_statement(topic_id: int, talk_data: Dict[str, Any], created_at: str) -> tuple[str, tuple[Any, ...]]:
+    return talk_insert_statement(topic_id, talk_data, created_at)
 
 
 def _update_tag_hid_statement(tag_id: int, hid: str) -> tuple[str, tuple[Any, ...]]:
@@ -494,20 +499,8 @@ class ZSXQDatabase:
         beijing_tz = timezone(timedelta(hours=8))
         current_time = datetime.now(beijing_tz).strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + '+0800'
         
-        self.cursor.execute('''
-            INSERT INTO talks 
-            (topic_id, owner_user_id, text, created_at)
-            VALUES (?, ?, ?, ?)
-            ON CONFLICT(topic_id) DO UPDATE SET
-                owner_user_id = excluded.owner_user_id,
-                text = excluded.text,
-                created_at = excluded.created_at
-        ''', (
-            topic_id,
-            owner_user_id,
-            talk_data.get('text', ''),
-            current_time
-        ))
+        sql, params = _talk_insert_statement(topic_id, talk_data, current_time)
+        self.cursor.execute(sql, params)
 
     
     def _import_images(self, topic_id: int, topic_data: Dict[str, Any]):
