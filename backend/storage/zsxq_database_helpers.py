@@ -91,6 +91,12 @@ def iter_valid_comment_image_payloads(images) -> Iterator[Any]:
             yield image
 
 
+def comment_image_batch_from_comment(comment) -> Optional[tuple[Any, Any]]:
+    if "images" in comment and comment["images"]:
+        return comment["comment_id"], comment["images"]
+    return None
+
+
 def format_tag_row(row) -> Dict[str, Any]:
     return {
         "tag_id": row[0],

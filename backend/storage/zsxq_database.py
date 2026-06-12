@@ -9,6 +9,7 @@ from backend.storage.zsxq_database_helpers import (
     article_insert_statement,
     beijing_now_timestamp,
     build_pagination,
+    comment_image_batch_from_comment,
     comment_insert_statement,
     database_stats_count_query,
     delete_latest_likes_statement,
@@ -106,6 +107,10 @@ def _iter_valid_latest_like_payloads(latest_likes):
 
 def _iter_valid_comment_image_payloads(images):
     return iter_valid_comment_image_payloads(images)
+
+
+def _comment_image_batch_from_comment(comment):
+    return comment_image_batch_from_comment(comment)
 
 
 def _tag_id_by_name_query(group_id: int, tag_name: str) -> tuple[str, tuple[Any, ...]]:
@@ -681,8 +686,10 @@ class ZSXQDatabase:
         for comment in comments:
             self._upsert_comment(topic_id, comment)
             # 导入评论的图片
-            if 'images' in comment and comment['images']:
-                self._import_comment_images(topic_id, comment['comment_id'], comment['images'])
+            image_batch = _comment_image_batch_from_comment(comment)
+            if image_batch:
+                comment_id, images = image_batch
+                self._import_comment_images(topic_id, comment_id, images)
 
         if comments:
             pass  # 数据已导入，无需额外日志
@@ -707,8 +714,10 @@ class ZSXQDatabase:
             self._upsert_comment(topic_id, comment)
 
             # 导入评论的图片
-            if 'images' in comment and comment['images']:
-                self._import_comment_images(topic_id, comment['comment_id'], comment['images'])
+            image_batch = _comment_image_batch_from_comment(comment)
+            if image_batch:
+                comment_id, images = image_batch
+                self._import_comment_images(topic_id, comment_id, images)
 
         print(f"✅ 完成导入 {len(comments)} 条评论")
 

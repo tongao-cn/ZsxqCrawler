@@ -6,6 +6,7 @@ from backend.storage.zsxq_database import (
     _article_insert_statement,
     _beijing_now_timestamp,
     _build_pagination,
+    _comment_image_batch_from_comment,
     _comment_insert_statement,
     _database_stats_count_query,
     _delete_latest_likes_statement,
@@ -608,6 +609,17 @@ class ZSXQDatabaseHelperTests(unittest.TestCase):
             [valid_first, valid_second],
             list(_iter_valid_comment_image_payloads([{}, {"image_id": 0}, valid_first, valid_second])),
         )
+
+    def test_comment_image_batch_from_comment_preserves_existing_access_semantics(self):
+        self.assertIsNone(_comment_image_batch_from_comment({}))
+        self.assertIsNone(_comment_image_batch_from_comment({"comment_id": 301, "images": []}))
+        self.assertEqual(
+            (301, [{"image_id": 701}]),
+            _comment_image_batch_from_comment({"comment_id": 301, "images": [{"image_id": 701}]}),
+        )
+
+        with self.assertRaises(KeyError):
+            _comment_image_batch_from_comment({"images": [{"image_id": 702}]})
 
     def test_format_tag_row_keeps_existing_fields(self):
         row = (1, "tag", "hid-1", 7, "2026-01-01")
@@ -1912,6 +1924,59 @@ class ZSXQDatabaseHelperTests(unittest.TestCase):
             comment_params[:14],
         )
         self.assertRegex(comment_params[14], r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}\+0800$")
+
+    def test_import_comments_preserves_upsert_and_image_import_order(self):
+        from backend.storage.zsxq_database import ZSXQDatabase
+
+        db = object.__new__(ZSXQDatabase)
+        events = []
+
+        def upsert_comment(topic_id, comment):
+            events.append(("upsert", topic_id, comment.get("comment_id")))
+
+        def import_comment_images(topic_id, comment_id, images):
+            events.append(("images", topic_id, comment_id, images))
+
+        db._upsert_comment = upsert_comment
+        db._import_comment_images = import_comment_images
+
+        images = [{"image_id": 701}]
+        ZSXQDatabase._import_comments(
+            db,
+            202,
+            [
+                {"comment_id": 301},
+                {"comment_id": 302, "images": []},
+                {"comment_id": 303, "images": images},
+            ],
+        )
+
+        self.assertEqual(
+            [
+                ("upsert", 202, 301),
+                ("upsert", 202, 302),
+                ("upsert", 202, 303),
+                ("images", 202, 303, images),
+            ],
+            events,
+        )
+
+        failing_db = object.__new__(ZSXQDatabase)
+        failing_events = []
+
+        def failing_upsert_comment(topic_id, comment):
+            failing_events.append(("upsert", topic_id, comment.get("comment_id")))
+
+        def failing_import_comment_images(topic_id, comment_id, images):
+            failing_events.append(("images", topic_id, comment_id, images))
+
+        failing_db._upsert_comment = failing_upsert_comment
+        failing_db._import_comment_images = failing_import_comment_images
+
+        with self.assertRaises(KeyError):
+            ZSXQDatabase._import_comments(failing_db, 202, [{"images": images}])
+
+        self.assertEqual([("upsert", 202, None)], failing_events)
 
     def test_import_likes_preserves_delete_skip_and_insert_order(self):
         from backend.storage.zsxq_database import ZSXQDatabase
