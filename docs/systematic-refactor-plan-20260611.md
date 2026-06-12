@@ -7883,6 +7883,53 @@ Result:
 - Frontend build passed, including Next.js lint/type checks.
 - `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
 
+### 2026-06-12 - P4 legacy next-end-time helper
+
+Changed:
+
+- Added characterization coverage for the legacy time-range next-page cursor fallback when the
+  oldest topic timestamp is invalid.
+- Extracted `_legacy_next_end_time` in `backend/services/crawl_service.py`.
+- Reused the helper from the legacy `run_crawl_time_range_task` page loop.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Valid oldest topic timestamps still normalize `+0800` to `+08:00`, subtract
+  `crawler.timestamp_offset_ms`, and format back to `YYYY-MM-DDTHH:MM:SS.mmm+0800`.
+- Invalid or missing oldest topic timestamps still fall back to the original `oldest_in_page`
+  value for the next request `end_time`.
+- Filtering, page stats, stop checks, long-delay calls, empty-page completion, public API behavior,
+  task status semantics, schema/config behavior, official MCP HTTP behavior, and cookie-based
+  crawler behavior are unchanged.
+- No legacy/fallback behavior was removed; the fallback is now covered by a focused test.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_crawl_routes_helpers.CrawlRoutesHelperTests.test_legacy_time_range_keeps_invalid_oldest_time_as_next_end_time -v
+uv run python -m unittest tests.test_crawl_routes_helpers.CrawlRoutesHelperTests.test_legacy_time_range_filters_topics_and_advances_end_time tests.test_crawl_routes_helpers.CrawlRoutesHelperTests.test_legacy_time_range_keeps_invalid_oldest_time_as_next_end_time tests.test_crawl_routes_helpers.CrawlRoutesHelperTests.test_time_range_crawl_stops_after_empty_page -v
+uv run python -m py_compile backend\services\crawl_service.py tests\test_crawl_routes_helpers.py
+uv run python -m unittest tests.test_crawl_routes_helpers -v
+uv run python -m unittest tests.test_official_topic_client_helpers -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+git diff --check
+```
+
+Result:
+
+- New fallback test passed before and after helper extraction.
+- Focused legacy time-range tests passed after helper extraction.
+- `py_compile` passed.
+- `tests.test_crawl_routes_helpers`: 38 tests passed.
+- `tests.test_official_topic_client_helpers`: 16 tests passed.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Full backend unittest discovery: 754 tests passed, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+- `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
+
 ## Stop Conditions
 
 Pause before editing if:

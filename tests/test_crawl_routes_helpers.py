@@ -463,6 +463,47 @@ class CrawlRoutesHelperTests(unittest.TestCase):
         )
 
     @unittest.skipUnless(HAS_CRAWL_ROUTE_DEPS, "crawl route dependencies are not installed")
+    def test_legacy_time_range_keeps_invalid_oldest_time_as_next_end_time(self):
+        from backend.routes.crawl_routes import CrawlTimeRangeRequest
+        from backend.services.crawl_service import run_crawl_time_range_task
+
+        crawler = TimeRangeCrawler(
+            [
+                {
+                    "succeeded": True,
+                    "resp_data": {
+                        "topics": [
+                            {"topic_id": 1, "create_time": "2026-02-02T10:00:00.000+0800"},
+                            {"topic_id": 2, "create_time": "not-a-time"},
+                        ]
+                    },
+                },
+                {"succeeded": True, "resp_data": {"topics": []}},
+            ]
+        )
+
+        with (
+            patch("backend.services.crawl_service.get_cookie_for_group", return_value="cookie"),
+            patch("backend.services.crawl_service.ZSXQTopicCrawler", return_value=crawler),
+            patch("backend.services.crawl_service.is_task_stopped", return_value=False),
+            patch("backend.services.crawl_service.add_task_log"),
+            patch("backend.services.crawl_service.update_task"),
+            patch("backend.services.crawl_service.unregister_task_crawler"),
+        ):
+            run_crawl_time_range_task(
+                "task-1",
+                "group-1",
+                CrawlTimeRangeRequest(
+                    startTime="2026-02-01",
+                    endTime="2026-02-02",
+                    perPage=20,
+                    topicSource="legacy",
+                ),
+            )
+
+        self.assertEqual("not-a-time", crawler.fetch_calls[1]["end_time"])
+
+    @unittest.skipUnless(HAS_CRAWL_ROUTE_DEPS, "crawl route dependencies are not installed")
     def test_legacy_latest_branch_creates_registered_crawler_and_applies_settings(self):
         from backend.routes.crawl_routes import CrawlSettingsRequest
         from backend.services.crawl_service import run_crawl_latest_task

@@ -210,6 +210,15 @@ def _filter_legacy_topics_by_time_range(
                 filtered.append(topic)
     return filtered, last_time_dt_in_page
 
+def _legacy_next_end_time(topics: list[dict[str, Any]], timestamp_offset_ms: int) -> Optional[str]:
+    oldest_in_page = topics[-1].get("create_time")
+    try:
+        dt_oldest = datetime.fromisoformat(oldest_in_page.replace("+0800", "+08:00"))
+        dt_oldest = dt_oldest - timedelta(milliseconds=timestamp_offset_ms)
+        return dt_oldest.strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "+0800"
+    except Exception:
+        return oldest_in_page
+
 def _query_group_id(group_id: str) -> Any:
     value = str(group_id or "").strip()
     return int(value) if value.isdigit() else value
@@ -739,13 +748,7 @@ def run_crawl_time_range_task(task_id: str, group_id: str, request: Any):
                 total_stats["pages"] += 1
                 page_processed = True
 
-                oldest_in_page = topics[-1].get("create_time")
-                try:
-                    dt_oldest = datetime.fromisoformat(oldest_in_page.replace("+0800", "+08:00"))
-                    dt_oldest = dt_oldest - timedelta(milliseconds=crawler.timestamp_offset_ms)
-                    end_time_param = dt_oldest.strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "+0800"
-                except Exception:
-                    end_time_param = oldest_in_page
+                end_time_param = _legacy_next_end_time(topics, crawler.timestamp_offset_ms)
 
                 if last_time_dt_in_page and last_time_dt_in_page < start_dt:
                     add_task_log(task_id, "✅ 已到达起始时间之前，任务结束")
