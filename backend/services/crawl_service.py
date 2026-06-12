@@ -298,6 +298,9 @@ def _log_legacy_time_range_page_summary(
 def _empty_legacy_time_range_stats() -> dict[str, int]:
     return {"new_topics": 0, "updated_topics": 0, "errors": 0, "pages": 0}
 
+def _legacy_time_range_initial_cursors(start_dt: datetime, end_dt: datetime) -> tuple[str, str]:
+    return _format_zsxq_time(start_dt), _format_zsxq_time(end_dt)
+
 def _query_group_id(group_id: str) -> Any:
     value = str(group_id or "").strip()
     return int(value) if value.isdigit() else value
@@ -769,8 +772,7 @@ def run_crawl_time_range_task(task_id: str, group_id: str, request: Any):
 
         per_page = request.perPage or 20
         total_stats = _empty_legacy_time_range_stats()
-        begin_time_param = _format_zsxq_time(start_dt)
-        end_time_param = _format_zsxq_time(end_dt)
+        begin_time_param, end_time_param = _legacy_time_range_initial_cursors(start_dt, end_dt)
         max_retries_per_page = 10
 
         while True:
