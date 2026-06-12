@@ -65,6 +65,12 @@ def topic_image_payloads_from_data(topic_data: Dict[str, Any]) -> list[tuple[Any
     return images_to_import
 
 
+def iter_valid_like_emoji_payloads(emojis) -> Iterator[Any]:
+    for emoji in emojis:
+        if emoji.get("emoji_key"):
+            yield emoji
+
+
 def format_tag_row(row) -> Dict[str, Any]:
     return {
         "tag_id": row[0],

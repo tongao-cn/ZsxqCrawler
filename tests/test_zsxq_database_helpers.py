@@ -18,6 +18,7 @@ from backend.storage.zsxq_database import (
     _insert_tag_statement,
     _insert_topic_tag_statement,
     _iter_topic_user_payloads_from_data,
+    _iter_valid_like_emoji_payloads,
     _like_emoji_insert_statement,
     _latest_like_insert_statement,
     _like_insert_statement,
@@ -550,6 +551,24 @@ class ZSXQDatabaseHelperTests(unittest.TestCase):
                         {},
                     ],
                 }
+            ),
+        )
+
+    def test_iter_valid_like_emoji_payloads_filters_missing_keys(self):
+        valid_first = {"emoji_key": "[ok]", "likes_count": 3}
+        valid_second = {"emoji_key": "[fire]", "likes_count": 5}
+
+        self.assertEqual(
+            [valid_first, valid_second],
+            list(
+                _iter_valid_like_emoji_payloads(
+                    [
+                        {"likes_count": 9},
+                        {"emoji_key": ""},
+                        valid_first,
+                        valid_second,
+                    ]
+                )
             ),
         )
 

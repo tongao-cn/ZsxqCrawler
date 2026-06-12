@@ -21,6 +21,7 @@ from backend.storage.zsxq_database_helpers import (
     insert_tag_statement,
     insert_topic_tag_statement,
     iter_topic_user_payloads_from_data,
+    iter_valid_like_emoji_payloads,
     like_emoji_insert_statement,
     latest_like_insert_statement,
     like_insert_statement,
@@ -86,6 +87,10 @@ def _iter_topic_user_payloads_from_data(topic_data: Dict[str, Any]):
 
 def _topic_image_payloads_from_data(topic_data: Dict[str, Any]) -> list[tuple[Any, Optional[Any]]]:
     return topic_image_payloads_from_data(topic_data)
+
+
+def _iter_valid_like_emoji_payloads(emojis):
+    return iter_valid_like_emoji_payloads(emojis)
 
 
 def _tag_id_by_name_query(group_id: int, tag_name: str) -> tuple[str, tuple[Any, ...]]:
@@ -636,15 +641,13 @@ class ZSXQDatabase:
         """导入表情点赞信息"""
         if 'likes_detail' not in topic_data or 'emojis' not in topic_data['likes_detail']:
             return
-        
-        for emoji in topic_data['likes_detail']['emojis']:
-            emoji_key = emoji.get('emoji_key')
-            if emoji_key:
-                # 获取当前时间作为created_at（使用东八区时间格式）
-                current_time = _beijing_now_timestamp()
-                
-                sql, params = _like_emoji_insert_statement(topic_id, emoji, current_time)
-                self.cursor.execute(sql, params)
+
+        for emoji in _iter_valid_like_emoji_payloads(topic_data['likes_detail']['emojis']):
+            # 获取当前时间作为created_at（使用东八区时间格式）
+            current_time = _beijing_now_timestamp()
+
+            sql, params = _like_emoji_insert_statement(topic_id, emoji, current_time)
+            self.cursor.execute(sql, params)
         
         if topic_data['likes_detail']['emojis']:
             pass  # 数据已导入，无需额外日志
