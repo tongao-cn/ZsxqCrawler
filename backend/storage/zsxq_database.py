@@ -22,6 +22,7 @@ from backend.storage.zsxq_database_helpers import (
     insert_topic_tag_statement,
     iter_topic_user_payloads_from_data,
     iter_valid_like_emoji_payloads,
+    iter_valid_user_liked_emoji_keys,
     like_emoji_insert_statement,
     latest_like_insert_statement,
     like_insert_statement,
@@ -91,6 +92,10 @@ def _topic_image_payloads_from_data(topic_data: Dict[str, Any]) -> list[tuple[An
 
 def _iter_valid_like_emoji_payloads(emojis):
     return iter_valid_like_emoji_payloads(emojis)
+
+
+def _iter_valid_user_liked_emoji_keys(emoji_keys):
+    return iter_valid_user_liked_emoji_keys(emoji_keys)
 
 
 def _tag_id_by_name_query(group_id: int, tag_name: str) -> tuple[str, tuple[Any, ...]]:
@@ -656,11 +661,10 @@ class ZSXQDatabase:
         """导入用户表情点赞信息"""
         if 'user_specific' not in topic_data or 'liked_emojis' not in topic_data['user_specific']:
             return
-        
-        for emoji_key in topic_data['user_specific']['liked_emojis']:
-            if emoji_key:
-                sql, params = _user_liked_emoji_insert_statement(topic_id, emoji_key)
-                self.cursor.execute(sql, params)
+
+        for emoji_key in _iter_valid_user_liked_emoji_keys(topic_data['user_specific']['liked_emojis']):
+            sql, params = _user_liked_emoji_insert_statement(topic_id, emoji_key)
+            self.cursor.execute(sql, params)
         
         if topic_data['user_specific']['liked_emojis']:
             pass  # 数据已导入，无需额外日志

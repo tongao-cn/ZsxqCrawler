@@ -5340,6 +5340,51 @@ Result:
 - `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
 - Frontend build is not planned because this slice only changes backend storage/helper code.
 
+### 2026-06-12 - P2 user liked emoji key iterator helper
+
+Changed:
+
+- Added `iter_valid_user_liked_emoji_keys` to `backend/storage/zsxq_database_helpers.py`,
+  with a compatibility wrapper in `backend/storage/zsxq_database.py`.
+- Replaced the inline `_import_user_liked_emojis` falsey-key filtering with the helper output.
+- Added direct helper coverage for empty string, `None`, `False`, and valid emoji key ordering.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- `_import_user_liked_emojis` still returns before processing when `user_specific` or
+  `liked_emojis` is missing.
+- Falsey liked emoji keys are still skipped and valid keys keep their original order.
+- The helper is lazy, so SQL execution still occurs only when a valid key is reached.
+- The existing no-op non-empty `liked_emojis` branch remains in the class method to preserve the
+  original control-flow shape.
+- Existing SQL, schema, config, fallback behavior, error handling, logging, commit/rollback
+  behavior, and public API semantics are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_import_user_liked_emojis_preserves_skip_and_insert_params -v
+uv run python -m py_compile backend\storage\zsxq_database.py backend\storage\zsxq_database_helpers.py tests\test_zsxq_database_helpers.py
+uv run python -m unittest tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_iter_valid_user_liked_emoji_keys_filters_falsey_keys tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_import_user_liked_emojis_preserves_skip_and_insert_params -v
+uv run python -m unittest tests.test_zsxq_database_helpers -v
+uv run python -m unittest discover -s tests
+uv run python scripts\scan_postgres_compat_debt.py
+git diff --check
+```
+
+Result:
+
+- Pre-refactor characterization test passed against the original inline
+  `_import_user_liked_emojis` implementation.
+- `py_compile` passed.
+- Focused helper/import tests passed.
+- `tests.test_zsxq_database_helpers`: 69 tests passed.
+- Full backend unittest discovery: 672 tests passed, 15 skipped.
+- PostgreSQL compatibility debt scan: no SQLite compatibility patterns found.
+- `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
+- Frontend build is not planned because this slice only changes backend storage/helper code.
+
 ## Stop Conditions
 
 Pause before editing if:

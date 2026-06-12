@@ -19,6 +19,7 @@ from backend.storage.zsxq_database import (
     _insert_topic_tag_statement,
     _iter_topic_user_payloads_from_data,
     _iter_valid_like_emoji_payloads,
+    _iter_valid_user_liked_emoji_keys,
     _like_emoji_insert_statement,
     _latest_like_insert_statement,
     _like_insert_statement,
@@ -570,6 +571,12 @@ class ZSXQDatabaseHelperTests(unittest.TestCase):
                     ]
                 )
             ),
+        )
+
+    def test_iter_valid_user_liked_emoji_keys_filters_falsey_keys(self):
+        self.assertEqual(
+            ["[ok]", "[fire]"],
+            list(_iter_valid_user_liked_emoji_keys(["", "[ok]", None, False, "[fire]"])),
         )
 
     def test_format_tag_row_keeps_existing_fields(self):

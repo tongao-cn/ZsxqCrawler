@@ -71,6 +71,12 @@ def iter_valid_like_emoji_payloads(emojis) -> Iterator[Any]:
             yield emoji
 
 
+def iter_valid_user_liked_emoji_keys(emoji_keys) -> Iterator[Any]:
+    for emoji_key in emoji_keys:
+        if emoji_key:
+            yield emoji_key
+
+
 def format_tag_row(row) -> Dict[str, Any]:
     return {
         "tag_id": row[0],
