@@ -6,6 +6,9 @@ from backend.core.console_output import safe_console_print as print
 from backend.crawlers.topic_ingestion import _query_group_id
 
 
+TOPIC_PAGINATION_MAX_RETRIES_PER_PAGE = 10
+
+
 def _format_offset_zsxq_end_time(value: str, delta: Any) -> str:
     from datetime import datetime
 
@@ -61,7 +64,7 @@ class TopicPaginationMixin:
         total_stats = {'new_topics': 0, 'updated_topics': 0, 'errors': 0, 'pages': 0}
         end_time = None
         completed_pages = 0
-        max_retries_per_page = 10  # 每页最大重试次数
+        max_retries_per_page = TOPIC_PAGINATION_MAX_RETRIES_PER_PAGE
 
         while completed_pages < pages:
             # 检查停止标志
@@ -209,7 +212,7 @@ class TopicPaginationMixin:
         total_stats = {'new_topics': 0, 'updated_topics': 0, 'errors': 0, 'pages': 0}
         end_time = start_end_time  # 使用增量爬取的起始时间戳
         current_page = 0
-        max_retries_per_page = 10
+        max_retries_per_page = TOPIC_PAGINATION_MAX_RETRIES_PER_PAGE
         consecutive_empty_pages = 0  # 连续空页面计数
         max_consecutive_empty = 3   # 最大连续空页面数
 
@@ -405,7 +408,7 @@ class TopicPaginationMixin:
         total_stats = {'new_topics': 0, 'updated_topics': 0, 'errors': 0, 'pages': 0}
         end_time = start_end_time
         completed_pages = 0
-        max_retries_per_page = 10
+        max_retries_per_page = TOPIC_PAGINATION_MAX_RETRIES_PER_PAGE
 
         while completed_pages < pages:
             current_page = completed_pages + 1
@@ -549,7 +552,7 @@ class TopicPaginationMixin:
         total_stats = {'new_topics': 0, 'updated_topics': 0, 'errors': 0, 'pages': 0}
         end_time = None  # 从最新开始
         current_page = 0
-        max_retries_per_page = 10
+        max_retries_per_page = TOPIC_PAGINATION_MAX_RETRIES_PER_PAGE
 
         while True:
             # 检查停止标志

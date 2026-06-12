@@ -9566,6 +9566,54 @@ Result:
 - Frontend build passed, including Next.js lint/type checks.
 - `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
 
+### 2026-06-12 - P4 topic pagination retry constant
+
+Changed:
+
+- Reused existing topic pagination helper tests before editing `backend/crawlers/topic_pagination.py`.
+- Added `TOPIC_PAGINATION_MAX_RETRIES_PER_PAGE = 10`.
+- Replaced four duplicated local `max_retries_per_page = 10` assignments with the shared constant.
+- Added characterization coverage for the current retry count.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Historical, all-historical, incremental, and latest pagination paths still use 10 max retries per
+  page.
+- Retry loop bounds, retry log interpolation, max-retry skip/stop branches, stop checks, timestamp
+  fallback behavior, return shapes, task status behavior, and crawler side effects are unchanged.
+- Public API behavior, schema/config behavior, official MCP HTTP behavior, legacy cookie crawler
+  behavior, and fallback behavior are otherwise unchanged.
+- No legacy/fallback behavior was removed.
+- Existing dirty downloader risk-log files and scripts remain outside this P4 slice.
+
+Verification:
+
+```powershell
+uv run python -m py_compile backend\crawlers\topic_pagination.py tests\test_zsxq_interactive_crawler_helpers.py
+uv run python -m unittest tests.test_zsxq_interactive_crawler_helpers -v
+git grep -n "max_retries_per_page = 10" -- backend/crawlers/topic_pagination.py
+uv run python scripts\scan_postgres_compat_debt.py
+uv run python -m unittest tests.test_zsxq_interactive_crawler_helpers -v
+uv run python -m unittest tests.test_crawl_routes_helpers -v
+uv run python -m unittest discover -s tests
+cmd.exe /d /c npm --prefix frontend run build
+git diff --check
+```
+
+Result:
+
+- Focused pagination helper tests passed after constant extraction.
+- `py_compile` passed.
+- Grep found no remaining local `max_retries_per_page = 10` assignments in
+  `topic_pagination.py`.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- `tests.test_zsxq_interactive_crawler_helpers`: 6 tests passed.
+- `tests.test_crawl_routes_helpers`: 54 tests passed.
+- Full backend unittest discovery: 772 tests passed, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+- `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
+
 ## Stop Conditions
 
 Pause before editing if:

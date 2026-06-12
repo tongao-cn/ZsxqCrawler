@@ -1,6 +1,7 @@
 import unittest
 
 from backend.crawlers.topic_pagination import (
+    TOPIC_PAGINATION_MAX_RETRIES_PER_PAGE,
     _offset_zsxq_end_time,
     _offset_zsxq_end_time_by_hours,
 )
@@ -8,6 +9,9 @@ from backend.crawlers.topic_crawler import ZSXQTopicCrawler
 
 
 class TopicCrawlerPaginationTests(unittest.TestCase):
+    def test_topic_pagination_max_retries_per_page_preserves_current_value(self):
+        self.assertEqual(10, TOPIC_PAGINATION_MAX_RETRIES_PER_PAGE)
+
     def test_offset_zsxq_end_time_formats_without_timezone_colon(self):
         self.assertEqual(
             "2026-02-01T09:59:59.999+0800",
