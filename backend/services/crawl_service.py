@@ -273,6 +273,13 @@ def _legacy_time_range_reached_before_start(
 ) -> bool:
     return last_time_dt_in_page is not None and last_time_dt_in_page < start_dt
 
+def _legacy_time_range_should_finish(
+    reached_end: bool,
+    last_time_dt_in_page: Optional[datetime],
+    start_dt: datetime,
+) -> bool:
+    return reached_end or _legacy_time_range_reached_before_start(last_time_dt_in_page, start_dt)
+
 def _fetch_legacy_time_range_page(
     crawler: Any,
     per_page: int,
@@ -838,7 +845,7 @@ def run_crawl_time_range_task(task_id: str, group_id: str, request: Any):
             if _legacy_time_range_page_failed(task_id, page_processed):
                 break
 
-            if reached_end or _legacy_time_range_reached_before_start(last_time_dt_in_page, start_dt):
+            if _legacy_time_range_should_finish(reached_end, last_time_dt_in_page, start_dt):
                 break
 
         update_task(task_id, "completed", "时间区间爬取完成", total_stats)

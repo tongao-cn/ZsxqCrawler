@@ -8584,6 +8584,53 @@ Result:
 - Frontend build passed, including Next.js lint/type checks.
 - `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
 
+### 2026-06-12 - P4 legacy time-range finish condition helper
+
+Changed:
+
+- Reused existing legacy time-range tests that assert empty-page termination, filtered-page
+  continuation, and before-start termination.
+- Extracted `_legacy_time_range_should_finish` in `backend/services/crawl_service.py`.
+- Replaced the outer-loop `reached_end or before-start` expression with the helper.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Empty pages still end the legacy time-range task through the existing completion path.
+- Pages older than the start time still log `✅ 已到达起始时间之前，任务结束` inside the page loop
+  and then stop the outer loop.
+- Filtered pages that remain within range still continue to the next legacy page.
+- Fetch call shape, initial cursor formatting, default and explicit `perPage`, retry error counting,
+  max-retry termination, filtered page storage, invalid timestamp fallback, outer-stop completion,
+  expired handling, public API behavior, task status semantics, schema/config behavior, official MCP
+  HTTP behavior, and cookie-based crawler behavior are unchanged.
+- No legacy/fallback behavior was removed.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_crawl_routes_helpers.CrawlRoutesHelperTests.test_time_range_crawl_stops_after_empty_page tests.test_crawl_routes_helpers.CrawlRoutesHelperTests.test_legacy_time_range_filters_topics_and_advances_end_time tests.test_crawl_routes_helpers.CrawlRoutesHelperTests.test_legacy_time_range_stops_when_page_is_before_start_time -v
+uv run python -m py_compile backend\services\crawl_service.py tests\test_crawl_routes_helpers.py
+uv run python scripts\scan_postgres_compat_debt.py
+uv run python -m unittest tests.test_crawl_routes_helpers -v
+uv run python -m unittest tests.test_official_topic_client_helpers -v
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+git diff --check
+```
+
+Result:
+
+- Focused empty-page, filtered-page continuation, and before-start tests passed after helper
+  extraction.
+- `py_compile` passed.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- `tests.test_crawl_routes_helpers`: 45 tests passed.
+- `tests.test_official_topic_client_helpers`: 16 tests passed.
+- Full backend unittest discovery: 761 tests passed, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+- `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
+
 ## Stop Conditions
 
 Pause before editing if:
