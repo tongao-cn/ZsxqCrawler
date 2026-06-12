@@ -1282,6 +1282,22 @@ class CrawlRoutesHelperTests(unittest.TestCase):
         self.assertEqual("not-a-time", _official_cursor_before_timestamp("not-a-time"))
 
     @unittest.skipUnless(HAS_CRAWL_ROUTE_DEPS, "crawl route dependencies are not installed")
+    def test_official_start_cursor_for_group_oldest_preserves_db_construction_and_allow_empty(self):
+        from backend.services.crawl_service import _official_start_cursor_for_group_oldest
+
+        db = object()
+
+        with (
+            patch("backend.services.crawl_service.ZSXQDatabase", return_value=db) as database_cls,
+            patch("backend.services.crawl_service._official_start_cursor_from_oldest", return_value="cursor-1") as start_cursor,
+        ):
+            result = _official_start_cursor_for_group_oldest("group-1", "task-1", allow_empty=True)
+
+        self.assertEqual("cursor-1", result)
+        database_cls.assert_called_once_with("group-1")
+        start_cursor.assert_called_once_with(db, "task-1", allow_empty=True)
+
+    @unittest.skipUnless(HAS_CRAWL_ROUTE_DEPS, "crawl route dependencies are not installed")
     def test_filter_official_topics_by_time_range_preserves_bounds_and_oldest_time(self):
         from backend.services.crawl_service import _filter_official_topics_by_time_range
 

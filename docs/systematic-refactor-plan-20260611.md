@@ -9308,6 +9308,62 @@ Result:
 - Frontend build passed, including Next.js lint/type checks.
 - `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
 
+### 2026-06-12 - P4 official group oldest cursor helper
+
+Changed:
+
+- Reused existing official branch coverage, then added characterization coverage for group-scoped
+  oldest-cursor database construction and `allow_empty` forwarding.
+- Added `_official_start_cursor_for_group_oldest` in `backend/services/crawl_service.py`.
+- Reused the helper from official incremental-from-oldest and official all-from-oldest entrypoints,
+  keeping `ZSXQDatabase(group_id)` construction and `_official_start_cursor_from_oldest(...,
+  allow_empty=...)` call shape in one place.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Official incremental-from-oldest still constructs `ZSXQDatabase(group_id)`, calls
+  `_official_start_cursor_from_oldest(..., allow_empty=False)`, fails with the same empty-database
+  message when the start cursor is `""`, and otherwise calls `_run_official_crawl_pages_task` with
+  mode `incremental`.
+- Official all-from-oldest still constructs `ZSXQDatabase(group_id)`, calls
+  `_official_start_cursor_from_oldest(..., allow_empty=True)`, and calls
+  `_run_official_crawl_pages_task` with mode `all`, unbounded pages, and per-page `20`.
+- Public API behavior, task status semantics, schema/config behavior, official MCP HTTP behavior,
+  legacy cookie crawler behavior, and fallback behavior are unchanged.
+- No legacy/fallback behavior was removed.
+- Unrelated dirty downloader files and scripts were left outside this P4 slice.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_crawl_routes_helpers -v
+uv run python -m unittest tests.test_official_topic_client_helpers -v
+uv run python -m py_compile backend\services\crawl_service.py tests\test_crawl_routes_helpers.py
+uv run python -m unittest tests.test_crawl_routes_helpers.CrawlRoutesHelperTests.test_official_start_cursor_for_group_oldest_preserves_db_construction_and_allow_empty tests.test_crawl_routes_helpers.CrawlRoutesHelperTests.test_official_all_branch_uses_oldest_cursor_and_skips_legacy_crawler tests.test_crawl_routes_helpers.CrawlRoutesHelperTests.test_official_incremental_branch_uses_oldest_cursor_and_skips_legacy_crawler tests.test_crawl_routes_helpers.CrawlRoutesHelperTests.test_official_incremental_empty_database_fails_without_legacy_crawler -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run python -m unittest tests.test_crawl_routes_helpers -v
+uv run python -m unittest tests.test_official_topic_client_helpers -v
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers -v
+uv run python -m unittest discover -s tests
+cmd.exe /d /c npm --prefix frontend run build
+git diff --check
+```
+
+Result:
+
+- Pre-extraction `tests.test_crawl_routes_helpers`: 52 tests passed.
+- Pre-extraction `tests.test_official_topic_client_helpers`: 16 tests passed.
+- Focused official oldest-cursor helper tests passed after helper extraction.
+- `py_compile` passed.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- `tests.test_crawl_routes_helpers`: 53 tests passed.
+- `tests.test_official_topic_client_helpers`: 16 tests passed.
+- `tests.test_zsxq_file_downloader_helpers`: 90 tests passed.
+- Full backend unittest discovery: 769 tests passed, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+- `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
+
 ## Stop Conditions
 
 Pause before editing if:
