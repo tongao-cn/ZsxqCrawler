@@ -8933,6 +8933,55 @@ Result:
 - Frontend build passed, including Next.js lint/type checks.
 - `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
 
+### 2026-06-12 - P4 official topic page fetch helper
+
+Changed:
+
+- Reused existing official crawl route/helper coverage, then added characterization coverage for
+  the official page fetch helper call shape and payload-topic extraction.
+- Added `_OfficialTopicPage` and `_fetch_official_topic_page` in
+  `backend/services/crawl_service.py`.
+- Reused the helper from both official time-range crawling and the shared official page crawling
+  loop, so the `get_group_topics(group_id, limit=per_page, scope="all", end_time=cursor)` call
+  shape and `official_payload_topics` parsing now live in one place.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Official latest, incremental, historical, all, and time-range flows still use the same client
+  construction, per-page cap, cursor value, `scope="all"`, empty-page termination, duplicate
+  accounting, latest-mode existing-topic filtering, import stats, completion messages, and
+  time-range filtering.
+- Public API behavior, task status semantics, schema/config behavior, official MCP HTTP behavior,
+  legacy cookie crawler behavior, and fallback behavior are unchanged.
+- No legacy/fallback behavior was removed.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_crawl_routes_helpers -v
+uv run python -m py_compile backend\services\crawl_service.py tests\test_crawl_routes_helpers.py
+uv run python -m unittest tests.test_crawl_routes_helpers.CrawlRoutesHelperTests.test_fetch_official_topic_page_preserves_call_shape_and_payload_topics tests.test_crawl_routes_helpers.CrawlRoutesHelperTests.test_official_next_page_cursor_requires_has_more_and_moving_cursor tests.test_crawl_routes_helpers.CrawlRoutesHelperTests.test_official_pages_remaining_preserves_unbounded_and_limit_semantics tests.test_crawl_routes_helpers.CrawlRoutesHelperTests.test_official_per_page_limit_preserves_default_and_cap tests.test_crawl_routes_helpers.CrawlRoutesHelperTests.test_filter_official_topics_by_time_range_preserves_bounds_and_oldest_time -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run python -m unittest tests.test_crawl_routes_helpers -v
+uv run python -m unittest tests.test_official_topic_client_helpers -v
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+git diff --check
+```
+
+Result:
+
+- Pre-extraction `tests.test_crawl_routes_helpers`: 45 tests passed.
+- Focused official helper/page tests passed after helper extraction.
+- `py_compile` passed.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- `tests.test_crawl_routes_helpers`: 46 tests passed.
+- `tests.test_official_topic_client_helpers`: 16 tests passed.
+- Full backend unittest discovery: 762 tests passed, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+- `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
+
 ## Stop Conditions
 
 Pause before editing if:

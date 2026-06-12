@@ -54,6 +54,10 @@ class _LegacyTimeRangeRunResult(NamedTuple):
     stats: dict[str, int]
     expired: bool
 
+class _OfficialTopicPage(NamedTuple):
+    payload: dict[str, Any]
+    topics: list[dict[str, Any]]
+
 def _should_stop_task(task_id: str) -> bool:
     return is_task_stopped(task_id)
 
@@ -592,6 +596,20 @@ def _dedupe_official_page_topics(
         unique_topics.append(topic)
     return unique_topics
 
+def _fetch_official_topic_page(
+    client: OfficialTopicClient,
+    group_id: str,
+    per_page: int,
+    cursor: Optional[str],
+) -> _OfficialTopicPage:
+    payload = client.get_group_topics(
+        group_id,
+        limit=per_page,
+        scope="all",
+        end_time=cursor,
+    )
+    return _OfficialTopicPage(payload=payload, topics=official_payload_topics(payload))
+
 def _official_page_cursor(payload: dict[str, Any], current_cursor: Optional[str]) -> Optional[str]:
     next_cursor = payload.get("next_end_time")
     if not next_cursor or next_cursor == current_cursor:
@@ -677,8 +695,9 @@ def _run_official_crawl_time_range_task(
             add_task_log(task_id, "🛑 任务已停止")
             break
 
-        payload = client.get_group_topics(group_id, limit=per_page, scope="all", end_time=cursor)
-        topics = official_payload_topics(payload)
+        page = _fetch_official_topic_page(client, group_id, per_page, cursor)
+        payload = page.payload
+        topics = page.topics
         if not topics:
             add_task_log(task_id, "📭 无更多数据，任务结束")
             break
@@ -723,8 +742,9 @@ def _run_official_crawl_pages_task(
             add_task_log(task_id, "🛑 任务已停止")
             break
 
-        payload = client.get_group_topics(group_id, limit=per_page, scope="all", end_time=cursor)
-        topics = official_payload_topics(payload)
+        page = _fetch_official_topic_page(client, group_id, per_page, cursor)
+        payload = page.payload
+        topics = page.topics
         if not topics:
             add_task_log(task_id, "📭 无更多数据，任务结束")
             break

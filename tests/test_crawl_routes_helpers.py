@@ -1255,6 +1255,35 @@ class CrawlRoutesHelperTests(unittest.TestCase):
             topic_exists.call_args_list,
         )
 
+    @unittest.skipUnless(HAS_CRAWL_ROUTE_DEPS, "crawl route dependencies are not installed")
+    def test_fetch_official_topic_page_preserves_call_shape_and_payload_topics(self):
+        from backend.services.crawl_service import _fetch_official_topic_page
+
+        payload = {"topics_brief": [{"topic_id": "1"}], "next_end_time": "next"}
+
+        class Client:
+            def __init__(self):
+                self.calls = []
+
+            def get_group_topics(self, group_id, **kwargs):
+                self.calls.append((group_id, kwargs))
+                return payload
+
+        client = Client()
+        page = _fetch_official_topic_page(client, "group-1", 30, "cursor-1")
+
+        self.assertIs(payload, page.payload)
+        self.assertEqual([{"topic_id": "1"}], page.topics)
+        self.assertEqual(
+            [
+                (
+                    "group-1",
+                    {"limit": 30, "scope": "all", "end_time": "cursor-1"},
+                )
+            ],
+            client.calls,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
