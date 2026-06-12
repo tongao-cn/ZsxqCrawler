@@ -4783,6 +4783,49 @@ Result:
 - `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
 - Frontend build is not planned because this slice only changes backend storage/helper code.
 
+### 2026-06-12 - P2 user liked emoji insert statement helper extraction
+
+Changed:
+
+- Added `user_liked_emoji_insert_statement` to `backend/storage/zsxq_database_helpers.py`, with a
+  compatibility wrapper in `backend/storage/zsxq_database.py`.
+- Replaced inline `INSERT INTO user_liked_emojis` SQL and params in `_import_user_liked_emojis`
+  with helper-returned SQL and params.
+- Added characterization coverage for helper SQL shape, parameter order, missing `user_specific`
+  skip, missing `liked_emojis` skip, empty-list skip, empty `emoji_key` skip, and
+  `ON CONFLICT(topic_id, emoji_key) DO NOTHING` behavior.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- `_import_user_liked_emojis` still returns before any database call when `user_specific` is absent
+  or does not contain `liked_emojis`.
+- Empty `liked_emojis` lists still produce no database writes.
+- Individual empty/falsy emoji keys are still skipped.
+- Valid emoji keys still insert the same `user_liked_emojis` fields with
+  `ON CONFLICT(topic_id, emoji_key) DO NOTHING`.
+- No schema, config, compatibility, fallback, error handling, logging, commit order, timestamp, or
+  public API semantics were changed.
+
+Verification:
+
+```powershell
+uv run python -m py_compile backend\storage\zsxq_database.py backend\storage\zsxq_database_helpers.py tests\test_zsxq_database_helpers.py
+uv run python -m unittest tests.test_zsxq_database_helpers -v
+uv run python -m unittest discover -s tests
+uv run python scripts\scan_postgres_compat_debt.py
+git diff --check
+```
+
+Result:
+
+- `py_compile` passed.
+- `tests.test_zsxq_database_helpers`: 49 tests passed.
+- Full backend unittest discovery: 652 tests passed, 15 skipped.
+- PostgreSQL compatibility debt scan: no SQLite compatibility patterns found.
+- `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
+- Frontend build is not planned because this slice only changes backend storage/helper code.
+
 ## Stop Conditions
 
 Pause before editing if:

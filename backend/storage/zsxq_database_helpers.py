@@ -392,6 +392,18 @@ def like_emoji_insert_statement(
     )
 
 
+def user_liked_emoji_insert_statement(topic_id: int, emoji_key: str) -> tuple[str, tuple[Any, ...]]:
+    return (
+        """
+            INSERT INTO user_liked_emojis
+            (topic_id, emoji_key)
+            VALUES (?, ?)
+            ON CONFLICT(topic_id, emoji_key) DO NOTHING
+        """,
+        (topic_id, emoji_key),
+    )
+
+
 def update_tag_hid_statement(tag_id: int, hid: str) -> tuple[str, tuple[Any, ...]]:
     return "UPDATE tags SET hid = ? WHERE tag_id = ?", (hid, tag_id)
 

@@ -44,6 +44,7 @@ from backend.storage.zsxq_database_helpers import (
     topics_by_tag_query,
     update_tag_hid_statement,
     upsert_core_file,
+    user_liked_emoji_insert_statement,
     user_insert_statement,
 )
 
@@ -146,6 +147,10 @@ def _like_emoji_insert_statement(
     created_at: str,
 ) -> tuple[str, tuple[Any, ...]]:
     return like_emoji_insert_statement(topic_id, emoji_data, created_at)
+
+
+def _user_liked_emoji_insert_statement(topic_id: int, emoji_key: str) -> tuple[str, tuple[Any, ...]]:
+    return user_liked_emoji_insert_statement(topic_id, emoji_key)
 
 
 def _update_tag_hid_statement(tag_id: int, hid: str) -> tuple[str, tuple[Any, ...]]:
@@ -642,15 +647,8 @@ class ZSXQDatabase:
         
         for emoji_key in topic_data['user_specific']['liked_emojis']:
             if emoji_key:
-                self.cursor.execute('''
-                    INSERT INTO user_liked_emojis 
-                    (topic_id, emoji_key)
-                    VALUES (?, ?)
-                    ON CONFLICT(topic_id, emoji_key) DO NOTHING
-                ''', (
-                    topic_id,
-                    emoji_key
-                ))
+                sql, params = _user_liked_emoji_insert_statement(topic_id, emoji_key)
+                self.cursor.execute(sql, params)
         
         if topic_data['user_specific']['liked_emojis']:
             pass  # 数据已导入，无需额外日志

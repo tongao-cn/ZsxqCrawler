@@ -35,6 +35,7 @@ from backend.storage.zsxq_database import (
     _topics_by_tag_query,
     _update_tag_hid_statement,
     _upsert_core_file,
+    _user_liked_emoji_insert_statement,
     _user_insert_statement,
 )
 
@@ -893,6 +894,16 @@ class ZSXQDatabaseHelperTests(unittest.TestCase):
         )
         self.assertEqual((202, "[ok]", 0, "2026-06-12T10:00:00.000+0800"), params)
 
+    def test_user_liked_emoji_insert_statement_helper_preserves_sql_shape_and_params(self):
+        sql, params = _user_liked_emoji_insert_statement(202, "[ok]")
+
+        self.assertEqual(
+            "INSERT INTO user_liked_emojis (topic_id, emoji_key) VALUES (?, ?) "
+            "ON CONFLICT(topic_id, emoji_key) DO NOTHING",
+            " ".join(sql.split()),
+        )
+        self.assertEqual((202, "[ok]"), params)
+
     def test_replace_file_topic_relation_deletes_then_inserts(self):
         file_db = FakeFileDatabase()
 
@@ -1396,6 +1407,31 @@ class ZSXQDatabaseHelperTests(unittest.TestCase):
         )
         self.assertEqual((202, "[ok]", 0), emoji_params[:3])
         self.assertRegex(emoji_params[3], r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}\+0800$")
+
+    def test_import_user_liked_emojis_preserves_skip_and_insert_params(self):
+        from backend.storage.zsxq_database import ZSXQDatabase
+
+        db = object.__new__(ZSXQDatabase)
+        db.cursor = FakeCursor()
+
+        ZSXQDatabase._import_user_liked_emojis(db, 202, {})
+        ZSXQDatabase._import_user_liked_emojis(db, 202, {"user_specific": {}})
+        ZSXQDatabase._import_user_liked_emojis(db, 202, {"user_specific": {"liked_emojis": []}})
+        self.assertEqual([], db.cursor.calls)
+
+        ZSXQDatabase._import_user_liked_emojis(
+            db,
+            202,
+            {"user_specific": {"liked_emojis": ["", "[ok]"]}},
+        )
+
+        sql, params = db.cursor.calls[0]
+        self.assertEqual(
+            "INSERT INTO user_liked_emojis (topic_id, emoji_key) VALUES (?, ?) "
+            "ON CONFLICT(topic_id, emoji_key) DO NOTHING",
+            sql,
+        )
+        self.assertEqual((202, "[ok]"), params)
 
     def test_update_topic_stats_preserves_skip_rowcount_and_exception_branches(self):
         from backend.storage.zsxq_database import ZSXQDatabase
