@@ -593,6 +593,42 @@ class CrawlRoutesHelperTests(unittest.TestCase):
         )
 
     @unittest.skipUnless(HAS_CRAWL_ROUTE_DEPS, "crawl route dependencies are not installed")
+    def test_legacy_time_range_stops_after_max_failed_page_fetches(self):
+        from backend.routes.crawl_routes import CrawlTimeRangeRequest
+        from backend.services.crawl_service import run_crawl_time_range_task
+
+        crawler = TimeRangeCrawler([None] * 10)
+
+        with (
+            patch("backend.services.crawl_service.get_cookie_for_group", return_value="cookie"),
+            patch("backend.services.crawl_service.ZSXQTopicCrawler", return_value=crawler),
+            patch("backend.services.crawl_service.is_task_stopped", return_value=False),
+            patch("backend.services.crawl_service.add_task_log") as add_task_log,
+            patch("backend.services.crawl_service.update_task") as update_task,
+            patch("backend.services.crawl_service.unregister_task_crawler"),
+        ):
+            run_crawl_time_range_task(
+                "task-1",
+                "group-1",
+                CrawlTimeRangeRequest(
+                    startTime="2026-02-01",
+                    endTime="2026-02-02",
+                    perPage=20,
+                    topicSource="legacy",
+                ),
+            )
+
+        self.assertEqual(10, len(crawler.fetch_calls))
+        add_task_log.assert_any_call("task-1", "❌ 页面获取失败 (重试10/10)")
+        add_task_log.assert_any_call("task-1", "🚫 当前页面达到最大重试次数，终止任务")
+        update_task.assert_any_call(
+            "task-1",
+            "completed",
+            "时间区间爬取完成",
+            {"new_topics": 0, "updated_topics": 0, "errors": 10, "pages": 0},
+        )
+
+    @unittest.skipUnless(HAS_CRAWL_ROUTE_DEPS, "crawl route dependencies are not installed")
     def test_legacy_time_range_expired_response_fails_with_original_payload(self):
         from backend.routes.crawl_routes import CrawlTimeRangeRequest
         from backend.services.crawl_service import run_crawl_time_range_task

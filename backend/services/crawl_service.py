@@ -247,6 +247,12 @@ def _mark_legacy_time_range_expired(task_id: str, data: dict[str, Any]) -> None:
     add_task_log(task_id, f"❌ 会员已过期: {data.get('message')}")
     update_task(task_id, "failed", "会员已过期", data)
 
+def _legacy_time_range_page_failed(task_id: str, page_processed: bool) -> bool:
+    if page_processed:
+        return False
+    add_task_log(task_id, "🚫 当前页面达到最大重试次数，终止任务")
+    return True
+
 def _query_group_id(group_id: str) -> Any:
     value = str(group_id or "").strip()
     return int(value) if value.isdigit() else value
@@ -780,8 +786,7 @@ def run_crawl_time_range_task(task_id: str, group_id: str, request: Any):
                 crawler.check_page_long_delay()
                 break
 
-            if not page_processed:
-                add_task_log(task_id, "🚫 当前页面达到最大重试次数，终止任务")
+            if _legacy_time_range_page_failed(task_id, page_processed):
                 break
 
             if reached_end or (last_time_dt_in_page and last_time_dt_in_page < start_dt):
