@@ -5662,6 +5662,53 @@ Result:
 - PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
 - `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
 
+### 2026-06-12 - P3 column topic related payload iterator helper
+
+Changed:
+
+- Added `_iter_topic_related_payloads` to `backend/storage/zsxq_columns_database_helpers.py`.
+- Reused the helper from `ZSXQColumnsDatabase._insert_topic_related_payloads`, leaving the class
+  method responsible only for dispatching to the existing `_insert_image`, `_insert_file`,
+  `_insert_video`, and `_insert_comment` methods.
+- Added direct helper coverage for empty input, image/file/content-voice/video/comment ordering,
+  and falsey content-voice/video skip behavior.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Topic images are still inserted before talk files, then `content_voice`, then video, then
+  `show_comments`.
+- Empty/missing related payloads are still skipped.
+- The existing class method still calls the same `_insert_*` methods with the same `topic_id` and
+  payload objects.
+- Existing SQL, schema, config, fallback behavior, error handling, logging, commit timing, and
+  public API semantics are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_columns_database_helpers.ZSXQColumnsDatabaseHelperTests.test_insert_topic_related_payloads_preserves_order_and_empty_skip_behavior -v
+uv run python -m py_compile backend\storage\zsxq_columns_database.py backend\storage\zsxq_columns_database_helpers.py tests\test_zsxq_columns_database_helpers.py
+uv run python -m unittest tests.test_zsxq_columns_database_helpers.ZSXQColumnsDatabaseHelperTests.test_iter_topic_related_payloads_preserves_existing_order tests.test_zsxq_columns_database_helpers.ZSXQColumnsDatabaseHelperTests.test_insert_topic_related_payloads_preserves_order_and_empty_skip_behavior tests.test_zsxq_columns_database_helpers.ZSXQColumnsDatabaseHelperTests.test_insert_topic_detail_preserves_related_insert_order -v
+uv run python -m unittest tests.test_zsxq_columns_database_helpers -v
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+uv run python scripts\scan_postgres_compat_debt.py
+git diff --check
+```
+
+Result:
+
+- Pre-refactor class-method characterization test passed against the original inline related-payload
+  traversal.
+- `py_compile` passed.
+- Focused helper/class/import tests passed.
+- `tests.test_zsxq_columns_database_helpers`: 65 tests passed.
+- Full backend unittest discovery: 681 tests passed, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
+
 ## Stop Conditions
 
 Pause before editing if:

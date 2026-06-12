@@ -21,6 +21,7 @@ from backend.storage.zsxq_columns_database import (
     _file_download_status_update,
     _group_clear_delete_statements,
     _image_local_path_update,
+    _iter_topic_related_payloads,
     _iter_topic_comment_import_payloads,
     _group_topic_ids_query,
     _nest_topic_comments,
@@ -1650,6 +1651,42 @@ class ZSXQColumnsDatabaseHelperTests(unittest.TestCase):
                 ("comment", 202, {"comment_id": 701}),
             ],
             calls,
+        )
+
+    def test_iter_topic_related_payloads_preserves_existing_order(self):
+        self.assertEqual([], list(_iter_topic_related_payloads({}, {})))
+
+        topic_data = {
+            "content_voice": {"file_id": 402},
+            "show_comments": [{"comment_id": 701}, {"comment_id": 702}],
+        }
+        talk = {
+            "images": [{"image_id": 301}, {"image_id": 302}],
+            "files": [{"file_id": 401}],
+            "video": {"video_id": 501},
+        }
+
+        self.assertEqual(
+            [
+                ("image", {"image_id": 301}),
+                ("image", {"image_id": 302}),
+                ("file", {"file_id": 401}),
+                ("file", {"file_id": 402}),
+                ("video", {"video_id": 501}),
+                ("comment", {"comment_id": 701}),
+                ("comment", {"comment_id": 702}),
+            ],
+            list(_iter_topic_related_payloads(topic_data, talk)),
+        )
+
+        self.assertEqual(
+            [],
+            list(
+                _iter_topic_related_payloads(
+                    {"content_voice": {}, "show_comments": []},
+                    {"images": [], "files": [], "video": {}},
+                )
+            ),
         )
 
     def test_insert_topic_detail_preserves_related_insert_order(self):

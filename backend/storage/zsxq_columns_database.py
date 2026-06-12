@@ -30,6 +30,7 @@ from backend.storage.zsxq_columns_database_helpers import (
     _group_id_param,
     _group_topic_ids_query,
     _image_local_path_update,
+    _iter_topic_related_payloads,
     _iter_topic_comment_import_payloads,
     _nullable_group_id_param,
     _pending_file_row_to_dict,
@@ -172,25 +173,15 @@ class ZSXQColumnsDatabase:
         talk: Dict[str, Any],
     ):
         """插入文章详情关联的图片、文件、视频和评论"""
-        images = talk.get('images', [])
-        for image in images:
-            self._insert_image(topic_id, image)
-        
-        files = talk.get('files', [])
-        for file in files:
-            self._insert_file(topic_id, file)
-        
-        content_voice = topic_data.get('content_voice')
-        if content_voice:
-            self._insert_file(topic_id, content_voice)
-        
-        video = talk.get('video')
-        if video:
-            self._insert_video(topic_id, video)
-        
-        comments = topic_data.get('show_comments', [])
-        for comment in comments:
-            self._insert_comment(topic_id, comment)
+        for payload_type, payload in _iter_topic_related_payloads(topic_data, talk):
+            if payload_type == 'image':
+                self._insert_image(topic_id, payload)
+            elif payload_type == 'file':
+                self._insert_file(topic_id, payload)
+            elif payload_type == 'video':
+                self._insert_video(topic_id, payload)
+            elif payload_type == 'comment':
+                self._insert_comment(topic_id, payload)
 
     def _insert_topic_owner(self, topic_id: int, talk: Dict[str, Any]):
         """插入文章作者关联"""

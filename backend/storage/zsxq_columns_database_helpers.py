@@ -332,6 +332,28 @@ def _topic_comment_insert_params(
     )
 
 
+def _iter_topic_related_payloads(
+    topic_data: Dict[str, Any],
+    talk: Dict[str, Any],
+) -> Iterator[tuple[str, Dict[str, Any]]]:
+    for image in talk.get('images', []):
+        yield 'image', image
+
+    for file in talk.get('files', []):
+        yield 'file', file
+
+    content_voice = topic_data.get('content_voice')
+    if content_voice:
+        yield 'file', content_voice
+
+    video = talk.get('video')
+    if video:
+        yield 'video', video
+
+    for comment in topic_data.get('show_comments', []):
+        yield 'comment', comment
+
+
 def _iter_topic_comment_import_payloads(
     comments: list[Dict[str, Any]],
 ) -> Iterator[Dict[str, Any]]:
