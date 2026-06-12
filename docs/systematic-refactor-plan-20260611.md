@@ -4692,6 +4692,52 @@ Result:
 - `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
 - Frontend build is not planned because this slice only changes backend storage/helper code.
 
+### 2026-06-12 - P2 likes import statement helper extraction
+
+Changed:
+
+- Added `delete_latest_likes_statement`, `like_insert_statement`, and
+  `latest_like_insert_statement` to `backend/storage/zsxq_database_helpers.py`, with compatibility
+  wrappers in `backend/storage/zsxq_database.py`.
+- Replaced inline `latest_likes` delete SQL plus `likes` and `latest_likes` insert SQL in
+  `_import_likes` with helper-returned SQL and params.
+- Added characterization coverage for helper SQL shape, parameter order, field-missing skip,
+  empty `latest_likes` delete behavior, missing `owner.user_id` skip, write order, and generated
+  Beijing-time timestamp format.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- `_import_likes` still returns before any database call when the `latest_likes` key is absent.
+- When `latest_likes` is present, it still deletes existing `latest_likes` rows for the topic before
+  processing the payload, including the empty-list case.
+- Individual likes without a truthy `owner.user_id` are still skipped.
+- Valid likes still write one historical `likes` row and one conflict-upserted `latest_likes` row,
+  in the same order, with the same `create_time` default of an empty string.
+- Timestamp formatting remains the existing Beijing-time `YYYY-MM-DDTHH:MM:SS.mmm+0800` string
+  generated inside the per-like branch.
+- No schema, config, compatibility, fallback, error handling, logging, commit order, or public API
+  semantics were changed.
+
+Verification:
+
+```powershell
+uv run python -m py_compile backend\storage\zsxq_database.py backend\storage\zsxq_database_helpers.py tests\test_zsxq_database_helpers.py
+uv run python -m unittest tests.test_zsxq_database_helpers -v
+uv run python -m unittest discover -s tests
+uv run python scripts\scan_postgres_compat_debt.py
+git diff --check
+```
+
+Result:
+
+- `py_compile` passed.
+- `tests.test_zsxq_database_helpers`: 45 tests passed.
+- Full backend unittest discovery: 648 tests passed, 15 skipped.
+- PostgreSQL compatibility debt scan: no SQLite compatibility patterns found.
+- `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
+- Frontend build is not planned because this slice only changes backend storage/helper code.
+
 ## Stop Conditions
 
 Pause before editing if:

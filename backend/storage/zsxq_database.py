@@ -6,6 +6,7 @@ from typing import Dict, Any, Optional, List
 from backend.storage.db_compat import connect
 from backend.storage.zsxq_database_helpers import (
     build_pagination,
+    delete_latest_likes_statement,
     file_exists_query,
     format_tag_row,
     format_tag_topic_row,
@@ -14,6 +15,8 @@ from backend.storage.zsxq_database_helpers import (
     image_insert_statement,
     insert_tag_statement,
     insert_topic_tag_statement,
+    latest_like_insert_statement,
+    like_insert_statement,
     load_topic_detail_base,
     load_topic_detail_comments,
     load_topic_detail_latest_likes,
@@ -112,6 +115,28 @@ def _image_insert_statement(
         created_at,
         missing_numeric_default=missing_numeric_default,
     )
+
+
+def _delete_latest_likes_statement(topic_id: int) -> tuple[str, tuple[Any, ...]]:
+    return delete_latest_likes_statement(topic_id)
+
+
+def _like_insert_statement(
+    topic_id: int,
+    user_id: Any,
+    like_data: Dict[str, Any],
+    imported_at: str,
+) -> tuple[str, tuple[Any, ...]]:
+    return like_insert_statement(topic_id, user_id, like_data, imported_at)
+
+
+def _latest_like_insert_statement(
+    topic_id: int,
+    user_id: Any,
+    like_data: Dict[str, Any],
+    created_at: str,
+) -> tuple[str, tuple[Any, ...]]:
+    return latest_like_insert_statement(topic_id, user_id, like_data, created_at)
 
 
 def _update_tag_hid_statement(tag_id: int, hid: str) -> tuple[str, tuple[Any, ...]]:
@@ -562,10 +587,8 @@ class ZSXQDatabase:
         if 'latest_likes' not in topic_data:
             return
 
-        self.cursor.execute('''
-            DELETE FROM latest_likes
-            WHERE topic_id = ?
-        ''', (topic_id,))
+        sql, params = _delete_latest_likes_statement(topic_id)
+        self.cursor.execute(sql, params)
         
         for like in topic_data['latest_likes']:
             owner = like.get('owner', {})
@@ -576,28 +599,10 @@ class ZSXQDatabase:
                 beijing_tz = timezone(timedelta(hours=8))
                 current_time = datetime.now(beijing_tz).strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + '+0800'
                 
-                self.cursor.execute('''
-                    INSERT INTO likes 
-                    (topic_id, user_id, create_time, imported_at)
-                    VALUES (?, ?, ?, ?)
-                ''', (
-                    topic_id,
-                    user_id,
-                    like.get('create_time', ''),
-                    current_time
-                ))
-                self.cursor.execute('''
-                    INSERT INTO latest_likes
-                    (topic_id, owner_user_id, create_time, created_at)
-                    VALUES (?, ?, ?, ?)
-                    ON CONFLICT(topic_id, owner_user_id, create_time) DO UPDATE SET
-                        created_at = excluded.created_at
-                ''', (
-                    topic_id,
-                    user_id,
-                    like.get('create_time', ''),
-                    current_time
-                ))
+                sql, params = _like_insert_statement(topic_id, user_id, like, current_time)
+                self.cursor.execute(sql, params)
+                sql, params = _latest_like_insert_statement(topic_id, user_id, like, current_time)
+                self.cursor.execute(sql, params)
         
         if topic_data['latest_likes']:
             pass  # 数据已导入，无需额外日志

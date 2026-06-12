@@ -315,6 +315,60 @@ def image_insert_statement(
     )
 
 
+def delete_latest_likes_statement(topic_id: int) -> tuple[str, tuple[Any, ...]]:
+    return (
+        """
+            DELETE FROM latest_likes
+            WHERE topic_id = ?
+        """,
+        (topic_id,),
+    )
+
+
+def like_insert_statement(
+    topic_id: int,
+    user_id: Any,
+    like_data: Dict[str, Any],
+    imported_at: str,
+) -> tuple[str, tuple[Any, ...]]:
+    return (
+        """
+            INSERT INTO likes
+            (topic_id, user_id, create_time, imported_at)
+            VALUES (?, ?, ?, ?)
+        """,
+        (
+            topic_id,
+            user_id,
+            like_data.get("create_time", ""),
+            imported_at,
+        ),
+    )
+
+
+def latest_like_insert_statement(
+    topic_id: int,
+    user_id: Any,
+    like_data: Dict[str, Any],
+    created_at: str,
+) -> tuple[str, tuple[Any, ...]]:
+    return (
+        """
+            INSERT INTO latest_likes
+            (topic_id, owner_user_id, create_time, created_at)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(topic_id, owner_user_id, create_time) DO UPDATE SET
+                created_at = excluded.created_at
+        """,
+        (
+            topic_id,
+            user_id,
+            like_data.get("create_time", ""),
+            created_at,
+        ),
+    )
+
+
 def update_tag_hid_statement(tag_id: int, hid: str) -> tuple[str, tuple[Any, ...]]:
     return "UPDATE tags SET hid = ? WHERE tag_id = ?", (hid, tag_id)
 

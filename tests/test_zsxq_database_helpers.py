@@ -3,6 +3,7 @@ from unittest.mock import patch
 
 from backend.storage.zsxq_database import (
     _build_pagination,
+    _delete_latest_likes_statement,
     _file_exists_query,
     _format_tag_row,
     _format_tag_topic_row,
@@ -11,6 +12,8 @@ from backend.storage.zsxq_database import (
     _image_insert_statement,
     _insert_tag_statement,
     _insert_topic_tag_statement,
+    _latest_like_insert_statement,
+    _like_insert_statement,
     _newest_topic_create_time_query,
     _nullable_group_id_param,
     _oldest_topic_create_time_query,
@@ -836,6 +839,44 @@ class ZSXQDatabaseHelperTests(unittest.TestCase):
             comment_params,
         )
 
+    def test_like_statement_helpers_preserve_sql_shape_and_params(self):
+        self.assertEqual(
+            ("DELETE FROM latest_likes WHERE topic_id = ?", (202,)),
+            (
+                " ".join(_delete_latest_likes_statement(202)[0].split()),
+                _delete_latest_likes_statement(202)[1],
+            ),
+        )
+
+        like_sql, like_params = _like_insert_statement(
+            202,
+            901,
+            {"create_time": "2026-01-01T10:00:00.000+0800"},
+            "2026-06-12T10:00:00.000+0800",
+        )
+        self.assertEqual(
+            "INSERT INTO likes (topic_id, user_id, create_time, imported_at) VALUES (?, ?, ?, ?)",
+            " ".join(like_sql.split()),
+        )
+        self.assertEqual(
+            (202, 901, "2026-01-01T10:00:00.000+0800", "2026-06-12T10:00:00.000+0800"),
+            like_params,
+        )
+
+        latest_sql, latest_params = _latest_like_insert_statement(
+            202,
+            901,
+            {},
+            "2026-06-12T10:00:00.000+0800",
+        )
+        self.assertEqual(
+            "INSERT INTO latest_likes (topic_id, owner_user_id, create_time, created_at) "
+            "VALUES (?, ?, ?, ?) ON CONFLICT(topic_id, owner_user_id, create_time) "
+            "DO UPDATE SET created_at = excluded.created_at",
+            " ".join(latest_sql.split()),
+        )
+        self.assertEqual((202, 901, "", "2026-06-12T10:00:00.000+0800"), latest_params)
+
     def test_replace_file_topic_relation_deletes_then_inserts(self):
         file_db = FakeFileDatabase()
 
@@ -1265,6 +1306,53 @@ class ZSXQDatabaseHelperTests(unittest.TestCase):
             comment_params[:14],
         )
         self.assertRegex(comment_params[14], r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}\+0800$")
+
+    def test_import_likes_preserves_delete_skip_and_insert_order(self):
+        from backend.storage.zsxq_database import ZSXQDatabase
+
+        db = object.__new__(ZSXQDatabase)
+        db.cursor = FakeCursor()
+
+        ZSXQDatabase._import_likes(db, 202, {})
+        self.assertEqual([], db.cursor.calls)
+
+        ZSXQDatabase._import_likes(db, 202, {"latest_likes": []})
+        self.assertEqual([("DELETE FROM latest_likes WHERE topic_id = ?", (202,))], db.cursor.calls)
+
+        active_db = object.__new__(ZSXQDatabase)
+        active_db.cursor = FakeCursor()
+
+        ZSXQDatabase._import_likes(
+            active_db,
+            202,
+            {
+                "latest_likes": [
+                    {"owner": {}, "create_time": "skipped"},
+                    {"owner": {"user_id": 901}, "create_time": "2026-01-01T10:00:00.000+0800"},
+                ]
+            },
+        )
+
+        self.assertEqual("DELETE FROM latest_likes WHERE topic_id = ?", active_db.cursor.calls[0][0])
+        self.assertEqual((202,), active_db.cursor.calls[0][1])
+
+        likes_sql, likes_params = active_db.cursor.calls[1]
+        self.assertEqual(
+            "INSERT INTO likes (topic_id, user_id, create_time, imported_at) VALUES (?, ?, ?, ?)",
+            likes_sql,
+        )
+        self.assertEqual((202, 901, "2026-01-01T10:00:00.000+0800"), likes_params[:3])
+        self.assertRegex(likes_params[3], r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}\+0800$")
+
+        latest_sql, latest_params = active_db.cursor.calls[2]
+        self.assertEqual(
+            "INSERT INTO latest_likes (topic_id, owner_user_id, create_time, created_at) "
+            "VALUES (?, ?, ?, ?) ON CONFLICT(topic_id, owner_user_id, create_time) "
+            "DO UPDATE SET created_at = excluded.created_at",
+            latest_sql,
+        )
+        self.assertEqual((202, 901, "2026-01-01T10:00:00.000+0800"), latest_params[:3])
+        self.assertRegex(latest_params[3], r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}\+0800$")
 
     def test_update_topic_stats_preserves_skip_rowcount_and_exception_branches(self):
         from backend.storage.zsxq_database import ZSXQDatabase
