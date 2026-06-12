@@ -195,6 +195,21 @@ def _filter_official_topics_by_time_range(
                 filtered.append(topic)
     return filtered, oldest_dt
 
+def _filter_legacy_topics_by_time_range(
+    topics: list[dict[str, Any]],
+    start_dt: datetime,
+    end_dt: datetime,
+) -> tuple[list[dict[str, Any]], Optional[datetime]]:
+    filtered: list[dict[str, Any]] = []
+    last_time_dt_in_page = None
+    for topic in topics:
+        dt = _topic_time(topic)
+        if dt:
+            last_time_dt_in_page = dt
+            if start_dt <= dt <= end_dt:
+                filtered.append(topic)
+    return filtered, last_time_dt_in_page
+
 def _query_group_id(group_id: str) -> Any:
     value = str(group_id or "").strip()
     return int(value) if value.isdigit() else value
@@ -710,21 +725,7 @@ def run_crawl_time_range_task(task_id: str, group_id: str, request: Any):
                     reached_end = True
                     break
 
-                filtered = []
-                for t in topics:
-                    ts = t.get("create_time")
-                    dt = None
-                    try:
-                        if ts:
-                            ts_fixed = ts.replace("+0800", "+08:00") if ts.endswith("+0800") else ts
-                            dt = datetime.fromisoformat(ts_fixed)
-                    except Exception:
-                        dt = None
-
-                    if dt:
-                        last_time_dt_in_page = dt
-                        if start_dt <= dt <= end_dt:
-                            filtered.append(t)
+                filtered, last_time_dt_in_page = _filter_legacy_topics_by_time_range(topics, start_dt, end_dt)
 
                 add_task_log(task_id, f"📄 本页获取 {len(topics)} 个话题，区间内 {len(filtered)} 个")
 

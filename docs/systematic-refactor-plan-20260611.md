@@ -7836,6 +7836,53 @@ Result:
 - Frontend build passed, including Next.js lint/type checks.
 - `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
 
+### 2026-06-12 - P4 legacy time-range filter helper
+
+Changed:
+
+- Added characterization coverage for the legacy time-range entrypoint filtering mixed valid and
+  invalid topic timestamps.
+- Extracted `_filter_legacy_topics_by_time_range` in `backend/services/crawl_service.py`.
+- Reused the helper from the legacy `run_crawl_time_range_task` page loop.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Legacy time-range crawling still parses topic `create_time` values with the existing `+0800`
+  normalization and invalid timestamp fallback.
+- Invalid timestamps are still ignored for filtering and for the last-topic-time stop check.
+- The filtered payload sent to `store_batch_data`, page stats accumulation, page count increment,
+  next-page `end_time` adjustment, long-delay call, and empty-page completion behavior are unchanged.
+- Public API behavior, task status semantics, update-task payloads, schema/config behavior, official
+  MCP HTTP crawler behavior, and cookie-based crawler behavior are unchanged.
+- This does not introduce, remove, or alter legacy/fallback behavior.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_crawl_routes_helpers.CrawlRoutesHelperTests.test_legacy_time_range_filters_topics_and_advances_end_time -v
+uv run python -m unittest tests.test_crawl_routes_helpers.CrawlRoutesHelperTests.test_legacy_time_range_filters_topics_and_advances_end_time tests.test_crawl_routes_helpers.CrawlRoutesHelperTests.test_time_range_crawl_stops_after_empty_page -v
+uv run python -m py_compile backend\services\crawl_service.py tests\test_crawl_routes_helpers.py
+uv run python -m unittest tests.test_crawl_routes_helpers -v
+uv run python -m unittest tests.test_official_topic_client_helpers -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+git diff --check
+```
+
+Result:
+
+- New legacy time-range characterization test passed before and after helper extraction.
+- Existing legacy empty-page time-range test passed after helper extraction.
+- `py_compile` passed.
+- `tests.test_crawl_routes_helpers`: 37 tests passed.
+- `tests.test_official_topic_client_helpers`: 16 tests passed.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Full backend unittest discovery: 753 tests passed, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+- `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
+
 ## Stop Conditions
 
 Pause before editing if:
