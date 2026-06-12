@@ -9364,6 +9364,62 @@ Result:
 - Frontend build passed, including Next.js lint/type checks.
 - `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
 
+### 2026-06-12 - P4 official unique page helper
+
+Changed:
+
+- Reused existing official crawl helper coverage, then added characterization coverage for the
+  composed official page fetch, empty-page log, and per-run duplicate tracking semantics.
+- Added `_OfficialUniqueTopicPage` and `_fetch_unique_official_topic_page` in
+  `backend/services/crawl_service.py`.
+- Reused the helper from official time-range and page-count crawl loops, keeping raw page topics
+  available for existing time-range logs while passing deduplicated topics to filtering/import logic.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Official page fetch still calls `OfficialTopicClient.get_group_topics` with the same group,
+  `limit`, `scope="all"`, and `end_time` arguments.
+- Empty official pages still emit `📭 无更多数据，任务结束` and stop the loop before dedupe/import.
+- Duplicate topic tracking still increments `total_stats["duplicates"]` before filtering/import and
+  preserves the same `seen_topic_ids` semantics.
+- Official time-range logs still count raw page topics, while filtering still receives deduplicated
+  topics.
+- Public API behavior, task status semantics, schema/config behavior, official MCP HTTP behavior,
+  legacy cookie crawler behavior, and fallback behavior are unchanged.
+- No legacy/fallback behavior was removed.
+- Unrelated dirty downloader files and scripts were left outside this P4 slice.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_crawl_routes_helpers -v
+uv run python -m unittest tests.test_official_topic_client_helpers -v
+uv run python -m py_compile backend\services\crawl_service.py tests\test_crawl_routes_helpers.py
+uv run python -m unittest tests.test_crawl_routes_helpers.CrawlRoutesHelperTests.test_fetch_unique_official_topic_page_preserves_empty_and_dedupe_semantics -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run python -m unittest tests.test_crawl_routes_helpers -v
+uv run python -m unittest tests.test_official_topic_client_helpers -v
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers -v
+uv run python -m unittest discover -s tests
+cmd.exe /d /c npm --prefix frontend run build
+git diff --check
+```
+
+Result:
+
+- Pre-extraction `tests.test_crawl_routes_helpers`: 53 tests passed.
+- Pre-extraction `tests.test_official_topic_client_helpers`: 16 tests passed.
+- Focused official unique-page helper test passed after helper extraction.
+- `py_compile` passed.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- `tests.test_crawl_routes_helpers`: 54 tests passed.
+- `tests.test_official_topic_client_helpers`: 16 tests passed.
+- `tests.test_zsxq_file_downloader_helpers`: 90 tests passed.
+- Full backend unittest discovery: 770 tests passed, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+- `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
+
 ## Stop Conditions
 
 Pause before editing if:

@@ -58,6 +58,11 @@ class _OfficialTopicPage(NamedTuple):
     payload: dict[str, Any]
     topics: list[dict[str, Any]]
 
+class _OfficialUniqueTopicPage(NamedTuple):
+    payload: dict[str, Any]
+    topics: list[dict[str, Any]]
+    unique_topics: list[dict[str, Any]]
+
 def _should_stop_task(task_id: str) -> bool:
     return is_task_stopped(task_id)
 
@@ -643,6 +648,25 @@ def _fetch_official_topic_page(
     )
     return _OfficialTopicPage(payload=payload, topics=official_payload_topics(payload))
 
+def _fetch_unique_official_topic_page(
+    task_id: str,
+    client: OfficialTopicClient,
+    group_id: str,
+    per_page: int,
+    cursor: Optional[str],
+    seen_topic_ids: set[int],
+    total_stats: dict[str, Any],
+) -> Optional[_OfficialUniqueTopicPage]:
+    page = _fetch_official_topic_page(client, group_id, per_page, cursor)
+    if _official_topic_page_empty(task_id, page.topics):
+        return None
+    unique_topics = _dedupe_official_page_topics(page.topics, seen_topic_ids, total_stats)
+    return _OfficialUniqueTopicPage(
+        payload=page.payload,
+        topics=page.topics,
+        unique_topics=unique_topics,
+    )
+
 def _official_topic_page_empty(task_id: str, topics: list[dict[str, Any]]) -> bool:
     if topics:
         return False
@@ -746,14 +770,25 @@ def _run_official_crawl_time_range_task(
         if _task_stopped_with_log(task_id):
             break
 
-        page = _fetch_official_topic_page(client, group_id, per_page, cursor)
-        payload = page.payload
-        topics = page.topics
-        if _official_topic_page_empty(task_id, topics):
+        page = _fetch_unique_official_topic_page(
+            task_id,
+            client,
+            group_id,
+            per_page,
+            cursor,
+            seen_topic_ids,
+            total_stats,
+        )
+        if page is None:
             break
 
-        unique_topics = _dedupe_official_page_topics(topics, seen_topic_ids, total_stats)
-        filtered, oldest_dt = _filter_official_topics_by_time_range(unique_topics, start_dt, end_dt)
+        payload = page.payload
+        topics = page.topics
+        filtered, oldest_dt = _filter_official_topics_by_time_range(
+            page.unique_topics,
+            start_dt,
+            end_dt,
+        )
 
         add_task_log(task_id, f"📄 官方本页获取 {len(topics)} 个话题，区间内 {len(filtered)} 个")
 
@@ -789,20 +824,26 @@ def _run_official_crawl_pages_task(
         if _task_stopped_with_log(task_id):
             break
 
-        page = _fetch_official_topic_page(client, group_id, per_page, cursor)
-        payload = page.payload
-        topics = page.topics
-        if _official_topic_page_empty(task_id, topics):
+        page = _fetch_unique_official_topic_page(
+            task_id,
+            client,
+            group_id,
+            per_page,
+            cursor,
+            seen_topic_ids,
+            total_stats,
+        )
+        if page is None:
             break
 
-        unique_topics = _dedupe_official_page_topics(topics, seen_topic_ids, total_stats)
+        payload = page.payload
 
         topics_to_import, should_stop = _official_topics_to_import_for_mode(
             task_id,
             db,
             group_id,
             mode,
-            unique_topics,
+            page.unique_topics,
         )
         if should_stop:
             break

@@ -1461,6 +1461,77 @@ class CrawlRoutesHelperTests(unittest.TestCase):
         )
 
     @unittest.skipUnless(HAS_CRAWL_ROUTE_DEPS, "crawl route dependencies are not installed")
+    def test_fetch_unique_official_topic_page_preserves_empty_and_dedupe_semantics(self):
+        from backend.services.crawl_service import (
+            _empty_official_crawl_stats,
+            _fetch_unique_official_topic_page,
+        )
+
+        first_topic = {"topic_id": "1"}
+        duplicate_topic = {"topic_id": 1}
+        last_topic = {"topic_id": 2}
+        payload = {
+            "topics_brief": [first_topic, duplicate_topic, last_topic],
+            "next_end_time": "next",
+        }
+
+        class Client:
+            def __init__(self):
+                self.calls = []
+                self.payload = payload
+
+            def get_group_topics(self, group_id, **kwargs):
+                self.calls.append((group_id, kwargs))
+                return self.payload
+
+        client = Client()
+        total_stats = _empty_official_crawl_stats()
+        seen_topic_ids: set[int] = set()
+
+        with patch("backend.services.crawl_service.add_task_log") as add_task_log:
+            page = _fetch_unique_official_topic_page(
+                "task-1",
+                client,
+                "group-1",
+                30,
+                "cursor-1",
+                seen_topic_ids,
+                total_stats,
+            )
+
+        self.assertIs(payload, page.payload)
+        self.assertEqual([first_topic, duplicate_topic, last_topic], page.topics)
+        self.assertEqual([first_topic, last_topic], page.unique_topics)
+        self.assertEqual({1, 2}, seen_topic_ids)
+        self.assertEqual(1, total_stats["duplicates"])
+        add_task_log.assert_not_called()
+        self.assertEqual(
+            [
+                (
+                    "group-1",
+                    {"limit": 30, "scope": "all", "end_time": "cursor-1"},
+                )
+            ],
+            client.calls,
+        )
+
+        client.payload = {"topics_brief": []}
+        with patch("backend.services.crawl_service.add_task_log") as add_task_log:
+            empty_page = _fetch_unique_official_topic_page(
+                "task-1",
+                client,
+                "group-1",
+                30,
+                None,
+                seen_topic_ids,
+                total_stats,
+            )
+
+        self.assertIsNone(empty_page)
+        self.assertEqual(1, total_stats["duplicates"])
+        add_task_log.assert_called_once_with("task-1", "📭 无更多数据，任务结束")
+
+    @unittest.skipUnless(HAS_CRAWL_ROUTE_DEPS, "crawl route dependencies are not installed")
     def test_official_topic_page_empty_preserves_log_and_truthiness(self):
         from backend.services.crawl_service import _official_topic_page_empty
 
