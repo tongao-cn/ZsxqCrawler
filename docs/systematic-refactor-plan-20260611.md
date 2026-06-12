@@ -7411,6 +7411,50 @@ Result:
 - Frontend build passed, including Next.js lint/type checks.
 - `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
 
+### 2026-06-12 - P4 official start cursor timestamp helper
+
+Changed:
+
+- Added direct helper coverage for official oldest-timestamp cursor conversion.
+- Extracted `_official_cursor_before_timestamp` in `backend/services/crawl_service.py`.
+- Reused the helper from `_official_start_cursor_from_oldest` after the existing database timestamp
+  lookup and log.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Valid `+0800` and `+08:00` timestamps still convert to the previous millisecond and format as
+  Beijing-time `YYYY-MM-DDTHH:MM:SS.mmm+0800`.
+- Invalid oldest timestamps still fall back to the original timestamp string.
+- Empty-database handling, the `allow_empty` sentinel behavior, task log messages, official
+  historical/all route behavior, update-task failure semantics, schema/config/API behavior, public
+  API behavior, and legacy cookie-based crawler behavior are unchanged.
+- This does not introduce, remove, or alter legacy/fallback behavior.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_crawl_routes_helpers.CrawlRoutesHelperTests.test_official_cursor_before_timestamp_preserves_offset_and_fallback -v
+uv run python -m py_compile backend\services\crawl_service.py tests\test_crawl_routes_helpers.py
+uv run python -m unittest tests.test_crawl_routes_helpers -v
+uv run python -m unittest tests.test_official_topic_client_helpers -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+git diff --check
+```
+
+Result:
+
+- New official cursor-before-timestamp helper test passed.
+- `py_compile` passed.
+- `tests.test_crawl_routes_helpers`: 25 tests passed.
+- `tests.test_official_topic_client_helpers`: 16 tests passed.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Full backend unittest discovery: 741 tests passed, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+- `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
+
 ## Stop Conditions
 
 Pause before editing if:

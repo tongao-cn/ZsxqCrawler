@@ -300,6 +300,13 @@ def _official_per_page_limit(per_page: Optional[int]) -> int:
 def _official_crawl_completion_message(mode: str) -> str:
     return OFFICIAL_CRAWL_COMPLETION_MESSAGES.get(mode, "官方采集完成")
 
+def _official_cursor_before_timestamp(oldest_timestamp: str) -> str:
+    try:
+        dt = datetime.fromisoformat(oldest_timestamp.replace("+0800", "+08:00"))
+        return _format_zsxq_time(dt - timedelta(milliseconds=1))
+    except Exception:
+        return oldest_timestamp
+
 def _official_start_cursor_from_oldest(db: ZSXQDatabase, task_id: str, allow_empty: bool) -> Optional[str]:
     timestamp_info = db.get_timestamp_range_info()
     if not timestamp_info["has_data"]:
@@ -311,11 +318,7 @@ def _official_start_cursor_from_oldest(db: ZSXQDatabase, task_id: str, allow_emp
 
     oldest_timestamp = timestamp_info["oldest_timestamp"]
     add_task_log(task_id, f"📊 当前最老时间戳: {oldest_timestamp}")
-    try:
-        dt = datetime.fromisoformat(oldest_timestamp.replace("+0800", "+08:00"))
-        return _format_zsxq_time(dt - timedelta(milliseconds=1))
-    except Exception:
-        return oldest_timestamp
+    return _official_cursor_before_timestamp(oldest_timestamp)
 
 def _run_official_crawl_time_range_task(
     task_id: str,

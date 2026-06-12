@@ -464,6 +464,20 @@ class CrawlRoutesHelperTests(unittest.TestCase):
         self.assertEqual("官方采集完成", _official_crawl_completion_message("unexpected"))
 
     @unittest.skipUnless(HAS_CRAWL_ROUTE_DEPS, "crawl route dependencies are not installed")
+    def test_official_cursor_before_timestamp_preserves_offset_and_fallback(self):
+        from backend.services.crawl_service import _official_cursor_before_timestamp
+
+        self.assertEqual(
+            "2026-05-06T23:59:59.999+0800",
+            _official_cursor_before_timestamp("2026-05-07T00:00:00.000+0800"),
+        )
+        self.assertEqual(
+            "2026-05-06T23:59:59.999+0800",
+            _official_cursor_before_timestamp("2026-05-07T00:00:00.000+08:00"),
+        )
+        self.assertEqual("not-a-time", _official_cursor_before_timestamp("not-a-time"))
+
+    @unittest.skipUnless(HAS_CRAWL_ROUTE_DEPS, "crawl route dependencies are not installed")
     def test_filter_official_topics_by_time_range_preserves_bounds_and_oldest_time(self):
         from backend.services.crawl_service import _filter_official_topics_by_time_range
 
