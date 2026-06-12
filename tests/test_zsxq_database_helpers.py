@@ -3,6 +3,7 @@ from unittest.mock import patch
 
 from backend.storage.zsxq_database import (
     _answer_insert_statement,
+    _article_insert_statement,
     _build_pagination,
     _comment_insert_statement,
     _delete_latest_likes_statement,
@@ -1034,6 +1035,41 @@ class ZSXQDatabaseHelperTests(unittest.TestCase):
         )
         self.assertEqual((202, 901, "answer text", "2026-06-12T10:00:00.000+0800"), answer_params)
 
+    def test_article_insert_statement_helper_preserves_sql_shape_and_params(self):
+        sql, params = _article_insert_statement(
+            202,
+            "article title",
+            "401",
+            {
+                "article_url": "article-url",
+                "inline_article_url": "inline-url",
+            },
+            "2026-05-07T10:00:00.000+0800",
+        )
+
+        self.assertEqual(
+            "INSERT INTO articles (topic_id, title, article_id, article_url, inline_article_url, "
+            "created_at) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(topic_id) DO UPDATE SET "
+            "title = excluded.title, article_id = excluded.article_id, "
+            "article_url = excluded.article_url, inline_article_url = excluded.inline_article_url, "
+            "created_at = excluded.created_at",
+            " ".join(sql.split()),
+        )
+        self.assertEqual(
+            (
+                202,
+                "article title",
+                "401",
+                "article-url",
+                "inline-url",
+                "2026-05-07T10:00:00.000+0800",
+            ),
+            params,
+        )
+
+        _default_sql, default_params = _article_insert_statement(203, "", "402", {}, "")
+        self.assertEqual((203, "", "402", "", "", ""), default_params)
+
     def test_replace_file_topic_relation_deletes_then_inserts(self):
         file_db = FakeFileDatabase()
 
@@ -1861,6 +1897,20 @@ class ZSXQDatabaseHelperTests(unittest.TestCase):
             ),
             article_params,
         )
+
+        fallback_db = object.__new__(ZSXQDatabase)
+        fallback_db.cursor = FakeCursor()
+        fallback_db.cursor.row = None
+
+        ZSXQDatabase._upsert_article(fallback_db, 203, {"article_id": "402"})
+
+        self.assertEqual(
+            ("SELECT create_time FROM topics WHERE topic_id = ?", (203,)),
+            fallback_db.cursor.calls[0],
+        )
+        fallback_sql, fallback_params = fallback_db.cursor.calls[1]
+        self.assertIn("INSERT INTO articles", fallback_sql)
+        self.assertEqual((203, "", "402", "", "", ""), fallback_params)
 
     def test_upsert_tag_preserves_existing_update_insert_and_missing_return_branches(self):
         from backend.storage.zsxq_database import ZSXQDatabase

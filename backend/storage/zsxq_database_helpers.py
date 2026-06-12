@@ -519,6 +519,36 @@ def answer_insert_statement(
     )
 
 
+def article_insert_statement(
+    topic_id: int,
+    title: str,
+    article_id: Any,
+    article_data: Dict[str, Any],
+    created_at: str,
+) -> tuple[str, tuple[Any, ...]]:
+    return (
+        """
+            INSERT INTO articles
+            (topic_id, title, article_id, article_url, inline_article_url, created_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+            ON CONFLICT(topic_id) DO UPDATE SET
+                title = excluded.title,
+                article_id = excluded.article_id,
+                article_url = excluded.article_url,
+                inline_article_url = excluded.inline_article_url,
+                created_at = excluded.created_at
+        """,
+        (
+            topic_id,
+            title,
+            article_id,
+            article_data.get("article_url", ""),
+            article_data.get("inline_article_url", ""),
+            created_at,
+        ),
+    )
+
+
 def update_tag_hid_statement(tag_id: int, hid: str) -> tuple[str, tuple[Any, ...]]:
     return "UPDATE tags SET hid = ? WHERE tag_id = ?", (hid, tag_id)
 

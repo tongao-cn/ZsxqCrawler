@@ -6,6 +6,7 @@ from typing import Dict, Any, Optional, List
 from backend.storage.db_compat import connect
 from backend.storage.zsxq_database_helpers import (
     answer_insert_statement,
+    article_insert_statement,
     build_pagination,
     comment_insert_statement,
     delete_latest_likes_statement,
@@ -201,6 +202,16 @@ def _answer_insert_statement(
     created_at: str,
 ) -> tuple[str, tuple[Any, ...]]:
     return answer_insert_statement(topic_id, owner_user_id, answer_data, created_at)
+
+
+def _article_insert_statement(
+    topic_id: int,
+    title: str,
+    article_id: Any,
+    article_data: Dict[str, Any],
+    created_at: str,
+) -> tuple[str, tuple[Any, ...]]:
+    return article_insert_statement(topic_id, title, article_id, article_data, created_at)
 
 
 def _update_tag_hid_statement(tag_id: int, hid: str) -> tuple[str, tuple[Any, ...]]:
@@ -886,24 +897,14 @@ class ZSXQDatabase:
         result = self.cursor.fetchone()
         created_at = result[0] if result else ''
         
-        self.cursor.execute('''
-            INSERT INTO articles
-            (topic_id, title, article_id, article_url, inline_article_url, created_at)
-            VALUES (?, ?, ?, ?, ?, ?)
-            ON CONFLICT(topic_id) DO UPDATE SET
-                title = excluded.title,
-                article_id = excluded.article_id,
-                article_url = excluded.article_url,
-                inline_article_url = excluded.inline_article_url,
-                created_at = excluded.created_at
-        ''', (
+        sql, params = _article_insert_statement(
             topic_id,
             title,
             article_id,
-            article_data.get('article_url', ''),
-            article_data.get('inline_article_url', ''),
-            created_at
-        ))
+            article_data,
+            created_at,
+        )
+        self.cursor.execute(sql, params)
 
     def _import_files(self, topic_id: int, files_data: List[Dict[str, Any]]):
         """导入话题文件信息"""

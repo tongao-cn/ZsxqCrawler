@@ -4923,6 +4923,51 @@ Result:
 - `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
 - Frontend build is not planned because this slice only changes backend storage/helper code.
 
+### 2026-06-12 - P2 article insert statement helper extraction
+
+Changed:
+
+- Added `article_insert_statement` to `backend/storage/zsxq_database_helpers.py`, with a
+  compatibility wrapper in `backend/storage/zsxq_database.py`.
+- Replaced inline `INSERT INTO articles` SQL and params in `_upsert_article` with
+  helper-returned SQL and params.
+- Added characterization coverage for article helper SQL shape, parameter order, URL defaults, and
+  missing topic create-time fallback to an empty `created_at` string.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- `_upsert_article` still returns before any database call when both `title` and `article_id` are
+  missing/falsy.
+- `_upsert_article` still reads the topic create time with `SELECT create_time FROM topics WHERE
+  topic_id = ?` before writing the article row.
+- Missing topic create time still maps to `created_at=''`.
+- `article_url` and `inline_article_url` still default to empty strings.
+- The same `articles` fields and `ON CONFLICT(topic_id) DO UPDATE SET` update list are preserved.
+- No schema, config, compatibility, fallback, error handling, logging, commit order, or public API
+  semantics were changed.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_database_helpers -v
+uv run python -m py_compile backend\storage\zsxq_database.py backend\storage\zsxq_database_helpers.py tests\test_zsxq_database_helpers.py
+uv run python -m unittest tests.test_zsxq_database_helpers -v
+uv run python -m unittest discover -s tests
+uv run python scripts\scan_postgres_compat_debt.py
+git diff --check
+```
+
+Result:
+
+- Pre-refactor characterization run passed against the original implementation.
+- `py_compile` passed.
+- `tests.test_zsxq_database_helpers`: 54 tests passed.
+- Full backend unittest discovery: 657 tests passed, 15 skipped.
+- PostgreSQL compatibility debt scan: no SQLite compatibility patterns found.
+- `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
+- Frontend build is not planned because this slice only changes backend storage/helper code.
+
 ## Stop Conditions
 
 Pause before editing if:
