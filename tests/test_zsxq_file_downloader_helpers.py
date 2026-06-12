@@ -96,6 +96,15 @@ class FakeDownloadResponse:
         yield self._chunks
 
 
+class FakeChunkedDownloadResponse(FakeDownloadResponse):
+    def __init__(self, chunks, headers=None):
+        super().__init__(200, b"".join(chunks), headers=headers)
+        self._chunk_list = list(chunks)
+
+    def iter_content(self, chunk_size=8192):
+        yield from self._chunk_list
+
+
 class FakeJsonResponse:
     status_code = 200
     text = ""
@@ -534,6 +543,99 @@ class FileDownloaderDownloadTests(unittest.TestCase):
             self.assertTrue(result)
             self.assertTrue((Path(temp_dir) / "real.pdf").exists())
             self.assertEqual((101, "completed", expected_path), downloader.file_db.status_updates[-1][:3])
+
+    def test_download_file_preserves_progress_for_chunked_body_download(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            session = FakeDownloadSession([FakeChunkedDownloadResponse([b"memo", b""])])
+            downloader = self._downloader_for_download(temp_dir, session)
+
+            result = ZSXQFileDownloader.download_file(
+                downloader,
+                {"file": {"id": 101, "name": "memo.pdf", "size": 4, "download_count": 0}},
+            )
+
+            self.assertTrue(result)
+            self.assertEqual(b"memo", (Path(temp_dir) / "memo.pdf").read_bytes())
+            self.assertIn("   📊 进度: 100.0% (4/4 bytes)", downloader.logs)
+
+    def test_write_download_response_body_preserves_progress_stop_and_empty_chunks(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir) / "memo.pdf.part"
+            response = FakeChunkedDownloadResponse([b"memo", b""])
+            downloader = object.__new__(ZSXQFileDownloader)
+            downloader.file_db = FakeDownloadFileDb()
+            downloader.logs = []
+            downloader.log = downloader.logs.append
+            downloader.check_stop = lambda: False
+
+            downloaded_size = ZSXQFileDownloader._write_download_response_body(
+                downloader,
+                response,
+                str(temp_path),
+                4,
+                101,
+            )
+
+            self.assertEqual(4, downloaded_size)
+            self.assertEqual(b"memo", temp_path.read_bytes())
+            self.assertEqual(["   📊 进度: 100.0% (4/4 bytes)"], downloader.logs)
+            self.assertEqual([], downloader.file_db.status_updates)
+
+            stopping_path = Path(temp_dir) / "stopping.pdf.part"
+            stopping_response = FakeChunkedDownloadResponse([b"stop"])
+            downloader.logs = []
+            downloader.log = downloader.logs.append
+            downloader.check_stop = lambda: True
+
+            with patch(
+                "backend.crawlers.zsxq_file_downloader.remove_partial_download",
+                return_value=True,
+            ) as remove_partial:
+                self.assertIsNone(
+                    ZSXQFileDownloader._write_download_response_body(
+                        downloader,
+                        stopping_response,
+                        str(stopping_path),
+                        0,
+                        102,
+                    )
+                )
+
+            remove_partial.assert_called_once_with(str(stopping_path))
+            self.assertEqual(
+                (102, "failed", None, "stopped", "下载过程中被停止"),
+                downloader.file_db.status_updates[-1],
+            )
+            self.assertEqual(
+                ["   📊 已下载: 4 bytes", "🛑 下载过程中被停止"],
+                downloader.logs,
+            )
+
+    def test_download_file_stops_during_body_download(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            session = FakeDownloadSession([FakeDownloadResponse(200, b"memo")])
+            downloader = self._downloader_for_download(temp_dir, session)
+            stop_checks = iter([False, True])
+            downloader.check_stop = lambda: next(stop_checks)
+            expected_partial_path = str(Path(temp_dir) / "memo.pdf.part")
+
+            with patch(
+                "backend.crawlers.zsxq_file_downloader.remove_partial_download",
+                return_value=True,
+            ) as remove_partial:
+                result = ZSXQFileDownloader.download_file(
+                    downloader,
+                    {"file": {"id": 101, "name": "memo.pdf", "size": 4, "download_count": 0}},
+                )
+
+            self.assertFalse(result)
+            self.assertEqual(
+                (101, "failed", None, "stopped", "下载过程中被停止"),
+                downloader.file_db.status_updates[-1],
+            )
+            self.assertEqual(2, remove_partial.call_count)
+            remove_partial.assert_called_with(expected_partial_path)
+            self.assertFalse((Path(temp_dir) / "memo.pdf").exists())
 
     def test_download_file_marks_failed_when_download_url_missing(self):
         with tempfile.TemporaryDirectory() as temp_dir:

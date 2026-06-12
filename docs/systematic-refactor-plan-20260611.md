@@ -5931,6 +5931,51 @@ Result:
 - PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
 - `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
 
+### 2026-06-12 - P9 file downloader body write helper
+
+Changed:
+
+- Added characterization coverage for chunked response body writes, empty chunk skipping, progress
+  logging, body-phase stop handling, and size-mismatch retry preservation.
+- Added `ZSXQFileDownloader._write_download_response_body`.
+- Reused the helper from `ZSXQFileDownloader.download_file` to separate response-body writes from
+  retry/orchestration logic.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Chunk write order, empty chunk skip behavior, progress log timing, stop check timing,
+  `_handle_download_stop` side effects, size-mismatch validation after body write, retry loop,
+  final status updates, signed URL handling, schema/config/API behavior, and public API behavior are
+  unchanged.
+- The stop-path tests mock `remove_partial_download` where needed to avoid platform file-lock
+  differences while preserving the current call/status semantics; this slice does not fix or change
+  stop-time partial-file deletion behavior.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_download_file_preserves_progress_for_chunked_body_download tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_download_file_stops_during_body_download tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_download_file_retries_and_fails_on_size_mismatch tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_download_file_accepts_raw_file_id_payload -v
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_write_download_response_body_preserves_progress_stop_and_empty_chunks tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_download_file_preserves_progress_for_chunked_body_download tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_download_file_stops_during_body_download tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_download_file_retries_and_fails_on_size_mismatch tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_download_file_accepts_raw_file_id_payload -v
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+git diff --check
+```
+
+Result:
+
+- Pre-refactor body-write characterization tests passed against the original inline body loop.
+- `py_compile` passed.
+- Focused body-write/download tests passed.
+- `tests.test_zsxq_file_downloader_helpers`: 49 tests passed.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Full backend unittest discovery: 691 tests passed, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+- `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
+
 ## Stop Conditions
 
 Pause before editing if:

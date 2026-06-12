@@ -617,25 +617,18 @@ class ZSXQFileDownloader:
 
                 if response.status_code == 200:
                     total_size = download_total_size(response.headers)
-                    downloaded_size = 0
                     expected_size = download_expected_size(file_size, total_size)
                     temp_path = partial_download_path(file_path)
                     remove_partial_download(temp_path)
 
-                    with open(temp_path, 'wb') as f:
-                        for chunk in response.iter_content(chunk_size=8192):
-                            if chunk:
-                                f.write(chunk)
-                                downloaded_size += len(chunk)
-
-                                progress_message = download_progress_message(downloaded_size, total_size)
-                                if progress_message:
-                                    self.log(progress_message)
-
-                                # 检查是否需要停止
-                                if self.check_stop():
-                                    self._handle_download_stop(file_id, temp_path)
-                                    return False
+                    downloaded_size = self._write_download_response_body(
+                        response,
+                        temp_path,
+                        total_size,
+                        file_id,
+                    )
+                    if downloaded_size is None:
+                        return False
 
                     # 验证文件大小
                     final_size = os.path.getsize(temp_path)
@@ -679,6 +672,31 @@ class ZSXQFileDownloader:
             error_message=error_message,
         )
         return False
+
+    def _write_download_response_body(
+        self,
+        response,
+        temp_path: str,
+        total_size: int,
+        file_id: int,
+    ) -> Optional[int]:
+        downloaded_size = 0
+        with open(temp_path, 'wb') as f:
+            for chunk in response.iter_content(chunk_size=8192):
+                if chunk:
+                    f.write(chunk)
+                    downloaded_size += len(chunk)
+
+                    progress_message = download_progress_message(downloaded_size, total_size)
+                    if progress_message:
+                        self.log(progress_message)
+
+                    # 检查是否需要停止
+                    if self.check_stop():
+                        self._handle_download_stop(file_id, temp_path)
+                        return None
+
+        return downloaded_size
 
     def _handle_download_stop(self, file_id: int, temp_path: str) -> None:
         self.log("🛑 下载过程中被停止")
