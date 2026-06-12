@@ -524,6 +524,47 @@ class FileDownloaderDownloadTests(unittest.TestCase):
             self.assertTrue((Path(temp_dir) / "..memo.pdf").exists())
             self.assertEqual((101, "completed", expected_path), downloader.file_db.status_updates[-1][:3])
 
+    def test_download_file_skips_existing_matching_file_without_request(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            existing_path = Path(temp_dir) / "memo.pdf"
+            existing_path.write_bytes(b"memo")
+            session = FakeDownloadSession([])
+            downloader = self._downloader_for_download(temp_dir, session)
+
+            result = ZSXQFileDownloader.download_file(
+                downloader,
+                {"file": {"id": 101, "name": "memo.pdf", "size": 4, "download_count": 0}},
+            )
+
+            self.assertEqual("skipped", result)
+            self.assertEqual([], session.get_calls)
+            self.assertEqual(
+                (101, "completed", str(existing_path)),
+                downloader.file_db.status_updates[-1][:3],
+            )
+            self.assertIn("   ✅ 文件已存在且大小匹配，跳过下载", downloader.logs)
+
+    def test_download_file_redownloads_existing_size_mismatch(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            existing_path = Path(temp_dir) / "memo.pdf"
+            existing_path.write_bytes(b"old")
+            session = FakeDownloadSession([FakeDownloadResponse(200, b"memo")])
+            downloader = self._downloader_for_download(temp_dir, session)
+
+            result = ZSXQFileDownloader.download_file(
+                downloader,
+                {"file": {"id": 101, "name": "memo.pdf", "size": 4, "download_count": 0}},
+            )
+
+            self.assertTrue(result)
+            self.assertEqual(b"memo", existing_path.read_bytes())
+            self.assertEqual(1, len(session.get_calls))
+            self.assertEqual(
+                (101, "completed", str(existing_path)),
+                downloader.file_db.status_updates[-1][:3],
+            )
+            self.assertIn("   ⚠️ 文件已存在但大小不匹配，重新下载", downloader.logs)
+
     def test_download_file_uses_content_disposition_for_default_filename(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             response = FakeDownloadResponse(

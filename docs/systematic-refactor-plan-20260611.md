@@ -5976,6 +5976,51 @@ Result:
 - Frontend build passed, including Next.js lint/type checks.
 - `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
 
+### 2026-06-12 - P9 file downloader existing-file skip helper
+
+Changed:
+
+- Added characterization coverage for `ZSXQFileDownloader.download_file` local-file short-circuit
+  behavior when the target file already exists and size matches.
+- Added characterization coverage for the existing-file size-mismatch branch continuing into a
+  fresh download and replacing the local file.
+- Added `ZSXQFileDownloader._skip_existing_download_if_complete` and reused it from
+  `download_file`.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Existing matching local files still return `"skipped"` before any signed-URL request and still
+  update download status to `completed` with the existing path.
+- Existing size-mismatched local files still log the mismatch and continue through the normal
+  signed-URL, response handling, body write, size verification, replace, status-update, and interval
+  flow.
+- Retry behavior, content-disposition filename override, partial-file cleanup, stop handling,
+  final failure status, schema/config/API behavior, and public API behavior are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_download_file_skips_existing_matching_file_without_request tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_download_file_redownloads_existing_size_mismatch tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_download_file_uses_safe_filename_for_local_target tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_download_file_retries_and_fails_on_size_mismatch -v
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+git diff --check
+```
+
+Result:
+
+- Pre-refactor existing-file characterization tests passed against the original inline branch.
+- `py_compile` passed.
+- Focused existing-file/download tests passed.
+- `tests.test_zsxq_file_downloader_helpers`: 51 tests passed.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Full backend unittest discovery: 693 tests passed, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+- `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
+
 ## Stop Conditions
 
 Pause before editing if:

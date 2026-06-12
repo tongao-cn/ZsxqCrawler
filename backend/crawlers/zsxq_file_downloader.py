@@ -570,14 +570,9 @@ class ZSXQFileDownloader:
         safe_filename, file_path = download_target_path(self.download_dir, file_name, file_id)
         
         # 🚀 优化：先检查本地文件，避免无意义的API请求
-        file_exists, size_matches, _existing_size = existing_file_matches(file_path, file_size)
-        if file_exists:
-            if size_matches:
-                self.log(f"   ✅ 文件已存在且大小匹配，跳过下载")
-                self.file_db.update_file_download_status(file_id, 'completed', file_path)
-                return "skipped"  # 返回特殊值表示跳过
-            else:
-                self.log(f"   ⚠️ 文件已存在但大小不匹配，重新下载")
+        existing_file_result = self._skip_existing_download_if_complete(file_id, file_path, file_size)
+        if existing_file_result:
+            return existing_file_result
 
         download_retries = 3
         last_error = None
@@ -672,6 +667,24 @@ class ZSXQFileDownloader:
             error_message=error_message,
         )
         return False
+
+    def _skip_existing_download_if_complete(
+        self,
+        file_id: int,
+        file_path: str,
+        file_size: int,
+    ) -> Optional[str]:
+        file_exists, size_matches, _existing_size = existing_file_matches(file_path, file_size)
+        if not file_exists:
+            return None
+
+        if size_matches:
+            self.log(f"   ✅ 文件已存在且大小匹配，跳过下载")
+            self.file_db.update_file_download_status(file_id, 'completed', file_path)
+            return "skipped"  # 返回特殊值表示跳过
+
+        self.log(f"   ⚠️ 文件已存在但大小不匹配，重新下载")
+        return None
 
     def _write_download_response_body(
         self,
