@@ -9420,6 +9420,52 @@ Result:
 - Frontend build passed, including Next.js lint/type checks.
 - `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
 
+### 2026-06-12 - P4 topic pagination timestamp offset reuse
+
+Changed:
+
+- Reused existing `_offset_zsxq_end_time` coverage before editing
+  `backend/crawlers/topic_pagination.py`.
+- Replaced duplicated inline timestamp-minus-milliseconds formatting in legacy historical,
+  all-historical, and incremental pagination paths with `_offset_zsxq_end_time`.
+- Left `crawl_latest_until_complete` retry timestamp handling unchanged because that branch has a
+  different legacy import/exception shape and replacing it could change failure behavior.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- The reused helper performs the same `+0800` parsing, millisecond subtraction, and `+0800`
+  formatting as the removed inline blocks.
+- Existing log messages, retry counters, fallback exception handling, one-hour skip behavior,
+  pagination stop conditions, database reads/writes, and return shapes are unchanged.
+- No legacy/fallback behavior was removed.
+- Unrelated dirty downloader files and scripts were left outside this P4 slice.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_interactive_crawler_helpers -v
+uv run python -m py_compile backend\crawlers\topic_pagination.py tests\test_zsxq_interactive_crawler_helpers.py
+uv run python scripts\scan_postgres_compat_debt.py
+uv run python -m unittest tests.test_zsxq_interactive_crawler_helpers -v
+uv run python -m unittest tests.test_crawl_routes_helpers -v
+uv run python -m unittest discover -s tests
+cmd.exe /d /c npm --prefix frontend run build
+git diff --check
+```
+
+Result:
+
+- Pre-extraction `tests.test_zsxq_interactive_crawler_helpers`: 4 tests passed.
+- Focused pagination helper tests passed after reuse.
+- `py_compile` passed.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- `tests.test_zsxq_interactive_crawler_helpers`: 4 tests passed.
+- `tests.test_crawl_routes_helpers`: 54 tests passed.
+- Full backend unittest discovery: 770 tests passed, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+- `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
+
 ## Stop Conditions
 
 Pause before editing if:

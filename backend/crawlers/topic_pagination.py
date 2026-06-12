@@ -129,10 +129,7 @@ class TopicPaginationMixin:
                     # 调整时间戳用于重试
                     if end_time:
                         try:
-                            from datetime import datetime, timedelta
-                            dt = datetime.fromisoformat(end_time.replace('+0800', '+08:00'))
-                            dt = dt - timedelta(milliseconds=self.timestamp_offset_ms)
-                            end_time = dt.strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + '+0800'
+                            end_time = _offset_zsxq_end_time(end_time, self.timestamp_offset_ms)
                             print(f"   🔄 调整时间戳: {end_time} (再次减去{self.timestamp_offset_ms}毫秒)")
                         except Exception as e:
                             print(f"   ⚠️ 时间戳调整失败: {e}")
@@ -183,10 +180,7 @@ class TopicPaginationMixin:
 
             # 准备增量爬取的起始时间戳
             try:
-                from datetime import datetime, timedelta
-                dt = datetime.fromisoformat(oldest_timestamp.replace('+0800', '+08:00'))
-                dt = dt - timedelta(milliseconds=self.timestamp_offset_ms)
-                start_end_time = dt.strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + '+0800'
+                start_end_time = _offset_zsxq_end_time(oldest_timestamp, self.timestamp_offset_ms)
                 print(f"🚀 增量爬取起始时间戳: {start_end_time}")
             except Exception as e:
                 print(f"⚠️ 时间戳处理失败，使用原时间戳: {e}")
@@ -335,10 +329,7 @@ class TopicPaginationMixin:
                     # 调整时间戳用于重试
                     if end_time:
                         try:
-                            from datetime import datetime, timedelta
-                            dt = datetime.fromisoformat(end_time.replace('+0800', '+08:00'))
-                            dt = dt - timedelta(milliseconds=self.timestamp_offset_ms)
-                            end_time = dt.strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + '+0800'
+                            end_time = _offset_zsxq_end_time(end_time, self.timestamp_offset_ms)
                         except Exception as e:
                             print(f"   ⚠️ 时间戳调整失败: {e}")
 
@@ -398,10 +389,7 @@ class TopicPaginationMixin:
 
         # 准备增量爬取的起始时间戳（在最老时间戳基础上减去偏移量）
         try:
-            from datetime import datetime, timedelta
-            dt = datetime.fromisoformat(oldest_timestamp.replace('+0800', '+08:00'))
-            dt = dt - timedelta(milliseconds=self.timestamp_offset_ms)
-            start_end_time = dt.strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + '+0800'
+            start_end_time = _offset_zsxq_end_time(oldest_timestamp, self.timestamp_offset_ms)
             print(f"🚀 增量爬取起始时间戳: {start_end_time}")
         except Exception as e:
             print(f"⚠️ 时间戳处理失败，使用原时间戳: {e}")
@@ -501,9 +489,7 @@ class TopicPaginationMixin:
                     # 调整时间戳用于重试
                     if end_time:
                         try:
-                            dt = datetime.fromisoformat(end_time.replace('+0800', '+08:00'))
-                            dt = dt - timedelta(milliseconds=self.timestamp_offset_ms)
-                            end_time = dt.strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + '+0800'
+                            end_time = _offset_zsxq_end_time(end_time, self.timestamp_offset_ms)
                             print(f"   🔄 调整时间戳: {end_time}")
                         except Exception as e:
                             print(f"   ⚠️ 时间戳调整失败: {e}")
