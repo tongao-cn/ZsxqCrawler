@@ -180,6 +180,17 @@ def database_download_query_plan(
     }
 
 
+def latest_file_create_time_query(query_group_id: Any) -> tuple[str, tuple[Any, ...]]:
+    return (
+        '''
+                SELECT MAX(create_time) FROM files
+                WHERE group_id = ?
+                  AND create_time IS NOT NULL AND create_time != ''
+            ''',
+        (query_group_id,),
+    )
+
+
 def summarize_page_time_range(files: list[Dict[str, Any]]) -> tuple[Optional[str], Optional[str]]:
     timestamps: list[datetime.datetime] = []
     for item in files:

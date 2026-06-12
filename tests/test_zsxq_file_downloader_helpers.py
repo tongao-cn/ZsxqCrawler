@@ -35,6 +35,7 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     has_retry_attempt_remaining,
     is_retryable_api_error,
     is_retryable_http_status,
+    latest_file_create_time_query,
     normalize_date_range,
     page_crosses_stop_before,
     partial_download_path,
@@ -272,6 +273,12 @@ class FileDownloaderPaginationTests(unittest.TestCase):
         self.assertEqual([101], [item["file"]["file_id"] for item in imported_files])
         self.assertEqual(1, len(downloader.fetch_calls))
         self.assertEqual([{"count": 20, "index": None, "sort": "by_create_time"}], downloader.fetch_calls)
+        self.assertEqual(1, len(downloader.file_db.executed))
+        latest_time_query, latest_time_params = downloader.file_db.executed[0]
+        self.assertIn("SELECT MAX(create_time) FROM files", latest_time_query)
+        self.assertIn("group_id = ?", latest_time_query)
+        self.assertIn("create_time IS NOT NULL AND create_time != ''", latest_time_query)
+        self.assertEqual((511,), latest_time_params)
         self.assertEqual(2, downloader.file_db.stats_calls)
         self.assertEqual(11, stats["total_files"])
         self.assertEqual(1, stats["new_files"])
@@ -523,6 +530,14 @@ class FileDownloaderTimeHelperTests(unittest.TestCase):
             },
             summary["result"],
         )
+
+    def test_latest_file_create_time_query_preserves_shape_and_params(self):
+        query, params = latest_file_create_time_query(511)
+
+        self.assertIn("SELECT MAX(create_time) FROM files", query)
+        self.assertIn("group_id = ?", query)
+        self.assertIn("create_time IS NOT NULL AND create_time != ''", query)
+        self.assertEqual((511,), params)
 
     def test_page_crosses_stop_before_returns_oldest_time(self):
         crossed, oldest = page_crosses_stop_before(

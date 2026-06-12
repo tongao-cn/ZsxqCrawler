@@ -6930,6 +6930,51 @@ Result:
 - Frontend build passed, including Next.js lint/type checks.
 - `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
 
+### 2026-06-12 - P9 file downloader latest file time query helper
+
+Changed:
+
+- Added characterization assertions for the `collect_files_by_time` database-latest-time lookup
+  SQL and numeric group ID parameter.
+- Added direct helper coverage for the latest file create-time query shape.
+- Extracted `latest_file_create_time_query` into
+  `backend/crawlers/zsxq_file_downloader_helpers.py` and reused it from `collect_files_by_time`.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- The `SELECT MAX(create_time) FROM files` lookup, `group_id = ?` predicate, non-empty
+  `create_time` filter, parameter order, `_query_group_id` conversion call site, latest-time log,
+  and time-dedupe trigger conditions are unchanged.
+- The outer `collect_files_by_time` loop still owns database cursor execution, result fetch,
+  stop checks, page fetch/import behavior, fallback/legacy behavior, schema/config/API behavior,
+  and public API behavior.
+- This does not introduce, remove, or alter legacy/fallback behavior.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderPaginationTests.test_collect_files_by_time_filters_old_files_and_stops_after_mixed_page -v
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderTimeHelperTests.test_latest_file_create_time_query_preserves_shape_and_params tests.test_zsxq_file_downloader_helpers.FileDownloaderPaginationTests.test_collect_files_by_time_filters_old_files_and_stops_after_mixed_page -v
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py backend\crawlers\zsxq_file_downloader_helpers.py tests\test_zsxq_file_downloader_helpers.py
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+git diff --check
+```
+
+Result:
+
+- The new query-shape characterization assertion passed before helper extraction.
+- Focused latest-time helper and mixed-page collection tests passed after extraction.
+- `py_compile` passed.
+- `tests.test_zsxq_file_downloader_helpers`: 86 tests passed.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Full backend unittest discovery: 728 tests passed, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+- `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
+
 ## Stop Conditions
 
 Pause before editing if:

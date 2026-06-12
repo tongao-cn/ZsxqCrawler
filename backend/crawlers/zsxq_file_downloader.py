@@ -43,6 +43,7 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     empty_import_stats,
     existing_file_matches,
     has_retry_attempt_remaining,
+    latest_file_create_time_query,
     normalize_date_range,
     page_crosses_stop_before,
     partial_download_path,
@@ -1183,11 +1184,8 @@ class ZSXQFileDownloader:
         
         db_latest_time = None
         if enable_time_dedupe and initial_files > 0:
-            self.file_db.cursor.execute('''
-                SELECT MAX(create_time) FROM files 
-                WHERE group_id = ?
-                  AND create_time IS NOT NULL AND create_time != ''
-            ''', (_query_group_id(self.group_id),))
+            query, params = latest_file_create_time_query(_query_group_id(self.group_id))
+            self.file_db.cursor.execute(query, params)
             result = self.file_db.cursor.fetchone()
             if result and result[0]:
                 db_latest_time = result[0]
