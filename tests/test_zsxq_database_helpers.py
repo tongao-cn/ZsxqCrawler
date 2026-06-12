@@ -4,6 +4,7 @@ from unittest.mock import patch
 from backend.storage.zsxq_database import (
     _answer_insert_statement,
     _article_insert_statement,
+    _beijing_now_timestamp,
     _build_pagination,
     _comment_insert_statement,
     _database_stats_count_query,
@@ -470,6 +471,12 @@ class FakeTopicDetailQACursor(FakeCursor):
 
 
 class ZSXQDatabaseHelperTests(unittest.TestCase):
+    def test_beijing_now_timestamp_preserves_existing_format(self):
+        self.assertRegex(
+            _beijing_now_timestamp(),
+            r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}\+0800$",
+        )
+
     def test_build_pagination_calculates_pages(self):
         self.assertEqual(
             {'page': 2, 'per_page': 20, 'total': 41, 'pages': 3},

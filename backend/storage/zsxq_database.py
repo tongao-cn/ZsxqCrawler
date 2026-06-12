@@ -7,6 +7,7 @@ from backend.storage.db_compat import connect
 from backend.storage.zsxq_database_helpers import (
     answer_insert_statement,
     article_insert_statement,
+    beijing_now_timestamp,
     build_pagination,
     comment_insert_statement,
     database_stats_count_query,
@@ -55,6 +56,10 @@ from backend.storage.zsxq_database_helpers import (
     user_liked_emoji_insert_statement,
     user_insert_statement,
 )
+
+
+def _beijing_now_timestamp() -> str:
+    return beijing_now_timestamp()
 
 
 def _build_pagination(page: int, per_page: int, total: int) -> Dict[str, int]:
@@ -413,9 +418,7 @@ class ZSXQDatabase:
             return
         
         # 获取当前时间作为created_at（使用东八区时间格式）
-        from datetime import datetime, timezone, timedelta
-        beijing_tz = timezone(timedelta(hours=8))
-        current_time = datetime.now(beijing_tz).strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + '+0800'
+        current_time = _beijing_now_timestamp()
         
         sql, params = _group_insert_statement(group_data, current_time)
         self.cursor.execute(sql, params)
@@ -427,9 +430,7 @@ class ZSXQDatabase:
             return
         
         # 获取当前时间作为created_at（使用东八区时间格式）
-        from datetime import datetime, timezone, timedelta
-        beijing_tz = timezone(timedelta(hours=8))
-        current_time = datetime.now(beijing_tz).strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + '+0800'
+        current_time = _beijing_now_timestamp()
         
         sql, params = _user_insert_statement(user_data, current_time)
         self.cursor.execute(sql, params)
@@ -441,9 +442,7 @@ class ZSXQDatabase:
             return
         
         # 获取当前时间作为imported_at（使用东八区时间格式）
-        from datetime import datetime, timezone, timedelta
-        beijing_tz = timezone(timedelta(hours=8))
-        current_time = datetime.now(beijing_tz).strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + '+0800'
+        current_time = _beijing_now_timestamp()
         
         sql, params = _topic_insert_statement(topic_data, current_time)
         self.cursor.execute(sql, params)
@@ -456,9 +455,7 @@ class ZSXQDatabase:
                 return False
 
             # 获取当前时间作为imported_at（使用东八区时间格式）
-            from datetime import datetime, timezone, timedelta
-            beijing_tz = timezone(timedelta(hours=8))
-            current_time = datetime.now(beijing_tz).strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + '+0800'
+            current_time = _beijing_now_timestamp()
 
             # 只更新统计相关字段，不更新内容字段
             scoped_group_id = _group_id_param(self.group_id)
@@ -605,9 +602,7 @@ class ZSXQDatabase:
             return
         
         # 获取当前时间作为created_at（使用东八区时间格式）
-        from datetime import datetime, timezone, timedelta
-        beijing_tz = timezone(timedelta(hours=8))
-        current_time = datetime.now(beijing_tz).strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + '+0800'
+        current_time = _beijing_now_timestamp()
         
         sql, params = _talk_insert_statement(topic_id, talk_data, current_time)
         self.cursor.execute(sql, params)
@@ -641,9 +636,7 @@ class ZSXQDatabase:
             return
         
         # 获取当前时间作为created_at（使用东八区时间格式）
-        from datetime import datetime, timezone, timedelta
-        beijing_tz = timezone(timedelta(hours=8))
-        current_time = datetime.now(beijing_tz).strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + '+0800'
+        current_time = _beijing_now_timestamp()
         
         sql, params = _image_insert_statement(topic_id, image_data, comment_id, current_time)
         self.cursor.execute(sql, params)
@@ -662,9 +655,7 @@ class ZSXQDatabase:
             user_id = owner.get('user_id')
             if user_id:
                 # 获取当前时间作为imported_at（使用东八区时间格式）
-                from datetime import datetime, timezone, timedelta
-                beijing_tz = timezone(timedelta(hours=8))
-                current_time = datetime.now(beijing_tz).strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + '+0800'
+                current_time = _beijing_now_timestamp()
                 
                 sql, params = _like_insert_statement(topic_id, user_id, like, current_time)
                 self.cursor.execute(sql, params)
@@ -683,9 +674,7 @@ class ZSXQDatabase:
             emoji_key = emoji.get('emoji_key')
             if emoji_key:
                 # 获取当前时间作为created_at（使用东八区时间格式）
-                from datetime import datetime, timezone, timedelta
-                beijing_tz = timezone(timedelta(hours=8))
-                current_time = datetime.now(beijing_tz).strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + '+0800'
+                current_time = _beijing_now_timestamp()
                 
                 sql, params = _like_emoji_insert_statement(topic_id, emoji, current_time)
                 self.cursor.execute(sql, params)
@@ -752,9 +741,7 @@ class ZSXQDatabase:
         repliee_user_id = comment_data.get('repliee', {}).get('user_id')
         
         # 获取当前时间作为imported_at（使用东八区时间格式）
-        from datetime import datetime, timezone, timedelta
-        beijing_tz = timezone(timedelta(hours=8))
-        current_time = datetime.now(beijing_tz).strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + '+0800'
+        current_time = _beijing_now_timestamp()
         group_id = self._resolve_topic_group_id(topic_id, comment_data.get('group_id'))
         
         sql, params = _comment_insert_statement(
@@ -788,9 +775,7 @@ class ZSXQDatabase:
                 continue
 
             # 获取当前时间作为created_at（使用东八区时间格式）
-            from datetime import datetime, timezone, timedelta
-            beijing_tz = timezone(timedelta(hours=8))
-            current_time = datetime.now(beijing_tz).strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + '+0800'
+            current_time = _beijing_now_timestamp()
 
             sql, params = _image_insert_statement(
                 topic_id,
@@ -813,9 +798,7 @@ class ZSXQDatabase:
             return
 
         # 获取当前时间作为created_at（使用东八区时间格式）
-        from datetime import datetime, timezone, timedelta
-        beijing_tz = timezone(timedelta(hours=8))
-        current_time = datetime.now(beijing_tz).strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + '+0800'
+        current_time = _beijing_now_timestamp()
 
         sql, params = _question_insert_statement(
             topic_id,
@@ -836,9 +819,7 @@ class ZSXQDatabase:
             return
         
         # 获取当前时间作为created_at（使用东八区时间格式）
-        from datetime import datetime, timezone, timedelta
-        beijing_tz = timezone(timedelta(hours=8))
-        current_time = datetime.now(beijing_tz).strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + '+0800'
+        current_time = _beijing_now_timestamp()
         
         sql, params = _answer_insert_statement(
             topic_id,
@@ -908,9 +889,7 @@ class ZSXQDatabase:
                 continue
 
             # 获取当前时间作为created_at（使用东八区时间格式）
-            from datetime import datetime, timezone, timedelta
-            beijing_tz = timezone(timedelta(hours=8))
-            current_time = datetime.now(beijing_tz).strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + '+0800'
+            current_time = _beijing_now_timestamp()
 
             sql, params = _topic_file_insert_statement(topic_id, file_data, current_time)
             self.cursor.execute(sql, params)
@@ -1061,9 +1040,7 @@ class ZSXQDatabase:
                 return tag_id
             else:
                 # 插入新标签
-                from datetime import datetime, timezone, timedelta
-                beijing_tz = timezone(timedelta(hours=8))
-                current_time = datetime.now(beijing_tz).strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + '+0800'
+                current_time = _beijing_now_timestamp()
                 
                 sql, params = _insert_tag_statement(group_id, tag_name, hid, current_time)
                 self.cursor.execute(sql, params)
@@ -1077,9 +1054,7 @@ class ZSXQDatabase:
     def _link_topic_tag(self, topic_id: int, tag_id: int):
         """关联话题和标签"""
         try:
-            from datetime import datetime, timezone, timedelta
-            beijing_tz = timezone(timedelta(hours=8))
-            current_time = datetime.now(beijing_tz).strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + '+0800'
+            current_time = _beijing_now_timestamp()
             
             sql, params = _insert_topic_tag_statement(topic_id, tag_id, current_time)
             self.cursor.execute(sql, params)

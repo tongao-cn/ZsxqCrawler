@@ -4,7 +4,13 @@ from __future__ import annotations
 
 import re
 import urllib.parse
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Optional
+
+
+def beijing_now_timestamp() -> str:
+    beijing_tz = timezone(timedelta(hours=8))
+    return datetime.now(beijing_tz).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "+0800"
 
 
 def build_pagination(page: int, per_page: int, total: int) -> Dict[str, int]:

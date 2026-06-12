@@ -5154,6 +5154,53 @@ Result:
 - `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
 - Frontend build is not planned because this slice only changes backend storage/helper code.
 
+### 2026-06-12 - P2 Beijing timestamp helper extraction
+
+Changed:
+
+- Added `beijing_now_timestamp` to `backend/storage/zsxq_database_helpers.py`, with a
+  compatibility wrapper in `backend/storage/zsxq_database.py`.
+- Replaced 15 repeated East-8 timestamp generation blocks in
+  `backend/storage/zsxq_database.py` with `_beijing_now_timestamp()`.
+- Added direct helper coverage for the existing `YYYY-MM-DDTHH:MM:SS.mmm+0800` timestamp
+  format.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Every replaced call site still obtains the current timestamp at the same point in its method
+  or loop.
+- Timestamp formatting remains the existing Beijing-time `YYYY-MM-DDTHH:MM:SS.mmm+0800`
+  string.
+- Existing created_at/imported_at call sites, skip paths, insert/update SQL, parameter order,
+  commit/rollback behavior, fallback behavior, and public API semantics are unchanged.
+- No schema, config, compatibility, fallback, error handling, logging, commit order, or public
+  API semantics were changed.
+
+Verification:
+
+```powershell
+rg -n "from datetime import datetime, timezone, timedelta|datetime\.now\(|strftime\('%Y-%m-%dT%H:%M:%S.%f'\)\[:-3\] \+ '\+0800'" backend\storage\zsxq_database.py
+rg -n "_beijing_now_timestamp|current_time = _beijing_now_timestamp" backend\storage\zsxq_database.py
+uv run python -m py_compile backend\storage\zsxq_database.py backend\storage\zsxq_database_helpers.py tests\test_zsxq_database_helpers.py
+uv run python -m unittest tests.test_zsxq_database_helpers -v
+uv run python -m unittest discover -s tests
+uv run python scripts\scan_postgres_compat_debt.py
+git diff --check
+```
+
+Result:
+
+- Inline timestamp-generation scan found no remaining matches in
+  `backend/storage/zsxq_database.py`.
+- Helper call-site scan found the wrapper plus 15 timestamp call sites.
+- `py_compile` passed.
+- `tests.test_zsxq_database_helpers`: 63 tests passed.
+- Full backend unittest discovery: 666 tests passed, 15 skipped.
+- PostgreSQL compatibility debt scan: no SQLite compatibility patterns found.
+- `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
+- Frontend build is not planned because this slice only changes backend storage/helper code.
+
 ## Stop Conditions
 
 Pause before editing if:
