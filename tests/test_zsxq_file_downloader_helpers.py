@@ -806,6 +806,33 @@ class FileDownloaderDownloadTests(unittest.TestCase):
         self.assertEqual([("https://download.test/101", 300, True)], session.get_calls)
         self.assertEqual(["   🚀 开始下载..."], downloader.logs)
 
+    def test_prepare_download_body_target_preserves_sizes_temp_path_and_cleanup(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            file_path = Path(temp_dir) / "memo.pdf"
+            partial_path = Path(f"{file_path}.part")
+            partial_path.write_bytes(b"stale")
+            downloader = object.__new__(ZSXQFileDownloader)
+
+            prepared = ZSXQFileDownloader._prepare_download_body_target(
+                downloader,
+                {"content-length": "8"},
+                4,
+                str(file_path),
+            )
+            fallback_prepared = ZSXQFileDownloader._prepare_download_body_target(
+                downloader,
+                {"content-length": "8"},
+                0,
+                str(Path(temp_dir) / "unknown.bin"),
+            )
+
+            self.assertEqual((8, 4, str(partial_path)), prepared)
+            self.assertFalse(partial_path.exists())
+            self.assertEqual(
+                (8, 8, str(Path(temp_dir) / "unknown.bin.part")),
+                fallback_prepared,
+            )
+
     def test_write_download_response_body_preserves_progress_stop_and_empty_chunks(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir) / "memo.pdf.part"
@@ -958,6 +985,27 @@ class FileDownloaderDownloadTests(unittest.TestCase):
                 session.get_calls,
             )
             self.assertIn("   🚀 开始下载...", downloader.logs)
+
+    def test_download_file_clears_existing_partial_file_before_successful_body_write(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            partial_path = Path(temp_dir) / "memo.pdf.part"
+            partial_path.write_bytes(b"stale")
+            session = FakeDownloadSession([FakeDownloadResponse(200, b"memo")])
+            downloader = self._downloader_for_download(temp_dir, session)
+
+            with patch(
+                "backend.crawlers.zsxq_file_downloader.remove_partial_download",
+                wraps=remove_partial_download,
+            ) as remove_partial:
+                result = ZSXQFileDownloader.download_file(
+                    downloader,
+                    {"file": {"id": 101, "name": "memo.pdf", "size": 4, "download_count": 0}},
+                )
+
+            self.assertTrue(result)
+            remove_partial.assert_called_once_with(str(partial_path))
+            self.assertEqual(b"memo", (Path(temp_dir) / "memo.pdf").read_bytes())
+            self.assertFalse(partial_path.exists())
 
     def test_download_file_preserves_retry_wait_log_and_delay(self):
         with tempfile.TemporaryDirectory() as temp_dir:

@@ -599,10 +599,11 @@ class ZSXQFileDownloader:
                     file_name, safe_filename, file_path = filename_override
 
                 if response.status_code == 200:
-                    total_size = download_total_size(response.headers)
-                    expected_size = download_expected_size(file_size, total_size)
-                    temp_path = partial_download_path(file_path)
-                    remove_partial_download(temp_path)
+                    total_size, expected_size, temp_path = self._prepare_download_body_target(
+                        response.headers,
+                        file_size,
+                        file_path,
+                    )
 
                     downloaded_size = self._write_download_response_body(
                         response,
@@ -762,6 +763,18 @@ class ZSXQFileDownloader:
     def _request_download_response(self, download_url: str) -> Any:
         self.log(f"   🚀 开始下载...")
         return self.session.get(download_url, timeout=300, stream=True)
+
+    def _prepare_download_body_target(
+        self,
+        response_headers: Dict[str, Any],
+        file_size: int,
+        file_path: str,
+    ) -> tuple[int, int, str]:
+        total_size = download_total_size(response_headers)
+        expected_size = download_expected_size(file_size, total_size)
+        temp_path = partial_download_path(file_path)
+        remove_partial_download(temp_path)
+        return total_size, expected_size, temp_path
 
     def _handle_download_size_mismatch(
         self,

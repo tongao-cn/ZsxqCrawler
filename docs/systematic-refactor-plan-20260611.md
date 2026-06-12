@@ -6423,6 +6423,51 @@ Result:
 - Frontend build passed, including Next.js lint/type checks.
 - `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
 
+### 2026-06-12 - P9 file downloader body target helper
+
+Changed:
+
+- Added characterization coverage that a stale `.part` file is cleared before a successful
+  body write.
+- Added direct helper coverage for total size, expected size, `.part` path, and cleanup
+  behavior.
+- Added `ZSXQFileDownloader._prepare_download_body_target` and reused it from `download_file`.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Successful HTTP 200 downloads still derive `total_size` from `Content-Length`, derive
+  `expected_size` from file metadata when positive or from `Content-Length` when missing,
+  and use `<file_path>.part`.
+- Existing `.part` files are still removed before body writing begins.
+- Body progress/stop handling, size mismatch handling, success finalization, retry wait,
+  response request, HTTP/body exceptions, schema/config/API behavior, and public API behavior
+  are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_download_file_clears_existing_partial_file_before_successful_body_write tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_download_file_requests_response_with_stream_timeout_and_log -v
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_prepare_download_body_target_preserves_sizes_temp_path_and_cleanup tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_download_file_clears_existing_partial_file_before_successful_body_write tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_download_file_requests_response_with_stream_timeout_and_log tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_download_file_retries_and_fails_on_size_mismatch -v
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+git diff --check
+```
+
+Result:
+
+- Pre-refactor body-target characterization tests passed against the original inline branch.
+- `py_compile` passed.
+- Focused body-target/download tests passed.
+- `tests.test_zsxq_file_downloader_helpers`: 71 tests passed.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Full backend unittest discovery: 713 tests passed, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+- `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
+
 ## Stop Conditions
 
 Pause before editing if:
