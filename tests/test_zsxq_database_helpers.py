@@ -15,12 +15,15 @@ from backend.storage.zsxq_database import (
     _refresh_tag_topic_count_statement,
     _replace_file_topic_relation,
     _tag_id_by_name_query,
+    _tags_by_group_query,
     _topic_create_time_by_id_query,
+    _topic_count_by_tag_query,
     _topic_detail_scope,
     _topic_count_query,
     _topic_exists_query,
     _topic_file_payload_from_row,
     _topic_group_id_query,
+    _topics_by_tag_query,
     _update_tag_hid_statement,
     _upsert_core_file,
 )
@@ -64,6 +67,33 @@ class FakeFailingExecuteCursor(FakeCursor):
     def execute(self, query, params=()):
         super().execute(query, params)
         raise RuntimeError("temporary tag-link failure")
+
+
+class FakeTagReadCursor(FakeCursor):
+    def __init__(self, tag_rows=None, topic_rows=None, total=0, raises=False):
+        super().__init__()
+        self.tag_rows = list(tag_rows or [])
+        self.topic_rows = list(topic_rows or [])
+        self.total = total
+        self.raises = raises
+        self.last_query = ""
+
+    def execute(self, query, params=()):
+        self.last_query = " ".join(query.split())
+        super().execute(query, params)
+        if self.raises:
+            raise RuntimeError("temporary tag read failure")
+        return self
+
+    def fetchall(self):
+        if "FROM tags" in self.last_query:
+            return self.tag_rows
+        if "FROM topics t" in self.last_query:
+            return self.topic_rows
+        return []
+
+    def fetchone(self):
+        return (self.total,)
 
 
 class FakeFileDatabase:
@@ -520,6 +550,37 @@ class ZSXQDatabaseHelperTests(unittest.TestCase):
         )
         self.assertEqual((7, 7), count_params)
 
+    def test_tag_read_query_helpers_preserve_sql_shape_and_params(self):
+        tags_sql, tags_params = _tags_by_group_query(303)
+        self.assertEqual(
+            "SELECT tag_id, tag_name, hid, topic_count, created_at FROM tags "
+            "WHERE group_id = ? ORDER BY topic_count DESC, tag_name ASC",
+            " ".join(tags_sql.split()),
+        )
+        self.assertEqual((303,), tags_params)
+
+        topics_sql, topics_params = _topics_by_tag_query(7, 5, 10)
+        self.assertEqual(
+            "SELECT t.topic_id, t.title, t.create_time, t.likes_count, t.comments_count, "
+            "t.reading_count, t.type, t.digested, t.sticky, q.text as question_text, "
+            "a.text as answer_text, tk.text as talk_text, u.user_id, u.name, u.avatar_url "
+            "FROM topics t INNER JOIN topic_tags tt ON t.topic_id = tt.topic_id "
+            "LEFT JOIN questions q ON t.topic_id = q.topic_id "
+            "LEFT JOIN answers a ON t.topic_id = a.topic_id "
+            "LEFT JOIN talks tk ON t.topic_id = tk.topic_id "
+            "LEFT JOIN users u ON tk.owner_user_id = u.user_id "
+            "WHERE tt.tag_id = ? ORDER BY t.create_time DESC LIMIT ? OFFSET ?",
+            " ".join(topics_sql.split()),
+        )
+        self.assertEqual((7, 5, 10), topics_params)
+
+        count_sql, count_params = _topic_count_by_tag_query(7)
+        self.assertEqual(
+            "SELECT COUNT(*) FROM topic_tags WHERE tag_id = ?",
+            " ".join(count_sql.split()),
+        )
+        self.assertEqual((7,), count_params)
+
     def test_replace_file_topic_relation_deletes_then_inserts(self):
         file_db = FakeFileDatabase()
 
@@ -946,6 +1007,102 @@ class ZSXQDatabaseHelperTests(unittest.TestCase):
             self.assertIsNone(ZSXQDatabase._link_topic_tag(failing_db, 202, 7))
         mocked_print.assert_called_once()
         self.assertEqual(1, len(failing_db.cursor.calls))
+
+    def test_get_tags_by_group_uses_helper_query_and_preserves_response_shape(self):
+        from backend.storage.zsxq_database import ZSXQDatabase
+
+        db = object.__new__(ZSXQDatabase)
+        db.cursor = FakeTagReadCursor(
+            tag_rows=[(7, "AI", "hid-1", 12, "2026-06-12T10:00:00.000+0800")]
+        )
+
+        self.assertEqual(
+            [
+                {
+                    "tag_id": 7,
+                    "tag_name": "AI",
+                    "hid": "hid-1",
+                    "topic_count": 12,
+                    "created_at": "2026-06-12T10:00:00.000+0800",
+                }
+            ],
+            ZSXQDatabase.get_tags_by_group(db, 303),
+        )
+        self.assertEqual(
+            [
+                (
+                    "SELECT tag_id, tag_name, hid, topic_count, created_at FROM tags "
+                    "WHERE group_id = ? ORDER BY topic_count DESC, tag_name ASC",
+                    (303,),
+                )
+            ],
+            db.cursor.calls,
+        )
+
+    def test_get_topics_by_tag_uses_helper_queries_and_preserves_pagination(self):
+        from backend.storage.zsxq_database import ZSXQDatabase
+
+        db = object.__new__(ZSXQDatabase)
+        db.cursor = FakeTagReadCursor(
+            topic_rows=[
+                (
+                    202,
+                    "title",
+                    "2026-05-07",
+                    1,
+                    2,
+                    3,
+                    "talk",
+                    0,
+                    1,
+                    None,
+                    None,
+                    "body",
+                    901,
+                    "Alice",
+                    "a.png",
+                )
+            ],
+            total=12,
+        )
+
+        self.assertEqual(
+            {
+                "topics": [
+                    {
+                        "topic_id": 202,
+                        "title": "title",
+                        "create_time": "2026-05-07",
+                        "likes_count": 1,
+                        "comments_count": 2,
+                        "reading_count": 3,
+                        "type": "talk",
+                        "digested": False,
+                        "sticky": True,
+                        "talk_text": "body",
+                        "author": {"user_id": 901, "name": "Alice", "avatar_url": "a.png"},
+                    }
+                ],
+                "pagination": {"page": 2, "per_page": 5, "total": 12, "pages": 3},
+            },
+            ZSXQDatabase.get_topics_by_tag(db, 7, page=2, per_page=5),
+        )
+        self.assertEqual((7, 5, 5), db.cursor.calls[0][1])
+        self.assertIn("FROM topics t INNER JOIN topic_tags tt", db.cursor.calls[0][0])
+        self.assertEqual(("SELECT COUNT(*) FROM topic_tags WHERE tag_id = ?", (7,)), db.cursor.calls[1])
+
+    def test_get_topics_by_tag_preserves_exception_fallback_shape(self):
+        from backend.storage.zsxq_database import ZSXQDatabase
+
+        db = object.__new__(ZSXQDatabase)
+        db.cursor = FakeTagReadCursor(raises=True)
+
+        with patch("builtins.print") as mocked_print:
+            result = ZSXQDatabase.get_topics_by_tag(db, 7, page=2, per_page=5)
+
+        self.assertEqual({"topics": [], "pagination": {"page": 2, "per_page": 5, "total": 0, "pages": 0}}, result)
+        mocked_print.assert_called_once()
+        self.assertEqual(1, len(db.cursor.calls))
 
     def test_content_child_writes_use_explicit_unique_semantics(self):
         from backend.storage.zsxq_database import ZSXQDatabase

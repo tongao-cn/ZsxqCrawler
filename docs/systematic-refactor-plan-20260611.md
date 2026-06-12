@@ -4432,6 +4432,49 @@ Result:
 - `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
 - Frontend build is not planned because this slice only changes backend storage/helper code.
 
+### 2026-06-12 - P2 tag read query helper extraction
+
+Changed:
+
+- Added `tags_by_group_query`, `topics_by_tag_query`, and `topic_count_by_tag_query` to
+  `backend/storage/zsxq_database_helpers.py`, with compatibility wrappers in
+  `backend/storage/zsxq_database.py`.
+- Replaced inline SQL in `get_tags_by_group` and `get_topics_by_tag` with helper-returned SQL and
+  params.
+- Added characterization coverage for tag-list query shape, tagged-topic query shape, count query
+  shape, formatted tag rows, tagged-topic pagination, and the existing tagged-topic exception
+  fallback response.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- `get_tags_by_group` still orders by `topic_count DESC, tag_name ASC`, still formats rows through
+  `_format_tag_row`, and still returns `[]` after printing on exceptions.
+- `get_topics_by_tag` still computes `offset = (page - 1) * per_page`, returns the same topic row
+  shape through `_format_tag_topic_row`, still queries `topic_tags` for total count, and still
+  returns an empty topics list plus zero-total pagination on exceptions.
+- No schema, config, compatibility, fallback, error handling, logging, or public API semantics were
+  changed.
+
+Verification:
+
+```powershell
+uv run python -m py_compile backend\storage\zsxq_database.py backend\storage\zsxq_database_helpers.py tests\test_zsxq_database_helpers.py
+uv run python -m unittest tests.test_zsxq_database_helpers -v
+uv run python -m unittest discover -s tests
+uv run python scripts\scan_postgres_compat_debt.py
+git diff --check
+```
+
+Result:
+
+- `py_compile` passed.
+- `tests.test_zsxq_database_helpers`: 33 tests passed.
+- Full backend unittest discovery: 636 tests passed, 15 skipped.
+- PostgreSQL compatibility debt scan: no SQLite compatibility patterns found.
+- `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
+- Frontend build is not planned because this slice only changes backend storage/helper code.
+
 ## Stop Conditions
 
 Pause before editing if:

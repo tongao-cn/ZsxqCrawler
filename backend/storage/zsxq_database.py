@@ -24,12 +24,15 @@ from backend.storage.zsxq_database_helpers import (
     refresh_tag_topic_count_statement,
     replace_file_topic_relation,
     tag_id_by_name_query,
+    tags_by_group_query,
     topic_create_time_by_id_query,
+    topic_count_by_tag_query,
     topic_detail_scope,
     topic_count_query,
     topic_exists_query,
     topic_file_payload_from_row,
     topic_group_id_query,
+    topics_by_tag_query,
     update_tag_hid_statement,
     upsert_core_file,
 )
@@ -49,6 +52,18 @@ def _format_tag_topic_row(topic) -> Dict[str, Any]:
 
 def _tag_id_by_name_query(group_id: int, tag_name: str) -> tuple[str, tuple[Any, ...]]:
     return tag_id_by_name_query(group_id, tag_name)
+
+
+def _tags_by_group_query(group_id: int) -> tuple[str, tuple[Any, ...]]:
+    return tags_by_group_query(group_id)
+
+
+def _topics_by_tag_query(tag_id: int, per_page: int, offset: int) -> tuple[str, tuple[Any, ...]]:
+    return topics_by_tag_query(tag_id, per_page, offset)
+
+
+def _topic_count_by_tag_query(tag_id: int) -> tuple[str, tuple[Any, ...]]:
+    return topic_count_by_tag_query(tag_id)
 
 
 def _update_tag_hid_statement(tag_id: int, hid: str) -> tuple[str, tuple[Any, ...]]:
@@ -1298,12 +1313,8 @@ class ZSXQDatabase:
     def get_tags_by_group(self, group_id: int) -> List[Dict[str, Any]]:
         """获取指定群组的所有标签"""
         try:
-            self.cursor.execute('''
-                SELECT tag_id, tag_name, hid, topic_count, created_at
-                FROM tags
-                WHERE group_id = ?
-                ORDER BY topic_count DESC, tag_name ASC
-            ''', (group_id,))
+            sql, params = _tags_by_group_query(group_id)
+            self.cursor.execute(sql, params)
             
             return [_format_tag_row(row) for row in self.cursor.fetchall()]
         except Exception as e:
@@ -1316,33 +1327,14 @@ class ZSXQDatabase:
             offset = (page - 1) * per_page
             
             # 获取话题列表 - 包含所有详细信息，与get_group_topics保持一致
-            self.cursor.execute('''
-                SELECT
-                    t.topic_id, t.title, t.create_time, t.likes_count, t.comments_count,
-                    t.reading_count, t.type, t.digested, t.sticky,
-                    q.text as question_text,
-                    a.text as answer_text,
-                    tk.text as talk_text,
-                    u.user_id, u.name, u.avatar_url
-                FROM topics t
-                INNER JOIN topic_tags tt ON t.topic_id = tt.topic_id
-                LEFT JOIN questions q ON t.topic_id = q.topic_id
-                LEFT JOIN answers a ON t.topic_id = a.topic_id
-                LEFT JOIN talks tk ON t.topic_id = tk.topic_id
-                LEFT JOIN users u ON tk.owner_user_id = u.user_id
-                WHERE tt.tag_id = ?
-                ORDER BY t.create_time DESC
-                LIMIT ? OFFSET ?
-            ''', (tag_id, per_page, offset))
+            sql, params = _topics_by_tag_query(tag_id, per_page, offset)
+            self.cursor.execute(sql, params)
             
             topics = [_format_tag_topic_row(topic) for topic in self.cursor.fetchall()]
             
             # 获取总数
-            self.cursor.execute('''
-                SELECT COUNT(*)
-                FROM topic_tags
-                WHERE tag_id = ?
-            ''', (tag_id,))
+            sql, params = _topic_count_by_tag_query(tag_id)
+            self.cursor.execute(sql, params)
             total = self.cursor.fetchone()[0]
             
             return {
