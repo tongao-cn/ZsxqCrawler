@@ -42,6 +42,7 @@ from backend.storage.zsxq_database_helpers import (
     topic_count_query,
     topic_exists_query,
     topic_file_payload_from_row,
+    topic_file_insert_statement,
     topic_group_id_query,
     topic_insert_statement,
     topic_stats_update_statement,
@@ -212,6 +213,14 @@ def _article_insert_statement(
     created_at: str,
 ) -> tuple[str, tuple[Any, ...]]:
     return article_insert_statement(topic_id, title, article_id, article_data, created_at)
+
+
+def _topic_file_insert_statement(
+    topic_id: int,
+    file_data: Dict[str, Any],
+    created_at: str,
+) -> tuple[str, tuple[Any, ...]]:
+    return topic_file_insert_statement(topic_id, file_data, created_at)
 
 
 def _update_tag_hid_statement(tag_id: int, hid: str) -> tuple[str, tuple[Any, ...]]:
@@ -920,29 +929,8 @@ class ZSXQDatabase:
             beijing_tz = timezone(timedelta(hours=8))
             current_time = datetime.now(beijing_tz).strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + '+0800'
 
-            self.cursor.execute('''
-                INSERT INTO topic_files
-                (topic_id, file_id, name, hash, size, duration, download_count, create_time, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ON CONFLICT(topic_id, file_id) DO UPDATE SET
-                    name = excluded.name,
-                    hash = excluded.hash,
-                    size = excluded.size,
-                    duration = excluded.duration,
-                    download_count = excluded.download_count,
-                    create_time = excluded.create_time,
-                    created_at = excluded.created_at
-            ''', (
-                topic_id,
-                file_data.get('file_id'),
-                file_data.get('name', ''),
-                file_data.get('hash', ''),
-                file_data.get('size', 0),
-                file_data.get('duration', 0),
-                file_data.get('download_count', 0),
-                file_data.get('create_time', ''),
-                current_time
-            ))
+            sql, params = _topic_file_insert_statement(topic_id, file_data, current_time)
+            self.cursor.execute(sql, params)
 
     def _sync_topic_files_to_core_tables(self, topic_data: Dict[str, Any], files_data: List[Dict[str, Any]]):
         """把话题采集到的 talk.files 同步到核心 files/relations 表。"""

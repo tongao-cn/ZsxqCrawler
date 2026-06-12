@@ -549,6 +549,39 @@ def article_insert_statement(
     )
 
 
+def topic_file_insert_statement(
+    topic_id: int,
+    file_data: Dict[str, Any],
+    created_at: str,
+) -> tuple[str, tuple[Any, ...]]:
+    return (
+        """
+                INSERT INTO topic_files
+                (topic_id, file_id, name, hash, size, duration, download_count, create_time, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(topic_id, file_id) DO UPDATE SET
+                    name = excluded.name,
+                    hash = excluded.hash,
+                    size = excluded.size,
+                    duration = excluded.duration,
+                    download_count = excluded.download_count,
+                    create_time = excluded.create_time,
+                    created_at = excluded.created_at
+            """,
+        (
+            topic_id,
+            file_data.get("file_id"),
+            file_data.get("name", ""),
+            file_data.get("hash", ""),
+            file_data.get("size", 0),
+            file_data.get("duration", 0),
+            file_data.get("download_count", 0),
+            file_data.get("create_time", ""),
+            created_at,
+        ),
+    )
+
+
 def update_tag_hid_statement(tag_id: int, hid: str) -> tuple[str, tuple[Any, ...]]:
     return "UPDATE tags SET hid = ? WHERE tag_id = ?", (hid, tag_id)
 

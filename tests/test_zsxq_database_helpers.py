@@ -33,6 +33,7 @@ from backend.storage.zsxq_database import (
     _topic_count_query,
     _topic_exists_query,
     _topic_file_payload_from_row,
+    _topic_file_insert_statement,
     _topic_group_id_query,
     _topic_insert_statement,
     _topic_stats_update_statement,
@@ -1070,6 +1071,48 @@ class ZSXQDatabaseHelperTests(unittest.TestCase):
         _default_sql, default_params = _article_insert_statement(203, "", "402", {}, "")
         self.assertEqual((203, "", "402", "", "", ""), default_params)
 
+    def test_topic_file_insert_statement_helper_preserves_sql_shape_and_params(self):
+        sql, params = _topic_file_insert_statement(
+            202,
+            {
+                "file_id": 501,
+                "name": "memo.pdf",
+                "hash": "abc",
+                "size": 12,
+                "duration": 3,
+                "download_count": 4,
+                "create_time": "2026-05-07T10:00:00.000+0800",
+            },
+            "2026-06-12T10:00:00.000+0800",
+        )
+
+        self.assertEqual(
+            "INSERT INTO topic_files (topic_id, file_id, name, hash, size, duration, "
+            "download_count, create_time, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) "
+            "ON CONFLICT(topic_id, file_id) DO UPDATE SET name = excluded.name, "
+            "hash = excluded.hash, size = excluded.size, duration = excluded.duration, "
+            "download_count = excluded.download_count, create_time = excluded.create_time, "
+            "created_at = excluded.created_at",
+            " ".join(sql.split()),
+        )
+        self.assertEqual(
+            (
+                202,
+                501,
+                "memo.pdf",
+                "abc",
+                12,
+                3,
+                4,
+                "2026-05-07T10:00:00.000+0800",
+                "2026-06-12T10:00:00.000+0800",
+            ),
+            params,
+        )
+
+        _default_sql, default_params = _topic_file_insert_statement(202, {"file_id": 502}, "now")
+        self.assertEqual((202, 502, "", "", 0, 0, 0, "", "now"), default_params)
+
     def test_replace_file_topic_relation_deletes_then_inserts(self):
         file_db = FakeFileDatabase()
 
@@ -1911,6 +1954,31 @@ class ZSXQDatabaseHelperTests(unittest.TestCase):
         fallback_sql, fallback_params = fallback_db.cursor.calls[1]
         self.assertIn("INSERT INTO articles", fallback_sql)
         self.assertEqual((203, "", "402", "", "", ""), fallback_params)
+
+    def test_import_files_preserves_skip_defaults_and_timestamp(self):
+        from backend.storage.zsxq_database import ZSXQDatabase
+
+        db = object.__new__(ZSXQDatabase)
+        db.cursor = FakeCursor()
+
+        ZSXQDatabase._import_files(db, 202, [])
+        ZSXQDatabase._import_files(db, 202, [{}])
+        self.assertEqual([], db.cursor.calls)
+
+        ZSXQDatabase._import_files(db, 202, [{"file_id": 501}])
+
+        topic_file_sql, topic_file_params = db.cursor.calls[0]
+        self.assertEqual(
+            "INSERT INTO topic_files (topic_id, file_id, name, hash, size, duration, "
+            "download_count, create_time, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) "
+            "ON CONFLICT(topic_id, file_id) DO UPDATE SET name = excluded.name, "
+            "hash = excluded.hash, size = excluded.size, duration = excluded.duration, "
+            "download_count = excluded.download_count, create_time = excluded.create_time, "
+            "created_at = excluded.created_at",
+            topic_file_sql,
+        )
+        self.assertEqual((202, 501, "", "", 0, 0, 0, ""), topic_file_params[:8])
+        self.assertRegex(topic_file_params[8], r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}\+0800$")
 
     def test_upsert_tag_preserves_existing_update_insert_and_missing_return_branches(self):
         from backend.storage.zsxq_database import ZSXQDatabase
