@@ -57,6 +57,17 @@ def _parse_extensions(value: str | None) -> set[str]:
     return {item.strip().lower().lstrip(".") for item in value.split(",") if item.strip()}
 
 
+def _validate_interval_range(name: str, minimum: float | None, maximum: float | None) -> None:
+    if minimum is None and maximum is None:
+        return
+    if minimum is None or maximum is None:
+        raise ValueError(f"{name} min and max must be provided together")
+    if minimum < 0 or maximum < 0:
+        raise ValueError(f"{name} values must be non-negative")
+    if minimum > maximum:
+        raise ValueError(f"{name} min must be <= max")
+
+
 def _load_candidate_rows(
     *,
     group_id: str,
@@ -137,6 +148,10 @@ def _download_rows(
     download_interval: float,
     long_sleep_interval: float,
     files_per_batch: int,
+    download_interval_min: float | None,
+    download_interval_max: float | None,
+    long_sleep_interval_min: float | None,
+    long_sleep_interval_max: float | None,
 ) -> dict[str, int]:
     cookie = get_cookie_for_group(group_id)
     downloader = ZSXQFileDownloader(
@@ -145,6 +160,10 @@ def _download_rows(
         download_interval=download_interval,
         long_sleep_interval=long_sleep_interval,
         files_per_batch=files_per_batch,
+        download_interval_min=download_interval_min,
+        download_interval_max=download_interval_max,
+        long_sleep_interval_min=long_sleep_interval_min,
+        long_sleep_interval_max=long_sleep_interval_max,
     )
     try:
         stats = {"total_files": 0, "downloaded": 0, "skipped": 0, "failed": 0}
@@ -185,8 +204,17 @@ def main() -> int:
     parser.add_argument("--download-interval", type=float, default=1.0)
     parser.add_argument("--long-sleep-interval", type=float, default=60.0)
     parser.add_argument("--files-per-batch", type=int, default=10)
+    parser.add_argument("--download-interval-min", type=float, help="Enable random per-file sleep, minimum seconds.")
+    parser.add_argument("--download-interval-max", type=float, help="Enable random per-file sleep, maximum seconds.")
+    parser.add_argument("--long-sleep-interval-min", type=float, help="Enable random batch sleep, minimum seconds.")
+    parser.add_argument("--long-sleep-interval-max", type=float, help="Enable random batch sleep, maximum seconds.")
     parser.add_argument("--manifest", type=Path, help="CSV manifest path.")
     args = parser.parse_args()
+    try:
+        _validate_interval_range("download interval", args.download_interval_min, args.download_interval_max)
+        _validate_interval_range("long sleep interval", args.long_sleep_interval_min, args.long_sleep_interval_max)
+    except ValueError as exc:
+        parser.error(str(exc))
 
     extensions = _parse_extensions(args.extensions)
     rows = _load_candidate_rows(
@@ -219,6 +247,10 @@ def main() -> int:
         download_interval=args.download_interval,
         long_sleep_interval=args.long_sleep_interval,
         files_per_batch=args.files_per_batch,
+        download_interval_min=args.download_interval_min,
+        download_interval_max=args.download_interval_max,
+        long_sleep_interval_min=args.long_sleep_interval_min,
+        long_sleep_interval_max=args.long_sleep_interval_max,
     )
     print(f"downloaded={stats['downloaded']}")
     print(f"skipped={stats['skipped']}")
