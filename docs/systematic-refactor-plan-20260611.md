@@ -5524,6 +5524,54 @@ Result:
 - `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
 - Frontend build is not planned because this slice only changes backend storage/helper code.
 
+### 2026-06-12 - P2 additional comment user iterator helper
+
+Changed:
+
+- Added `iter_additional_comment_user_payloads` to `backend/storage/zsxq_database_helpers.py`,
+  with a compatibility wrapper in `backend/storage/zsxq_database.py`.
+- Replaced the inline owner/repliee user-upsert checks in `import_additional_comments` with the
+  helper output.
+- Added direct helper coverage for missing users, falsey owner/repliee values, and owner-before-
+  repliee ordering.
+- Added `import_additional_comments` characterization coverage for empty-list early return, print
+  behavior, user upsert order, comment upsert order, and image import order.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- `import_additional_comments` still returns before printing or writing when `comments` is empty.
+- Truthy `owner` and `repliee` payloads are still upserted before the comment itself, in owner then
+  repliee order.
+- Falsey `owner` and `repliee` payloads are still skipped.
+- Comment upsert still happens before comment-image import for each comment.
+- Existing SQL, schema, config, fallback behavior, error handling, logging, commit/rollback
+  behavior, and public API semantics are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_import_additional_comments_preserves_user_comment_image_order -v
+uv run python -m py_compile backend\storage\zsxq_database.py backend\storage\zsxq_database_helpers.py tests\test_zsxq_database_helpers.py
+uv run python -m unittest tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_iter_additional_comment_user_payloads_preserves_truthy_owner_repliee_order tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_import_additional_comments_preserves_user_comment_image_order -v
+uv run python -m unittest tests.test_zsxq_database_helpers -v
+uv run python -m unittest discover -s tests
+uv run python scripts\scan_postgres_compat_debt.py
+git diff --check
+```
+
+Result:
+
+- Pre-refactor characterization test passed against the original inline
+  `import_additional_comments` implementation.
+- `py_compile` passed.
+- Focused helper/import tests passed.
+- `tests.test_zsxq_database_helpers`: 75 tests passed.
+- Full backend unittest discovery: 678 tests passed, 15 skipped.
+- PostgreSQL compatibility debt scan: no SQLite compatibility patterns found.
+- `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
+- Frontend build is not planned because this slice only changes backend storage/helper code.
+
 ## Stop Conditions
 
 Pause before editing if:

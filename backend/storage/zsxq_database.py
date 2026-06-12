@@ -21,6 +21,7 @@ from backend.storage.zsxq_database_helpers import (
     image_insert_statement,
     insert_tag_statement,
     insert_topic_tag_statement,
+    iter_additional_comment_user_payloads,
     iter_topic_user_payloads_from_data,
     iter_valid_comment_image_payloads,
     iter_valid_latest_like_payloads,
@@ -111,6 +112,10 @@ def _iter_valid_comment_image_payloads(images):
 
 def _comment_image_batch_from_comment(comment):
     return comment_image_batch_from_comment(comment)
+
+
+def _iter_additional_comment_user_payloads(comment):
+    return iter_additional_comment_user_payloads(comment)
 
 
 def _tag_id_by_name_query(group_id: int, tag_name: str) -> tuple[str, tuple[Any, ...]]:
@@ -702,13 +707,8 @@ class ZSXQDatabase:
         print(f"📝 导入话题 {topic_id} 的 {len(comments)} 条额外评论...")
 
         for comment in comments:
-            # 导入评论作者
-            if 'owner' in comment and comment['owner']:
-                self._upsert_user(comment['owner'])
-
-            # 导入回复人（如果存在）
-            if 'repliee' in comment and comment['repliee']:
-                self._upsert_user(comment['repliee'])
+            for user_data in _iter_additional_comment_user_payloads(comment):
+                self._upsert_user(user_data)
 
             # 导入评论
             self._upsert_comment(topic_id, comment)

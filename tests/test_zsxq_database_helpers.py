@@ -18,6 +18,7 @@ from backend.storage.zsxq_database import (
     _image_insert_statement,
     _insert_tag_statement,
     _insert_topic_tag_statement,
+    _iter_additional_comment_user_payloads,
     _iter_topic_user_payloads_from_data,
     _iter_valid_comment_image_payloads,
     _iter_valid_latest_like_payloads,
@@ -620,6 +621,21 @@ class ZSXQDatabaseHelperTests(unittest.TestCase):
 
         with self.assertRaises(KeyError):
             _comment_image_batch_from_comment({"images": [{"image_id": 702}]})
+
+    def test_iter_additional_comment_user_payloads_preserves_truthy_owner_repliee_order(self):
+        owner = {"user_id": 901}
+        repliee = {"user_id": 902}
+
+        self.assertEqual([], list(_iter_additional_comment_user_payloads({})))
+        self.assertEqual(
+            [owner, repliee],
+            list(
+                _iter_additional_comment_user_payloads(
+                    {"owner": owner, "repliee": repliee, "ignored": {"user_id": 903}}
+                )
+            ),
+        )
+        self.assertEqual([], list(_iter_additional_comment_user_payloads({"owner": {}, "repliee": None})))
 
     def test_format_tag_row_keeps_existing_fields(self):
         row = (1, "tag", "hid-1", 7, "2026-01-01")
@@ -1977,6 +1993,63 @@ class ZSXQDatabaseHelperTests(unittest.TestCase):
             ZSXQDatabase._import_comments(failing_db, 202, [{"images": images}])
 
         self.assertEqual([("upsert", 202, None)], failing_events)
+
+    def test_import_additional_comments_preserves_user_comment_image_order(self):
+        from backend.storage.zsxq_database import ZSXQDatabase
+
+        empty_db = object.__new__(ZSXQDatabase)
+        empty_db._upsert_user = lambda user: self.fail("unexpected user upsert")
+        empty_db._upsert_comment = lambda topic_id, comment: self.fail("unexpected comment upsert")
+        empty_db._import_comment_images = lambda topic_id, comment_id, images: self.fail(
+            "unexpected comment image import"
+        )
+
+        with patch("builtins.print") as mocked_print:
+            ZSXQDatabase.import_additional_comments(empty_db, 202, [])
+
+        mocked_print.assert_not_called()
+
+        db = object.__new__(ZSXQDatabase)
+        events = []
+
+        def upsert_user(user):
+            events.append(("user", user.get("user_id")))
+
+        def upsert_comment(topic_id, comment):
+            events.append(("comment", topic_id, comment.get("comment_id")))
+
+        def import_comment_images(topic_id, comment_id, images):
+            events.append(("images", topic_id, comment_id, images))
+
+        db._upsert_user = upsert_user
+        db._upsert_comment = upsert_comment
+        db._import_comment_images = import_comment_images
+
+        owner = {"user_id": 901}
+        repliee = {"user_id": 902}
+        images = [{"image_id": 701}]
+
+        with patch("builtins.print") as mocked_print:
+            ZSXQDatabase.import_additional_comments(
+                db,
+                202,
+                [
+                    {"comment_id": 301, "owner": {}, "repliee": None},
+                    {"comment_id": 302, "owner": owner, "repliee": repliee, "images": images},
+                ],
+            )
+
+        self.assertEqual(
+            [
+                ("comment", 202, 301),
+                ("user", 901),
+                ("user", 902),
+                ("comment", 202, 302),
+                ("images", 202, 302, images),
+            ],
+            events,
+        )
+        self.assertEqual(2, mocked_print.call_count)
 
     def test_import_likes_preserves_delete_skip_and_insert_order(self):
         from backend.storage.zsxq_database import ZSXQDatabase

@@ -97,6 +97,12 @@ def comment_image_batch_from_comment(comment) -> Optional[tuple[Any, Any]]:
     return None
 
 
+def iter_additional_comment_user_payloads(comment) -> Iterator[Any]:
+    for key in ("owner", "repliee"):
+        if key in comment and comment[key]:
+            yield comment[key]
+
+
 def format_tag_row(row) -> Dict[str, Any]:
     return {
         "tag_id": row[0],
