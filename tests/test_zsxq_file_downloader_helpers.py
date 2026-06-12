@@ -771,6 +771,26 @@ class FileDownloaderDownloadTests(unittest.TestCase):
                 downloader.file_db.status_updates[-1],
             )
 
+    def test_download_file_marks_failed_with_download_url_api_error_detail(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            session = FakeDownloadSession([])
+            downloader = self._downloader_for_download(temp_dir, session)
+            downloader.get_download_url = lambda file_id: None
+            downloader.last_download_url_error = {"code": 1030, "message": "mobile only"}
+
+            result = ZSXQFileDownloader.download_file(
+                downloader,
+                {"file": {"id": 101, "name": "memo.pdf", "size": 4, "download_count": 0}},
+            )
+
+            self.assertFalse(result)
+            self.assertEqual([], session.get_calls)
+            self.assertEqual(
+                (101, "failed", None, "1030", "mobile only"),
+                downloader.file_db.status_updates[-1],
+            )
+            self.assertIn("   ❌ 无法获取下载链接", downloader.logs)
+
     def test_download_file_retries_body_download_once(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             session = FakeDownloadSession([
@@ -813,6 +833,31 @@ class FileDownloaderDownloadTests(unittest.TestCase):
             self.assertIn("   🚫 文件下载重试3次仍失败: HTTP 500", downloader.logs)
             self.assertFalse((Path(temp_dir) / "memo.pdf").exists())
             self.assertFalse((Path(temp_dir) / "memo.pdf.part").exists())
+
+    def test_mark_download_url_unavailable_preserves_default_and_api_error_details(self):
+        downloader = object.__new__(ZSXQFileDownloader)
+        downloader.file_db = FakeDownloadFileDb()
+        downloader.logs = []
+        downloader.log = downloader.logs.append
+
+        downloader.last_download_url_error = None
+        ZSXQFileDownloader._mark_download_url_unavailable(downloader, 101)
+
+        downloader.last_download_url_error = {"code": 1030, "message": "mobile only"}
+        ZSXQFileDownloader._mark_download_url_unavailable(downloader, 102)
+
+        self.assertEqual(
+            (101, "failed", None, "download_url_unavailable", "无法获取下载链接"),
+            downloader.file_db.status_updates[0],
+        )
+        self.assertEqual(
+            (102, "failed", None, "1030", "mobile only"),
+            downloader.file_db.status_updates[1],
+        )
+        self.assertEqual(
+            ["   ❌ 无法获取下载链接", "   ❌ 无法获取下载链接"],
+            downloader.logs,
+        )
 
     def test_mark_download_failed_after_retries_preserves_error_detail_defaults(self):
         downloader = object.__new__(ZSXQFileDownloader)

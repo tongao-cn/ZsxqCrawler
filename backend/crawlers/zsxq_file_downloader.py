@@ -587,14 +587,7 @@ class ZSXQFileDownloader:
 
                 download_url = self.get_download_url(file_id)
                 if not download_url:
-                    self.log(f"   ❌ 无法获取下载链接")
-                    error_code, error_message = download_url_failure_detail(self.last_download_url_error)
-                    self.file_db.update_file_download_status(
-                        file_id,
-                        'failed',
-                        error_code=error_code,
-                        error_message=error_message,
-                    )
+                    self._mark_download_url_unavailable(file_id)
                     return False
 
                 self.log(f"   🚀 开始下载...")
@@ -672,6 +665,16 @@ class ZSXQFileDownloader:
 
         self.log(f"   ⚠️ 文件已存在但大小不匹配，重新下载")
         return None
+
+    def _mark_download_url_unavailable(self, file_id: int) -> None:
+        self.log(f"   ❌ 无法获取下载链接")
+        error_code, error_message = download_url_failure_detail(self.last_download_url_error)
+        self.file_db.update_file_download_status(
+            file_id,
+            'failed',
+            error_code=error_code,
+            error_message=error_message,
+        )
 
     def _mark_download_failed_after_retries(
         self,
