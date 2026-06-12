@@ -1313,6 +1313,32 @@ class ZSXQColumnsDatabaseHelperTests(unittest.TestCase):
         self.assertEqual({10, 11}, ZSXQColumnsDatabase.get_existing_topic_ids(db, 303))
         self.assertEqual(("SELECT topic_id FROM topic_details WHERE group_id = ?", (303,)), db.cursor.calls[-1])
 
+    def test_fetch_group_topic_ids_preserves_query_params_order_and_empty_shape(self):
+        from backend.storage.zsxq_columns_database import ZSXQColumnsDatabase
+
+        class FakeCursor:
+            def __init__(self):
+                self.calls = []
+                self.fetchall_results = [
+                    [(10,), (11,)],
+                    [],
+                ]
+
+            def execute(self, sql, params=()):
+                self.calls.append((" ".join(sql.split()), params))
+
+            def fetchall(self):
+                return self.fetchall_results.pop(0)
+
+        db = object.__new__(ZSXQColumnsDatabase)
+        db.cursor = FakeCursor()
+
+        self.assertEqual([10, 11], ZSXQColumnsDatabase._fetch_group_topic_ids(db, 303))
+        self.assertEqual(("SELECT topic_id FROM topic_details WHERE group_id = ?", (303,)), db.cursor.calls[-1])
+
+        self.assertEqual([], ZSXQColumnsDatabase._fetch_group_topic_ids(db, 304))
+        self.assertEqual(("SELECT topic_id FROM topic_details WHERE group_id = ?", (304,)), db.cursor.calls[-1])
+
     def test_resolve_topic_group_id_preserves_scope_lookup_and_exception_fallback(self):
         from backend.storage.zsxq_columns_database import ZSXQColumnsDatabase
 

@@ -452,9 +452,12 @@ class ZSXQColumnsDatabase:
     
     def get_existing_topic_ids(self, group_id: int) -> set:
         """获取已存在的文章ID集合"""
+        return set(self._fetch_group_topic_ids(group_id))
+
+    def _fetch_group_topic_ids(self, group_id: int) -> List[Any]:
         sql, params = _group_topic_ids_query(group_id)
         self.cursor.execute(sql, params)
-        return {row[0] for row in self.cursor.fetchall()}
+        return [row[0] for row in self.cursor.fetchall()]
     
     # ==================== 数据清理 ====================
     
@@ -463,10 +466,7 @@ class ZSXQColumnsDatabase:
         stats = _empty_clear_data_stats()
         
         try:
-            # 获取该群组的所有topic_id
-            sql, params = _group_topic_ids_query(group_id)
-            self.cursor.execute(sql, params)
-            topic_ids = [row[0] for row in self.cursor.fetchall()]
+            topic_ids = self._fetch_group_topic_ids(group_id)
             
             if topic_ids:
                 placeholders = ','.join('?' * len(topic_ids))

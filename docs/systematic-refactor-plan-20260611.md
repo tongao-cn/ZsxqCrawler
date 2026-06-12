@@ -5844,6 +5844,48 @@ Result:
 - PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
 - `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
 
+### 2026-06-12 - P3 column group topic id loader extraction
+
+Changed:
+
+- Added `ZSXQColumnsDatabase._fetch_group_topic_ids`.
+- Reused the helper from `get_existing_topic_ids` and `clear_all_data`.
+- Added direct helper coverage for query parameters, list ordering, and empty-list shape.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- `get_existing_topic_ids` still returns a `set` of topic IDs.
+- `clear_all_data` still uses the fetched topic IDs as an ordered list for child-delete parameter
+  binding before group-level deletes.
+- Delete order, stats updates, commit/rollback behavior, print behavior, SQL, schema, config,
+  fallback behavior, and public API behavior are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_columns_database_helpers.ZSXQColumnsDatabaseHelperTests.test_incremental_select_methods_preserve_execute_params_and_fetch_shape tests.test_zsxq_columns_database_helpers.ZSXQColumnsDatabaseHelperTests.test_clear_all_data_preserves_delete_order_stats_and_commit -v
+uv run python -m py_compile backend\storage\zsxq_columns_database.py tests\test_zsxq_columns_database_helpers.py
+uv run python -m unittest tests.test_zsxq_columns_database_helpers.ZSXQColumnsDatabaseHelperTests.test_fetch_group_topic_ids_preserves_query_params_order_and_empty_shape tests.test_zsxq_columns_database_helpers.ZSXQColumnsDatabaseHelperTests.test_incremental_select_methods_preserve_execute_params_and_fetch_shape tests.test_zsxq_columns_database_helpers.ZSXQColumnsDatabaseHelperTests.test_clear_all_data_preserves_delete_order_stats_and_commit -v
+uv run python -m unittest tests.test_zsxq_columns_database_helpers -v
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+uv run python scripts\scan_postgres_compat_debt.py
+git diff --check
+```
+
+Result:
+
+- Pre-refactor incremental-select and clear-data characterization tests passed against the original
+  duplicated group-topic-ID query implementation.
+- `py_compile` passed.
+- Focused helper/incremental/clear-data tests passed.
+- `tests.test_zsxq_columns_database_helpers`: 70 tests passed.
+- Full backend unittest discovery: 686 tests passed, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
+
 ## Stop Conditions
 
 Pause before editing if:
