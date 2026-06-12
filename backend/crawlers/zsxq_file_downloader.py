@@ -634,18 +634,7 @@ class ZSXQFileDownloader:
                         os.remove(temp_path)
                         continue
 
-                    os.replace(temp_path, file_path)
-
-                    self.log(f"   ✅ 下载完成: {safe_filename}")
-                    self.log(f"   💾 保存路径: {file_path}")
-                    self.file_db.update_file_download_status(file_id, 'completed', file_path)
-
-                    self.download_count += 1
-                    self.current_batch_count += 1
-
-                    # 下载间隔控制
-                    self._apply_download_intervals()
-
+                    self._complete_successful_download(file_id, safe_filename, file_path, temp_path)
                     return True
 
                 last_error_code, last_error = download_http_failure_detail(response.status_code)
@@ -685,6 +674,25 @@ class ZSXQFileDownloader:
 
         self.log(f"   ⚠️ 文件已存在但大小不匹配，重新下载")
         return None
+
+    def _complete_successful_download(
+        self,
+        file_id: int,
+        safe_filename: str,
+        file_path: str,
+        temp_path: str,
+    ) -> None:
+        os.replace(temp_path, file_path)
+
+        self.log(f"   ✅ 下载完成: {safe_filename}")
+        self.log(f"   💾 保存路径: {file_path}")
+        self.file_db.update_file_download_status(file_id, 'completed', file_path)
+
+        self.download_count += 1
+        self.current_batch_count += 1
+
+        # 下载间隔控制
+        self._apply_download_intervals()
 
     def _write_download_response_body(
         self,

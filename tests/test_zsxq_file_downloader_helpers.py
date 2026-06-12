@@ -599,6 +599,80 @@ class FileDownloaderDownloadTests(unittest.TestCase):
             self.assertEqual(b"memo", (Path(temp_dir) / "memo.pdf").read_bytes())
             self.assertIn("   📊 进度: 100.0% (4/4 bytes)", downloader.logs)
 
+    def test_download_file_finalizes_success_with_status_counters_logs_and_interval(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            session = FakeDownloadSession([FakeDownloadResponse(200, b"memo")])
+            downloader = self._downloader_for_download(temp_dir, session)
+            interval_snapshots = []
+
+            def apply_intervals():
+                interval_snapshots.append(
+                    (downloader.download_count, downloader.current_batch_count)
+                )
+
+            downloader._apply_download_intervals = apply_intervals
+
+            result = ZSXQFileDownloader.download_file(
+                downloader,
+                {"file": {"id": 101, "name": "memo.pdf", "size": 4, "download_count": 0}},
+            )
+
+            expected_path = str(Path(temp_dir) / "memo.pdf")
+            self.assertTrue(result)
+            self.assertEqual(b"memo", (Path(temp_dir) / "memo.pdf").read_bytes())
+            self.assertFalse((Path(temp_dir) / "memo.pdf.part").exists())
+            self.assertEqual((101, "completed", expected_path), downloader.file_db.status_updates[-1][:3])
+            self.assertEqual(1, downloader.download_count)
+            self.assertEqual(1, downloader.current_batch_count)
+            self.assertEqual([(1, 1)], interval_snapshots)
+            self.assertIn("   ✅ 下载完成: memo.pdf", downloader.logs)
+            self.assertIn(f"   💾 保存路径: {expected_path}", downloader.logs)
+
+    def test_complete_successful_download_preserves_side_effect_order(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir) / "memo.pdf.part"
+            file_path = Path(temp_dir) / "memo.pdf"
+            temp_path.write_bytes(b"memo")
+            downloader = object.__new__(ZSXQFileDownloader)
+            downloader.file_db = FakeDownloadFileDb()
+            downloader.logs = []
+            downloader.log = downloader.logs.append
+            downloader.download_count = 3
+            downloader.current_batch_count = 4
+            interval_snapshots = []
+
+            def apply_intervals():
+                interval_snapshots.append(
+                    (downloader.download_count, downloader.current_batch_count)
+                )
+
+            downloader._apply_download_intervals = apply_intervals
+
+            ZSXQFileDownloader._complete_successful_download(
+                downloader,
+                101,
+                "memo.pdf",
+                str(file_path),
+                str(temp_path),
+            )
+
+            self.assertEqual(b"memo", file_path.read_bytes())
+            self.assertFalse(temp_path.exists())
+            self.assertEqual(
+                (101, "completed", str(file_path), None, None),
+                downloader.file_db.status_updates[-1],
+            )
+            self.assertEqual(4, downloader.download_count)
+            self.assertEqual(5, downloader.current_batch_count)
+            self.assertEqual([(4, 5)], interval_snapshots)
+            self.assertEqual(
+                [
+                    "   ✅ 下载完成: memo.pdf",
+                    f"   💾 保存路径: {file_path}",
+                ],
+                downloader.logs,
+            )
+
     def test_write_download_response_body_preserves_progress_stop_and_empty_chunks(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir) / "memo.pdf.part"
