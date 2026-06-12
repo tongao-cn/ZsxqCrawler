@@ -7279,6 +7279,50 @@ Result:
 - Frontend build passed, including Next.js lint/type checks.
 - `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
 
+### 2026-06-12 - P4 official crawl time-range filter helper
+
+Changed:
+
+- Added direct helper coverage for official crawl time-range topic filtering.
+- Extracted `_filter_official_topics_by_time_range` in `backend/services/crawl_service.py` and
+  reused it from the official time-range crawl path after page-level de-duplication.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Time range bounds remain inclusive, invalid or missing `create_time` values are still ignored,
+  and the returned `oldest_dt` remains the last valid topic time observed on the page.
+- De-duplication still happens before time filtering, and the "reached before start time" stop
+  condition still uses the same `oldest_dt` value as before.
+- Request/import loops, pagination cursor handling, duplicate handling, stats accumulation,
+  stop checks, update-task payloads, schema/config/API behavior, public API behavior, and legacy
+  cookie-based crawler behavior are unchanged.
+- This does not introduce, remove, or alter legacy/fallback behavior.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_crawl_routes_helpers.CrawlRoutesHelperTests.test_filter_official_topics_by_time_range_preserves_bounds_and_oldest_time -v
+uv run python -m unittest tests.test_crawl_routes_helpers -v
+uv run python -m py_compile backend\services\crawl_service.py tests\test_crawl_routes_helpers.py
+uv run python -m unittest tests.test_official_topic_client_helpers -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+git diff --check
+```
+
+Result:
+
+- New official time-range filter helper test passed.
+- `tests.test_crawl_routes_helpers`: 22 tests passed.
+- `py_compile` passed.
+- `tests.test_official_topic_client_helpers`: 16 tests passed.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Full backend unittest discovery: 738 tests passed, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+- `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
+
 ## Stop Conditions
 
 Pause before editing if:

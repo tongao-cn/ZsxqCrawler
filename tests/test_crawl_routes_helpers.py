@@ -454,6 +454,31 @@ class CrawlRoutesHelperTests(unittest.TestCase):
         self.assertEqual(30, _official_per_page_limit(30))
         self.assertEqual(30, _official_per_page_limit(31))
 
+    @unittest.skipUnless(HAS_CRAWL_ROUTE_DEPS, "crawl route dependencies are not installed")
+    def test_filter_official_topics_by_time_range_preserves_bounds_and_oldest_time(self):
+        from backend.services.crawl_service import _filter_official_topics_by_time_range
+
+        start_dt = datetime(2026, 5, 1, tzinfo=timezone(timedelta(hours=8)))
+        end_dt = datetime(2026, 5, 7, 23, 59, 59, tzinfo=timezone(timedelta(hours=8)))
+        start_topic = {"topic_id": 1, "create_time": "2026-05-01T00:00:00.000+0800"}
+        middle_topic = {"topic_id": 2, "create_time": "2026-05-03T12:00:00.000+0800"}
+        end_topic = {"topic_id": 3, "create_time": "2026-05-07T23:59:59.000+0800"}
+
+        filtered, oldest_dt = _filter_official_topics_by_time_range(
+            [
+                {"topic_id": 0, "create_time": "not-a-time"},
+                start_topic,
+                middle_topic,
+                end_topic,
+                {"topic_id": 4, "create_time": "2026-04-30T23:59:59.000+0800"},
+            ],
+            start_dt,
+            end_dt,
+        )
+
+        self.assertEqual([start_topic, middle_topic, end_topic], filtered)
+        self.assertEqual(datetime(2026, 4, 30, 23, 59, 59, tzinfo=timezone(timedelta(hours=8))), oldest_dt)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -164,6 +164,21 @@ def _topic_time(topic: dict[str, Any]) -> Optional[datetime]:
     except Exception:
         return None
 
+def _filter_official_topics_by_time_range(
+    topics: list[dict[str, Any]],
+    start_dt: datetime,
+    end_dt: datetime,
+) -> tuple[list[dict[str, Any]], Optional[datetime]]:
+    filtered: list[dict[str, Any]] = []
+    oldest_dt = None
+    for topic in topics:
+        dt = _topic_time(topic)
+        if dt:
+            oldest_dt = dt
+            if start_dt <= dt <= end_dt:
+                filtered.append(topic)
+    return filtered, oldest_dt
+
 def _query_group_id(group_id: str) -> Any:
     value = str(group_id or "").strip()
     return int(value) if value.isdigit() else value
@@ -316,14 +331,8 @@ def _run_official_crawl_time_range_task(
             add_task_log(task_id, "📭 无更多数据，任务结束")
             break
 
-        filtered: list[dict[str, Any]] = []
-        oldest_dt = None
-        for topic in _dedupe_official_page_topics(topics, seen_topic_ids, total_stats):
-            dt = _topic_time(topic)
-            if dt:
-                oldest_dt = dt
-                if start_dt <= dt <= end_dt:
-                    filtered.append(topic)
+        unique_topics = _dedupe_official_page_topics(topics, seen_topic_ids, total_stats)
+        filtered, oldest_dt = _filter_official_topics_by_time_range(unique_topics, start_dt, end_dt)
 
         add_task_log(task_id, f"📄 官方本页获取 {len(topics)} 个话题，区间内 {len(filtered)} 个")
 
