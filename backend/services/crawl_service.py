@@ -232,6 +232,17 @@ def _store_legacy_time_range_page(
         total_stats["errors"] += page_stats.get("errors", 0)
     total_stats["pages"] += 1
 
+def _record_legacy_time_range_fetch_failure(
+    task_id: str,
+    total_stats: dict[str, int],
+    retry: int,
+    max_retries_per_page: int,
+) -> int:
+    retry += 1
+    total_stats["errors"] += 1
+    add_task_log(task_id, f"❌ 页面获取失败 (重试{retry}/{max_retries_per_page})")
+    return retry
+
 def _query_group_id(group_id: str) -> Any:
     value = str(group_id or "").strip()
     return int(value) if value.isdigit() else value
@@ -735,9 +746,12 @@ def run_crawl_time_range_task(task_id: str, group_id: str, request: Any):
                     return
 
                 if not data:
-                    retry += 1
-                    total_stats["errors"] += 1
-                    add_task_log(task_id, f"❌ 页面获取失败 (重试{retry}/{max_retries_per_page})")
+                    retry = _record_legacy_time_range_fetch_failure(
+                        task_id,
+                        total_stats,
+                        retry,
+                        max_retries_per_page,
+                    )
                     continue
 
                 topics = (data.get("resp_data", {}) or {}).get("topics", []) or []
