@@ -9614,6 +9614,54 @@ Result:
 - Frontend build passed, including Next.js lint/type checks.
 - `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
 
+### 2026-06-12 - P4 topic pagination stats helper
+
+Changed:
+
+- Reused existing topic pagination helper tests before editing `backend/crawlers/topic_pagination.py`.
+- Added `_empty_topic_pagination_stats`.
+- Replaced four duplicated pagination stats initializers with the shared helper.
+- Added characterization coverage for the stats shape and independent dict instances.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Historical, all-historical, incremental, and latest pagination paths still initialize
+  `new_topics`, `updated_topics`, `errors`, and `pages` to zero.
+- Each crawl run still receives a fresh mutable stats dict; no stats state is shared across runs.
+- Retry logic, stop checks, timestamp fallback behavior, return shapes, task status behavior, and
+  crawler side effects are unchanged.
+- Public API behavior, schema/config behavior, official MCP HTTP behavior, legacy cookie crawler
+  behavior, and fallback behavior are otherwise unchanged.
+- No legacy/fallback behavior was removed.
+- Existing dirty downloader risk-log files and scripts remain outside this P4 slice.
+
+Verification:
+
+```powershell
+uv run python -m py_compile backend\crawlers\topic_pagination.py tests\test_zsxq_interactive_crawler_helpers.py
+uv run python -m unittest tests.test_zsxq_interactive_crawler_helpers -v
+git grep -n "total_stats = {'new_topics': 0, 'updated_topics': 0, 'errors': 0, 'pages': 0}" -- backend/crawlers/topic_pagination.py
+uv run python scripts\scan_postgres_compat_debt.py
+uv run python -m unittest tests.test_zsxq_interactive_crawler_helpers -v
+uv run python -m unittest tests.test_crawl_routes_helpers -v
+uv run python -m unittest discover -s tests
+cmd.exe /d /c npm --prefix frontend run build
+git diff --check
+```
+
+Result:
+
+- Focused pagination helper tests passed after helper extraction.
+- `py_compile` passed.
+- Grep found no remaining inline pagination stats initializer in `topic_pagination.py`.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- `tests.test_zsxq_interactive_crawler_helpers`: 7 tests passed.
+- `tests.test_crawl_routes_helpers`: 54 tests passed.
+- Full backend unittest discovery: 773 tests passed, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+- `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
+
 ## Stop Conditions
 
 Pause before editing if:

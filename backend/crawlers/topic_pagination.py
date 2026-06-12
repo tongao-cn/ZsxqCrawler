@@ -9,6 +9,10 @@ from backend.crawlers.topic_ingestion import _query_group_id
 TOPIC_PAGINATION_MAX_RETRIES_PER_PAGE = 10
 
 
+def _empty_topic_pagination_stats() -> Dict[str, int]:
+    return {'new_topics': 0, 'updated_topics': 0, 'errors': 0, 'pages': 0}
+
+
 def _format_offset_zsxq_end_time(value: str, delta: Any) -> str:
     from datetime import datetime
 
@@ -61,7 +65,7 @@ class TopicPaginationMixin:
         """爬取历史数据"""
         print(f"\n📚 爬取历史数据: {pages}页 x {per_page}条/页")
 
-        total_stats = {'new_topics': 0, 'updated_topics': 0, 'errors': 0, 'pages': 0}
+        total_stats = _empty_topic_pagination_stats()
         end_time = None
         completed_pages = 0
         max_retries_per_page = TOPIC_PAGINATION_MAX_RETRIES_PER_PAGE
@@ -209,7 +213,7 @@ class TopicPaginationMixin:
 
         self.log(f"🚀 开始无限历史爬取...")
 
-        total_stats = {'new_topics': 0, 'updated_topics': 0, 'errors': 0, 'pages': 0}
+        total_stats = _empty_topic_pagination_stats()
         end_time = start_end_time  # 使用增量爬取的起始时间戳
         current_page = 0
         max_retries_per_page = TOPIC_PAGINATION_MAX_RETRIES_PER_PAGE
@@ -405,7 +409,7 @@ class TopicPaginationMixin:
             start_end_time = oldest_timestamp
 
         # 执行增量爬取
-        total_stats = {'new_topics': 0, 'updated_topics': 0, 'errors': 0, 'pages': 0}
+        total_stats = _empty_topic_pagination_stats()
         end_time = start_end_time
         completed_pages = 0
         max_retries_per_page = TOPIC_PAGINATION_MAX_RETRIES_PER_PAGE
@@ -549,7 +553,7 @@ class TopicPaginationMixin:
         print(f"   现有话题数: {timestamp_info['total_topics']}")
         print(f"   最新时间戳: {timestamp_info['newest_timestamp']}")
 
-        total_stats = {'new_topics': 0, 'updated_topics': 0, 'errors': 0, 'pages': 0}
+        total_stats = _empty_topic_pagination_stats()
         end_time = None  # 从最新开始
         current_page = 0
         max_retries_per_page = TOPIC_PAGINATION_MAX_RETRIES_PER_PAGE
