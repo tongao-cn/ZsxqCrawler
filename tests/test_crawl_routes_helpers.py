@@ -455,6 +455,15 @@ class CrawlRoutesHelperTests(unittest.TestCase):
         self.assertEqual(30, _official_per_page_limit(31))
 
     @unittest.skipUnless(HAS_CRAWL_ROUTE_DEPS, "crawl route dependencies are not installed")
+    def test_official_crawl_completion_message_preserves_mode_mapping(self):
+        from backend.services.crawl_service import _official_crawl_completion_message
+
+        self.assertEqual("官方最新采集完成", _official_crawl_completion_message("latest"))
+        self.assertEqual("官方增量采集完成", _official_crawl_completion_message("incremental"))
+        self.assertEqual("官方全量采集完成", _official_crawl_completion_message("all"))
+        self.assertEqual("官方采集完成", _official_crawl_completion_message("unexpected"))
+
+    @unittest.skipUnless(HAS_CRAWL_ROUTE_DEPS, "crawl route dependencies are not installed")
     def test_filter_official_topics_by_time_range_preserves_bounds_and_oldest_time(self):
         from backend.services.crawl_service import _filter_official_topics_by_time_range
 

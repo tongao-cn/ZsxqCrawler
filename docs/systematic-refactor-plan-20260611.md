@@ -7366,6 +7366,51 @@ Result:
 - Frontend build passed, including Next.js lint/type checks.
 - `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
 
+### 2026-06-12 - P4 official crawl completion message helper
+
+Changed:
+
+- Added direct helper coverage for official crawl completion message mapping.
+- Added `OFFICIAL_CRAWL_COMPLETION_MESSAGES` and `_official_crawl_completion_message` in
+  `backend/services/crawl_service.py`.
+- Replaced the inline completion-message dictionary in `_run_official_crawl_pages_task` with the
+  helper call.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- The `latest`, `incremental`, `all`, and unknown-mode completion messages remain unchanged.
+- `update_task()` still receives status `completed`, the same message string for each mode, and the
+  same `total_stats` payload.
+- Request/import loops, pagination cursor handling, duplicate handling, latest-mode existing-topic
+  stop behavior, schema/config/API behavior, public API behavior, and legacy cookie-based crawler
+  behavior are unchanged.
+- This does not introduce, remove, or alter legacy/fallback behavior.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_crawl_routes_helpers.CrawlRoutesHelperTests.test_official_crawl_completion_message_preserves_mode_mapping -v
+uv run python -m py_compile backend\services\crawl_service.py tests\test_crawl_routes_helpers.py
+uv run python -m unittest tests.test_crawl_routes_helpers -v
+uv run python -m unittest tests.test_official_topic_client_helpers -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+git diff --check
+```
+
+Result:
+
+- New official crawl completion message helper test passed.
+- `py_compile` passed.
+- `tests.test_crawl_routes_helpers`: 24 tests passed.
+- `tests.test_official_topic_client_helpers`: 16 tests passed.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Full backend unittest discovery: 740 tests passed, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+- `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
+
 ## Stop Conditions
 
 Pause before editing if:
