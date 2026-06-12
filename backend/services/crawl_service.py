@@ -331,6 +331,20 @@ def _official_start_cursor_from_oldest(db: ZSXQDatabase, task_id: str, allow_emp
     add_task_log(task_id, f"📊 当前最老时间戳: {oldest_timestamp}")
     return _official_cursor_before_timestamp(oldest_timestamp)
 
+def _run_official_incremental_pages_from_oldest(
+    task_id: str,
+    group_id: str,
+    pages: int,
+    per_page: int,
+    empty_failure_message: str,
+) -> None:
+    db = ZSXQDatabase(group_id)
+    start_cursor = _official_start_cursor_from_oldest(db, task_id, allow_empty=False)
+    if start_cursor == "":
+        update_task(task_id, "failed", empty_failure_message)
+        return
+    _run_official_crawl_pages_task(task_id, group_id, pages, per_page, "incremental", start_cursor=start_cursor)
+
 def _run_official_crawl_time_range_task(
     task_id: str,
     group_id: str,
@@ -448,12 +462,13 @@ def run_crawl_historical_task(
 
         if _uses_official_topic_source(crawl_settings):
             add_task_log(task_id, "🔁 使用官方历史增量采集流程（MCP HTTP）")
-            db = ZSXQDatabase(group_id)
-            start_cursor = _official_start_cursor_from_oldest(db, task_id, allow_empty=False)
-            if start_cursor == "":
-                update_task(task_id, "failed", "官方历史增量采集失败: 数据库为空")
-                return
-            _run_official_crawl_pages_task(task_id, group_id, pages, per_page, "incremental", start_cursor=start_cursor)
+            _run_official_incremental_pages_from_oldest(
+                task_id,
+                group_id,
+                pages,
+                per_page,
+                "官方历史增量采集失败: 数据库为空",
+            )
             return
 
         if is_task_stopped(task_id):
@@ -560,12 +575,13 @@ def run_crawl_incremental_task(
 
         if _uses_official_topic_source(crawl_settings):
             add_task_log(task_id, "🔁 使用官方增量采集流程（MCP HTTP）")
-            db = ZSXQDatabase(group_id)
-            start_cursor = _official_start_cursor_from_oldest(db, task_id, allow_empty=False)
-            if start_cursor == "":
-                update_task(task_id, "failed", "官方增量采集失败: 数据库为空")
-                return
-            _run_official_crawl_pages_task(task_id, group_id, pages, per_page, "incremental", start_cursor=start_cursor)
+            _run_official_incremental_pages_from_oldest(
+                task_id,
+                group_id,
+                pages,
+                per_page,
+                "官方增量采集失败: 数据库为空",
+            )
             return
 
         log_callback, stop_check = _build_task_callbacks(task_id)

@@ -189,6 +189,65 @@ class CrawlRoutesHelperTests(unittest.TestCase):
         legacy_crawler.assert_not_called()
 
     @unittest.skipUnless(HAS_CRAWL_ROUTE_DEPS, "crawl route dependencies are not installed")
+    def test_official_historical_branch_uses_oldest_cursor_and_skips_legacy_crawler(self):
+        from backend.routes.crawl_routes import CrawlHistoricalRequest
+        from backend.services.crawl_service import run_crawl_historical_task
+
+        with (
+            patch("backend.services.crawl_service._official_start_cursor_from_oldest", return_value="cursor-1") as start_cursor,
+            patch("backend.services.crawl_service._run_official_crawl_pages_task") as official_runner,
+            patch("backend.services.crawl_service.ZSXQDatabase") as database,
+            patch("backend.services.crawl_service.ZSXQTopicCrawler") as legacy_crawler,
+            patch("backend.services.crawl_service.update_task") as update_task,
+            patch("backend.services.crawl_service.add_task_log") as add_task_log,
+            patch("backend.services.crawl_service.unregister_task_crawler"),
+        ):
+            run_crawl_historical_task(
+                "task-1",
+                "group-1",
+                3,
+                25,
+                CrawlHistoricalRequest(topicSource="official"),
+            )
+
+        update_task.assert_any_call("task-1", "running", "开始爬取历史数据 3 页...")
+        add_task_log.assert_any_call("task-1", "🚀 开始获取历史数据，3 页，每页 25 条")
+        add_task_log.assert_any_call("task-1", "🔁 使用官方历史增量采集流程（MCP HTTP）")
+        database.assert_called_once_with("group-1")
+        start_cursor.assert_called_once_with(database.return_value, "task-1", allow_empty=False)
+        official_runner.assert_called_once_with("task-1", "group-1", 3, 25, "incremental", start_cursor="cursor-1")
+        legacy_crawler.assert_not_called()
+
+    @unittest.skipUnless(HAS_CRAWL_ROUTE_DEPS, "crawl route dependencies are not installed")
+    def test_official_incremental_branch_uses_oldest_cursor_and_skips_legacy_crawler(self):
+        from backend.routes.crawl_routes import CrawlHistoricalRequest
+        from backend.services.crawl_service import run_crawl_incremental_task
+
+        with (
+            patch("backend.services.crawl_service._official_start_cursor_from_oldest", return_value="cursor-2") as start_cursor,
+            patch("backend.services.crawl_service._run_official_crawl_pages_task") as official_runner,
+            patch("backend.services.crawl_service.ZSXQDatabase") as database,
+            patch("backend.services.crawl_service.ZSXQTopicCrawler") as legacy_crawler,
+            patch("backend.services.crawl_service.update_task") as update_task,
+            patch("backend.services.crawl_service.add_task_log") as add_task_log,
+            patch("backend.services.crawl_service.unregister_task_crawler"),
+        ):
+            run_crawl_incremental_task(
+                "task-2",
+                "group-2",
+                4,
+                26,
+                CrawlHistoricalRequest(topicSource="official"),
+            )
+
+        update_task.assert_any_call("task-2", "running", "开始增量爬取...")
+        add_task_log.assert_any_call("task-2", "🔁 使用官方增量采集流程（MCP HTTP）")
+        database.assert_called_once_with("group-2")
+        start_cursor.assert_called_once_with(database.return_value, "task-2", allow_empty=False)
+        official_runner.assert_called_once_with("task-2", "group-2", 4, 26, "incremental", start_cursor="cursor-2")
+        legacy_crawler.assert_not_called()
+
+    @unittest.skipUnless(HAS_CRAWL_ROUTE_DEPS, "crawl route dependencies are not installed")
     def test_official_incremental_empty_database_fails_without_legacy_crawler(self):
         from backend.routes.crawl_routes import CrawlHistoricalRequest
         from backend.services.crawl_service import run_crawl_incremental_task

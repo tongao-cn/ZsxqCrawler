@@ -7688,6 +7688,56 @@ Result:
 - Frontend build passed, including Next.js lint/type checks.
 - `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
 
+### 2026-06-12 - P4 official incremental cursor helper
+
+Changed:
+
+- Added characterization coverage for the official historical and official incremental entrypoint
+  branches that start from the oldest stored topic cursor.
+- Extracted `_run_official_incremental_pages_from_oldest` in
+  `backend/services/crawl_service.py`.
+- Reused the helper from `run_crawl_historical_task` and `run_crawl_incremental_task`.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Historical and incremental official branches still emit their existing entry logs.
+- Both branches still create `ZSXQDatabase(group_id)`, call `_official_start_cursor_from_oldest`
+  with `allow_empty=False`, and skip the legacy cookie crawler path.
+- Empty-database failures still update the same failed status and user-facing message for each
+  entrypoint.
+- Successful official historical/incremental branches still call `_run_official_crawl_pages_task`
+  with mode `incremental`, the same `pages`/`per_page`, and the same `start_cursor` keyword.
+- Public API behavior, task status semantics, update-task payloads, schema/config behavior, and
+  legacy cookie-based crawler behavior are unchanged.
+- This does not introduce, remove, or alter legacy/fallback behavior.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_crawl_routes_helpers.CrawlRoutesHelperTests.test_official_historical_branch_uses_oldest_cursor_and_skips_legacy_crawler tests.test_crawl_routes_helpers.CrawlRoutesHelperTests.test_official_incremental_branch_uses_oldest_cursor_and_skips_legacy_crawler tests.test_crawl_routes_helpers.CrawlRoutesHelperTests.test_official_incremental_empty_database_fails_without_legacy_crawler -v
+uv run python -m py_compile backend\services\crawl_service.py tests\test_crawl_routes_helpers.py
+uv run python -m unittest tests.test_crawl_routes_helpers -v
+uv run python -m unittest tests.test_official_topic_client_helpers -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+git diff --check
+```
+
+Result:
+
+- New official historical and incremental entrypoint characterization tests passed before and after
+  helper extraction.
+- Existing official incremental empty-database test passed.
+- `py_compile` passed.
+- `tests.test_crawl_routes_helpers`: 34 tests passed.
+- `tests.test_official_topic_client_helpers`: 16 tests passed.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Full backend unittest discovery: 750 tests passed, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+- `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
+
 ## Stop Conditions
 
 Pause before editing if:
