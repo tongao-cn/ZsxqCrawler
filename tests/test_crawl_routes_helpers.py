@@ -189,6 +189,31 @@ class CrawlRoutesHelperTests(unittest.TestCase):
         legacy_crawler.assert_not_called()
 
     @unittest.skipUnless(HAS_CRAWL_ROUTE_DEPS, "crawl route dependencies are not installed")
+    def test_official_all_branch_uses_oldest_cursor_and_skips_legacy_crawler(self):
+        from backend.routes.crawl_routes import CrawlSettingsRequest
+        from backend.services.crawl_service import run_crawl_all_task
+
+        with (
+            patch("backend.services.crawl_service._official_start_cursor_from_oldest", return_value="cursor-all") as start_cursor,
+            patch("backend.services.crawl_service._run_official_crawl_pages_task") as official_runner,
+            patch("backend.services.crawl_service.ZSXQDatabase") as database,
+            patch("backend.services.crawl_service.ZSXQTopicCrawler") as legacy_crawler,
+            patch("backend.services.crawl_service.update_task") as update_task,
+            patch("backend.services.crawl_service.add_task_log") as add_task_log,
+            patch("backend.services.crawl_service.unregister_task_crawler"),
+        ):
+            run_crawl_all_task("task-1", "group-1", CrawlSettingsRequest(topicSource="official"))
+
+        update_task.assert_any_call("task-1", "running", "开始全量爬取...")
+        add_task_log.assert_any_call("task-1", "🚀 开始全量爬取...")
+        add_task_log.assert_any_call("task-1", "⚠️ 警告：此模式将持续爬取直到没有数据，可能需要很长时间")
+        add_task_log.assert_any_call("task-1", "🔁 使用官方全量采集流程（MCP HTTP）")
+        database.assert_called_once_with("group-1")
+        start_cursor.assert_called_once_with(database.return_value, "task-1", allow_empty=True)
+        official_runner.assert_called_once_with("task-1", "group-1", None, 20, "all", start_cursor="cursor-all")
+        legacy_crawler.assert_not_called()
+
+    @unittest.skipUnless(HAS_CRAWL_ROUTE_DEPS, "crawl route dependencies are not installed")
     def test_official_historical_branch_uses_oldest_cursor_and_skips_legacy_crawler(self):
         from backend.routes.crawl_routes import CrawlHistoricalRequest
         from backend.services.crawl_service import run_crawl_historical_task

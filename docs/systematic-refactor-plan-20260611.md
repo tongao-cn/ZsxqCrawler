@@ -7738,6 +7738,56 @@ Result:
 - Frontend build passed, including Next.js lint/type checks.
 - `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
 
+### 2026-06-12 - P4 official all cursor helper
+
+Changed:
+
+- Added characterization coverage for the official all-crawl entrypoint branch that starts from
+  the oldest stored topic cursor when data exists.
+- Extracted `_run_official_all_pages_from_oldest` in `backend/services/crawl_service.py`.
+- Reused the helper from `run_crawl_all_task`.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- The official all-crawl branch still emits its existing running status, warning logs, and official
+  branch log before dispatch.
+- The branch still creates `ZSXQDatabase(group_id)`, calls `_official_start_cursor_from_oldest`
+  with `allow_empty=True`, and skips the legacy cookie crawler path.
+- Empty-database behavior remains unchanged because `allow_empty=True` still allows a `None`
+  cursor to flow into the official pages runner instead of failing the task.
+- Successful official all-crawl dispatch still calls `_run_official_crawl_pages_task` with
+  `pages=None`, `per_page=20`, mode `all`, and the same `start_cursor` keyword.
+- Public API behavior, task status semantics, update-task payloads, schema/config behavior, and
+  legacy cookie-based crawler behavior are unchanged.
+- This does not introduce, remove, or alter legacy/fallback behavior.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_crawl_routes_helpers.CrawlRoutesHelperTests.test_official_all_branch_uses_oldest_cursor_and_skips_legacy_crawler -v
+uv run python -m unittest tests.test_crawl_routes_helpers.CrawlRoutesHelperTests.test_official_all_branch_uses_oldest_cursor_and_skips_legacy_crawler tests.test_crawl_routes_helpers.CrawlRoutesHelperTests.test_official_historical_branch_uses_oldest_cursor_and_skips_legacy_crawler tests.test_crawl_routes_helpers.CrawlRoutesHelperTests.test_official_incremental_branch_uses_oldest_cursor_and_skips_legacy_crawler -v
+uv run python -m py_compile backend\services\crawl_service.py tests\test_crawl_routes_helpers.py
+uv run python -m unittest tests.test_crawl_routes_helpers -v
+uv run python -m unittest tests.test_official_topic_client_helpers -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+git diff --check
+```
+
+Result:
+
+- New official all-crawl entrypoint characterization test passed before and after helper extraction.
+- Existing official historical and incremental cursor branch tests passed after helper extraction.
+- `py_compile` passed.
+- `tests.test_crawl_routes_helpers`: 35 tests passed.
+- `tests.test_official_topic_client_helpers`: 16 tests passed.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Full backend unittest discovery: 751 tests passed, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+- `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
+
 ## Stop Conditions
 
 Pause before editing if:

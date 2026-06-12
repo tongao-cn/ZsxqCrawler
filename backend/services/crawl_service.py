@@ -345,6 +345,11 @@ def _run_official_incremental_pages_from_oldest(
         return
     _run_official_crawl_pages_task(task_id, group_id, pages, per_page, "incremental", start_cursor=start_cursor)
 
+def _run_official_all_pages_from_oldest(task_id: str, group_id: str) -> None:
+    db = ZSXQDatabase(group_id)
+    start_cursor = _official_start_cursor_from_oldest(db, task_id, allow_empty=True)
+    _run_official_crawl_pages_task(task_id, group_id, None, 20, "all", start_cursor=start_cursor)
+
 def _run_official_crawl_time_range_task(
     task_id: str,
     group_id: str,
@@ -516,9 +521,7 @@ def run_crawl_all_task(task_id: str, group_id: str, crawl_settings: Any = None):
 
         if _uses_official_topic_source(crawl_settings):
             add_task_log(task_id, "🔁 使用官方全量采集流程（MCP HTTP）")
-            db = ZSXQDatabase(group_id)
-            start_cursor = _official_start_cursor_from_oldest(db, task_id, allow_empty=True)
-            _run_official_crawl_pages_task(task_id, group_id, None, 20, "all", start_cursor=start_cursor)
+            _run_official_all_pages_from_oldest(task_id, group_id)
             return
 
         log_callback, stop_check = _build_task_callbacks(task_id)
