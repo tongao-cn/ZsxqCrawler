@@ -288,6 +288,13 @@ def _fetch_legacy_time_range_page(
 def _legacy_time_range_topics(data: dict[str, Any]) -> list[dict[str, Any]]:
     return (data.get("resp_data", {}) or {}).get("topics", []) or []
 
+def _log_legacy_time_range_page_summary(
+    task_id: str,
+    topics: list[dict[str, Any]],
+    filtered: list[dict[str, Any]],
+) -> None:
+    add_task_log(task_id, f"📄 本页获取 {len(topics)} 个话题，区间内 {len(filtered)} 个")
+
 def _query_group_id(group_id: str) -> Any:
     value = str(group_id or "").strip()
     return int(value) if value.isdigit() else value
@@ -804,7 +811,7 @@ def run_crawl_time_range_task(task_id: str, group_id: str, request: Any):
 
                 filtered, last_time_dt_in_page = _filter_legacy_topics_by_time_range(topics, start_dt, end_dt)
 
-                add_task_log(task_id, f"📄 本页获取 {len(topics)} 个话题，区间内 {len(filtered)} 个")
+                _log_legacy_time_range_page_summary(task_id, topics, filtered)
 
                 _store_legacy_time_range_page(crawler, total_stats, filtered)
                 page_processed = True

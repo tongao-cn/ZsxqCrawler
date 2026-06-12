@@ -8360,6 +8360,48 @@ Result:
 - Frontend build passed, including Next.js lint/type checks.
 - `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
 
+### 2026-06-12 - P4 legacy time-range page summary log helper
+
+Changed:
+
+- Reused existing legacy time-range tests that assert the page summary log messages.
+- Extracted `_log_legacy_time_range_page_summary` in `backend/services/crawl_service.py`.
+- Kept filtering, storage, cursor, delay, and stop decisions at the original call site.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Legacy time-range pages still log `📄 本页获取 {len(topics)} 个话题，区间内 {len(filtered)} 个`
+  after filtering and before storage.
+- Empty pages, out-of-range pages, filtered page storage, before-start stopping, retry handling,
+  expired handling, public API behavior, task status semantics, schema/config behavior, official MCP
+  HTTP behavior, and cookie-based crawler behavior are unchanged.
+- No legacy/fallback behavior was removed.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_crawl_routes_helpers.CrawlRoutesHelperTests.test_legacy_time_range_filters_topics_and_advances_end_time tests.test_crawl_routes_helpers.CrawlRoutesHelperTests.test_legacy_time_range_counts_unstored_out_of_range_page -v
+uv run python -m py_compile backend\services\crawl_service.py tests\test_crawl_routes_helpers.py
+uv run python scripts\scan_postgres_compat_debt.py
+uv run python -m unittest tests.test_crawl_routes_helpers -v
+uv run python -m unittest tests.test_official_topic_client_helpers -v
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+git diff --check
+```
+
+Result:
+
+- Focused log-message tests passed after helper extraction.
+- `py_compile` passed.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- `tests.test_crawl_routes_helpers`: 44 tests passed.
+- `tests.test_official_topic_client_helpers`: 16 tests passed.
+- Full backend unittest discovery: 760 tests passed, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+- `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
+
 ## Stop Conditions
 
 Pause before editing if:
