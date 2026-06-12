@@ -21,6 +21,7 @@ from backend.storage.zsxq_database_helpers import (
     insert_tag_statement,
     insert_topic_tag_statement,
     iter_topic_user_payloads_from_data,
+    iter_valid_comment_image_payloads,
     iter_valid_latest_like_payloads,
     iter_valid_like_emoji_payloads,
     iter_valid_user_liked_emoji_keys,
@@ -101,6 +102,10 @@ def _iter_valid_user_liked_emoji_keys(emoji_keys):
 
 def _iter_valid_latest_like_payloads(latest_likes):
     return iter_valid_latest_like_payloads(latest_likes)
+
+
+def _iter_valid_comment_image_payloads(images):
+    return iter_valid_comment_image_payloads(images)
 
 
 def _tag_id_by_name_query(group_id: int, tag_name: str) -> tuple[str, tuple[Any, ...]]:
@@ -746,10 +751,7 @@ class ZSXQDatabase:
 
     def _import_comment_images(self, topic_id: int, comment_id: int, images: List[Dict[str, Any]]):
         """导入评论的图片信息"""
-        for image in images:
-            if not image.get('image_id'):
-                continue
-
+        for image in _iter_valid_comment_image_payloads(images):
             # 获取当前时间作为created_at（使用东八区时间格式）
             current_time = _beijing_now_timestamp()
 

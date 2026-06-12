@@ -18,6 +18,7 @@ from backend.storage.zsxq_database import (
     _insert_tag_statement,
     _insert_topic_tag_statement,
     _iter_topic_user_payloads_from_data,
+    _iter_valid_comment_image_payloads,
     _iter_valid_latest_like_payloads,
     _iter_valid_like_emoji_payloads,
     _iter_valid_user_liked_emoji_keys,
@@ -597,6 +598,15 @@ class ZSXQDatabaseHelperTests(unittest.TestCase):
                     ]
                 )
             ),
+        )
+
+    def test_iter_valid_comment_image_payloads_filters_missing_image_ids(self):
+        valid_first = {"image_id": 701, "type": "image"}
+        valid_second = {"image_id": 702, "type": "image"}
+
+        self.assertEqual(
+            [valid_first, valid_second],
+            list(_iter_valid_comment_image_payloads([{}, {"image_id": 0}, valid_first, valid_second])),
         )
 
     def test_format_tag_row_keeps_existing_fields(self):

@@ -5434,6 +5434,51 @@ Result:
 - `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
 - Frontend build is not planned because this slice only changes backend storage/helper code.
 
+### 2026-06-12 - P2 comment image iterator helper
+
+Changed:
+
+- Added `iter_valid_comment_image_payloads` to `backend/storage/zsxq_database_helpers.py`,
+  with a compatibility wrapper in `backend/storage/zsxq_database.py`.
+- Replaced the inline `_import_comment_images` falsey `image_id` filtering with the helper output.
+- Added direct helper coverage for empty payloads, falsey image IDs, and valid comment-image
+  payload ordering.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- `_import_comment_images` still skips images with missing or falsey `image_id`.
+- Valid comment images keep their original order.
+- The helper is lazy, so timestamp generation and SQL execution still occur only when a valid
+  image payload is reached.
+- Comment image writes still use `_image_insert_statement` with `missing_numeric_default=0`.
+- Existing SQL, schema, config, fallback behavior, error handling, logging, commit/rollback
+  behavior, and public API semantics are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_image_writes_preserve_skip_paths_and_distinct_numeric_defaults -v
+uv run python -m py_compile backend\storage\zsxq_database.py backend\storage\zsxq_database_helpers.py tests\test_zsxq_database_helpers.py
+uv run python -m unittest tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_iter_valid_comment_image_payloads_filters_missing_image_ids tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_image_writes_preserve_skip_paths_and_distinct_numeric_defaults -v
+uv run python -m unittest tests.test_zsxq_database_helpers -v
+uv run python -m unittest discover -s tests
+uv run python scripts\scan_postgres_compat_debt.py
+git diff --check
+```
+
+Result:
+
+- Pre-refactor characterization test passed against the original inline `_import_comment_images`
+  implementation.
+- `py_compile` passed.
+- Focused helper/import tests passed.
+- `tests.test_zsxq_database_helpers`: 71 tests passed.
+- Full backend unittest discovery: 674 tests passed, 15 skipped.
+- PostgreSQL compatibility debt scan: no SQLite compatibility patterns found.
+- `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
+- Frontend build is not planned because this slice only changes backend storage/helper code.
+
 ## Stop Conditions
 
 Pause before editing if:

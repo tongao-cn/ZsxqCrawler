@@ -85,6 +85,12 @@ def iter_valid_latest_like_payloads(latest_likes) -> Iterator[tuple[Any, Any]]:
             yield like, user_id
 
 
+def iter_valid_comment_image_payloads(images) -> Iterator[Any]:
+    for image in images:
+        if image.get("image_id"):
+            yield image
+
+
 def format_tag_row(row) -> Dict[str, Any]:
     return {
         "tag_id": row[0],
