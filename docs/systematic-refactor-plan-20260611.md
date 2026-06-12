@@ -7547,6 +7547,55 @@ Result:
 - Frontend build passed, including Next.js lint/type checks.
 - `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
 
+### 2026-06-12 - P4 official comment count helper
+
+Changed:
+
+- Added characterization coverage for official import comment-count handling, comment fetch calls,
+  normalization comment payloads, import-result stats, and final commit behavior.
+- Added direct helper coverage for official topic comment-count integer coercion.
+- Extracted `_official_topic_comments_count` in `backend/services/crawl_service.py`.
+- Reused the helper from `_official_import_topics`.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Missing `counts`, falsey `counts`, and falsey `counts.comments` still coerce to `0`.
+- Numeric string and integer comment counts still coerce through `int(...)`.
+- Invalid non-numeric comment counts still raise the same conversion error instead of being
+  swallowed.
+- Topics with positive comment counts still fetch official comments, log the same success message,
+  and pass the fetched comments to `normalize_official_topic`.
+- Topics with zero or missing comment counts still skip comment fetch and pass `comments=None` to
+  `normalize_official_topic`.
+- `_official_import_topics` still returns the same `new_topics`/`updated_topics`/`errors` stats and
+  commits once after processing the batch.
+- This does not introduce, remove, or alter legacy/fallback behavior.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_crawl_routes_helpers.CrawlRoutesHelperTests.test_official_topic_comments_count_preserves_integer_coercion_and_invalid_error tests.test_crawl_routes_helpers.CrawlRoutesHelperTests.test_official_import_topics_preserves_comment_count_stats_and_commit -v
+uv run python -m py_compile backend\services\crawl_service.py tests\test_crawl_routes_helpers.py
+uv run python -m unittest tests.test_crawl_routes_helpers -v
+uv run python -m unittest tests.test_official_topic_client_helpers -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+git diff --check
+```
+
+Result:
+
+- New official comment-count helper and import characterization tests passed.
+- `py_compile` passed.
+- `tests.test_crawl_routes_helpers`: 30 tests passed.
+- `tests.test_official_topic_client_helpers`: 16 tests passed.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Full backend unittest discovery: 746 tests passed, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+- `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
+
 ## Stop Conditions
 
 Pause before editing if:

@@ -209,6 +209,9 @@ def _official_topic_exists(db: ZSXQDatabase, group_id: str, topic_id: int) -> bo
 def _official_topic_id(topic: dict[str, Any]) -> int:
     return int(topic.get("topic_id") or 0)
 
+def _official_topic_comments_count(topic: dict[str, Any]) -> int:
+    return int((topic.get("counts") or {}).get("comments") or 0)
+
 def _new_official_topics(db: ZSXQDatabase, group_id: str, topics: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return [
         topic
@@ -242,7 +245,7 @@ def _official_import_topics(
     stats = {"new_topics": 0, "updated_topics": 0, "errors": 0}
     for topic in topics:
         topic_id = _official_topic_id(topic)
-        comments_count = int((topic.get("counts") or {}).get("comments") or 0)
+        comments_count = _official_topic_comments_count(topic)
         comments = _fetch_official_comments(client, topic_id, comments_count, task_id)
         normalized = normalize_official_topic(topic, group_id, comments=comments if comments_count else None)
         imported = _official_import_topic(db, group_id, normalized)

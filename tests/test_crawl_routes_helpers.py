@@ -447,6 +447,84 @@ class CrawlRoutesHelperTests(unittest.TestCase):
             _official_topic_id({"topic_id": "not-a-number"})
 
     @unittest.skipUnless(HAS_CRAWL_ROUTE_DEPS, "crawl route dependencies are not installed")
+    def test_official_topic_comments_count_preserves_integer_coercion_and_invalid_error(self):
+        from backend.services.crawl_service import _official_topic_comments_count
+
+        self.assertEqual(0, _official_topic_comments_count({}))
+        self.assertEqual(0, _official_topic_comments_count({"counts": None}))
+        self.assertEqual(0, _official_topic_comments_count({"counts": {"comments": None}}))
+        self.assertEqual(2, _official_topic_comments_count({"counts": {"comments": "2"}}))
+        self.assertEqual(3, _official_topic_comments_count({"counts": {"comments": 3}}))
+        with self.assertRaises(ValueError):
+            _official_topic_comments_count({"counts": {"comments": "not-a-number"}})
+
+    @unittest.skipUnless(HAS_CRAWL_ROUTE_DEPS, "crawl route dependencies are not installed")
+    def test_official_import_topics_preserves_comment_count_stats_and_commit(self):
+        from backend.services.crawl_service import _official_import_topics
+
+        class FakeConnection:
+            def __init__(self):
+                self.commits = 0
+
+            def commit(self):
+                self.commits += 1
+
+        class FakeDb:
+            def __init__(self):
+                self.conn = FakeConnection()
+
+        class FakeOfficialClient:
+            def __init__(self):
+                self.comment_topic_ids = []
+
+            def get_topic_comments(self, topic_id):
+                self.comment_topic_ids.append(topic_id)
+                return [{"comment_id": f"comment-{topic_id}"}]
+
+        db = FakeDb()
+        client = FakeOfficialClient()
+        normalized_topics = []
+
+        def normalize_topic(topic, group_id, comments=None):
+            normalized = {"topic_id": topic["topic_id"], "group_id": group_id, "comments": comments}
+            normalized_topics.append(normalized)
+            return normalized
+
+        topics = [
+            {"topic_id": "10", "counts": {"comments": "2"}},
+            {"topic_id": 11, "counts": {"comments": 0}},
+            {"topic_id": 12},
+        ]
+
+        with (
+            patch("backend.services.crawl_service.normalize_official_topic", side_effect=normalize_topic),
+            patch("backend.services.crawl_service._official_import_topic", side_effect=["new", "updated", "error"]) as import_topic,
+            patch("backend.services.crawl_service.add_task_log") as add_task_log,
+        ):
+            stats = _official_import_topics(db, client, "group-1", topics, "task-1")
+
+        self.assertEqual({"new_topics": 1, "updated_topics": 1, "errors": 1}, stats)
+        self.assertEqual(1, db.conn.commits)
+        self.assertEqual([10], client.comment_topic_ids)
+        self.assertEqual(
+            [
+                {"topic_id": "10", "group_id": "group-1", "comments": [{"comment_id": "comment-10"}]},
+                {"topic_id": 11, "group_id": "group-1", "comments": None},
+                {"topic_id": 12, "group_id": "group-1", "comments": None},
+            ],
+            normalized_topics,
+        )
+        self.assertEqual(
+            [
+                call(db, "group-1", normalized_topics[0]),
+                call(db, "group-1", normalized_topics[1]),
+                call(db, "group-1", normalized_topics[2]),
+            ],
+            import_topic.call_args_list,
+        )
+        add_task_log.assert_called_once_with("task-1", "📝 话题 10 官方评论拉取 1/2 条")
+
+    @unittest.skipUnless(HAS_CRAWL_ROUTE_DEPS, "crawl route dependencies are not installed")
     def test_official_next_page_cursor_requires_has_more_and_moving_cursor(self):
         from backend.services.crawl_service import _official_next_page_cursor
 
