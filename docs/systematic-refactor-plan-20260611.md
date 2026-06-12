@@ -8879,6 +8879,60 @@ Result:
 - Frontend build passed, including Next.js lint/type checks.
 - `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
 
+### 2026-06-12 - P4 legacy time-range run helper
+
+Changed:
+
+- Reused existing time-range and legacy time-range characterization coverage for time-bound
+  resolution, default `perPage`, outer-stop completion, filtered page import, invalid oldest
+  timestamp cursor fallback, out-of-range pages, before-start termination, retryable fetch
+  failures, max-retry termination, expired responses, and empty pages.
+- Added `_LegacyTimeRangeRunResult` and `_run_legacy_time_range_pages` in
+  `backend/services/crawl_service.py`.
+- Moved the legacy time-range outer page loop out of `run_crawl_time_range_task`, leaving the
+  entrypoint responsible for time parsing, running-state/log initialization, official-vs-legacy
+  dispatch, crawler preparation, expired early return, final completion update, exception handling,
+  and crawler unregister cleanup.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- The legacy page loop still uses the same default/explicit `perPage`, initial cursor formatting,
+  max-retry limit, page processing helper, task-stop check, page-failure handling, finish condition,
+  expired-response early return, and final stats object.
+- Expired responses still fail the task inside the existing expired helper and skip the final
+  completed update.
+- Outer-stop completion, empty-page completion, retry failure termination, filtered import stats,
+  invalid cursor fallback, before-start stopping, public API behavior, task status semantics,
+  schema/config behavior, official MCP HTTP behavior, and cookie-based crawler behavior are
+  unchanged.
+- No legacy/fallback behavior was removed.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_crawl_routes_helpers.CrawlRoutesHelperTests.test_resolve_time_range_uses_last_days_and_swaps_reversed_bounds tests.test_crawl_routes_helpers.CrawlRoutesHelperTests.test_legacy_time_range_uses_default_per_page_when_missing tests.test_crawl_routes_helpers.CrawlRoutesHelperTests.test_legacy_time_range_outer_stop_completes_without_fetching tests.test_crawl_routes_helpers.CrawlRoutesHelperTests.test_legacy_time_range_filters_topics_and_advances_end_time tests.test_crawl_routes_helpers.CrawlRoutesHelperTests.test_legacy_time_range_keeps_invalid_oldest_time_as_next_end_time tests.test_crawl_routes_helpers.CrawlRoutesHelperTests.test_legacy_time_range_counts_unstored_out_of_range_page tests.test_crawl_routes_helpers.CrawlRoutesHelperTests.test_legacy_time_range_stops_when_page_is_before_start_time tests.test_crawl_routes_helpers.CrawlRoutesHelperTests.test_legacy_time_range_retries_failed_page_fetch tests.test_crawl_routes_helpers.CrawlRoutesHelperTests.test_legacy_time_range_stops_after_max_failed_page_fetches tests.test_crawl_routes_helpers.CrawlRoutesHelperTests.test_legacy_time_range_expired_response_fails_with_original_payload tests.test_crawl_routes_helpers.CrawlRoutesHelperTests.test_time_range_crawl_stops_after_empty_page -v
+uv run python -m py_compile backend\services\crawl_service.py tests\test_crawl_routes_helpers.py
+uv run python scripts\scan_postgres_compat_debt.py
+uv run python -m unittest tests.test_crawl_routes_helpers -v
+uv run python -m unittest tests.test_official_topic_client_helpers -v
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+git diff --check
+```
+
+Result:
+
+- Pre-extraction focused time-range and legacy time-range tests passed.
+- The same focused tests passed after extracting the run helper.
+- `py_compile` passed.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- `tests.test_crawl_routes_helpers`: 45 tests passed.
+- `tests.test_official_topic_client_helpers`: 16 tests passed.
+- Full backend unittest discovery: 761 tests passed, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+- `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
+
 ## Stop Conditions
 
 Pause before editing if:

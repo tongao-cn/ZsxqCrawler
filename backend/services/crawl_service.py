@@ -50,6 +50,10 @@ class _LegacyTimeRangePageResult(NamedTuple):
     end_time_param: Optional[str]
     expired: bool
 
+class _LegacyTimeRangeRunResult(NamedTuple):
+    stats: dict[str, int]
+    expired: bool
+
 def _should_stop_task(task_id: str) -> bool:
     return is_task_stopped(task_id)
 
@@ -441,6 +445,48 @@ def _legacy_time_range_initial_cursors(start_dt: datetime, end_dt: datetime) -> 
 
 def _legacy_time_range_per_page(request: CrawlTimeRangeRequest) -> int:
     return request.perPage or LEGACY_TIME_RANGE_DEFAULT_PER_PAGE
+
+def _run_legacy_time_range_pages(
+    task_id: str,
+    crawler: Any,
+    request: Any,
+    start_dt: datetime,
+    end_dt: datetime,
+) -> _LegacyTimeRangeRunResult:
+    per_page = _legacy_time_range_per_page(request)
+    total_stats = _empty_legacy_time_range_stats()
+    begin_time_param, end_time_param = _legacy_time_range_initial_cursors(start_dt, end_dt)
+    max_retries_per_page = LEGACY_TIME_RANGE_MAX_RETRIES_PER_PAGE
+
+    while True:
+        if _legacy_time_range_task_stopped(task_id):
+            break
+
+        page_result = _process_legacy_time_range_page(
+            task_id,
+            crawler,
+            total_stats,
+            per_page,
+            begin_time_param,
+            end_time_param,
+            start_dt,
+            end_dt,
+            max_retries_per_page,
+        )
+        if page_result.expired:
+            return _LegacyTimeRangeRunResult(stats=total_stats, expired=True)
+
+        end_time_param = page_result.end_time_param
+
+        if _legacy_time_range_page_failed(task_id, page_result.page_processed):
+            break
+
+        if _legacy_time_range_should_finish(
+            page_result.reached_end, page_result.last_time_dt_in_page, start_dt
+        ):
+            break
+
+    return _LegacyTimeRangeRunResult(stats=total_stats, expired=False)
 
 def _query_group_id(group_id: str) -> Any:
     value = str(group_id or "").strip()
@@ -911,40 +957,11 @@ def run_crawl_time_range_task(task_id: str, group_id: str, request: Any):
 
         crawler = _prepare_legacy_crawler(task_id, group_id, request, require_overrides=True)
 
-        per_page = _legacy_time_range_per_page(request)
-        total_stats = _empty_legacy_time_range_stats()
-        begin_time_param, end_time_param = _legacy_time_range_initial_cursors(start_dt, end_dt)
-        max_retries_per_page = LEGACY_TIME_RANGE_MAX_RETRIES_PER_PAGE
+        legacy_result = _run_legacy_time_range_pages(task_id, crawler, request, start_dt, end_dt)
+        if legacy_result.expired:
+            return
 
-        while True:
-            if _legacy_time_range_task_stopped(task_id):
-                break
-
-            page_result = _process_legacy_time_range_page(
-                task_id,
-                crawler,
-                total_stats,
-                per_page,
-                begin_time_param,
-                end_time_param,
-                start_dt,
-                end_dt,
-                max_retries_per_page,
-            )
-            if page_result.expired:
-                return
-
-            end_time_param = page_result.end_time_param
-
-            if _legacy_time_range_page_failed(task_id, page_result.page_processed):
-                break
-
-            if _legacy_time_range_should_finish(
-                page_result.reached_end, page_result.last_time_dt_in_page, start_dt
-            ):
-                break
-
-        update_task(task_id, "completed", "时间区间爬取完成", total_stats)
+        update_task(task_id, "completed", "时间区间爬取完成", legacy_result.stats)
     except Exception as e:
         if not is_task_stopped(task_id):
             add_task_log(task_id, f"❌ 时间区间爬取失败: {str(e)}")
