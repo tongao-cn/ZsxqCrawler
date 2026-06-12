@@ -627,11 +627,7 @@ class ZSXQFileDownloader:
                 last_error_code, last_error = self._record_download_http_failure(response.status_code)
 
             except Exception as e:
-                last_error_code, last_error = download_exception_detail(e)
-                self.log(f"   ❌ 下载异常: {e}")
-                temp_path = partial_download_path(file_path)
-                if remove_partial_download(temp_path):
-                    self.log(f"   🗑️ 删除不完整文件")
+                last_error_code, last_error = self._record_download_exception(e, file_path)
 
         self._mark_download_failed_after_retries(
             file_id,
@@ -751,6 +747,14 @@ class ZSXQFileDownloader:
     def _record_download_http_failure(self, status_code: int) -> tuple[str, str]:
         error_code, error_message = download_http_failure_detail(status_code)
         self.log(f"   ❌ 下载失败: {error_message}")
+        return error_code, error_message
+
+    def _record_download_exception(self, exc: Exception, file_path: str) -> tuple[str, str]:
+        error_code, error_message = download_exception_detail(exc)
+        self.log(f"   ❌ 下载异常: {exc}")
+        temp_path = partial_download_path(file_path)
+        if remove_partial_download(temp_path):
+            self.log(f"   🗑️ 删除不完整文件")
         return error_code, error_message
 
     def _handle_download_size_mismatch(

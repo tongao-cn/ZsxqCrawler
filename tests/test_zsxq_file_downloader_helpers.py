@@ -105,6 +105,15 @@ class FakeChunkedDownloadResponse(FakeDownloadResponse):
         yield from self._chunk_list
 
 
+class FakeFailingBodyDownloadResponse(FakeDownloadResponse):
+    def __init__(self):
+        super().__init__(200, b"", headers={"content-length": "4"})
+
+    def iter_content(self, chunk_size=8192):
+        yield b"pa"
+        raise RuntimeError("stream down")
+
+
 class FakeJsonResponse:
     status_code = 200
     text = ""
@@ -734,6 +743,38 @@ class FileDownloaderDownloadTests(unittest.TestCase):
             downloader.logs,
         )
 
+    def test_record_download_exception_preserves_error_detail_log_and_cleanup(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            file_path = Path(temp_dir) / "memo.pdf"
+            partial_path = Path(f"{file_path}.part")
+            partial_path.write_bytes(b"pa")
+            downloader = object.__new__(ZSXQFileDownloader)
+            downloader.logs = []
+            downloader.log = downloader.logs.append
+
+            failure_with_partial = ZSXQFileDownloader._record_download_exception(
+                downloader,
+                RuntimeError("stream down"),
+                str(file_path),
+            )
+            failure_without_partial = ZSXQFileDownloader._record_download_exception(
+                downloader,
+                ValueError("no part"),
+                str(file_path),
+            )
+
+            self.assertEqual(("download_exception", "stream down"), failure_with_partial)
+            self.assertEqual(("download_exception", "no part"), failure_without_partial)
+            self.assertFalse(partial_path.exists())
+            self.assertEqual(
+                [
+                    "   ❌ 下载异常: stream down",
+                    "   🗑️ 删除不完整文件",
+                    "   ❌ 下载异常: no part",
+                ],
+                downloader.logs,
+            )
+
     def test_write_download_response_body_preserves_progress_stop_and_empty_chunks(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir) / "memo.pdf.part"
@@ -918,6 +959,33 @@ class FileDownloaderDownloadTests(unittest.TestCase):
             )
             self.assertIn("   ❌ 下载失败: HTTP 404", downloader.logs)
             self.assertIn("   🚫 文件下载重试3次仍失败: HTTP 404", downloader.logs)
+
+    def test_download_file_cleans_partial_file_after_body_exception_retries(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            session = FakeDownloadSession([
+                FakeFailingBodyDownloadResponse(),
+                FakeFailingBodyDownloadResponse(),
+                FakeFailingBodyDownloadResponse(),
+            ])
+            downloader = self._downloader_for_download(temp_dir, session)
+
+            with patch("backend.crawlers.zsxq_file_downloader.time.sleep"):
+                result = ZSXQFileDownloader.download_file(
+                    downloader,
+                    {"file": {"id": 101, "name": "memo.pdf", "size": 4, "download_count": 0}},
+                )
+
+            self.assertFalse(result)
+            self.assertEqual(3, len(session.get_calls))
+            self.assertEqual(
+                (101, "failed", None, "download_exception", "stream down"),
+                downloader.file_db.status_updates[-1],
+            )
+            self.assertIn("   ❌ 下载异常: stream down", downloader.logs)
+            self.assertIn("   🗑️ 删除不完整文件", downloader.logs)
+            self.assertIn("   🚫 文件下载重试3次仍失败: stream down", downloader.logs)
+            self.assertFalse((Path(temp_dir) / "memo.pdf").exists())
+            self.assertFalse((Path(temp_dir) / "memo.pdf.part").exists())
 
     def test_mark_download_url_unavailable_preserves_default_and_api_error_details(self):
         downloader = object.__new__(ZSXQFileDownloader)

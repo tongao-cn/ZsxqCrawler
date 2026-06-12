@@ -6292,6 +6292,50 @@ Result:
 - Frontend build passed, including Next.js lint/type checks.
 - `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
 
+### 2026-06-12 - P9 file downloader exception cleanup helper
+
+Changed:
+
+- Added characterization coverage for body-stream exceptions preserving retry, partial-file
+  cleanup, and final `download_exception` status details.
+- Added direct helper coverage for exception detail/log mapping with and without a `.part` file.
+- Added `ZSXQFileDownloader._record_download_exception` and reused it from `download_file`.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Body download exceptions still retry three times, record `download_exception` / exception text,
+  log `"   ❌ 下载异常: <error>"`, and delete the partial `.part` file when present.
+- Final after-retries failure still writes the last exception detail to file status and logs
+  `"   🚫 文件下载重试3次仍失败: <error>"`.
+- Download URL failures, HTTP failures, response filename override, body progress/stop handling,
+  size mismatch handling, success finalization, schema/config/API behavior, and public API behavior
+  are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_download_file_cleans_partial_file_after_body_exception_retries tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_download_file_retries_and_marks_final_failure_after_http_404 -v
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_record_download_exception_preserves_error_detail_log_and_cleanup tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_download_file_cleans_partial_file_after_body_exception_retries tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_download_file_retries_and_marks_final_failure_after_http_404 tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_download_file_retries_body_download_once -v
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+git diff --check
+```
+
+Result:
+
+- Pre-refactor exception cleanup characterization tests passed against the original inline branch.
+- `py_compile` passed.
+- Focused exception-cleanup/download tests passed.
+- `tests.test_zsxq_file_downloader_helpers`: 65 tests passed.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Full backend unittest discovery: 707 tests passed, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+- `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
+
 ## Stop Conditions
 
 Pause before editing if:
