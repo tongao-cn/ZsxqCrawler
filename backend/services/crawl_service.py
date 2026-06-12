@@ -253,6 +253,12 @@ def _legacy_time_range_page_empty(task_id: str, topics: list[dict[str, Any]]) ->
     add_task_log(task_id, "📭 无更多数据，任务结束")
     return True
 
+def _legacy_time_range_task_stopped(task_id: str) -> bool:
+    if not is_task_stopped(task_id):
+        return False
+    add_task_log(task_id, "🛑 任务已停止")
+    return True
+
 def _legacy_time_range_page_failed(task_id: str, page_processed: bool) -> bool:
     if page_processed:
         return False
@@ -741,8 +747,7 @@ def run_crawl_time_range_task(task_id: str, group_id: str, request: Any):
         max_retries_per_page = 10
 
         while True:
-            if is_task_stopped(task_id):
-                add_task_log(task_id, "🛑 任务已停止")
+            if _legacy_time_range_task_stopped(task_id):
                 break
 
             retry = 0

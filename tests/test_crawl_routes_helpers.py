@@ -380,6 +380,42 @@ class CrawlRoutesHelperTests(unittest.TestCase):
         )
 
     @unittest.skipUnless(HAS_CRAWL_ROUTE_DEPS, "crawl route dependencies are not installed")
+    def test_legacy_time_range_outer_stop_completes_without_fetching(self):
+        from backend.routes.crawl_routes import CrawlTimeRangeRequest
+        from backend.services.crawl_service import run_crawl_time_range_task
+
+        crawler = TimeRangeCrawler([])
+
+        with (
+            patch("backend.services.crawl_service.get_cookie_for_group", return_value="cookie"),
+            patch("backend.services.crawl_service.ZSXQTopicCrawler", return_value=crawler),
+            patch("backend.services.crawl_service.is_task_stopped", return_value=True),
+            patch("backend.services.crawl_service.add_task_log") as add_task_log,
+            patch("backend.services.crawl_service.update_task") as update_task,
+            patch("backend.services.crawl_service.unregister_task_crawler") as unregister_task_crawler,
+        ):
+            run_crawl_time_range_task(
+                "task-1",
+                "group-1",
+                CrawlTimeRangeRequest(
+                    startTime="2026-02-01",
+                    endTime="2026-02-01",
+                    perPage=20,
+                    topicSource="legacy",
+                ),
+            )
+
+        self.assertEqual([], crawler.fetch_calls)
+        add_task_log.assert_any_call("task-1", "🛑 任务已停止")
+        update_task.assert_any_call(
+            "task-1",
+            "completed",
+            "时间区间爬取完成",
+            {"new_topics": 0, "updated_topics": 0, "errors": 0, "pages": 0},
+        )
+        unregister_task_crawler.assert_called_once_with("task-1")
+
+    @unittest.skipUnless(HAS_CRAWL_ROUTE_DEPS, "crawl route dependencies are not installed")
     def test_legacy_time_range_filters_topics_and_advances_end_time(self):
         from backend.routes.crawl_routes import CrawlTimeRangeRequest
         from backend.services.crawl_service import run_crawl_time_range_task
