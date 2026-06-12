@@ -34,6 +34,7 @@ from backend.storage.zsxq_database_helpers import (
     topic_file_payload_from_row,
     topic_group_id_query,
     topic_insert_statement,
+    topic_stats_update_statement,
     topics_by_tag_query,
     update_tag_hid_statement,
     upsert_core_file,
@@ -79,6 +80,15 @@ def _user_insert_statement(user_data: Dict[str, Any], created_at: str) -> tuple[
 
 def _topic_insert_statement(topic_data: Dict[str, Any], imported_at: str) -> tuple[str, tuple[Any, ...]]:
     return topic_insert_statement(topic_data, imported_at)
+
+
+def _topic_stats_update_statement(
+    topic_data: Dict[str, Any],
+    topic_id: int,
+    scoped_group_id: Any,
+    imported_at: str,
+) -> tuple[str, tuple[Any, ...]]:
+    return topic_stats_update_statement(topic_data, topic_id, scoped_group_id, imported_at)
 
 
 def _update_tag_hid_statement(tag_id: int, hid: str) -> tuple[str, tuple[Any, ...]]:
@@ -304,30 +314,9 @@ class ZSXQDatabase:
             current_time = datetime.now(beijing_tz).strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + '+0800'
 
             # 只更新统计相关字段，不更新内容字段
-            self.cursor.execute('''
-                UPDATE topics
-                SET likes_count = ?, tourist_likes_count = ?, rewards_count = ?,
-                    comments_count = ?, reading_count = ?, readers_count = ?,
-                    digested = ?, sticky = ?, user_liked = ?, user_subscribed = ?,
-                    imported_at = ?
-                WHERE topic_id = ?
-                  AND (? IS NULL OR group_id = ?)
-            ''', (
-                topic_data.get('likes_count', 0),
-                topic_data.get('tourist_likes_count', 0),
-                topic_data.get('rewards_count', 0),
-                topic_data.get('comments_count', 0),
-                topic_data.get('reading_count', 0),
-                topic_data.get('readers_count', 0),
-                topic_data.get('digested', False),
-                topic_data.get('sticky', False),
-                topic_data.get('user_specific', {}).get('liked', False),
-                topic_data.get('user_specific', {}).get('subscribed', False),
-                current_time,
-                topic_id,
-                _group_id_param(self.group_id),
-                _group_id_param(self.group_id),
-            ))
+            scoped_group_id = _group_id_param(self.group_id)
+            sql, params = _topic_stats_update_statement(topic_data, topic_id, scoped_group_id, current_time)
+            self.cursor.execute(sql, params)
 
             # 检查是否有行被更新
             if self.cursor.rowcount > 0:

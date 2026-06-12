@@ -25,6 +25,7 @@ from backend.storage.zsxq_database import (
     _topic_file_payload_from_row,
     _topic_group_id_query,
     _topic_insert_statement,
+    _topic_stats_update_statement,
     _topics_by_tag_query,
     _update_tag_hid_statement,
     _upsert_core_file,
@@ -694,6 +695,51 @@ class ZSXQDatabaseHelperTests(unittest.TestCase):
             topic_params,
         )
 
+    def test_topic_stats_update_statement_helper_preserves_sql_shape_and_params(self):
+        sql, params = _topic_stats_update_statement(
+            {
+                "likes_count": 1,
+                "tourist_likes_count": 2,
+                "rewards_count": 3,
+                "comments_count": 4,
+                "reading_count": 5,
+                "readers_count": 6,
+                "digested": True,
+                "sticky": True,
+                "user_specific": {"liked": True, "subscribed": True},
+            },
+            202,
+            303,
+            "2026-06-12T10:00:00.000+0800",
+        )
+
+        self.assertEqual(
+            "UPDATE topics SET likes_count = ?, tourist_likes_count = ?, rewards_count = ?, "
+            "comments_count = ?, reading_count = ?, readers_count = ?, digested = ?, sticky = ?, "
+            "user_liked = ?, user_subscribed = ?, imported_at = ? WHERE topic_id = ? "
+            "AND (? IS NULL OR group_id = ?)",
+            " ".join(sql.split()),
+        )
+        self.assertEqual(
+            (
+                1,
+                2,
+                3,
+                4,
+                5,
+                6,
+                True,
+                True,
+                True,
+                True,
+                "2026-06-12T10:00:00.000+0800",
+                202,
+                303,
+                303,
+            ),
+            params,
+        )
+
     def test_replace_file_topic_relation_deletes_then_inserts(self):
         file_db = FakeFileDatabase()
 
@@ -1028,6 +1074,64 @@ class ZSXQDatabaseHelperTests(unittest.TestCase):
             topic_params[:18],
         )
         self.assertRegex(topic_params[18], r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}\+0800$")
+
+    def test_update_topic_stats_preserves_skip_rowcount_and_exception_branches(self):
+        from backend.storage.zsxq_database import ZSXQDatabase
+
+        empty_db = object.__new__(ZSXQDatabase)
+        empty_db.cursor = FakeCursor()
+        empty_db.group_id = "303"
+        self.assertFalse(ZSXQDatabase.update_topic_stats(empty_db, {}))
+        self.assertEqual([], empty_db.cursor.calls)
+
+        success_db = object.__new__(ZSXQDatabase)
+        success_db.cursor = FakeCursor()
+        success_db.cursor.rowcount = 1
+        success_db.group_id = "303"
+        self.assertTrue(
+            ZSXQDatabase.update_topic_stats(
+                success_db,
+                {
+                    "topic_id": 202,
+                    "likes_count": 1,
+                    "tourist_likes_count": 2,
+                    "rewards_count": 3,
+                    "comments_count": 4,
+                    "reading_count": 5,
+                    "readers_count": 6,
+                    "digested": True,
+                    "sticky": True,
+                    "user_specific": {"liked": True, "subscribed": True},
+                },
+            )
+        )
+        stats_sql, stats_params = success_db.cursor.calls[0]
+        self.assertEqual(
+            "UPDATE topics SET likes_count = ?, tourist_likes_count = ?, rewards_count = ?, "
+            "comments_count = ?, reading_count = ?, readers_count = ?, digested = ?, sticky = ?, "
+            "user_liked = ?, user_subscribed = ?, imported_at = ? WHERE topic_id = ? "
+            "AND (? IS NULL OR group_id = ?)",
+            stats_sql,
+        )
+        self.assertEqual((1, 2, 3, 4, 5, 6, True, True, True, True), stats_params[:10])
+        self.assertRegex(stats_params[10], r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}\+0800$")
+        self.assertEqual((202, 303, 303), stats_params[11:])
+
+        missing_db = object.__new__(ZSXQDatabase)
+        missing_db.cursor = FakeCursor()
+        missing_db.group_id = None
+        with patch("builtins.print") as mocked_print:
+            self.assertFalse(ZSXQDatabase.update_topic_stats(missing_db, {"topic_id": 202}))
+        mocked_print.assert_called_once_with("警告：话题 202 不存在，无法更新")
+        self.assertEqual((202, "", ""), missing_db.cursor.calls[0][1][11:])
+
+        failing_db = object.__new__(ZSXQDatabase)
+        failing_db.cursor = FakeFailingExecuteCursor()
+        failing_db.group_id = "303"
+        with patch("builtins.print") as mocked_print, patch("traceback.print_exc") as mocked_traceback:
+            self.assertFalse(ZSXQDatabase.update_topic_stats(failing_db, {"topic_id": 202}))
+        mocked_print.assert_called_once()
+        mocked_traceback.assert_called_once()
 
     def test_resolve_topic_group_id_preserves_explicit_scope_lookup_and_exception_fallback(self):
         from backend.storage.zsxq_database import ZSXQDatabase

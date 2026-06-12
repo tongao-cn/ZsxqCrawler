@@ -206,6 +206,41 @@ def topic_insert_statement(topic_data: Dict[str, Any], imported_at: str) -> tupl
     )
 
 
+def topic_stats_update_statement(
+    topic_data: Dict[str, Any],
+    topic_id: int,
+    scoped_group_id: Any,
+    imported_at: str,
+) -> tuple[str, tuple[Any, ...]]:
+    return (
+        """
+                UPDATE topics
+                SET likes_count = ?, tourist_likes_count = ?, rewards_count = ?,
+                    comments_count = ?, reading_count = ?, readers_count = ?,
+                    digested = ?, sticky = ?, user_liked = ?, user_subscribed = ?,
+                    imported_at = ?
+                WHERE topic_id = ?
+                  AND (? IS NULL OR group_id = ?)
+            """,
+        (
+            topic_data.get("likes_count", 0),
+            topic_data.get("tourist_likes_count", 0),
+            topic_data.get("rewards_count", 0),
+            topic_data.get("comments_count", 0),
+            topic_data.get("reading_count", 0),
+            topic_data.get("readers_count", 0),
+            topic_data.get("digested", False),
+            topic_data.get("sticky", False),
+            topic_data.get("user_specific", {}).get("liked", False),
+            topic_data.get("user_specific", {}).get("subscribed", False),
+            imported_at,
+            topic_id,
+            scoped_group_id,
+            scoped_group_id,
+        ),
+    )
+
+
 def update_tag_hid_statement(tag_id: int, hid: str) -> tuple[str, tuple[Any, ...]]:
     return "UPDATE tags SET hid = ? WHERE tag_id = ?", (hid, tag_id)
 

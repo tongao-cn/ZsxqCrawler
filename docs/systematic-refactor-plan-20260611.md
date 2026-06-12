@@ -4561,6 +4561,49 @@ Result:
 - `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
 - Frontend build is not planned because this slice only changes backend storage/helper code.
 
+### 2026-06-12 - P2 topic stats update statement helper extraction
+
+Changed:
+
+- Added `topic_stats_update_statement` to `backend/storage/zsxq_database_helpers.py`, with a
+  compatibility wrapper in `backend/storage/zsxq_database.py`.
+- Replaced inline `UPDATE topics` SQL and params in `update_topic_stats` with helper-returned SQL
+  and params.
+- Added characterization coverage for helper SQL shape, parameter order, `user_specific` boolean
+  mapping, missing-topic skip behavior, rowcount success and warning branches, exception fallback,
+  generated Beijing-time `imported_at` format, and the existing `group_id=None -> ""` scope params.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- `update_topic_stats` still returns `False` before any database call when `topic_id` is missing.
+- It still updates only the stats/user-specific fields plus `imported_at`, still checks
+  `cursor.rowcount`, still prints the same not-found warning, and still catches exceptions by
+  printing and returning `False`.
+- Group scope parameter semantics are preserved, including the legacy `_group_id_param(None) -> ""`
+  behavior for this method.
+- No schema, config, compatibility, fallback, error handling, logging, commit order, or public API
+  semantics were changed.
+
+Verification:
+
+```powershell
+uv run python -m py_compile backend\storage\zsxq_database.py backend\storage\zsxq_database_helpers.py tests\test_zsxq_database_helpers.py
+uv run python -m unittest tests.test_zsxq_database_helpers -v
+uv run python -m unittest discover -s tests
+uv run python scripts\scan_postgres_compat_debt.py
+git diff --check
+```
+
+Result:
+
+- `py_compile` passed.
+- `tests.test_zsxq_database_helpers`: 39 tests passed.
+- Full backend unittest discovery: 642 tests passed, 15 skipped.
+- PostgreSQL compatibility debt scan: no SQLite compatibility patterns found.
+- `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
+- Frontend build is not planned because this slice only changes backend storage/helper code.
+
 ## Stop Conditions
 
 Pause before editing if:
