@@ -20,6 +20,7 @@ from backend.storage.zsxq_database_helpers import (
     image_insert_statement,
     insert_tag_statement,
     insert_topic_tag_statement,
+    iter_topic_user_payloads_from_data,
     like_emoji_insert_statement,
     latest_like_insert_statement,
     like_insert_statement,
@@ -76,6 +77,10 @@ def _format_tag_topic_row(topic) -> Dict[str, Any]:
 
 def _topic_tags_from_data(topic_data: Dict[str, Any]) -> set[tuple[str, str]]:
     return topic_tags_from_data(topic_data)
+
+
+def _iter_topic_user_payloads_from_data(topic_data: Dict[str, Any]):
+    return iter_topic_user_payloads_from_data(topic_data)
 
 
 def _tag_id_by_name_query(group_id: int, tag_name: str) -> tuple[str, tuple[Any, ...]]:
@@ -561,36 +566,8 @@ class ZSXQDatabase:
     
     def _import_all_users(self, topic_data: Dict[str, Any]):
         """导入话题相关的所有用户信息"""
-        # 导入talk中的用户
-        if 'talk' in topic_data and topic_data['talk'] and 'owner' in topic_data['talk']:
-            self._upsert_user(topic_data['talk']['owner'])
-
-        # 导入question中的用户
-        if 'question' in topic_data and topic_data['question']:
-            # 对于非匿名用户，导入提问者信息
-            if 'owner' in topic_data['question'] and not topic_data['question'].get('anonymous', False):
-                self._upsert_user(topic_data['question']['owner'])
-            # 导入被提问者信息（无论是否匿名都有）
-            if 'questionee' in topic_data['question']:
-                self._upsert_user(topic_data['question']['questionee'])
-
-        # 导入answer中的用户
-        if 'answer' in topic_data and topic_data['answer'] and 'owner' in topic_data['answer']:
-            self._upsert_user(topic_data['answer']['owner'])
-        
-        # 导入latest_likes中的用户
-        if 'latest_likes' in topic_data:
-            for like in topic_data['latest_likes']:
-                if 'owner' in like:
-                    self._upsert_user(like['owner'])
-        
-        # 导入comments中的用户
-        if 'show_comments' in topic_data:
-            for comment in topic_data['show_comments']:
-                if 'owner' in comment:
-                    self._upsert_user(comment['owner'])
-                if 'repliee' in comment:
-                    self._upsert_user(comment['repliee'])
+        for user_data in _iter_topic_user_payloads_from_data(topic_data):
+            self._upsert_user(user_data)
     
     def _upsert_talk(self, topic_id: int, talk_data: Dict[str, Any]):
         """插入或更新话题内容"""

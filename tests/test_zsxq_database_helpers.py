@@ -17,6 +17,7 @@ from backend.storage.zsxq_database import (
     _image_insert_statement,
     _insert_tag_statement,
     _insert_topic_tag_statement,
+    _iter_topic_user_payloads_from_data,
     _like_emoji_insert_statement,
     _latest_like_insert_statement,
     _like_insert_statement,
@@ -481,6 +482,51 @@ class ZSXQDatabaseHelperTests(unittest.TestCase):
         self.assertEqual(
             {'page': 2, 'per_page': 20, 'total': 41, 'pages': 3},
             _build_pagination(2, 20, 41),
+        )
+
+    def test_iter_topic_user_payloads_from_data_preserves_source_order(self):
+        talk_owner = {"user_id": 1}
+        question_owner = {"user_id": 2}
+        questionee = {"user_id": 3}
+        answer_owner = {"user_id": 4}
+        like_owner = {"user_id": 5}
+        empty_like_owner = {}
+        comment_owner = {"user_id": 6}
+        repliee = {"user_id": 7}
+
+        self.assertEqual(
+            [
+                talk_owner,
+                question_owner,
+                questionee,
+                answer_owner,
+                like_owner,
+                empty_like_owner,
+                comment_owner,
+                repliee,
+            ],
+            list(
+                _iter_topic_user_payloads_from_data(
+                    {
+                        "talk": {"owner": talk_owner},
+                        "question": {
+                            "owner": question_owner,
+                            "questionee": questionee,
+                            "anonymous": False,
+                        },
+                        "answer": {"owner": answer_owner},
+                        "latest_likes": [
+                            {"owner": like_owner},
+                            {"owner": empty_like_owner},
+                            {},
+                        ],
+                        "show_comments": [
+                            {"owner": comment_owner, "repliee": repliee},
+                            {},
+                        ],
+                    }
+                )
+            ),
         )
 
     def test_format_tag_row_keeps_existing_fields(self):
@@ -1564,6 +1610,57 @@ class ZSXQDatabaseHelperTests(unittest.TestCase):
         )
         self.assertEqual((901, "Alice", "", "", "", "", ""), user_params[:7])
         self.assertRegex(user_params[7], r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}\+0800$")
+
+    def test_import_all_users_preserves_existing_source_order(self):
+        from backend.storage.zsxq_database import ZSXQDatabase
+
+        db = object.__new__(ZSXQDatabase)
+        calls = []
+        db._upsert_user = lambda user_data: calls.append(user_data)
+
+        talk_owner = {"user_id": 1}
+        question_owner = {"user_id": 2}
+        questionee = {"user_id": 3}
+        answer_owner = {"user_id": 4}
+        like_owner = {"user_id": 5}
+        empty_like_owner = {}
+        comment_owner = {"user_id": 6}
+        repliee = {"user_id": 7}
+
+        ZSXQDatabase._import_all_users(
+            db,
+            {
+                "talk": {"owner": talk_owner},
+                "question": {
+                    "owner": question_owner,
+                    "questionee": questionee,
+                    "anonymous": True,
+                },
+                "answer": {"owner": answer_owner},
+                "latest_likes": [
+                    {"owner": like_owner},
+                    {"owner": empty_like_owner},
+                    {},
+                ],
+                "show_comments": [
+                    {"owner": comment_owner, "repliee": repliee},
+                    {},
+                ],
+            },
+        )
+
+        self.assertEqual(
+            [
+                talk_owner,
+                questionee,
+                answer_owner,
+                like_owner,
+                empty_like_owner,
+                comment_owner,
+                repliee,
+            ],
+            calls,
+        )
 
     def test_upsert_topic_preserves_skip_defaults_and_insert_params(self):
         from backend.storage.zsxq_database import ZSXQDatabase

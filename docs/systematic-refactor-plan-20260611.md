@@ -5201,6 +5201,52 @@ Result:
 - `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
 - Frontend build is not planned because this slice only changes backend storage/helper code.
 
+### 2026-06-12 - P2 topic user payload iterator extraction
+
+Changed:
+
+- Added `iter_topic_user_payloads_from_data` to `backend/storage/zsxq_database_helpers.py`,
+  with a compatibility wrapper in `backend/storage/zsxq_database.py`.
+- Replaced the inline `_import_all_users` source traversal with iteration over the helper.
+- Added direct helper coverage for talk owner, non-anonymous question owner, questionee,
+  answer owner, latest-like owners, comment owners, and repliees.
+- Added characterization coverage for `_import_all_users` call order, including anonymous
+  question owner skip and empty like-owner pass-through.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- `_import_all_users` still calls `_upsert_user` in the existing source order.
+- The helper is an iterator so `_upsert_user` calls still happen as each source is reached;
+  malformed later payload sections do not move ahead of earlier side effects.
+- Anonymous question owners are still skipped, while questionees are still imported.
+- Empty owner payloads under `latest_likes` are still passed through to `_upsert_user`, where
+  existing skip behavior is preserved.
+- Existing SQL, schema, config, fallback behavior, error handling, logging, commit/rollback
+  behavior, and public API semantics are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_import_all_users_preserves_existing_source_order -v
+uv run python -m py_compile backend\storage\zsxq_database.py backend\storage\zsxq_database_helpers.py tests\test_zsxq_database_helpers.py
+uv run python -m unittest tests.test_zsxq_database_helpers -v
+uv run python -m unittest discover -s tests
+uv run python scripts\scan_postgres_compat_debt.py
+git diff --check
+```
+
+Result:
+
+- Pre-refactor characterization test passed against the original inline `_import_all_users`
+  implementation.
+- `py_compile` passed.
+- `tests.test_zsxq_database_helpers`: 65 tests passed.
+- Full backend unittest discovery: 668 tests passed, 15 skipped.
+- PostgreSQL compatibility debt scan: no SQLite compatibility patterns found.
+- `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
+- Frontend build is not planned because this slice only changes backend storage/helper code.
+
 ## Stop Conditions
 
 Pause before editing if:

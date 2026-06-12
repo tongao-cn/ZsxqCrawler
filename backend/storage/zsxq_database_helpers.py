@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 import urllib.parse
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Iterator, Optional
 
 
 def beijing_now_timestamp() -> str:
@@ -20,6 +20,32 @@ def build_pagination(page: int, per_page: int, total: int) -> Dict[str, int]:
         "total": total,
         "pages": (total + per_page - 1) // per_page,
     }
+
+
+def iter_topic_user_payloads_from_data(topic_data: Dict[str, Any]) -> Iterator[Any]:
+    if "talk" in topic_data and topic_data["talk"] and "owner" in topic_data["talk"]:
+        yield topic_data["talk"]["owner"]
+
+    if "question" in topic_data and topic_data["question"]:
+        if "owner" in topic_data["question"] and not topic_data["question"].get("anonymous", False):
+            yield topic_data["question"]["owner"]
+        if "questionee" in topic_data["question"]:
+            yield topic_data["question"]["questionee"]
+
+    if "answer" in topic_data and topic_data["answer"] and "owner" in topic_data["answer"]:
+        yield topic_data["answer"]["owner"]
+
+    if "latest_likes" in topic_data:
+        for like in topic_data["latest_likes"]:
+            if "owner" in like:
+                yield like["owner"]
+
+    if "show_comments" in topic_data:
+        for comment in topic_data["show_comments"]:
+            if "owner" in comment:
+                yield comment["owner"]
+            if "repliee" in comment:
+                yield comment["repliee"]
 
 
 def format_tag_row(row) -> Dict[str, Any]:
