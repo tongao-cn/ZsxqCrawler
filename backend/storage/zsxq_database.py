@@ -10,6 +10,7 @@ from backend.storage.zsxq_database_helpers import (
     format_tag_row,
     format_tag_topic_row,
     group_id_param,
+    group_insert_statement,
     insert_tag_statement,
     insert_topic_tag_statement,
     load_topic_detail_base,
@@ -35,6 +36,7 @@ from backend.storage.zsxq_database_helpers import (
     topics_by_tag_query,
     update_tag_hid_statement,
     upsert_core_file,
+    user_insert_statement,
 )
 
 
@@ -64,6 +66,14 @@ def _topics_by_tag_query(tag_id: int, per_page: int, offset: int) -> tuple[str, 
 
 def _topic_count_by_tag_query(tag_id: int) -> tuple[str, tuple[Any, ...]]:
     return topic_count_by_tag_query(tag_id)
+
+
+def _group_insert_statement(group_data: Dict[str, Any], created_at: str) -> tuple[str, tuple[Any, ...]]:
+    return group_insert_statement(group_data, created_at)
+
+
+def _user_insert_statement(user_data: Dict[str, Any], created_at: str) -> tuple[str, tuple[Any, ...]]:
+    return user_insert_statement(user_data, created_at)
 
 
 def _update_tag_hid_statement(tag_id: int, hid: str) -> tuple[str, tuple[Any, ...]]:
@@ -245,22 +255,8 @@ class ZSXQDatabase:
         beijing_tz = timezone(timedelta(hours=8))
         current_time = datetime.now(beijing_tz).strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + '+0800'
         
-        self.cursor.execute('''
-            INSERT INTO groups 
-            (group_id, name, type, background_url, created_at)
-            VALUES (?, ?, ?, ?, ?)
-            ON CONFLICT(group_id) DO UPDATE SET
-                name = excluded.name,
-                type = excluded.type,
-                background_url = excluded.background_url,
-                created_at = excluded.created_at
-        ''', (
-            group_id,
-            group_data.get('name', ''),
-            group_data.get('type', ''),
-            group_data.get('background_url', ''),
-            current_time
-        ))
+        sql, params = _group_insert_statement(group_data, current_time)
+        self.cursor.execute(sql, params)
     
     def _upsert_user(self, user_data: Dict[str, Any]):
         """插入或更新用户信息"""
@@ -273,28 +269,8 @@ class ZSXQDatabase:
         beijing_tz = timezone(timedelta(hours=8))
         current_time = datetime.now(beijing_tz).strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + '+0800'
         
-        self.cursor.execute('''
-            INSERT INTO users 
-            (user_id, name, alias, avatar_url, location, description, ai_comment_url, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT(user_id) DO UPDATE SET
-                name = excluded.name,
-                alias = excluded.alias,
-                avatar_url = excluded.avatar_url,
-                location = excluded.location,
-                description = excluded.description,
-                ai_comment_url = excluded.ai_comment_url,
-                created_at = excluded.created_at
-        ''', (
-            user_id,
-            user_data.get('name', ''),
-            user_data.get('alias', ''),
-            user_data.get('avatar_url', ''),
-            user_data.get('location', ''),
-            user_data.get('description', ''),
-            user_data.get('ai_comment_url', ''),
-            current_time
-        ))
+        sql, params = _user_insert_statement(user_data, current_time)
+        self.cursor.execute(sql, params)
     
     def _upsert_topic(self, topic_data: Dict[str, Any]):
         """插入或更新话题信息"""

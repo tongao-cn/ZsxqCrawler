@@ -103,6 +103,56 @@ def topic_count_by_tag_query(tag_id: int) -> tuple[str, tuple[Any, ...]]:
     )
 
 
+def group_insert_statement(group_data: Dict[str, Any], created_at: str) -> tuple[str, tuple[Any, ...]]:
+    return (
+        """
+            INSERT INTO groups
+            (group_id, name, type, background_url, created_at)
+            VALUES (?, ?, ?, ?, ?)
+            ON CONFLICT(group_id) DO UPDATE SET
+                name = excluded.name,
+                type = excluded.type,
+                background_url = excluded.background_url,
+                created_at = excluded.created_at
+        """,
+        (
+            group_data.get("group_id"),
+            group_data.get("name", ""),
+            group_data.get("type", ""),
+            group_data.get("background_url", ""),
+            created_at,
+        ),
+    )
+
+
+def user_insert_statement(user_data: Dict[str, Any], created_at: str) -> tuple[str, tuple[Any, ...]]:
+    return (
+        """
+            INSERT INTO users
+            (user_id, name, alias, avatar_url, location, description, ai_comment_url, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(user_id) DO UPDATE SET
+                name = excluded.name,
+                alias = excluded.alias,
+                avatar_url = excluded.avatar_url,
+                location = excluded.location,
+                description = excluded.description,
+                ai_comment_url = excluded.ai_comment_url,
+                created_at = excluded.created_at
+        """,
+        (
+            user_data.get("user_id"),
+            user_data.get("name", ""),
+            user_data.get("alias", ""),
+            user_data.get("avatar_url", ""),
+            user_data.get("location", ""),
+            user_data.get("description", ""),
+            user_data.get("ai_comment_url", ""),
+            created_at,
+        ),
+    )
+
+
 def update_tag_hid_statement(tag_id: int, hid: str) -> tuple[str, tuple[Any, ...]]:
     return "UPDATE tags SET hid = ? WHERE tag_id = ?", (hid, tag_id)
 

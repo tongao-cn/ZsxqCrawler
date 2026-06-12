@@ -7,6 +7,7 @@ from backend.storage.zsxq_database import (
     _format_tag_row,
     _format_tag_topic_row,
     _group_id_param,
+    _group_insert_statement,
     _insert_tag_statement,
     _insert_topic_tag_statement,
     _newest_topic_create_time_query,
@@ -26,6 +27,7 @@ from backend.storage.zsxq_database import (
     _topics_by_tag_query,
     _update_tag_hid_statement,
     _upsert_core_file,
+    _user_insert_statement,
 )
 
 
@@ -581,6 +583,50 @@ class ZSXQDatabaseHelperTests(unittest.TestCase):
         )
         self.assertEqual((7,), count_params)
 
+    def test_group_and_user_insert_statement_helpers_preserve_sql_shape_and_params(self):
+        group_sql, group_params = _group_insert_statement(
+            {
+                "group_id": 303,
+                "name": "group",
+                "type": "paid",
+                "background_url": "bg.png",
+            },
+            "2026-06-12T10:00:00.000+0800",
+        )
+        self.assertEqual(
+            "INSERT INTO groups (group_id, name, type, background_url, created_at) "
+            "VALUES (?, ?, ?, ?, ?) ON CONFLICT(group_id) DO UPDATE SET "
+            "name = excluded.name, type = excluded.type, background_url = excluded.background_url, "
+            "created_at = excluded.created_at",
+            " ".join(group_sql.split()),
+        )
+        self.assertEqual((303, "group", "paid", "bg.png", "2026-06-12T10:00:00.000+0800"), group_params)
+
+        user_sql, user_params = _user_insert_statement(
+            {
+                "user_id": 901,
+                "name": "Alice",
+                "alias": "A",
+                "avatar_url": "a.png",
+                "location": "SH",
+                "description": "owner",
+                "ai_comment_url": "ai-url",
+            },
+            "2026-06-12T10:00:00.000+0800",
+        )
+        self.assertEqual(
+            "INSERT INTO users (user_id, name, alias, avatar_url, location, description, ai_comment_url, created_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(user_id) DO UPDATE SET "
+            "name = excluded.name, alias = excluded.alias, avatar_url = excluded.avatar_url, "
+            "location = excluded.location, description = excluded.description, "
+            "ai_comment_url = excluded.ai_comment_url, created_at = excluded.created_at",
+            " ".join(user_sql.split()),
+        )
+        self.assertEqual(
+            (901, "Alice", "A", "a.png", "SH", "owner", "ai-url", "2026-06-12T10:00:00.000+0800"),
+            user_params,
+        )
+
     def test_replace_file_topic_relation_deletes_then_inserts(self):
         file_db = FakeFileDatabase()
 
@@ -830,6 +876,52 @@ class ZSXQDatabaseHelperTests(unittest.TestCase):
         self.assertEqual([(topic_data, [{"file_id": 101}])], synced)
         self.assertEqual(0, db.conn.commits)
         self.assertEqual(0, db.conn.rollbacks)
+
+    def test_upsert_group_and_user_preserve_skip_and_insert_params(self):
+        from backend.storage.zsxq_database import ZSXQDatabase
+
+        group_db = object.__new__(ZSXQDatabase)
+        group_db.cursor = FakeCursor()
+        ZSXQDatabase._upsert_group(group_db, {})
+        self.assertEqual([], group_db.cursor.calls)
+
+        ZSXQDatabase._upsert_group(
+            group_db,
+            {
+                "group_id": 303,
+                "name": "group",
+                "type": "paid",
+                "background_url": "bg.png",
+            },
+        )
+        group_sql, group_params = group_db.cursor.calls[0]
+        self.assertEqual(
+            "INSERT INTO groups (group_id, name, type, background_url, created_at) "
+            "VALUES (?, ?, ?, ?, ?) ON CONFLICT(group_id) DO UPDATE SET "
+            "name = excluded.name, type = excluded.type, background_url = excluded.background_url, "
+            "created_at = excluded.created_at",
+            group_sql,
+        )
+        self.assertEqual((303, "group", "paid", "bg.png"), group_params[:4])
+        self.assertRegex(group_params[4], r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}\+0800$")
+
+        user_db = object.__new__(ZSXQDatabase)
+        user_db.cursor = FakeCursor()
+        ZSXQDatabase._upsert_user(user_db, {})
+        self.assertEqual([], user_db.cursor.calls)
+
+        ZSXQDatabase._upsert_user(user_db, {"user_id": 901, "name": "Alice"})
+        user_sql, user_params = user_db.cursor.calls[0]
+        self.assertEqual(
+            "INSERT INTO users (user_id, name, alias, avatar_url, location, description, ai_comment_url, created_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(user_id) DO UPDATE SET "
+            "name = excluded.name, alias = excluded.alias, avatar_url = excluded.avatar_url, "
+            "location = excluded.location, description = excluded.description, "
+            "ai_comment_url = excluded.ai_comment_url, created_at = excluded.created_at",
+            user_sql,
+        )
+        self.assertEqual((901, "Alice", "", "", "", "", ""), user_params[:7])
+        self.assertRegex(user_params[7], r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}\+0800$")
 
     def test_resolve_topic_group_id_preserves_explicit_scope_lookup_and_exception_fallback(self):
         from backend.storage.zsxq_database import ZSXQDatabase

@@ -4475,6 +4475,50 @@ Result:
 - `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
 - Frontend build is not planned because this slice only changes backend storage/helper code.
 
+### 2026-06-12 - P2 group/user insert statement helper extraction
+
+Changed:
+
+- Added `group_insert_statement` and `user_insert_statement` to
+  `backend/storage/zsxq_database_helpers.py`, with compatibility wrappers in
+  `backend/storage/zsxq_database.py`.
+- Replaced inline `INSERT INTO groups` and `INSERT INTO users` statements in `_upsert_group` and
+  `_upsert_user` with helper-returned SQL and params.
+- Added characterization coverage for helper SQL shape, parameter defaults, missing-id skip
+  behavior, generated Beijing-time `created_at` format, and execute params.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- `_upsert_group` still returns before any database call when `group_id` is missing, still writes
+  the same group columns, and still updates the same fields on `ON CONFLICT(group_id)`.
+- `_upsert_user` still returns before any database call when `user_id` is missing, still writes the
+  same user columns, preserves empty-string defaults, and still updates the same fields on
+  `ON CONFLICT(user_id)`.
+- Timestamp formatting remains the existing Beijing-time `YYYY-MM-DDTHH:MM:SS.mmm+0800` string
+  generated in the calling methods.
+- No schema, config, compatibility, fallback, error handling, logging, commit order, or public API
+  semantics were changed.
+
+Verification:
+
+```powershell
+uv run python -m py_compile backend\storage\zsxq_database.py backend\storage\zsxq_database_helpers.py tests\test_zsxq_database_helpers.py
+uv run python -m unittest tests.test_zsxq_database_helpers -v
+uv run python -m unittest discover -s tests
+uv run python scripts\scan_postgres_compat_debt.py
+git diff --check
+```
+
+Result:
+
+- `py_compile` passed.
+- `tests.test_zsxq_database_helpers`: 35 tests passed.
+- Full backend unittest discovery: 638 tests passed, 15 skipped.
+- PostgreSQL compatibility debt scan: no SQLite compatibility patterns found.
+- `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
+- Frontend build is not planned because this slice only changes backend storage/helper code.
+
 ## Stop Conditions
 
 Pause before editing if:
