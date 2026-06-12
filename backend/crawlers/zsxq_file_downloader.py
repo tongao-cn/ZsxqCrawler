@@ -624,8 +624,7 @@ class ZSXQFileDownloader:
                     self._complete_successful_download(file_id, safe_filename, file_path, temp_path)
                     return True
 
-                last_error_code, last_error = download_http_failure_detail(response.status_code)
-                self.log(f"   ❌ 下载失败: {last_error}")
+                last_error_code, last_error = self._record_download_http_failure(response.status_code)
 
             except Exception as e:
                 last_error_code, last_error = download_exception_detail(e)
@@ -748,6 +747,11 @@ class ZSXQFileDownloader:
         real_filename, _safe_filename, _file_path = filename_override
         self.log(f"   📝 从响应头获取到真实文件名: {real_filename}")
         return filename_override
+
+    def _record_download_http_failure(self, status_code: int) -> tuple[str, str]:
+        error_code, error_message = download_http_failure_detail(status_code)
+        self.log(f"   ❌ 下载失败: {error_message}")
+        return error_code, error_message
 
     def _handle_download_size_mismatch(
         self,

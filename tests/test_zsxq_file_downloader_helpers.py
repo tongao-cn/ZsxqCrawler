@@ -719,6 +719,21 @@ class FileDownloaderDownloadTests(unittest.TestCase):
             self.assertIsNone(noop)
             self.assertEqual(["   📝 从响应头获取到真实文件名: real?.pdf"], downloader.logs)
 
+    def test_record_download_http_failure_preserves_error_detail_and_log(self):
+        downloader = object.__new__(ZSXQFileDownloader)
+        downloader.logs = []
+        downloader.log = downloader.logs.append
+
+        failure_500 = ZSXQFileDownloader._record_download_http_failure(downloader, 500)
+        failure_404 = ZSXQFileDownloader._record_download_http_failure(downloader, 404)
+
+        self.assertEqual(("http_status", "HTTP 500"), failure_500)
+        self.assertEqual(("http_status", "HTTP 404"), failure_404)
+        self.assertEqual(
+            ["   ❌ 下载失败: HTTP 500", "   ❌ 下载失败: HTTP 404"],
+            downloader.logs,
+        )
+
     def test_write_download_response_body_preserves_progress_stop_and_empty_chunks(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir) / "memo.pdf.part"
@@ -879,6 +894,30 @@ class FileDownloaderDownloadTests(unittest.TestCase):
             self.assertIn("   🚫 文件下载重试3次仍失败: HTTP 500", downloader.logs)
             self.assertFalse((Path(temp_dir) / "memo.pdf").exists())
             self.assertFalse((Path(temp_dir) / "memo.pdf.part").exists())
+
+    def test_download_file_retries_and_marks_final_failure_after_http_404(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            session = FakeDownloadSession([
+                FakeDownloadResponse(404),
+                FakeDownloadResponse(404),
+                FakeDownloadResponse(404),
+            ])
+            downloader = self._downloader_for_download(temp_dir, session)
+
+            with patch("backend.crawlers.zsxq_file_downloader.time.sleep"):
+                result = ZSXQFileDownloader.download_file(
+                    downloader,
+                    {"file": {"id": 101, "name": "memo.pdf", "size": 4, "download_count": 0}},
+                )
+
+            self.assertFalse(result)
+            self.assertEqual(3, len(session.get_calls))
+            self.assertEqual(
+                (101, "failed", None, "http_status", "HTTP 404"),
+                downloader.file_db.status_updates[-1],
+            )
+            self.assertIn("   ❌ 下载失败: HTTP 404", downloader.logs)
+            self.assertIn("   🚫 文件下载重试3次仍失败: HTTP 404", downloader.logs)
 
     def test_mark_download_url_unavailable_preserves_default_and_api_error_details(self):
         downloader = object.__new__(ZSXQFileDownloader)
