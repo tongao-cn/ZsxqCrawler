@@ -10,6 +10,7 @@ from backend.storage.zsxq_database_helpers import (
     format_tag_row,
     format_tag_topic_row,
     group_id_param,
+    insert_tag_statement,
     load_topic_detail_base,
     load_topic_detail_comments,
     load_topic_detail_latest_likes,
@@ -20,12 +21,14 @@ from backend.storage.zsxq_database_helpers import (
     nullable_group_id_param,
     oldest_topic_create_time_query,
     replace_file_topic_relation,
+    tag_id_by_name_query,
     topic_create_time_by_id_query,
     topic_detail_scope,
     topic_count_query,
     topic_exists_query,
     topic_file_payload_from_row,
     topic_group_id_query,
+    update_tag_hid_statement,
     upsert_core_file,
 )
 
@@ -40,6 +43,20 @@ def _format_tag_row(row) -> Dict[str, Any]:
 
 def _format_tag_topic_row(topic) -> Dict[str, Any]:
     return format_tag_topic_row(topic)
+
+
+def _tag_id_by_name_query(group_id: int, tag_name: str) -> tuple[str, tuple[Any, ...]]:
+    return tag_id_by_name_query(group_id, tag_name)
+
+
+def _update_tag_hid_statement(tag_id: int, hid: str) -> tuple[str, tuple[Any, ...]]:
+    return update_tag_hid_statement(tag_id, hid)
+
+
+def _insert_tag_statement(
+    group_id: int, tag_name: str, hid: Optional[str], created_at: str
+) -> tuple[str, tuple[Any, ...]]:
+    return insert_tag_statement(group_id, tag_name, hid, created_at)
 
 
 def _replace_file_topic_relation(file_db, file_id: int, topic_id: int) -> int:
@@ -1223,18 +1240,16 @@ class ZSXQDatabase:
         """插入或更新标签信息"""
         try:
             # 检查标签是否已存在
-            self.cursor.execute('''
-                SELECT tag_id FROM tags WHERE group_id = ? AND tag_name = ?
-            ''', (group_id, tag_name))
+            sql, params = _tag_id_by_name_query(group_id, tag_name)
+            self.cursor.execute(sql, params)
             
             result = self.cursor.fetchone()
             if result:
                 tag_id = result[0]
                 # 更新hid（如果提供了新的hid）
                 if hid:
-                    self.cursor.execute('''
-                        UPDATE tags SET hid = ? WHERE tag_id = ?
-                    ''', (hid, tag_id))
+                    sql, params = _update_tag_hid_statement(tag_id, hid)
+                    self.cursor.execute(sql, params)
                 return tag_id
             else:
                 # 插入新标签
@@ -1242,11 +1257,8 @@ class ZSXQDatabase:
                 beijing_tz = timezone(timedelta(hours=8))
                 current_time = datetime.now(beijing_tz).strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + '+0800'
                 
-                self.cursor.execute('''
-                    INSERT INTO tags (group_id, tag_name, hid, created_at)
-                    VALUES (?, ?, ?, ?)
-                    RETURNING tag_id
-                ''', (group_id, tag_name, hid, current_time))
+                sql, params = _insert_tag_statement(group_id, tag_name, hid, current_time)
+                self.cursor.execute(sql, params)
 
                 row = self.cursor.fetchone()
                 return row[0] if row else None

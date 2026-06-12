@@ -4347,6 +4347,49 @@ Result:
 - `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
 - Frontend build is not planned because this slice only changes backend storage/helper code.
 
+### 2026-06-12 - P2 tag upsert statement helper extraction
+
+Changed:
+
+- Added `tag_id_by_name_query`, `update_tag_hid_statement`, and `insert_tag_statement` to
+  `backend/storage/zsxq_database_helpers.py`, with compatibility wrappers in
+  `backend/storage/zsxq_database.py`.
+- Replaced inline tag lookup, hid update, and tag insert SQL in `_upsert_tag` with helper-returned
+  SQL and params.
+- Added characterization coverage for SQL shape, params, existing-tag return, optional hid update,
+  insert `RETURNING tag_id`, generated `created_at` format, and the existing missing-return-row
+  `None` branch.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- `_upsert_tag` still returns the existing tag id, still updates `hid` only when a new `hid` value
+  is provided, still inserts new tags with Beijing-time `created_at`, and still returns `None` when
+  an insert produces no returned row.
+- The tag insert columns, `RETURNING tag_id`, lookup keys, exception fallback, and public method
+  signature were not changed.
+- No schema, config, compatibility, fallback, error handling, logging, or public API semantics were
+  changed.
+
+Verification:
+
+```powershell
+uv run python -m py_compile backend\storage\zsxq_database.py backend\storage\zsxq_database_helpers.py tests\test_zsxq_database_helpers.py
+uv run python -m unittest tests.test_zsxq_database_helpers -v
+uv run python -m unittest discover -s tests
+uv run python scripts\scan_postgres_compat_debt.py
+git diff --check
+```
+
+Result:
+
+- `py_compile` passed.
+- `tests.test_zsxq_database_helpers`: 28 tests passed.
+- Full backend unittest discovery: 631 tests passed, 15 skipped.
+- PostgreSQL compatibility debt scan: no SQLite compatibility patterns found.
+- `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
+- Frontend build is not planned because this slice only changes backend storage/helper code.
+
 ## Stop Conditions
 
 Pause before editing if:

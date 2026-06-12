@@ -7,16 +7,19 @@ from backend.storage.zsxq_database import (
     _format_tag_row,
     _format_tag_topic_row,
     _group_id_param,
+    _insert_tag_statement,
     _newest_topic_create_time_query,
     _nullable_group_id_param,
     _oldest_topic_create_time_query,
     _replace_file_topic_relation,
+    _tag_id_by_name_query,
     _topic_create_time_by_id_query,
     _topic_detail_scope,
     _topic_count_query,
     _topic_exists_query,
     _topic_file_payload_from_row,
     _topic_group_id_query,
+    _update_tag_hid_statement,
     _upsert_core_file,
 )
 
@@ -49,6 +52,10 @@ class FakeTimestampCursor(FakeCursor):
         if self.rows:
             return self.rows.pop(0)
         return None
+
+
+class FakeSequenceCursor(FakeTimestampCursor):
+    pass
 
 
 class FakeFileDatabase:
@@ -464,6 +471,27 @@ class ZSXQDatabaseHelperTests(unittest.TestCase):
         self.assertFalse(topic["digested"])
         self.assertFalse(topic["sticky"])
 
+    def test_tag_statement_helpers_preserve_sql_shape_and_params(self):
+        lookup_sql, lookup_params = _tag_id_by_name_query(303, "AI")
+        self.assertEqual("SELECT tag_id FROM tags WHERE group_id = ? AND tag_name = ?", lookup_sql)
+        self.assertEqual((303, "AI"), lookup_params)
+
+        update_sql, update_params = _update_tag_hid_statement(7, "hid-1")
+        self.assertEqual("UPDATE tags SET hid = ? WHERE tag_id = ?", update_sql)
+        self.assertEqual(("hid-1", 7), update_params)
+
+        insert_sql, insert_params = _insert_tag_statement(
+            303,
+            "AI",
+            "hid-1",
+            "2026-06-12T10:00:00.000+0800",
+        )
+        self.assertEqual(
+            "INSERT INTO tags (group_id, tag_name, hid, created_at) VALUES (?, ?, ?, ?) RETURNING tag_id",
+            " ".join(insert_sql.split()),
+        )
+        self.assertEqual((303, "AI", "hid-1", "2026-06-12T10:00:00.000+0800"), insert_params)
+
     def test_replace_file_topic_relation_deletes_then_inserts(self):
         file_db = FakeFileDatabase()
 
@@ -819,6 +847,44 @@ class ZSXQDatabaseHelperTests(unittest.TestCase):
             ),
             article_params,
         )
+
+    def test_upsert_tag_preserves_existing_update_insert_and_missing_return_branches(self):
+        from backend.storage.zsxq_database import ZSXQDatabase
+
+        existing_db = object.__new__(ZSXQDatabase)
+        existing_db.cursor = FakeSequenceCursor([(7,)])
+        self.assertEqual(7, ZSXQDatabase._upsert_tag(existing_db, 303, "AI", "hid-1"))
+        self.assertEqual(
+            [
+                ("SELECT tag_id FROM tags WHERE group_id = ? AND tag_name = ?", (303, "AI")),
+                ("UPDATE tags SET hid = ? WHERE tag_id = ?", ("hid-1", 7)),
+            ],
+            existing_db.cursor.calls,
+        )
+
+        no_hid_db = object.__new__(ZSXQDatabase)
+        no_hid_db.cursor = FakeSequenceCursor([(8,)])
+        self.assertEqual(8, ZSXQDatabase._upsert_tag(no_hid_db, 303, "AI", None))
+        self.assertEqual(
+            [("SELECT tag_id FROM tags WHERE group_id = ? AND tag_name = ?", (303, "AI"))],
+            no_hid_db.cursor.calls,
+        )
+
+        new_db = object.__new__(ZSXQDatabase)
+        new_db.cursor = FakeSequenceCursor([None, (9,)])
+        self.assertEqual(9, ZSXQDatabase._upsert_tag(new_db, 303, "AI", "hid-2"))
+        self.assertEqual("SELECT tag_id FROM tags WHERE group_id = ? AND tag_name = ?", new_db.cursor.calls[0][0])
+        insert_sql, insert_params = new_db.cursor.calls[1]
+        self.assertEqual(
+            "INSERT INTO tags (group_id, tag_name, hid, created_at) VALUES (?, ?, ?, ?) RETURNING tag_id",
+            insert_sql,
+        )
+        self.assertEqual((303, "AI", "hid-2"), insert_params[:3])
+        self.assertRegex(insert_params[3], r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}\+0800$")
+
+        missing_return_db = object.__new__(ZSXQDatabase)
+        missing_return_db.cursor = FakeSequenceCursor([None, None])
+        self.assertIsNone(ZSXQDatabase._upsert_tag(missing_return_db, 303, "AI", "hid-3"))
 
     def test_content_child_writes_use_explicit_unique_semantics(self):
         from backend.storage.zsxq_database import ZSXQDatabase

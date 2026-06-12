@@ -52,6 +52,27 @@ def format_tag_topic_row(topic) -> Dict[str, Any]:
     return topic_data
 
 
+def tag_id_by_name_query(group_id: int, tag_name: str) -> tuple[str, tuple[Any, ...]]:
+    return "SELECT tag_id FROM tags WHERE group_id = ? AND tag_name = ?", (group_id, tag_name)
+
+
+def update_tag_hid_statement(tag_id: int, hid: str) -> tuple[str, tuple[Any, ...]]:
+    return "UPDATE tags SET hid = ? WHERE tag_id = ?", (hid, tag_id)
+
+
+def insert_tag_statement(
+    group_id: int, tag_name: str, hid: Optional[str], created_at: str
+) -> tuple[str, tuple[Any, ...]]:
+    return (
+        """
+                    INSERT INTO tags (group_id, tag_name, hid, created_at)
+                    VALUES (?, ?, ?, ?)
+                    RETURNING tag_id
+                """,
+        (group_id, tag_name, hid, created_at),
+    )
+
+
 def group_id_param(group_id: Optional[str]) -> Any:
     value = str(group_id or "").strip()
     return int(value) if value.isdigit() else value
