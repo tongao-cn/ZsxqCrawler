@@ -6711,6 +6711,50 @@ Result:
 - Frontend build passed, including Next.js lint/type checks.
 - `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
 
+### 2026-06-12 - P9 file downloader database download query helper
+
+Changed:
+
+- Added characterization coverage for `download_files_from_database` query construction with date
+  filters, status filters, limit parameters, and legacy `order_by` sorting.
+- Added characterization coverage for an unfiltered heat-sort query preserving non-numeric group ID
+  parameters, no `download_status` predicate, and no `LIMIT` clause.
+- Extracted `database_download_query_plan` into `backend/crawlers/zsxq_file_downloader_helpers.py`
+  and reused it from `ZSXQFileDownloader.download_files_from_database`.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- SQL predicate order, parameter order, group ID conversion call site, default heat sorting,
+  create-time sorting, legacy `order_by` mapping, `max_files` limit behavior, empty result stats,
+  and user-facing logs are preserved.
+- Download iteration, skip/download/failure counters, retry behavior, long sleep, per-file delay,
+  status updates, schema/config/API behavior, and public API behavior are unchanged.
+- This does not remove or alter the legacy `recent_days` or `order_by` compatibility inputs.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderDatabaseDownloadTests -v
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py backend\crawlers\zsxq_file_downloader_helpers.py tests\test_zsxq_file_downloader_helpers.py
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+git diff --check
+```
+
+Result:
+
+- The new database-download query characterization tests passed against the pre-refactor inline
+  query construction and after helper extraction.
+- `py_compile` passed.
+- `tests.test_zsxq_file_downloader_helpers`: 80 tests passed.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Full backend unittest discovery: 722 tests passed, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+- `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
+
 ## Stop Conditions
 
 Pause before editing if:

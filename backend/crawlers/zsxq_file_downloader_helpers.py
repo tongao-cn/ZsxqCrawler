@@ -120,6 +120,66 @@ def normalize_date_range(
     return start, end, stop_before_dt
 
 
+def database_download_query_plan(
+    query_group_id: Any,
+    max_files: Optional[int] = None,
+    status_filter: Optional[str] = "pending",
+    sort_by: str = "download_count",
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    last_days: Optional[int] = None,
+    legacy_order_by: Any = None,
+) -> Dict[str, Any]:
+    normalized_start, normalized_end, _ = normalize_date_range(
+        start_date=start_date,
+        end_date=end_date,
+        last_days=last_days,
+    )
+
+    legacy_order = str(legacy_order_by or "").strip().lower()
+    if legacy_order.startswith("create_time"):
+        sort_by = "create_time"
+    elif legacy_order.startswith("download_count"):
+        sort_by = "download_count"
+
+    conditions = ["group_id = ?"]
+    params: list[Any] = [query_group_id]
+    if status_filter:
+        conditions.append("download_status = ?")
+        params.append(status_filter)
+    if normalized_start:
+        conditions.append("substr(create_time, 1, 10) >= ?")
+        params.append(normalized_start)
+    if normalized_end:
+        conditions.append("substr(create_time, 1, 10) <= ?")
+        params.append(normalized_end)
+
+    where_clause = f"WHERE {' AND '.join(conditions)}"
+    order_clause = (
+        "ORDER BY create_time DESC, download_count DESC"
+        if sort_by == "create_time"
+        else "ORDER BY download_count DESC, size ASC"
+    )
+    limit_clause = "LIMIT ?" if max_files else ""
+    if max_files:
+        params.append(max_files)
+
+    query = f'''
+            SELECT file_id, name, size, download_count, create_time
+            FROM files
+            {where_clause}
+            {order_clause}
+            {limit_clause}
+        '''
+    return {
+        "query": query,
+        "params": tuple(params),
+        "sort_by": sort_by,
+        "normalized_start": normalized_start,
+        "normalized_end": normalized_end,
+    }
+
+
 def summarize_page_time_range(files: list[Dict[str, Any]]) -> tuple[Optional[str], Optional[str]]:
     timestamps: list[datetime.datetime] = []
     for item in files:

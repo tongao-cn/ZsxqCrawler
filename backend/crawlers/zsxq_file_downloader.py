@@ -27,6 +27,7 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     add_import_stats,
     classify_api_failure,
     classify_http_failure,
+    database_download_query_plan,
     download_file_data,
     download_exception_detail,
     download_expected_size,
@@ -1387,18 +1388,19 @@ class ZSXQFileDownloader:
         if last_days is None and legacy_recent_days is not None:
             last_days = legacy_recent_days
 
-        normalized_start, normalized_end, _ = normalize_date_range(
+        query_plan = database_download_query_plan(
+            _query_group_id(self.group_id),
+            max_files=max_files,
+            status_filter=status_filter,
+            sort_by=sort_by,
             start_date=start_date,
             end_date=end_date,
             last_days=last_days,
+            legacy_order_by=kwargs.get('order_by'),
         )
-        legacy_order_by = str(kwargs.get('order_by') or '').strip().lower()
-        if legacy_order_by.startswith('create_time'):
-            sort_by = 'create_time'
-        elif legacy_order_by.startswith('download_count'):
-            sort_by = 'download_count'
-
-        order_by = "create_time DESC, download_count DESC" if sort_by == 'create_time' else "download_count DESC, size ASC"
+        normalized_start = query_plan["normalized_start"]
+        normalized_end = query_plan["normalized_end"]
+        sort_by = query_plan["sort_by"]
 
         if normalized_start or normalized_end:
             self.log(f"   📅 下载区间: {normalized_start or '-'} ~ {normalized_end or '-'}")
@@ -1410,33 +1412,7 @@ class ZSXQFileDownloader:
         if self.check_stop():
             self.log("🛑 任务被停止")
             return {'total_files': 0, 'downloaded': 0, 'skipped': 0, 'failed': 0}
-        conditions = []
-        params: list[Any] = [_query_group_id(self.group_id)]
-        conditions.append("group_id = ?")
-        if status_filter:
-            conditions.append("download_status = ?")
-            params.append(status_filter)
-        if normalized_start:
-            conditions.append("substr(create_time, 1, 10) >= ?")
-            params.append(normalized_start)
-        if normalized_end:
-            conditions.append("substr(create_time, 1, 10) <= ?")
-            params.append(normalized_end)
-
-        where_clause = f"WHERE {' AND '.join(conditions)}" if conditions else ""
-        order_clause = "ORDER BY create_time DESC, download_count DESC" if sort_by == 'create_time' else "ORDER BY download_count DESC, size ASC"
-        limit_clause = "LIMIT ?" if max_files else ""
-        if max_files:
-            params.append(max_files)
-
-        query = f'''
-            SELECT file_id, name, size, download_count, create_time
-            FROM files
-            {where_clause}
-            {order_clause}
-            {limit_clause}
-        '''
-        self.file_db.cursor.execute(query, tuple(params))
+        self.file_db.cursor.execute(query_plan["query"], query_plan["params"])
         files_to_download = self.file_db.cursor.fetchall()
         
         if not files_to_download:

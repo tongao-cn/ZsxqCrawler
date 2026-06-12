@@ -84,6 +84,20 @@ class FakeDownloadFileDb:
         self.status_updates.append((file_id, status, local_path, error_code, error_message))
 
 
+class QueryCaptureFileDb:
+    def __init__(self, rows=()):
+        self.cursor = self
+        self.rows = list(rows)
+        self.executed = []
+
+    def execute(self, query, params=()):
+        self.executed.append((query, tuple(params)))
+        return self
+
+    def fetchall(self):
+        return list(self.rows)
+
+
 class FakeDownloadResponse:
     def __init__(self, status_code, chunks=b"", headers=None):
         self.status_code = status_code
@@ -202,6 +216,64 @@ class FileDownloaderPaginationTests(unittest.TestCase):
         self.assertEqual(1, len(downloader.fetch_calls))
         self.assertEqual(1, downloader.file_db.import_calls)
         self.assertEqual(0, stats["files"])
+
+
+class FileDownloaderDatabaseDownloadTests(unittest.TestCase):
+    def _downloader_for_query_capture(self, group_id="511", rows=()):
+        downloader = object.__new__(ZSXQFileDownloader)
+        downloader.group_id = group_id
+        downloader.file_db = QueryCaptureFileDb(rows)
+        downloader.logs = []
+        downloader.log = downloader.logs.append
+        downloader.check_stop = lambda: False
+        return downloader
+
+    def _compact_sql(self, sql):
+        return " ".join(sql.split())
+
+    def test_download_files_from_database_preserves_filtered_query_shape_and_legacy_order_by(self):
+        downloader = self._downloader_for_query_capture()
+
+        stats = ZSXQFileDownloader.download_files_from_database(
+            downloader,
+            max_files=5,
+            status_filter="failed",
+            start_date="2026-05-01",
+            end_date="2026-05-07",
+            order_by="create_time DESC",
+        )
+
+        query, params = downloader.file_db.executed[-1]
+        compact_query = self._compact_sql(query)
+        self.assertEqual({"total_files": 0, "downloaded": 0, "skipped": 0, "failed": 0}, stats)
+        self.assertIn(
+            "WHERE group_id = ? AND download_status = ? AND substr(create_time, 1, 10) >= ? "
+            "AND substr(create_time, 1, 10) <= ?",
+            compact_query,
+        )
+        self.assertIn("ORDER BY create_time DESC, download_count DESC", compact_query)
+        self.assertTrue(compact_query.endswith("LIMIT ?"))
+        self.assertEqual((511, "failed", "2026-05-01", "2026-05-07", 5), params)
+        self.assertIn("   📌 下载排序: 按时间倒序", downloader.logs)
+
+    def test_download_files_from_database_preserves_unfiltered_heat_sort_query_shape(self):
+        downloader = self._downloader_for_query_capture(group_id="group-1")
+
+        stats = ZSXQFileDownloader.download_files_from_database(
+            downloader,
+            status_filter="",
+            sort_by="download_count",
+        )
+
+        query, params = downloader.file_db.executed[-1]
+        compact_query = self._compact_sql(query)
+        self.assertEqual({"total_files": 0, "downloaded": 0, "skipped": 0, "failed": 0}, stats)
+        self.assertIn("WHERE group_id = ?", compact_query)
+        self.assertNotIn("download_status = ?", compact_query)
+        self.assertIn("ORDER BY download_count DESC, size ASC", compact_query)
+        self.assertNotIn("LIMIT ?", compact_query)
+        self.assertEqual(("group-1",), params)
+        self.assertIn("   📌 下载排序: 按热度倒序", downloader.logs)
 
 
 class FileDownloaderTimeHelperTests(unittest.TestCase):
