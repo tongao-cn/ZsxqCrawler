@@ -7788,6 +7788,54 @@ Result:
 - Frontend build passed, including Next.js lint/type checks.
 - `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
 
+### 2026-06-12 - P4 legacy crawler preparation helper
+
+Changed:
+
+- Added characterization coverage for the legacy latest-crawl entrypoint branch.
+- Extracted `_prepare_legacy_crawler` in `backend/services/crawl_service.py`.
+- Reused the helper from the historical, all, incremental, latest, and time-range legacy branches.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Legacy branches still build task callbacks, create the cookie-based `ZSXQTopicCrawler`, set its
+  stop-check callback, register it with task runtime, and apply crawl settings before startup logs.
+- Time-range legacy crawling still passes `require_overrides=True` when applying interval settings.
+- Existing stop checks, initialization-stopped logging, startup logs, crawl method calls, expired
+  handling, completion logs, failure messages, and `finally` unregistration remain in their original
+  entrypoint-specific locations.
+- Public API behavior, task status semantics, update-task payloads, schema/config behavior, and
+  official MCP HTTP crawler behavior are unchanged.
+- This does not remove legacy behavior; it isolates the retained cookie-based crawler setup.
+- This does not introduce, remove, or alter fallback behavior.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_crawl_routes_helpers.CrawlRoutesHelperTests.test_legacy_latest_branch_creates_registered_crawler_and_applies_settings -v
+uv run python -m unittest tests.test_crawl_routes_helpers.CrawlRoutesHelperTests.test_legacy_latest_branch_creates_registered_crawler_and_applies_settings tests.test_crawl_routes_helpers.CrawlRoutesHelperTests.test_time_range_crawl_stops_after_empty_page tests.test_crawl_routes_helpers.CrawlRoutesHelperTests.test_official_latest_branch_skips_legacy_crawler tests.test_crawl_routes_helpers.CrawlRoutesHelperTests.test_official_all_branch_uses_oldest_cursor_and_skips_legacy_crawler -v
+uv run python -m py_compile backend\services\crawl_service.py tests\test_crawl_routes_helpers.py
+uv run python -m unittest tests.test_crawl_routes_helpers -v
+uv run python -m unittest tests.test_official_topic_client_helpers -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+git diff --check
+```
+
+Result:
+
+- New legacy latest entrypoint characterization test passed before and after helper extraction.
+- Existing time-range legacy empty-page test and official branch tests passed after helper extraction.
+- `py_compile` passed.
+- `tests.test_crawl_routes_helpers`: 36 tests passed.
+- `tests.test_official_topic_client_helpers`: 16 tests passed.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Full backend unittest discovery: 752 tests passed, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+- `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
+
 ## Stop Conditions
 
 Pause before editing if:

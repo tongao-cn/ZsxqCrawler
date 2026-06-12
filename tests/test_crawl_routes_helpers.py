@@ -40,6 +40,18 @@ class EmptyPageCrawler:
         self.interval_kwargs = kwargs
 
 
+class LatestCrawler:
+    def __init__(self):
+        self.interval_kwargs = None
+        self.stop_check_func = None
+
+    def set_custom_intervals(self, **kwargs):
+        self.interval_kwargs = kwargs
+
+    def crawl_latest_until_complete(self):
+        return {"new_topics": 1, "updated_topics": 2}
+
+
 def fake_task_func(*args):
     return args
 
@@ -340,6 +352,45 @@ class CrawlRoutesHelperTests(unittest.TestCase):
             "completed",
             "时间区间爬取完成",
             {"new_topics": 0, "updated_topics": 0, "errors": 0, "pages": 0},
+        )
+
+    @unittest.skipUnless(HAS_CRAWL_ROUTE_DEPS, "crawl route dependencies are not installed")
+    def test_legacy_latest_branch_creates_registered_crawler_and_applies_settings(self):
+        from backend.routes.crawl_routes import CrawlSettingsRequest
+        from backend.services.crawl_service import run_crawl_latest_task
+
+        crawler = LatestCrawler()
+
+        with (
+            patch("backend.services.crawl_service.get_cookie_for_group", return_value="cookie") as get_cookie,
+            patch("backend.services.crawl_service.ZSXQTopicCrawler", return_value=crawler) as crawler_cls,
+            patch("backend.services.crawl_service.register_task_crawler") as register_task_crawler,
+            patch("backend.services.crawl_service.unregister_task_crawler") as unregister_task_crawler,
+            patch("backend.services.crawl_service.is_task_stopped", return_value=False),
+            patch("backend.services.crawl_service.add_task_log") as add_task_log,
+            patch("backend.services.crawl_service.update_task") as update_task,
+        ):
+            run_crawl_latest_task(
+                "task-1",
+                "group-1",
+                CrawlSettingsRequest(topicSource="legacy", crawlIntervalMin=2.0),
+            )
+
+        get_cookie.assert_called_once_with("group-1")
+        crawler_cls.assert_called_once()
+        register_task_crawler.assert_called_once_with("task-1", crawler)
+        unregister_task_crawler.assert_called_once_with("task-1")
+        self.assertIsNotNone(crawler.stop_check_func)
+        self.assertEqual(2.0, crawler.interval_kwargs["crawl_interval_min"])
+        add_task_log.assert_any_call("task-1", "📡 连接到知识星球API...")
+        add_task_log.assert_any_call("task-1", "🔍 检查数据库状态...")
+        add_task_log.assert_any_call("task-1", "✅ 获取最新记录完成！新增话题: 1, 更新话题: 2")
+        update_task.assert_any_call("task-1", "running", "开始获取最新记录...")
+        update_task.assert_any_call(
+            "task-1",
+            "completed",
+            "获取最新记录完成",
+            {"new_topics": 1, "updated_topics": 2},
         )
 
     @unittest.skipUnless(HAS_CRAWL_ROUTE_DEPS, "crawl route dependencies are not installed")

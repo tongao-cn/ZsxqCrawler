@@ -159,6 +159,17 @@ def _create_task_crawler(task_id: str, group_id: str, log_callback: Callable[[st
     register_task_crawler(task_id, crawler)
     return crawler
 
+def _prepare_legacy_crawler(
+    task_id: str,
+    group_id: str,
+    crawl_settings: Any,
+    require_overrides: bool = False,
+) -> ZSXQTopicCrawler:
+    log_callback, stop_check = _build_task_callbacks(task_id)
+    crawler = _create_task_crawler(task_id, group_id, log_callback, stop_check)
+    _apply_crawl_settings(crawler, crawl_settings, require_overrides=require_overrides)
+    return crawler
+
 def _topic_time(topic: dict[str, Any]) -> Optional[datetime]:
     ts = topic.get("create_time")
     if not ts:
@@ -479,11 +490,7 @@ def run_crawl_historical_task(
         if is_task_stopped(task_id):
             return
 
-        log_callback, stop_check = _build_task_callbacks(task_id)
-
-        crawler = _create_task_crawler(task_id, group_id, log_callback, stop_check)
-
-        _apply_crawl_settings(crawler, crawl_settings)
+        crawler = _prepare_legacy_crawler(task_id, group_id, crawl_settings)
 
         if is_task_stopped(task_id):
             _log_init_stopped(task_id)
@@ -524,11 +531,7 @@ def run_crawl_all_task(task_id: str, group_id: str, crawl_settings: Any = None):
             _run_official_all_pages_from_oldest(task_id, group_id)
             return
 
-        log_callback, stop_check = _build_task_callbacks(task_id)
-
-        crawler = _create_task_crawler(task_id, group_id, log_callback, stop_check)
-
-        _apply_crawl_settings(crawler, crawl_settings)
+        crawler = _prepare_legacy_crawler(task_id, group_id, crawl_settings)
 
         if is_task_stopped(task_id):
             _log_init_stopped(task_id)
@@ -587,11 +590,7 @@ def run_crawl_incremental_task(
             )
             return
 
-        log_callback, stop_check = _build_task_callbacks(task_id)
-
-        crawler = _create_task_crawler(task_id, group_id, log_callback, stop_check)
-
-        _apply_crawl_settings(crawler, crawl_settings)
+        crawler = _prepare_legacy_crawler(task_id, group_id, crawl_settings)
 
         if is_task_stopped(task_id):
             _log_init_stopped(task_id)
@@ -623,11 +622,7 @@ def run_crawl_latest_task(task_id: str, group_id: str, crawl_settings: Any = Non
             _run_official_crawl_pages_task(task_id, group_id, None, 20, "latest")
             return
 
-        log_callback, stop_check = _build_task_callbacks(task_id)
-
-        crawler = _create_task_crawler(task_id, group_id, log_callback, stop_check)
-
-        _apply_crawl_settings(crawler, crawl_settings)
+        crawler = _prepare_legacy_crawler(task_id, group_id, crawl_settings)
 
         if is_task_stopped(task_id):
             _log_init_stopped(task_id)
@@ -667,11 +662,7 @@ def run_crawl_time_range_task(task_id: str, group_id: str, request: Any):
             _run_official_crawl_time_range_task(task_id, group_id, request, start_dt, end_dt)
             return
 
-        log_callback, stop_check = _build_task_callbacks(task_id)
-
-        crawler = _create_task_crawler(task_id, group_id, log_callback, stop_check)
-
-        _apply_crawl_settings(crawler, request, require_overrides=True)
+        crawler = _prepare_legacy_crawler(task_id, group_id, request, require_overrides=True)
 
         per_page = request.perPage or 20
         total_stats = {"new_topics": 0, "updated_topics": 0, "errors": 0, "pages": 0}
