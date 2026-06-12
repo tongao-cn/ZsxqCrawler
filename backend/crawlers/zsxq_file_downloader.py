@@ -588,8 +588,7 @@ class ZSXQFileDownloader:
                     self._mark_download_url_unavailable(file_id)
                     return False
 
-                self.log(f"   🚀 开始下载...")
-                response = self.session.get(download_url, timeout=300, stream=True)
+                response = self._request_download_response(download_url)
 
                 filename_override = self._apply_response_filename_override(
                     file_name,
@@ -759,6 +758,10 @@ class ZSXQFileDownloader:
         retry_delay, retry_message = download_retry_wait(attempt, download_retries)
         self.log(retry_message)
         time.sleep(retry_delay)
+
+    def _request_download_response(self, download_url: str) -> Any:
+        self.log(f"   🚀 开始下载...")
+        return self.session.get(download_url, timeout=300, stream=True)
 
     def _handle_download_size_mismatch(
         self,

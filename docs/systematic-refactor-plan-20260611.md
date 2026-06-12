@@ -6379,6 +6379,50 @@ Result:
 - Frontend build passed, including Next.js lint/type checks.
 - `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
 
+### 2026-06-12 - P9 file downloader response request helper
+
+Changed:
+
+- Added characterization coverage that `download_file` still requests the signed download URL
+  with `timeout=300` and `stream=True`, and still logs the start-download message.
+- Added direct helper coverage for response request log, return value, and `session.get` arguments.
+- Added `ZSXQFileDownloader._request_download_response` and reused it from `download_file`.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Download requests still log `"   🚀 开始下载..."` before calling `session.get`.
+- Signed download URLs are still requested with `timeout=300` and `stream=True`.
+- The response object still flows unchanged into filename override, HTTP status handling, body
+  writing, size mismatch handling, and success/failure finalization.
+- Download URL failures, retry wait behavior, HTTP/body exceptions, response filename override,
+  body progress/stop handling, size mismatch handling, success finalization, schema/config/API
+  behavior, and public API behavior are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_download_file_requests_response_with_stream_timeout_and_log tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_download_file_retries_body_download_once -v
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_request_download_response_preserves_stream_timeout_and_log tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_download_file_requests_response_with_stream_timeout_and_log tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_download_file_retries_body_download_once tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_download_file_marks_final_failure_after_http_retries -v
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+git diff --check
+```
+
+Result:
+
+- Pre-refactor response-request characterization tests passed against the original inline branch.
+- `py_compile` passed.
+- Focused response-request/download tests passed.
+- `tests.test_zsxq_file_downloader_helpers`: 69 tests passed.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Full backend unittest discovery: 711 tests passed, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+- `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
+
 ## Stop Conditions
 
 Pause before editing if:

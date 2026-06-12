@@ -789,6 +789,23 @@ class FileDownloaderDownloadTests(unittest.TestCase):
             downloader.logs,
         )
 
+    def test_request_download_response_preserves_stream_timeout_and_log(self):
+        response = FakeDownloadResponse(200, b"memo")
+        session = FakeDownloadSession([response])
+        downloader = object.__new__(ZSXQFileDownloader)
+        downloader.session = session
+        downloader.logs = []
+        downloader.log = downloader.logs.append
+
+        requested_response = ZSXQFileDownloader._request_download_response(
+            downloader,
+            "https://download.test/101",
+        )
+
+        self.assertIs(response, requested_response)
+        self.assertEqual([("https://download.test/101", 300, True)], session.get_calls)
+        self.assertEqual(["   🚀 开始下载..."], downloader.logs)
+
     def test_write_download_response_body_preserves_progress_stop_and_empty_chunks(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir) / "memo.pdf.part"
@@ -924,6 +941,23 @@ class FileDownloaderDownloadTests(unittest.TestCase):
             self.assertTrue(result)
             self.assertEqual(2, len(session.get_calls))
             self.assertEqual((101, "completed"), downloader.file_db.status_updates[-1][:2])
+
+    def test_download_file_requests_response_with_stream_timeout_and_log(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            session = FakeDownloadSession([FakeDownloadResponse(200, b"memo")])
+            downloader = self._downloader_for_download(temp_dir, session)
+
+            result = ZSXQFileDownloader.download_file(
+                downloader,
+                {"file": {"id": 101, "name": "memo.pdf", "size": 4, "download_count": 0}},
+            )
+
+            self.assertTrue(result)
+            self.assertEqual(
+                [("https://download.test/101", 300, True)],
+                session.get_calls,
+            )
+            self.assertIn("   🚀 开始下载...", downloader.logs)
 
     def test_download_file_preserves_retry_wait_log_and_delay(self):
         with tempfile.TemporaryDirectory() as temp_dir:
