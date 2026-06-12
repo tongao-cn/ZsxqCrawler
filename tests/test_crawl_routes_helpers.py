@@ -1140,6 +1140,39 @@ class CrawlRoutesHelperTests(unittest.TestCase):
         add_task_log.assert_called_once_with("task-1", "📝 话题 10 官方评论拉取 1/2 条")
 
     @unittest.skipUnless(HAS_CRAWL_ROUTE_DEPS, "crawl route dependencies are not installed")
+    def test_official_import_page_topics_preserves_import_then_accumulate_order(self):
+        from backend.services.crawl_service import _official_import_page_topics
+
+        total_stats = {"pages": 0, "new_topics": 0, "updated_topics": 0, "errors": 0}
+        db = object()
+        client = object()
+        topics = [{"topic_id": 1}]
+        page_stats = {"new_topics": 1, "updated_topics": 2, "errors": 0}
+        calls = []
+
+        def import_topics(*args):
+            calls.append(("import", args))
+            return page_stats
+
+        def add_page_stats(*args):
+            calls.append(("add", args))
+
+        with (
+            patch("backend.services.crawl_service._official_import_topics", side_effect=import_topics),
+            patch("backend.services.crawl_service._add_official_page_stats", side_effect=add_page_stats),
+        ):
+            result = _official_import_page_topics(total_stats, db, client, "group-1", topics, "task-1")
+
+        self.assertIs(page_stats, result)
+        self.assertEqual(
+            [
+                ("import", (db, client, "group-1", topics, "task-1")),
+                ("add", (total_stats, page_stats)),
+            ],
+            calls,
+        )
+
+    @unittest.skipUnless(HAS_CRAWL_ROUTE_DEPS, "crawl route dependencies are not installed")
     def test_official_next_page_cursor_requires_has_more_and_moving_cursor(self):
         from backend.services.crawl_service import _official_next_page_cursor
 

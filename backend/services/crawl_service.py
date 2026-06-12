@@ -565,6 +565,18 @@ def _official_import_topics(
     db.conn.commit()
     return stats
 
+def _official_import_page_topics(
+    total_stats: dict[str, Any],
+    db: ZSXQDatabase,
+    client: OfficialTopicClient,
+    group_id: str,
+    topics: list[dict[str, Any]],
+    task_id: str,
+) -> dict[str, int]:
+    page_stats = _official_import_topics(db, client, group_id, topics, task_id)
+    _add_official_page_stats(total_stats, page_stats)
+    return page_stats
+
 def _official_topic_client(task_id: str) -> OfficialTopicClient:
     return OfficialTopicClient(log_callback=lambda message: add_task_log(task_id, message))
 
@@ -744,8 +756,7 @@ def _run_official_crawl_time_range_task(
 
         add_task_log(task_id, f"📄 官方本页获取 {len(topics)} 个话题，区间内 {len(filtered)} 个")
 
-        page_stats = _official_import_topics(db, client, group_id, filtered, task_id)
-        _add_official_page_stats(total_stats, page_stats)
+        _official_import_page_topics(total_stats, db, client, group_id, filtered, task_id)
 
         next_cursor = _official_next_cursor_or_log_end(task_id, payload, cursor)
         if not next_cursor:
@@ -796,8 +807,7 @@ def _run_official_crawl_pages_task(
         if should_stop:
             break
 
-        page_stats = _official_import_topics(db, client, group_id, topics_to_import, task_id)
-        _add_official_page_stats(total_stats, page_stats)
+        _official_import_page_topics(total_stats, db, client, group_id, topics_to_import, task_id)
 
         next_cursor = _official_next_cursor_or_log_end(task_id, payload, cursor)
         if not next_cursor:
