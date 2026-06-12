@@ -262,6 +262,11 @@ def _official_page_cursor(payload: dict[str, Any], current_cursor: Optional[str]
         return None
     return next_cursor
 
+def _official_next_page_cursor(payload: dict[str, Any], current_cursor: Optional[str]) -> Optional[str]:
+    if not payload.get("has_more"):
+        return None
+    return _official_page_cursor(payload, current_cursor)
+
 def _official_start_cursor_from_oldest(db: ZSXQDatabase, task_id: str, allow_empty: bool) -> Optional[str]:
     timestamp_info = db.get_timestamp_range_info()
     if not timestamp_info["has_data"]:
@@ -322,8 +327,8 @@ def _run_official_crawl_time_range_task(
         page_stats = _official_import_topics(db, client, group_id, filtered, task_id)
         _add_official_page_stats(total_stats, page_stats)
 
-        next_cursor = _official_page_cursor(payload, cursor)
-        if not payload.get("has_more") or not next_cursor:
+        next_cursor = _official_next_page_cursor(payload, cursor)
+        if not next_cursor:
             add_task_log(task_id, "✅ 官方分页已无更多数据")
             break
         cursor = next_cursor
@@ -380,8 +385,8 @@ def _run_official_crawl_pages_task(
         page_stats = _official_import_topics(db, client, group_id, topics_to_import, task_id)
         _add_official_page_stats(total_stats, page_stats)
 
-        next_cursor = _official_page_cursor(payload, cursor)
-        if not payload.get("has_more") or not next_cursor:
+        next_cursor = _official_next_page_cursor(payload, cursor)
+        if not next_cursor:
             add_task_log(task_id, "✅ 官方分页已无更多数据")
             break
         cursor = next_cursor

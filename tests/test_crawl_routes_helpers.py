@@ -435,6 +435,15 @@ class CrawlRoutesHelperTests(unittest.TestCase):
         self.assertEqual({0, 10, 11}, seen_topic_ids)
         self.assertEqual(2, total_stats["duplicates"])
 
+    @unittest.skipUnless(HAS_CRAWL_ROUTE_DEPS, "crawl route dependencies are not installed")
+    def test_official_next_page_cursor_requires_has_more_and_moving_cursor(self):
+        from backend.services.crawl_service import _official_next_page_cursor
+
+        self.assertIsNone(_official_next_page_cursor({"has_more": False, "next_end_time": "next"}, "same"))
+        self.assertIsNone(_official_next_page_cursor({"has_more": True}, "same"))
+        self.assertIsNone(_official_next_page_cursor({"has_more": True, "next_end_time": "same"}, "same"))
+        self.assertEqual("next", _official_next_page_cursor({"has_more": True, "next_end_time": "next"}, "same"))
+
 
 if __name__ == "__main__":
     unittest.main()
