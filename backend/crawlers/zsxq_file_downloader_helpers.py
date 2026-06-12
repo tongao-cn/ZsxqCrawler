@@ -191,6 +191,24 @@ def latest_file_create_time_query(query_group_id: Any) -> tuple[str, tuple[Any, 
     )
 
 
+def time_collection_mode(
+    sort: str,
+    force_refresh: bool,
+    stop_before_time: Optional[datetime.datetime],
+) -> Dict[str, Any]:
+    enable_time_dedupe = sort == "by_create_time" and not force_refresh and stop_before_time is None
+    mode_message = None
+    if force_refresh:
+        mode_message = "   🔄 强制刷新模式: 将收集所有文件（包括已存在的）"
+    elif enable_time_dedupe:
+        mode_message = "   ✅ 智能去重模式: 遇到已存在的文件将停止收集"
+    return {
+        "force_refresh": force_refresh,
+        "enable_time_dedupe": enable_time_dedupe,
+        "mode_message": mode_message,
+    }
+
+
 def summarize_page_time_range(files: list[Dict[str, Any]]) -> tuple[Optional[str], Optional[str]]:
     timestamps: list[datetime.datetime] = []
     for item in files:

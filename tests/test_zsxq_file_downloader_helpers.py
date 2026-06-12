@@ -50,6 +50,7 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     should_log_full_response,
     summarize_page_time_range,
     time_collection_final_summary,
+    time_collection_mode,
     time_dedupe_page_plan,
 )
 
@@ -538,6 +539,23 @@ class FileDownloaderTimeHelperTests(unittest.TestCase):
         self.assertIn("group_id = ?", query)
         self.assertIn("create_time IS NOT NULL AND create_time != ''", query)
         self.assertEqual((511,), params)
+
+    def test_time_collection_mode_preserves_dedupe_and_force_refresh_rules(self):
+        default_mode = time_collection_mode("by_create_time", False, None)
+        self.assertTrue(default_mode["enable_time_dedupe"])
+        self.assertEqual("   ✅ 智能去重模式: 遇到已存在的文件将停止收集", default_mode["mode_message"])
+
+        force_mode = time_collection_mode("by_create_time", True, None)
+        self.assertFalse(force_mode["enable_time_dedupe"])
+        self.assertEqual("   🔄 强制刷新模式: 将收集所有文件（包括已存在的）", force_mode["mode_message"])
+
+        bounded_mode = time_collection_mode("by_create_time", False, datetime.datetime(2026, 5, 1))
+        self.assertFalse(bounded_mode["enable_time_dedupe"])
+        self.assertIsNone(bounded_mode["mode_message"])
+
+        heat_mode = time_collection_mode("by_download_count", False, None)
+        self.assertFalse(heat_mode["enable_time_dedupe"])
+        self.assertIsNone(heat_mode["mode_message"])
 
     def test_page_crosses_stop_before_returns_oldest_time(self):
         crossed, oldest = page_crosses_stop_before(

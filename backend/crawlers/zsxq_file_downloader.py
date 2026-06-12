@@ -52,6 +52,7 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     should_log_full_response,
     summarize_page_time_range,
     time_collection_final_summary,
+    time_collection_mode,
     time_dedupe_page_plan,
 )
 from backend.storage.postgres_core_schema import CORE_SCHEMA
@@ -1165,12 +1166,10 @@ class ZSXQFileDownloader:
         if stop_before_time:
             self.log(f"   🎯 收集边界: 覆盖到 {stop_before_time.strftime('%Y-%m-%d')} 即停止")
 
-        force_refresh = kwargs.get('force_refresh', False)
-        enable_time_dedupe = sort == "by_create_time" and not force_refresh and stop_before_time is None
-        if force_refresh:
-            self.log(f"   🔄 强制刷新模式: 将收集所有文件（包括已存在的）")
-        elif enable_time_dedupe:
-            self.log(f"   ✅ 智能去重模式: 遇到已存在的文件将停止收集")
+        mode = time_collection_mode(sort, kwargs.get('force_refresh', False), stop_before_time)
+        enable_time_dedupe = mode["enable_time_dedupe"]
+        if mode["mode_message"]:
+            self.log(mode["mode_message"])
 
         # 检查是否需要停止
         if self.check_stop():
