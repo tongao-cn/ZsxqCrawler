@@ -472,6 +472,50 @@ class CrawlRoutesHelperTests(unittest.TestCase):
         self.assertEqual({"new_topics": 1, "updated_topics": 1, "errors": 2}, stats)
 
     @unittest.skipUnless(HAS_CRAWL_ROUTE_DEPS, "crawl route dependencies are not installed")
+    def test_official_import_topic_preserves_existence_query_group_id_and_result_mapping(self):
+        from backend.services.crawl_service import _official_import_topic
+
+        class FakeCursor:
+            def __init__(self):
+                self.execute_calls = []
+                self.rows = [("10",), None, None]
+
+            def execute(self, query, params):
+                self.execute_calls.append((query, params))
+
+            def fetchone(self):
+                return self.rows.pop(0)
+
+        class FakeDb:
+            def __init__(self):
+                self.cursor = FakeCursor()
+                self.imported = []
+                self.import_results = [True, True, False]
+
+            def import_topic_data(self, topic_data):
+                self.imported.append(topic_data)
+                return self.import_results.pop(0)
+
+        db = FakeDb()
+        existing_topic = {"topic_id": "10"}
+        missing_id_topic = {"title": "missing"}
+        failed_topic = {"topic_id": 12}
+
+        self.assertEqual("updated", _official_import_topic(db, "511", existing_topic))
+        self.assertEqual("new", _official_import_topic(db, "group-1", missing_id_topic))
+        self.assertEqual("error", _official_import_topic(db, "group-2", failed_topic))
+
+        self.assertEqual(
+            [
+                ("SELECT topic_id FROM topics WHERE topic_id = ? AND group_id = ?", ("10", 511)),
+                ("SELECT topic_id FROM topics WHERE topic_id = ? AND group_id = ?", (None, "group-1")),
+                ("SELECT topic_id FROM topics WHERE topic_id = ? AND group_id = ?", (12, "group-2")),
+            ],
+            db.cursor.execute_calls,
+        )
+        self.assertEqual([existing_topic, missing_id_topic, failed_topic], db.imported)
+
+    @unittest.skipUnless(HAS_CRAWL_ROUTE_DEPS, "crawl route dependencies are not installed")
     def test_official_import_topics_preserves_comment_count_stats_and_commit(self):
         from backend.services.crawl_service import _official_import_topics
 

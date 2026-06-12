@@ -190,16 +190,12 @@ def _query_group_id(group_id: str) -> Any:
 
 def _official_import_topic(db: ZSXQDatabase, group_id: str, topic_data: dict[str, Any]) -> str:
     topic_id = topic_data.get("topic_id")
-    db.cursor.execute(
-        "SELECT topic_id FROM topics WHERE topic_id = ? AND group_id = ?",
-        (topic_id, _query_group_id(group_id)),
-    )
-    exists = db.cursor.fetchone()
+    exists = _official_topic_exists(db, group_id, topic_id)
     if not db.import_topic_data(topic_data):
         return "error"
     return "updated" if exists else "new"
 
-def _official_topic_exists(db: ZSXQDatabase, group_id: str, topic_id: int) -> bool:
+def _official_topic_exists(db: ZSXQDatabase, group_id: str, topic_id: Any) -> bool:
     db.cursor.execute(
         "SELECT topic_id FROM topics WHERE topic_id = ? AND group_id = ?",
         (topic_id, _query_group_id(group_id)),

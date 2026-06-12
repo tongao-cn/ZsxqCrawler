@@ -7641,6 +7641,53 @@ Result:
 - Frontend build passed, including Next.js lint/type checks.
 - `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
 
+### 2026-06-12 - P4 official import existence helper reuse
+
+Changed:
+
+- Added characterization coverage for `_official_import_topic` existence-query parameters, numeric
+  group ID conversion, missing-topic-ID behavior, import call order, and import result mapping.
+- Reused `_official_topic_exists` inside `_official_import_topic`.
+- Broadened `_official_topic_exists` topic-ID parameter typing to reflect current callers that pass
+  integer IDs, string IDs, and missing IDs.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- `_official_import_topic` still checks existence before calling `import_topic_data`.
+- Existing topics still return `updated` after a successful import.
+- Missing existing rows still return `new` after a successful import.
+- Failed imports still return `error`, regardless of the existence check result.
+- The existence query SQL, group ID normalization, query parameter order, missing `topic_id`
+  behavior, official request/import loops, update-task payloads, schema/config/API behavior, public
+  API behavior, and legacy cookie-based crawler behavior are unchanged.
+- This does not introduce, remove, or alter legacy/fallback behavior.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_crawl_routes_helpers.CrawlRoutesHelperTests.test_official_import_topic_preserves_existence_query_group_id_and_result_mapping tests.test_crawl_routes_helpers.CrawlRoutesHelperTests.test_official_import_topics_preserves_comment_count_stats_and_commit -v
+uv run python -m py_compile backend\services\crawl_service.py tests\test_crawl_routes_helpers.py
+uv run python -m unittest tests.test_crawl_routes_helpers -v
+uv run python -m unittest tests.test_official_topic_client_helpers -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+git diff --check
+```
+
+Result:
+
+- New official import-topic characterization test passed before and after helper reuse.
+- Existing official import batch characterization test passed.
+- `py_compile` passed.
+- `tests.test_crawl_routes_helpers`: 32 tests passed.
+- `tests.test_official_topic_client_helpers`: 16 tests passed.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Full backend unittest discovery: 748 tests passed, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+- `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
+
 ## Stop Conditions
 
 Pause before editing if:
