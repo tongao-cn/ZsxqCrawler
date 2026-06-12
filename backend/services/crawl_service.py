@@ -565,6 +565,9 @@ def _official_import_topics(
     db.conn.commit()
     return stats
 
+def _official_topic_client(task_id: str) -> OfficialTopicClient:
+    return OfficialTopicClient(log_callback=lambda message: add_task_log(task_id, message))
+
 def _empty_official_crawl_stats() -> dict[str, Any]:
     return {
         "new_topics": 0,
@@ -697,7 +700,7 @@ def _run_official_crawl_time_range_task(
     end_dt: datetime,
 ) -> None:
     add_task_log(task_id, "🔁 使用官方话题采集流程（MCP HTTP）")
-    client = OfficialTopicClient(log_callback=lambda message: add_task_log(task_id, message))
+    client = _official_topic_client(task_id)
     db = ZSXQDatabase(group_id)
     per_page = _official_per_page_limit(request.perPage)
     if request.perPage and request.perPage > 30:
@@ -745,7 +748,7 @@ def _run_official_crawl_pages_task(
     mode: str,
     start_cursor: Optional[str] = None,
 ) -> None:
-    client = OfficialTopicClient(log_callback=lambda message: add_task_log(task_id, message))
+    client = _official_topic_client(task_id)
     db = ZSXQDatabase(group_id)
     per_page = _official_per_page_limit(per_page)
     cursor = start_cursor

@@ -1281,6 +1281,22 @@ class CrawlRoutesHelperTests(unittest.TestCase):
         )
 
     @unittest.skipUnless(HAS_CRAWL_ROUTE_DEPS, "crawl route dependencies are not installed")
+    def test_official_topic_client_preserves_log_callback_binding(self):
+        from backend.services.crawl_service import _official_topic_client
+
+        with (
+            patch("backend.services.crawl_service.OfficialTopicClient") as client_cls,
+            patch("backend.services.crawl_service.add_task_log") as add_task_log,
+        ):
+            client = _official_topic_client("task-1")
+            callback = client_cls.call_args.kwargs["log_callback"]
+            callback("client log")
+
+        self.assertIs(client, client_cls.return_value)
+        client_cls.assert_called_once()
+        add_task_log.assert_called_once_with("task-1", "client log")
+
+    @unittest.skipUnless(HAS_CRAWL_ROUTE_DEPS, "crawl route dependencies are not installed")
     def test_fetch_official_topic_page_preserves_call_shape_and_payload_topics(self):
         from backend.services.crawl_service import _fetch_official_topic_page
 
