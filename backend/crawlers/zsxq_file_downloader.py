@@ -583,27 +583,18 @@ class ZSXQFileDownloader:
                     file_name, safe_filename, file_path = filename_override
 
                 if response.status_code == 200:
-                    total_size, expected_size, temp_path = self._prepare_download_body_target(
-                        response.headers,
+                    success_result, failure_detail = self._handle_successful_download_response(
+                        response,
+                        file_id,
                         file_size,
+                        safe_filename,
                         file_path,
                     )
-
-                    downloaded_size = self._write_download_response_body(
-                        response,
-                        temp_path,
-                        total_size,
-                        file_id,
-                    )
-                    if downloaded_size is None:
+                    if success_result is False:
                         return False
-
-                    mismatch_detail = self._handle_download_size_mismatch(expected_size, temp_path)
-                    if mismatch_detail:
-                        last_error_code, last_error = mismatch_detail
+                    if failure_detail:
+                        last_error_code, last_error = failure_detail
                         continue
-
-                    self._complete_successful_download(file_id, safe_filename, file_path, temp_path)
                     return True
 
                 last_error_code, last_error = self._record_download_http_failure(response.status_code)
@@ -793,6 +784,36 @@ class ZSXQFileDownloader:
         temp_path = partial_download_path(file_path)
         remove_partial_download(temp_path)
         return total_size, expected_size, temp_path
+
+    def _handle_successful_download_response(
+        self,
+        response,
+        file_id: int,
+        file_size: int,
+        safe_filename: str,
+        file_path: str,
+    ) -> tuple[Optional[bool], Optional[tuple[str, str]]]:
+        total_size, expected_size, temp_path = self._prepare_download_body_target(
+            response.headers,
+            file_size,
+            file_path,
+        )
+
+        downloaded_size = self._write_download_response_body(
+            response,
+            temp_path,
+            total_size,
+            file_id,
+        )
+        if downloaded_size is None:
+            return False, None
+
+        mismatch_detail = self._handle_download_size_mismatch(expected_size, temp_path)
+        if mismatch_detail:
+            return None, mismatch_detail
+
+        self._complete_successful_download(file_id, safe_filename, file_path, temp_path)
+        return True, None
 
     def _handle_download_size_mismatch(
         self,

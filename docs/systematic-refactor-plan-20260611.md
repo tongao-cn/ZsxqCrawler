@@ -6567,6 +6567,56 @@ Result:
 - Frontend build passed, including Next.js lint/type checks.
 - `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
 
+### 2026-06-12 - P9 file downloader successful response helper
+
+Changed:
+
+- Re-ran existing characterization coverage for successful completion, stop-during-body, and
+  repeated size-mismatch behavior before the production extraction.
+- Added direct helper coverage for HTTP 200 response handling across completion, retryable
+  size mismatch, and stopped body-write paths.
+- Added `ZSXQFileDownloader._handle_successful_download_response` and reused it from
+  `download_file`.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- HTTP 200 responses still prepare the same `Content-Length`/expected-size/`.part` target before
+  body writing.
+- Body writing still preserves progress logging, stop checks, and stop status updates.
+- Size mismatch still logs the same warning, removes the `.part` file, returns the same
+  `size_mismatch` detail to the outer retry loop, and retries until the existing retry limit.
+- Successful body writes still replace the final file, log completion and path, update status to
+  `completed`, increment counters, and apply existing interval behavior.
+- Signed URL lookup, response request, response filename override, HTTP failure handling,
+  exception cleanup, final failure handling, schema/config/API behavior, and public API behavior
+  are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_download_file_finalizes_success_with_status_counters_logs_and_interval tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_download_file_stops_during_body_download tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_download_file_retries_and_fails_on_size_mismatch -v
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_handle_successful_download_response_preserves_completion_retry_and_stop_paths tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_download_file_finalizes_success_with_status_counters_logs_and_interval tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_download_file_stops_during_body_download tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_download_file_retries_and_fails_on_size_mismatch -v
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+git diff --check
+```
+
+Result:
+
+- Pre-refactor HTTP 200 response characterization tests passed against the original inline
+  branch.
+- `py_compile` passed.
+- Focused successful-response/download tests passed.
+- `tests.test_zsxq_file_downloader_helpers`: 75 tests passed.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Full backend unittest discovery: 717 tests passed, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+- `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
+
 ## Stop Conditions
 
 Pause before editing if:
