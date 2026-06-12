@@ -8125,6 +8125,54 @@ Result:
 - Frontend build passed, including Next.js lint/type checks.
 - `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
 
+### 2026-06-12 - P4 legacy time-range before-start helper
+
+Changed:
+
+- Added characterization coverage for a legacy time-range page whose oldest valid topic is before
+  the requested start time.
+- Extracted `_legacy_time_range_reached_before_start` in `backend/services/crawl_service.py`.
+- Reused the helper for both the inner page-loop log branch and the outer loop exit branch.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- The branch still logs `✅ 已到达起始时间之前，任务结束` only after a page with topics is
+  processed and the last valid topic timestamp is strictly before `start_dt`.
+- Such a page still counts as one processed page, skips storage when no topics are in range, does
+  not call `check_page_long_delay`, exits the outer loop, and completes with the same stats payload.
+- Empty-page completion, max-retry handling, expired handling, retry logging, filtered topic
+  storage, next-page cursor computation, stop checks, public API behavior, task status semantics,
+  schema/config behavior, official MCP HTTP behavior, and cookie-based crawler behavior are
+  unchanged.
+- No legacy/fallback behavior was removed.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_crawl_routes_helpers.CrawlRoutesHelperTests.test_legacy_time_range_stops_when_page_is_before_start_time -v
+uv run python -m unittest tests.test_crawl_routes_helpers.CrawlRoutesHelperTests.test_legacy_time_range_stops_when_page_is_before_start_time tests.test_crawl_routes_helpers.CrawlRoutesHelperTests.test_legacy_time_range_filters_topics_and_advances_end_time tests.test_crawl_routes_helpers.CrawlRoutesHelperTests.test_legacy_time_range_counts_unstored_out_of_range_page tests.test_crawl_routes_helpers.CrawlRoutesHelperTests.test_legacy_time_range_stops_after_max_failed_page_fetches tests.test_crawl_routes_helpers.CrawlRoutesHelperTests.test_time_range_crawl_stops_after_empty_page -v
+uv run python -m py_compile backend\services\crawl_service.py tests\test_crawl_routes_helpers.py
+uv run python -m unittest tests.test_crawl_routes_helpers -v
+uv run python -m unittest tests.test_official_topic_client_helpers -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+git diff --check
+```
+
+Result:
+
+- New before-start characterization test passed before and after helper extraction.
+- Focused legacy time-range tests passed after helper extraction.
+- `py_compile` passed.
+- `tests.test_crawl_routes_helpers`: 43 tests passed.
+- `tests.test_official_topic_client_helpers`: 16 tests passed.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Full backend unittest discovery: 759 tests passed, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+- `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
+
 ## Stop Conditions
 
 Pause before editing if:

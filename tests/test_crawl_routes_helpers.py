@@ -552,6 +552,54 @@ class CrawlRoutesHelperTests(unittest.TestCase):
         )
 
     @unittest.skipUnless(HAS_CRAWL_ROUTE_DEPS, "crawl route dependencies are not installed")
+    def test_legacy_time_range_stops_when_page_is_before_start_time(self):
+        from backend.routes.crawl_routes import CrawlTimeRangeRequest
+        from backend.services.crawl_service import run_crawl_time_range_task
+
+        crawler = TimeRangeCrawler(
+            [
+                {
+                    "succeeded": True,
+                    "resp_data": {
+                        "topics": [
+                            {"topic_id": 1, "create_time": "2026-01-31T23:59:59.999+0800"},
+                        ]
+                    },
+                },
+            ]
+        )
+
+        with (
+            patch("backend.services.crawl_service.get_cookie_for_group", return_value="cookie"),
+            patch("backend.services.crawl_service.ZSXQTopicCrawler", return_value=crawler),
+            patch("backend.services.crawl_service.is_task_stopped", return_value=False),
+            patch("backend.services.crawl_service.add_task_log") as add_task_log,
+            patch("backend.services.crawl_service.update_task") as update_task,
+            patch("backend.services.crawl_service.unregister_task_crawler"),
+        ):
+            run_crawl_time_range_task(
+                "task-1",
+                "group-1",
+                CrawlTimeRangeRequest(
+                    startTime="2026-02-01",
+                    endTime="2026-02-02",
+                    perPage=20,
+                    topicSource="legacy",
+                ),
+            )
+
+        self.assertEqual(1, len(crawler.fetch_calls))
+        self.assertEqual([], crawler.store_calls)
+        self.assertEqual(0, crawler.delay_calls)
+        add_task_log.assert_any_call("task-1", "✅ 已到达起始时间之前，任务结束")
+        update_task.assert_any_call(
+            "task-1",
+            "completed",
+            "时间区间爬取完成",
+            {"new_topics": 0, "updated_topics": 0, "errors": 0, "pages": 1},
+        )
+
+    @unittest.skipUnless(HAS_CRAWL_ROUTE_DEPS, "crawl route dependencies are not installed")
     def test_legacy_time_range_retries_failed_page_fetch(self):
         from backend.routes.crawl_routes import CrawlTimeRangeRequest
         from backend.services.crawl_service import run_crawl_time_range_task

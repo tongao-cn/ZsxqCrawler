@@ -253,6 +253,12 @@ def _legacy_time_range_page_failed(task_id: str, page_processed: bool) -> bool:
     add_task_log(task_id, "🚫 当前页面达到最大重试次数，终止任务")
     return True
 
+def _legacy_time_range_reached_before_start(
+    last_time_dt_in_page: Optional[datetime],
+    start_dt: datetime,
+) -> bool:
+    return last_time_dt_in_page is not None and last_time_dt_in_page < start_dt
+
 def _query_group_id(group_id: str) -> Any:
     value = str(group_id or "").strip()
     return int(value) if value.isdigit() else value
@@ -779,7 +785,7 @@ def run_crawl_time_range_task(task_id: str, group_id: str, request: Any):
 
                 end_time_param = _legacy_next_end_time(topics, crawler.timestamp_offset_ms)
 
-                if last_time_dt_in_page and last_time_dt_in_page < start_dt:
+                if _legacy_time_range_reached_before_start(last_time_dt_in_page, start_dt):
                     add_task_log(task_id, "✅ 已到达起始时间之前，任务结束")
                     break
 
@@ -789,7 +795,7 @@ def run_crawl_time_range_task(task_id: str, group_id: str, request: Any):
             if _legacy_time_range_page_failed(task_id, page_processed):
                 break
 
-            if reached_end or (last_time_dt_in_page and last_time_dt_in_page < start_dt):
+            if reached_end or _legacy_time_range_reached_before_start(last_time_dt_in_page, start_dt):
                 break
 
         update_task(task_id, "completed", "时间区间爬取完成", total_stats)
