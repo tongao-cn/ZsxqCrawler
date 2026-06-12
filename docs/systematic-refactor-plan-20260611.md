@@ -8825,6 +8825,60 @@ Result:
 - Frontend build passed, including Next.js lint/type checks.
 - `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
 
+### 2026-06-12 - P4 legacy time-range page helper
+
+Changed:
+
+- Reused existing legacy time-range characterization coverage for retryable empty fetches,
+  max-retry termination, expired responses, empty pages, normal filtered pages, before-start
+  termination, and outer-stop completion.
+- Added `_LegacyTimeRangePageResult` and `_process_legacy_time_range_page` in
+  `backend/services/crawl_service.py`.
+- Moved the inner legacy page fetch/retry/expired/empty/non-empty handling loop out of
+  `run_crawl_time_range_task`, leaving the outer loop responsible for task stop checks,
+  page-failed handling, finish checks, and final task completion.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Empty/falsey fetch responses still increment retry errors and retry up to
+  `LEGACY_TIME_RANGE_MAX_RETRIES_PER_PAGE`.
+- Expired responses still log/fail with the original payload and skip the final completed update.
+- Empty pages still mark the page processed, set reached-end, and complete with the existing stats.
+- Non-empty pages still filter/store/log/update cursor/run before-start logic via the existing
+  non-empty-page helper.
+- Inner-loop task-stop checks, max-retry failure logs, outer-stop completion, fetch call shape,
+  initial cursor formatting, default and explicit `perPage`, invalid timestamp fallback,
+  before-start stopping, public API behavior, task status semantics, schema/config behavior,
+  official MCP HTTP behavior, and cookie-based crawler behavior are unchanged.
+- No legacy/fallback behavior was removed.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_crawl_routes_helpers.CrawlRoutesHelperTests.test_legacy_time_range_retries_failed_page_fetch tests.test_crawl_routes_helpers.CrawlRoutesHelperTests.test_legacy_time_range_stops_after_max_failed_page_fetches tests.test_crawl_routes_helpers.CrawlRoutesHelperTests.test_legacy_time_range_expired_response_fails_with_original_payload tests.test_crawl_routes_helpers.CrawlRoutesHelperTests.test_time_range_crawl_stops_after_empty_page tests.test_crawl_routes_helpers.CrawlRoutesHelperTests.test_legacy_time_range_filters_topics_and_advances_end_time tests.test_crawl_routes_helpers.CrawlRoutesHelperTests.test_legacy_time_range_stops_when_page_is_before_start_time tests.test_crawl_routes_helpers.CrawlRoutesHelperTests.test_legacy_time_range_outer_stop_completes_without_fetching -v
+uv run python -m py_compile backend\services\crawl_service.py tests\test_crawl_routes_helpers.py
+uv run python scripts\scan_postgres_compat_debt.py
+uv run python -m unittest tests.test_crawl_routes_helpers -v
+uv run python -m unittest tests.test_official_topic_client_helpers -v
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+git diff --check
+```
+
+Result:
+
+- Pre-extraction focused retry, max-retry, expired, empty-page, filtered-page, before-start, and
+  outer-stop tests passed.
+- The same focused tests passed after extracting the page helper.
+- `py_compile` passed.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- `tests.test_crawl_routes_helpers`: 45 tests passed.
+- `tests.test_official_topic_client_helpers`: 16 tests passed.
+- Full backend unittest discovery: 761 tests passed, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+- `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
+
 ## Stop Conditions
 
 Pause before editing if:
