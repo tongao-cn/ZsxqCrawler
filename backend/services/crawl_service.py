@@ -247,6 +247,12 @@ def _mark_legacy_time_range_expired(task_id: str, data: dict[str, Any]) -> None:
     add_task_log(task_id, f"❌ 会员已过期: {data.get('message')}")
     update_task(task_id, "failed", "会员已过期", data)
 
+def _legacy_time_range_page_empty(task_id: str, topics: list[dict[str, Any]]) -> bool:
+    if topics:
+        return False
+    add_task_log(task_id, "📭 无更多数据，任务结束")
+    return True
+
 def _legacy_time_range_page_failed(task_id: str, page_processed: bool) -> bool:
     if page_processed:
         return False
@@ -770,8 +776,7 @@ def run_crawl_time_range_task(task_id: str, group_id: str, request: Any):
                     continue
 
                 topics = (data.get("resp_data", {}) or {}).get("topics", []) or []
-                if not topics:
-                    add_task_log(task_id, "📭 无更多数据，任务结束")
+                if _legacy_time_range_page_empty(task_id, topics):
                     page_processed = True
                     reached_end = True
                     break

@@ -8173,6 +8173,51 @@ Result:
 - Frontend build passed, including Next.js lint/type checks.
 - `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
 
+### 2026-06-12 - P4 legacy time-range empty-page helper
+
+Changed:
+
+- Reused the existing empty-page characterization coverage in `tests.test_crawl_routes_helpers`.
+- Extracted `_legacy_time_range_page_empty` in `backend/services/crawl_service.py`.
+- Kept `page_processed`, `reached_end`, and loop `break` assignments at the original call site so
+  the legacy control flow remains visible and unchanged.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Empty legacy time-range pages still log `📭 无更多数据，任务结束`, do not increment page stats,
+  exit the outer crawl loop, and complete with the same stats payload.
+- Fetch retry, expired handling, filtered topic storage, before-start stopping, next-page cursor
+  computation, stop checks, public API behavior, task status semantics, schema/config behavior,
+  official MCP HTTP behavior, and cookie-based crawler behavior are unchanged.
+- No legacy/fallback behavior was removed.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_crawl_routes_helpers.CrawlRoutesHelperTests.test_time_range_crawl_stops_after_empty_page -v
+uv run python -m unittest tests.test_crawl_routes_helpers.CrawlRoutesHelperTests.test_time_range_crawl_stops_after_empty_page tests.test_crawl_routes_helpers.CrawlRoutesHelperTests.test_legacy_time_range_filters_topics_and_advances_end_time tests.test_crawl_routes_helpers.CrawlRoutesHelperTests.test_legacy_time_range_counts_unstored_out_of_range_page tests.test_crawl_routes_helpers.CrawlRoutesHelperTests.test_legacy_time_range_stops_when_page_is_before_start_time tests.test_crawl_routes_helpers.CrawlRoutesHelperTests.test_legacy_time_range_stops_after_max_failed_page_fetches -v
+uv run python -m py_compile backend\services\crawl_service.py tests\test_crawl_routes_helpers.py
+uv run python scripts\scan_postgres_compat_debt.py
+uv run python -m unittest tests.test_crawl_routes_helpers -v
+uv run python -m unittest tests.test_official_topic_client_helpers -v
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+git diff --check
+```
+
+Result:
+
+- Existing empty-page characterization test passed before and after helper extraction.
+- Focused legacy time-range tests passed after helper extraction.
+- `py_compile` passed.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- `tests.test_crawl_routes_helpers`: 43 tests passed.
+- `tests.test_official_topic_client_helpers`: 16 tests passed.
+- Full backend unittest discovery: 759 tests passed, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+- `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
+
 ## Stop Conditions
 
 Pause before editing if:
