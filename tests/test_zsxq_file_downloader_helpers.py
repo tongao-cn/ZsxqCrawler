@@ -896,6 +896,61 @@ class FileDownloaderDownloadTests(unittest.TestCase):
             downloader.logs,
         )
 
+    def test_download_file_retries_after_size_mismatch_before_success(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            session = FakeDownloadSession([
+                FakeDownloadResponse(200, b"bad"),
+                FakeDownloadResponse(200, b"memo"),
+            ])
+            downloader = self._downloader_for_download(temp_dir, session)
+
+            with patch("backend.crawlers.zsxq_file_downloader.time.sleep"):
+                result = ZSXQFileDownloader.download_file(
+                    downloader,
+                    {"file": {"id": 101, "name": "memo.pdf", "size": 4, "download_count": 0}},
+                )
+
+            self.assertTrue(result)
+            self.assertEqual(2, len(session.get_calls))
+            self.assertEqual(
+                (101, "completed", str(Path(temp_dir) / "memo.pdf")),
+                downloader.file_db.status_updates[-1][:3],
+            )
+            self.assertEqual(b"memo", (Path(temp_dir) / "memo.pdf").read_bytes())
+            self.assertFalse((Path(temp_dir) / "memo.pdf.part").exists())
+            self.assertIn("   ⚠️ 文件大小不匹配: 预期4, 实际3", downloader.logs)
+
+    def test_handle_download_size_mismatch_preserves_cleanup_and_noop_paths(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            downloader = object.__new__(ZSXQFileDownloader)
+            downloader.logs = []
+            downloader.log = downloader.logs.append
+
+            mismatch_path = Path(temp_dir) / "mismatch.pdf.part"
+            mismatch_path.write_bytes(b"bad")
+            mismatch_detail = ZSXQFileDownloader._handle_download_size_mismatch(
+                downloader,
+                4,
+                str(mismatch_path),
+            )
+
+            matching_path = Path(temp_dir) / "matching.pdf.part"
+            matching_path.write_bytes(b"memo")
+            matching_detail = ZSXQFileDownloader._handle_download_size_mismatch(
+                downloader,
+                4,
+                str(matching_path),
+            )
+
+            self.assertEqual(
+                ("size_mismatch", "文件大小不匹配: 预期4, 实际3"),
+                mismatch_detail,
+            )
+            self.assertFalse(mismatch_path.exists())
+            self.assertIsNone(matching_detail)
+            self.assertTrue(matching_path.exists())
+            self.assertEqual(["   ⚠️ 文件大小不匹配: 预期4, 实际3"], downloader.logs)
+
     def test_download_file_retries_and_fails_on_size_mismatch(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             session = FakeDownloadSession([

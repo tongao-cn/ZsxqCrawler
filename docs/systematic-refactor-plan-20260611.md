@@ -6157,6 +6157,52 @@ Result:
 - Frontend build passed, including Next.js lint/type checks.
 - `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
 
+### 2026-06-12 - P9 file downloader size mismatch helper
+
+Changed:
+
+- Added characterization coverage for a size-mismatched body download being deleted and then
+  retried successfully on the next response.
+- Added direct helper coverage for mismatch cleanup and matching-size no-op behavior.
+- Added `ZSXQFileDownloader._handle_download_size_mismatch` and reused it from
+  `download_file`.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Size mismatch still logs `"   ⚠️ 文件大小不匹配: ..."` and deletes the `.part` file before
+  continuing the retry loop.
+- Matching file size still leaves the `.part` file in place for normal success finalization.
+- Repeated size mismatches still exhaust the configured retry count and preserve the final
+  `size_mismatch` failure status.
+- Download URL failures, HTTP/body failures, stop handling, success finalization, partial cleanup
+  in exception paths, schema/config/API behavior, and public API behavior are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_download_file_retries_after_size_mismatch_before_success tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_download_file_retries_and_fails_on_size_mismatch tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_download_file_retries_body_download_once -v
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_handle_download_size_mismatch_preserves_cleanup_and_noop_paths tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_download_file_retries_after_size_mismatch_before_success tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_download_file_retries_and_fails_on_size_mismatch tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_download_file_retries_body_download_once -v
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+git diff --check
+```
+
+Result:
+
+- Pre-refactor size-mismatch retry characterization tests passed against the original inline
+  mismatch branch.
+- `py_compile` passed.
+- Focused size-mismatch/download tests passed.
+- `tests.test_zsxq_file_downloader_helpers`: 59 tests passed.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Full backend unittest discovery: 701 tests passed, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+- `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
+
 ## Stop Conditions
 
 Pause before editing if:

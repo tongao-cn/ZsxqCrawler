@@ -618,13 +618,9 @@ class ZSXQFileDownloader:
                     if downloaded_size is None:
                         return False
 
-                    # 验证文件大小
-                    final_size = os.path.getsize(temp_path)
-                    mismatch_detail = download_size_mismatch_detail(expected_size, final_size)
+                    mismatch_detail = self._handle_download_size_mismatch(expected_size, temp_path)
                     if mismatch_detail:
                         last_error_code, last_error = mismatch_detail
-                        self.log(f"   ⚠️ {last_error}")
-                        os.remove(temp_path)
                         continue
 
                     self._complete_successful_download(file_id, safe_filename, file_path, temp_path)
@@ -735,6 +731,21 @@ class ZSXQFileDownloader:
                         return None
 
         return downloaded_size
+
+    def _handle_download_size_mismatch(
+        self,
+        expected_size: int,
+        temp_path: str,
+    ) -> Optional[tuple[str, str]]:
+        final_size = os.path.getsize(temp_path)
+        mismatch_detail = download_size_mismatch_detail(expected_size, final_size)
+        if not mismatch_detail:
+            return None
+
+        _error_code, error_message = mismatch_detail
+        self.log(f"   ⚠️ {error_message}")
+        os.remove(temp_path)
+        return mismatch_detail
 
     def _handle_download_stop(self, file_id: int, temp_path: str) -> None:
         self.log("🛑 下载过程中被停止")
