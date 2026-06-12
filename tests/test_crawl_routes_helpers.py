@@ -380,6 +380,32 @@ class CrawlRoutesHelperTests(unittest.TestCase):
         )
 
     @unittest.skipUnless(HAS_CRAWL_ROUTE_DEPS, "crawl route dependencies are not installed")
+    def test_legacy_time_range_uses_default_per_page_when_missing(self):
+        from backend.routes.crawl_routes import CrawlTimeRangeRequest
+        from backend.services.crawl_service import run_crawl_time_range_task
+
+        crawler = EmptyPageCrawler("cookie", "group-1", lambda message: None)
+
+        with (
+            patch("backend.services.crawl_service.get_cookie_for_group", return_value="cookie"),
+            patch("backend.services.crawl_service.ZSXQTopicCrawler", return_value=crawler),
+            patch("backend.services.crawl_service.is_task_stopped", return_value=False),
+            patch("backend.services.crawl_service.add_task_log"),
+            patch("backend.services.crawl_service.update_task"),
+        ):
+            run_crawl_time_range_task(
+                "task-1",
+                "group-1",
+                CrawlTimeRangeRequest(
+                    startTime="2026-02-01",
+                    endTime="2026-02-01",
+                    topicSource="legacy",
+                ),
+            )
+
+        self.assertEqual(20, crawler.fetch_calls[0]["count"])
+
+    @unittest.skipUnless(HAS_CRAWL_ROUTE_DEPS, "crawl route dependencies are not installed")
     def test_legacy_time_range_outer_stop_completes_without_fetching(self):
         from backend.routes.crawl_routes import CrawlTimeRangeRequest
         from backend.services.crawl_service import run_crawl_time_range_task
