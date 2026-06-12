@@ -285,6 +285,9 @@ def _fetch_legacy_time_range_page(
         is_historical=True,
     )
 
+def _legacy_time_range_topics(data: dict[str, Any]) -> list[dict[str, Any]]:
+    return (data.get("resp_data", {}) or {}).get("topics", []) or []
+
 def _query_group_id(group_id: str) -> Any:
     value = str(group_id or "").strip()
     return int(value) if value.isdigit() else value
@@ -793,7 +796,7 @@ def run_crawl_time_range_task(task_id: str, group_id: str, request: Any):
                     )
                     continue
 
-                topics = (data.get("resp_data", {}) or {}).get("topics", []) or []
+                topics = _legacy_time_range_topics(data)
                 if _legacy_time_range_page_empty(task_id, topics):
                     page_processed = True
                     reached_end = True
