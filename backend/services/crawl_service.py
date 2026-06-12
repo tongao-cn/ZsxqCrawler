@@ -235,6 +235,12 @@ def _empty_official_crawl_stats() -> dict[str, Any]:
         "source": "official",
     }
 
+def _add_official_page_stats(total_stats: dict[str, Any], page_stats: dict[str, int]) -> None:
+    total_stats["new_topics"] += page_stats["new_topics"]
+    total_stats["updated_topics"] += page_stats["updated_topics"]
+    total_stats["errors"] += page_stats["errors"]
+    total_stats["pages"] += 1
+
 def _official_page_cursor(payload: dict[str, Any], current_cursor: Optional[str]) -> Optional[str]:
     next_cursor = payload.get("next_end_time")
     if not next_cursor or next_cursor == current_cursor:
@@ -305,10 +311,7 @@ def _run_official_crawl_time_range_task(
         add_task_log(task_id, f"📄 官方本页获取 {len(topics)} 个话题，区间内 {len(filtered)} 个")
 
         page_stats = _official_import_topics(db, client, group_id, filtered, task_id)
-        total_stats["new_topics"] += page_stats["new_topics"]
-        total_stats["updated_topics"] += page_stats["updated_topics"]
-        total_stats["errors"] += page_stats["errors"]
-        total_stats["pages"] += 1
+        _add_official_page_stats(total_stats, page_stats)
 
         next_cursor = _official_page_cursor(payload, cursor)
         if not payload.get("has_more") or not next_cursor:
@@ -373,10 +376,7 @@ def _run_official_crawl_pages_task(
             add_task_log(task_id, f"📄 官方本页获取 {len(unique_topics)} 个话题")
 
         page_stats = _official_import_topics(db, client, group_id, topics_to_import, task_id)
-        total_stats["new_topics"] += page_stats["new_topics"]
-        total_stats["updated_topics"] += page_stats["updated_topics"]
-        total_stats["errors"] += page_stats["errors"]
-        total_stats["pages"] += 1
+        _add_official_page_stats(total_stats, page_stats)
 
         next_cursor = _official_page_cursor(payload, cursor)
         if not payload.get("has_more") or not next_cursor:

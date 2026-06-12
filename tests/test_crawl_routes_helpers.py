@@ -386,6 +386,29 @@ class CrawlRoutesHelperTests(unittest.TestCase):
         first["pages"] = 1
         self.assertEqual(0, second["pages"])
 
+    @unittest.skipUnless(HAS_CRAWL_ROUTE_DEPS, "crawl route dependencies are not installed")
+    def test_add_official_page_stats_preserves_accumulation_semantics(self):
+        from backend.services.crawl_service import _add_official_page_stats, _empty_official_crawl_stats
+
+        total_stats = _empty_official_crawl_stats()
+        total_stats["duplicates"] = 2
+        page_stats = {"new_topics": 3, "updated_topics": 4, "errors": 1}
+
+        _add_official_page_stats(total_stats, page_stats)
+        _add_official_page_stats(total_stats, {"new_topics": 1, "updated_topics": 0, "errors": 2})
+
+        self.assertEqual(
+            {
+                "new_topics": 4,
+                "updated_topics": 4,
+                "errors": 3,
+                "pages": 2,
+                "duplicates": 2,
+                "source": "official",
+            },
+            total_stats,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

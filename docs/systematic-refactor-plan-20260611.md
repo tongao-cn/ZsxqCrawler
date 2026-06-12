@@ -7105,6 +7105,48 @@ Result:
 - Frontend build passed, including Next.js lint/type checks.
 - `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
 
+### 2026-06-12 - P4 official crawl page stats helper
+
+Changed:
+
+- Added direct helper coverage for official crawl per-page stats accumulation.
+- Extracted `_add_official_page_stats` in `backend/services/crawl_service.py` and reused it
+  from both official time-range and official pages crawl paths.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- `new_topics`, `updated_topics`, `errors`, and `pages` accumulation semantics are unchanged;
+  duplicate counting, `source: official`, update-task payload shape, official request/import
+  loops, cursor handling, task stop checks, schema/config/API behavior, and public API behavior
+  are unchanged.
+- This does not introduce, remove, or alter legacy/fallback behavior; the cookie-based legacy
+  crawler branch is untouched.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_crawl_routes_helpers.CrawlRoutesHelperTests.test_add_official_page_stats_preserves_accumulation_semantics -v
+uv run python -m unittest tests.test_crawl_routes_helpers -v
+uv run python -m py_compile backend\services\crawl_service.py tests\test_crawl_routes_helpers.py
+uv run python -m unittest tests.test_official_topic_client_helpers -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+git diff --check
+```
+
+Result:
+
+- New official page stats helper test passed.
+- `tests.test_crawl_routes_helpers`: 18 tests passed.
+- `py_compile` passed.
+- `tests.test_official_topic_client_helpers`: 16 tests passed.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Full backend unittest discovery: 734 tests passed, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+- `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
+
 ## Stop Conditions
 
 Pause before editing if:
