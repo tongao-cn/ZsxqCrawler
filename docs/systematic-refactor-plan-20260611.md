@@ -9135,6 +9135,60 @@ Result:
 - Frontend build passed, including Next.js lint/type checks.
 - `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
 
+### 2026-06-12 - P4 official topics-to-import helper
+
+Changed:
+
+- Reused existing official crawl route/helper coverage, then added characterization coverage for
+  latest-mode topic selection and non-latest page logging.
+- Added `_official_topics_to_import_for_mode` in `backend/services/crawl_service.py`.
+- Reused the helper from the shared official page crawling loop, keeping latest-mode existing-topic
+  checks, page-analysis logs, no-new-topic stop behavior, and non-latest page logs in one place.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Official latest mode still checks existing topics before import, logs `📊 官方页面分析: ...`,
+  stops before import when all topics already exist, and logs `✅ 本页话题均已存在，最新采集完成`.
+- Official non-latest modes still import all deduplicated page topics and log `📄 官方本页获取 ...`.
+- Official time-range crawling is unchanged and does not use this helper.
+- Official latest, incremental, historical, and all flows still use the same client construction,
+  database construction timing, page fetch shape, empty-page handling, per-page cap, cursor
+  handling, duplicate accounting, import stats, completion messages, and oldest-cursor behavior.
+- Public API behavior, task status semantics, schema/config behavior, official MCP HTTP behavior,
+  legacy cookie crawler behavior, and fallback behavior are unchanged.
+- No legacy/fallback behavior was removed.
+- Unrelated dirty downloader files were left outside this P4 slice; a minimal unstaged
+  syntax/test-precondition repair was needed there to restore current-worktree testability.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_crawl_routes_helpers -v
+uv run python -m unittest tests.test_official_topic_client_helpers -v
+uv run python -m py_compile backend\services\crawl_service.py tests\test_crawl_routes_helpers.py
+uv run python -m unittest tests.test_crawl_routes_helpers.CrawlRoutesHelperTests.test_official_topics_to_import_for_mode_preserves_latest_and_page_logs tests.test_crawl_routes_helpers.CrawlRoutesHelperTests.test_new_official_topics_preserves_existing_check_order_and_missing_id_semantics tests.test_crawl_routes_helpers.CrawlRoutesHelperTests.test_official_latest_branch_skips_legacy_crawler -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run python -m unittest tests.test_crawl_routes_helpers -v
+uv run python -m unittest tests.test_official_topic_client_helpers -v
+uv run python -m unittest discover -s tests
+cmd.exe /d /c npm --prefix frontend run build
+git diff --check
+```
+
+Result:
+
+- Pre-extraction `tests.test_crawl_routes_helpers`: 49 tests passed.
+- Pre-extraction `tests.test_official_topic_client_helpers`: 16 tests passed.
+- Focused official topic-selection/latest helper tests passed after helper extraction.
+- `py_compile` passed.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- `tests.test_crawl_routes_helpers`: 50 tests passed.
+- `tests.test_official_topic_client_helpers`: 16 tests passed.
+- Full backend unittest discovery: 766 tests passed, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+- `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
+
 ## Stop Conditions
 
 Pause before editing if:

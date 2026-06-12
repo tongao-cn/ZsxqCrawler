@@ -599,6 +599,24 @@ def _dedupe_official_page_topics(
         unique_topics.append(topic)
     return unique_topics
 
+def _official_topics_to_import_for_mode(
+    task_id: str,
+    db: ZSXQDatabase,
+    group_id: str,
+    mode: str,
+    unique_topics: list[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], bool]:
+    if mode != "latest":
+        add_task_log(task_id, f"📄 官方本页获取 {len(unique_topics)} 个话题")
+        return unique_topics, False
+
+    new_topics = _new_official_topics(db, group_id, unique_topics)
+    add_task_log(task_id, f"📊 官方页面分析: {len(unique_topics)} 个话题，{len(new_topics)} 个新话题")
+    if not new_topics:
+        add_task_log(task_id, "✅ 本页话题均已存在，最新采集完成")
+        return [], True
+    return new_topics, False
+
 def _fetch_official_topic_page(
     client: OfficialTopicClient,
     group_id: str,
@@ -768,16 +786,15 @@ def _run_official_crawl_pages_task(
 
         unique_topics = _dedupe_official_page_topics(topics, seen_topic_ids, total_stats)
 
-        topics_to_import = unique_topics
-        if mode == "latest":
-            new_topics = _new_official_topics(db, group_id, unique_topics)
-            add_task_log(task_id, f"📊 官方页面分析: {len(unique_topics)} 个话题，{len(new_topics)} 个新话题")
-            if not new_topics:
-                add_task_log(task_id, "✅ 本页话题均已存在，最新采集完成")
-                break
-            topics_to_import = new_topics
-        else:
-            add_task_log(task_id, f"📄 官方本页获取 {len(unique_topics)} 个话题")
+        topics_to_import, should_stop = _official_topics_to_import_for_mode(
+            task_id,
+            db,
+            group_id,
+            mode,
+            unique_topics,
+        )
+        if should_stop:
+            break
 
         page_stats = _official_import_topics(db, client, group_id, topics_to_import, task_id)
         _add_official_page_stats(total_stats, page_stats)

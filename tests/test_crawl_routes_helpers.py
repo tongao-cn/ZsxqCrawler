@@ -1281,6 +1281,70 @@ class CrawlRoutesHelperTests(unittest.TestCase):
         )
 
     @unittest.skipUnless(HAS_CRAWL_ROUTE_DEPS, "crawl route dependencies are not installed")
+    def test_official_topics_to_import_for_mode_preserves_latest_and_page_logs(self):
+        from backend.services.crawl_service import _official_topics_to_import_for_mode
+
+        db = object()
+        topics = [{"topic_id": 1}, {"topic_id": 2}]
+        new_topics = [topics[1]]
+
+        with (
+            patch("backend.services.crawl_service._new_official_topics", return_value=new_topics) as new_official_topics,
+            patch("backend.services.crawl_service.add_task_log") as add_task_log,
+        ):
+            topics_to_import, should_stop = _official_topics_to_import_for_mode(
+                "task-1",
+                db,
+                "group-1",
+                "latest",
+                topics,
+            )
+
+        self.assertEqual(new_topics, topics_to_import)
+        self.assertFalse(should_stop)
+        new_official_topics.assert_called_once_with(db, "group-1", topics)
+        add_task_log.assert_called_once_with("task-1", "📊 官方页面分析: 2 个话题，1 个新话题")
+
+        with (
+            patch("backend.services.crawl_service._new_official_topics") as new_official_topics,
+            patch("backend.services.crawl_service.add_task_log") as add_task_log,
+        ):
+            topics_to_import, should_stop = _official_topics_to_import_for_mode(
+                "task-1",
+                db,
+                "group-1",
+                "incremental",
+                topics,
+            )
+
+        self.assertIs(topics, topics_to_import)
+        self.assertFalse(should_stop)
+        new_official_topics.assert_not_called()
+        add_task_log.assert_called_once_with("task-1", "📄 官方本页获取 2 个话题")
+
+        with (
+            patch("backend.services.crawl_service._new_official_topics", return_value=[]),
+            patch("backend.services.crawl_service.add_task_log") as add_task_log,
+        ):
+            topics_to_import, should_stop = _official_topics_to_import_for_mode(
+                "task-1",
+                db,
+                "group-1",
+                "latest",
+                topics,
+            )
+
+        self.assertEqual([], topics_to_import)
+        self.assertTrue(should_stop)
+        self.assertEqual(
+            [
+                call("task-1", "📊 官方页面分析: 2 个话题，0 个新话题"),
+                call("task-1", "✅ 本页话题均已存在，最新采集完成"),
+            ],
+            add_task_log.call_args_list,
+        )
+
+    @unittest.skipUnless(HAS_CRAWL_ROUTE_DEPS, "crawl route dependencies are not installed")
     def test_official_topic_client_preserves_log_callback_binding(self):
         from backend.services.crawl_service import _official_topic_client
 
