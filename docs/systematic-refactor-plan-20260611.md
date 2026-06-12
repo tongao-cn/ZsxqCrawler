@@ -6755,6 +6755,49 @@ Result:
 - Frontend build passed, including Next.js lint/type checks.
 - `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
 
+### 2026-06-12 - P9 file downloader database row download helper
+
+Changed:
+
+- Added characterization coverage for `download_files_from_database` result handling across
+  skipped, successful, and failed per-file download results.
+- Locked the database-row-to-download-payload shape and successful-download interval side effects.
+- Extracted `ZSXQFileDownloader._download_database_file_row` and reused it from the database
+  download loop.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Per-row log messages, file payload shape, skip/download/failure counters, successful-download
+  long-delay check, inter-file download delay, final summary logs, empty-result behavior, query
+  semantics, schema/config/API behavior, and public API behavior are unchanged.
+- The outer `download_files_from_database` loop still owns stop checks plus `KeyboardInterrupt` and
+  generic exception handling, preserving the existing stop and continue-after-row-error behavior.
+- This does not introduce, remove, or alter legacy/fallback behavior.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderDatabaseDownloadTests -v
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+git diff --check
+```
+
+Result:
+
+- The new database-download result-handling characterization test passed before and after helper
+  extraction.
+- `py_compile` passed.
+- `tests.test_zsxq_file_downloader_helpers`: 81 tests passed.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Full backend unittest discovery: 723 tests passed, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+- `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
+
 ## Stop Conditions
 
 Pause before editing if:

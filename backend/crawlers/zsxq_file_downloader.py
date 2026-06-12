@@ -1369,6 +1369,40 @@ class ZSXQFileDownloader:
             stop_before_time=stop_before_dt,
         )
 
+    def _download_database_file_row(
+        self,
+        file_row: tuple[Any, Any, Any, Any, Any],
+        position: int,
+        total_files: int,
+        stats: Dict[str, int],
+    ) -> None:
+        file_id, file_name, file_size, download_count, _create_time = file_row
+        self.log(f"【{position}/{total_files}】{file_name}")
+        self.log(f"   📊 文件ID: {file_id}, 大小: {file_size/1024:.1f}KB, 下载次数: {download_count}")
+
+        file_info = {
+            'file': {
+                'id': file_id,
+                'name': file_name,
+                'size': file_size,
+                'download_count': download_count
+            }
+        }
+
+        result = self.download_file(file_info)
+
+        if result == "skipped":
+            stats['skipped'] += 1
+            self.log(f"   ⚠️ 文件已跳过")
+        elif result:
+            stats['downloaded'] += 1
+            self.check_long_delay()
+            if position < total_files:
+                self.download_delay()
+        else:
+            stats['failed'] += 1
+            self.log(f"   ❌ 下载失败")
+
     def download_files_from_database(
         self,
         max_files: Optional[int] = None,
@@ -1427,45 +1461,14 @@ class ZSXQFileDownloader:
 
         stats = {'total_files': len(files_to_download), 'downloaded': 0, 'skipped': 0, 'failed': 0}
 
-        for i, (file_id, file_name, file_size, download_count, create_time) in enumerate(files_to_download, 1):
+        for i, file_row in enumerate(files_to_download, 1):
             # 检查是否需要停止
             if self.check_stop():
                 self.log("🛑 下载任务被停止")
                 break
 
             try:
-                self.log(f"【{i}/{len(files_to_download)}】{file_name}")
-                self.log(f"   📊 文件ID: {file_id}, 大小: {file_size/1024:.1f}KB, 下载次数: {download_count}")
-                
-                # 构造文件信息结构（使用正确的file_id）
-                file_info = {
-                    'file': {
-                        'id': file_id,  # 使用正确的file_id
-                        'name': file_name,
-                        'size': file_size,
-                        'download_count': download_count
-                    }
-                }
-                
-                # 下载文件
-                result = self.download_file(file_info)
-                
-                if result == "skipped":
-                    stats['skipped'] += 1
-                    self.log(f"   ⚠️ 文件已跳过")
-                elif result:
-                    stats['downloaded'] += 1
-
-                    # 检查长休眠
-                    self.check_long_delay()
-
-                    # 如果不是最后一个文件，进行下载间隔
-                    if i < len(files_to_download):
-                        self.download_delay()
-                else:
-                    stats['failed'] += 1
-                    self.log(f"   ❌ 下载失败")
-                
+                self._download_database_file_row(file_row, i, len(files_to_download), stats)
             except KeyboardInterrupt:
                 self.log(f"⏹️ 用户中断下载")
                 break

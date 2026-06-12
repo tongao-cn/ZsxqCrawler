@@ -275,6 +275,45 @@ class FileDownloaderDatabaseDownloadTests(unittest.TestCase):
         self.assertEqual(("group-1",), params)
         self.assertIn("   📌 下载排序: 按热度倒序", downloader.logs)
 
+    def test_download_files_from_database_preserves_result_stats_payloads_and_delays(self):
+        downloader = self._downloader_for_query_capture(
+            rows=[
+                (101, "skip.pdf", 2048, 7, "2026-05-03 10:00:00"),
+                (102, "ok.pdf", 1024, 9, "2026-05-02 10:00:00"),
+                (103, "bad.pdf", 512, 1, "2026-05-01 10:00:00"),
+            ],
+        )
+        payloads = []
+        results = ["skipped", True, False]
+        interval_events = []
+
+        def download_file(file_info):
+            payloads.append(file_info)
+            return results.pop(0)
+
+        downloader.download_file = download_file
+        downloader.check_long_delay = lambda: interval_events.append("long")
+        downloader.download_delay = lambda: interval_events.append("delay")
+
+        stats = ZSXQFileDownloader.download_files_from_database(downloader)
+
+        self.assertEqual({"total_files": 3, "downloaded": 1, "skipped": 1, "failed": 1}, stats)
+        self.assertEqual(
+            [
+                {"file": {"id": 101, "name": "skip.pdf", "size": 2048, "download_count": 7}},
+                {"file": {"id": 102, "name": "ok.pdf", "size": 1024, "download_count": 9}},
+                {"file": {"id": 103, "name": "bad.pdf", "size": 512, "download_count": 1}},
+            ],
+            payloads,
+        )
+        self.assertEqual(["long", "delay"], interval_events)
+        self.assertIn("📋 找到 3 个待下载文件", downloader.logs)
+        self.assertIn("【1/3】skip.pdf", downloader.logs)
+        self.assertIn("   📊 文件ID: 101, 大小: 2.0KB, 下载次数: 7", downloader.logs)
+        self.assertIn("   ⚠️ 文件已跳过", downloader.logs)
+        self.assertIn("   ❌ 下载失败", downloader.logs)
+        self.assertEqual("   ❌ 失败: 1", downloader.logs[-1])
+
 
 class FileDownloaderTimeHelperTests(unittest.TestCase):
     def test_parse_create_time_accepts_common_formats(self):
