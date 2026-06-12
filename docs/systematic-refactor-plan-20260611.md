@@ -8027,6 +8027,56 @@ Result:
 - Frontend build passed, including Next.js lint/type checks.
 - `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
 
+### 2026-06-12 - P4 legacy time-range expired helper
+
+Changed:
+
+- Added characterization coverage for a legacy time-range expired response returned from
+  `fetch_topics_safe`.
+- Extracted `_mark_legacy_time_range_expired` in `backend/services/crawl_service.py`.
+- Reused the helper from the legacy `run_crawl_time_range_task` expired branch.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- The expired branch still logs `❌ 会员已过期: {message}` using `data.get("message")`.
+- The expired branch still calls `update_task(task_id, "failed", "会员已过期", data)` with the
+  original response payload unchanged.
+- The task still returns immediately after marking failed, skips completion status, and still
+  unregisters the task crawler in `finally`.
+- This helper intentionally does not reuse `_mark_expired_task`, because that helper reshapes the
+  failure payload for other crawl modes.
+- Retry handling, filtered topic storage, next-page cursor computation, stop checks, public API
+  behavior, task status semantics, schema/config behavior, official MCP HTTP behavior, and
+  cookie-based crawler behavior are unchanged.
+- No legacy/fallback behavior was removed.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_crawl_routes_helpers.CrawlRoutesHelperTests.test_legacy_time_range_expired_response_fails_with_original_payload -v
+uv run python -m unittest tests.test_crawl_routes_helpers.CrawlRoutesHelperTests.test_legacy_time_range_expired_response_fails_with_original_payload tests.test_crawl_routes_helpers.CrawlRoutesHelperTests.test_legacy_time_range_retries_failed_page_fetch tests.test_crawl_routes_helpers.CrawlRoutesHelperTests.test_legacy_time_range_counts_unstored_out_of_range_page tests.test_crawl_routes_helpers.CrawlRoutesHelperTests.test_legacy_time_range_filters_topics_and_advances_end_time tests.test_crawl_routes_helpers.CrawlRoutesHelperTests.test_time_range_crawl_stops_after_empty_page -v
+uv run python -m py_compile backend\services\crawl_service.py tests\test_crawl_routes_helpers.py
+uv run python -m unittest tests.test_crawl_routes_helpers -v
+uv run python -m unittest tests.test_official_topic_client_helpers -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+git diff --check
+```
+
+Result:
+
+- New expired-response characterization test passed before and after helper extraction.
+- Focused legacy time-range tests passed after helper extraction.
+- `py_compile` passed.
+- `tests.test_crawl_routes_helpers`: 41 tests passed.
+- `tests.test_official_topic_client_helpers`: 16 tests passed.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Full backend unittest discovery: 757 tests passed, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+- `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
+
 ## Stop Conditions
 
 Pause before editing if:

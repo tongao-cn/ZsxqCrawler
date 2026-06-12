@@ -243,6 +243,10 @@ def _record_legacy_time_range_fetch_failure(
     add_task_log(task_id, f"❌ 页面获取失败 (重试{retry}/{max_retries_per_page})")
     return retry
 
+def _mark_legacy_time_range_expired(task_id: str, data: dict[str, Any]) -> None:
+    add_task_log(task_id, f"❌ 会员已过期: {data.get('message')}")
+    update_task(task_id, "failed", "会员已过期", data)
+
 def _query_group_id(group_id: str) -> Any:
     value = str(group_id or "").strip()
     return int(value) if value.isdigit() else value
@@ -741,8 +745,7 @@ def run_crawl_time_range_task(task_id: str, group_id: str, request: Any):
                 )
 
                 if data and isinstance(data, dict) and data.get("expired"):
-                    add_task_log(task_id, f"❌ 会员已过期: {data.get('message')}")
-                    update_task(task_id, "failed", "会员已过期", data)
+                    _mark_legacy_time_range_expired(task_id, data)
                     return
 
                 if not data:

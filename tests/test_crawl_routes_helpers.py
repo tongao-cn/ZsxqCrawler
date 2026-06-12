@@ -593,6 +593,45 @@ class CrawlRoutesHelperTests(unittest.TestCase):
         )
 
     @unittest.skipUnless(HAS_CRAWL_ROUTE_DEPS, "crawl route dependencies are not installed")
+    def test_legacy_time_range_expired_response_fails_with_original_payload(self):
+        from backend.routes.crawl_routes import CrawlTimeRangeRequest
+        from backend.services.crawl_service import run_crawl_time_range_task
+
+        expired_payload = {"expired": True, "code": 1059, "message": "expired"}
+        crawler = TimeRangeCrawler([expired_payload])
+
+        with (
+            patch("backend.services.crawl_service.get_cookie_for_group", return_value="cookie"),
+            patch("backend.services.crawl_service.ZSXQTopicCrawler", return_value=crawler),
+            patch("backend.services.crawl_service.is_task_stopped", return_value=False),
+            patch("backend.services.crawl_service.add_task_log") as add_task_log,
+            patch("backend.services.crawl_service.update_task") as update_task,
+            patch("backend.services.crawl_service.unregister_task_crawler") as unregister_task_crawler,
+        ):
+            run_crawl_time_range_task(
+                "task-1",
+                "group-1",
+                CrawlTimeRangeRequest(
+                    startTime="2026-02-01",
+                    endTime="2026-02-02",
+                    perPage=20,
+                    topicSource="legacy",
+                ),
+            )
+
+        self.assertEqual(1, len(crawler.fetch_calls))
+        self.assertEqual([], crawler.store_calls)
+        add_task_log.assert_any_call("task-1", "❌ 会员已过期: expired")
+        update_task.assert_any_call("task-1", "failed", "会员已过期", expired_payload)
+        self.assertFalse(
+            any(
+                len(call_args.args) > 1 and call_args.args[1] == "completed"
+                for call_args in update_task.call_args_list
+            )
+        )
+        unregister_task_crawler.assert_called_once_with("task-1")
+
+    @unittest.skipUnless(HAS_CRAWL_ROUTE_DEPS, "crawl route dependencies are not installed")
     def test_legacy_latest_branch_creates_registered_crawler_and_applies_settings(self):
         from backend.routes.crawl_routes import CrawlSettingsRequest
         from backend.services.crawl_service import run_crawl_latest_task
