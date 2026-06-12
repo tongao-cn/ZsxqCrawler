@@ -6,12 +6,24 @@ from backend.core.console_output import safe_console_print as print
 from backend.crawlers.topic_ingestion import _query_group_id
 
 
-def _offset_zsxq_end_time(value: str, offset_ms: int) -> str:
-    from datetime import datetime, timedelta
+def _format_offset_zsxq_end_time(value: str, delta: Any) -> str:
+    from datetime import datetime
 
     dt = datetime.fromisoformat(value.replace('+0800', '+08:00'))
-    dt = dt - timedelta(milliseconds=offset_ms)
+    dt = dt - delta
     return dt.strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + '+0800'
+
+
+def _offset_zsxq_end_time(value: str, offset_ms: int) -> str:
+    from datetime import timedelta
+
+    return _format_offset_zsxq_end_time(value, timedelta(milliseconds=offset_ms))
+
+
+def _offset_zsxq_end_time_by_hours(value: str, hours: int) -> str:
+    from datetime import timedelta
+
+    return _format_offset_zsxq_end_time(value, timedelta(hours=hours))
 
 
 class TopicPaginationMixin:
@@ -140,11 +152,8 @@ class TopicPaginationMixin:
                 # 如果有时间戳，尝试大幅度调整跳过问题区域
                 if end_time:
                     try:
-                        from datetime import datetime, timedelta
-                        dt = datetime.fromisoformat(end_time.replace('+0800', '+08:00'))
                         # 大幅度跳过，减去1小时
-                        dt = dt - timedelta(hours=1)
-                        end_time = dt.strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + '+0800'
+                        end_time = _offset_zsxq_end_time_by_hours(end_time, 1)
                         print(f"   ⏰ 大幅度跳过时间段: {end_time} (减去1小时)")
                     except Exception as e:
                         print(f"   ⚠️ 大幅度时间戳调整失败: {e}")
@@ -339,10 +348,7 @@ class TopicPaginationMixin:
                 # 大幅度跳过问题区域
                 if end_time:
                     try:
-                        from datetime import datetime, timedelta
-                        dt = datetime.fromisoformat(end_time.replace('+0800', '+08:00'))
-                        dt = dt - timedelta(hours=1)
-                        end_time = dt.strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + '+0800'
+                        end_time = _offset_zsxq_end_time_by_hours(end_time, 1)
                         print(f"   ⏰ 大幅度跳过时间段: {end_time} (减去1小时)")
                     except Exception as e:
                         print(f"   ⚠️ 大幅度时间戳调整失败: {e}")
@@ -504,9 +510,7 @@ class TopicPaginationMixin:
                 # 大幅度跳过问题区域
                 if end_time:
                     try:
-                        dt = datetime.fromisoformat(end_time.replace('+0800', '+08:00'))
-                        dt = dt - timedelta(hours=1)
-                        end_time = dt.strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + '+0800'
+                        end_time = _offset_zsxq_end_time_by_hours(end_time, 1)
                         print(f"   ⏰ 大幅度跳过时间段: {end_time} (减去1小时)")
                     except Exception as e:
                         print(f"   ⚠️ 大幅度时间戳调整失败: {e}")

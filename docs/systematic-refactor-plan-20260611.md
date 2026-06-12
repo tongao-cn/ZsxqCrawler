@@ -9466,6 +9466,57 @@ Result:
 - Frontend build passed, including Next.js lint/type checks.
 - `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
 
+### 2026-06-12 - P4 topic pagination hour offset helper
+
+Changed:
+
+- Reused existing topic pagination helper tests before editing `backend/crawlers/topic_pagination.py`.
+- Added `_format_offset_zsxq_end_time` and `_offset_zsxq_end_time_by_hours` so millisecond and
+  hour offsets share the same ZSXQ timestamp parsing/formatting path.
+- Replaced three duplicated legacy page-failure one-hour skip blocks with
+  `_offset_zsxq_end_time_by_hours(end_time, 1)`.
+- Added characterization coverage for the hour-offset helper's `+0800` output format.
+
+Behavior impact:
+
+- Intended behavior change: none against the original legacy skip semantics.
+- The one-hour skip branches still subtract exactly one hour, preserve the `+0800` no-colon
+  timestamp format, keep the same log messages, and keep the same fallback exception logging.
+- This also removes a hidden dependency on inline `datetime/timedelta` imports in adjacent retry
+  code, keeping the max-retry skip path equivalent after the previous timestamp-helper reuse.
+- `crawl_latest_until_complete` timestamp retry logic was left unchanged because it has a different
+  legacy branch shape and was not part of this safe slice.
+- Public API behavior, task status semantics, schema/config behavior, official MCP HTTP behavior,
+  legacy cookie crawler behavior, and fallback behavior are otherwise unchanged.
+- No legacy/fallback behavior was removed.
+- Existing dirty downloader risk-log files and scripts were inspected but left outside this P4
+  slice because they add new CLI/logging behavior.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_interactive_crawler_helpers -v
+uv run python -m py_compile backend\crawlers\topic_pagination.py tests\test_zsxq_interactive_crawler_helpers.py
+uv run python -m unittest tests.test_zsxq_interactive_crawler_helpers -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run python -m unittest tests.test_crawl_routes_helpers -v
+uv run python -m unittest discover -s tests
+cmd.exe /d /c npm --prefix frontend run build
+git diff --check
+```
+
+Result:
+
+- Pre-extraction `tests.test_zsxq_interactive_crawler_helpers`: 4 tests passed.
+- Focused pagination helper tests passed after helper extraction.
+- `py_compile` passed.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- `tests.test_zsxq_interactive_crawler_helpers`: 5 tests passed.
+- `tests.test_crawl_routes_helpers`: 54 tests passed.
+- Full backend unittest discovery: 771 tests passed, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+- `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
+
 ## Stop Conditions
 
 Pause before editing if:

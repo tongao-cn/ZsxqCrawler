@@ -1,6 +1,9 @@
 import unittest
 
-from backend.crawlers.topic_pagination import _offset_zsxq_end_time
+from backend.crawlers.topic_pagination import (
+    _offset_zsxq_end_time,
+    _offset_zsxq_end_time_by_hours,
+)
 from backend.crawlers.topic_crawler import ZSXQTopicCrawler
 
 
@@ -9,6 +12,12 @@ class TopicCrawlerPaginationTests(unittest.TestCase):
         self.assertEqual(
             "2026-02-01T09:59:59.999+0800",
             _offset_zsxq_end_time("2026-02-01T10:00:00.000+0800", 1),
+        )
+
+    def test_offset_zsxq_end_time_by_hours_formats_without_timezone_colon(self):
+        self.assertEqual(
+            "2026-02-01T09:00:00.000+0800",
+            _offset_zsxq_end_time_by_hours("2026-02-01T10:00:00.000+0800", 1),
         )
 
     def test_topic_next_end_time_returns_none_when_last_topic_has_no_create_time(self):
