@@ -7502,6 +7502,51 @@ Result:
 - Frontend build passed, including Next.js lint/type checks.
 - `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
 
+### 2026-06-12 - P4 official topic ID helper
+
+Changed:
+
+- Added direct helper coverage for official topic ID integer coercion.
+- Extracted `_official_topic_id` in `backend/services/crawl_service.py`.
+- Reused the helper from official latest new-topic filtering, official import, and official page
+  de-duplication.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Missing and falsey `topic_id` values still coerce to `0`.
+- Numeric string and integer `topic_id` values still coerce through `int(...)`.
+- Invalid non-numeric topic IDs still raise the same conversion error instead of being swallowed.
+- Existing missing/zero ID duplicate semantics, latest-mode existence checks, official import
+  comment fetch topic IDs, request/import loops, pagination cursor handling, log messages,
+  update-task payloads, schema/config/API behavior, public API behavior, and legacy cookie-based
+  crawler behavior are unchanged.
+- This does not introduce, remove, or alter legacy/fallback behavior.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_crawl_routes_helpers.CrawlRoutesHelperTests.test_official_topic_id_preserves_integer_coercion_and_invalid_error -v
+uv run python -m py_compile backend\services\crawl_service.py tests\test_crawl_routes_helpers.py
+uv run python -m unittest tests.test_crawl_routes_helpers -v
+uv run python -m unittest tests.test_official_topic_client_helpers -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+git diff --check
+```
+
+Result:
+
+- New official topic ID helper test passed.
+- `py_compile` passed.
+- `tests.test_crawl_routes_helpers`: 28 tests passed.
+- `tests.test_official_topic_client_helpers`: 16 tests passed.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Full backend unittest discovery: 744 tests passed, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+- `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
+
 ## Stop Conditions
 
 Pause before editing if:

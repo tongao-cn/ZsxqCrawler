@@ -206,11 +206,14 @@ def _official_topic_exists(db: ZSXQDatabase, group_id: str, topic_id: int) -> bo
     )
     return db.cursor.fetchone() is not None
 
+def _official_topic_id(topic: dict[str, Any]) -> int:
+    return int(topic.get("topic_id") or 0)
+
 def _new_official_topics(db: ZSXQDatabase, group_id: str, topics: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return [
         topic
         for topic in topics
-        if not _official_topic_exists(db, group_id, int(topic.get("topic_id") or 0))
+        if not _official_topic_exists(db, group_id, _official_topic_id(topic))
     ]
 
 def _fetch_official_comments(
@@ -238,7 +241,7 @@ def _official_import_topics(
 ) -> dict[str, int]:
     stats = {"new_topics": 0, "updated_topics": 0, "errors": 0}
     for topic in topics:
-        topic_id = int(topic.get("topic_id") or 0)
+        topic_id = _official_topic_id(topic)
         comments_count = int((topic.get("counts") or {}).get("comments") or 0)
         comments = _fetch_official_comments(client, topic_id, comments_count, task_id)
         normalized = normalize_official_topic(topic, group_id, comments=comments if comments_count else None)
@@ -275,7 +278,7 @@ def _dedupe_official_page_topics(
 ) -> list[dict[str, Any]]:
     unique_topics = []
     for topic in topics:
-        topic_id = int(topic.get("topic_id") or 0)
+        topic_id = _official_topic_id(topic)
         if topic_id in seen_topic_ids:
             total_stats["duplicates"] += 1
             continue

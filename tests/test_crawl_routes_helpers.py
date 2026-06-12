@@ -436,6 +436,17 @@ class CrawlRoutesHelperTests(unittest.TestCase):
         self.assertEqual(2, total_stats["duplicates"])
 
     @unittest.skipUnless(HAS_CRAWL_ROUTE_DEPS, "crawl route dependencies are not installed")
+    def test_official_topic_id_preserves_integer_coercion_and_invalid_error(self):
+        from backend.services.crawl_service import _official_topic_id
+
+        self.assertEqual(0, _official_topic_id({}))
+        self.assertEqual(0, _official_topic_id({"topic_id": None}))
+        self.assertEqual(10, _official_topic_id({"topic_id": "10"}))
+        self.assertEqual(11, _official_topic_id({"topic_id": 11}))
+        with self.assertRaises(ValueError):
+            _official_topic_id({"topic_id": "not-a-number"})
+
+    @unittest.skipUnless(HAS_CRAWL_ROUTE_DEPS, "crawl route dependencies are not installed")
     def test_official_next_page_cursor_requires_has_more_and_moving_cursor(self):
         from backend.services.crawl_service import _official_next_page_cursor
 
