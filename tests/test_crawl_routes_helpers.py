@@ -479,6 +479,35 @@ class CrawlRoutesHelperTests(unittest.TestCase):
         self.assertEqual([start_topic, middle_topic, end_topic], filtered)
         self.assertEqual(datetime(2026, 4, 30, 23, 59, 59, tzinfo=timezone(timedelta(hours=8))), oldest_dt)
 
+    @unittest.skipUnless(HAS_CRAWL_ROUTE_DEPS, "crawl route dependencies are not installed")
+    def test_new_official_topics_preserves_existing_check_order_and_missing_id_semantics(self):
+        from backend.services.crawl_service import _new_official_topics
+
+        existing_topic = {"topic_id": "10", "title": "existing"}
+        missing_id_topic = {"title": "missing id"}
+        new_topic = {"topic_id": 11, "title": "new"}
+        db = object()
+
+        with patch(
+            "backend.services.crawl_service._official_topic_exists",
+            side_effect=lambda _db, _group_id, topic_id: topic_id == 10,
+        ) as topic_exists:
+            new_topics = _new_official_topics(
+                db,
+                "group-1",
+                [existing_topic, missing_id_topic, new_topic],
+            )
+
+        self.assertEqual([missing_id_topic, new_topic], new_topics)
+        self.assertEqual(
+            [
+                call(db, "group-1", 10),
+                call(db, "group-1", 0),
+                call(db, "group-1", 11),
+            ],
+            topic_exists.call_args_list,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

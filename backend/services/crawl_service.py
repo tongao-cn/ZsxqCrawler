@@ -201,6 +201,13 @@ def _official_topic_exists(db: ZSXQDatabase, group_id: str, topic_id: int) -> bo
     )
     return db.cursor.fetchone() is not None
 
+def _new_official_topics(db: ZSXQDatabase, group_id: str, topics: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [
+        topic
+        for topic in topics
+        if not _official_topic_exists(db, group_id, int(topic.get("topic_id") or 0))
+    ]
+
 def _fetch_official_comments(
     client: OfficialTopicClient,
     topic_id: int,
@@ -381,11 +388,7 @@ def _run_official_crawl_pages_task(
 
         topics_to_import = unique_topics
         if mode == "latest":
-            new_topics = [
-                topic
-                for topic in unique_topics
-                if not _official_topic_exists(db, group_id, int(topic.get("topic_id") or 0))
-            ]
+            new_topics = _new_official_topics(db, group_id, unique_topics)
             add_task_log(task_id, f"📊 官方页面分析: {len(unique_topics)} 个话题，{len(new_topics)} 个新话题")
             if not new_topics:
                 add_task_log(task_id, "✅ 本页话题均已存在，最新采集完成")

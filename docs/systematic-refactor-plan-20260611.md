@@ -7323,6 +7323,49 @@ Result:
 - Frontend build passed, including Next.js lint/type checks.
 - `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
 
+### 2026-06-12 - P4 official latest new-topic helper
+
+Changed:
+
+- Added direct helper coverage for official latest-mode new-topic filtering.
+- Extracted `_new_official_topics` in `backend/services/crawl_service.py` and reused it
+  from the official pages crawl path when `mode == "latest"`.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- The existing `_official_topic_exists` query remains the source of truth for whether a topic is
+  already stored.
+- Topic order, `topic_id` integer coercion, missing/zero `topic_id` behavior, latest-mode page
+  analysis log counts, "all topics already exist" stop condition, import selection, update-task
+  payloads, schema/config/API behavior, public API behavior, and legacy cookie-based crawler
+  behavior are unchanged.
+- This does not introduce, remove, or alter legacy/fallback behavior.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_crawl_routes_helpers.CrawlRoutesHelperTests.test_new_official_topics_preserves_existing_check_order_and_missing_id_semantics -v
+uv run python -m unittest tests.test_crawl_routes_helpers -v
+uv run python -m py_compile backend\services\crawl_service.py tests\test_crawl_routes_helpers.py
+uv run python -m unittest tests.test_official_topic_client_helpers -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+git diff --check
+```
+
+Result:
+
+- New official latest new-topic helper test passed.
+- `tests.test_crawl_routes_helpers`: 23 tests passed.
+- `py_compile` passed.
+- `tests.test_official_topic_client_helpers`: 16 tests passed.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Full backend unittest discovery: 739 tests passed, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+- `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
+
 ## Stop Conditions
 
 Pause before editing if:
