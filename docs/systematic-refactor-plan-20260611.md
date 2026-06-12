@@ -8679,6 +8679,57 @@ Result:
 - Frontend build passed, including Next.js lint/type checks.
 - `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
 
+### 2026-06-12 - P4 legacy time-range expired response helper
+
+Changed:
+
+- Reused existing legacy time-range characterization coverage for expired responses, retryable
+  empty fetch responses, empty pages, and normal filtered pages.
+- Extracted `_legacy_time_range_response_expired` in `backend/services/crawl_service.py`.
+- Kept the original expired predicate semantics: only truthy dict responses with `expired` set are
+  marked failed as membership-expired responses.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Expired responses still log `❌ 会员已过期: <message>` and fail the task with the original
+  payload.
+- Empty/falsey fetch responses still enter the retry/error-count path.
+- Non-expired dict responses still flow into topic extraction, empty-page handling, filtering,
+  storage, cursor updates, and before-start termination exactly as before.
+- Public API behavior, task status semantics, fetch call shape, retry behavior, max-retry
+  termination, empty-page completion, filtered page storage, invalid timestamp fallback,
+  before-start stopping, schema/config behavior, official MCP HTTP behavior, and cookie-based
+  crawler behavior are unchanged.
+- No legacy/fallback behavior was removed.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_crawl_routes_helpers.CrawlRoutesHelperTests.test_legacy_time_range_expired_response_fails_with_original_payload -v
+uv run python -m py_compile backend\services\crawl_service.py tests\test_crawl_routes_helpers.py
+uv run python -m unittest tests.test_crawl_routes_helpers.CrawlRoutesHelperTests.test_legacy_time_range_expired_response_fails_with_original_payload tests.test_crawl_routes_helpers.CrawlRoutesHelperTests.test_legacy_time_range_retries_failed_page_fetch tests.test_crawl_routes_helpers.CrawlRoutesHelperTests.test_time_range_crawl_stops_after_empty_page tests.test_crawl_routes_helpers.CrawlRoutesHelperTests.test_legacy_time_range_filters_topics_and_advances_end_time -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run python -m unittest tests.test_crawl_routes_helpers -v
+uv run python -m unittest tests.test_official_topic_client_helpers -v
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+git diff --check
+```
+
+Result:
+
+- Pre-extraction expired characterization test passed.
+- Focused expired, retryable empty fetch, empty-page, and filtered-page tests passed after helper
+  extraction.
+- `py_compile` passed.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- `tests.test_crawl_routes_helpers`: 45 tests passed.
+- `tests.test_official_topic_client_helpers`: 16 tests passed.
+- Full backend unittest discovery: 761 tests passed, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+- `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
+
 ## Stop Conditions
 
 Pause before editing if:

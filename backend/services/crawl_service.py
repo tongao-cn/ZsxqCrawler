@@ -249,6 +249,12 @@ def _mark_legacy_time_range_expired(task_id: str, data: dict[str, Any]) -> None:
     add_task_log(task_id, f"❌ 会员已过期: {data.get('message')}")
     update_task(task_id, "failed", "会员已过期", data)
 
+def _legacy_time_range_response_expired(task_id: str, data: Any) -> bool:
+    if not data or not isinstance(data, dict) or not data.get("expired"):
+        return False
+    _mark_legacy_time_range_expired(task_id, data)
+    return True
+
 def _legacy_time_range_page_empty(task_id: str, topics: list[dict[str, Any]]) -> bool:
     if topics:
         return False
@@ -817,8 +823,7 @@ def run_crawl_time_range_task(task_id: str, group_id: str, request: Any):
                     end_time_param,
                 )
 
-                if data and isinstance(data, dict) and data.get("expired"):
-                    _mark_legacy_time_range_expired(task_id, data)
+                if _legacy_time_range_response_expired(task_id, data):
                     return
 
                 if not data:
