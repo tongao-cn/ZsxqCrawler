@@ -294,6 +294,12 @@ def _official_next_page_cursor(payload: dict[str, Any], current_cursor: Optional
         return None
     return _official_page_cursor(payload, current_cursor)
 
+def _official_pages_remaining(pages: Optional[int], total_stats: dict[str, Any]) -> bool:
+    return pages is None or total_stats["pages"] < pages
+
+def _official_reached_before_start(oldest_dt: Optional[datetime], start_dt: datetime) -> bool:
+    return bool(oldest_dt and oldest_dt < start_dt)
+
 def _official_per_page_limit(per_page: Optional[int]) -> int:
     return min(per_page or 20, 30)
 
@@ -363,7 +369,7 @@ def _run_official_crawl_time_range_task(
             break
         cursor = next_cursor
 
-        if oldest_dt and oldest_dt < start_dt:
+        if _official_reached_before_start(oldest_dt, start_dt):
             add_task_log(task_id, "✅ 已到达起始时间之前，任务结束")
             break
 
@@ -384,7 +390,7 @@ def _run_official_crawl_pages_task(
     total_stats = _empty_official_crawl_stats()
     seen_topic_ids: set[int] = set()
 
-    while pages is None or total_stats["pages"] < pages:
+    while _official_pages_remaining(pages, total_stats):
         if is_task_stopped(task_id):
             add_task_log(task_id, "🛑 任务已停止")
             break

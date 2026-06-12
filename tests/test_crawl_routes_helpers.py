@@ -445,6 +445,26 @@ class CrawlRoutesHelperTests(unittest.TestCase):
         self.assertEqual("next", _official_next_page_cursor({"has_more": True, "next_end_time": "next"}, "same"))
 
     @unittest.skipUnless(HAS_CRAWL_ROUTE_DEPS, "crawl route dependencies are not installed")
+    def test_official_pages_remaining_preserves_unbounded_and_limit_semantics(self):
+        from backend.services.crawl_service import _official_pages_remaining
+
+        self.assertTrue(_official_pages_remaining(None, {}))
+        self.assertFalse(_official_pages_remaining(0, {"pages": 0}))
+        self.assertTrue(_official_pages_remaining(2, {"pages": 1}))
+        self.assertFalse(_official_pages_remaining(2, {"pages": 2}))
+
+    @unittest.skipUnless(HAS_CRAWL_ROUTE_DEPS, "crawl route dependencies are not installed")
+    def test_official_reached_before_start_preserves_none_equal_and_older_semantics(self):
+        from backend.services.crawl_service import _official_reached_before_start
+
+        start_dt = datetime(2026, 5, 1, tzinfo=timezone(timedelta(hours=8)))
+
+        self.assertFalse(_official_reached_before_start(None, start_dt))
+        self.assertFalse(_official_reached_before_start(start_dt, start_dt))
+        self.assertFalse(_official_reached_before_start(start_dt + timedelta(seconds=1), start_dt))
+        self.assertTrue(_official_reached_before_start(start_dt - timedelta(milliseconds=1), start_dt))
+
+    @unittest.skipUnless(HAS_CRAWL_ROUTE_DEPS, "crawl route dependencies are not installed")
     def test_official_per_page_limit_preserves_default_and_cap(self):
         from backend.services.crawl_service import _official_per_page_limit
 
