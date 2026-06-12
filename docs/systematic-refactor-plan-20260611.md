@@ -9662,6 +9662,54 @@ Result:
 - Frontend build passed, including Next.js lint/type checks.
 - `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
 
+### 2026-06-12 - P3 column scope group helper
+
+Changed:
+
+- Reused existing column database helper tests before editing
+  `backend/storage/zsxq_columns_database.py`.
+- Added `ZSXQColumnsDatabase._scope_group_id_param`.
+- Replaced seven duplicated `group_id if group_id is not None else self.group_id` scope
+  normalizations in column/topic detail read paths with the instance helper.
+- Added characterization coverage for explicit group ID precedence, instance group fallback, numeric
+  string coercion, and blank-group unscoped behavior.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- `get_column`, `get_column_topics`, `get_topic_detail`, `get_topic_images`, `get_topic_files`,
+  `get_topic_videos`, and `get_topic_comments` still use explicit `group_id` when provided and fall
+  back to `self.group_id` only when the argument is `None`.
+- Existing `_scope_group_id_param` coercion behavior is preserved: numeric strings become ints, blank
+  values become `None`, and query helper SQL/params stay unchanged.
+- Public API behavior, PostgreSQL schema behavior, query result shapes, commit behavior, legacy/fallback
+  behavior, and task behavior are unchanged.
+- Existing dirty downloader risk-log files and scripts remain outside this P3 slice.
+
+Verification:
+
+```powershell
+uv run python -m py_compile backend\storage\zsxq_columns_database.py tests\test_zsxq_columns_database_helpers.py
+uv run python -m unittest tests.test_zsxq_columns_database_helpers -v
+git grep -n "scope_group_id = _scope_group_id_param(group_id if group_id is not None else self.group_id)" -- backend/storage/zsxq_columns_database.py
+uv run python scripts\scan_postgres_compat_debt.py
+uv run python -m unittest tests.test_zsxq_columns_database_helpers -v
+uv run python -m unittest discover -s tests
+cmd.exe /d /c npm --prefix frontend run build
+git diff --check
+```
+
+Result:
+
+- Focused column database helper tests passed after helper extraction.
+- `py_compile` passed.
+- Grep found no remaining duplicated column scope normalization expression.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- `tests.test_zsxq_columns_database_helpers`: 71 tests passed.
+- Full backend unittest discovery: 774 tests passed, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+- `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
+
 ## Stop Conditions
 
 Pause before editing if:

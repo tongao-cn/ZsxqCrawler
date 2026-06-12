@@ -69,6 +69,17 @@ class ZSXQColumnsDatabaseHelperTests(unittest.TestCase):
     def _sql(self, sql):
         return " ".join(sql.split())
 
+    def test_columns_database_scope_group_id_param_prefers_explicit_then_instance_group(self):
+        from backend.storage.zsxq_columns_database import ZSXQColumnsDatabase
+
+        db = object.__new__(ZSXQColumnsDatabase)
+        db.group_id = "303"
+
+        self.assertEqual(404, ZSXQColumnsDatabase._scope_group_id_param(db, "404"))
+        self.assertEqual(303, ZSXQColumnsDatabase._scope_group_id_param(db, None))
+        db.group_id = ""
+        self.assertIsNone(ZSXQColumnsDatabase._scope_group_id_param(db, None))
+
     def test_column_row_to_dict_preserves_shape(self):
         row = (
             101,

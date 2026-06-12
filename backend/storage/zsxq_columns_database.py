@@ -89,6 +89,9 @@ class ZSXQColumnsDatabase:
         """Schema is managed by manage-postgres-core-schema; runtime DDL is disabled."""
         return None
 
+    def _scope_group_id_param(self, group_id: Optional[Any] = None) -> Any:
+        return _scope_group_id_param(group_id if group_id is not None else self.group_id)
+
     def insert_column(self, group_id: int, column_data: Dict[str, Any]) -> Optional[int]:
         """插入或更新专栏目录"""
         if not column_data or not column_data.get('column_id'):
@@ -107,7 +110,7 @@ class ZSXQColumnsDatabase:
     
     def get_column(self, column_id: int, group_id: Optional[Any] = None) -> Optional[Dict[str, Any]]:
         """获取单个专栏目录"""
-        scope_group_id = _scope_group_id_param(group_id if group_id is not None else self.group_id)
+        scope_group_id = self._scope_group_id_param(group_id)
         sql, params = _column_query(column_id, scope_group_id)
         self.cursor.execute(sql, params)
         
@@ -130,7 +133,7 @@ class ZSXQColumnsDatabase:
     
     def get_column_topics(self, column_id: int, group_id: Optional[Any] = None) -> List[Dict[str, Any]]:
         """获取专栏下的所有文章列表"""
-        scope_group_id = _scope_group_id_param(group_id if group_id is not None else self.group_id)
+        scope_group_id = self._scope_group_id_param(group_id)
         sql, params = _column_topics_query(column_id, scope_group_id)
         self.cursor.execute(sql, params)
         
@@ -274,7 +277,7 @@ class ZSXQColumnsDatabase:
 
     def get_topic_detail(self, topic_id: int, group_id: Optional[Any] = None) -> Optional[Dict[str, Any]]:
         """获取文章详情"""
-        scope_group_id = _scope_group_id_param(group_id if group_id is not None else self.group_id)
+        scope_group_id = self._scope_group_id_param(group_id)
         sql, params = _topic_detail_query(topic_id, scope_group_id)
         self.cursor.execute(sql, params)
         
@@ -300,7 +303,7 @@ class ZSXQColumnsDatabase:
     
     def get_topic_images(self, topic_id: int, group_id: Optional[Any] = None) -> List[Dict[str, Any]]:
         """获取文章的所有图片"""
-        scope_group_id = _scope_group_id_param(group_id if group_id is not None else self.group_id)
+        scope_group_id = self._scope_group_id_param(group_id)
         sql, params = _topic_images_query(topic_id, scope_group_id)
         self.cursor.execute(sql, params)
         
@@ -308,7 +311,7 @@ class ZSXQColumnsDatabase:
     
     def get_topic_files(self, topic_id: int, group_id: Optional[Any] = None) -> List[Dict[str, Any]]:
         """获取文章的所有文件"""
-        scope_group_id = _scope_group_id_param(group_id if group_id is not None else self.group_id)
+        scope_group_id = self._scope_group_id_param(group_id)
         sql, params = _topic_files_query(topic_id, scope_group_id)
         self.cursor.execute(sql, params)
         
@@ -316,7 +319,7 @@ class ZSXQColumnsDatabase:
     
     def get_topic_videos(self, topic_id: int, group_id: Optional[Any] = None) -> List[Dict[str, Any]]:
         """获取文章的所有视频"""
-        scope_group_id = _scope_group_id_param(group_id if group_id is not None else self.group_id)
+        scope_group_id = self._scope_group_id_param(group_id)
         sql, params = _topic_videos_query(topic_id, scope_group_id)
         self.cursor.execute(sql, params)
         
@@ -358,7 +361,7 @@ class ZSXQColumnsDatabase:
     
     def get_topic_comments(self, topic_id: int, group_id: Optional[Any] = None) -> List[Dict[str, Any]]:
         """获取文章的所有评论（支持嵌套结构）"""
-        scope_group_id = _scope_group_id_param(group_id if group_id is not None else self.group_id)
+        scope_group_id = self._scope_group_id_param(group_id)
         sql, params = _topic_comments_query(topic_id, scope_group_id)
         self.cursor.execute(sql, params)
 
