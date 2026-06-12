@@ -281,7 +281,7 @@ def _legacy_time_range_page_empty(task_id: str, topics: list[dict[str, Any]]) ->
     add_task_log(task_id, "📭 无更多数据，任务结束")
     return True
 
-def _legacy_time_range_task_stopped(task_id: str) -> bool:
+def _task_stopped_with_log(task_id: str) -> bool:
     if not is_task_stopped(task_id):
         return False
     add_task_log(task_id, "🛑 任务已停止")
@@ -463,7 +463,7 @@ def _run_legacy_time_range_pages(
     max_retries_per_page = LEGACY_TIME_RANGE_MAX_RETRIES_PER_PAGE
 
     while True:
-        if _legacy_time_range_task_stopped(task_id):
+        if _task_stopped_with_log(task_id):
             break
 
         page_result = _process_legacy_time_range_page(
@@ -741,8 +741,7 @@ def _run_official_crawl_time_range_task(
     total_stats = _empty_official_crawl_stats()
 
     while True:
-        if is_task_stopped(task_id):
-            add_task_log(task_id, "🛑 任务已停止")
+        if _task_stopped_with_log(task_id):
             break
 
         page = _fetch_official_topic_page(client, group_id, per_page, cursor)
@@ -785,8 +784,7 @@ def _run_official_crawl_pages_task(
     seen_topic_ids: set[int] = set()
 
     while _official_pages_remaining(pages, total_stats):
-        if is_task_stopped(task_id):
-            add_task_log(task_id, "🛑 任务已停止")
+        if _task_stopped_with_log(task_id):
             break
 
         page = _fetch_official_topic_page(client, group_id, per_page, cursor)

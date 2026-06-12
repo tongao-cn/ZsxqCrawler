@@ -880,6 +880,28 @@ class CrawlRoutesHelperTests(unittest.TestCase):
         self.assertTrue(stopped)
 
     @unittest.skipUnless(HAS_CRAWL_ROUTE_DEPS, "crawl route dependencies are not installed")
+    def test_task_stopped_with_log_preserves_stop_log_semantics(self):
+        from backend.services.crawl_service import _task_stopped_with_log
+
+        with (
+            patch("backend.services.crawl_service.is_task_stopped", return_value=False) as is_task_stopped,
+            patch("backend.services.crawl_service.add_task_log") as add_task_log,
+        ):
+            self.assertFalse(_task_stopped_with_log("task-1"))
+
+        is_task_stopped.assert_called_once_with("task-1")
+        add_task_log.assert_not_called()
+
+        with (
+            patch("backend.services.crawl_service.is_task_stopped", return_value=True) as is_task_stopped,
+            patch("backend.services.crawl_service.add_task_log") as add_task_log,
+        ):
+            self.assertTrue(_task_stopped_with_log("task-1"))
+
+        is_task_stopped.assert_called_once_with("task-1")
+        add_task_log.assert_called_once_with("task-1", "🛑 任务已停止")
+
+    @unittest.skipUnless(HAS_CRAWL_ROUTE_DEPS, "crawl route dependencies are not installed")
     def test_log_crawler_startup_logs_connection_and_database_status(self):
         from backend.services.crawl_service import _log_crawler_startup
 

@@ -9249,6 +9249,65 @@ Result:
 - Frontend build passed, including Next.js lint/type checks.
 - `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
 
+### 2026-06-12 - P4 shared stopped-with-log helper
+
+Changed:
+
+- Reused existing official/legacy crawl route coverage, then added characterization coverage for
+  the shared stopped-task log helper.
+- Renamed `_legacy_time_range_task_stopped` to `_task_stopped_with_log` in
+  `backend/services/crawl_service.py`.
+- Reused the helper from legacy time-range crawling and both official crawling loops, keeping the
+  existing `🛑 任务已停止` log in one place.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Stopped tasks still call `is_task_stopped(task_id)` once per check.
+- Non-stopped tasks still return `False` without logging.
+- Stopped tasks still log `🛑 任务已停止` and return `True`.
+- Legacy time-range crawling and official time-range/page crawling still break out of the current
+  loop at the same stop-check point as before.
+- Official latest, incremental, historical, all, and time-range flows still use the same client
+  construction, database construction timing, page fetch shape, empty-page handling, per-page cap,
+  cursor handling, duplicate accounting, latest-mode existing-topic filtering, import stats,
+  completion messages, and oldest-cursor behavior.
+- Public API behavior, task status semantics, schema/config behavior, official MCP HTTP behavior,
+  legacy cookie crawler behavior, and fallback behavior are unchanged.
+- No legacy/fallback behavior was removed.
+- Unrelated dirty downloader files and scripts were left outside this P4 slice; their unstaged
+  testability repairs remained unstaged.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_crawl_routes_helpers -v
+uv run python -m unittest tests.test_official_topic_client_helpers -v
+uv run python -m py_compile backend\services\crawl_service.py tests\test_crawl_routes_helpers.py
+uv run python -m unittest tests.test_crawl_routes_helpers.CrawlRoutesHelperTests.test_task_stopped_with_log_preserves_stop_log_semantics tests.test_crawl_routes_helpers.CrawlRoutesHelperTests.test_legacy_time_range_outer_stop_completes_without_fetching tests.test_crawl_routes_helpers.CrawlRoutesHelperTests.test_official_latest_branch_skips_legacy_crawler -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run python -m unittest tests.test_crawl_routes_helpers -v
+uv run python -m unittest tests.test_official_topic_client_helpers -v
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers -v
+uv run python -m unittest discover -s tests
+cmd.exe /d /c npm --prefix frontend run build
+git diff --check
+```
+
+Result:
+
+- Pre-extraction `tests.test_crawl_routes_helpers`: 51 tests passed.
+- Pre-extraction `tests.test_official_topic_client_helpers`: 16 tests passed.
+- Focused shared stop-helper tests passed after helper rename/reuse.
+- `py_compile` passed.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- `tests.test_crawl_routes_helpers`: 52 tests passed.
+- `tests.test_official_topic_client_helpers`: 16 tests passed.
+- `tests.test_zsxq_file_downloader_helpers`: 90 tests passed.
+- Full backend unittest discovery: 768 tests passed, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+- `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
+
 ## Stop Conditions
 
 Pause before editing if:
