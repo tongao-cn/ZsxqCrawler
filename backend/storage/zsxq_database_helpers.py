@@ -755,6 +755,29 @@ def upsert_core_file(cursor, group_id: Optional[int], topic_id: int, file_data: 
     return file_id
 
 
+def topic_files_backfill_query(group_id: Optional[str]) -> tuple[str, tuple[Any, ...]]:
+    scoped_group_id = group_id_param(group_id)
+    return (
+        """
+                SELECT
+                    tf.topic_id, tf.file_id, tf.name, tf.hash, tf.size, tf.duration,
+                    tf.download_count, tf.create_time,
+                    t.group_id, t.type, t.title, t.annotation, t.create_time,
+                    t.likes_count, t.tourist_likes_count, t.rewards_count,
+                    t.comments_count, t.reading_count, t.readers_count,
+                    t.digested, t.sticky, t.user_liked, t.user_subscribed,
+                    g.name, g.type, g.background_url
+                FROM topic_files tf
+                LEFT JOIN topics t ON t.topic_id = tf.topic_id
+                LEFT JOIN groups g ON g.group_id = t.group_id
+                WHERE tf.file_id IS NOT NULL
+                  AND (? IS NULL OR t.group_id = ?)
+                ORDER BY tf.topic_id ASC, tf.file_id ASC
+            """,
+        (scoped_group_id, scoped_group_id),
+    )
+
+
 def topic_file_payload_from_row(row) -> Dict[str, Any]:
     return {
         "file_id": row[1],

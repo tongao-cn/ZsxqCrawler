@@ -32,6 +32,7 @@ from backend.storage.zsxq_database import (
     _topic_detail_scope,
     _topic_count_query,
     _topic_exists_query,
+    _topic_files_backfill_query,
     _topic_file_payload_from_row,
     _topic_file_insert_statement,
     _topic_group_id_query,
@@ -1174,6 +1175,25 @@ class ZSXQDatabaseHelperTests(unittest.TestCase):
             _topic_file_payload_from_row(row),
         )
 
+    def test_topic_files_backfill_query_preserves_scope_params_and_order(self):
+        sql, params = _topic_files_backfill_query("303")
+
+        self.assertEqual(
+            "SELECT tf.topic_id, tf.file_id, tf.name, tf.hash, tf.size, tf.duration, "
+            "tf.download_count, tf.create_time, t.group_id, t.type, t.title, t.annotation, "
+            "t.create_time, t.likes_count, t.tourist_likes_count, t.rewards_count, "
+            "t.comments_count, t.reading_count, t.readers_count, t.digested, t.sticky, "
+            "t.user_liked, t.user_subscribed, g.name, g.type, g.background_url "
+            "FROM topic_files tf LEFT JOIN topics t ON t.topic_id = tf.topic_id "
+            "LEFT JOIN groups g ON g.group_id = t.group_id WHERE tf.file_id IS NOT NULL "
+            "AND (? IS NULL OR t.group_id = ?) ORDER BY tf.topic_id ASC, tf.file_id ASC",
+            " ".join(sql.split()),
+        )
+        self.assertEqual((303, 303), params)
+
+        _unscoped_sql, unscoped_params = _topic_files_backfill_query(None)
+        self.assertEqual(("", ""), unscoped_params)
+
     def test_backfill_topic_files_to_core_tables_uses_current_database_cursor(self):
         from backend.storage.zsxq_database import ZSXQDatabase
 
@@ -1214,6 +1234,18 @@ class ZSXQDatabaseHelperTests(unittest.TestCase):
 
         self.assertEqual({"scanned": 1, "new_files": 1, "relations": 1, "topic_files": 1}, stats)
         self.assertGreaterEqual(db.conn.commits, 1)
+        self.assertEqual(
+            "SELECT tf.topic_id, tf.file_id, tf.name, tf.hash, tf.size, tf.duration, "
+            "tf.download_count, tf.create_time, t.group_id, t.type, t.title, t.annotation, "
+            "t.create_time, t.likes_count, t.tourist_likes_count, t.rewards_count, "
+            "t.comments_count, t.reading_count, t.readers_count, t.digested, t.sticky, "
+            "t.user_liked, t.user_subscribed, g.name, g.type, g.background_url "
+            "FROM topic_files tf LEFT JOIN topics t ON t.topic_id = tf.topic_id "
+            "LEFT JOIN groups g ON g.group_id = t.group_id WHERE tf.file_id IS NOT NULL "
+            "AND (? IS NULL OR t.group_id = ?) ORDER BY tf.topic_id ASC, tf.file_id ASC",
+            db.cursor.calls[0][0],
+        )
+        self.assertEqual((303, 303), db.cursor.calls[0][1])
         calls = "\n".join(sql for sql, _params in db.cursor.calls)
         self.assertIn("INSERT INTO groups", calls)
         self.assertIn("INSERT INTO files", calls)

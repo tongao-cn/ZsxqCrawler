@@ -5012,6 +5012,52 @@ Result:
 - `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
 - Frontend build is not planned because this slice only changes backend storage/helper code.
 
+### 2026-06-12 - P2 topic files backfill query helper extraction
+
+Changed:
+
+- Added `topic_files_backfill_query` to `backend/storage/zsxq_database_helpers.py`, with a
+  compatibility wrapper in `backend/storage/zsxq_database.py`.
+- Replaced the inline `SELECT` used by `backfill_topic_files_to_core_tables` with helper-returned
+  SQL and params.
+- Added characterization coverage for the existing backfill query shape before extraction, plus
+  direct helper coverage for selected columns, joins, scoped params, empty-group legacy scope, and
+  ordering.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Backfill still scans `topic_files` joined with `topics` and `groups` using the same selected
+  columns and `ORDER BY tf.topic_id ASC, tf.file_id ASC`.
+- Group scoping still uses the existing `group_id_param` behavior, including `None` mapping to
+  empty-string params for this legacy backfill path.
+- Row unpacking, group upsert, file upsert, file-topic relation replacement, stats increments,
+  batch commits, final commit, rollback-on-exception, and the compatibility method
+  `backfill_topic_files_to_file_database` are unchanged.
+- No schema, config, compatibility, fallback, error handling, logging, commit order, or public API
+  semantics were changed.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_database_helpers -v
+uv run python -m py_compile backend\storage\zsxq_database.py backend\storage\zsxq_database_helpers.py tests\test_zsxq_database_helpers.py
+uv run python -m unittest tests.test_zsxq_database_helpers -v
+uv run python -m unittest discover -s tests
+uv run python scripts\scan_postgres_compat_debt.py
+git diff --check
+```
+
+Result:
+
+- Pre-refactor characterization run passed against the original inline query.
+- `py_compile` passed.
+- `tests.test_zsxq_database_helpers`: 57 tests passed.
+- Full backend unittest discovery: 660 tests passed, 15 skipped.
+- PostgreSQL compatibility debt scan: no SQLite compatibility patterns found.
+- `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
+- Frontend build is not planned because this slice only changes backend storage/helper code.
+
 ## Stop Conditions
 
 Pause before editing if:
