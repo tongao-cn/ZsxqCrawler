@@ -404,6 +404,53 @@ def user_liked_emoji_insert_statement(topic_id: int, emoji_key: str) -> tuple[st
     )
 
 
+def comment_insert_statement(
+    topic_id: int,
+    comment_id: Any,
+    group_id: Any,
+    owner_user_id: Any,
+    repliee_user_id: Any,
+    comment_data: Dict[str, Any],
+    imported_at: str,
+) -> tuple[str, tuple[Any, ...]]:
+    return (
+        """
+            INSERT INTO comments
+            (comment_id, group_id, topic_id, owner_user_id, parent_comment_id, repliee_user_id,
+             text, create_time, likes_count, rewards_count, replies_count, sticky, imported_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(comment_id) DO UPDATE SET
+                group_id = excluded.group_id,
+                topic_id = excluded.topic_id,
+                owner_user_id = excluded.owner_user_id,
+                parent_comment_id = excluded.parent_comment_id,
+                repliee_user_id = excluded.repliee_user_id,
+                text = excluded.text,
+                create_time = excluded.create_time,
+                likes_count = excluded.likes_count,
+                rewards_count = excluded.rewards_count,
+                replies_count = excluded.replies_count,
+                sticky = excluded.sticky,
+                imported_at = excluded.imported_at
+        """,
+        (
+            comment_id,
+            group_id,
+            topic_id,
+            owner_user_id,
+            comment_data.get("parent_comment_id"),
+            repliee_user_id,
+            comment_data.get("text", ""),
+            comment_data.get("create_time", ""),
+            comment_data.get("likes_count", 0),
+            comment_data.get("rewards_count", 0),
+            comment_data.get("replies_count", 0),
+            comment_data.get("sticky", False),
+            imported_at,
+        ),
+    )
+
+
 def update_tag_hid_statement(tag_id: int, hid: str) -> tuple[str, tuple[Any, ...]]:
     return "UPDATE tags SET hid = ? WHERE tag_id = ?", (hid, tag_id)
 

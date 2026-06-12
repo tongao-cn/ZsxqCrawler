@@ -3,6 +3,7 @@ from unittest.mock import patch
 
 from backend.storage.zsxq_database import (
     _build_pagination,
+    _comment_insert_statement,
     _delete_latest_likes_statement,
     _file_exists_query,
     _format_tag_row,
@@ -904,6 +905,61 @@ class ZSXQDatabaseHelperTests(unittest.TestCase):
         )
         self.assertEqual((202, "[ok]"), params)
 
+    def test_comment_insert_statement_helper_preserves_sql_shape_and_params(self):
+        sql, params = _comment_insert_statement(
+            202,
+            101,
+            303,
+            901,
+            902,
+            {
+                "parent_comment_id": 100,
+                "text": "ok",
+                "create_time": "2026-01-01T10:00:00.000+0800",
+                "likes_count": 1,
+                "rewards_count": 2,
+                "replies_count": 3,
+                "sticky": True,
+            },
+            "2026-06-12T10:00:00.000+0800",
+        )
+
+        self.assertEqual(
+            "INSERT INTO comments (comment_id, group_id, topic_id, owner_user_id, "
+            "parent_comment_id, repliee_user_id, text, create_time, likes_count, "
+            "rewards_count, replies_count, sticky, imported_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
+            "ON CONFLICT(comment_id) DO UPDATE SET group_id = excluded.group_id, "
+            "topic_id = excluded.topic_id, owner_user_id = excluded.owner_user_id, "
+            "parent_comment_id = excluded.parent_comment_id, "
+            "repliee_user_id = excluded.repliee_user_id, text = excluded.text, "
+            "create_time = excluded.create_time, likes_count = excluded.likes_count, "
+            "rewards_count = excluded.rewards_count, replies_count = excluded.replies_count, "
+            "sticky = excluded.sticky, imported_at = excluded.imported_at",
+            " ".join(sql.split()),
+        )
+        self.assertEqual(
+            (
+                101,
+                303,
+                202,
+                901,
+                100,
+                902,
+                "ok",
+                "2026-01-01T10:00:00.000+0800",
+                1,
+                2,
+                3,
+                True,
+                "2026-06-12T10:00:00.000+0800",
+            ),
+            params,
+        )
+
+        _default_sql, default_params = _comment_insert_statement(202, 102, None, None, None, {}, "now")
+        self.assertEqual((102, None, 202, None, None, None, "", "", 0, 0, 0, False, "now"), default_params)
+
     def test_replace_file_topic_relation_deletes_then_inserts(self):
         file_db = FakeFileDatabase()
 
@@ -1543,17 +1599,65 @@ class ZSXQDatabaseHelperTests(unittest.TestCase):
     def test_upsert_comment_writes_group_id_from_runtime_scope(self):
         from backend.storage.zsxq_database import ZSXQDatabase
 
+        empty_db = object.__new__(ZSXQDatabase)
+        empty_db.cursor = FakeCursor()
+        empty_db.group_id = "303"
+        ZSXQDatabase._upsert_comment(empty_db, 202, {})
+        self.assertEqual([], empty_db.cursor.calls)
+
         db = object.__new__(ZSXQDatabase)
         db.cursor = FakeCursor()
         db.group_id = "303"
 
-        ZSXQDatabase._upsert_comment(db, 202, {"comment_id": 101, "text": "ok"})
+        ZSXQDatabase._upsert_comment(
+            db,
+            202,
+            {
+                "comment_id": 101,
+                "owner": {"user_id": 901},
+                "repliee": {"user_id": 902},
+                "parent_comment_id": 100,
+                "text": "ok",
+                "create_time": "2026-01-01T10:00:00.000+0800",
+                "likes_count": 1,
+                "rewards_count": 2,
+                "replies_count": 3,
+                "sticky": True,
+            },
+        )
 
         sql, params = db.cursor.calls[-1]
         self.assertIn("INSERT INTO comments", sql)
         self.assertIn("ON CONFLICT(comment_id) DO UPDATE SET", sql)
         self.assertIn("comment_id, group_id, topic_id", sql)
-        self.assertEqual((101, 303, 202), params[:3])
+        self.assertEqual(
+            (
+                101,
+                303,
+                202,
+                901,
+                100,
+                902,
+                "ok",
+                "2026-01-01T10:00:00.000+0800",
+                1,
+                2,
+                3,
+                True,
+            ),
+            params[:12],
+        )
+        self.assertRegex(params[12], r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}\+0800$")
+
+        default_db = object.__new__(ZSXQDatabase)
+        default_db.cursor = FakeCursor()
+        default_db.group_id = None
+        default_db._resolve_topic_group_id = lambda _topic_id, _explicit_group_id=None: None
+
+        ZSXQDatabase._upsert_comment(default_db, 202, {"comment_id": 102})
+
+        _default_sql, default_params = default_db.cursor.calls[0]
+        self.assertEqual((102, None, 202, None, None, None, "", "", 0, 0, 0, False), default_params[:12])
 
     def test_upsert_article_uses_topic_create_time_and_preserves_empty_payload_skip(self):
         from backend.storage.zsxq_database import ZSXQDatabase

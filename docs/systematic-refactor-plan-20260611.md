@@ -4826,6 +4826,53 @@ Result:
 - `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
 - Frontend build is not planned because this slice only changes backend storage/helper code.
 
+### 2026-06-12 - P2 comment insert statement helper extraction
+
+Changed:
+
+- Added `comment_insert_statement` to `backend/storage/zsxq_database_helpers.py`, with a
+  compatibility wrapper in `backend/storage/zsxq_database.py`.
+- Replaced inline `INSERT INTO comments` SQL and params in `_upsert_comment` with
+  helper-returned SQL and params.
+- Strengthened characterization coverage for missing `comment_id` skip, runtime group scope,
+  owner/repliee IDs, parent comment ID, text/create-time fields, counter defaults, sticky default,
+  generated Beijing-time `imported_at`, and full helper SQL/parameter order.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- `_upsert_comment` still returns before any database call when `comment_id` is missing/falsy.
+- Runtime group resolution still happens in `_upsert_comment` after timestamp generation and before
+  the write.
+- Owner and repliee IDs still come from `owner.user_id` and `repliee.user_id`, defaulting to
+  `None` when absent.
+- Parent comment, text, create time, likes, rewards, replies, and sticky fields keep the same
+  defaults and same `ON CONFLICT(comment_id) DO UPDATE SET` update list.
+- Timestamp formatting remains the existing Beijing-time `YYYY-MM-DDTHH:MM:SS.mmm+0800` string.
+- No schema, config, compatibility, fallback, error handling, logging, commit order, or public API
+  semantics were changed.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_database_helpers -v
+uv run python -m py_compile backend\storage\zsxq_database.py backend\storage\zsxq_database_helpers.py tests\test_zsxq_database_helpers.py
+uv run python -m unittest tests.test_zsxq_database_helpers -v
+uv run python -m unittest discover -s tests
+uv run python scripts\scan_postgres_compat_debt.py
+git diff --check
+```
+
+Result:
+
+- Pre-refactor characterization run passed against the original implementation.
+- `py_compile` passed.
+- `tests.test_zsxq_database_helpers`: 50 tests passed.
+- Full backend unittest discovery: 653 tests passed, 15 skipped.
+- PostgreSQL compatibility debt scan: no SQLite compatibility patterns found.
+- `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
+- Frontend build is not planned because this slice only changes backend storage/helper code.
+
 ## Stop Conditions
 
 Pause before editing if:

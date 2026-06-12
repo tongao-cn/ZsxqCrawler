@@ -6,6 +6,7 @@ from typing import Dict, Any, Optional, List
 from backend.storage.db_compat import connect
 from backend.storage.zsxq_database_helpers import (
     build_pagination,
+    comment_insert_statement,
     delete_latest_likes_statement,
     file_exists_query,
     format_tag_row,
@@ -151,6 +152,26 @@ def _like_emoji_insert_statement(
 
 def _user_liked_emoji_insert_statement(topic_id: int, emoji_key: str) -> tuple[str, tuple[Any, ...]]:
     return user_liked_emoji_insert_statement(topic_id, emoji_key)
+
+
+def _comment_insert_statement(
+    topic_id: int,
+    comment_id: Any,
+    group_id: Any,
+    owner_user_id: Any,
+    repliee_user_id: Any,
+    comment_data: Dict[str, Any],
+    imported_at: str,
+) -> tuple[str, tuple[Any, ...]]:
+    return comment_insert_statement(
+        topic_id,
+        comment_id,
+        group_id,
+        owner_user_id,
+        repliee_user_id,
+        comment_data,
+        imported_at,
+    )
 
 
 def _update_tag_hid_statement(tag_id: int, hid: str) -> tuple[str, tuple[Any, ...]]:
@@ -704,39 +725,16 @@ class ZSXQDatabase:
         current_time = datetime.now(beijing_tz).strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + '+0800'
         group_id = self._resolve_topic_group_id(topic_id, comment_data.get('group_id'))
         
-        self.cursor.execute('''
-            INSERT INTO comments
-            (comment_id, group_id, topic_id, owner_user_id, parent_comment_id, repliee_user_id,
-             text, create_time, likes_count, rewards_count, replies_count, sticky, imported_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT(comment_id) DO UPDATE SET
-                group_id = excluded.group_id,
-                topic_id = excluded.topic_id,
-                owner_user_id = excluded.owner_user_id,
-                parent_comment_id = excluded.parent_comment_id,
-                repliee_user_id = excluded.repliee_user_id,
-                text = excluded.text,
-                create_time = excluded.create_time,
-                likes_count = excluded.likes_count,
-                rewards_count = excluded.rewards_count,
-                replies_count = excluded.replies_count,
-                sticky = excluded.sticky,
-                imported_at = excluded.imported_at
-        ''', (
+        sql, params = _comment_insert_statement(
+            topic_id,
             comment_id,
             group_id,
-            topic_id,
             owner_user_id,
-            comment_data.get('parent_comment_id'),
             repliee_user_id,
-            comment_data.get('text', ''),
-            comment_data.get('create_time', ''),
-            comment_data.get('likes_count', 0),
-            comment_data.get('rewards_count', 0),
-            comment_data.get('replies_count', 0),
-            comment_data.get('sticky', False),
-            current_time
-        ))
+            comment_data,
+            current_time,
+        )
+        self.cursor.execute(sql, params)
 
     def _resolve_topic_group_id(self, topic_id: int, explicit_group_id: Optional[Any] = None):
         """Resolve group_id for comments fetched separately from topic payloads."""
