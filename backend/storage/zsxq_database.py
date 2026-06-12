@@ -655,9 +655,6 @@ class ZSXQDatabase:
             self.cursor.execute(sql, params)
             sql, params = _latest_like_insert_statement(topic_id, user_id, like, current_time)
             self.cursor.execute(sql, params)
-        
-        if topic_data['latest_likes']:
-            pass  # 数据已导入，无需额外日志
 
     def _import_like_emojis(self, topic_id: int, topic_data: Dict[str, Any]):
         """导入表情点赞信息"""
@@ -670,9 +667,6 @@ class ZSXQDatabase:
 
             sql, params = _like_emoji_insert_statement(topic_id, emoji, current_time)
             self.cursor.execute(sql, params)
-        
-        if topic_data['likes_detail']['emojis']:
-            pass  # 数据已导入，无需额外日志
 
     def _import_user_liked_emojis(self, topic_id: int, topic_data: Dict[str, Any]):
         """导入用户表情点赞信息"""
@@ -682,9 +676,6 @@ class ZSXQDatabase:
         for emoji_key in _iter_valid_user_liked_emoji_keys(topic_data['user_specific']['liked_emojis']):
             sql, params = _user_liked_emoji_insert_statement(topic_id, emoji_key)
             self.cursor.execute(sql, params)
-        
-        if topic_data['user_specific']['liked_emojis']:
-            pass  # 数据已导入，无需额外日志
 
     def _import_comments(self, topic_id: int, comments: List[Dict[str, Any]]):
         """导入评论信息"""
@@ -695,9 +686,6 @@ class ZSXQDatabase:
             if image_batch:
                 comment_id, images = image_batch
                 self._import_comment_images(topic_id, comment_id, images)
-
-        if comments:
-            pass  # 数据已导入，无需额外日志
 
     def import_additional_comments(self, topic_id: int, comments: List[Dict[str, Any]]):
         """导入额外获取的评论信息（来自评论API）"""

@@ -5572,6 +5572,49 @@ Result:
 - `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
 - Frontend build is not planned because this slice only changes backend storage/helper code.
 
+### 2026-06-12 - P2 import no-op branch cleanup
+
+Changed:
+
+- Removed four `if ...: pass` branches from `_import_likes`, `_import_like_emojis`,
+  `_import_user_liked_emojis`, and `_import_comments`.
+- Confirmed no remaining `pass  # 数据已导入，无需额外日志` / `无需额外日志` placeholders in
+  `backend/storage/zsxq_database.py`.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- These branches only executed `pass` and had no logging, return value, SQL, timestamp, commit,
+  rollback, or exception side effects.
+- Existing early returns, delete statements, per-item filtering, SQL write order, timestamp
+  generation, and comment-image import behavior are unchanged.
+- No legacy, fallback, compatibility, schema, config, logging, or public API semantics were
+  removed.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_import_likes_preserves_delete_skip_and_insert_order tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_import_like_emojis_preserves_skip_defaults_and_upsert_params tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_import_user_liked_emojis_preserves_skip_and_insert_params tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_import_comments_preserves_upsert_and_image_import_order -v
+uv run python -m py_compile backend\storage\zsxq_database.py
+rg -n "pass\s*# 数据已导入|无需额外日志" backend\storage\zsxq_database.py backend\storage\zsxq_database_helpers.py tests\test_zsxq_database_helpers.py
+uv run python -m unittest tests.test_zsxq_database_helpers -v
+uv run python -m unittest discover -s tests
+uv run python scripts\scan_postgres_compat_debt.py
+git diff --check
+```
+
+Result:
+
+- Pre-cleanup characterization tests passed against the original no-op-branch implementation.
+- `py_compile` passed.
+- Focused post-cleanup tests passed.
+- Residual no-op placeholder search returned no matches.
+- `tests.test_zsxq_database_helpers`: 75 tests passed.
+- Full backend unittest discovery: 678 tests passed, 15 skipped.
+- PostgreSQL compatibility debt scan: no SQLite compatibility patterns found.
+- `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
+- Frontend build is not planned because this slice only changes backend storage code and docs.
+
 ## Stop Conditions
 
 Pause before editing if:
