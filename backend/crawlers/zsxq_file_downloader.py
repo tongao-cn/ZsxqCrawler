@@ -548,27 +548,12 @@ class ZSXQFileDownloader:
     
     def download_file(self, file_info: Dict[str, Any]) -> bool:
         """下载单个文件"""
-        file_data = download_file_data(file_info)
-        file_id = file_data["file_id"]
-        file_name = file_data["file_name"]
-        file_size = file_data["file_size"]
-        download_count = file_data["download_count"]
-        
-        self.log(f"📥 准备下载文件:")
-        self.log(f"   📄 名称: {file_name}")
-        self.log(f"   📊 大小: {file_size:,} bytes ({file_size/1024/1024:.2f} MB)")
-        self.log(f"   📈 下载次数: {download_count}")
-        if not file_id:
-            self.log("   ❌ 文件缺少 file_id，无法下载")
+        prepared_file = self._prepare_download_file_target(file_info)
+        if not prepared_file:
             return False
 
-        # 检查是否需要停止
-        if self.check_stop():
-            self.log("🛑 下载任务被停止")
-            return False
-        
-        safe_filename, file_path = download_target_path(self.download_dir, file_name, file_id)
-        
+        file_id, file_name, file_size, safe_filename, file_path = prepared_file
+
         # 🚀 优化：先检查本地文件，避免无意义的API请求
         existing_file_result = self._skip_existing_download_if_complete(file_id, file_path, file_size)
         if existing_file_result:
@@ -634,6 +619,32 @@ class ZSXQFileDownloader:
             last_error,
         )
         return False
+
+    def _prepare_download_file_target(
+        self,
+        file_info: Dict[str, Any],
+    ) -> Optional[tuple[int, str, int, str, str]]:
+        file_data = download_file_data(file_info)
+        file_id = file_data["file_id"]
+        file_name = file_data["file_name"]
+        file_size = file_data["file_size"]
+        download_count = file_data["download_count"]
+
+        self.log(f"📥 准备下载文件:")
+        self.log(f"   📄 名称: {file_name}")
+        self.log(f"   📊 大小: {file_size:,} bytes ({file_size/1024/1024:.2f} MB)")
+        self.log(f"   📈 下载次数: {download_count}")
+        if not file_id:
+            self.log("   ❌ 文件缺少 file_id，无法下载")
+            return None
+
+        # 检查是否需要停止
+        if self.check_stop():
+            self.log("🛑 下载任务被停止")
+            return None
+
+        safe_filename, file_path = download_target_path(self.download_dir, file_name, file_id)
+        return file_id, file_name, file_size, safe_filename, file_path
 
     def _skip_existing_download_if_complete(
         self,

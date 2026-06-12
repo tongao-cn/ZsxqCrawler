@@ -518,6 +518,96 @@ class FileDownloaderDownloadTests(unittest.TestCase):
             self.assertEqual("https://download.test/101", session.get_calls[0][0])
             self.assertEqual((101, "completed"), downloader.file_db.status_updates[-1][:2])
 
+    def test_download_file_without_file_id_logs_and_returns_before_request(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            session = FakeDownloadSession([])
+            downloader = self._downloader_for_download(temp_dir, session)
+
+            result = ZSXQFileDownloader.download_file(
+                downloader,
+                {"file": {"name": "memo.pdf", "size": 4, "download_count": 2}},
+            )
+
+            self.assertFalse(result)
+            self.assertEqual([], session.get_calls)
+            self.assertEqual([], downloader.file_db.status_updates)
+            self.assertEqual(
+                [
+                    "📥 准备下载文件:",
+                    "   📄 名称: memo.pdf",
+                    "   📊 大小: 4 bytes (0.00 MB)",
+                    "   📈 下载次数: 2",
+                    "   ❌ 文件缺少 file_id，无法下载",
+                ],
+                downloader.logs,
+            )
+
+    def test_prepare_download_file_target_preserves_logs_target_and_early_returns(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            downloader = object.__new__(ZSXQFileDownloader)
+            downloader.download_dir = temp_dir
+            downloader.logs = []
+            downloader.log = downloader.logs.append
+            downloader.check_stop = lambda: False
+
+            prepared = ZSXQFileDownloader._prepare_download_file_target(
+                downloader,
+                {"file": {"id": 101, "name": "../memo?.pdf", "size": 4, "download_count": 2}},
+            )
+
+            self.assertEqual(
+                (101, "../memo?.pdf", 4, "..memo.pdf", str(Path(temp_dir) / "..memo.pdf")),
+                prepared,
+            )
+            self.assertEqual(
+                [
+                    "📥 准备下载文件:",
+                    "   📄 名称: ../memo?.pdf",
+                    "   📊 大小: 4 bytes (0.00 MB)",
+                    "   📈 下载次数: 2",
+                ],
+                downloader.logs,
+            )
+
+            downloader.logs = []
+            downloader.log = downloader.logs.append
+            self.assertIsNone(
+                ZSXQFileDownloader._prepare_download_file_target(
+                    downloader,
+                    {"file": {"name": "memo.pdf", "size": 4, "download_count": 2}},
+                )
+            )
+            self.assertEqual(
+                [
+                    "📥 准备下载文件:",
+                    "   📄 名称: memo.pdf",
+                    "   📊 大小: 4 bytes (0.00 MB)",
+                    "   📈 下载次数: 2",
+                    "   ❌ 文件缺少 file_id，无法下载",
+                ],
+                downloader.logs,
+            )
+
+            downloader.logs = []
+            downloader.log = downloader.logs.append
+            downloader.check_stop = lambda: True
+            self.assertIsNone(
+                ZSXQFileDownloader._prepare_download_file_target(
+                    downloader,
+                    {"file": {"id": 102, "name": "stop.pdf", "size": 8, "download_count": 3}},
+                )
+            )
+            self.assertEqual(
+                [
+                    "📥 准备下载文件:",
+                    "   📄 名称: stop.pdf",
+                    "   📊 大小: 8 bytes (0.00 MB)",
+                    "   📈 下载次数: 3",
+                    "🛑 下载任务被停止",
+                ],
+                downloader.logs,
+            )
+
     def test_download_file_uses_safe_filename_for_local_target(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             session = FakeDownloadSession([FakeDownloadResponse(200, b"memo")])

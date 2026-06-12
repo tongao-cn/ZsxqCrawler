@@ -6468,6 +6468,55 @@ Result:
 - Frontend build passed, including Next.js lint/type checks.
 - `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
 
+### 2026-06-12 - P9 file downloader file target helper
+
+Changed:
+
+- Added characterization coverage that a file payload without `file_id` logs the current
+  preparation messages, returns `False`, does not request a signed URL, and does not update
+  download status.
+- Added direct helper coverage for file metadata logging, safe target path generation,
+  missing-`file_id` early return, and stop-check early return.
+- Added `ZSXQFileDownloader._prepare_download_file_target` and reused it from `download_file`.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- `download_file` still logs the file name, byte size, MB display, and download count before
+  checking `file_id`.
+- Missing `file_id` still returns `False` before stop checks, signed URL requests, local target
+  checks, or database status updates.
+- A stopped task still returns `False` before target path generation, existing-file checks,
+  signed URL requests, or database status updates.
+- Normal downloads still use `download_target_path(self.download_dir, file_name, file_id)`, keep
+  the original `file_name` for later response-header override handling, and preserve existing
+  skip, retry, request, body-write, size-mismatch, success, failure, schema/config/API, and public
+  API behavior.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_download_file_without_file_id_logs_and_returns_before_request -v
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_prepare_download_file_target_preserves_logs_target_and_early_returns tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_download_file_without_file_id_logs_and_returns_before_request tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_download_file_uses_safe_filename_for_local_target tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_download_file_accepts_raw_file_id_payload -v
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+git diff --check
+```
+
+Result:
+
+- Pre-refactor missing-`file_id` characterization test passed against the original inline branch.
+- `py_compile` passed.
+- Focused file-target/download tests passed.
+- `tests.test_zsxq_file_downloader_helpers`: 73 tests passed.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Full backend unittest discovery: 715 tests passed, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+- `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
+
 ## Stop Conditions
 
 Pause before editing if:
