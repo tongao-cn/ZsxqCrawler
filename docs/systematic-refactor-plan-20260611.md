@@ -12975,6 +12975,38 @@ Result:
 - PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-13 - P5 workflow registry contract baseline
+
+Changed:
+
+- Added `backend/services/workflow_registry.py` as the first workflow contract registry for current
+  task types.
+- Moved the ingestion-lock task-type source in `backend/services/task_runtime_status.py` to derive
+  from the registry while keeping the existing `INGESTION_LOCK_TYPES` compatibility export.
+- Added registry tests that lock current workflow types, ingestion lock compatibility, and the
+  current A-share analysis business-state checkpoint fact.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Task creation, immediate thread execution, task statuses, lock keys, cancellation behavior,
+  checkpoint writes, route responses, storage schema, SSE/fallback polling, legacy paths, and config
+  semantics are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m py_compile backend\services\workflow_registry.py backend\services\task_runtime_status.py
+uv run python -m unittest tests.test_workflow_registry tests.test_task_runtime_helpers -v
+uv run python -m unittest tests.test_workflow_registry tests.test_ingestion_helpers tests.test_crawl_routes_helpers tests.test_file_routes_helpers tests.test_columns_routes_helpers -v
+```
+
+Result:
+
+- Workflow registry tests passed: 3 tests.
+- Task runtime helper tests passed with registry-backed ingestion lock types.
+- Related ingestion, crawl, file, and column route helper tests passed: 104 tests.
+
 ## Stop Conditions
 
 Pause before editing if:

@@ -4,26 +4,14 @@ from datetime import datetime
 from typing import Any, Dict, Optional
 
 from backend.services.a_share_analysis_service import normalize_group_id
+from backend.services.workflow_registry import INGESTION_LOCK_CATEGORY, INGESTION_WORKFLOW_TYPES
 
 
 ACTIVE_TASK_STATUSES = {"pending", "running"}
 RUNTIME_TERMINAL_TASK_STATUSES = {"completed", "failed", "cancelled"}
 
-INGESTION_LOCK_TYPES = {
-    "columns_fetch",
-    "crawl_all",
-    "crawl_historical",
-    "crawl_incremental",
-    "crawl_latest_until_complete",
-    "crawl_time_range",
-    "collect_files",
-    "download_files",
-    "download_filtered_files",
-    "download_selected_files",
-    "download_single_file",
-    "sync_files_from_topics",
-}
-INGESTION_LOCK_KEY = "ingestion"
+INGESTION_LOCK_TYPES = INGESTION_WORKFLOW_TYPES
+INGESTION_LOCK_KEY = INGESTION_LOCK_CATEGORY
 
 
 def _normalize_task_status(status: str) -> str:
