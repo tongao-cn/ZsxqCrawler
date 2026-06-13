@@ -21,6 +21,7 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     classify_api_failure,
     classify_http_failure,
     content_disposition_filename,
+    database_download_completion_messages,
     database_download_filter_messages,
     database_stats_table_emoji,
     download_exception_detail,
@@ -497,6 +498,20 @@ class FileDownloaderDatabaseDownloadTests(unittest.TestCase):
 
 
 class FileDownloaderTimeHelperTests(unittest.TestCase):
+    def test_database_download_completion_messages_preserves_summary_order(self):
+        self.assertEqual(
+            (
+                "🎉 数据库下载完成:",
+                "   📊 总文件数: 3",
+                "   ✅ 下载成功: 1",
+                "   ⚠️ 跳过: 1",
+                "   ❌ 失败: 1",
+            ),
+            database_download_completion_messages(
+                {"total_files": 3, "downloaded": 1, "skipped": 1, "failed": 1}
+            ),
+        )
+
     def test_database_download_filter_messages_preserves_range_and_sort_labels(self):
         self.assertEqual(
             (

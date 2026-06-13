@@ -27,6 +27,7 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     add_import_stats,
     classify_api_failure,
     classify_http_failure,
+    database_download_completion_messages,
     database_download_filter_messages,
     database_download_query_plan,
     database_stats_table_emoji,
@@ -1592,11 +1593,8 @@ class ZSXQFileDownloader:
                 stats['failed'] += 1
                 continue
 
-        self.log(f"🎉 数据库下载完成:")
-        self.log(f"   📊 总文件数: {stats['total_files']}")
-        self.log(f"   ✅ 下载成功: {stats['downloaded']}")
-        self.log(f"   ⚠️ 跳过: {stats['skipped']}")
-        self.log(f"   ❌ 失败: {stats['failed']}")
+        for message in database_download_completion_messages(stats):
+            self.log(message)
         
         return stats
     

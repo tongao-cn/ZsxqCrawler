@@ -409,6 +409,16 @@ def download_result_stats(total_files: int = 0) -> Dict[str, int]:
     }
 
 
+def database_download_completion_messages(stats: Dict[str, int]) -> tuple[str, ...]:
+    return (
+        "🎉 数据库下载完成:",
+        f"   📊 总文件数: {stats['total_files']}",
+        f"   ✅ 下载成功: {stats['downloaded']}",
+        f"   ⚠️ 跳过: {stats['skipped']}",
+        f"   ❌ 失败: {stats['failed']}",
+    )
+
+
 def database_stats_table_emoji(table_name: str) -> str:
     return DATABASE_STATS_TABLE_EMOJI.get(table_name, "📊")
 
