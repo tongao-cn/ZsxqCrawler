@@ -19,6 +19,8 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     HTTP_FAILURE_RETRY_EXHAUSTED,
     add_import_stats,
     api_failure_detail,
+    batch_download_completion_messages,
+    batch_download_start_messages,
     classify_api_failure,
     classify_http_failure,
     content_disposition_filename,
@@ -383,6 +385,28 @@ class FileDownloaderBatchDownloadTests(unittest.TestCase):
 
         downloader.fetch_file_list = fetch_file_list
         return downloader
+
+    def test_batch_download_messages_preserve_start_and_completion_logs(self):
+        self.assertEqual(
+            ("📥 开始无限下载文件 (直到没有更多文件)",),
+            batch_download_start_messages(None),
+        )
+        self.assertEqual(
+            ("📥 开始批量下载文件 (最多2个)",),
+            batch_download_start_messages(2),
+        )
+        self.assertEqual(
+            (
+                "🎉 批量下载完成:",
+                "   📊 总文件数: 3",
+                "   ✅ 下载成功: 1",
+                "   ⚠️ 跳过: 1",
+                "   ❌ 失败: 1",
+            ),
+            batch_download_completion_messages(
+                {"total_files": 3, "downloaded": 1, "skipped": 1, "failed": 1}
+            ),
+        )
 
     def test_download_files_batch_preserves_result_stats_payloads_and_delays(self):
         files = [

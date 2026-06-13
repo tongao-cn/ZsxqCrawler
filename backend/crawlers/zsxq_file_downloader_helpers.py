@@ -609,14 +609,28 @@ def download_result_stats(total_files: int = 0) -> Dict[str, int]:
     }
 
 
-def database_download_completion_messages(stats: Dict[str, int]) -> tuple[str, ...]:
+def _download_completion_messages(title: str, stats: Dict[str, int]) -> tuple[str, ...]:
     return (
-        "🎉 数据库下载完成:",
+        title,
         f"   📊 总文件数: {stats['total_files']}",
         f"   ✅ 下载成功: {stats['downloaded']}",
         f"   ⚠️ 跳过: {stats['skipped']}",
         f"   ❌ 失败: {stats['failed']}",
     )
+
+
+def batch_download_start_messages(max_files: Optional[int]) -> tuple[str, ...]:
+    if max_files is None:
+        return ("📥 开始无限下载文件 (直到没有更多文件)",)
+    return (f"📥 开始批量下载文件 (最多{max_files}个)",)
+
+
+def batch_download_completion_messages(stats: Dict[str, int]) -> tuple[str, ...]:
+    return _download_completion_messages("🎉 批量下载完成:", stats)
+
+
+def database_download_completion_messages(stats: Dict[str, int]) -> tuple[str, ...]:
+    return _download_completion_messages("🎉 数据库下载完成:", stats)
 
 
 def database_download_file_info(

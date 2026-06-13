@@ -26,6 +26,8 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     HTTP_FAILURE_RETRY,
     api_failure_detail,
     add_import_stats,
+    batch_download_completion_messages,
+    batch_download_start_messages,
     classify_api_failure,
     database_download_completion_messages,
     database_download_filter_messages,
@@ -1029,10 +1031,8 @@ class ZSXQFileDownloader:
 
     def download_files_batch(self, max_files: Optional[int] = None, start_index: Optional[str] = None) -> Dict[str, int]:
         """批量下载文件"""
-        if max_files is None:
-            self.log(f"📥 开始无限下载文件 (直到没有更多文件)")
-        else:
-            self.log(f"📥 开始批量下载文件 (最多{max_files}个)")
+        for message in batch_download_start_messages(max_files):
+            self.log(message)
 
         # 检查是否需要停止
         if self.check_stop():
@@ -1091,11 +1091,8 @@ class ZSXQFileDownloader:
             else:
                 break
 
-        self.log(f"🎉 批量下载完成:")
-        self.log(f"   📊 总文件数: {stats['total_files']}")
-        self.log(f"   ✅ 下载成功: {stats['downloaded']}")
-        self.log(f"   ⚠️ 跳过: {stats['skipped']}")
-        self.log(f"   ❌ 失败: {stats['failed']}")
+        for message in batch_download_completion_messages(stats):
+            self.log(message)
         
         return stats
     
