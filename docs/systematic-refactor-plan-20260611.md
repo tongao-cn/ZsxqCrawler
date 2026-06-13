@@ -13460,6 +13460,45 @@ Result:
 - PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-13 - P5 daily stock concept service-call helper
+
+Changed:
+
+- Added `_extract_daily_stock_concepts_for_task()` in
+  `backend.routes.daily_stock_concept_routes`.
+- Reused it from `run_daily_stock_concept_task()` for the daily stock concept service call.
+- Added helper coverage for the current group/date/comments arguments, result pass-through, and
+  task log callback wiring.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Daily stock concept extraction still passes the same group ID, report date, `commentsPerTopic`,
+  and task-bound log callback into `extract_daily_stock_concepts()`.
+- Running/completed/failure task messages, `run_workflow()` lifecycle behavior, result payload,
+  task/public APIs, storage schema, fallback/legacy behavior, and config semantics are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m py_compile backend\routes\daily_stock_concept_routes.py tests\test_daily_stock_concept_routes_helpers.py
+uv run python -m unittest tests.test_daily_stock_concept_routes_helpers.DailyStockConceptRoutesHelperTests.test_extract_daily_stock_concepts_for_task_preserves_service_arguments -v
+uv run python -m unittest tests.test_daily_stock_concept_routes_helpers -v
+uv run python -m unittest tests.test_task_runtime_helpers tests.test_daily_analysis_routes_helpers tests.test_daily_stock_concept_routes_helpers -v
+uv run python -m unittest discover -s tests
+uv run python scripts\scan_postgres_compat_debt.py
+npm --prefix frontend run build
+```
+
+Result:
+
+- Focused daily stock concept helper test passed.
+- Daily stock concept route helper tests passed: 5 tests.
+- Related runtime/daily route helper tests passed: 57 tests.
+- Full backend unittest discovery passed: 888 tests, 15 skipped.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:

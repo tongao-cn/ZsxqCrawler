@@ -70,6 +70,31 @@ class DailyStockConceptRoutesHelperTests(unittest.TestCase):
         add_task_log.assert_called_once_with("task-1", "hello")
 
     @unittest.skipUnless(HAS_ROUTE_DEPS, "daily stock concept route dependencies are not installed")
+    def test_extract_daily_stock_concepts_for_task_preserves_service_arguments(self):
+        from backend.routes.daily_stock_concept_routes import (
+            DailyStockConceptRequest,
+            _extract_daily_stock_concepts_for_task,
+        )
+
+        request = DailyStockConceptRequest(date="2026-06-13", commentsPerTopic=2)
+        expected = {"stocks": []}
+        with (
+            patch("backend.routes.daily_stock_concept_routes.extract_daily_stock_concepts", return_value=expected) as extract,
+            patch("backend.routes.daily_stock_concept_routes.add_task_log") as add_task_log,
+        ):
+            result = _extract_daily_stock_concepts_for_task("task-1", "51111112855254", request)
+
+            self.assertEqual(expected, result)
+            extract.assert_called_once()
+            call_args, call_kwargs = extract.call_args
+            self.assertEqual(("51111112855254", "2026-06-13"), call_args)
+            self.assertEqual(2, call_kwargs["comments_per_topic"])
+
+            call_kwargs["log_callback"]("concept log")
+
+        add_task_log.assert_called_once_with("task-1", "concept log")
+
+    @unittest.skipUnless(HAS_ROUTE_DEPS, "daily stock concept route dependencies are not installed")
     def test_run_daily_stock_concept_task_uses_runtime_workflow_lifecycle(self):
         from backend.routes.daily_stock_concept_routes import DailyStockConceptRequest, run_daily_stock_concept_task
 

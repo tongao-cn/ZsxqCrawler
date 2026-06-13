@@ -45,14 +45,18 @@ def _create_daily_stock_concept_task_response(
     return {"task_id": task_id, "message": TASK_CREATED_MESSAGE}
 
 
+def _extract_daily_stock_concepts_for_task(task_id: str, group_id: str, request: DailyStockConceptRequest) -> dict:
+    return extract_daily_stock_concepts(
+        group_id,
+        request.date,
+        comments_per_topic=request.commentsPerTopic,
+        log_callback=_build_stock_concept_log_callback(task_id),
+    )
+
+
 def run_daily_stock_concept_task(task_id: str, group_id: str, request: DailyStockConceptRequest) -> None:
     def work() -> dict:
-        return extract_daily_stock_concepts(
-            group_id,
-            request.date,
-            comments_per_topic=request.commentsPerTopic,
-            log_callback=_build_stock_concept_log_callback(task_id),
-        )
+        return _extract_daily_stock_concepts_for_task(task_id, group_id, request)
 
     run_workflow(
         task_id,
