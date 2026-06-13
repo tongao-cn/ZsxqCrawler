@@ -11974,6 +11974,44 @@ Result:
 - PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-13 - P9 file downloader download URL API failure helper
+
+Changed:
+
+- Added `download_url_api_failure_plan()` in
+  `backend/crawlers/zsxq_file_downloader_helpers.py`.
+- Reused the helper in `ZSXQFileDownloader.get_download_url()` for API failure message planning,
+  retry classification, and 1030 download-url error detail payloads.
+- Added direct helper coverage for retryable API failures, retry-exhausted failures, 1030
+  permission-denied compatibility behavior, and non-retry failures.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- API failure log ordering, risk-event fields, retry-vs-terminal decisions, 1030
+  `last_download_url_error` payload, exhausted-retry final message behavior, request ordering,
+  fallback behavior, task/public APIs, storage schema, and config semantics are unchanged.
+- The separate file-list API failure branch remains unchanged.
+
+Verification:
+
+```powershell
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py backend\crawlers\zsxq_file_downloader_helpers.py tests\test_zsxq_file_downloader_helpers.py
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderRetryHelperTests.test_download_url_api_failure_plan_preserves_retry_and_terminal_paths tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_get_download_url_1030_does_not_stop_whole_task tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_get_download_url_writes_opt_in_risk_log_events -v
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers -v
+uv run python -m unittest discover -s tests
+uv run python scripts\scan_postgres_compat_debt.py
+npm --prefix frontend run build
+```
+
+Result:
+
+- Focused API-failure helper and download URL behavior tests passed.
+- Downloader helper tests passed: 113 tests.
+- Full backend unittest discovery passed: 823 tests, 15 skipped.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:

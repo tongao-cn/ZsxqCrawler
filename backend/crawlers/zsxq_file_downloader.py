@@ -48,6 +48,7 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     download_size_mismatch_detail,
     download_target_path,
     download_total_size,
+    download_url_api_failure_plan,
     download_url_failure_detail,
     download_url_success_plan,
     empty_import_stats,
@@ -582,34 +583,30 @@ class ZSXQFileDownloader:
                             return download_url
                         print(f"   ❌ 响应中无下载链接字段")
                     else:
-                        error_msg, error_code = api_failure_detail(data)
-                        self.log(f"   ❌ API返回失败: {error_msg} (代码: {error_code})")
+                        api_failure = download_url_api_failure_plan(data, attempt, max_retries)
+                        self.log(api_failure["messages"][0])
                         self._record_risk_event(
                             file_id=file_id,
                             phase="download_url_response",
                             attempt=attempt,
                             headers=headers,
                             http_status=response.status_code,
-                            api_code=error_code,
-                            api_message=error_msg,
+                            api_code=api_failure["error_code"],
+                            api_message=api_failure["error_msg"],
                             status="api_failed",
                         )
+                        for message in api_failure["messages"][1:]:
+                            self.log(message)
 
-                        failure_class = classify_api_failure(error_code, attempt, max_retries)
+                        failure_class = api_failure["failure_class"]
 
                         if failure_class == API_FAILURE_PERMISSION_DENIED_1030:
-                            self.last_download_url_error = {
-                                "code": error_code,
-                                "message": error_msg,
-                            }
-                            self.log("   🚫 权限不足错误(1030)：此文件可能只能在手机端下载，已跳过当前文件")
+                            self.last_download_url_error = api_failure["last_download_url_error"]
                             return None
 
                         if failure_class == API_FAILURE_RETRY:
-                            self.log(f"   🔄 检测到可重试错误，准备重试...")
                             continue
                         if failure_class == API_FAILURE_NON_RETRY:
-                            self.log(f"   🚫 非可重试错误，停止重试")
                             return None
                         
                 else:

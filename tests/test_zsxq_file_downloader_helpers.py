@@ -40,6 +40,7 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     download_query_group_id,
     download_result_stats,
     download_target_path,
+    download_url_api_failure_plan,
     empty_import_stats,
     existing_file_matches,
     file_list_request_params,
@@ -1015,6 +1016,49 @@ class FileDownloaderRetryHelperTests(unittest.TestCase):
         self.assertEqual(API_FAILURE_RETRY_EXHAUSTED, classify_api_failure("1059", 1, 2))
         self.assertEqual(API_FAILURE_NON_RETRY, classify_api_failure("N/A", 0, 2))
         self.assertEqual(API_FAILURE_PERMISSION_DENIED_1030, classify_api_failure(1030, 0, 2))
+
+    def test_download_url_api_failure_plan_preserves_retry_and_terminal_paths(self):
+        retry_plan = download_url_api_failure_plan({"message": "slow", "code": 1059}, 0, 2)
+        self.assertEqual(API_FAILURE_RETRY, retry_plan["failure_class"])
+        self.assertEqual("slow", retry_plan["error_msg"])
+        self.assertEqual(1059, retry_plan["error_code"])
+        self.assertIsNone(retry_plan["last_download_url_error"])
+        self.assertEqual(
+            (
+                "   ❌ API返回失败: slow (代码: 1059)",
+                "   🔄 检测到可重试错误，准备重试...",
+            ),
+            retry_plan["messages"],
+        )
+
+        exhausted_plan = download_url_api_failure_plan({"message": "slow", "code": 1059}, 1, 2)
+        self.assertEqual(API_FAILURE_RETRY_EXHAUSTED, exhausted_plan["failure_class"])
+        self.assertIsNone(exhausted_plan["last_download_url_error"])
+        self.assertEqual(("   ❌ API返回失败: slow (代码: 1059)",), exhausted_plan["messages"])
+
+        permission_plan = download_url_api_failure_plan({"message": "mobile only", "code": 1030}, 0, 2)
+        self.assertEqual(API_FAILURE_PERMISSION_DENIED_1030, permission_plan["failure_class"])
+        self.assertEqual({"code": 1030, "message": "mobile only"}, permission_plan["last_download_url_error"])
+        self.assertEqual(
+            (
+                "   ❌ API返回失败: mobile only (代码: 1030)",
+                "   🚫 权限不足错误(1030)：此文件可能只能在手机端下载，已跳过当前文件",
+            ),
+            permission_plan["messages"],
+        )
+
+        non_retry_plan = download_url_api_failure_plan({"error": "final"}, 0, 2)
+        self.assertEqual(API_FAILURE_NON_RETRY, non_retry_plan["failure_class"])
+        self.assertEqual("final", non_retry_plan["error_msg"])
+        self.assertEqual("N/A", non_retry_plan["error_code"])
+        self.assertIsNone(non_retry_plan["last_download_url_error"])
+        self.assertEqual(
+            (
+                "   ❌ API返回失败: final (代码: N/A)",
+                "   🚫 非可重试错误，停止重试",
+            ),
+            non_retry_plan["messages"],
+        )
 
     def test_classify_http_failure_distinguishes_retry_and_terminal_cases(self):
         self.assertEqual(HTTP_FAILURE_RETRY, classify_http_failure(429, 0, 2))

@@ -162,6 +162,32 @@ def classify_api_failure(error_code: Any, attempt: int, max_retries: int) -> str
     return API_FAILURE_RETRY_EXHAUSTED
 
 
+def download_url_api_failure_plan(data: Dict[str, Any], attempt: int, max_retries: int) -> Dict[str, Any]:
+    error_msg, error_code = api_failure_detail(data)
+    failure_class = classify_api_failure(error_code, attempt, max_retries)
+    messages = [f"   ❌ API返回失败: {error_msg} (代码: {error_code})"]
+    last_error = None
+
+    if failure_class == API_FAILURE_PERMISSION_DENIED_1030:
+        last_error = {
+            "code": error_code,
+            "message": error_msg,
+        }
+        messages.append("   🚫 权限不足错误(1030)：此文件可能只能在手机端下载，已跳过当前文件")
+    elif failure_class == API_FAILURE_RETRY:
+        messages.append("   🔄 检测到可重试错误，准备重试...")
+    elif failure_class == API_FAILURE_NON_RETRY:
+        messages.append("   🚫 非可重试错误，停止重试")
+
+    return {
+        "error_msg": error_msg,
+        "error_code": error_code,
+        "failure_class": failure_class,
+        "messages": tuple(messages),
+        "last_download_url_error": last_error,
+    }
+
+
 def classify_http_failure(status_code: int, attempt: int, max_retries: int) -> str:
     if not is_retryable_http_status(status_code):
         return HTTP_FAILURE_NON_RETRY
