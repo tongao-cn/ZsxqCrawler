@@ -34,6 +34,7 @@ from backend.services.task_runtime import (
 )
 
 router = APIRouter(prefix="/api/analytics/a-share", tags=["a-share"])
+TASK_CREATED_MESSAGE = "任务已创建，正在后台执行"
 
 
 class AShareAnalysisRunRequest(BaseModel):
@@ -107,6 +108,25 @@ def _run_range_text(request: AShareAnalysisRunRequest) -> str:
             raise ValueError("start_date 不能晚于 end_date")
         return f"{start_day} ~ {end_day}"
     return f"最近 {request.days} 天"
+
+
+def _a_share_task_metadata(normalized_group_id: Optional[str]) -> dict[str, Optional[str]]:
+    return {"group_id": normalized_group_id}
+
+
+def _create_a_share_analysis_task_response(
+    request: AShareAnalysisRunRequest,
+    normalized_group_id: Optional[str],
+    scope_text: str,
+    run_range_text: str,
+) -> dict[str, str]:
+    task_id = create_task(
+        "a_share_analysis",
+        f"A股公司分析（{scope_text}，{run_range_text}）",
+        metadata=_a_share_task_metadata(normalized_group_id),
+    )
+    enqueue_runtime_task(run_a_share_analysis_task, task_id, request)
+    return {"task_id": task_id, "message": TASK_CREATED_MESSAGE}
 
 
 def run_a_share_analysis_task(task_id: str, request: AShareAnalysisRunRequest):
@@ -249,13 +269,7 @@ async def start_a_share_analysis(request: AShareAnalysisRunRequest, background_t
 
         normalized_group_id, scope_text = _normalize_group_scope(request.group_id)
         run_range_text = _run_range_text(request)
-        task_id = create_task(
-            "a_share_analysis",
-            f"A股公司分析（{scope_text}，{run_range_text}）",
-            metadata={"group_id": normalized_group_id},
-        )
-        enqueue_runtime_task(run_a_share_analysis_task, task_id, request)
-        return {"task_id": task_id, "message": "任务已创建，正在后台执行"}
+        return _create_a_share_analysis_task_response(request, normalized_group_id, scope_text, run_range_text)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:

@@ -12,6 +12,43 @@ HAS_A_SHARE_ROUTE_DEPS = (
 
 class AShareRoutesHelperTests(unittest.TestCase):
     @unittest.skipUnless(HAS_A_SHARE_ROUTE_DEPS, "a-share route dependencies are not installed")
+    def test_a_share_task_metadata_preserves_group_field(self):
+        from backend.routes.a_share_routes import _a_share_task_metadata
+
+        self.assertEqual({"group_id": "51111112855254"}, _a_share_task_metadata("51111112855254"))
+        self.assertEqual({"group_id": None}, _a_share_task_metadata(None))
+
+    @unittest.skipUnless(HAS_A_SHARE_ROUTE_DEPS, "a-share route dependencies are not installed")
+    def test_create_a_share_analysis_task_response_preserves_task_contract(self):
+        from backend.routes.a_share_routes import (
+            TASK_CREATED_MESSAGE,
+            AShareAnalysisRunRequest,
+            _create_a_share_analysis_task_response,
+            run_a_share_analysis_task,
+        )
+
+        request = AShareAnalysisRunRequest(group_id="51111112855254", days=21)
+
+        with (
+            patch("backend.routes.a_share_routes.create_task", return_value="task-a-share") as create_task,
+            patch("backend.routes.a_share_routes.enqueue_runtime_task") as enqueue_runtime_task,
+        ):
+            response = _create_a_share_analysis_task_response(
+                request,
+                "51111112855254",
+                "群组 51111112855254",
+                "最近 21 天",
+            )
+
+        create_task.assert_called_once_with(
+            "a_share_analysis",
+            "A股公司分析（群组 51111112855254，最近 21 天）",
+            metadata={"group_id": "51111112855254"},
+        )
+        enqueue_runtime_task.assert_called_once_with(run_a_share_analysis_task, "task-a-share", request)
+        self.assertEqual({"task_id": "task-a-share", "message": TASK_CREATED_MESSAGE}, response)
+
+    @unittest.skipUnless(HAS_A_SHARE_ROUTE_DEPS, "a-share route dependencies are not installed")
     def test_normalize_group_scope_keeps_existing_labels(self):
         from backend.routes.a_share_routes import _normalize_group_scope
 

@@ -10168,6 +10168,48 @@ Result:
 - Frontend build passed, including Next.js lint/type checks.
 - `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
 
+### 2026-06-13 - P2 A-share analysis task response helper
+
+Changed:
+
+- Added `backend.routes.a_share_routes.TASK_CREATED_MESSAGE`.
+- Added `backend.routes.a_share_routes._a_share_task_metadata`.
+- Added `backend.routes.a_share_routes._create_a_share_analysis_task_response`.
+- Reused the helper in the A-share analysis task creation endpoint.
+- Added helper coverage in `tests/test_a_share_routes_helpers.py` for global/group metadata, task
+  creation, enqueue order, and response shape.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Existing OpenAI API key preflight check, group normalization, date-range validation, task type,
+  task description, metadata keyword argument, task runner, enqueue argument order, error wrappers,
+  and response payload are unchanged.
+- The task-created message literal was moved into a module constant with the same value.
+- No schema, crawler, storage, fallback, legacy, route, or public response behavior was removed.
+- Existing dirty downloader risk-log files and scripts remain outside this P2 slice.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_a_share_routes_helpers -v
+uv run python -m py_compile backend\routes\a_share_routes.py tests\test_a_share_routes_helpers.py
+uv run python scripts\scan_postgres_compat_debt.py
+uv run python -m unittest discover -s tests
+cmd.exe /d /c npm --prefix frontend run build
+git diff --check
+```
+
+Result:
+
+- Existing A-share route helper tests passed before production code changes.
+- Focused A-share route helper tests passed after extracting the task response helper.
+- `py_compile` passed.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Full backend unittest discovery: 797 tests passed, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+- `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
+
 ## Stop Conditions
 
 Pause before editing if:
