@@ -12083,6 +12083,43 @@ Result:
 - PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-13 - P9 file downloader time collection page import messages helper
+
+Changed:
+
+- Added `time_collection_page_import_messages()` in
+  `backend/crawlers/zsxq_file_downloader_helpers.py`.
+- Reused the helper in `ZSXQFileDownloader.collect_files_by_time()` for the page import success
+  log and post-insert stop hint logs.
+- Added direct helper coverage for regular page import logging and stop-after-insert logging with
+  missing `files` / `topics` defaults.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Page import execution, stats accumulation ordering, `page_stats.get(..., 0)` fallback semantics,
+  post-insert stop behavior, log text/order, pagination, task/public APIs, storage schema, and
+  config semantics are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py backend\crawlers\zsxq_file_downloader_helpers.py tests\test_zsxq_file_downloader_helpers.py
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderTimeHelperTests.test_time_collection_page_import_messages_preserve_success_and_stop_logs tests.test_zsxq_file_downloader_helpers.FileDownloaderPaginationTests.test_collect_files_by_time_filters_old_files_and_stops_after_mixed_page tests.test_zsxq_file_downloader_helpers.FileDownloaderPaginationTests.test_collect_files_by_time_stops_when_page_import_fails -v
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers -v
+uv run python -m unittest discover -s tests
+uv run python scripts\scan_postgres_compat_debt.py
+npm --prefix frontend run build
+```
+
+Result:
+
+- Focused page-import helper and collect-by-time behavior tests passed.
+- Downloader helper tests passed: 116 tests.
+- Full backend unittest discovery passed: 826 tests, 15 skipped.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:

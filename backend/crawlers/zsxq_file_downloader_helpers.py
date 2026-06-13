@@ -513,6 +513,20 @@ def time_dedupe_page_messages(dedupe_plan: Dict[str, Any]) -> tuple[str, ...]:
     return tuple(messages)
 
 
+def time_collection_page_import_messages(
+    page_count: int,
+    page_stats: Dict[str, Any],
+    should_stop_after_insert: bool,
+) -> tuple[str, ...]:
+    messages = [
+        f"   ✅ 第{page_count}页存储完成: 文件+{page_stats.get('files', 0)}, 话题+{page_stats.get('topics', 0)}",
+    ]
+    if should_stop_after_insert:
+        messages.append("   ✅ 已插入本页新数据，后续页面均为旧数据，停止收集")
+        messages.append("   💡 提示: 如需强制重新收集，请传入 force_refresh=True 参数")
+    return tuple(messages)
+
+
 def time_collection_final_summary(
     final_stats: Dict[str, int],
     initial_files: int,

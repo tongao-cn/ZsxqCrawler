@@ -72,6 +72,7 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     should_log_full_response,
     summarize_page_time_range,
     time_dedupe_page_messages,
+    time_collection_page_import_messages,
     time_collection_final_summary,
     time_collection_mode,
     time_collection_next_page_plan,
@@ -723,6 +724,20 @@ class FileDownloaderTimeHelperTests(unittest.TestCase):
                 "   🔄 过滤掉2个旧数据，只插入1个新数据",
             ),
             time_dedupe_page_messages(mixed_plan),
+        )
+
+    def test_time_collection_page_import_messages_preserve_success_and_stop_logs(self):
+        self.assertEqual(
+            ("   ✅ 第3页存储完成: 文件+2, 话题+1",),
+            time_collection_page_import_messages(3, {"files": 2, "topics": 1}, False),
+        )
+        self.assertEqual(
+            (
+                "   ✅ 第4页存储完成: 文件+0, 话题+0",
+                "   ✅ 已插入本页新数据，后续页面均为旧数据，停止收集",
+                "   💡 提示: 如需强制重新收集，请传入 force_refresh=True 参数",
+            ),
+            time_collection_page_import_messages(4, {}, True),
         )
 
     def test_time_collection_final_summary_preserves_result_and_positive_log_items(self):
