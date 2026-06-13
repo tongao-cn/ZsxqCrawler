@@ -112,6 +112,7 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     retry_exhausted_message,
     risk_event_header_profile_label,
     risk_event_user_agent_label,
+    sec_ch_ua_for_user_agent,
     should_log_full_response,
     summarize_page_time_range,
     time_dedupe_page_messages,
@@ -325,17 +326,7 @@ class ZSXQFileDownloader:
         selected_ua = random.choice(user_agents)
         
         # 根据User-Agent生成对应的Sec-Ch-Ua
-        if "Chrome" in selected_ua:
-            if "131.0.0.0" in selected_ua:
-                sec_ch_ua = '"Google Chrome";v="131", "Chromium";v="131", "Not_A Brand";v="24"'
-            elif "130.0.0.0" in selected_ua:
-                sec_ch_ua = '"Google Chrome";v="130", "Chromium";v="130", "Not?A_Brand";v="99"'
-            elif "129.0.0.0" in selected_ua:
-                sec_ch_ua = '"Google Chrome";v="129", "Not=A?Brand";v="8", "Chromium";v="129"'
-            else:
-                sec_ch_ua = '"Google Chrome";v="131", "Chromium";v="131", "Not_A Brand";v="24"'
-        else:
-            sec_ch_ua = '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"'
+        sec_ch_ua = sec_ch_ua_for_user_agent(selected_ua)
         
         # 随机化其他头部
         accept_languages = [

@@ -12796,6 +12796,42 @@ Result:
 - PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-13 - P9 file downloader Sec-Ch-Ua mapping helper
+
+Changed:
+
+- Added `sec_ch_ua_for_user_agent()` in `backend/crawlers/zsxq_file_downloader_helpers.py`.
+- Reused it in `ZSXQFileDownloader.get_stealth_headers()` for the selected User-Agent mapping.
+- Added direct helper coverage for Chrome 131, 130, 129, unknown Chrome-version fallback, and
+  non-Chrome fallback strings.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- User-Agent pool, random User-Agent selection, `Sec-Ch-Ua` strings, accept-language/platform
+  randomization, optional header probabilities, timestamp/request-id behavior, Cookie/Referer
+  values, task/public APIs, storage schema, fallback/legacy behavior, and config semantics are
+  unchanged.
+
+Verification:
+
+```powershell
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py backend\crawlers\zsxq_file_downloader_helpers.py tests\test_zsxq_file_downloader_helpers.py
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderRetryHelperTests.test_sec_ch_ua_for_user_agent_preserves_existing_mapping -v
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers -v
+uv run python -m unittest discover -s tests
+uv run python scripts\scan_postgres_compat_debt.py
+npm --prefix frontend run build
+```
+
+Result:
+
+- Focused Sec-Ch-Ua helper test passed.
+- Downloader helper tests passed: 149 tests.
+- Full backend unittest discovery passed: 859 tests, 15 skipped.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:

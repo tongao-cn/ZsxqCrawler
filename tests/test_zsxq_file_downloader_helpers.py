@@ -110,6 +110,7 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     retry_exhausted_message,
     risk_event_header_profile_label,
     risk_event_user_agent_label,
+    sec_ch_ua_for_user_agent,
     safe_download_filename,
     should_retry_api_error,
     should_retry_http_status,
@@ -2216,6 +2217,28 @@ class FileDownloaderRetryHelperTests(unittest.TestCase):
             ),
         )
         self.assertEqual("minimal", risk_event_header_profile_label({}))
+
+    def test_sec_ch_ua_for_user_agent_preserves_existing_mapping(self):
+        self.assertEqual(
+            '"Google Chrome";v="131", "Chromium";v="131", "Not_A Brand";v="24"',
+            sec_ch_ua_for_user_agent("Mozilla/5.0 Chrome/131.0.0.0 Safari/537.36"),
+        )
+        self.assertEqual(
+            '"Google Chrome";v="130", "Chromium";v="130", "Not?A_Brand";v="99"',
+            sec_ch_ua_for_user_agent("Mozilla/5.0 Chrome/130.0.0.0 Safari/537.36"),
+        )
+        self.assertEqual(
+            '"Google Chrome";v="129", "Not=A?Brand";v="8", "Chromium";v="129"',
+            sec_ch_ua_for_user_agent("Mozilla/5.0 Chrome/129.0.0.0 Safari/537.36"),
+        )
+        self.assertEqual(
+            '"Google Chrome";v="131", "Chromium";v="131", "Not_A Brand";v="24"',
+            sec_ch_ua_for_user_agent("Mozilla/5.0 Chrome/128.0.0.0 Safari/537.36"),
+        )
+        self.assertEqual(
+            '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
+            sec_ch_ua_for_user_agent("Mozilla/5.0 Firefox/132.0"),
+        )
 
     def test_prepare_retry_api_request_sleeps_counts_and_rotates_headers(self):
         downloader = object.__new__(ZSXQFileDownloader)

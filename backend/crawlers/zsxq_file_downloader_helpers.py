@@ -98,6 +98,18 @@ def risk_event_header_profile_label(headers: Dict[str, str]) -> str:
     return "+".join(labels) or "minimal"
 
 
+def sec_ch_ua_for_user_agent(user_agent: str) -> str:
+    if "Chrome" in user_agent:
+        if "131.0.0.0" in user_agent:
+            return '"Google Chrome";v="131", "Chromium";v="131", "Not_A Brand";v="24"'
+        if "130.0.0.0" in user_agent:
+            return '"Google Chrome";v="130", "Chromium";v="130", "Not?A_Brand";v="99"'
+        if "129.0.0.0" in user_agent:
+            return '"Google Chrome";v="129", "Not=A?Brand";v="8", "Chromium";v="129"'
+        return '"Google Chrome";v="131", "Chromium";v="131", "Not_A Brand";v="24"'
+    return '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"'
+
+
 def is_retryable_api_error(error_code: Any) -> bool:
     return str(error_code) in RETRYABLE_API_ERROR_CODES
 
