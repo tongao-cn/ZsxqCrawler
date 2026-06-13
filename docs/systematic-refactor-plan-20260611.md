@@ -12832,6 +12832,42 @@ Result:
 - PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-13 - P9 file downloader cookie cleanup helper
+
+Changed:
+
+- Added `clean_cookie_result()` in `backend/crawlers/zsxq_file_downloader_helpers.py`.
+- Reused it in `ZSXQFileDownloader.clean_cookie()` while preserving the public method wrapper.
+- Added direct helper coverage for bytes decoding, newline truncation, quote/b-prefix removal,
+  escaped quote/newline cleanup, semicolon spacing, and trailing backslash removal.
+- Added method-level coverage for the existing exception message and fallback return value.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Cookie cleanup ordering, normal return values, class method name/signature, failure log text,
+  exception swallowing, fallback return value, header Cookie usage, task/public APIs, storage
+  schema, fallback/legacy behavior, and config semantics are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py backend\crawlers\zsxq_file_downloader_helpers.py tests\test_zsxq_file_downloader_helpers.py
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderCookieHelperTests -v
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers -v
+uv run python -m unittest discover -s tests
+uv run python scripts\scan_postgres_compat_debt.py
+npm --prefix frontend run build
+```
+
+Result:
+
+- Focused cookie helper and method fallback tests passed.
+- Downloader helper tests passed: 151 tests.
+- Full backend unittest discovery passed: 864 tests, 15 skipped.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:

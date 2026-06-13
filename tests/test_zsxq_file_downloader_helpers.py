@@ -33,6 +33,7 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     batch_download_start_messages,
     classify_api_failure,
     classify_http_failure,
+    clean_cookie_result,
     content_disposition_filename,
     database_download_completion_messages,
     database_download_effective_last_days,
@@ -1911,6 +1912,40 @@ class FileDownloaderImportStatsHelperTests(unittest.TestCase):
         self.assertEqual(3, total_stats["topics"])
         self.assertEqual(4, total_stats["users"])
         self.assertNotIn("unknown", total_stats)
+
+
+class FileDownloaderCookieHelperTests(unittest.TestCase):
+    def test_clean_cookie_result_preserves_existing_normalization(self):
+        cases = [
+            (b" a=1; b=2 \nignored", "a=1; b=2"),
+            (
+                " b'a=1; b=2\\n; q=\\\"x\\\"; s=\\'y\\'' ",
+                "a=1; b=2; q=\"x\"; s='y'",
+            ),
+            ('"token=1; theme=dark"', "token=1; theme=dark"),
+            (" a=1; b=2\\", "a=1; b=2"),
+        ]
+
+        for raw_cookie, expected in cases:
+            with self.subTest(raw_cookie=raw_cookie):
+                cleaned, error = clean_cookie_result(raw_cookie)
+                self.assertIsNone(error)
+                self.assertEqual(expected, cleaned)
+
+    def test_clean_cookie_method_preserves_failure_message_and_fallback_value(self):
+        class StripFailure:
+            def strip(self):
+                raise RuntimeError("strip boom")
+
+        raw_cookie = StripFailure()
+        downloader = object.__new__(ZSXQFileDownloader)
+
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            result = ZSXQFileDownloader.clean_cookie(downloader, raw_cookie)
+
+        self.assertIs(raw_cookie, result)
+        self.assertIn("Cookie清理失败: strip boom", output.getvalue())
 
 
 class FileDownloaderRetryHelperTests(unittest.TestCase):

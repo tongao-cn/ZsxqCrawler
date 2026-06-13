@@ -110,6 +110,38 @@ def sec_ch_ua_for_user_agent(user_agent: str) -> str:
     return '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"'
 
 
+def clean_cookie_result(cookie: Any) -> tuple[Any, Optional[Exception]]:
+    try:
+        if isinstance(cookie, bytes):
+            cookie = cookie.decode('utf-8')
+
+        cookie = cookie.strip()
+
+        if '\n' in cookie:
+            cookie = cookie.split('\n')[0]
+
+        cookie = cookie.rstrip('\\')
+
+        if cookie.startswith("b'") and cookie.endswith("'"):
+            cookie = cookie[2:-1]
+        elif cookie.startswith('b"') and cookie.endswith('"'):
+            cookie = cookie[2:-1]
+        elif cookie.startswith("'") and cookie.endswith("'"):
+            cookie = cookie[1:-1]
+        elif cookie.startswith('"') and cookie.endswith('"'):
+            cookie = cookie[1:-1]
+
+        cookie = cookie.replace('\\n', '')
+        cookie = cookie.replace('\\"', '"')
+        cookie = cookie.replace("\\'", "'")
+
+        cookie = '; '.join(part.strip() for part in cookie.split(';'))
+
+        return cookie, None
+    except Exception as exc:
+        return cookie, exc
+
+
 def is_retryable_api_error(error_code: Any) -> bool:
     return str(error_code) in RETRYABLE_API_ERROR_CODES
 

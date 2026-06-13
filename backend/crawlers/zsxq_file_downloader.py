@@ -39,6 +39,7 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     batch_download_skipped_message,
     batch_download_start_messages,
     classify_api_failure,
+    clean_cookie_result,
     database_download_completion_messages,
     database_download_effective_last_days,
     database_download_filter_messages,
@@ -268,43 +269,10 @@ class ZSXQFileDownloader:
         Returns:
             str: 清理后的Cookie字符串
         """
-        try:
-            # 如果是bytes类型，先解码
-            if isinstance(cookie, bytes):
-                cookie = cookie.decode('utf-8')
-            
-            # 去除多余的空格和换行符
-            cookie = cookie.strip()
-            
-            # 如果有多行，只取第一行
-            if '\n' in cookie:
-                cookie = cookie.split('\n')[0]
-            
-            # 去除末尾的反斜杠
-            cookie = cookie.rstrip('\\')
-            
-            # 去除可能的前缀b和引号
-            if cookie.startswith("b'") and cookie.endswith("'"):
-                cookie = cookie[2:-1]
-            elif cookie.startswith('b"') and cookie.endswith('"'):
-                cookie = cookie[2:-1]
-            elif cookie.startswith("'") and cookie.endswith("'"):
-                cookie = cookie[1:-1]
-            elif cookie.startswith('"') and cookie.endswith('"'):
-                cookie = cookie[1:-1]
-            
-            # 处理转义字符
-            cookie = cookie.replace('\\n', '')
-            cookie = cookie.replace('\\"', '"')
-            cookie = cookie.replace("\\'", "'")
-            
-            # 确保分号后有空格
-            cookie = '; '.join(part.strip() for part in cookie.split(';'))
-            
-            return cookie
-        except Exception as e:
-            print(f"Cookie清理失败: {e}")
-            return cookie  # 返回原始值
+        cookie, error = clean_cookie_result(cookie)
+        if error is not None:
+            print(f"Cookie清理失败: {error}")
+        return cookie
     
     def get_stealth_headers(self) -> Dict[str, str]:
         """获取反检测请求头（每次调用随机化）"""
