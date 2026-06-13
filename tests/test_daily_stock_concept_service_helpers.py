@@ -103,11 +103,31 @@ class DailyStockConceptServiceHelperTests(unittest.TestCase):
         self.assertEqual("宁德时代", stocks[0]["stock_name"])
         self.assertEqual("300750", stocks[0]["stock_code"])
         self.assertEqual("SZ", stocks[0]["market"])
-        self.assertEqual(["固态电池", "储能"], stocks[0]["concepts"])
+        self.assertEqual(["锂电/电池", "储能"], stocks[0]["concepts"])
         self.assertEqual(["101", "102"], stocks[0]["topic_ids"])
         self.assertEqual(0.8, stocks[0]["confidence"])
         self.assertIn("提到固态电池", stocks[0]["reason"])
         self.assertIn("提到储能", stocks[0]["reason"])
+
+    @unittest.skipUnless(HAS_STOCK_CONCEPT_DEPS, "daily stock concept service dependencies are not installed")
+    def test_aggregate_topic_stock_extractions_normalizes_aliases_and_keeps_signals(self):
+        from backend.services.daily_stock_concept_service import _aggregate_topic_stock_extractions
+
+        rows = [
+            {
+                "topic_id": "201",
+                "stock_name": "沪电股份",
+                "concepts": ["PCB钻针", "PCB", "涨价", "未知细分"],
+                "reason": "提到PCB钻针涨价。",
+                "confidence": 0.7,
+            },
+        ]
+
+        stocks = _aggregate_topic_stock_extractions(rows, stock_lookup={})
+
+        self.assertEqual(1, len(stocks))
+        self.assertEqual(["PCB", "涨价/供需", "未知细分"], stocks[0]["concepts"])
+        self.assertEqual(["201"], stocks[0]["topic_ids"])
 
 
 if __name__ == "__main__":

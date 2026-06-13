@@ -220,7 +220,18 @@ Verification:
 - Added focused unit tests in `tests/test_stock_concept_taxonomy_helpers.py`.
 - Remaining Phase 3 work:
   - decide whether the JSON should stay under frontend or move to a top-level shared package.
-  - wire backend daily aggregation to the shared normalization helpers.
+
+### 2026-06-13 - Phase 4 Aggregation Normalization Start
+
+- Wired topic-level daily stock concept aggregation to the shared taxonomy helpers.
+- Kept the current API shape unchanged:
+  - mapped industry aliases are saved under canonical concept names.
+  - mapped signal aliases remain in `concepts_json` as canonical signal tags for the current frontend split.
+  - unmapped raw terms are preserved as-is.
+- Added focused aggregation tests for alias normalization, signal preservation, and unmapped-term preservation.
+- Remaining Phase 4 work:
+  - compare latest completed date before and after regeneration on real data.
+  - decide whether to add additive `signal_tags_json` / `raw_terms_json` fields later.
 
 ### 2026-06-13 - Initial Plan
 

@@ -25,6 +25,7 @@ from backend.services.daily_topic_analysis_service import (
     _fetch_topics_for_date,
     _parse_report_date,
 )
+from backend.services.stock_concept_taxonomy import normalize_stock_concept_term
 
 
 STOCK_CONCEPT_PROMPT_VERSION = "daily-stock-concepts-v1"
@@ -234,8 +235,11 @@ def _aggregate_topic_stock_extractions(
             },
         )
         for concept in _safe_string_list(row.get("concepts"), limit=10):
-            if concept not in item["concepts"]:
-                item["concepts"].append(concept)
+            class_name, normalized = normalize_stock_concept_term(concept)
+            if class_name == "empty" or not normalized:
+                continue
+            if normalized not in item["concepts"]:
+                item["concepts"].append(normalized)
         reason = _normalize_text(row.get("reason"))
         topic_id = _normalize_text(row.get("topic_id"))
         if reason and reason not in item["reason_parts"]:
