@@ -117,6 +117,7 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     should_log_full_response,
     stealth_accept_languages,
     stealth_base_headers,
+    stealth_optional_headers,
     stealth_platforms,
     stealth_user_agents,
     summarize_page_time_range,
@@ -307,12 +308,7 @@ class ZSXQFileDownloader:
         )
         
         # 随机添加可选头部
-        optional_headers = {
-            'DNT': '1',
-            'Sec-GPC': '1',
-            'Upgrade-Insecure-Requests': '1',
-            'X-Requested-With': 'XMLHttpRequest'
-        }
+        optional_headers = stealth_optional_headers()
         
         for key, value in optional_headers.items():
             if random.random() > 0.5:  # 50%概率添加

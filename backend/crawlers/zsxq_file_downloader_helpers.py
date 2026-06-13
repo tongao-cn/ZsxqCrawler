@@ -70,6 +70,12 @@ STEALTH_ACCEPT_LANGUAGES = (
     'zh-CN,zh;q=0.8,zh-TW;q=0.7,zh-HK;q=0.5,en-US;q=0.3,en;q=0.2',
 )
 STEALTH_PLATFORMS = ('"Windows"', '"macOS"', '"Linux"')
+STEALTH_OPTIONAL_HEADERS = (
+    ('DNT', '1'),
+    ('Sec-GPC', '1'),
+    ('Upgrade-Insecure-Requests', '1'),
+    ('X-Requested-With', 'XMLHttpRequest'),
+)
 
 
 def stealth_user_agents() -> list[str]:
@@ -82,6 +88,10 @@ def stealth_accept_languages() -> list[str]:
 
 def stealth_platforms() -> list[str]:
     return list(STEALTH_PLATFORMS)
+
+
+def stealth_optional_headers() -> Dict[str, str]:
+    return dict(STEALTH_OPTIONAL_HEADERS)
 
 
 def stealth_base_headers(

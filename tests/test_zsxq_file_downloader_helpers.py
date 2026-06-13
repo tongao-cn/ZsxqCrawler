@@ -118,6 +118,7 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     should_log_full_response,
     stealth_accept_languages,
     stealth_base_headers,
+    stealth_optional_headers,
     stealth_platforms,
     stealth_user_agents,
     summarize_page_time_range,
@@ -2355,6 +2356,21 @@ class FileDownloaderRetryHelperTests(unittest.TestCase):
         self.assertEqual('cors', headers['Sec-Fetch-Mode'])
         self.assertEqual('same-site', headers['Sec-Fetch-Site'])
         self.assertEqual('ua-value', headers['User-Agent'])
+
+    def test_stealth_optional_headers_preserve_existing_values_and_order(self):
+        self.assertEqual(
+            {
+                'DNT': '1',
+                'Sec-GPC': '1',
+                'Upgrade-Insecure-Requests': '1',
+                'X-Requested-With': 'XMLHttpRequest',
+            },
+            stealth_optional_headers(),
+        )
+        self.assertEqual(
+            ['DNT', 'Sec-GPC', 'Upgrade-Insecure-Requests', 'X-Requested-With'],
+            list(stealth_optional_headers().keys()),
+        )
 
     def test_prepare_retry_api_request_sleeps_counts_and_rotates_headers(self):
         downloader = object.__new__(ZSXQFileDownloader)
