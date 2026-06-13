@@ -45,6 +45,8 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     download_retry_wait,
     download_size_mismatch_detail,
     download_total_size,
+    risk_event_header_profile_label,
+    risk_event_user_agent_label,
     safe_download_filename,
     should_retry_api_error,
     should_retry_http_status,
@@ -829,6 +831,35 @@ class FileDownloaderRetryHelperTests(unittest.TestCase):
         self.assertEqual(HTTP_FAILURE_RETRY, classify_http_failure(429, 0, 2))
         self.assertEqual(HTTP_FAILURE_RETRY_EXHAUSTED, classify_http_failure(503, 1, 2))
         self.assertEqual(HTTP_FAILURE_NON_RETRY, classify_http_failure(403, 0, 2))
+
+    def test_risk_event_user_agent_label_preserves_browser_platform_labels(self):
+        self.assertEqual(
+            "Edge Windows",
+            risk_event_user_agent_label(
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/131.0.0.0 Edg/131.0.0.0"
+            ),
+        )
+        self.assertEqual(
+            "Safari Mac",
+            risk_event_user_agent_label("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Safari/605.1.15"),
+        )
+        self.assertEqual("Other Other", risk_event_user_agent_label(""))
+
+    def test_risk_event_header_profile_label_preserves_order_and_case_handling(self):
+        self.assertEqual(
+            "referer+origin+sec-fetch+sec-ch+x-timestamp+x-request-id",
+            risk_event_header_profile_label(
+                {
+                    "Referer": "https://wx.zsxq.com",
+                    "Origin": "https://wx.zsxq.com",
+                    "Sec-Fetch-Site": "same-site",
+                    "Sec-Ch-Ua": '"Chromium";v="131"',
+                    "X-Timestamp": "123",
+                    "X-Request-Id": "req-1",
+                }
+            ),
+        )
+        self.assertEqual("minimal", risk_event_header_profile_label({}))
 
     def test_prepare_retry_api_request_sleeps_counts_and_rotates_headers(self):
         downloader = object.__new__(ZSXQFileDownloader)

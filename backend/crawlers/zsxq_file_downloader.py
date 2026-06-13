@@ -49,6 +49,8 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     partial_download_path,
     remove_partial_download,
     response_filename_override,
+    risk_event_header_profile_label,
+    risk_event_user_agent_label,
     should_log_full_response,
     summarize_page_time_range,
     time_collection_final_summary,
@@ -319,48 +321,11 @@ class ZSXQFileDownloader:
 
     @staticmethod
     def _user_agent_label(user_agent: str) -> str:
-        text = str(user_agent or "")
-        browser = "Other"
-        if "Edg/" in text:
-            browser = "Edge"
-        elif "Chrome/" in text or "Chromium/" in text:
-            browser = "Chrome"
-        elif "Firefox/" in text:
-            browser = "Firefox"
-        elif "Safari/" in text:
-            browser = "Safari"
-
-        platform = "Other"
-        if "Windows" in text:
-            platform = "Windows"
-        elif "Macintosh" in text or "Mac OS X" in text:
-            platform = "Mac"
-        elif "Linux" in text or "X11" in text:
-            platform = "Linux"
-        elif "Android" in text:
-            platform = "Android"
-        elif "iPhone" in text or "iPad" in text:
-            platform = "iOS"
-
-        return f"{browser} {platform}"
+        return risk_event_user_agent_label(user_agent)
 
     @staticmethod
     def _header_profile_label(headers: Dict[str, str]) -> str:
-        normalized = {str(key).lower(): value for key, value in (headers or {}).items()}
-        labels = []
-        if "referer" in normalized:
-            labels.append("referer")
-        if "origin" in normalized:
-            labels.append("origin")
-        if any(key.startswith("sec-fetch-") for key in normalized):
-            labels.append("sec-fetch")
-        if any(key.startswith("sec-ch-") for key in normalized):
-            labels.append("sec-ch")
-        if "x-timestamp" in normalized:
-            labels.append("x-timestamp")
-        if "x-request-id" in normalized:
-            labels.append("x-request-id")
-        return "+".join(labels) or "minimal"
+        return risk_event_header_profile_label(headers)
 
     def _record_risk_event(
         self,

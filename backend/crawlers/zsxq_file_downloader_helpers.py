@@ -32,6 +32,51 @@ HTTP_FAILURE_RETRY_EXHAUSTED = "retry_exhausted"
 DOWNLOAD_PROGRESS_INTERVAL_BYTES = 10 * 1024 * 1024
 
 
+def risk_event_user_agent_label(user_agent: str) -> str:
+    text = str(user_agent or "")
+    browser = "Other"
+    if "Edg/" in text:
+        browser = "Edge"
+    elif "Chrome/" in text or "Chromium/" in text:
+        browser = "Chrome"
+    elif "Firefox/" in text:
+        browser = "Firefox"
+    elif "Safari/" in text:
+        browser = "Safari"
+
+    platform = "Other"
+    if "Windows" in text:
+        platform = "Windows"
+    elif "Macintosh" in text or "Mac OS X" in text:
+        platform = "Mac"
+    elif "Linux" in text or "X11" in text:
+        platform = "Linux"
+    elif "Android" in text:
+        platform = "Android"
+    elif "iPhone" in text or "iPad" in text:
+        platform = "iOS"
+
+    return f"{browser} {platform}"
+
+
+def risk_event_header_profile_label(headers: Dict[str, str]) -> str:
+    normalized = {str(key).lower(): value for key, value in (headers or {}).items()}
+    labels = []
+    if "referer" in normalized:
+        labels.append("referer")
+    if "origin" in normalized:
+        labels.append("origin")
+    if any(key.startswith("sec-fetch-") for key in normalized):
+        labels.append("sec-fetch")
+    if any(key.startswith("sec-ch-") for key in normalized):
+        labels.append("sec-ch")
+    if "x-timestamp" in normalized:
+        labels.append("x-timestamp")
+    if "x-request-id" in normalized:
+        labels.append("x-request-id")
+    return "+".join(labels) or "minimal"
+
+
 def is_retryable_api_error(error_code: Any) -> bool:
     return str(error_code) in RETRYABLE_API_ERROR_CODES
 
