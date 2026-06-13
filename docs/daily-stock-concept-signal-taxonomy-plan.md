@@ -2,7 +2,8 @@
 
 ## Status
 
-Active.
+Core implementation landed; keep this document as the follow-up checklist for live data
+observation and optional storage additions.
 
 This plan tracks the next optimization rounds for the stock concept tab after the first
 display-layer split between industry concepts and signal tags.
@@ -23,14 +24,17 @@ easy to inspect.
 
 ## Current State
 
-- Frontend display already has a concept/signal split in the stock concept tab.
-- Current frontend taxonomy is still code-local in
-  `frontend/src/components/DailyTopicAnalysisPanelUtils.ts`.
-- `daily_stock_concepts.concepts_json` still stores the original aggregated concept list.
-- Topic-level extraction still writes only `concepts_json`; it does not yet distinguish
-  industry concepts, signal tags, and raw terms.
-- The latest scan found many remaining raw terms, but most are long tail. The highest-value
-  cleanup should focus on frequent multi-day terms.
+- Frontend display has a concept/signal split in the stock concept tab, plus compact counts for
+  industry concepts, signal tags, unmapped raw terms, and recommendation hits.
+- The taxonomy lives in `frontend/src/components/stockConceptTaxonomy.json` and is reused by
+  frontend utilities and backend normalization helpers.
+- Daily stock concept aggregation normalizes topic-level aliases through the shared taxonomy while
+  keeping the current `concepts_json` API/storage shape.
+- Topic-level extraction prompt version `a-share-topic-stock-extraction-v3` asks for
+  `industry_concepts`, `signal_tags`, and trace-only `raw_terms`; the parser normalizes concepts
+  and signals back into the current `concepts` field for compatibility.
+- Historical rows are unchanged. The latest scan found many remaining raw terms, but most are long
+  tail; future cleanup should focus on frequent multi-day unmapped terms.
 
 ## Scope
 
