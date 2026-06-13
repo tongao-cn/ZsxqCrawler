@@ -10503,6 +10503,51 @@ Result:
 - `git diff --check` passed with only Git's existing LF-to-CRLF working-copy
   warnings.
 
+### 2026-06-13 - P2 image cache unused import cleanup
+
+Changed:
+
+- Removed unused `os`, `mimetypes`, and `time` imports from
+  `backend.core.image_cache_manager`.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Only unused standard-library imports were removed; image URL validation, private-IP blocking,
+  trusted-host handling, cache-key generation, content-type checks, size-limit enforcement,
+  download streaming, cache info, and clear-cache behavior are unchanged.
+- `rg` confirmed those imports no longer exist in `backend.core.image_cache_manager` and no backend,
+  script, test, README, or docs references depend on `image_cache_manager.os`,
+  `image_cache_manager.mimetypes`, or `image_cache_manager.time`.
+- No schema, crawler, storage, fallback, legacy, route, public response, or dependency behavior was
+  removed.
+- Existing dirty downloader risk-log files and scripts remain outside this P2 slice.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_media_routes_helpers tests.test_columns_media_cache_service -v
+uv run python -m py_compile backend\core\image_cache_manager.py tests\test_media_routes_helpers.py tests\test_columns_media_cache_service.py
+rg -n "^(import os|import mimetypes|import time)" backend\core\image_cache_manager.py
+rg -n "image_cache_manager\.(os|mimetypes|time)\b|from backend\.core\.image_cache_manager import .*\b(os|mimetypes|time)\b" tests backend scripts docs README.md
+uv run python scripts\scan_postgres_compat_debt.py
+uv run python -m unittest discover -s tests
+cmd.exe /d /c npm --prefix frontend run build
+git diff --check
+```
+
+Result:
+
+- Baseline focused media/cache tests passed before removing the imports.
+- Focused media/cache tests passed after the import cleanup: 18 tests passed.
+- `py_compile` passed.
+- Both `rg` checks returned no matches for the removed imports or external module-attribute
+  dependency.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Full backend unittest discovery passed: 795 tests passed, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+- `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
+
 ## Stop Conditions
 
 Pause before editing if:

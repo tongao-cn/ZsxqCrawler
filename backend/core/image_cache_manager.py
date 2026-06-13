@@ -3,16 +3,13 @@
 负责下载、缓存和提供本地图片服务
 """
 
-import os
 import hashlib
 import ipaddress
 import requests
-import mimetypes
 import socket
 from pathlib import Path
 from typing import Mapping, Optional, Tuple
 from urllib.parse import urlparse
-import time
 
 DEFAULT_MAX_IMAGE_BYTES = 10 * 1024 * 1024
 ALLOWED_IMAGE_URL_SCHEMES = {"http", "https"}
