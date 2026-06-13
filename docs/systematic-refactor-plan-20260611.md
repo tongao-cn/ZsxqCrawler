@@ -12868,6 +12868,42 @@ Result:
 - PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-13 - P9 file downloader stealth header option pools
+
+Changed:
+
+- Added `stealth_user_agents()`, `stealth_accept_languages()`, and `stealth_platforms()` in
+  `backend/crawlers/zsxq_file_downloader_helpers.py`.
+- Reused them in `ZSXQFileDownloader.get_stealth_headers()`.
+- Added direct helper coverage for exact option-pool contents and ordering.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- User-Agent option order, Accept-Language option order, platform option order, random selection
+  call sites, `Sec-Ch-Ua` mapping, optional header probabilities, timestamp/request-id behavior,
+  Cookie/Referer values, task/public APIs, storage schema, fallback/legacy behavior, and config
+  semantics are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py backend\crawlers\zsxq_file_downloader_helpers.py tests\test_zsxq_file_downloader_helpers.py
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderRetryHelperTests.test_stealth_header_option_pools_preserve_existing_order -v
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers -v
+uv run python -m unittest discover -s tests
+uv run python scripts\scan_postgres_compat_debt.py
+npm --prefix frontend run build
+```
+
+Result:
+
+- Focused stealth header option-pool helper test passed.
+- Downloader helper tests passed: 152 tests.
+- Full backend unittest discovery passed: 865 tests, 15 skipped.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:

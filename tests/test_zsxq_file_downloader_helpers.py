@@ -116,6 +116,9 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     should_retry_api_error,
     should_retry_http_status,
     should_log_full_response,
+    stealth_accept_languages,
+    stealth_platforms,
+    stealth_user_agents,
     summarize_page_time_range,
     time_dedupe_page_messages,
     time_collection_database_status_message,
@@ -2274,6 +2277,33 @@ class FileDownloaderRetryHelperTests(unittest.TestCase):
             '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
             sec_ch_ua_for_user_agent("Mozilla/5.0 Firefox/132.0"),
         )
+
+    def test_stealth_header_option_pools_preserve_existing_order(self):
+        self.assertEqual(
+            [
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36",
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:132.0) Gecko/20100101 Firefox/132.0",
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:131.0) Gecko/20100101 Firefox/131.0",
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 Edg/131.0.0.0",
+                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.1 Safari/605.1.15",
+                "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+                "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:132.0) Gecko/20100101 Firefox/132.0",
+            ],
+            stealth_user_agents(),
+        )
+        self.assertEqual(
+            [
+                'zh-CN,zh;q=0.9,en;q=0.8',
+                'zh-CN,zh;q=0.9,en;q=0.8,zh-TW;q=0.7',
+                'zh-CN,zh;q=0.9,en-US;q=0.8,en;q=0.7',
+                'zh-CN,zh;q=0.8,zh-TW;q=0.7,zh-HK;q=0.5,en-US;q=0.3,en;q=0.2',
+            ],
+            stealth_accept_languages(),
+        )
+        self.assertEqual(['"Windows"', '"macOS"', '"Linux"'], stealth_platforms())
 
     def test_prepare_retry_api_request_sleeps_counts_and_rotates_headers(self):
         downloader = object.__new__(ZSXQFileDownloader)
