@@ -10210,6 +10210,48 @@ Result:
 - Frontend build passed, including Next.js lint/type checks.
 - `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
 
+### 2026-06-13 - P2 core route dead helper cleanup
+
+Changed:
+
+- Removed `backend.routes.core_routes._add_table_counts`.
+- Removed `backend.routes.core_routes._merge_timestamp_info`.
+- Removed the tests that only existed to cover those now-unreferenced private helpers.
+- Removed unused `os`, `List`, and `Optional` imports from `backend.routes.core_routes`.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- `rg` showed both private helpers were referenced only by their definitions and their helper tests;
+  no production route, service, storage, frontend, script, or document references remained.
+- Existing database stats response behavior still comes directly from `ZSXQDatabase` and
+  `ZSXQFileDatabase`; that route path was not changed.
+- No schema, crawler, storage, fallback, legacy, route, or public response behavior was removed.
+- Existing dirty downloader risk-log files and scripts remain outside this P2 slice.
+
+Verification:
+
+```powershell
+rg -n "\b_add_table_counts\b|\b_merge_timestamp_info\b|from typing import Any, Dict, List, Optional|\bos\b" backend\routes\core_routes.py tests\test_core_routes_helpers.py
+uv run python -m unittest tests.test_core_routes_helpers -v
+uv run python -m py_compile backend\routes\core_routes.py tests\test_core_routes_helpers.py
+uv run python scripts\scan_postgres_compat_debt.py
+uv run python -m unittest discover -s tests
+cmd.exe /d /c npm --prefix frontend run build
+git diff --check
+```
+
+Result:
+
+- Focused core route helper tests passed after removing unreferenced helpers.
+- `py_compile` passed.
+- `rg` found no remaining references to the removed helper names or removed imports in the edited
+  files.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Full backend unittest discovery: 795 tests passed, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+- `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
+
 ## Stop Conditions
 
 Pause before editing if:

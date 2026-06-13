@@ -1,9 +1,8 @@
 from __future__ import annotations
 
-import os
 from contextlib import closing
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
@@ -39,25 +38,6 @@ def _empty_database_stats_response(configured: bool) -> Dict[str, Any]:
             "stats": {},
         },
     }
-
-
-def _add_table_counts(target: Dict[str, int], stats: Optional[Dict[str, Any]]) -> None:
-    for table, count in (stats or {}).items():
-        target[table] = target.get(table, 0) + int(count or 0)
-
-
-def _merge_timestamp_info(target: Dict[str, Any], ts_info: Dict[str, Any]) -> None:
-    if not ts_info.get("has_data"):
-        return
-
-    target["has_data"] = True
-    oldest_ts = ts_info.get("oldest_timestamp")
-    newest_ts = ts_info.get("newest_timestamp")
-    if oldest_ts and (not target["oldest_timestamp"] or oldest_ts < target["oldest_timestamp"]):
-        target["oldest_timestamp"] = oldest_ts
-    if newest_ts and (not target["newest_timestamp"] or newest_ts > target["newest_timestamp"]):
-        target["newest_timestamp"] = newest_ts
-    target["total_topics"] += int(ts_info.get("total_topics") or 0)
 
 
 def _masked_config_cookie(cookie: str) -> str:
