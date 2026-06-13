@@ -46,6 +46,7 @@ interface DailyStockConceptsViewProps {
   selectedRelatedStats: ConceptStat[];
   signalStats: ConceptStat[];
   stockConcepts: DailyStockConceptResponse | null;
+  unmappedRawTermCount: number;
 }
 
 function ConceptList({
@@ -138,6 +139,7 @@ export default function DailyStockConceptsView({
   selectedRelatedStats,
   signalStats,
   stockConcepts,
+  unmappedRawTermCount,
 }: DailyStockConceptsViewProps) {
   const [listMode, setListMode] = useState<'concept' | 'signal'>('concept');
   const activeStats = listMode === 'concept' ? conceptStats : signalStats;
@@ -291,8 +293,8 @@ export default function DailyStockConceptsView({
                 <div className="mt-1 font-semibold">{signalStats.length}</div>
               </div>
               <div className="rounded-md border border-gray-200 bg-gray-50 p-3">
-                <div className="text-xs text-muted-foreground">股票</div>
-                <div className="mt-1 font-semibold">{stockConcepts?.stocks.length ?? 0}</div>
+                <div className="text-xs text-muted-foreground">未归并</div>
+                <div className="mt-1 font-semibold">{unmappedRawTermCount}</div>
               </div>
               <div className="rounded-md border border-gray-200 bg-gray-50 p-3">
                 <div className="text-xs text-muted-foreground">推荐命中</div>

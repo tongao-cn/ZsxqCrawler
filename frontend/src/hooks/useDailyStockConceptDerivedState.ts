@@ -3,6 +3,7 @@ import { useCallback, useMemo } from 'react';
 import { DailyStockConceptResponse } from '@/lib/api';
 import { ConceptTrendItem } from '@/hooks/useDailyTopicAnalysisData';
 import {
+  classifyStockConceptTerm,
   isRisingTrend,
   normalizeCompanyName,
   normalizeConceptName,
@@ -105,9 +106,14 @@ export function useDailyStockConceptDerivedState({
   selectedConceptDetail,
   stockConcepts,
 }: UseDailyStockConceptDerivedStateOptions) {
-  const { conceptStats, signalStats } = useMemo<{ conceptStats: ConceptStat[]; signalStats: ConceptStat[] }>(() => {
+  const { conceptStats, signalStats, unmappedRawTermCount } = useMemo<{
+    conceptStats: ConceptStat[];
+    signalStats: ConceptStat[];
+    unmappedRawTermCount: number;
+  }>(() => {
     const conceptMap: StatMap = new Map();
     const signalMap: StatMap = new Map();
+    const unmappedRawTerms = new Set<string>();
 
     for (const stock of stockConcepts?.stocks || []) {
       const stockName = stock.stock_name?.trim();
@@ -119,6 +125,9 @@ export function useDailyStockConceptDerivedState({
         const alias = rawConcept.trim();
         if (!alias) {
           continue;
+        }
+        if (classifyStockConceptTerm(alias) === 'unmapped') {
+          unmappedRawTerms.add(alias);
         }
         const signalTag = normalizeSignalTagName(alias);
         if (signalTag) {
@@ -132,6 +141,7 @@ export function useDailyStockConceptDerivedState({
     return {
       conceptStats: toStats(conceptMap),
       signalStats: toStats(signalMap),
+      unmappedRawTermCount: unmappedRawTerms.size,
     };
   }, [recommendedCompanies, stockConcepts]);
 
@@ -242,5 +252,6 @@ export function useDailyStockConceptDerivedState({
     selectedConceptTrend,
     selectedRelatedStats,
     signalStats,
+    unmappedRawTermCount,
   };
 }

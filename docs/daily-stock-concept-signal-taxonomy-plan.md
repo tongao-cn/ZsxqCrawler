@@ -189,9 +189,9 @@ Verification:
 - Added selected-item related distribution:
   - selected industry concept shows top related signal tags.
   - selected signal tag shows top related industry concepts.
+- Added a compact unmapped raw-term count to the concept tab summary.
 - Kept the implementation display-layer only; no database schema or raw extraction rows changed.
 - Remaining Phase 1 work:
-  - add compact unmapped raw term counts.
   - add a stronger manual browser smoke once Playwright browser binaries are available.
 
 ### 2026-06-13 - Phase 2 Taxonomy Diagnostics Script

@@ -79,6 +79,7 @@ export default function DailyTopicAnalysisPanel({
     selectedConceptTrend,
     selectedRelatedStats,
     signalStats,
+    unmappedRawTermCount,
   } = useDailyStockConceptDerivedState({
     conceptTrendItems,
     onlyRecommendationHits,
@@ -163,6 +164,7 @@ export default function DailyTopicAnalysisPanel({
           selectedRelatedStats={selectedRelatedStats}
           signalStats={signalStats}
           stockConcepts={stockConcepts}
+          unmappedRawTermCount={unmappedRawTermCount}
         />
       ) : (
         <DailyTopicReportView

@@ -106,6 +106,21 @@ export function normalizeSignalTagName(value?: string | null) {
   return SIGNAL_TAG_ALIAS_MAP.get(tag.toLocaleLowerCase()) || null;
 }
 
+export function classifyStockConceptTerm(value?: string | null): 'concept' | 'signal' | 'unmapped' | 'empty' {
+  const term = (value || '').trim();
+  if (!term) {
+    return 'empty';
+  }
+  const key = term.toLocaleLowerCase();
+  if (SIGNAL_TAG_ALIAS_MAP.has(key)) {
+    return 'signal';
+  }
+  if (CONCEPT_ALIAS_MAP.has(key)) {
+    return 'concept';
+  }
+  return 'unmapped';
+}
+
 export function isRisingTrend(counts: number[]) {
   if (counts.length < 3) {
     return false;
