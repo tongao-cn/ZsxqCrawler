@@ -80,7 +80,7 @@ def _log(log_callback: Callable[[str], None] | None, message: str) -> None:
         log_callback(message)
 
 
-def parse_stock_names(values: Any, *, limit: int = MAX_BATCH_STOCKS) -> List[str]:
+def parse_stock_names(values: Any, *, limit: int | None = None) -> List[str]:
     if isinstance(values, str):
         raw_values = re.split(r"[\s,，、;；]+", values)
     elif isinstance(values, Iterable):
@@ -89,7 +89,8 @@ def parse_stock_names(values: Any, *, limit: int = MAX_BATCH_STOCKS) -> List[str
             raw_values.extend(re.split(r"[\s,，、;；]+", _normalize_text(value)))
     else:
         raw_values = []
-    return _ordered_unique((_normalize_company_name(value) for value in raw_values), limit=max(1, min(limit, MAX_BATCH_STOCKS)))
+    max_limit = MAX_BATCH_STOCKS if limit is None else max(1, int(limit))
+    return _ordered_unique((_normalize_company_name(value) for value in raw_values), limit=max_limit)
 
 
 def _normalize_question_keywords(values: Any, *, limit: int = MAX_QUESTION_KEYWORDS) -> List[str]:
@@ -982,8 +983,9 @@ def analyze_stock_topics_batch(
     stock_names: Any,
     *,
     log_callback: Callable[[str], None] | None = None,
+    max_stocks: int | None = None,
 ) -> Dict[str, Any]:
-    names = parse_stock_names(stock_names)
+    names = parse_stock_names(stock_names, limit=max_stocks)
     if not names:
         raise ValueError("stock_names 不能为空")
 
@@ -1013,7 +1015,10 @@ def analyze_stock_topics_batch(
             status = "no_topics" if result.get("topic_count", 0) <= 0 else "success"
             return index, result, status
         except Exception as exc:
-            latest = get_latest_stock_topic_analysis(group_id_text, stock_name) or _empty_latest_result(group_id_text, stock_name)
+            try:
+                latest = get_latest_stock_topic_analysis(group_id_text, stock_name) or _empty_latest_result(group_id_text, stock_name)
+            except Exception:
+                latest = _empty_latest_result(group_id_text, stock_name)
             failed_result = {
                 **latest,
                 "status": "failed",
