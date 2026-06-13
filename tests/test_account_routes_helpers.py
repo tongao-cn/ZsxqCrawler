@@ -146,6 +146,46 @@ class AccountRoutesAsyncTests(unittest.IsolatedAsyncioTestCase):
                     {"self": {"called": helper_func.__name__, "args": (identifier,)}},
                 )
 
+    async def test_self_routes_preserve_network_error_details(self):
+        route_cases = [
+            (account_routes.get_account_self, "acc-1", "Network request failed: boom"),
+            (account_routes.refresh_account_self, "acc-1", "Network request failed: boom"),
+            (account_routes.get_group_account_self, "group-1", "网络请求失败: boom"),
+            (account_routes.refresh_group_account_self, "group-1", "网络请求失败: boom"),
+        ]
+
+        async def fake_to_thread(func, *args):
+            raise account_routes.requests.RequestException("boom")
+
+        with patch.object(account_routes.asyncio, "to_thread", new=fake_to_thread):
+            for route_func, identifier, expected_detail in route_cases:
+                with self.subTest(route=route_func.__name__):
+                    with self.assertRaises(HTTPException) as ctx:
+                        await route_func(identifier)
+
+                self.assertEqual(ctx.exception.status_code, 502)
+                self.assertEqual(ctx.exception.detail, expected_detail)
+
+    async def test_self_routes_preserve_generic_error_details(self):
+        route_cases = [
+            (account_routes.get_account_self, "acc-1", "Failed to retrieve account info: boom"),
+            (account_routes.refresh_account_self, "acc-1", "Failed to refresh account info: boom"),
+            (account_routes.get_group_account_self, "group-1", "获取群组账号信息失败: boom"),
+            (account_routes.refresh_group_account_self, "group-1", "刷新群组账号信息失败: boom"),
+        ]
+
+        async def fake_to_thread(func, *args):
+            raise RuntimeError("boom")
+
+        with patch.object(account_routes.asyncio, "to_thread", new=fake_to_thread):
+            for route_func, identifier, expected_detail in route_cases:
+                with self.subTest(route=route_func.__name__):
+                    with self.assertRaises(HTTPException) as ctx:
+                        await route_func(identifier)
+
+                self.assertEqual(ctx.exception.status_code, 500)
+                self.assertEqual(ctx.exception.detail, expected_detail)
+
 
 if __name__ == "__main__":
     unittest.main()

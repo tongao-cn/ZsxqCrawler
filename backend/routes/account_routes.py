@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Callable, Dict, Optional, Tuple
 
 import requests
 from fastapi import APIRouter, HTTPException
@@ -116,6 +116,23 @@ def _refresh_group_account_self_response(group_id: str) -> Dict[str, Any]:
     return _save_self_info_response(db, account_id, data)
 
 
+async def _run_self_response_route(
+    helper: Callable[[str], Dict[str, Any]],
+    identifier: str,
+    *,
+    network_error_prefix: str,
+    generic_error_prefix: str,
+) -> Dict[str, Any]:
+    try:
+        return await asyncio.to_thread(helper, identifier)
+    except HTTPException:
+        raise
+    except requests.RequestException as e:
+        raise HTTPException(status_code=502, detail=f"{network_error_prefix}: {str(e)}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"{generic_error_prefix}: {str(e)}")
+
+
 @router.get("/accounts")
 async def list_accounts():
     """获取所有账号列表"""
@@ -183,50 +200,42 @@ async def get_group_account(group_id: str):
 @router.get("/accounts/{account_id}/self")
 async def get_account_self(account_id: str):
     """获取并返回指定账号的已持久化自我信息；若无则尝试抓取并保存"""
-    try:
-        return await asyncio.to_thread(_get_account_self_response, account_id)
-    except HTTPException:
-        raise
-    except requests.RequestException as e:
-        raise HTTPException(status_code=502, detail=f"Network request failed: {str(e)}")
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to retrieve account info: {str(e)}")
+    return await _run_self_response_route(
+        _get_account_self_response,
+        account_id,
+        network_error_prefix="Network request failed",
+        generic_error_prefix="Failed to retrieve account info",
+    )
 
 
 @router.post("/accounts/{account_id}/self/refresh")
 async def refresh_account_self(account_id: str):
     """强制抓取 /v3/users/self 并更新持久化"""
-    try:
-        return await asyncio.to_thread(_refresh_account_self_response, account_id)
-    except HTTPException:
-        raise
-    except requests.RequestException as e:
-        raise HTTPException(status_code=502, detail=f"Network request failed: {str(e)}")
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to refresh account info: {str(e)}")
+    return await _run_self_response_route(
+        _refresh_account_self_response,
+        account_id,
+        network_error_prefix="Network request failed",
+        generic_error_prefix="Failed to refresh account info",
+    )
 
 
 @router.get("/groups/{group_id}/self")
 async def get_group_account_self(group_id: str):
     """获取群组当前使用账号的自我信息（若无则尝试抓取并保存）"""
-    try:
-        return await asyncio.to_thread(_get_group_account_self_response, group_id)
-    except HTTPException:
-        raise
-    except requests.RequestException as e:
-        raise HTTPException(status_code=502, detail=f"网络请求失败: {str(e)}")
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"获取群组账号信息失败: {str(e)}")
+    return await _run_self_response_route(
+        _get_group_account_self_response,
+        group_id,
+        network_error_prefix="网络请求失败",
+        generic_error_prefix="获取群组账号信息失败",
+    )
 
 
 @router.post("/groups/{group_id}/self/refresh")
 async def refresh_group_account_self(group_id: str):
     """强制抓取群组当前使用账号的自我信息并持久化"""
-    try:
-        return await asyncio.to_thread(_refresh_group_account_self_response, group_id)
-    except HTTPException:
-        raise
-    except requests.RequestException as e:
-        raise HTTPException(status_code=502, detail=f"网络请求失败: {str(e)}")
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"刷新群组账号信息失败: {str(e)}")
+    return await _run_self_response_route(
+        _refresh_group_account_self_response,
+        group_id,
+        network_error_prefix="网络请求失败",
+        generic_error_prefix="刷新群组账号信息失败",
+    )

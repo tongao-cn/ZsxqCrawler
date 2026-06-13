@@ -9799,6 +9799,49 @@ Result:
 - Frontend build passed, including Next.js lint/type checks.
 - `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
 
+### 2026-06-13 - P2 account self route wrapper
+
+Changed:
+
+- Added characterization coverage for the four account self endpoints in
+  `tests/test_account_routes_helpers.py`.
+- Locked existing network-error status/details and generic-error status/details for account and group
+  self read/refresh endpoints.
+- Added `backend.routes.account_routes._run_self_response_route`.
+- Replaced four duplicated `asyncio.to_thread` plus exception-wrapper blocks with the shared helper.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Public route paths, HTTP methods, response payloads, helper call order, and `asyncio.to_thread`
+  offloading behavior are unchanged.
+- `HTTPException` is still re-raised without wrapping.
+- `requests.RequestException` still maps to HTTP 502 with the same English or Chinese message prefix.
+- Other exceptions still map to HTTP 500 with the same endpoint-specific message prefix.
+- No schema, task, crawler, storage, legacy, or fallback-removal behavior changed.
+- Existing dirty downloader risk-log files and scripts remain outside this P2 slice.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_account_routes_helpers -v
+uv run python -m py_compile backend\routes\account_routes.py tests\test_account_routes_helpers.py
+uv run python scripts\scan_postgres_compat_debt.py
+uv run python -m unittest discover -s tests
+cmd.exe /d /c npm --prefix frontend run build
+git diff --check
+```
+
+Result:
+
+- Characterization tests passed before production code changes.
+- Focused account route helper tests passed after wrapper extraction.
+- `py_compile` passed.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Full backend unittest discovery: 784 tests passed, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+- `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
+
 ## Stop Conditions
 
 Pause before editing if:
