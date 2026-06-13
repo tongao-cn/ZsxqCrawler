@@ -13689,6 +13689,55 @@ Result:
 - PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-13 - P5 daily today crawl-first helper
+
+Changed:
+
+- Added characterization coverage for `run_daily_today_task()` with crawl-first enabled,
+  crawl stop/failure after the crawl stage, and crawl-first disabled.
+- Extracted `_run_daily_today_crawl_first_step()` in `backend.routes.daily_analysis_routes`.
+- Reused it from `run_daily_today_task()` for the optional latest-topic crawl stage and
+  transition back into AI analysis.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- The combined daily crawl-and-analysis task still updates to `running` with
+  `开始每日抓取与 AI 分析...` before the optional crawl stage.
+- When `crawlLatestFirst` is true, it still logs `🔄 先抓取最新话题...`, calls
+  `run_crawl_latest_task(task_id, group_id, request.crawlSettings)`, checks
+  `_daily_task_stopped_or_failed(task_id)`, returns before analysis when stopped/failed,
+  and otherwise updates to `running` with `最新话题抓取完成，开始 AI 分析...`.
+- When `crawlLatestFirst` is false, it still skips the crawl log, crawl call, and
+  post-crawl running status update.
+- The AI analysis call, post-analysis stop check, completion status/result, failure
+  handling, task/public APIs, fallback/legacy behavior, and config semantics are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_daily_analysis_routes_helpers.DailyAnalysisRoutesHelperTests.test_run_daily_today_task_preserves_crawl_first_lifecycle tests.test_daily_analysis_routes_helpers.DailyAnalysisRoutesHelperTests.test_run_daily_today_task_returns_after_crawl_stop_or_failure tests.test_daily_analysis_routes_helpers.DailyAnalysisRoutesHelperTests.test_run_daily_today_task_skips_crawl_when_disabled -v
+uv run python -m py_compile backend\routes\daily_analysis_routes.py tests\test_daily_analysis_routes_helpers.py
+uv run python -m unittest tests.test_daily_analysis_routes_helpers.DailyAnalysisRoutesHelperTests.test_run_daily_today_task_preserves_crawl_first_lifecycle tests.test_daily_analysis_routes_helpers.DailyAnalysisRoutesHelperTests.test_run_daily_today_task_returns_after_crawl_stop_or_failure tests.test_daily_analysis_routes_helpers.DailyAnalysisRoutesHelperTests.test_run_daily_today_task_skips_crawl_when_disabled -v
+uv run python -m unittest tests.test_daily_analysis_routes_helpers -v
+uv run python -m unittest tests.test_daily_analysis_routes_helpers tests.test_daily_stock_concept_routes_helpers tests.test_stock_topic_analysis_routes_helpers tests.test_task_runtime_helpers -v
+uv run python -m unittest discover -s tests
+uv run python scripts\scan_postgres_compat_debt.py
+npm --prefix frontend run build
+```
+
+Result:
+
+- Focused daily today characterization tests passed against the original inline
+  implementation before extraction: 3 tests.
+- `py_compile` passed.
+- Focused daily today characterization tests passed after extraction: 3 tests.
+- Daily route helper tests passed: 12 tests.
+- Related route/task-runtime tests passed: 77 tests.
+- Full backend unittest discovery passed: 898 tests, 15 skipped.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:

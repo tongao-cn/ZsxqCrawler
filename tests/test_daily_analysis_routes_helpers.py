@@ -1,6 +1,6 @@
 import unittest
 from importlib.util import find_spec
-from unittest.mock import patch
+from unittest.mock import call, patch
 
 
 HAS_DAILY_ROUTE_DEPS = find_spec("fastapi") is not None and find_spec("pydantic") is not None
@@ -170,6 +170,94 @@ class DailyAnalysisRoutesHelperTests(unittest.TestCase):
 
         add_task_log.assert_not_called()
         update_task.assert_not_called()
+
+    @unittest.skipUnless(HAS_DAILY_ROUTE_DEPS, "daily analysis route dependencies are not installed")
+    def test_run_daily_today_task_preserves_crawl_first_lifecycle(self):
+        from backend.routes.daily_analysis_routes import DailyRunTodayRequest, run_daily_today_task
+
+        request = DailyRunTodayRequest(date="2026-06-13", commentsPerTopic=2, crawlLatestFirst=True)
+        result = {"report": []}
+
+        with (
+            patch("backend.routes.daily_analysis_routes.update_task") as update_task,
+            patch("backend.routes.daily_analysis_routes.add_task_log") as add_task_log,
+            patch("backend.routes.daily_analysis_routes.run_crawl_latest_task") as run_crawl_latest_task,
+            patch("backend.routes.daily_analysis_routes._daily_task_stopped_or_failed", return_value=False)
+            as stopped_or_failed,
+            patch("backend.routes.daily_analysis_routes._analyze_daily_topics_for_task", return_value=result)
+            as analyze,
+            patch("backend.routes.daily_analysis_routes.is_task_stopped", return_value=False) as is_task_stopped,
+        ):
+            run_daily_today_task("task-1", "group-1", request)
+
+        self.assertEqual(
+            [
+                call("task-1", "running", "开始每日抓取与 AI 分析..."),
+                call("task-1", "running", "最新话题抓取完成，开始 AI 分析..."),
+                call("task-1", "completed", "每日抓取与 AI 分析完成", result),
+            ],
+            update_task.call_args_list,
+        )
+        add_task_log.assert_called_once_with("task-1", "🔄 先抓取最新话题...")
+        run_crawl_latest_task.assert_called_once_with("task-1", "group-1", None)
+        stopped_or_failed.assert_called_once_with("task-1")
+        analyze.assert_called_once_with("task-1", "group-1", request)
+        is_task_stopped.assert_called_once_with("task-1")
+
+    @unittest.skipUnless(HAS_DAILY_ROUTE_DEPS, "daily analysis route dependencies are not installed")
+    def test_run_daily_today_task_returns_after_crawl_stop_or_failure(self):
+        from backend.routes.daily_analysis_routes import DailyRunTodayRequest, run_daily_today_task
+
+        request = DailyRunTodayRequest(date="2026-06-13", crawlLatestFirst=True)
+
+        with (
+            patch("backend.routes.daily_analysis_routes.update_task") as update_task,
+            patch("backend.routes.daily_analysis_routes.add_task_log") as add_task_log,
+            patch("backend.routes.daily_analysis_routes.run_crawl_latest_task") as run_crawl_latest_task,
+            patch("backend.routes.daily_analysis_routes._daily_task_stopped_or_failed", return_value=True)
+            as stopped_or_failed,
+            patch("backend.routes.daily_analysis_routes._analyze_daily_topics_for_task") as analyze,
+            patch("backend.routes.daily_analysis_routes.is_task_stopped") as is_task_stopped,
+        ):
+            run_daily_today_task("task-1", "group-1", request)
+
+        update_task.assert_called_once_with("task-1", "running", "开始每日抓取与 AI 分析...")
+        add_task_log.assert_called_once_with("task-1", "🔄 先抓取最新话题...")
+        run_crawl_latest_task.assert_called_once_with("task-1", "group-1", None)
+        stopped_or_failed.assert_called_once_with("task-1")
+        analyze.assert_not_called()
+        is_task_stopped.assert_not_called()
+
+    @unittest.skipUnless(HAS_DAILY_ROUTE_DEPS, "daily analysis route dependencies are not installed")
+    def test_run_daily_today_task_skips_crawl_when_disabled(self):
+        from backend.routes.daily_analysis_routes import DailyRunTodayRequest, run_daily_today_task
+
+        request = DailyRunTodayRequest(date="2026-06-13", commentsPerTopic=2, crawlLatestFirst=False)
+        result = {"report": []}
+
+        with (
+            patch("backend.routes.daily_analysis_routes.update_task") as update_task,
+            patch("backend.routes.daily_analysis_routes.add_task_log") as add_task_log,
+            patch("backend.routes.daily_analysis_routes.run_crawl_latest_task") as run_crawl_latest_task,
+            patch("backend.routes.daily_analysis_routes._daily_task_stopped_or_failed") as stopped_or_failed,
+            patch("backend.routes.daily_analysis_routes._analyze_daily_topics_for_task", return_value=result)
+            as analyze,
+            patch("backend.routes.daily_analysis_routes.is_task_stopped", return_value=False) as is_task_stopped,
+        ):
+            run_daily_today_task("task-1", "group-1", request)
+
+        self.assertEqual(
+            [
+                call("task-1", "running", "开始每日抓取与 AI 分析..."),
+                call("task-1", "completed", "每日抓取与 AI 分析完成", result),
+            ],
+            update_task.call_args_list,
+        )
+        add_task_log.assert_not_called()
+        run_crawl_latest_task.assert_not_called()
+        stopped_or_failed.assert_not_called()
+        analyze.assert_called_once_with("task-1", "group-1", request)
+        is_task_stopped.assert_called_once_with("task-1")
 
 
 if __name__ == "__main__":

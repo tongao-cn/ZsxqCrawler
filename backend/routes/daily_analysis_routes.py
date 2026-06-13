@@ -82,6 +82,18 @@ def _analyze_daily_topics_for_task(task_id: str, group_id: str, request: DailyAn
     )
 
 
+def _run_daily_today_crawl_first_step(task_id: str, group_id: str, request: DailyRunTodayRequest) -> bool:
+    if not request.crawlLatestFirst:
+        return True
+
+    add_task_log(task_id, "🔄 先抓取最新话题...")
+    run_crawl_latest_task(task_id, group_id, request.crawlSettings)
+    if _daily_task_stopped_or_failed(task_id):
+        return False
+    update_task(task_id, "running", "最新话题抓取完成，开始 AI 分析...")
+    return True
+
+
 def run_daily_analysis_task(
     task_id: str,
     group_id: str,
@@ -107,12 +119,8 @@ def run_daily_today_task(
     try:
         update_task(task_id, "running", "开始每日抓取与 AI 分析...")
 
-        if request.crawlLatestFirst:
-            add_task_log(task_id, "🔄 先抓取最新话题...")
-            run_crawl_latest_task(task_id, group_id, request.crawlSettings)
-            if _daily_task_stopped_or_failed(task_id):
-                return
-            update_task(task_id, "running", "最新话题抓取完成，开始 AI 分析...")
+        if not _run_daily_today_crawl_first_step(task_id, group_id, request):
+            return
 
         result = _analyze_daily_topics_for_task(task_id, group_id, request)
 
