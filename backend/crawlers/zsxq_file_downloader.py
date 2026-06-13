@@ -119,6 +119,8 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     stealth_base_headers,
     stealth_optional_headers,
     stealth_platforms,
+    stealth_request_id_header_value,
+    stealth_timestamp_header_value,
     stealth_user_agents,
     summarize_page_time_range,
     time_dedupe_page_messages,
@@ -316,10 +318,15 @@ class ZSXQFileDownloader:
         
         # 随机调整时间戳相关头部
         if random.random() > 0.7:  # 30%概率添加
-            headers['X-Timestamp'] = str(int(time.time()) + random.randint(-30, 30))
+            headers['X-Timestamp'] = stealth_timestamp_header_value(
+                int(time.time()),
+                random.randint(-30, 30),
+            )
         
         if random.random() > 0.6:  # 40%概率添加
-            headers['X-Request-Id'] = f"req-{random.randint(100000000000, 999999999999)}"
+            headers['X-Request-Id'] = stealth_request_id_header_value(
+                random.randint(100000000000, 999999999999),
+            )
         
         return headers
     

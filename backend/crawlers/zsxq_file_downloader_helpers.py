@@ -94,6 +94,14 @@ def stealth_optional_headers() -> Dict[str, str]:
     return dict(STEALTH_OPTIONAL_HEADERS)
 
 
+def stealth_timestamp_header_value(current_time: int, offset_seconds: int) -> str:
+    return str(current_time + offset_seconds)
+
+
+def stealth_request_id_header_value(request_id: int) -> str:
+    return f"req-{request_id}"
+
+
 def stealth_base_headers(
     cookie: str,
     group_id: Any,

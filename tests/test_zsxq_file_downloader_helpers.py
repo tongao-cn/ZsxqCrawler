@@ -120,6 +120,8 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     stealth_base_headers,
     stealth_optional_headers,
     stealth_platforms,
+    stealth_request_id_header_value,
+    stealth_timestamp_header_value,
     stealth_user_agents,
     summarize_page_time_range,
     time_dedupe_page_messages,
@@ -2371,6 +2373,12 @@ class FileDownloaderRetryHelperTests(unittest.TestCase):
             ['DNT', 'Sec-GPC', 'Upgrade-Insecure-Requests', 'X-Requested-With'],
             list(stealth_optional_headers().keys()),
         )
+
+    def test_stealth_dynamic_header_values_preserve_existing_format(self):
+        self.assertEqual("1700000005", stealth_timestamp_header_value(1700000000, 5))
+        self.assertEqual("1699999970", stealth_timestamp_header_value(1700000000, -30))
+        self.assertEqual("req-100000000000", stealth_request_id_header_value(100000000000))
+        self.assertEqual("req-999999999999", stealth_request_id_header_value(999999999999))
 
     def test_prepare_retry_api_request_sleeps_counts_and_rotates_headers(self):
         downloader = object.__new__(ZSXQFileDownloader)

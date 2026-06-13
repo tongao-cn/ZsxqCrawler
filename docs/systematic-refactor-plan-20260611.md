@@ -13007,6 +13007,43 @@ Result:
 - Task runtime helper tests passed with registry-backed ingestion lock types.
 - Related ingestion, crawl, file, and column route helper tests passed: 104 tests.
 
+### 2026-06-13 - P9 file downloader stealth dynamic header values
+
+Changed:
+
+- Added `stealth_timestamp_header_value()` and `stealth_request_id_header_value()` in
+  `backend/crawlers/zsxq_file_downloader_helpers.py`.
+- Reused them in `ZSXQFileDownloader.get_stealth_headers()` for `X-Timestamp` and
+  `X-Request-Id` value formatting.
+- Added direct helper coverage for positive/negative timestamp offsets and request-id prefix
+  formatting.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Timestamp/request-id random trigger probabilities, `time.time()` evaluation, `random.randint()`
+  ranges, generated string formats, optional/base headers, task/public APIs, storage schema,
+  fallback/legacy behavior, and config semantics are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py backend\crawlers\zsxq_file_downloader_helpers.py tests\test_zsxq_file_downloader_helpers.py
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderRetryHelperTests.test_stealth_dynamic_header_values_preserve_existing_format -v
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers -v
+uv run python -m unittest discover -s tests
+uv run python scripts\scan_postgres_compat_debt.py
+npm --prefix frontend run build
+```
+
+Result:
+
+- Focused stealth dynamic header values helper test passed.
+- Downloader helper tests passed: 155 tests.
+- Full backend unittest discovery passed: 872 tests, 15 skipped.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:
