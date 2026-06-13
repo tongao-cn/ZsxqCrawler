@@ -11634,6 +11634,43 @@ Result:
 - Frontend build passed, including Next.js lint/type checks.
 - Diff whitespace check passed with only existing LF-to-CRLF working-copy warnings.
 
+### 2026-06-13 - P9 file downloader database time range log helper
+
+Changed:
+
+- Added `database_download_time_range_message()` in
+  `backend/crawlers/zsxq_file_downloader_helpers.py`.
+- Reused the helper in `ZSXQFileDownloader.download_files_from_database()` for the optional
+  create-time result range log.
+- Added direct helper coverage for create-time sorting, heat sorting, and empty result inputs.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Time range log text, first/last row create-time selection, create-time-only condition, and no-log
+  behavior for heat sorting are preserved.
+- Query construction, SQL params, stop checks, download loop, retry behavior, returned stats,
+  task/public APIs, storage schema, fallback path, legacy path, and config semantics are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py backend\crawlers\zsxq_file_downloader_helpers.py
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers -v
+uv run python -m unittest discover -s tests
+uv run python scripts\scan_postgres_compat_debt.py
+npm --prefix frontend run build
+git diff --check
+```
+
+Result:
+
+- Downloader helper tests passed: 104 tests.
+- Full backend unittest discovery passed: 814 tests, 15 skipped.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Frontend build passed, including Next.js lint/type checks.
+- Diff whitespace check passed with only existing LF-to-CRLF working-copy warnings.
+
 ## Stop Conditions
 
 Pause before editing if:

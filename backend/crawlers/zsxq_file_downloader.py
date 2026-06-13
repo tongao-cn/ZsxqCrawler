@@ -32,6 +32,7 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     database_download_file_info,
     database_download_query_plan,
     database_download_start_messages,
+    database_download_time_range_message,
     database_stats_table_emoji,
     download_file_data,
     download_exception_detail,
@@ -1563,10 +1564,9 @@ class ZSXQFileDownloader:
             return download_result_stats()
 
         self.log(f"📋 找到 {len(files_to_download)} 个待下载文件")
-        if sort_by == 'create_time' and files_to_download:
-            newest = files_to_download[0][4]
-            oldest = files_to_download[-1][4]
-            self.log(f"   🗓️ 本次待下载文件时间范围: {newest} ~ {oldest}")
+        time_range_message = database_download_time_range_message(files_to_download, sort_by)
+        if time_range_message:
+            self.log(time_range_message)
 
         stats = download_result_stats(len(files_to_download))
 

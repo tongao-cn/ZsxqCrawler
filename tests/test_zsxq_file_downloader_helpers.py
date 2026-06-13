@@ -25,6 +25,7 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     database_download_filter_messages,
     database_download_file_info,
     database_download_start_messages,
+    database_download_time_range_message,
     database_stats_table_emoji,
     download_exception_detail,
     download_expected_size,
@@ -563,6 +564,19 @@ class FileDownloaderTimeHelperTests(unittest.TestCase):
             ),
             database_download_start_messages(None, "pending"),
         )
+
+    def test_database_download_time_range_message_preserves_create_time_only_log(self):
+        rows = [
+            (101, "new.pdf", 1024, 9, "2026-05-07 10:00:00"),
+            (102, "old.pdf", 2048, 7, "2026-05-01 09:00:00"),
+        ]
+
+        self.assertEqual(
+            "   🗓️ 本次待下载文件时间范围: 2026-05-07 10:00:00 ~ 2026-05-01 09:00:00",
+            database_download_time_range_message(rows, "create_time"),
+        )
+        self.assertIsNone(database_download_time_range_message(rows, "download_count"))
+        self.assertIsNone(database_download_time_range_message([], "create_time"))
 
     def test_parse_create_time_accepts_common_formats(self):
         self.assertEqual(

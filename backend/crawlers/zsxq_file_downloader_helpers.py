@@ -267,6 +267,14 @@ def database_download_start_messages(max_files: Optional[int], status_filter: st
     return tuple(messages)
 
 
+def database_download_time_range_message(files_to_download: list[Any], sort_by: str) -> Optional[str]:
+    if sort_by == "create_time" and files_to_download:
+        newest = files_to_download[0][4]
+        oldest = files_to_download[-1][4]
+        return f"   🗓️ 本次待下载文件时间范围: {newest} ~ {oldest}"
+    return None
+
+
 def latest_file_create_time_query(query_group_id: Any) -> tuple[str, tuple[Any, ...]]:
     return (
         '''
