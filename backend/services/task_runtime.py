@@ -348,6 +348,33 @@ def update_task(
     _release_task_lock_on_terminal_status(task_id, status, now, store)
 
 
+def run_workflow(
+    task_id: str,
+    *,
+    running_message: str,
+    completed_message: str,
+    failure_label: str,
+    work: Callable[[], Any],
+) -> None:
+    try:
+        if is_task_stopped(task_id):
+            return
+
+        update_task(task_id, "running", running_message)
+        result = work()
+
+        if is_task_stopped(task_id):
+            return
+
+        update_task(task_id, "completed", completed_message, result)
+    except Exception as exc:
+        if is_task_stopped(task_id):
+            return
+        message = f"{failure_label}失败: {str(exc)}"
+        add_task_log(task_id, f"❌ {message}")
+        update_task(task_id, "failed", message)
+
+
 def _release_task_lock_on_terminal_status(
     task_id: str,
     status: str,

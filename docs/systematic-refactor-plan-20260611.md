@@ -13152,6 +13152,36 @@ Result:
 - PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-13 - P5 workflow lifecycle helper baseline
+
+Changed:
+
+- Added `run_workflow()` in `backend/services/task_runtime.py` to centralize the simple workflow
+  lifecycle used by current route-owned tasks: initial stop check, running update, work execution,
+  post-work stop check, completion update, and unstopped exception failure logging.
+- Migrated `daily_stock_concept_routes.run_daily_stock_concept_task()` to the runtime helper as the
+  first low-risk adopter.
+- Added focused tests for helper success, failure, and post-work stop behavior plus daily stock
+  concept route wiring.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Daily stock concept task messages, stop-check timing, failure log text, failure task message,
+  task creation contract, AI prompt/service behavior, route responses, storage schema, locks,
+  SSE/fallback polling, and config semantics are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m py_compile backend\services\task_runtime.py backend\routes\daily_stock_concept_routes.py
+uv run python -m unittest tests.test_task_runtime_helpers tests.test_daily_stock_concept_routes_helpers -v
+```
+
+Result:
+
+- Task runtime helper tests and daily stock concept route helper tests passed: 46 tests.
+
 ## Stop Conditions
 
 Pause before editing if:

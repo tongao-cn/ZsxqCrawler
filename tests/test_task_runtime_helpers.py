@@ -590,6 +590,99 @@ class TaskRuntimeHelperTests(unittest.TestCase):
         ):
             task_runtime.update_task("missing-task", "running", "working")
 
+    def test_run_workflow_updates_running_and_completed_with_result(self):
+        from backend.services.task_runtime import run_workflow
+
+        store = FakeTaskStore()
+        store.tasks["task-1"] = {"task_id": "task-1", "status": "pending", "message": "queued"}
+
+        with patch("backend.services.task_runtime.get_task_store", return_value=store):
+            run_workflow(
+                "task-1",
+                running_message="running now",
+                completed_message="done now",
+                failure_label="每日股票概念提取",
+                work=lambda: {"ok": True},
+            )
+
+        self.assertEqual("completed", store.tasks["task-1"]["status"])
+        self.assertEqual("done now", store.tasks["task-1"]["message"])
+        self.assertEqual({"ok": True}, store.tasks["task-1"]["result"])
+        self.assertIn(("task-1", "状态更新: running now"), store.logs)
+        self.assertIn(("task-1", "状态更新: done now"), store.logs)
+        self.assertEqual([("task-1", "completed")], store.released_locks)
+
+    def test_run_workflow_logs_and_fails_unstopped_exception(self):
+        from backend.services.task_runtime import run_workflow
+
+        store = FakeTaskStore()
+        store.tasks["task-1"] = {"task_id": "task-1", "status": "pending", "message": "queued"}
+
+        def fail():
+            raise RuntimeError("boom")
+
+        with patch("backend.services.task_runtime.get_task_store", return_value=store):
+            run_workflow(
+                "task-1",
+                running_message="running now",
+                completed_message="done now",
+                failure_label="每日股票概念提取",
+                work=fail,
+            )
+
+        self.assertEqual("failed", store.tasks["task-1"]["status"])
+        self.assertEqual("每日股票概念提取失败: boom", store.tasks["task-1"]["message"])
+        self.assertIn(("task-1", "❌ 每日股票概念提取失败: boom"), store.logs)
+        self.assertIn(("task-1", "状态更新: 每日股票概念提取失败: boom"), store.logs)
+        self.assertEqual([("task-1", "failed")], store.released_locks)
+
+    def test_run_workflow_skips_completion_when_stopped_after_work(self):
+        from backend.services.task_runtime import run_workflow
+
+        store = FakeTaskStore()
+        store.tasks["task-1"] = {"task_id": "task-1", "status": "pending", "message": "queued"}
+
+        def stop_after_work():
+            store.stop_flags["task-1"] = True
+            return {"ok": True}
+
+        with patch("backend.services.task_runtime.get_task_store", return_value=store):
+            run_workflow(
+                "task-1",
+                running_message="running now",
+                completed_message="done now",
+                failure_label="每日股票概念提取",
+                work=stop_after_work,
+            )
+
+        self.assertEqual("running", store.tasks["task-1"]["status"])
+        self.assertEqual("running now", store.tasks["task-1"]["message"])
+        self.assertIsNone(store.tasks["task-1"]["result"])
+        self.assertEqual([], store.released_locks)
+
+    def test_run_workflow_skips_work_when_already_stopped(self):
+        from backend.services.task_runtime import run_workflow
+
+        store = FakeTaskStore()
+        store.tasks["task-1"] = {"task_id": "task-1", "status": "pending", "message": "queued"}
+        store.stop_flags["task-1"] = True
+        work_calls = []
+
+        with patch("backend.services.task_runtime.get_task_store", return_value=store):
+            run_workflow(
+                "task-1",
+                running_message="running now",
+                completed_message="done now",
+                failure_label="每日股票概念提取",
+                work=lambda: work_calls.append("called"),
+            )
+
+        self.assertEqual([], work_calls)
+        self.assertEqual("pending", store.tasks["task-1"]["status"])
+        self.assertEqual("queued", store.tasks["task-1"]["message"])
+        self.assertEqual([], store.logs)
+        self.assertEqual([], store.released_locks)
+
     def test_get_task_logs_state_returns_memory_log_copy(self):
         from backend.services import task_runtime
 

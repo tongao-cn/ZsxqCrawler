@@ -9,7 +9,7 @@ from backend.services.daily_stock_concept_service import (
     extract_daily_stock_concepts,
     get_daily_stock_concepts,
 )
-from backend.services.task_runtime import add_task_log, create_task, enqueue_runtime_task, is_task_stopped, update_task
+from backend.services.task_runtime import add_task_log, create_task, enqueue_runtime_task, run_workflow
 
 
 router = APIRouter(prefix="/api/analysis/daily-stock-concepts", tags=["daily-stock-concepts"])
@@ -26,14 +26,6 @@ def _build_stock_concept_log_callback(task_id: str) -> Callable[[str], None]:
         add_task_log(task_id, message)
 
     return log_callback
-
-
-def _fail_stock_concept_task_unless_stopped(task_id: str, error: Exception) -> None:
-    if is_task_stopped(task_id):
-        return
-    message = f"每日股票概念提取失败: {str(error)}"
-    add_task_log(task_id, f"❌ {message}")
-    update_task(task_id, "failed", message)
 
 
 def _stock_concept_task_metadata(group_id: str, report_date: Optional[str]) -> dict[str, Optional[str]]:
@@ -54,24 +46,21 @@ def _create_daily_stock_concept_task_response(
 
 
 def run_daily_stock_concept_task(task_id: str, group_id: str, request: DailyStockConceptRequest) -> None:
-    try:
-        if is_task_stopped(task_id):
-            return
-
-        update_task(task_id, "running", "开始提取每日股票概念...")
-        result = extract_daily_stock_concepts(
+    def work() -> dict:
+        return extract_daily_stock_concepts(
             group_id,
             request.date,
             comments_per_topic=request.commentsPerTopic,
             log_callback=_build_stock_concept_log_callback(task_id),
         )
 
-        if is_task_stopped(task_id):
-            return
-
-        update_task(task_id, "completed", "每日股票概念提取完成", result)
-    except Exception as e:
-        _fail_stock_concept_task_unless_stopped(task_id, e)
+    run_workflow(
+        task_id,
+        running_message="开始提取每日股票概念...",
+        completed_message="每日股票概念提取完成",
+        failure_label="每日股票概念提取",
+        work=work,
+    )
 
 
 @router.post("/{group_id}")

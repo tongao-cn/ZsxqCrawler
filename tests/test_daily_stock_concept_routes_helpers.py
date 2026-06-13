@@ -70,18 +70,33 @@ class DailyStockConceptRoutesHelperTests(unittest.TestCase):
         add_task_log.assert_called_once_with("task-1", "hello")
 
     @unittest.skipUnless(HAS_ROUTE_DEPS, "daily stock concept route dependencies are not installed")
-    def test_fail_stock_concept_task_unless_stopped_logs_and_updates_failure(self):
-        from backend.routes.daily_stock_concept_routes import _fail_stock_concept_task_unless_stopped
+    def test_run_daily_stock_concept_task_uses_runtime_workflow_lifecycle(self):
+        from backend.routes.daily_stock_concept_routes import DailyStockConceptRequest, run_daily_stock_concept_task
 
+        request = DailyStockConceptRequest(date="2026-06-13", commentsPerTopic=2)
         with (
-            patch("backend.routes.daily_stock_concept_routes.is_task_stopped", return_value=False),
-            patch("backend.routes.daily_stock_concept_routes.add_task_log") as add_task_log,
-            patch("backend.routes.daily_stock_concept_routes.update_task") as update_task,
+            patch("backend.routes.daily_stock_concept_routes.run_workflow") as run_workflow,
+            patch(
+                "backend.routes.daily_stock_concept_routes.extract_daily_stock_concepts",
+                return_value={"stocks": []},
+            ) as extract_daily_stock_concepts,
         ):
-            _fail_stock_concept_task_unless_stopped("task-1", RuntimeError("boom"))
+            run_daily_stock_concept_task("task-1", "51111112855254", request)
 
-        add_task_log.assert_called_once_with("task-1", "❌ 每日股票概念提取失败: boom")
-        update_task.assert_called_once_with("task-1", "failed", "每日股票概念提取失败: boom")
+            run_workflow.assert_called_once()
+            args, kwargs = run_workflow.call_args
+            self.assertEqual(("task-1",), args)
+            self.assertEqual("开始提取每日股票概念...", kwargs["running_message"])
+            self.assertEqual("每日股票概念提取完成", kwargs["completed_message"])
+            self.assertEqual("每日股票概念提取", kwargs["failure_label"])
+
+            result = kwargs["work"]()
+            self.assertEqual({"stocks": []}, result)
+            extract_daily_stock_concepts.assert_called_once()
+            call_args, call_kwargs = extract_daily_stock_concepts.call_args
+            self.assertEqual(("51111112855254", "2026-06-13"), call_args)
+            self.assertEqual(2, call_kwargs["comments_per_topic"])
+            self.assertTrue(callable(call_kwargs["log_callback"]))
 
 
 if __name__ == "__main__":
