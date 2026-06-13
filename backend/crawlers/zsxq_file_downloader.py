@@ -52,6 +52,7 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     empty_import_stats,
     existing_file_matches,
     has_retry_attempt_remaining,
+    incremental_start_index,
     latest_file_create_time_query,
     normalize_date_range,
     page_crosses_stop_before,
@@ -1453,16 +1454,7 @@ class ZSXQFileDownloader:
         
         # 将时间戳转换为毫秒数用作index
         try:
-            if '+' in oldest_time:
-                # 处理带时区的时间戳
-                from datetime import datetime
-                dt = datetime.fromisoformat(oldest_time.replace('+0800', '+08:00'))
-                timestamp_ms = int(dt.timestamp() * 1000)
-            else:
-                # 如果已经是毫秒时间戳
-                timestamp_ms = int(oldest_time)
-            
-            start_index = str(timestamp_ms)
+            start_index = incremental_start_index(oldest_time)
             self.log(f"🚀 增量收集起始时间戳: {start_index}")
 
             return self.collect_files_by_time(start_time=start_index)

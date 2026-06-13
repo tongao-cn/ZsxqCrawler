@@ -11708,6 +11708,43 @@ Result:
 - Frontend build passed, including Next.js lint/type checks.
 - Diff whitespace check passed with only existing LF-to-CRLF working-copy warnings.
 
+### 2026-06-13 - P9 file downloader incremental start index helper
+
+Changed:
+
+- Added `incremental_start_index()` in `backend/crawlers/zsxq_file_downloader_helpers.py`.
+- Reused the helper in `ZSXQFileDownloader.collect_incremental_files()` for existing oldest-time
+  to API start-index conversion.
+- Added direct helper coverage for millisecond strings, `+0800` timestamp strings, and invalid
+  input exception behavior.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Millisecond timestamp passthrough, `+0800` normalization, converted millisecond output, and
+  conversion exception propagation into the existing full-collection fallback are preserved.
+- Start-index logging, `collect_files_by_time()` call order, task/public APIs, storage schema,
+  fallback/legacy behavior, and config semantics are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py backend\crawlers\zsxq_file_downloader_helpers.py
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers -v
+uv run python -m unittest discover -s tests
+uv run python scripts\scan_postgres_compat_debt.py
+npm --prefix frontend run build
+git diff --check
+```
+
+Result:
+
+- Downloader helper tests passed: 106 tests.
+- Full backend unittest discovery passed: 816 tests, 15 skipped.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Frontend build passed, including Next.js lint/type checks.
+- Diff whitespace check passed with only existing LF-to-CRLF working-copy warnings.
+
 ## Stop Conditions
 
 Pause before editing if:

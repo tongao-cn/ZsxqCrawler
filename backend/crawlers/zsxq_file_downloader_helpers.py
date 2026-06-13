@@ -285,6 +285,15 @@ def date_range_collection_start_messages(
     return tuple(messages)
 
 
+def incremental_start_index(oldest_time: Any) -> str:
+    if "+" in oldest_time:
+        dt = datetime.datetime.fromisoformat(oldest_time.replace("+0800", "+08:00"))
+        timestamp_ms = int(dt.timestamp() * 1000)
+    else:
+        timestamp_ms = int(oldest_time)
+    return str(timestamp_ms)
+
+
 def latest_file_create_time_query(query_group_id: Any) -> tuple[str, tuple[Any, ...]]:
     return (
         '''

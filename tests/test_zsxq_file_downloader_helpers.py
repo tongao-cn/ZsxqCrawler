@@ -43,6 +43,7 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     existing_file_matches,
     filter_files_newer_than,
     has_retry_attempt_remaining,
+    incremental_start_index,
     is_retryable_api_error,
     is_retryable_http_status,
     latest_file_create_time_query,
@@ -598,6 +599,12 @@ class FileDownloaderTimeHelperTests(unittest.TestCase):
             ("📅 启动按时间范围收集文件列表...",),
             date_range_collection_start_messages(None, None),
         )
+
+    def test_incremental_start_index_preserves_millis_and_timezone_paths(self):
+        self.assertEqual("1680000000000", incremental_start_index("1680000000000"))
+        self.assertEqual("1777600800000", incremental_start_index("2026-05-01T10:00:00+0800"))
+        with self.assertRaises(ValueError):
+            incremental_start_index("not-a-time")
 
     def test_parse_create_time_accepts_common_formats(self):
         self.assertEqual(
