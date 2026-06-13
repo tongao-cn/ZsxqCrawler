@@ -10371,6 +10371,47 @@ Result:
 - Frontend build passed, including Next.js lint/type checks.
 - `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
 
+### 2026-06-13 - P2 A-share service unused Mapping import cleanup
+
+Changed:
+
+- Removed unused `Mapping` from `backend.services.a_share_analysis_service`.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Only an unused typing import was removed; A-share analysis functions, prompts, fallback local
+  storage behavior, database storage behavior, routes, scripts, response payloads, and logging are
+  unchanged.
+- `rg` confirmed no tests, scripts, docs, or backend modules import `Mapping` from
+  `backend.services.a_share_analysis_service`; other `Mapping` usages import it directly from
+  `typing`.
+- Existing compatibility re-exports from `backend.services.a_share_analysis_service`, including
+  parser helpers, `validate_day`, and group local-storage constants, were intentionally preserved.
+- Existing dirty downloader risk-log files and scripts remain outside this P2 slice.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_a_share_analysis_service_helpers -v
+uv run python -m py_compile backend\services\a_share_analysis_service.py
+rg -n "a_share_analysis_service import .*Mapping|\bMapping\b" backend\services\a_share_analysis_service.py tests scripts docs
+uv run python scripts\scan_postgres_compat_debt.py
+uv run python -m unittest discover -s tests
+cmd.exe /d /c npm --prefix frontend run build
+git diff --check
+```
+
+Result:
+
+- Baseline focused A-share analysis service tests passed before removing the unused typing import.
+- Focused A-share analysis service tests passed after the import cleanup.
+- `py_compile` passed.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Full backend unittest discovery: 795 tests passed, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+- `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
+
 ## Stop Conditions
 
 Pause before editing if:

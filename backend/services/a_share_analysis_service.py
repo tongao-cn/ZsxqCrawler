@@ -2,7 +2,7 @@
 import os
 from collections import defaultdict
 from datetime import datetime, timedelta
-from typing import Any, Callable, Dict, Iterable, List, Mapping, Optional, Sequence, Set, Tuple
+from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Set, Tuple
 
 from backend.core.local_group_runtime import get_cached_local_group_ids
 from backend.storage.db_compat import connect
