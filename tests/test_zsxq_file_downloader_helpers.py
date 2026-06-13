@@ -77,6 +77,7 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     time_collection_mode,
     time_collection_next_page_plan,
     time_collection_start_messages,
+    time_collection_summary_messages,
     time_dedupe_page_plan,
 )
 
@@ -763,6 +764,46 @@ class FileDownloaderTimeHelperTests(unittest.TestCase):
                 **total_imported_stats,
             },
             summary["result"],
+        )
+
+    def test_time_collection_summary_messages_preserve_log_sequence(self):
+        summary = {
+            "new_files": 2,
+            "final_files": 12,
+            "imported_items": (("files", 2), ("users", 1)),
+            "database_items": (("files", 12), ("topics", 3)),
+        }
+
+        self.assertEqual(
+            (
+                "🎉 完整文件列表收集完成:",
+                "   📊 处理页数: 4",
+                "   📁 新增文件: 2 (总计: 12)",
+                "   📋 累计导入统计:",
+                "      files: +2",
+                "      users: +1",
+                "   📚 当前数据库状态:",
+                "      files: 12",
+                "      topics: 3",
+            ),
+            time_collection_summary_messages(summary, 4),
+        )
+
+        empty_summary = {
+            "new_files": 0,
+            "final_files": 0,
+            "imported_items": (),
+            "database_items": (),
+        }
+        self.assertEqual(
+            (
+                "🎉 完整文件列表收集完成:",
+                "   📊 处理页数: 0",
+                "   📁 新增文件: 0 (总计: 0)",
+                "   📋 累计导入统计:",
+                "   📚 当前数据库状态:",
+            ),
+            time_collection_summary_messages(empty_summary, 0),
         )
 
     def test_latest_file_create_time_query_preserves_shape_and_params(self):

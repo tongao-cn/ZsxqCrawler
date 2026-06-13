@@ -549,6 +549,19 @@ def time_collection_final_summary(
     }
 
 
+def time_collection_summary_messages(summary: Dict[str, Any], page_count: int) -> tuple[str, ...]:
+    messages = [
+        "🎉 完整文件列表收集完成:",
+        f"   📊 处理页数: {page_count}",
+        f"   📁 新增文件: {summary['new_files']} (总计: {summary['final_files']})",
+        "   📋 累计导入统计:",
+    ]
+    messages.extend(f"      {key}: +{value}" for key, value in summary["imported_items"])
+    messages.append("   📚 当前数据库状态:")
+    messages.extend(f"      {table}: {count}" for table, count in summary["database_items"])
+    return tuple(messages)
+
+
 def page_crosses_stop_before(
     files: list[Dict[str, Any]],
     stop_before_time: datetime.datetime,

@@ -76,6 +76,7 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     time_collection_mode,
     time_collection_next_page_plan,
     time_collection_start_messages,
+    time_collection_summary_messages,
     time_dedupe_page_plan,
 )
 from backend.storage.postgres_core_schema import CORE_SCHEMA
@@ -1383,16 +1384,8 @@ class ZSXQFileDownloader:
             page_count,
         )
 
-        self.log(f"🎉 完整文件列表收集完成:")
-        self.log(f"   📊 处理页数: {page_count}")
-        self.log(f"   📁 新增文件: {summary['new_files']} (总计: {summary['final_files']})")
-        self.log(f"   📋 累计导入统计:")
-        for key, value in summary["imported_items"]:
-            self.log(f"      {key}: +{value}")
-
-        self.log("   📚 当前数据库状态:")
-        for table, count in summary["database_items"]:
-            self.log(f"      {table}: {count}")
+        for message in time_collection_summary_messages(summary, page_count):
+            self.log(message)
 
         return summary["result"]
     
