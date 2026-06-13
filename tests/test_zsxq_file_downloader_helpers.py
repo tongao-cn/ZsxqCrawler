@@ -55,6 +55,7 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     empty_import_stats,
     existing_file_matches,
     file_list_request_params,
+    file_list_response_page,
     file_list_start_messages,
     download_url_success_plan,
     filter_files_newer_than,
@@ -378,6 +379,41 @@ class FileDownloaderPaginationTests(unittest.TestCase):
         self.assertEqual(2, stats["total_files"])
         self.assertEqual(2, stats["new_files"])
         self.assertEqual(2, stats["pages"])
+
+    def test_show_file_list_preserves_page_output_and_next_index(self):
+        downloader = object.__new__(ZSXQFileDownloader)
+        downloader.fetch_calls = []
+
+        def fetch_file_list(**kwargs):
+            downloader.fetch_calls.append(kwargs)
+            return {
+                "resp_data": {
+                    "index": "next-page",
+                    "files": [
+                        {
+                            "file": {
+                                "name": "demo.pdf",
+                                "size": 1048576,
+                                "download_count": 7,
+                                "create_time": "2026-05-03T10:00:00",
+                            },
+                            "topic": {"talk": {"text": "topic title"}},
+                        }
+                    ],
+                }
+            }
+
+        downloader.fetch_file_list = fetch_file_list
+
+        with contextlib.redirect_stdout(io.StringIO()) as output:
+            next_index = ZSXQFileDownloader.show_file_list(downloader, count=1, index="cursor")
+
+        self.assertEqual("next-page", next_index)
+        self.assertEqual([{"count": 1, "index": "cursor"}], downloader.fetch_calls)
+        printed = output.getvalue()
+        self.assertIn("文件列表 (1 个文件)", printed)
+        self.assertIn("demo.pdf", printed)
+        self.assertIn("📑 下一页索引: next-page", printed)
 
 
 class FileDownloaderBatchDownloadTests(unittest.TestCase):
@@ -1267,6 +1303,20 @@ class FileDownloaderRetryHelperTests(unittest.TestCase):
                 "https://api.zsxq.com/v2/groups/511/files",
             ),
         )
+
+    def test_file_list_response_page_preserves_nested_access_semantics(self):
+        files = [{"file": {"id": 101}}]
+        self.assertEqual(
+            (files, "next-index"),
+            file_list_response_page({"resp_data": {"files": files, "index": "next-index"}}),
+        )
+        self.assertEqual(([], None), file_list_response_page({"resp_data": {}}))
+        self.assertEqual(
+            (None, "cursor"),
+            file_list_response_page({"resp_data": {"files": None, "index": "cursor"}}),
+        )
+        with self.assertRaises(AttributeError):
+            file_list_response_page({"resp_data": None})
 
     def test_api_failure_detail_preserves_message_error_code_fallbacks(self):
         self.assertEqual(

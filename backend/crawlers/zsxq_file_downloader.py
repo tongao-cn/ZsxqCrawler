@@ -65,6 +65,7 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     empty_import_stats,
     existing_file_matches,
     file_list_request_params,
+    file_list_response_page,
     file_list_start_messages,
     http_failure_plan,
     incremental_start_index,
@@ -516,7 +517,7 @@ class ZSXQFileDownloader:
                         continue
 
                     if data.get('succeeded'):
-                        files = data.get('resp_data', {}).get('files', [])
+                        files, _ = file_list_response_page(data)
                         if attempt > 0:
                             print(f"   ✅ 重试成功！第{attempt}次重试获取到文件列表")
                         else:
@@ -1061,8 +1062,7 @@ class ZSXQFileDownloader:
                 self.log(batch_download_fetch_failed_message())
                 break
 
-            files = data.get('resp_data', {}).get('files', [])
-            next_index = data.get('resp_data', {}).get('index')
+            files, next_index = file_list_response_page(data)
 
             if not files:
                 self.log(batch_download_empty_page_message())
@@ -1108,8 +1108,7 @@ class ZSXQFileDownloader:
         if not data:
             return None
         
-        files = data.get('resp_data', {}).get('files', [])
-        next_index = data.get('resp_data', {}).get('index')
+        files, next_index = file_list_response_page(data)
         
         print(f"\n📋 文件列表 ({len(files)} 个文件):")
         print("="*80)
@@ -1169,8 +1168,7 @@ class ZSXQFileDownloader:
                     print(f"💾 已成功收集前{page_count-1}页的数据")
                     break
                 
-                files = data.get('resp_data', {}).get('files', [])
-                next_index = data.get('resp_data', {}).get('index')
+                files, next_index = file_list_response_page(data)
                 
                 if not files:
                     print("📭 没有更多文件")
@@ -1309,8 +1307,7 @@ class ZSXQFileDownloader:
                     self.log(f"💾 已成功收集前{page_count-1}页的数据")
                     break
                 
-                files = data.get('resp_data', {}).get('files', [])
-                next_index = data.get('resp_data', {}).get('index')
+                files, next_index = file_list_response_page(data)
                 
                 if not files:
                     self.log("📭 没有更多文件")

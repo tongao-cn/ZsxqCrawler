@@ -148,6 +148,11 @@ def file_list_start_messages(
     return tuple(messages)
 
 
+def file_list_response_page(data: Dict[str, Any]) -> Tuple[Any, Any]:
+    resp_data = data.get("resp_data", {})
+    return resp_data.get("files", []), resp_data.get("index")
+
+
 def api_failure_detail(data: Dict[str, Any]) -> tuple[Any, Any]:
     return data.get("message", data.get("error", "未知错误")), data.get("code", "N/A")
 

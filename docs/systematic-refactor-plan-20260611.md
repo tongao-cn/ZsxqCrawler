@@ -12341,6 +12341,44 @@ Result:
 - PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-13 - P9 file downloader response page helper
+
+Changed:
+
+- Added `file_list_response_page()` in `backend/crawlers/zsxq_file_downloader_helpers.py`.
+- Reused the helper in `fetch_file_list()`, `download_files_batch()`, `show_file_list()`,
+  `collect_all_files_to_database()`, and `collect_files_by_time()`.
+- Added direct helper coverage for normal pages, missing `resp_data` keys, `files=None`, and the
+  existing `resp_data=None` exception behavior.
+- Added display-path coverage for `show_file_list()` output, fetch arguments, and returned
+  next-page index.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- File-list response nesting, empty-page fallback, `files=None` propagation, malformed
+  `resp_data=None` exception behavior, fetch call arguments, display output, import call order,
+  pagination cursor handling, task/public APIs, storage schema, and config semantics are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py backend\crawlers\zsxq_file_downloader_helpers.py tests\test_zsxq_file_downloader_helpers.py
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderRetryHelperTests.test_file_list_response_page_preserves_nested_access_semantics tests.test_zsxq_file_downloader_helpers.FileDownloaderPaginationTests.test_show_file_list_preserves_page_output_and_next_index tests.test_zsxq_file_downloader_helpers.FileDownloaderBatchDownloadTests.test_download_files_batch_preserves_result_stats_payloads_and_delays tests.test_zsxq_file_downloader_helpers.FileDownloaderPaginationTests.test_collect_all_files_stops_when_page_import_fails tests.test_zsxq_file_downloader_helpers.FileDownloaderPaginationTests.test_collect_files_by_time_preserves_next_index_sleep_and_last_page_log -v
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers -v
+uv run python -m unittest discover -s tests
+uv run python scripts\scan_postgres_compat_debt.py
+npm --prefix frontend run build
+```
+
+Result:
+
+- Focused response-page helper and integration tests passed.
+- Downloader helper tests passed: 126 tests.
+- Full backend unittest discovery passed: 836 tests, 15 skipped.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:
