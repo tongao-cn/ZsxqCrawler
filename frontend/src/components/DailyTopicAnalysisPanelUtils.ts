@@ -52,7 +52,11 @@ const CONCEPT_ALIAS_GROUPS: Array<{ concept: string; aliases: string[] }> = [
   },
   {
     concept: '半导体材料/硅片',
-    aliases: ['半导体材料', '半导体硅片', '12英寸硅片', '电子材料', '先进硅片', '大硅片', '12寸硅片', '硅片', 'SOI硅片', '抛光硅片'],
+    aliases: ['半导体材料', '半导体材料涨价', '半导体硅片', '12英寸硅片', '电子材料', '电子特气', '先进硅片', '大硅片', '12寸硅片', '硅片', 'SOI硅片', '抛光硅片', '重掺硅片', '硅材料', '靶材', '靶材涨价', '六氟化钨'],
+  },
+  {
+    concept: '半导体扩产/先进制程',
+    aliases: ['全球半导体扩产', '半导体扩产', '半导体扩产超级周期', '晶圆扩产', '先进制程', '先进逻辑'],
   },
   {
     concept: 'SiC/功率半导体',
@@ -84,7 +88,7 @@ const CONCEPT_ALIAS_GROUPS: Array<{ concept: string; aliases: string[] }> = [
   },
   {
     concept: '光通信/CPO',
-    aliases: ['光模块', '光通信', '光互联', '光互连', 'CPO', '光芯片', '硅光', 'Micro LED光互联', '短距光互联', 'MPO', 'NPO', 'OCS', '1.6T', '1.6T光模块', '800G', '3.2T', '光器件', '光模块设备', 'DSP', 'EML', '光纤', '通信'],
+    aliases: ['光模块', '高速光模块', '光通信', '光互联', '光互连', 'CPO', '光芯片', '硅光', 'Micro LED光互联', '短距光互联', 'MPO', 'NPO', 'OCS', '1.6T', '1.6T光模块', '2.4T', '800G', '3.2T', '光器件', '光模块设备', 'DSP', 'EML', '光纤', '光纤光缆', '光引擎', 'CW光源', '保偏光纤', '空芯光纤', '通信'],
   },
   {
     concept: '液冷/热管理',
@@ -92,19 +96,19 @@ const CONCEPT_ALIAS_GROUPS: Array<{ concept: string; aliases: string[] }> = [
   },
   {
     concept: 'PCB',
-    aliases: ['PCB', 'AI PCB', 'AI设备及耗材', '光模块mSAP PCB', 'PCB钻针', 'AI PCB钻针', 'PCB高端钻针', 'PCB高端铣刀', '金刚石涂层PCB钻针', 'PCB专用设备', 'PCB曝光设备', 'PCB高端设备'],
+    aliases: ['PCB', 'AI PCB', 'AI设备及耗材', '光模块mSAP PCB', 'PCB钻针', '钻针', 'AI PCB钻针', 'PCB高端钻针', 'PCB高端铣刀', '金刚石涂层PCB钻针', 'PCB专用设备', 'PCB曝光设备', 'PCB高端设备', 'PCB设备', 'PCB设备&耗材', 'PCB耗材', 'PCB微钻', 'PCB上游', 'mSAP', 'MSAP'],
   },
   {
     concept: 'CCL',
-    aliases: ['CCL', '高端CCL', 'CCL上游材料', '电子布', 'Q布', '正交背板'],
+    aliases: ['CCL', 'AI-CCL', '高端CCL', 'CCL上游材料', '覆铜板', '电子布', 'Q布', '正交背板', 'PTFE', '硅微粉', '树脂'],
   },
   {
     concept: '铜箔',
-    aliases: ['铜箔', '高端铜箔', '载体铜箔', 'HVLP4/5铜箔', 'HVLP5铜箔', 'RCC铜箔', '铜箔设备'],
+    aliases: ['铜箔', 'AI铜箔', '锂电铜箔', '高端电子铜箔', '高端铜箔', '载体铜箔', 'HVLP', 'HVLP铜箔', 'HVLP4/5铜箔', 'HVLP5铜箔', 'RCC铜箔', '铜箔设备'],
   },
   {
     concept: '商业航天/卫星',
-    aliases: ['商业航天', '空天行业', '低轨卫星星座', '卫星', '卫星互联网', '太空算力', '太空光伏', 'SpaceX', 'SpaceX产业链', 'SpaceX IPO催化', '火箭'],
+    aliases: ['商业航天', '空天行业', '低轨卫星星座', '低轨卫星', '卫星', '卫星互联网', '卫星产业链', '卫星通信', '太空算力', '太空光伏', 'SpaceX', 'SpaceX供应链', 'SpaceX产业链', 'SpaceX IPO催化', '星舰', '火箭', '可回收火箭'],
   },
   {
     concept: '燃机/SOFC',
