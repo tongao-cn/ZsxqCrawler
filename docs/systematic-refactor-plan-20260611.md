@@ -13297,6 +13297,36 @@ Result:
 - Stock topic analysis route helper tests passed: 12 tests.
 - Related runtime/stock route helper tests passed: 54 tests.
 
+### 2026-06-13 - P5 stock topic batch completion message helper
+
+Changed:
+
+- Extracted `_stock_topic_batch_completed_message()` in
+  `backend.routes.stock_topic_analysis_routes`.
+- Reused it in `run_stock_topic_analysis_batch_task()` while keeping the existing summary default
+  behavior.
+- Added helper coverage for complete, partial, and missing summary payloads.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Batch stock topic terminal message text, default counts, task status updates, result payload,
+  route behavior, task/public APIs, storage schema, fallback/legacy behavior, and config semantics
+  are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m py_compile backend\routes\stock_topic_analysis_routes.py tests\test_stock_topic_analysis_routes_helpers.py
+uv run python -m unittest tests.test_stock_topic_analysis_routes_helpers.StockTopicAnalysisRoutesHelperTests.test_stock_topic_batch_completed_message_preserves_summary_defaults -v
+uv run python -m unittest tests.test_stock_topic_analysis_routes_helpers -v
+```
+
+Result:
+
+- Focused batch completion message helper test passed.
+- Stock topic analysis route helper tests passed: 13 tests.
+
 ## Stop Conditions
 
 Pause before editing if:

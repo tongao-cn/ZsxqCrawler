@@ -80,6 +80,14 @@ def _create_stock_task_response(
     return {"task_id": task_id, "message": TASK_CREATED_MESSAGE}
 
 
+def _stock_topic_batch_completed_message(result: dict) -> str:
+    summary = result.get("summary") or {}
+    return (
+        f"批量个股话题分析完成：成功 {summary.get('success', 0)}，"
+        f"失败 {summary.get('failed', 0)}，无话题 {summary.get('no_topics', 0)}"
+    )
+
+
 def run_stock_topic_analysis_task(task_id: str, group_id: str, request: StockTopicAnalysisRequest) -> None:
     def work() -> dict:
         log_callback = _build_stock_topic_log_callback(task_id)
@@ -123,11 +131,10 @@ def run_stock_topic_analysis_batch_task(task_id: str, group_id: str, request: St
         if is_task_stopped(task_id):
             return
 
-        summary = result.get("summary") or {}
         update_task(
             task_id,
             "completed",
-            f"批量个股话题分析完成：成功 {summary.get('success', 0)}，失败 {summary.get('failed', 0)}，无话题 {summary.get('no_topics', 0)}",
+            _stock_topic_batch_completed_message(result),
             result,
         )
     except Exception as exc:

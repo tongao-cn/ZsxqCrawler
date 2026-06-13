@@ -172,6 +172,23 @@ class StockTopicAnalysisRoutesHelperTests(unittest.IsolatedAsyncioTestCase):
             self.assertTrue(callable(call_kwargs["log_callback"]))
 
     @unittest.skipUnless(HAS_ROUTE_DEPS, "stock topic analysis route dependencies are not installed")
+    async def test_stock_topic_batch_completed_message_preserves_summary_defaults(self):
+        from backend.routes.stock_topic_analysis_routes import _stock_topic_batch_completed_message
+
+        self.assertEqual(
+            "批量个股话题分析完成：成功 2，失败 1，无话题 3",
+            _stock_topic_batch_completed_message({"summary": {"success": 2, "failed": 1, "no_topics": 3}}),
+        )
+        self.assertEqual(
+            "批量个股话题分析完成：成功 2，失败 0，无话题 0",
+            _stock_topic_batch_completed_message({"summary": {"success": 2}}),
+        )
+        self.assertEqual(
+            "批量个股话题分析完成：成功 0，失败 0，无话题 0",
+            _stock_topic_batch_completed_message({}),
+        )
+
+    @unittest.skipUnless(HAS_ROUTE_DEPS, "stock topic analysis route dependencies are not installed")
     async def test_create_stock_topic_analysis_enqueues_runtime_task(self):
         from backend.routes.stock_topic_analysis_routes import (
             StockTopicAnalysisRequest,
