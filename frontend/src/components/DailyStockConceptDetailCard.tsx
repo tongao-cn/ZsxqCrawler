@@ -22,7 +22,7 @@ export default function DailyStockConceptDetailCard({
   if (!selectedConceptStat) {
     return (
       <div className="flex h-40 items-center justify-center rounded-md border border-dashed border-gray-300 text-sm text-muted-foreground">
-        从左侧选择一个概念查看详情
+        从左侧选择一个项目查看详情
       </div>
     );
   }
@@ -32,7 +32,7 @@ export default function DailyStockConceptDetailCard({
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <div className="text-base font-semibold">{selectedConceptStat.concept}</div>
-          <div className="mt-1 text-xs text-muted-foreground">选中概念详情</div>
+          <div className="mt-1 text-xs text-muted-foreground">选中项详情</div>
         </div>
         <div className="flex flex-wrap gap-1">
           {getConceptQualityTags(selectedConceptStat).map((tag) => (
@@ -45,7 +45,7 @@ export default function DailyStockConceptDetailCard({
 
       {selectedConceptStat.aliases.length > 1 && (
         <div>
-          <div className="mb-2 text-sm font-medium">合并概念</div>
+          <div className="mb-2 text-sm font-medium">合并别名</div>
           <div className="flex flex-wrap gap-1">
             {selectedConceptStat.aliases.map((alias) => (
               <Badge key={`${selectedConceptStat.concept}-alias-${alias}`} variant="outline">

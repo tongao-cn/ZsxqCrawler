@@ -16,6 +16,7 @@ import {
   getTodayText,
   normalizeCompanyName,
   normalizeConceptName,
+  normalizeSignalTagName,
 } from '@/components/DailyTopicAnalysisPanelUtils';
 
 interface DailyTopicAnalysisPanelProps {
@@ -65,6 +66,7 @@ export default function DailyTopicAnalysisPanel({
     mode,
     normalizeCompanyName,
     normalizeConceptName,
+    normalizeSignalTagName,
     reportDate,
   });
 
@@ -75,6 +77,7 @@ export default function DailyTopicAnalysisPanel({
     recommendedStockCount,
     selectedConceptStat,
     selectedConceptTrend,
+    signalStats,
   } = useDailyStockConceptDerivedState({
     conceptTrendItems,
     onlyRecommendationHits,
@@ -156,6 +159,7 @@ export default function DailyTopicAnalysisPanel({
           selectedConcept={selectedConcept}
           selectedConceptStat={selectedConceptStat}
           selectedConceptTrend={selectedConceptTrend}
+          signalStats={signalStats}
           stockConcepts={stockConcepts}
         />
       ) : (

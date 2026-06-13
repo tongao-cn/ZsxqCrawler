@@ -19,6 +19,7 @@ interface UseDailyTopicAnalysisDataOptions {
   mode: DailyTopicMode;
   normalizeCompanyName: (value?: string | null) => string;
   normalizeConceptName: (value?: string | null) => string;
+  normalizeSignalTagName?: (value?: string | null) => string | null;
   reportDate: string;
 }
 
@@ -40,6 +41,7 @@ export function useDailyTopicAnalysisData({
   mode,
   normalizeCompanyName,
   normalizeConceptName,
+  normalizeSignalTagName,
   reportDate,
 }: UseDailyTopicAnalysisDataOptions) {
   const [loadingReport, setLoadingReport] = useState(false);
@@ -130,7 +132,7 @@ export function useDailyTopicAnalysisData({
         for (const stock of result?.stocks || []) {
           const uniqueConcepts = new Set(
             (stock.concepts || [])
-              .map((concept) => normalizeConceptName(concept))
+              .map((concept) => normalizeSignalTagName?.(concept) || normalizeConceptName(concept))
               .filter(Boolean)
           );
           uniqueConcepts.forEach((concept) => {
@@ -176,7 +178,7 @@ export function useDailyTopicAnalysisData({
         setConceptTrendItems([]);
       }
     }
-  }, [groupId, normalizeConceptName, reportDate]);
+  }, [groupId, normalizeConceptName, normalizeSignalTagName, reportDate]);
 
   useEffect(() => {
     if (mode !== 'stock-concepts') {

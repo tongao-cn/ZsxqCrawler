@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import { RefreshCw, TrendingUp } from 'lucide-react';
 
 import { DailyStockConcept, DailyStockConceptResponse } from '@/lib/api';
@@ -42,6 +43,7 @@ interface DailyStockConceptsViewProps {
   selectedConcept: string | null;
   selectedConceptStat: ConceptStat | null;
   selectedConceptTrend: ConceptTrendItem | null;
+  signalStats: ConceptStat[];
   stockConcepts: DailyStockConceptResponse | null;
 }
 
@@ -132,8 +134,16 @@ export default function DailyStockConceptsView({
   selectedConcept,
   selectedConceptStat,
   selectedConceptTrend,
+  signalStats,
   stockConcepts,
 }: DailyStockConceptsViewProps) {
+  const [listMode, setListMode] = useState<'concept' | 'signal'>('concept');
+  const activeStats = listMode === 'concept' ? conceptStats : signalStats;
+  const activeTitle = listMode === 'concept' ? '概念榜' : '信号榜';
+  const activeDescription = listMode === 'concept'
+    ? `按去重来源话题数排序，共 ${conceptStats.length} 个概念`
+    : `按去重来源话题数排序，共 ${signalStats.length} 个信号`;
+
   return (
     <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px] xl:items-start">
       <Card className="border border-gray-200 shadow-none">
@@ -156,14 +166,36 @@ export default function DailyStockConceptsView({
               <div className="grid gap-4 xl:grid-cols-[340px_minmax(0,1fr)]">
                 <div className="rounded-md border border-gray-200">
                   <div className="border-b border-gray-200 p-3">
-                    <div className="text-sm font-medium">概念榜</div>
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="text-sm font-medium">{activeTitle}</div>
+                      <div className="inline-flex rounded-md border border-gray-200 bg-gray-50 p-0.5">
+                        <button
+                          type="button"
+                          onClick={() => setListMode('concept')}
+                          className={`rounded px-2 py-1 text-xs ${
+                            listMode === 'concept' ? 'bg-white text-gray-900 shadow-sm' : 'text-muted-foreground'
+                          }`}
+                        >
+                          概念
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setListMode('signal')}
+                          className={`rounded px-2 py-1 text-xs ${
+                            listMode === 'signal' ? 'bg-white text-gray-900 shadow-sm' : 'text-muted-foreground'
+                          }`}
+                        >
+                          信号
+                        </button>
+                      </div>
+                    </div>
                     <div className="text-xs text-muted-foreground">
-                      按去重来源话题数排序，共 {conceptStats.length} 个概念
+                      {activeDescription}
                     </div>
                   </div>
                   <div className="xl:max-h-[640px] xl:overflow-y-auto">
                     <ConceptList
-                      conceptStats={conceptStats}
+                      conceptStats={activeStats}
                       getConceptQualityTags={getConceptQualityTags}
                       onConceptSelect={onConceptSelect}
                       selectedConcept={selectedConcept}
@@ -176,7 +208,7 @@ export default function DailyStockConceptsView({
                     <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
                       <div className="text-muted-foreground">
                         当前展示 {filteredStocks.length} / {stockConcepts.stocks.length} 只股票
-                        {selectedConcept ? `，当前概念：${selectedConcept}` : ''}
+                        {selectedConcept ? `，当前筛选：${selectedConcept}` : ''}
                         {onlyRecommendationHits ? '，仅看推荐池命中' : ''}
                         {loadingRecommendations ? '，推荐池命中加载中...' : `，推荐池命中 ${recommendedStockCount} 只`}
                       </div>
@@ -252,12 +284,12 @@ export default function DailyStockConceptsView({
                 <div className="mt-1 font-semibold">{conceptStats.length}</div>
               </div>
               <div className="rounded-md border border-gray-200 bg-gray-50 p-3">
-                <div className="text-xs text-muted-foreground">股票</div>
-                <div className="mt-1 font-semibold">{stockConcepts?.stocks.length ?? 0}</div>
+                <div className="text-xs text-muted-foreground">信号</div>
+                <div className="mt-1 font-semibold">{signalStats.length}</div>
               </div>
               <div className="rounded-md border border-gray-200 bg-gray-50 p-3">
-                <div className="text-xs text-muted-foreground">当前展示</div>
-                <div className="mt-1 font-semibold">{filteredStocks.length}</div>
+                <div className="text-xs text-muted-foreground">股票</div>
+                <div className="mt-1 font-semibold">{stockConcepts?.stocks.length ?? 0}</div>
               </div>
               <div className="rounded-md border border-gray-200 bg-gray-50 p-3">
                 <div className="text-xs text-muted-foreground">推荐命中</div>
@@ -281,7 +313,7 @@ export default function DailyStockConceptsView({
             </div>
 
             <div className="rounded-md bg-gray-50 p-3 text-xs leading-5 text-muted-foreground">
-              {selectedConcept ? `当前概念：${selectedConcept}` : '当前未筛选概念'}
+              {selectedConcept ? `当前筛选：${selectedConcept}` : '当前未筛选'}
               <br />
               更新时间：{formatDateTime(stockConcepts?.updated_at)}
             </div>

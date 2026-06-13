@@ -6,6 +6,7 @@ import {
   isRisingTrend,
   normalizeCompanyName,
   normalizeConceptName,
+  normalizeSignalTagName,
   type ConceptQualityTag,
   type ConceptStat,
 } from '@/components/DailyTopicAnalysisPanelUtils';
@@ -27,39 +28,36 @@ export function useDailyStockConceptDerivedState({
   selectedConceptDetail,
   stockConcepts,
 }: UseDailyStockConceptDerivedStateOptions) {
-  const conceptStats = useMemo<ConceptStat[]>(() => {
+  const { conceptStats, signalStats } = useMemo<{ conceptStats: ConceptStat[]; signalStats: ConceptStat[] }>(() => {
     const conceptMap = new Map<string, { aliases: Set<string>; stocks: Set<string>; topics: Set<string>; recommendedStocks: Set<string> }>();
-    for (const stock of stockConcepts?.stocks || []) {
-      const stockName = stock.stock_name?.trim();
-      if (!stockName) {
-        continue;
+    const signalMap = new Map<string, { aliases: Set<string>; stocks: Set<string>; topics: Set<string>; recommendedStocks: Set<string> }>();
+    const addStat = (
+      target: Map<string, { aliases: Set<string>; stocks: Set<string>; topics: Set<string>; recommendedStocks: Set<string> }>,
+      concept: string,
+      alias: string,
+      stockName: string,
+      topicIds: Array<string | number>,
+      isRecommended: boolean
+    ) => {
+      if (!target.has(concept)) {
+        target.set(concept, {
+          aliases: new Set(),
+          stocks: new Set(),
+          topics: new Set(),
+          recommendedStocks: new Set(),
+        });
       }
-      const normalizedStockName = normalizeCompanyName(stockName);
-      for (const rawConcept of stock.concepts || []) {
-        const alias = rawConcept.trim();
-        if (!alias) {
-          continue;
-        }
-        const concept = normalizeConceptName(alias);
-        if (!conceptMap.has(concept)) {
-          conceptMap.set(concept, {
-            aliases: new Set(),
-            stocks: new Set(),
-            topics: new Set(),
-            recommendedStocks: new Set(),
-          });
-        }
-        const item = conceptMap.get(concept);
-        item?.aliases.add(alias);
-        item?.stocks.add(stockName);
-        stock.topic_ids.forEach((topicId) => item?.topics.add(String(topicId)));
-        if (recommendedCompanies.has(normalizedStockName)) {
-          item?.recommendedStocks.add(stockName);
-        }
+      const item = target.get(concept);
+      item?.aliases.add(alias);
+      item?.stocks.add(stockName);
+      topicIds.forEach((topicId) => item?.topics.add(String(topicId)));
+      if (isRecommended) {
+        item?.recommendedStocks.add(stockName);
       }
-    }
-
-    return Array.from(conceptMap.entries())
+    };
+    const toStats = (
+      source: Map<string, { aliases: Set<string>; stocks: Set<string>; topics: Set<string>; recommendedStocks: Set<string> }>
+    ) => Array.from(source.entries())
       .map(([concept, value]) => ({
         concept,
         aliases: Array.from(value.aliases).sort((a, b) => a.localeCompare(b, 'zh-CN')),
@@ -81,6 +79,31 @@ export function useDailyStockConceptDerivedState({
         }
         return a.concept.localeCompare(b.concept, 'zh-CN');
       });
+
+    for (const stock of stockConcepts?.stocks || []) {
+      const stockName = stock.stock_name?.trim();
+      if (!stockName) {
+        continue;
+      }
+      const normalizedStockName = normalizeCompanyName(stockName);
+      for (const rawConcept of stock.concepts || []) {
+        const alias = rawConcept.trim();
+        if (!alias) {
+          continue;
+        }
+        const signalTag = normalizeSignalTagName(alias);
+        if (signalTag) {
+          addStat(signalMap, signalTag, alias, stockName, stock.topic_ids, recommendedCompanies.has(normalizedStockName));
+        } else {
+          addStat(conceptMap, normalizeConceptName(alias), alias, stockName, stock.topic_ids, recommendedCompanies.has(normalizedStockName));
+        }
+      }
+    }
+
+    return {
+      conceptStats: toStats(conceptMap),
+      signalStats: toStats(signalMap),
+    };
   }, [recommendedCompanies, stockConcepts]);
 
   const conceptTrendMap = useMemo(
@@ -112,7 +135,13 @@ export function useDailyStockConceptDerivedState({
   const filteredStocks = useMemo(() => {
     const stocks = stockConcepts?.stocks || [];
     return stocks.filter((stock) => {
-      if (selectedConcept && !stock.concepts.some((concept) => normalizeConceptName(concept) === selectedConcept)) {
+      if (
+        selectedConcept &&
+        !stock.concepts.some((concept) => (
+          normalizeSignalTagName(concept) === selectedConcept ||
+          normalizeConceptName(concept) === selectedConcept
+        ))
+      ) {
         return false;
       }
       if (onlyRecommendationHits && !recommendedCompanies.has(normalizeCompanyName(stock.stock_name))) {
@@ -128,8 +157,12 @@ export function useDailyStockConceptDerivedState({
   );
 
   const selectedConceptStat = useMemo(
-    () => conceptStats.find((item) => item.concept === selectedConceptDetail) || null,
-    [conceptStats, selectedConceptDetail]
+    () => (
+      conceptStats.find((item) => item.concept === selectedConceptDetail) ||
+      signalStats.find((item) => item.concept === selectedConceptDetail) ||
+      null
+    ),
+    [conceptStats, selectedConceptDetail, signalStats]
   );
 
   const selectedConceptTrend = useMemo(
@@ -144,5 +177,6 @@ export function useDailyStockConceptDerivedState({
     recommendedStockCount,
     selectedConceptStat,
     selectedConceptTrend,
+    signalStats,
   };
 }

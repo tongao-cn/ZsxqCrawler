@@ -139,6 +139,40 @@ const CONCEPT_ALIAS_MAP = new Map<string, string>(
   ])
 );
 
+const SIGNAL_TAG_ALIAS_GROUPS: Array<{ tag: string; aliases: string[] }> = [
+  {
+    tag: '涨价/供需',
+    aliases: ['涨价', '涨价周期', '供需紧张', '供需矛盾', '供需错配', '量价齐升', '行业涨价', '高端产品涨价', '供给收缩'],
+  },
+  {
+    tag: '国产替代/自主可控',
+    aliases: ['国产替代', '国产化', '国产设备', '设备国产化', '国产化率提升', '自主可控'],
+  },
+  {
+    tag: '出海/出口',
+    aliases: ['出海', '出口', '产业链出海', '海外订单', '海外产能', '海外市占率提升', '出口链'],
+  },
+  {
+    tag: '订单/扩产',
+    aliases: ['订单增长', '订单上修', '产能扩张', '扩产预期', '扩产受益', '并购产能', '量产'],
+  },
+  {
+    tag: '估值/分红',
+    aliases: ['高分红', '高股息', '估值修复', '低估值', '股权激励'],
+  },
+  {
+    tag: 'AI需求/基础设施',
+    aliases: ['AI需求', 'AI基础设施', 'AI计算', 'AI核心资产'],
+  },
+];
+
+const SIGNAL_TAG_ALIAS_MAP = new Map<string, string>(
+  SIGNAL_TAG_ALIAS_GROUPS.flatMap((group) => [
+    [group.tag.toLocaleLowerCase(), group.tag] as [string, string],
+    ...group.aliases.map((alias) => [alias.toLocaleLowerCase(), group.tag] as [string, string]),
+  ])
+);
+
 export function getTodayText() {
   const now = new Date();
   const year = now.getFullYear();
@@ -202,6 +236,11 @@ export function normalizeCompanyName(value?: string | null) {
 export function normalizeConceptName(value?: string | null) {
   const concept = (value || '').trim();
   return CONCEPT_ALIAS_MAP.get(concept.toLocaleLowerCase()) || concept;
+}
+
+export function normalizeSignalTagName(value?: string | null) {
+  const tag = (value || '').trim();
+  return SIGNAL_TAG_ALIAS_MAP.get(tag.toLocaleLowerCase()) || null;
 }
 
 export function isRisingTrend(counts: number[]) {
