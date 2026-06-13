@@ -10687,6 +10687,49 @@ Result:
 - Frontend build passed, including Next.js lint/type checks.
 - `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
 
+### 2026-06-13 - P7 unused pandas dependency removal
+
+Changed:
+
+- Removed the unused direct `pandas>=2.0.0` runtime dependency from `pyproject.toml`.
+- Regenerated `uv.lock` offline, removing `pandas` plus its now-unused transitive dependencies:
+  `python-dateutil`, `pytz`, `six`, and `tzdata`.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Evidence before removal showed `pandas` was only present in `pyproject.toml` and `uv.lock`;
+  there were no code, test, README, or active-doc references to `pandas`, `pd.`, or common
+  DataFrame/Excel APIs.
+- `uv tree --package knowledge-planetb` showed `pandas` as a direct project dependency before the
+  change and absent after the lock refresh.
+- No public API, schema, crawler, task, AI, fallback, frontend, or script behavior was changed.
+
+Verification:
+
+```powershell
+uv tree --package knowledge-planetb
+rg -n "\bpandas\b|import pandas|from pandas|pd\." backend scripts tests README.md docs --glob '!docs/systematic-refactor-plan-20260611.md' --glob '!docs/archive/**'
+rg -n "read_excel|DataFrame|to_excel|ExcelWriter|Series\(" backend scripts tests README.md docs --glob '!docs/systematic-refactor-plan-20260611.md' --glob '!docs/archive/**'
+uv lock --offline
+rg -n "\bpandas\b|python-dateutil|\bpytz\b|\bsix\b|\btzdata\b" pyproject.toml uv.lock backend scripts tests README.md docs --glob '!docs/systematic-refactor-plan-20260611.md' --glob '!docs/archive/**'
+uv run python scripts\scan_postgres_compat_debt.py
+uv run python -m unittest discover -s tests
+cmd.exe /d /c npm --prefix frontend run build
+git diff --check
+```
+
+Result:
+
+- `uv lock --offline` removed `pandas` and the now-unused transitive packages without resolving
+  unrelated dependency updates.
+- Post-change `uv tree --package knowledge-planetb` no longer lists `pandas`.
+- Post-change `rg` checks returned no matches for the removed packages or pandas-style APIs.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Full backend unittest discovery passed: 802 tests passed, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+- `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
+
 ## Stop Conditions
 
 Pause before editing if:
