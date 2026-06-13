@@ -10334,6 +10334,43 @@ Result:
 - Frontend build passed, including Next.js lint/type checks.
 - `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
 
+### 2026-06-13 - P2 service unused typing import cleanup
+
+Changed:
+
+- Removed unused `Any` from `backend.services.a_share_analysis_local_store`.
+- Removed unused `List` from `backend.services.columns_comment_service`.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Only unused typing imports were removed; function bodies, signatures, route behavior, response
+  payloads, fallback behavior, file paths, logging, and persistence behavior are unchanged.
+- `rg` and AST import-use scan showed these names were not used by the edited modules.
+- No schema, crawler, storage, fallback, legacy, route, or public response behavior was removed.
+- Existing dirty downloader risk-log files and scripts remain outside this P2 slice.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_columns_comment_service tests.test_a_share_analysis_service_helpers -v
+uv run python -m py_compile backend\services\a_share_analysis_local_store.py backend\services\columns_comment_service.py
+uv run python scripts\scan_postgres_compat_debt.py
+uv run python -m unittest discover -s tests
+cmd.exe /d /c npm --prefix frontend run build
+git diff --check
+```
+
+Result:
+
+- Baseline focused service tests passed before removing the unused typing imports.
+- Focused service tests passed after the import cleanup.
+- `py_compile` passed.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Full backend unittest discovery: 795 tests passed, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+- `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
+
 ## Stop Conditions
 
 Pause before editing if:

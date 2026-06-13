@@ -3,7 +3,7 @@ from __future__ import annotations
 import csv
 import json
 import os
-from typing import Any, Callable, Dict, Iterable, Optional, Tuple
+from typing import Callable, Dict, Iterable, Optional, Tuple
 
 from backend.core.db_path_manager import get_db_path_manager
 

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from typing import Any, Callable, Dict, List
+from typing import Any, Callable, Dict
 
 import requests
 from fastapi import HTTPException
