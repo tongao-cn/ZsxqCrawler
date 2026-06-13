@@ -13884,6 +13884,61 @@ Result:
 - PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-13 - P5 A-share missing API key message constant
+
+Changed:
+
+- Added characterization coverage for `start_a_share_analysis()` when no OpenAI API key is
+  configured.
+- Locked the current public error behavior for that path: direct route invocation raises an
+  HTTP 500 wrapper with detail `创建A股分析任务失败: 400: ...`.
+- Extracted `A_SHARE_MISSING_API_KEY_MESSAGE` in `backend.routes.a_share_routes`.
+- Reused the constant in both the background task preflight failure path and the `/run`
+  creation preflight path.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- The background task missing-key path still updates the task to `failed`, logs the same
+  `❌` message, and returns before stop checks, group normalization, task start, service
+  call, and completion handling.
+- The `/run` route still preserves its existing wrapped HTTPException behavior for missing
+  API keys.
+- The duplicated literal is now centralized, reducing drift risk without changing public
+  API shape, task schema, config semantics, fallback/legacy behavior, or side effects.
+- The wrapped 500 behavior remains a documented compatibility debt; changing it to a direct
+  400 response would be a behavior change and needs a separate explicit decision.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_a_share_routes_helpers.AShareRoutesHelperTests.test_start_a_share_analysis_preserves_missing_api_key_http_error -v
+uv run python -m py_compile backend\routes\a_share_routes.py tests\test_a_share_routes_helpers.py
+uv run python -m unittest tests.test_a_share_routes_helpers.AShareRoutesHelperTests.test_start_a_share_analysis_preserves_missing_api_key_http_error tests.test_a_share_routes_helpers.AShareRoutesHelperTests.test_run_a_share_analysis_task_fails_fast_without_api_key tests.test_a_share_routes_helpers.AShareRoutesHelperTests.test_a_share_api_key_available_or_fail_task_records_missing_key_failure -v
+uv run python -m unittest tests.test_a_share_routes_helpers -v
+uv run python -m unittest tests.test_a_share_routes_helpers tests.test_a_share_analysis_service_helpers tests.test_a_share_analysis_db_storage_helpers -v
+uv run python -m unittest discover -s tests
+uv run python scripts\scan_postgres_compat_debt.py
+npm --prefix frontend run build
+uv run --extra dev ruff check backend\routes\a_share_routes.py tests\test_a_share_routes_helpers.py --select F401,F841
+uv run ruff check backend\routes\a_share_routes.py tests\test_a_share_routes_helpers.py --select F401,F841
+```
+
+Result:
+
+- Focused missing-key `/run` characterization test passed against the original duplicated
+  literal implementation before extraction: 1 test.
+- `py_compile` passed.
+- Focused missing-key tests passed after extraction: 3 tests.
+- A-share route helper tests passed: 21 tests.
+- Related A-share route/service/storage tests passed: 64 tests.
+- Full backend unittest discovery passed: 909 tests, 15 skipped.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Frontend build passed, including Next.js lint/type checks.
+- Focused backend Ruff could not run in this checkout: `uv run --extra dev ruff ...`
+  failed because the project does not define the `dev` extra, and `uv run ruff ...`
+  failed because `ruff` is not available.
+
 ## Stop Conditions
 
 Pause before editing if:

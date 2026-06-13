@@ -36,6 +36,7 @@ from backend.services.task_runtime import (
 
 router = APIRouter(prefix="/api/analytics/a-share", tags=["a-share"])
 TASK_CREATED_MESSAGE = "任务已创建，正在后台执行"
+A_SHARE_MISSING_API_KEY_MESSAGE = "未配置 OpenAI API Key，请设置环境变量 OPENAI_API_KEY 或 config.toml [ai].api_key"
 
 
 class AShareAnalysisRunRequest(BaseModel):
@@ -198,9 +199,8 @@ def _a_share_api_key_available_or_fail_task(task_id: str) -> bool:
     if has_openai_api_key():
         return True
 
-    message = "未配置 OpenAI API Key，请设置环境变量 OPENAI_API_KEY 或 config.toml [ai].api_key"
-    update_task(task_id, "failed", message)
-    add_task_log(task_id, f"❌ {message}")
+    update_task(task_id, "failed", A_SHARE_MISSING_API_KEY_MESSAGE)
+    add_task_log(task_id, f"❌ {A_SHARE_MISSING_API_KEY_MESSAGE}")
     return False
 
 
@@ -304,7 +304,7 @@ async def start_a_share_analysis(request: AShareAnalysisRunRequest, background_t
         if not has_openai_api_key():
             raise HTTPException(
                 status_code=400,
-                detail="未配置 OpenAI API Key，请设置环境变量 OPENAI_API_KEY 或 config.toml [ai].api_key",
+                detail=A_SHARE_MISSING_API_KEY_MESSAGE,
             )
 
         normalized_group_id, scope_text = _normalize_group_scope(request.group_id)

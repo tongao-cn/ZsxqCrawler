@@ -49,6 +49,31 @@ class AShareRoutesHelperTests(unittest.TestCase):
         self.assertEqual({"task_id": "task-a-share", "message": TASK_CREATED_MESSAGE}, response)
 
     @unittest.skipUnless(HAS_A_SHARE_ROUTE_DEPS, "a-share route dependencies are not installed")
+    def test_start_a_share_analysis_preserves_missing_api_key_http_error(self):
+        import asyncio
+
+        from fastapi import HTTPException
+
+        from backend.routes.a_share_routes import AShareAnalysisRunRequest, start_a_share_analysis
+
+        request = AShareAnalysisRunRequest(group_id="51111112855254")
+        missing_key_message = "未配置 OpenAI API Key，请设置环境变量 OPENAI_API_KEY 或 config.toml [ai].api_key"
+
+        with (
+            patch("backend.routes.a_share_routes.has_openai_api_key", return_value=False) as has_api_key,
+            patch("backend.routes.a_share_routes._normalize_group_scope") as normalize_group_scope,
+            patch("backend.routes.a_share_routes._create_a_share_analysis_task_response") as create_task_response,
+        ):
+            with self.assertRaises(HTTPException) as raised:
+                asyncio.run(start_a_share_analysis(request, None))
+
+        self.assertEqual(500, raised.exception.status_code)
+        self.assertEqual(f"创建A股分析任务失败: 400: {missing_key_message}", raised.exception.detail)
+        has_api_key.assert_called_once_with()
+        normalize_group_scope.assert_not_called()
+        create_task_response.assert_not_called()
+
+    @unittest.skipUnless(HAS_A_SHARE_ROUTE_DEPS, "a-share route dependencies are not installed")
     def test_run_a_share_analysis_for_task_preserves_service_arguments(self):
         from backend.routes.a_share_routes import AShareAnalysisRunRequest, _run_a_share_analysis_for_task
 
