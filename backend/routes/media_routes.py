@@ -53,6 +53,13 @@ def _resolve_safe_child_path(base_dir: Path, child_path: str) -> Path:
     return resolved_path
 
 
+def _existing_local_media_path(base_dir: Path, child_path: str, missing_detail: str) -> Path:
+    media_file = _resolve_safe_child_path(base_dir, child_path)
+    if not media_file.exists():
+        raise HTTPException(status_code=404, detail=missing_detail)
+    return media_file
+
+
 def _validate_proxy_image_url(url: str) -> str:
     try:
         return validate_remote_image_url(url)
@@ -139,11 +146,7 @@ async def get_local_image(group_id: str, image_path: str):
         group_dir = path_manager.get_group_data_dir(group_id)
         images_dir = Path(group_dir) / "images"
 
-        image_file = _resolve_safe_child_path(images_dir, image_path)
-
-        if not image_file.exists():
-            raise HTTPException(status_code=404, detail="图片不存在")
-
+        image_file = _existing_local_media_path(images_dir, image_path, "图片不存在")
         content_type = _guess_content_type(image_file, "application/octet-stream")
         return Response(content=_read_file_bytes(image_file), media_type=content_type)
     except HTTPException:
@@ -160,11 +163,7 @@ async def get_local_video(group_id: str, video_path: str):
         group_dir = path_manager.get_group_dir(group_id)
         videos_dir = Path(group_dir) / "column_videos"
 
-        video_file = _resolve_safe_child_path(videos_dir, video_path)
-
-        if not video_file.exists():
-            raise HTTPException(status_code=404, detail="视频不存在")
-
+        video_file = _existing_local_media_path(videos_dir, video_path, "视频不存在")
         content_type = _guess_content_type(video_file, "video/mp4")
         return FileResponse(
             path=str(video_file),

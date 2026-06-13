@@ -10,6 +10,7 @@ try:
     from backend.routes.media_routes import (
         _build_cached_image_response,
         _build_proxy_image_request_headers,
+        _existing_local_media_path,
         _guess_content_type,
         _is_blocked_proxy_ip,
         _read_file_bytes,
@@ -61,6 +62,38 @@ class MediaRoutesHelperTests(unittest.TestCase):
 
             with self.assertRaises(HTTPException) as ctx:
                 _resolve_safe_child_path(base_dir, "../outside.jpg")
+
+        self.assertEqual(403, ctx.exception.status_code)
+        self.assertEqual("禁止访问该路径", ctx.exception.detail)
+
+    def test_existing_local_media_path_returns_existing_child(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base_dir = Path(tmp) / "images"
+            file_path = base_dir / "nested" / "a.jpg"
+            file_path.parent.mkdir(parents=True)
+            file_path.write_bytes(b"image-data")
+
+            self.assertEqual(
+                file_path.resolve(),
+                _existing_local_media_path(base_dir, "nested/a.jpg", "图片不存在"),
+            )
+
+    def test_existing_local_media_path_raises_custom_missing_detail(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base_dir = Path(tmp) / "videos"
+
+            with self.assertRaises(HTTPException) as ctx:
+                _existing_local_media_path(base_dir, "missing.mp4", "视频不存在")
+
+        self.assertEqual(404, ctx.exception.status_code)
+        self.assertEqual("视频不存在", ctx.exception.detail)
+
+    def test_existing_local_media_path_rejects_parent_escape(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base_dir = Path(tmp) / "images"
+
+            with self.assertRaises(HTTPException) as ctx:
+                _existing_local_media_path(base_dir, "../outside.jpg", "图片不存在")
 
         self.assertEqual(403, ctx.exception.status_code)
         self.assertEqual("禁止访问该路径", ctx.exception.detail)

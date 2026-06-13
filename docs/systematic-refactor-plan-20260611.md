@@ -9921,6 +9921,50 @@ Result:
 - Frontend build passed, including Next.js lint/type checks.
 - `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
 
+### 2026-06-13 - P2 local media path helper
+
+Changed:
+
+- Added `backend.routes.media_routes._existing_local_media_path`.
+- Reused it in the local image and local video endpoints for safe child path resolution and missing
+  file checks.
+- Added helper coverage in `tests/test_media_routes_helpers.py` for existing files, missing files,
+  and parent-path escape attempts.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Local image routes still resolve under `get_group_data_dir(group_id) / "images"` and return a
+  byte `Response` with the same content-type fallback.
+- Local video routes still resolve under `get_group_dir(group_id) / "column_videos"` and return the
+  same `FileResponse` shape with filename and content-type fallback.
+- Missing images still raise HTTP 404 with `图片不存在`; missing videos still raise HTTP 404 with
+  `视频不存在`.
+- Parent-path escapes still raise HTTP 403 with `禁止访问该路径`.
+- No schema, crawler, storage, task, legacy, or fallback-removal behavior changed.
+- Existing dirty downloader risk-log files and scripts remain outside this P2 slice.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_media_routes_helpers -v
+uv run python -m py_compile backend\routes\media_routes.py tests\test_media_routes_helpers.py
+uv run python scripts\scan_postgres_compat_debt.py
+uv run python -m unittest discover -s tests
+cmd.exe /d /c npm --prefix frontend run build
+git diff --check
+```
+
+Result:
+
+- Existing media route helper tests passed before production code changes.
+- Focused media route helper tests passed after adding local media path coverage.
+- `py_compile` passed.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Full backend unittest discovery: 789 tests passed, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+- `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
+
 ## Stop Conditions
 
 Pause before editing if:
