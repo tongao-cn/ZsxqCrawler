@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from datetime import date, timedelta
 from typing import Any, Callable, Dict, Iterable, List, Tuple
 
@@ -67,17 +67,30 @@ MAX_TOPIC_TEXT_CHARS = 1800
 MAX_ANALYSIS_PROMPT_CHARS = 50000
 MAX_BATCH_STOCKS = 50
 MAX_BATCH_STOCK_ANALYSIS_WORKERS = 10
+MAX_BATCH_TRANSIENT_FAILURES = 5
 MAX_QUESTION_KEYWORDS = 8
 MAX_QUESTION_TOPICS = 60
 MAX_EXTRACT_IMAGE_BYTES = 4 * 1024 * 1024
 STOCK_TOPIC_ANALYSIS_TABLE = "stock_topic_analyses"
 PROCESSED_TOPIC_STATUSES = {"analyzed", "skipped"}
 SUPPORTED_EXTRACT_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp"}
+TRANSIENT_BATCH_ERROR_MARKERS = (
+    "503",
+    "service temporarily unavailable",
+    "connection error",
+    "timeout",
+    "timed out",
+)
 
 
 def _log(log_callback: Callable[[str], None] | None, message: str) -> None:
     if log_callback:
         log_callback(message)
+
+
+def _is_transient_batch_error(message: str) -> bool:
+    normalized = _normalize_text(message).lower()
+    return any(marker in normalized for marker in TRANSIENT_BATCH_ERROR_MARKERS)
 
 
 def parse_stock_names(values: Any, *, limit: int | None = None) -> List[str]:
@@ -995,6 +1008,9 @@ def analyze_stock_topics_batch(
     success_count = 0
     failed_count = 0
     no_topic_count = 0
+    skipped_count = 0
+    consecutive_transient_failures = 0
+    abort_reason = ""
     max_workers = min(MAX_BATCH_STOCK_ANALYSIS_WORKERS, total)
     _log(log_callback, f"开始批量分析，共 {total} 只股票，并发 {max_workers}")
 
@@ -1027,24 +1043,56 @@ def analyze_stock_topics_batch(
             _log(log_callback, f"{index}/{total} {stock_name}: 失败 - {str(exc)}")
             return index, failed_result, "failed"
 
+    def record_result(index: int, result: Dict[str, Any], status: str) -> None:
+        nonlocal success_count, failed_count, no_topic_count, consecutive_transient_failures, abort_reason
+        ordered_results[index - 1] = result
+        if status == "no_topics":
+            no_topic_count += 1
+            consecutive_transient_failures = 0
+        elif status == "failed":
+            failed_count += 1
+            if _is_transient_batch_error(str(result.get("error") or "")):
+                consecutive_transient_failures += 1
+            else:
+                consecutive_transient_failures = 0
+        else:
+            success_count += 1
+            consecutive_transient_failures = 0
+
+        if consecutive_transient_failures >= MAX_BATCH_TRANSIENT_FAILURES and not abort_reason:
+            abort_reason = f"连续 {consecutive_transient_failures} 个临时错误，停止提交后续股票"
+            _log(log_callback, f"⚠️ {abort_reason}")
+
     ordered_results: List[Dict[str, Any] | None] = [None] * total
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        futures = [
-            executor.submit(analyze_one, index, stock_name)
-            for index, stock_name in enumerate(names, start=1)
-        ]
-        for future in as_completed(futures):
-            index, result, status = future.result()
-            ordered_results[index - 1] = result
-            if status == "no_topics":
-                no_topic_count += 1
-            elif status == "failed":
-                failed_count += 1
-            else:
-                success_count += 1
+        futures = {}
+        next_position = 1
+
+        def submit_next() -> None:
+            nonlocal next_position
+            if next_position > total:
+                return
+            futures[executor.submit(analyze_one, next_position, names[next_position - 1])] = next_position
+            next_position += 1
+
+        for _ in range(max_workers):
+            submit_next()
+
+        while futures:
+            done, _ = wait(futures, return_when=FIRST_COMPLETED)
+            for future in done:
+                futures.pop(future, None)
+                index, result, status = future.result()
+                record_result(index, result, status)
+                if not abort_reason:
+                    submit_next()
 
     results = [result for result in ordered_results if result is not None]
-    _log(log_callback, f"批量分析完成：成功 {success_count}，失败 {failed_count}，无话题 {no_topic_count}")
+    skipped_count = total - len(results)
+    if abort_reason:
+        _log(log_callback, f"批量分析中止：成功 {success_count}，失败 {failed_count}，无话题 {no_topic_count}，未提交 {skipped_count}")
+    else:
+        _log(log_callback, f"批量分析完成：成功 {success_count}，失败 {failed_count}，无话题 {no_topic_count}")
     return {
         "group_id": group_id_text,
         "stocks": results,
@@ -1053,6 +1101,9 @@ def analyze_stock_topics_batch(
             "success": success_count,
             "failed": failed_count,
             "no_topics": no_topic_count,
+            "skipped": skipped_count,
+            "aborted": bool(abort_reason),
+            "abort_reason": abort_reason,
         },
     }
 
