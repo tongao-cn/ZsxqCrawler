@@ -24,6 +24,7 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     API_FAILURE_RETRY,
     HTTP_FAILURE_NON_RETRY,
     HTTP_FAILURE_RETRY,
+    api_failure_detail,
     add_import_stats,
     classify_api_failure,
     classify_http_failure,
@@ -505,8 +506,7 @@ class ZSXQFileDownloader:
                             print(f"   ✅ 获取成功: {len(files)}个文件")
                         return data
 
-                    error_msg = data.get('message', data.get('error', '未知错误'))
-                    error_code = data.get('code', 'N/A')
+                    error_msg, error_code = api_failure_detail(data)
                     print(f"   ❌ API返回失败: {error_msg} (代码: {error_code})")
                     failure_class = classify_api_failure(error_code, attempt, max_retries)
                     if failure_class == API_FAILURE_RETRY:
@@ -591,8 +591,7 @@ class ZSXQFileDownloader:
                             return download_url
                         print(f"   ❌ 响应中无下载链接字段")
                     else:
-                        error_msg = data.get('message', data.get('error', '未知错误'))
-                        error_code = data.get('code', 'N/A')
+                        error_msg, error_code = api_failure_detail(data)
                         self.log(f"   ❌ API返回失败: {error_msg} (代码: {error_code})")
                         self._record_risk_event(
                             file_id=file_id,

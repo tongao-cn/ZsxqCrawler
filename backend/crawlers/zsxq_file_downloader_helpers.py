@@ -146,6 +146,10 @@ def file_list_start_messages(
     return tuple(messages)
 
 
+def api_failure_detail(data: Dict[str, Any]) -> tuple[Any, Any]:
+    return data.get("message", data.get("error", "未知错误")), data.get("code", "N/A")
+
+
 def classify_api_failure(error_code: Any, attempt: int, max_retries: int) -> str:
     if str(error_code) == "1030":
         return API_FAILURE_PERMISSION_DENIED_1030

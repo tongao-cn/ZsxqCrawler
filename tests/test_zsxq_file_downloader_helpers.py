@@ -18,6 +18,7 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     HTTP_FAILURE_RETRY,
     HTTP_FAILURE_RETRY_EXHAUSTED,
     add_import_stats,
+    api_failure_detail,
     classify_api_failure,
     classify_http_failure,
     content_disposition_filename,
@@ -994,6 +995,15 @@ class FileDownloaderRetryHelperTests(unittest.TestCase):
                 "https://api.zsxq.com/v2/groups/511/files",
             ),
         )
+
+    def test_api_failure_detail_preserves_message_error_code_fallbacks(self):
+        self.assertEqual(
+            ("primary", 1059),
+            api_failure_detail({"message": "primary", "error": "backup", "code": 1059}),
+        )
+        self.assertEqual(("backup", "N/A"), api_failure_detail({"error": "backup"}))
+        self.assertEqual(("未知错误", "N/A"), api_failure_detail({}))
+        self.assertEqual((None, None), api_failure_detail({"message": None, "code": None}))
 
     def test_classify_api_failure_distinguishes_retry_and_terminal_cases(self):
         self.assertEqual(API_FAILURE_RETRY, classify_api_failure("1059", 0, 2))
