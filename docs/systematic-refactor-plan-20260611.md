@@ -13265,6 +13265,38 @@ Result:
 - Frontend build passed, including Next.js lint/type checks.
 - Search confirmed the removed stock-question failure helper has no remaining references.
 
+### 2026-06-13 - P5 stock topic workflow lifecycle reuse
+
+Changed:
+
+- Reused `backend.services.task_runtime.run_workflow()` in
+  `backend.routes.stock_topic_analysis_routes.run_stock_topic_analysis_task()`.
+- Kept the stock topic batch runner outside this slice because its terminal message depends on the
+  returned summary and needs a separate completion-message adapter.
+- Added route wiring coverage for single-stock topic workflow messages, failure label, stock-name
+  log, result callback, `analyze_stock_topics()` arguments, and log callback creation.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Single-stock topic analysis running/completed messages, failure message text, initial/post-work
+  stop checks, stock-name log text, `analyze_stock_topics()` arguments, task creation response,
+  route behavior, task/public APIs, storage schema, fallback/legacy behavior, and config semantics
+  are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m py_compile backend\routes\stock_topic_analysis_routes.py tests\test_stock_topic_analysis_routes_helpers.py
+uv run python -m unittest tests.test_stock_topic_analysis_routes_helpers -v
+uv run python -m unittest tests.test_task_runtime_helpers tests.test_stock_topic_analysis_routes_helpers -v
+```
+
+Result:
+
+- Stock topic analysis route helper tests passed: 12 tests.
+- Related runtime/stock route helper tests passed: 54 tests.
+
 ## Stop Conditions
 
 Pause before editing if:

@@ -81,21 +81,18 @@ def _create_stock_task_response(
 
 
 def run_stock_topic_analysis_task(task_id: str, group_id: str, request: StockTopicAnalysisRequest) -> None:
-    try:
-        if is_task_stopped(task_id):
-            return
-
+    def work() -> dict:
         log_callback = _build_stock_topic_log_callback(task_id)
-        update_task(task_id, "running", "开始个股话题分析...")
         log_callback(f"🔎 股票名称: {request.stockName}")
-        result = analyze_stock_topics(group_id, request.stockName, log_callback=log_callback)
+        return analyze_stock_topics(group_id, request.stockName, log_callback=log_callback)
 
-        if is_task_stopped(task_id):
-            return
-
-        update_task(task_id, "completed", "个股话题分析完成", result)
-    except Exception as exc:
-        _fail_stock_topic_task_unless_stopped(task_id, exc)
+    run_workflow(
+        task_id,
+        running_message="开始个股话题分析...",
+        completed_message="个股话题分析完成",
+        failure_label="个股话题分析",
+        work=work,
+    )
 
 
 def run_stock_question_task(task_id: str, group_id: str, request: StockQuestionRequest) -> None:

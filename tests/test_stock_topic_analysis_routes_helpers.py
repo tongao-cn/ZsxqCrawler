@@ -142,6 +142,36 @@ class StockTopicAnalysisRoutesHelperTests(unittest.IsolatedAsyncioTestCase):
             self.assertTrue(callable(call_kwargs["log_callback"]))
 
     @unittest.skipUnless(HAS_ROUTE_DEPS, "stock topic analysis route dependencies are not installed")
+    async def test_run_stock_topic_analysis_task_uses_runtime_workflow_lifecycle(self):
+        from backend.routes.stock_topic_analysis_routes import StockTopicAnalysisRequest, run_stock_topic_analysis_task
+
+        request = StockTopicAnalysisRequest(stockName="宁德时代")
+        with (
+            patch("backend.routes.stock_topic_analysis_routes.run_workflow") as run_workflow,
+            patch(
+                "backend.routes.stock_topic_analysis_routes.analyze_stock_topics",
+                return_value={"summary": "ok"},
+            ) as analyze_stock_topics,
+            patch("backend.routes.stock_topic_analysis_routes.add_task_log") as add_task_log,
+        ):
+            run_stock_topic_analysis_task("task-1", "51111112855254", request)
+
+            run_workflow.assert_called_once()
+            args, kwargs = run_workflow.call_args
+            self.assertEqual(("task-1",), args)
+            self.assertEqual("开始个股话题分析...", kwargs["running_message"])
+            self.assertEqual("个股话题分析完成", kwargs["completed_message"])
+            self.assertEqual("个股话题分析", kwargs["failure_label"])
+
+            result = kwargs["work"]()
+            self.assertEqual({"summary": "ok"}, result)
+            add_task_log.assert_called_once_with("task-1", "🔎 股票名称: 宁德时代")
+            analyze_stock_topics.assert_called_once()
+            call_args, call_kwargs = analyze_stock_topics.call_args
+            self.assertEqual(("51111112855254", "宁德时代"), call_args)
+            self.assertTrue(callable(call_kwargs["log_callback"]))
+
+    @unittest.skipUnless(HAS_ROUTE_DEPS, "stock topic analysis route dependencies are not installed")
     async def test_create_stock_topic_analysis_enqueues_runtime_task(self):
         from backend.routes.stock_topic_analysis_routes import (
             StockTopicAnalysisRequest,
