@@ -88,6 +88,13 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     file_list_response_page,
     file_list_start_messages,
     http_failure_plan,
+    incremental_collection_empty_database_message,
+    incremental_collection_missing_time_message,
+    incremental_collection_start_index_message,
+    incremental_collection_start_message,
+    incremental_collection_status_messages,
+    incremental_collection_target_message,
+    incremental_collection_timestamp_failure_messages,
     incremental_start_index,
     json_decode_failure_plan,
     latest_file_create_time_query,
@@ -1377,7 +1384,7 @@ class ZSXQFileDownloader:
     
     def collect_incremental_files(self) -> Dict[str, int]:
         """增量收集：从数据库最老时间戳开始继续收集"""
-        self.log(f"🔄 开始增量文件收集...")
+        self.log(incremental_collection_start_message())
 
         # 检查是否需要停止
         if self.check_stop():
@@ -1388,35 +1395,33 @@ class ZSXQFileDownloader:
         time_info = self.get_database_time_range()
 
         if not time_info['has_data']:
-            self.log("📊 数据库为空，将进行全量收集")
+            self.log(incremental_collection_empty_database_message())
             return self.collect_files_by_time()
         
         oldest_time = time_info['oldest_time']
         newest_time = time_info['newest_time']
         total_files = time_info['total_files']
         
-        self.log(f"📊 数据库现状:")
-        self.log(f"   现有文件数: {total_files}")
-        self.log(f"   最老时间: {oldest_time}")
-        self.log(f"   最新时间: {newest_time}")
+        for message in incremental_collection_status_messages(time_info):
+            self.log(message)
 
         if not oldest_time:
-            self.log("⚠️ 数据库中没有有效的时间信息，进行全量收集")
+            self.log(incremental_collection_missing_time_message())
             return self.collect_files_by_time()
 
         # 从最老时间戳开始收集更早的文件
-        self.log(f"🎯 将从最老时间戳开始收集更早的文件...")
+        self.log(incremental_collection_target_message())
         
         # 将时间戳转换为毫秒数用作index
         try:
             start_index = incremental_start_index(oldest_time)
-            self.log(f"🚀 增量收集起始时间戳: {start_index}")
+            self.log(incremental_collection_start_index_message(start_index))
 
             return self.collect_files_by_time(start_time=start_index)
 
         except Exception as e:
-            self.log(f"⚠️ 时间戳处理失败: {e}")
-            self.log("🔄 改为全量收集")
+            for message in incremental_collection_timestamp_failure_messages(e):
+                self.log(message)
             return self.collect_files_by_time()
     
     def collect_files_for_date_range(

@@ -12569,6 +12569,45 @@ Result:
 - PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-13 - P9 file downloader incremental collection messages
+
+Changed:
+
+- Added `incremental_collection_*` message helpers in
+  `backend/crawlers/zsxq_file_downloader_helpers.py`.
+- Reused them in `ZSXQFileDownloader.collect_incremental_files()`.
+- Added direct helper coverage for start, empty-database fallback, database status, missing-time
+  fallback, target, start-index, and timestamp-failure messages.
+- Added method-level coverage for stop-before-time-range lookup, empty database fallback,
+  missing oldest-time fallback, valid start-index collection, and timestamp failure fallback.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- `check_stop()` short-circuit order, `get_database_time_range()` lookup timing, empty database
+  fallback, status log text/order, missing-time fallback, `incremental_start_index()` use,
+  `collect_files_by_time()` call arguments, timestamp exception handling, task/public APIs,
+  storage schema, and config semantics are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py backend\crawlers\zsxq_file_downloader_helpers.py tests\test_zsxq_file_downloader_helpers.py
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderPaginationTests.test_collect_incremental_files_preserves_stop_before_time_range_lookup tests.test_zsxq_file_downloader_helpers.FileDownloaderPaginationTests.test_collect_incremental_files_preserves_empty_database_fallback tests.test_zsxq_file_downloader_helpers.FileDownloaderPaginationTests.test_collect_incremental_files_preserves_missing_oldest_time_fallback tests.test_zsxq_file_downloader_helpers.FileDownloaderPaginationTests.test_collect_incremental_files_preserves_start_index_collection_path tests.test_zsxq_file_downloader_helpers.FileDownloaderPaginationTests.test_collect_incremental_files_preserves_timestamp_failure_fallback tests.test_zsxq_file_downloader_helpers.FileDownloaderTimeHelperTests.test_incremental_collection_messages_preserve_existing_text -v
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers -v
+uv run python -m unittest discover -s tests
+uv run python scripts\scan_postgres_compat_debt.py
+npm --prefix frontend run build
+```
+
+Result:
+
+- Focused incremental collection helper and method-path tests passed.
+- Downloader helper tests passed: 140 tests.
+- Full backend unittest discovery passed: 850 tests, 15 skipped.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:

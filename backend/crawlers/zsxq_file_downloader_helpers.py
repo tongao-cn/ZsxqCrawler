@@ -543,6 +543,39 @@ def incremental_start_index(oldest_time: Any) -> str:
     return str(timestamp_ms)
 
 
+def incremental_collection_start_message() -> str:
+    return "🔄 开始增量文件收集..."
+
+
+def incremental_collection_empty_database_message() -> str:
+    return "📊 数据库为空，将进行全量收集"
+
+
+def incremental_collection_status_messages(time_info: Dict[str, Any]) -> tuple[str, ...]:
+    return (
+        "📊 数据库现状:",
+        f"   现有文件数: {time_info['total_files']}",
+        f"   最老时间: {time_info['oldest_time']}",
+        f"   最新时间: {time_info['newest_time']}",
+    )
+
+
+def incremental_collection_missing_time_message() -> str:
+    return "⚠️ 数据库中没有有效的时间信息，进行全量收集"
+
+
+def incremental_collection_target_message() -> str:
+    return "🎯 将从最老时间戳开始收集更早的文件..."
+
+
+def incremental_collection_start_index_message(start_index: Any) -> str:
+    return f"🚀 增量收集起始时间戳: {start_index}"
+
+
+def incremental_collection_timestamp_failure_messages(exc: Exception) -> tuple[str, str]:
+    return (f"⚠️ 时间戳处理失败: {exc}", "🔄 改为全量收集")
+
+
 def database_time_range_query(query_group_id: Any) -> tuple[str, tuple[Any, ...]]:
     return (
         '''

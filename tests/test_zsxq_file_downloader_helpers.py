@@ -81,6 +81,13 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     filter_files_newer_than,
     has_retry_attempt_remaining,
     http_failure_plan,
+    incremental_collection_empty_database_message,
+    incremental_collection_missing_time_message,
+    incremental_collection_start_index_message,
+    incremental_collection_start_message,
+    incremental_collection_status_messages,
+    incremental_collection_target_message,
+    incremental_collection_timestamp_failure_messages,
     incremental_start_index,
     is_retryable_api_error,
     is_retryable_http_status,
@@ -313,6 +320,26 @@ class FakeDownloadSession:
 
 
 class FileDownloaderPaginationTests(unittest.TestCase):
+    def _incremental_downloader(self, time_info=None, stopped=False):
+        downloader = object.__new__(ZSXQFileDownloader)
+        downloader.logs = []
+        downloader.collect_calls = []
+        downloader.time_range_calls = 0
+        downloader.log = downloader.logs.append
+        downloader.check_stop = lambda: stopped
+
+        def get_database_time_range():
+            downloader.time_range_calls += 1
+            return time_info
+
+        def collect_files_by_time(*args, **kwargs):
+            downloader.collect_calls.append((args, kwargs))
+            return {"total_files": 7, "new_files": 3}
+
+        downloader.get_database_time_range = get_database_time_range
+        downloader.collect_files_by_time = collect_files_by_time
+        return downloader
+
     def _downloader_with_failing_import(self):
         downloader = object.__new__(ZSXQFileDownloader)
         downloader.group_id = "group-1"
@@ -548,6 +575,99 @@ class FileDownloaderPaginationTests(unittest.TestCase):
             },
             result,
         )
+
+    def test_collect_incremental_files_preserves_stop_before_time_range_lookup(self):
+        downloader = self._incremental_downloader({"has_data": False}, stopped=True)
+
+        result = ZSXQFileDownloader.collect_incremental_files(downloader)
+
+        self.assertEqual({"total_files": 0, "new_files": 0}, result)
+        self.assertEqual(["🔄 开始增量文件收集...", "🛑 任务被停止"], downloader.logs)
+        self.assertEqual(0, downloader.time_range_calls)
+        self.assertEqual([], downloader.collect_calls)
+
+    def test_collect_incremental_files_preserves_empty_database_fallback(self):
+        downloader = self._incremental_downloader({"has_data": False, "total_files": 0})
+
+        result = ZSXQFileDownloader.collect_incremental_files(downloader)
+
+        self.assertEqual({"total_files": 7, "new_files": 3}, result)
+        self.assertEqual(
+            ["🔄 开始增量文件收集...", "📊 数据库为空，将进行全量收集"],
+            downloader.logs,
+        )
+        self.assertEqual(1, downloader.time_range_calls)
+        self.assertEqual([((), {})], downloader.collect_calls)
+
+    def test_collect_incremental_files_preserves_missing_oldest_time_fallback(self):
+        downloader = self._incremental_downloader(
+            {
+                "has_data": True,
+                "total_files": 5,
+                "oldest_time": None,
+                "newest_time": "2026-05-02",
+            }
+        )
+
+        result = ZSXQFileDownloader.collect_incremental_files(downloader)
+
+        self.assertEqual({"total_files": 7, "new_files": 3}, result)
+        self.assertEqual(
+            [
+                "🔄 开始增量文件收集...",
+                "📊 数据库现状:",
+                "   现有文件数: 5",
+                "   最老时间: None",
+                "   最新时间: 2026-05-02",
+                "⚠️ 数据库中没有有效的时间信息，进行全量收集",
+            ],
+            downloader.logs,
+        )
+        self.assertEqual([((), {})], downloader.collect_calls)
+
+    def test_collect_incremental_files_preserves_start_index_collection_path(self):
+        downloader = self._incremental_downloader(
+            {
+                "has_data": True,
+                "total_files": 5,
+                "oldest_time": "1680000000000",
+                "newest_time": "2026-05-02",
+            }
+        )
+
+        result = ZSXQFileDownloader.collect_incremental_files(downloader)
+
+        self.assertEqual({"total_files": 7, "new_files": 3}, result)
+        self.assertEqual(
+            [
+                "🔄 开始增量文件收集...",
+                "📊 数据库现状:",
+                "   现有文件数: 5",
+                "   最老时间: 1680000000000",
+                "   最新时间: 2026-05-02",
+                "🎯 将从最老时间戳开始收集更早的文件...",
+                "🚀 增量收集起始时间戳: 1680000000000",
+            ],
+            downloader.logs,
+        )
+        self.assertEqual([((), {"start_time": "1680000000000"})], downloader.collect_calls)
+
+    def test_collect_incremental_files_preserves_timestamp_failure_fallback(self):
+        downloader = self._incremental_downloader(
+            {
+                "has_data": True,
+                "total_files": 5,
+                "oldest_time": "not-a-time",
+                "newest_time": "2026-05-02",
+            }
+        )
+
+        result = ZSXQFileDownloader.collect_incremental_files(downloader)
+
+        self.assertEqual({"total_files": 7, "new_files": 3}, result)
+        self.assertEqual("🔄 改为全量收集", downloader.logs[-1])
+        self.assertTrue(downloader.logs[-2].startswith("⚠️ 时间戳处理失败: "))
+        self.assertEqual([((), {})], downloader.collect_calls)
 
     def test_collect_files_by_time_stops_when_page_import_fails(self):
         downloader = self._downloader_with_failing_import()
@@ -1069,6 +1189,37 @@ class FileDownloaderTimeHelperTests(unittest.TestCase):
         self.assertEqual("1777600800000", incremental_start_index("2026-05-01T10:00:00+0800"))
         with self.assertRaises(ValueError):
             incremental_start_index("not-a-time")
+
+    def test_incremental_collection_messages_preserve_existing_text(self):
+        self.assertEqual("🔄 开始增量文件收集...", incremental_collection_start_message())
+        self.assertEqual("📊 数据库为空，将进行全量收集", incremental_collection_empty_database_message())
+        self.assertEqual(
+            (
+                "📊 数据库现状:",
+                "   现有文件数: 5",
+                "   最老时间: old",
+                "   最新时间: new",
+            ),
+            incremental_collection_status_messages(
+                {"total_files": 5, "oldest_time": "old", "newest_time": "new"}
+            ),
+        )
+        self.assertEqual(
+            "⚠️ 数据库中没有有效的时间信息，进行全量收集",
+            incremental_collection_missing_time_message(),
+        )
+        self.assertEqual(
+            "🎯 将从最老时间戳开始收集更早的文件...",
+            incremental_collection_target_message(),
+        )
+        self.assertEqual(
+            "🚀 增量收集起始时间戳: 1680000000000",
+            incremental_collection_start_index_message("1680000000000"),
+        )
+        self.assertEqual(
+            ("⚠️ 时间戳处理失败: bad", "🔄 改为全量收集"),
+            incremental_collection_timestamp_failure_messages(RuntimeError("bad")),
+        )
 
     def test_parse_create_time_accepts_common_formats(self):
         self.assertEqual(
