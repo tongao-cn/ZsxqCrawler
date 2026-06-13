@@ -10456,6 +10456,53 @@ Result:
 - Frontend build passed, including Next.js lint/type checks.
 - `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
 
+### 2026-06-13 - P2 file database helper constant import cleanup
+
+Changed:
+
+- Removed unused `_FILE_AI_ANALYSIS_FIELDS` import from `backend.storage.zsxq_file_database`.
+- Updated the focused file database helper test to import `_FILE_AI_ANALYSIS_FIELDS` directly from
+  `backend.storage.zsxq_file_database_helpers`.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- The constant remains defined in `backend.storage.zsxq_file_database_helpers` and still drives
+  `_row_to_file_ai_analysis` field ordering.
+- `backend.storage.zsxq_file_database` still imports and exposes the helper functions used by the
+  existing focused helper tests; only the unused constant import was removed.
+- File database methods, SQL statements, row mappers, group scoping, runtime DDL no-op behavior,
+  and response shapes are unchanged.
+- No schema, crawler, storage, fallback, legacy, route, or public response behavior was removed.
+- Existing dirty downloader risk-log files and scripts remain outside this P2 slice.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_file_database_helpers -v
+uv run python -m py_compile backend\storage\zsxq_file_database.py backend\storage\zsxq_file_database_helpers.py tests\test_zsxq_file_database_helpers.py
+rg -n "_FILE_AI_ANALYSIS_FIELDS|_row_to_file_ai_analysis|zsxq_file_database_helpers|zsxq_file_database import" backend tests scripts docs frontend
+uv run python scripts\scan_postgres_compat_debt.py
+uv run python -m unittest discover -s tests
+cmd.exe /d /c npm --prefix frontend run build
+git diff --check
+```
+
+Result:
+
+- Baseline focused file database helper tests passed before removing the unused storage import.
+- Focused file database helper tests passed after the import cleanup.
+- `py_compile` passed.
+- `rg` confirmed `_FILE_AI_ANALYSIS_FIELDS` is no longer imported from
+  `backend.storage.zsxq_file_database`; the constant remains in
+  `backend.storage.zsxq_file_database_helpers` and `_row_to_file_ai_analysis`
+  still uses it.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Full backend unittest discovery passed: 795 tests passed, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+- `git diff --check` passed with only Git's existing LF-to-CRLF working-copy
+  warnings.
+
 ## Stop Conditions
 
 Pause before editing if:

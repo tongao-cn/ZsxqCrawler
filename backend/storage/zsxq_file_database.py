@@ -2,7 +2,6 @@ from typing import Dict, List, Any, Optional
 
 from backend.storage.db_compat import connect
 from backend.storage.zsxq_file_database_helpers import (
-    _FILE_AI_ANALYSIS_FIELDS,
     _api_response_record_params,
     _close_connection,
     _column_record_params,

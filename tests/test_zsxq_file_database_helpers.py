@@ -1,7 +1,7 @@
 import unittest
 
+from backend.storage.zsxq_file_database_helpers import _FILE_AI_ANALYSIS_FIELDS
 from backend.storage.zsxq_file_database import (
-    _FILE_AI_ANALYSIS_FIELDS,
     _api_response_record_params,
     _close_connection,
     _column_record_params,
