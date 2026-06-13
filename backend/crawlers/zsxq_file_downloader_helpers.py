@@ -188,6 +188,18 @@ def http_failure_plan(
     return {"failure_class": failure_class, "messages": tuple(messages)}
 
 
+def request_exception_plan(exc: Exception, attempt: int, max_retries: int) -> Dict[str, Any]:
+    should_retry = has_retry_attempt_remaining(attempt, max_retries)
+    messages = [f"   ❌ 请求异常: {exc}"]
+    if should_retry:
+        messages.append("   🔄 请求异常，准备重试...")
+    return {"should_retry": should_retry, "messages": tuple(messages)}
+
+
+def retry_exhausted_message(max_retries: int) -> str:
+    return f"   🚫 已重试{max_retries}次，全部失败"
+
+
 def parse_create_time(value: Optional[str]) -> Optional[datetime.datetime]:
     if not value:
         return None

@@ -59,6 +59,8 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     download_retry_wait,
     download_size_mismatch_detail,
     download_total_size,
+    request_exception_plan,
+    retry_exhausted_message,
     risk_event_header_profile_label,
     risk_event_user_agent_label,
     safe_download_filename,
@@ -1054,6 +1056,22 @@ class FileDownloaderRetryHelperTests(unittest.TestCase):
             ),
             exhausted_plan["messages"],
         )
+
+    def test_request_exception_plan_preserves_retry_messages_and_exhausted_message(self):
+        retry_plan = request_exception_plan(RuntimeError("temporary"), 0, 2)
+        self.assertTrue(retry_plan["should_retry"])
+        self.assertEqual(
+            (
+                "   ❌ 请求异常: temporary",
+                "   🔄 请求异常，准备重试...",
+            ),
+            retry_plan["messages"],
+        )
+
+        terminal_plan = request_exception_plan(RuntimeError("final"), 1, 2)
+        self.assertFalse(terminal_plan["should_retry"])
+        self.assertEqual(("   ❌ 请求异常: final",), terminal_plan["messages"])
+        self.assertEqual("   🚫 已重试10次，全部失败", retry_exhausted_message(10))
 
     def test_risk_event_user_agent_label_preserves_browser_platform_labels(self):
         self.assertEqual(

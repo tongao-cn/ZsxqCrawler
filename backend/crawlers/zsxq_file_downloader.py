@@ -62,6 +62,8 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     partial_download_path,
     remove_partial_download,
     response_filename_override,
+    request_exception_plan,
+    retry_exhausted_message,
     risk_event_header_profile_label,
     risk_event_user_agent_label,
     should_log_full_response,
@@ -527,12 +529,13 @@ class ZSXQFileDownloader:
                         return None
                     
             except Exception as e:
-                print(f"   ❌ 请求异常: {e}")
-                if has_retry_attempt_remaining(attempt, max_retries):
-                    print(f"   🔄 请求异常，准备重试...")
+                request_exception = request_exception_plan(e, attempt, max_retries)
+                for message in request_exception["messages"]:
+                    print(message)
+                if request_exception["should_retry"]:
                     continue
         
-        print(f"   🚫 已重试{max_retries}次，全部失败")
+        print(retry_exhausted_message(max_retries))
         return None
     
     def get_download_url(self, file_id: int) -> Optional[str]:
@@ -631,12 +634,13 @@ class ZSXQFileDownloader:
                         return None
                     
             except Exception as e:
-                print(f"   ❌ 请求异常: {e}")
-                if has_retry_attempt_remaining(attempt, max_retries):
-                    print(f"   🔄 请求异常，准备重试...")
+                request_exception = request_exception_plan(e, attempt, max_retries)
+                for message in request_exception["messages"]:
+                    print(message)
+                if request_exception["should_retry"]:
                     continue
         
-        print(f"   🚫 已重试{max_retries}次，全部失败")
+        print(retry_exhausted_message(max_retries))
         return None
     
     def download_file(self, file_info: Dict[str, Any]) -> bool:

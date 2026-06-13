@@ -11860,6 +11860,45 @@ Result:
 - Frontend build passed, including Next.js lint/type checks.
 - Diff whitespace check passed with only existing LF-to-CRLF working-copy warnings.
 
+### 2026-06-13 - P9 file downloader request exception plan helper
+
+Changed:
+
+- Added `request_exception_plan()` and `retry_exhausted_message()` in
+  `backend/crawlers/zsxq_file_downloader_helpers.py`.
+- Reused the helpers in `ZSXQFileDownloader.fetch_file_list()` and
+  `ZSXQFileDownloader.get_download_url()` for existing request-exception retry logs and final
+  exhausted retry message.
+- Added direct helper coverage for retryable exception attempts, terminal exception attempts, and
+  the final exhausted retry text.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Exception string rendering, retry log text, final exhausted retry text, retry-remaining condition,
+  swallowed-exception behavior, loop continuation, and final `None` return are preserved.
+- HTTP request execution, retry delays, JSON parsing, HTTP/API failure handling, signed URL
+  handling, fallback behavior, task/public APIs, storage schema, and config semantics are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py backend\crawlers\zsxq_file_downloader_helpers.py tests\test_zsxq_file_downloader_helpers.py
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers -v
+uv run python -m unittest discover -s tests
+uv run python scripts\scan_postgres_compat_debt.py
+npm --prefix frontend run build
+git diff --check
+```
+
+Result:
+
+- Downloader helper tests passed: 110 tests.
+- Full backend unittest discovery passed: 820 tests, 15 skipped.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Frontend build passed, including Next.js lint/type checks.
+- Diff whitespace check passed with only existing LF-to-CRLF working-copy warnings.
+
 ## Stop Conditions
 
 Pause before editing if:
