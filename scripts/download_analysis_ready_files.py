@@ -152,6 +152,7 @@ def _download_rows(
     download_interval_max: float | None,
     long_sleep_interval_min: float | None,
     long_sleep_interval_max: float | None,
+    risk_log_path: Path | None = None,
 ) -> dict[str, int]:
     cookie = get_cookie_for_group(group_id)
     downloader = ZSXQFileDownloader(
@@ -165,6 +166,7 @@ def _download_rows(
         long_sleep_interval_min=long_sleep_interval_min,
         long_sleep_interval_max=long_sleep_interval_max,
     )
+    downloader.risk_event_log_path = str(risk_log_path) if risk_log_path else None
     try:
         stats = {"total_files": 0, "downloaded": 0, "skipped": 0, "failed": 0}
         rows_list = list(rows)
@@ -209,6 +211,7 @@ def main() -> int:
     parser.add_argument("--long-sleep-interval-min", type=float, help="Enable random batch sleep, minimum seconds.")
     parser.add_argument("--long-sleep-interval-max", type=float, help="Enable random batch sleep, maximum seconds.")
     parser.add_argument("--manifest", type=Path, help="CSV manifest path.")
+    parser.add_argument("--risk-log", type=Path, help="Write opt-in CSV risk-event diagnostics to this path.")
     args = parser.parse_args()
     try:
         _validate_interval_range("download interval", args.download_interval_min, args.download_interval_max)
@@ -228,6 +231,7 @@ def main() -> int:
     total_size = sum(row["size"] for row in rows)
     default_manifest = Path("output") / "exports" / "file-download-candidates" / datetime.now().strftime("%Y%m%d_%H%M%S") / "manifest.csv"
     manifest_path = args.manifest or default_manifest
+    risk_log_path = args.risk_log
     _write_manifest(rows, manifest_path)
 
     print(f"group_id={args.group_id}")
@@ -236,6 +240,8 @@ def main() -> int:
     print(f"candidate_files={len(rows)}")
     print(f"candidate_size={_format_size(total_size)}")
     print(f"manifest={manifest_path}")
+    if risk_log_path:
+        print(f"risk_log={risk_log_path}")
 
     if args.dry_run:
         print("dry_run=true")
@@ -251,6 +257,7 @@ def main() -> int:
         download_interval_max=args.download_interval_max,
         long_sleep_interval_min=args.long_sleep_interval_min,
         long_sleep_interval_max=args.long_sleep_interval_max,
+        risk_log_path=risk_log_path,
     )
     print(f"downloaded={stats['downloaded']}")
     print(f"skipped={stats['skipped']}")

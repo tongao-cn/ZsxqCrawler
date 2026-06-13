@@ -127,6 +127,7 @@ class ZSXQFileDownloader:
         # 日志回调和停止检查函数
         self.log_callback = None
         self.stop_check_func = None
+        self.risk_event_log_path = None
         self.stop_flag = False  # 本地停止标志
         self.last_download_url_error = None
 
@@ -316,6 +317,95 @@ class ZSXQFileDownloader:
             print(f"   ⏱️ 延迟 {delay:.1f}秒")
         time.sleep(delay)
 
+    @staticmethod
+    def _user_agent_label(user_agent: str) -> str:
+        text = str(user_agent or "")
+        browser = "Other"
+        if "Edg/" in text:
+            browser = "Edge"
+        elif "Chrome/" in text or "Chromium/" in text:
+            browser = "Chrome"
+        elif "Firefox/" in text:
+            browser = "Firefox"
+        elif "Safari/" in text:
+            browser = "Safari"
+
+        platform = "Other"
+        if "Windows" in text:
+            platform = "Windows"
+        elif "Macintosh" in text or "Mac OS X" in text:
+            platform = "Mac"
+        elif "Linux" in text or "X11" in text:
+            platform = "Linux"
+        elif "Android" in text:
+            platform = "Android"
+        elif "iPhone" in text or "iPad" in text:
+            platform = "iOS"
+
+        return f"{browser} {platform}"
+
+    @staticmethod
+    def _header_profile_label(headers: Dict[str, str]) -> str:
+        normalized = {str(key).lower(): value for key, value in (headers or {}).items()}
+        labels = []
+        if "referer" in normalized:
+            labels.append("referer")
+        if "origin" in normalized:
+            labels.append("origin")
+        if any(key.startswith("sec-fetch-") for key in normalized):
+            labels.append("sec-fetch")
+        if any(key.startswith("sec-ch-") for key in normalized):
+            labels.append("sec-ch")
+        if "x-timestamp" in normalized:
+            labels.append("x-timestamp")
+        if "x-request-id" in normalized:
+            labels.append("x-request-id")
+        return "+".join(labels) or "minimal"
+
+    def _record_risk_event(
+        self,
+        *,
+        file_id: int,
+        phase: str,
+        attempt: int = 0,
+        headers: Optional[Dict[str, str]] = None,
+        http_status: Optional[int] = None,
+        api_code: Optional[Any] = None,
+        api_message: Optional[str] = None,
+        status: str = "observed",
+    ) -> None:
+        if not getattr(self, "risk_event_log_path", None):
+            return
+
+        import csv
+        from pathlib import Path
+
+        path = Path(self.risk_event_log_path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        user_agent = ""
+        if headers:
+            user_agent = headers.get("User-Agent") or headers.get("user-agent") or ""
+        row = {
+            "timestamp": datetime.datetime.now().isoformat(timespec="seconds"),
+            "group_id": self.group_id,
+            "file_id": file_id,
+            "phase": phase,
+            "attempt": attempt,
+            "ua_label": self._user_agent_label(user_agent),
+            "header_profile": self._header_profile_label(headers or {}),
+            "status": status,
+            "http_status": "" if http_status is None else http_status,
+            "api_code": "" if api_code is None else api_code,
+            "api_message": api_message or "",
+        }
+        fieldnames = tuple(row.keys())
+        write_header = not path.exists()
+        with path.open("a", encoding="utf-8-sig", newline="") as file_obj:
+            writer = csv.DictWriter(file_obj, fieldnames=fieldnames)
+            if write_header:
+                writer.writeheader()
+            writer.writerow(row)
+
     def download_delay(self):
         """下载间隔延迟"""
         if self.use_random_interval:
@@ -363,7 +453,7 @@ class ZSXQFileDownloader:
             print(f"😴 长休眠结束，继续下载...")
             print(f"   🕐 实际结束: {actual_end_time.strftime('%H:%M:%S')}")
     
-    def _prepare_retry_api_request(self, attempt: int) -> Dict[str, str]:
+    def _prepare_retry_api_request(self, attempt: int, file_id: Optional[int] = None) -> Dict[str, str]:
         if attempt > 0:
             retry_delay = random.uniform(15, 30)
             print(f"   🔄 第{attempt}次重试，等待{retry_delay:.1f}秒...")
@@ -372,6 +462,16 @@ class ZSXQFileDownloader:
         self.smart_delay()
         self.request_count += 1
         headers = self.get_stealth_headers()
+        if file_id is not None and getattr(self, "risk_event_log_path", None):
+            user_agent = headers.get("User-Agent") or headers.get("user-agent") or ""
+            self.log(f"   🧭 UA分类: {self._user_agent_label(user_agent)}")
+        if file_id is not None:
+            self._record_risk_event(
+                file_id=file_id,
+                phase="download_url_request",
+                attempt=attempt,
+                headers=headers,
+            )
 
         if attempt > 0:
             print(f"   🔄 重试#{attempt}: 使用新的User-Agent: {headers.get('User-Agent', 'N/A')[:50]}...")
@@ -442,7 +542,6 @@ class ZSXQFileDownloader:
                     error_msg = data.get('message', data.get('error', '未知错误'))
                     error_code = data.get('code', 'N/A')
                     print(f"   ❌ API返回失败: {error_msg} (代码: {error_code})")
-
                     failure_class = classify_api_failure(error_code, attempt, max_retries)
                     if failure_class == API_FAILURE_RETRY:
                         print(f"   🔄 检测到可重试错误，准备重试...")
@@ -486,7 +585,7 @@ class ZSXQFileDownloader:
         self.log(f"   🌐 请求URL: {url}")
         
         for attempt in range(max_retries):
-            headers = self._prepare_retry_api_request(attempt)
+            headers = self._prepare_retry_api_request(attempt, file_id=file_id)
             
             try:
                 response = self.session.get(url, headers=headers, timeout=30)
@@ -505,14 +604,40 @@ class ZSXQFileDownloader:
                         if download_url:
                             if attempt > 0:
                                 print(f"   ✅ 重试成功！第{attempt}次重试获取到下载链接")
+                                self._record_risk_event(
+                                    file_id=file_id,
+                                    phase="download_url_retry_response",
+                                    attempt=attempt,
+                                    headers=headers,
+                                    http_status=response.status_code,
+                                    status="api_success",
+                                )
                             else:
                                 print(f"   ✅ 获取下载链接成功")
+                                self._record_risk_event(
+                                    file_id=file_id,
+                                    phase="download_url_response",
+                                    attempt=0,
+                                    headers=headers,
+                                    http_status=response.status_code,
+                                    status="api_success",
+                                )
                             return download_url
                         print(f"   ❌ 响应中无下载链接字段")
                     else:
                         error_msg = data.get('message', data.get('error', '未知错误'))
                         error_code = data.get('code', 'N/A')
                         self.log(f"   ❌ API返回失败: {error_msg} (代码: {error_code})")
+                        self._record_risk_event(
+                            file_id=file_id,
+                            phase="download_url_response",
+                            attempt=attempt,
+                            headers=headers,
+                            http_status=response.status_code,
+                            api_code=error_code,
+                            api_message=error_msg,
+                            status="api_failed",
+                        )
 
                         failure_class = classify_api_failure(error_code, attempt, max_retries)
 
@@ -878,11 +1003,27 @@ class ZSXQFileDownloader:
         """应用下载间隔控制"""
         import time
 
+        download_interval = self.download_interval
+        long_sleep_interval = self.long_sleep_interval
+        if getattr(self, "use_random_interval", False):
+            should_long_sleep = self.current_batch_count >= self.files_per_batch
+            if (
+                should_long_sleep
+                and self.long_sleep_interval_min is not None
+                and self.long_sleep_interval_max is not None
+            ):
+                long_sleep_interval = random.uniform(
+                    self.long_sleep_interval_min,
+                    self.long_sleep_interval_max,
+                )
+            elif self.download_interval_min is not None and self.download_interval_max is not None:
+                download_interval = random.uniform(self.download_interval_min, self.download_interval_max)
+
         delay, messages, should_reset_batch = download_interval_plan(
             self.current_batch_count,
             self.files_per_batch,
-            self.download_interval,
-            self.long_sleep_interval,
+            download_interval,
+            long_sleep_interval,
         )
         if delay is None:
             return

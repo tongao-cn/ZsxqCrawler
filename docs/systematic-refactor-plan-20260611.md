@@ -10633,6 +10633,60 @@ Result:
 - Frontend build passed, including Next.js lint/type checks.
 - `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
 
+### 2026-06-13 - P5 downloader opt-in risk telemetry and interval characterization
+
+Changed:
+
+- Added opt-in risk-event CSV recording for download-url requests in
+  `backend.crawlers.zsxq_file_downloader.ZSXQFileDownloader`.
+- Added `--risk-log` to `scripts.download_analysis_ready_files`; the option is disabled by
+  default and only prints/writes diagnostics when explicitly provided.
+- Added `scripts.analyze_download_ua_log` to summarize either the opt-in CSV diagnostics or
+  matching historical text logs.
+- Locked downloader retry/header labels, default no-risk-log behavior, risk-log CSV rows, and
+  analysis-ready script risk-log wiring with focused tests.
+- Characterized random download interval behavior in `_apply_download_intervals`, including the
+  long-sleep boundary, so the advertised random interval CLI options are covered by tests.
+
+Behavior impact:
+
+- Intended default behavior change: none for ordinary downloader or `download_analysis_ready_files`
+  runs without `--risk-log`; no default risk CSV path is printed or created, and the new UA label
+  log line is gated behind opt-in risk logging for a concrete download URL file id.
+- Public surface expansion: low-to-medium risk because `download_analysis_ready_files` gains a
+  backwards-compatible `--risk-log` option and a new analysis helper script.
+- Config semantic risk: medium for random interval ranges, because `_apply_download_intervals`
+  now uses the already configured random ranges on successful per-file and batch-boundary waits.
+  This matches the existing CLI wording but can change sleep duration when callers explicitly set
+  random interval ranges.
+- Legacy/fallback handling: no fallback, compatibility branch, schema, crawler retry decision,
+  database write contract, signed URL redaction, or public response shape was removed.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers -v
+uv run python -m unittest tests.test_download_analysis_ready_files -v
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py scripts\download_analysis_ready_files.py scripts\analyze_download_ua_log.py tests\test_zsxq_file_downloader_helpers.py tests\test_download_analysis_ready_files.py
+uv run python -m scripts.download_analysis_ready_files --help
+uv run python -m scripts.analyze_download_ua_log --help
+uv run python scripts\scan_postgres_compat_debt.py
+uv run python -m unittest discover -s tests
+cmd.exe /d /c npm --prefix frontend run build
+git diff --check
+```
+
+Result:
+
+- Focused downloader helper tests passed: 94 tests passed.
+- Focused analysis-ready download script tests passed: 3 tests passed.
+- `py_compile` passed for the edited backend, script, analyzer, and test files.
+- Both script help paths passed; `--risk-log` is shown as opt-in diagnostics.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Full backend unittest discovery passed: 802 tests passed, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+- `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
+
 ## Stop Conditions
 
 Pause before editing if:

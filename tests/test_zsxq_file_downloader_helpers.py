@@ -1,5 +1,6 @@
 import unittest
 import tempfile
+import csv
 import contextlib
 import datetime
 import io
@@ -834,6 +835,7 @@ class FileDownloaderRetryHelperTests(unittest.TestCase):
         downloader.request_count = 0
         downloader.smart_delay = lambda: None
         downloader.get_stealth_headers = lambda: {"User-Agent": "unit-test-agent"}
+        downloader.log_callback = None
 
         with (
             patch("backend.crawlers.zsxq_file_downloader.random.uniform", return_value=15.0),
@@ -844,6 +846,50 @@ class FileDownloaderRetryHelperTests(unittest.TestCase):
         sleep.assert_called_once_with(15.0)
         self.assertEqual({"User-Agent": "unit-test-agent"}, headers)
         self.assertEqual(1, downloader.request_count)
+
+    def test_prepare_retry_api_request_without_risk_log_preserves_no_ua_log(self):
+        downloader = object.__new__(ZSXQFileDownloader)
+        downloader.request_count = 0
+        downloader.smart_delay = lambda: None
+        downloader.get_stealth_headers = lambda: {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/131.0.0.0",
+        }
+        downloader.logs = []
+        downloader.log = downloader.logs.append
+
+        headers = ZSXQFileDownloader._prepare_retry_api_request(downloader, 0, file_id=101)
+
+        self.assertIn("User-Agent", headers)
+        self.assertEqual([], downloader.logs)
+
+    def test_prepare_retry_api_request_with_risk_log_records_request_event(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            risk_log = Path(temp_dir) / "risk.csv"
+            downloader = object.__new__(ZSXQFileDownloader)
+            downloader.group_id = "group-1"
+            downloader.risk_event_log_path = str(risk_log)
+            downloader.request_count = 0
+            downloader.smart_delay = lambda: None
+            downloader.get_stealth_headers = lambda: {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/131.0.0.0",
+                "Referer": "https://wx.zsxq.com/dweb2/index/group/group-1",
+                "Sec-Fetch-Site": "same-site",
+            }
+            downloader.logs = []
+            downloader.log = downloader.logs.append
+
+            ZSXQFileDownloader._prepare_retry_api_request(downloader, 0, file_id=101)
+
+            with risk_log.open("r", encoding="utf-8-sig", newline="") as file_obj:
+                rows = list(csv.DictReader(file_obj))
+
+        self.assertEqual(1, len(rows))
+        self.assertEqual("group-1", rows[0]["group_id"])
+        self.assertEqual("101", rows[0]["file_id"])
+        self.assertEqual("download_url_request", rows[0]["phase"])
+        self.assertEqual("Chrome Windows", rows[0]["ua_label"])
+        self.assertEqual("referer+sec-fetch", rows[0]["header_profile"])
+        self.assertEqual(["   🧭 UA分类: Chrome Windows"], downloader.logs)
 
     def test_parse_api_json_response_returns_retry_on_decode_error(self):
         downloader = object.__new__(ZSXQFileDownloader)
@@ -1973,6 +2019,57 @@ class FileDownloaderDownloadTests(unittest.TestCase):
             downloader.logs,
         )
 
+    def test_apply_download_intervals_uses_random_interval_range(self):
+        downloader = object.__new__(ZSXQFileDownloader)
+        downloader.current_batch_count = 1
+        downloader.files_per_batch = 10
+        downloader.download_interval = 1
+        downloader.long_sleep_interval = 60
+        downloader.use_random_interval = True
+        downloader.download_interval_min = 8
+        downloader.download_interval_max = 20
+        downloader.long_sleep_interval_min = 300
+        downloader.long_sleep_interval_max = 900
+        downloader.logs = []
+        downloader.log = downloader.logs.append
+
+        with patch("backend.crawlers.zsxq_file_downloader.random.uniform", return_value=12.5) as uniform:
+            with patch("backend.crawlers.zsxq_file_downloader.time.sleep") as sleep:
+                ZSXQFileDownloader._apply_download_intervals(downloader)
+
+        uniform.assert_called_once_with(8, 20)
+        sleep.assert_called_once_with(12.5)
+        self.assertEqual(["⏱️ 下载间隔休眠 12.5 秒..."], downloader.logs)
+
+    def test_apply_download_intervals_uses_random_long_sleep_range_at_batch_boundary(self):
+        downloader = object.__new__(ZSXQFileDownloader)
+        downloader.current_batch_count = 10
+        downloader.files_per_batch = 10
+        downloader.download_interval = 1
+        downloader.long_sleep_interval = 60
+        downloader.use_random_interval = True
+        downloader.download_interval_min = 8
+        downloader.download_interval_max = 20
+        downloader.long_sleep_interval_min = 300
+        downloader.long_sleep_interval_max = 900
+        downloader.logs = []
+        downloader.log = downloader.logs.append
+
+        with patch("backend.crawlers.zsxq_file_downloader.random.uniform", return_value=480.0) as uniform:
+            with patch("backend.crawlers.zsxq_file_downloader.time.sleep") as sleep:
+                ZSXQFileDownloader._apply_download_intervals(downloader)
+
+        uniform.assert_called_once_with(300, 900)
+        sleep.assert_called_once_with(480.0)
+        self.assertEqual(0, downloader.current_batch_count)
+        self.assertEqual(
+            [
+                "⏰ 已下载 10 个文件，开始长休眠 480.0 秒...",
+                "😴 长休眠结束，继续下载",
+            ],
+            downloader.logs,
+        )
+
     def test_get_download_url_redacts_signed_url_in_stdout(self):
         session = FakeDownloadSession([FakeJsonResponse()])
         downloader = object.__new__(ZSXQFileDownloader)
@@ -1992,6 +2089,36 @@ class FileDownloaderDownloadTests(unittest.TestCase):
         self.assertEqual("https://files.example/signed-token", result)
         self.assertIn("<redacted>", output.getvalue())
         self.assertNotIn("signed-token", output.getvalue())
+
+    def test_get_download_url_writes_opt_in_risk_log_events(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            session = FakeDownloadSession([FakeJsonResponse()])
+            risk_log = Path(temp_dir) / "risk.csv"
+            downloader = object.__new__(ZSXQFileDownloader)
+            downloader.base_url = "https://api.example"
+            downloader.session = session
+            downloader.group_id = "group-1"
+            downloader.cookie = "cookie"
+            downloader.risk_event_log_path = str(risk_log)
+            downloader.request_count = 0
+            downloader.smart_delay = lambda: None
+            downloader.get_stealth_headers = lambda: {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/131.0.0.0",
+                "Referer": "https://wx.zsxq.com/dweb2/index/group/group-1",
+            }
+            downloader.logs = []
+            downloader.log = downloader.logs.append
+
+            result = ZSXQFileDownloader.get_download_url(downloader, 101)
+
+            with risk_log.open("r", encoding="utf-8-sig", newline="") as file_obj:
+                rows = list(csv.DictReader(file_obj))
+
+        self.assertEqual("https://files.example/signed-token", result)
+        self.assertEqual(["download_url_request", "download_url_response"], [row["phase"] for row in rows])
+        self.assertEqual(["observed", "api_success"], [row["status"] for row in rows])
+        self.assertEqual(["", "200"], [row["http_status"] for row in rows])
+        self.assertIn("   🧭 UA分类: Chrome Windows", downloader.logs)
 
     def test_get_download_url_1030_does_not_stop_whole_task(self):
         session = FakeDownloadSession([FakeFailedJsonResponse(1030, "mobile only")])
