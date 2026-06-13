@@ -82,6 +82,14 @@ class CoreRoutesHelperTests(unittest.TestCase):
             target,
         )
 
+    @unittest.skipUnless(HAS_CORE_ROUTE_DEPS, "core route dependencies are not installed")
+    def test_masked_config_cookie_preserves_existing_placeholder_semantics(self):
+        from backend.routes.core_routes import _masked_config_cookie
+
+        self.assertEqual("未配置", _masked_config_cookie(""))
+        self.assertEqual("未配置", _masked_config_cookie("your_cookie_here"))
+        self.assertEqual("***", _masked_config_cookie("zsxq_access_token=secret"))
+
 
 if __name__ == "__main__":
     unittest.main()

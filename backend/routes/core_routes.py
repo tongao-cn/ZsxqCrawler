@@ -60,6 +60,10 @@ def _merge_timestamp_info(target: Dict[str, Any], ts_info: Dict[str, Any]) -> No
     target["total_topics"] += int(ts_info.get("total_topics") or 0)
 
 
+def _masked_config_cookie(cookie: str) -> str:
+    return "***" if cookie and cookie != "your_cookie_here" else "未配置"
+
+
 class ConfigModel(BaseModel):
     cookie: str = Field(..., description="知识星球Cookie")
 
@@ -89,7 +93,7 @@ async def get_config():
         return {
             "configured": configured,
             "auth": {
-                "cookie": "***" if cookie and cookie != "your_cookie_here" else "未配置",
+                "cookie": _masked_config_cookie(cookie),
             },
             "database": config.get("database", {}) if config else {},
             "download": config.get("download", {}) if config else {},

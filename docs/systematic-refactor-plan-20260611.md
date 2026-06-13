@@ -9882,6 +9882,45 @@ Result:
 - Frontend build passed, including Next.js lint/type checks.
 - `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
 
+### 2026-06-13 - P2 config cookie mask helper
+
+Changed:
+
+- Added `backend.routes.core_routes._masked_config_cookie`.
+- Replaced inline config-cookie masking in `get_config` with the helper.
+- Added helper coverage in `tests/test_core_routes_helpers.py` for empty, placeholder, and configured
+  cookie values.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- `GET /api/config` still reports `auth.cookie` as `***` for any configured non-placeholder cookie.
+- Empty cookies and the legacy placeholder `your_cookie_here` still report `未配置`.
+- Public route path, response structure, config loading, configured detection, database/download
+  payloads, and exception semantics are unchanged.
+- No schema, crawler, storage, task, legacy, or fallback-removal behavior changed.
+- Existing dirty downloader risk-log files and scripts remain outside this P2 slice.
+
+Verification:
+
+```powershell
+uv run python -m py_compile backend\routes\core_routes.py tests\test_core_routes_helpers.py
+uv run python -m unittest tests.test_core_routes_helpers -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run python -m unittest discover -s tests
+cmd.exe /d /c npm --prefix frontend run build
+git diff --check
+```
+
+Result:
+
+- Focused core route helper tests passed after helper extraction.
+- `py_compile` passed.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Full backend unittest discovery: 786 tests passed, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+- `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
+
 ## Stop Conditions
 
 Pause before editing if:
