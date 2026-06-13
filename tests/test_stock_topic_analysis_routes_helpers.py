@@ -189,6 +189,13 @@ class StockTopicAnalysisRoutesHelperTests(unittest.IsolatedAsyncioTestCase):
         )
 
     @unittest.skipUnless(HAS_ROUTE_DEPS, "stock topic analysis route dependencies are not installed")
+    async def test_stock_topic_batch_running_message_preserves_count_format(self):
+        from backend.routes.stock_topic_analysis_routes import _stock_topic_batch_running_message
+
+        self.assertEqual("开始批量个股话题分析，共 2 只股票...", _stock_topic_batch_running_message(2))
+        self.assertEqual("开始批量个股话题分析，共 0 只股票...", _stock_topic_batch_running_message(0))
+
+    @unittest.skipUnless(HAS_ROUTE_DEPS, "stock topic analysis route dependencies are not installed")
     async def test_create_stock_topic_analysis_enqueues_runtime_task(self):
         from backend.routes.stock_topic_analysis_routes import (
             StockTopicAnalysisRequest,

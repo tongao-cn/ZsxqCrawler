@@ -13337,6 +13337,44 @@ Result:
 - PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-13 - P5 stock topic batch running message helper
+
+Changed:
+
+- Added `_stock_topic_batch_running_message()` in
+  `backend.routes.stock_topic_analysis_routes`.
+- Reused it in `run_stock_topic_analysis_batch_task()` for the existing running status message.
+- Added helper coverage for the current count interpolation format.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Batch stock-name parsing, running status, running message text, update order,
+  `analyze_stock_topics_batch()` call, stopped checks, completed status, result payload,
+  terminal message text, failure message text, task/public APIs, storage schema,
+  fallback/legacy behavior, and config semantics are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m py_compile backend\routes\stock_topic_analysis_routes.py tests\test_stock_topic_analysis_routes_helpers.py
+uv run python -m unittest tests.test_stock_topic_analysis_routes_helpers.StockTopicAnalysisRoutesHelperTests.test_stock_topic_batch_running_message_preserves_count_format -v
+uv run python -m unittest tests.test_stock_topic_analysis_routes_helpers -v
+uv run python -m unittest tests.test_task_runtime_helpers tests.test_stock_topic_analysis_routes_helpers -v
+uv run python -m unittest discover -s tests
+uv run python scripts\scan_postgres_compat_debt.py
+npm --prefix frontend run build
+```
+
+Result:
+
+- Focused batch running message helper test passed.
+- Stock topic analysis route helper tests passed: 14 tests.
+- Related runtime/stock route helper tests passed: 56 tests.
+- Full backend unittest discovery passed: 884 tests, 15 skipped.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:

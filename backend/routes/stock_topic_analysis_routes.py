@@ -88,6 +88,10 @@ def _stock_topic_batch_completed_message(result: dict) -> str:
     )
 
 
+def _stock_topic_batch_running_message(stock_count: int) -> str:
+    return f"开始批量个股话题分析，共 {stock_count} 只股票..."
+
+
 def run_stock_topic_analysis_task(task_id: str, group_id: str, request: StockTopicAnalysisRequest) -> None:
     def work() -> dict:
         log_callback = _build_stock_topic_log_callback(task_id)
@@ -125,7 +129,7 @@ def run_stock_topic_analysis_batch_task(task_id: str, group_id: str, request: St
 
         log_callback = _build_stock_topic_log_callback(task_id)
         stock_names = parse_stock_names(request.stockNames)
-        update_task(task_id, "running", f"开始批量个股话题分析，共 {len(stock_names)} 只股票...")
+        update_task(task_id, "running", _stock_topic_batch_running_message(len(stock_names)))
         result = analyze_stock_topics_batch(group_id, stock_names, log_callback=log_callback)
 
         if is_task_stopped(task_id):
