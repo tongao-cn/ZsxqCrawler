@@ -11560,6 +11560,42 @@ Result:
 - Frontend build passed, including Next.js lint/type checks.
 - Diff whitespace check passed with only existing LF-to-CRLF working-copy warnings.
 
+### 2026-06-13 - P9 file downloader database row payload helper
+
+Changed:
+
+- Added `database_download_file_info()` in `backend/crawlers/zsxq_file_downloader_helpers.py`.
+- Reused the helper in `ZSXQFileDownloader._download_database_file_row()` for the nested download
+  payload passed to `download_file()`.
+- Added direct helper coverage for the nested `{"file": ...}` payload shape and field names.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Database row unpacking, row log order, file-size formatting, download invocation timing,
+  stats mutation, delay behavior, and returned stats payload are preserved.
+- No public API, route behavior, task behavior, SQL query/params, crawler request order, download
+  retry behavior, storage schema, fallback path, legacy path, or config semantics changed.
+
+Verification:
+
+```powershell
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py backend\crawlers\zsxq_file_downloader_helpers.py
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers -v
+uv run python -m unittest discover -s tests
+uv run python scripts\scan_postgres_compat_debt.py
+npm --prefix frontend run build
+git diff --check
+```
+
+Result:
+
+- Downloader helper tests passed: 102 tests.
+- Full backend unittest discovery passed: 812 tests, 15 skipped.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Frontend build passed, including Next.js lint/type checks.
+- Diff whitespace check passed with only existing LF-to-CRLF working-copy warnings.
+
 ## Stop Conditions
 
 Pause before editing if:

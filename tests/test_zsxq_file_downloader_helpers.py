@@ -23,6 +23,7 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     content_disposition_filename,
     database_download_completion_messages,
     database_download_filter_messages,
+    database_download_file_info,
     database_stats_table_emoji,
     download_exception_detail,
     download_expected_size,
@@ -498,6 +499,19 @@ class FileDownloaderDatabaseDownloadTests(unittest.TestCase):
 
 
 class FileDownloaderTimeHelperTests(unittest.TestCase):
+    def test_database_download_file_info_preserves_nested_payload_shape(self):
+        self.assertEqual(
+            {
+                "file": {
+                    "id": 101,
+                    "name": "memo.pdf",
+                    "size": 2048,
+                    "download_count": 7,
+                }
+            },
+            database_download_file_info(101, "memo.pdf", 2048, 7),
+        )
+
     def test_database_download_completion_messages_preserves_summary_order(self):
         self.assertEqual(
             (

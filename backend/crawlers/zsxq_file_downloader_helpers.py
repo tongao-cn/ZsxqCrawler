@@ -419,6 +419,22 @@ def database_download_completion_messages(stats: Dict[str, int]) -> tuple[str, .
     )
 
 
+def database_download_file_info(
+    file_id: Any,
+    file_name: Any,
+    file_size: Any,
+    download_count: Any,
+) -> Dict[str, Dict[str, Any]]:
+    return {
+        "file": {
+            "id": file_id,
+            "name": file_name,
+            "size": file_size,
+            "download_count": download_count,
+        }
+    }
+
+
 def database_stats_table_emoji(table_name: str) -> str:
     return DATABASE_STATS_TABLE_EMOJI.get(table_name, "📊")
 

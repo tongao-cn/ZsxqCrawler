@@ -29,6 +29,7 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     classify_http_failure,
     database_download_completion_messages,
     database_download_filter_messages,
+    database_download_file_info,
     database_download_query_plan,
     database_stats_table_emoji,
     download_file_data,
@@ -1499,14 +1500,7 @@ class ZSXQFileDownloader:
         self.log(f"【{position}/{total_files}】{file_name}")
         self.log(f"   📊 文件ID: {file_id}, 大小: {file_size/1024:.1f}KB, 下载次数: {download_count}")
 
-        file_info = {
-            'file': {
-                'id': file_id,
-                'name': file_name,
-                'size': file_size,
-                'download_count': download_count
-            }
-        }
+        file_info = database_download_file_info(file_id, file_name, file_size, download_count)
 
         result = self.download_file(file_info)
 
