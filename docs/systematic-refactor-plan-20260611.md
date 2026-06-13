@@ -13541,6 +13541,43 @@ Result:
 - PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-13 - P5 shared task log callback helper
+
+Changed:
+
+- Added `build_task_log_callback()` in `backend.services.task_runtime`.
+- Reused it from daily analysis, daily stock concept, stock topic analysis, and A-share route
+  helpers for task-bound service log callbacks.
+- Kept existing route-private callback helpers and route-level `add_task_log` patch paths intact.
+- Added task-runtime helper coverage for default task-log writing and custom log-writer wiring.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Service log callbacks still write the same `(task_id, message)` pairs through the same route
+  `add_task_log` references used before this slice.
+- Task lifecycle updates, running/completed/failure messages, service-call arguments, public APIs,
+  task result payloads, storage schema, fallback/legacy behavior, and config semantics are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m py_compile backend\services\task_runtime.py backend\routes\daily_analysis_routes.py backend\routes\daily_stock_concept_routes.py backend\routes\stock_topic_analysis_routes.py backend\routes\a_share_routes.py tests\test_task_runtime_helpers.py
+uv run python -m unittest tests.test_task_runtime_helpers.TaskRuntimeHelperTests.test_build_task_log_callback_writes_task_log tests.test_task_runtime_helpers.TaskRuntimeHelperTests.test_build_task_log_callback_uses_custom_log_writer tests.test_daily_analysis_routes_helpers.DailyAnalysisRoutesHelperTests.test_build_daily_log_callback_writes_task_log tests.test_daily_analysis_routes_helpers.DailyAnalysisRoutesHelperTests.test_analyze_daily_topics_for_task_preserves_service_arguments tests.test_daily_stock_concept_routes_helpers.DailyStockConceptRoutesHelperTests.test_build_stock_concept_log_callback_writes_task_log tests.test_daily_stock_concept_routes_helpers.DailyStockConceptRoutesHelperTests.test_extract_daily_stock_concepts_for_task_preserves_service_arguments tests.test_stock_topic_analysis_routes_helpers.StockTopicAnalysisRoutesHelperTests.test_run_stock_topic_analysis_task_uses_runtime_workflow_lifecycle tests.test_a_share_routes_helpers.AShareRoutesHelperTests.test_run_a_share_analysis_for_task_preserves_service_arguments -v
+uv run python -m unittest tests.test_task_runtime_helpers tests.test_daily_analysis_routes_helpers tests.test_daily_stock_concept_routes_helpers tests.test_stock_topic_analysis_routes_helpers tests.test_a_share_routes_helpers -v
+uv run python -m unittest discover -s tests
+uv run python scripts\scan_postgres_compat_debt.py
+npm --prefix frontend run build
+```
+
+Result:
+
+- Focused task-log callback and route service-call tests passed: 8 tests.
+- Related task runtime and route helper tests passed: 83 tests.
+- Full backend unittest discovery passed: 891 tests, 15 skipped.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:

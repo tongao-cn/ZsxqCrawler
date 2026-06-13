@@ -26,6 +26,7 @@ from backend.core.ai_provider_config import has_openai_api_key
 from backend.services.tdx_a_share_export_service import export_a_share_rankings_to_tdx, get_latest_tdx_export
 from backend.services.task_runtime import (
     add_task_log,
+    build_task_log_callback,
     create_task,
     enqueue_runtime_task,
     get_latest_task_by_type,
@@ -134,9 +135,6 @@ def _run_a_share_analysis_for_task(
     normalized_group_id: Optional[str],
     request: AShareAnalysisRunRequest,
 ) -> dict:
-    def log_callback(message: str):
-        add_task_log(task_id, message)
-
     return run_analysis(
         days=request.days,
         group_id=normalized_group_id,
@@ -149,7 +147,10 @@ def _run_a_share_analysis_for_task(
         end_date=request.end_date,
         reset_start_date=request.reset_start_date,
         reset_end_date=request.reset_end_date,
-        log_callback=log_callback,
+        log_callback=build_task_log_callback(
+            task_id,
+            lambda current_task_id, message: add_task_log(current_task_id, message),
+        ),
     )
 
 

@@ -279,6 +279,16 @@ def add_task_log(task_id: str, log_message: str) -> None:
     broadcast_log(task_id, formatted_log)
 
 
+def build_task_log_callback(
+    task_id: str,
+    log_writer: Optional[Callable[[str, str], None]] = None,
+) -> Callable[[str], None]:
+    def log_callback(message: str) -> None:
+        (log_writer or add_task_log)(task_id, message)
+
+    return log_callback
+
+
 def _add_task_log_subscriber_locked(task_id: str, subscriber: queue.Queue[str]) -> None:
     add_task_log_subscriber(sse_connections, task_id, subscriber)
 

@@ -10,6 +10,7 @@ from backend.services.crawl_service import run_crawl_latest_task
 from backend.services.daily_topic_analysis_service import analyze_daily_topics, get_daily_report
 from backend.services.task_runtime import (
     add_task_log,
+    build_task_log_callback,
     create_task,
     current_tasks,
     enqueue_runtime_task,
@@ -34,10 +35,10 @@ class DailyRunTodayRequest(DailyAnalysisRequest):
 
 
 def _build_daily_log_callback(task_id: str) -> Callable[[str], None]:
-    def log_callback(message: str) -> None:
-        add_task_log(task_id, message)
-
-    return log_callback
+    return build_task_log_callback(
+        task_id,
+        lambda current_task_id, message: add_task_log(current_task_id, message),
+    )
 
 
 def _daily_task_stopped_or_failed(task_id: str) -> bool:

@@ -19,6 +19,7 @@ from backend.services.stock_topic_analysis_service import (
 )
 from backend.services.task_runtime import (
     add_task_log,
+    build_task_log_callback,
     create_task,
     enqueue_runtime_task,
     run_workflow,
@@ -51,10 +52,10 @@ class StockQuestionRequest(BaseModel):
 
 
 def _build_stock_topic_log_callback(task_id: str) -> Callable[[str], None]:
-    def log_callback(message: str) -> None:
-        add_task_log(task_id, message)
-
-    return log_callback
+    return build_task_log_callback(
+        task_id,
+        lambda current_task_id, message: add_task_log(current_task_id, message),
+    )
 
 
 def _create_stock_task_response(

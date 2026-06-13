@@ -779,6 +779,28 @@ class TaskRuntimeHelperTests(unittest.TestCase):
             finally:
                 task_runtime.task_logs.pop("task-1", None)
 
+    def test_build_task_log_callback_writes_task_log(self):
+        from backend.services import task_runtime
+
+        with patch("backend.services.task_runtime.add_task_log") as add_task_log:
+            log_callback = task_runtime.build_task_log_callback("task-1")
+            log_callback("hello")
+
+        add_task_log.assert_called_once_with("task-1", "hello")
+
+    def test_build_task_log_callback_uses_custom_log_writer(self):
+        from backend.services.task_runtime import build_task_log_callback
+
+        writes = []
+        log_callback = build_task_log_callback(
+            "task-1",
+            lambda task_id, message: writes.append((task_id, message)),
+        )
+
+        log_callback("hello")
+
+        self.assertEqual([("task-1", "hello")], writes)
+
     def test_task_log_subscription_receives_broadcast_until_unsubscribed(self):
         from backend.services import task_runtime
 

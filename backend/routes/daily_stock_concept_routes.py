@@ -9,7 +9,13 @@ from backend.services.daily_stock_concept_service import (
     extract_daily_stock_concepts,
     get_daily_stock_concepts,
 )
-from backend.services.task_runtime import add_task_log, create_task, enqueue_runtime_task, run_workflow
+from backend.services.task_runtime import (
+    add_task_log,
+    build_task_log_callback,
+    create_task,
+    enqueue_runtime_task,
+    run_workflow,
+)
 
 
 router = APIRouter(prefix="/api/analysis/daily-stock-concepts", tags=["daily-stock-concepts"])
@@ -22,10 +28,10 @@ class DailyStockConceptRequest(BaseModel):
 
 
 def _build_stock_concept_log_callback(task_id: str) -> Callable[[str], None]:
-    def log_callback(message: str) -> None:
-        add_task_log(task_id, message)
-
-    return log_callback
+    return build_task_log_callback(
+        task_id,
+        lambda current_task_id, message: add_task_log(current_task_id, message),
+    )
 
 
 def _stock_concept_task_metadata(group_id: str, report_date: Optional[str]) -> dict[str, Optional[str]]:
