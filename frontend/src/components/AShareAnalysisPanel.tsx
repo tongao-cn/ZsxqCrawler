@@ -13,6 +13,7 @@ import { useAShareAnalysisActions } from '@/hooks/useAShareAnalysisActions';
 import { useAShareAnalysisData } from '@/hooks/useAShareAnalysisData';
 import { useTaskStatus } from '@/hooks/useTaskStatus';
 import AShareActionPanel from '@/components/AShareActionPanel';
+import { formatAShareDateTime } from '@/components/AShareAnalysisDisplay';
 import AShareAnalysisResultsSection from '@/components/AShareAnalysisResultsSection';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -32,13 +33,6 @@ function compareSeriesByTotal(
     return b.total - a.total;
   }
   return a.label.localeCompare(b.label, 'zh-CN');
-}
-
-function formatDateTime(value?: string | null) {
-  if (!value) {
-    return '暂无';
-  }
-  return new Date(value).toLocaleString('zh-CN');
 }
 
 function getTaskStatusBadge(task?: Task | null) {
@@ -272,7 +266,7 @@ export default function AShareAnalysisPanel({
       return `最近 ${latestTaskResult?.days ?? runDays} 天没有可分析的话题，结果为空`;
     }
     if (summary?.source_latest_topic_time) {
-      return `当前还没有分析结果，源话题库最新话题时间为 ${formatDateTime(summary.source_latest_topic_time)}`;
+      return `当前还没有分析结果，源话题库最新话题时间为 ${formatAShareDateTime(summary.source_latest_topic_time)}`;
     }
     return '暂无可展示的分析数据';
   }, [latestTask, latestTaskResult, loadingChart, runDays, summary]);
@@ -285,7 +279,7 @@ export default function AShareAnalysisPanel({
 
     const parts = [`源话题数 ${sourceTopicsCount}`];
     if (latestTopicTime) {
-      parts.push(`最新话题 ${formatDateTime(latestTopicTime)}`);
+      parts.push(`最新话题 ${formatAShareDateTime(latestTopicTime)}`);
     }
     return parts.join('，');
   }, [summary]);
@@ -305,7 +299,7 @@ export default function AShareAnalysisPanel({
     if ((summary?.source_topics_count ?? 0) === 0) {
       return '当前群话题库为空，请先采集或同步话题';
     }
-    return `更新于 ${formatDateTime(summary?.updated_at)}`;
+    return `更新于 ${formatAShareDateTime(summary?.updated_at)}`;
   }, [hasChartData, latestTask?.status, status?.api_key_configured, summary]);
 
   if (!selectedGroup) {

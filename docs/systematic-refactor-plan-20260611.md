@@ -11106,6 +11106,49 @@ Result:
 - Full backend unittest discovery passed: 804 tests passed, 15 skipped.
 - `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
 
+### 2026-06-13 - P6 A-share date display helper extraction
+
+Changed:
+
+- Added `frontend/src/components/AShareAnalysisDisplay.tsx` with shared
+  `formatAShareDateTime()`.
+- Removed duplicate `formatDateTime()` implementations from `AShareAnalysisPanel` and
+  `AShareLatestExportSummary`.
+- Reused the helper for A-share status messages, chart metadata, update time, and latest TDX
+  export time.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Missing-date fallback remains `暂无`.
+- Date rendering still uses `new Date(value).toLocaleString('zh-CN')` with no added validation,
+  exception handling, timezone override, or fallback.
+- The helper is scoped to the A-share recommendation-pool display surface; same-named helpers in
+  other frontend domains remain untouched.
+- No public API, route behavior, task behavior, backend path, storage schema, fallback path,
+  legacy path, or dependency semantics changed.
+
+Verification:
+
+```powershell
+rg -n "formatAShareDateTime|function formatDateTime\(value\?: string \| null\)" frontend\src\components --glob "AShare*.tsx" --glob "AShare*.ts" --glob "!node_modules/**"
+npm --prefix frontend run build
+npm exec -- tsc -p tsconfig.json --noEmit --noUnusedLocals --pretty false  # from frontend/
+uv run python scripts\scan_postgres_compat_debt.py
+uv run python -m unittest discover -s tests
+git diff --check
+```
+
+Result:
+
+- A-share reference search shows both A-share callers now use `formatAShareDateTime()`, with no
+  remaining local A-share `formatDateTime()` duplicate.
+- Frontend build passed, including Next.js lint/type checks.
+- Standalone TypeScript unused-local check passed.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Full backend unittest discovery passed: 804 tests passed, 15 skipped.
+- `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
+
 ## Stop Conditions
 
 Pause before editing if:

@@ -4,19 +4,13 @@ import { Upload } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { formatAShareDateTime } from '@/components/AShareAnalysisDisplay';
 import type { AShareAnalysisLatestTdxExport } from '@/lib/api';
 
 interface AShareLatestExportSummaryProps {
   exportingTdx: boolean;
   latestExport?: AShareAnalysisLatestTdxExport | null;
   onExportToTdx: () => void;
-}
-
-function formatDateTime(value?: string | null) {
-  if (!value) {
-    return '暂无';
-  }
-  return new Date(value).toLocaleString('zh-CN');
 }
 
 function formatDateRange(start?: string | null, end?: string | null) {
@@ -58,7 +52,7 @@ export default function AShareLatestExportSummary({
         <details className="rounded-lg border border-gray-200 bg-gray-50 p-3 text-xs">
           <summary className="cursor-pointer font-medium text-gray-900">最近导入记录</summary>
           <div className="mt-3 space-y-2 text-muted-foreground">
-            <div>导入时间：{formatDateTime(latestExport.exported_at)}</div>
+            <div>导入时间：{formatAShareDateTime(latestExport.exported_at)}</div>
             <div>范围：{formatDateRange(latestExport.start_date, latestExport.end_date)}</div>
             <div>股票主数据：{latestExport.stock_basic_source || '未知'}</div>
             <div className="grid grid-cols-1 gap-2">
