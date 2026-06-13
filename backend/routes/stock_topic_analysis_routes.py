@@ -68,6 +68,19 @@ def _fail_stock_question_task_unless_stopped(task_id: str, error: Exception) -> 
     update_task(task_id, "failed", message)
 
 
+def _create_stock_task_response(
+    task_type: str,
+    description: str,
+    metadata: dict,
+    task_func,
+    group_id: str,
+    request,
+) -> dict[str, str]:
+    task_id = create_task(task_type, description, metadata)
+    enqueue_runtime_task(task_func, task_id, group_id, request)
+    return {"task_id": task_id, "message": TASK_CREATED_MESSAGE}
+
+
 def run_stock_topic_analysis_task(task_id: str, group_id: str, request: StockTopicAnalysisRequest) -> None:
     try:
         if is_task_stopped(task_id):
@@ -149,13 +162,14 @@ async def create_stock_question_analysis(
     try:
         if not request.question.strip():
             raise ValueError("question 不能为空")
-        task_id = create_task(
+        return _create_stock_task_response(
             "stock_question_analysis",
             f"A股问答 (群组: {group_id})",
             {"group_id": str(group_id), "question": request.question},
+            run_stock_question_task,
+            group_id,
+            request,
         )
-        enqueue_runtime_task(run_stock_question_task, task_id, group_id, request)
-        return {"task_id": task_id, "message": TASK_CREATED_MESSAGE}
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     except Exception as exc:
@@ -193,13 +207,14 @@ async def create_stock_topic_analysis(
     try:
         if not request.stockName.strip():
             raise ValueError("stock_name 不能为空")
-        task_id = create_task(
+        return _create_stock_task_response(
             "stock_topic_analysis",
             f"个股话题分析 (群组: {group_id}, 股票: {request.stockName})",
             {"group_id": str(group_id), "stock_name": request.stockName},
+            run_stock_topic_analysis_task,
+            group_id,
+            request,
         )
-        enqueue_runtime_task(run_stock_topic_analysis_task, task_id, group_id, request)
-        return {"task_id": task_id, "message": TASK_CREATED_MESSAGE}
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     except Exception as exc:
@@ -215,14 +230,15 @@ async def create_stock_topic_analysis_batch(
         stock_names = parse_stock_names(request.stockNames)
         if not stock_names:
             raise ValueError("stock_names 不能为空")
-        task_id = create_task(
+        normalized_request = StockTopicAnalysisBatchRequest(stockNames=stock_names)
+        return _create_stock_task_response(
             "stock_topic_analysis_batch",
             f"批量个股话题分析 (群组: {group_id}, 股票数: {len(stock_names)})",
             {"group_id": str(group_id), "stock_names": stock_names},
+            run_stock_topic_analysis_batch_task,
+            group_id,
+            normalized_request,
         )
-        normalized_request = StockTopicAnalysisBatchRequest(stockNames=stock_names)
-        enqueue_runtime_task(run_stock_topic_analysis_batch_task, task_id, group_id, normalized_request)
-        return {"task_id": task_id, "message": TASK_CREATED_MESSAGE}
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     except Exception as exc:

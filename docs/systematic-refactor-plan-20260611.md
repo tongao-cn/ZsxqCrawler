@@ -10087,6 +10087,46 @@ Result:
 - Frontend build passed, including Next.js lint/type checks.
 - `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
 
+### 2026-06-13 - P2 stock topic task response helper
+
+Changed:
+
+- Added `backend.routes.stock_topic_analysis_routes._create_stock_task_response`.
+- Reused it in stock question, single stock-topic analysis, and batch stock-topic analysis task
+  creation endpoints.
+- Added helper coverage in `tests/test_stock_topic_analysis_routes_helpers.py` for task creation,
+  enqueue order, metadata payload, and response shape.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Existing request validation (`question 不能为空`, `stock_name 不能为空`, `stock_names 不能为空`),
+  task types, task descriptions, metadata field names and values, batch normalization, runner
+  functions, enqueue argument order, and response payload are unchanged.
+- No schema, crawler, storage, fallback, legacy, route, or public response behavior was removed.
+- Existing dirty downloader risk-log files and scripts remain outside this P2 slice.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_stock_topic_analysis_routes_helpers -v
+uv run python -m py_compile backend\routes\stock_topic_analysis_routes.py tests\test_stock_topic_analysis_routes_helpers.py
+uv run python scripts\scan_postgres_compat_debt.py
+uv run python -m unittest discover -s tests
+cmd.exe /d /c npm --prefix frontend run build
+git diff --check
+```
+
+Result:
+
+- Existing stock topic route helper tests passed before production code changes.
+- Focused stock topic route helper tests passed after extracting the task response helper.
+- `py_compile` passed.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Full backend unittest discovery: 793 tests passed, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+- `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
+
 ## Stop Conditions
 
 Pause before editing if:

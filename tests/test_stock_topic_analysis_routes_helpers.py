@@ -8,6 +8,43 @@ HAS_ROUTE_DEPS = find_spec("fastapi") is not None and find_spec("pydantic") is n
 
 class StockTopicAnalysisRoutesHelperTests(unittest.IsolatedAsyncioTestCase):
     @unittest.skipUnless(HAS_ROUTE_DEPS, "stock topic analysis route dependencies are not installed")
+    async def test_create_stock_task_response_preserves_task_creation_contract(self):
+        from backend.routes.stock_topic_analysis_routes import (
+            TASK_CREATED_MESSAGE,
+            StockQuestionRequest,
+            _create_stock_task_response,
+            run_stock_question_task,
+        )
+
+        request = StockQuestionRequest(question="固态电池怎么看")
+
+        with (
+            patch("backend.routes.stock_topic_analysis_routes.create_task", return_value="task-qa") as create_task,
+            patch("backend.routes.stock_topic_analysis_routes.enqueue_runtime_task") as enqueue_runtime_task,
+        ):
+            response = _create_stock_task_response(
+                "stock_question_analysis",
+                "A股问答 (群组: 51111112855254)",
+                {"group_id": "51111112855254", "question": "固态电池怎么看"},
+                run_stock_question_task,
+                "51111112855254",
+                request,
+            )
+
+        create_task.assert_called_once_with(
+            "stock_question_analysis",
+            "A股问答 (群组: 51111112855254)",
+            {"group_id": "51111112855254", "question": "固态电池怎么看"},
+        )
+        enqueue_runtime_task.assert_called_once_with(
+            run_stock_question_task,
+            "task-qa",
+            "51111112855254",
+            request,
+        )
+        self.assertEqual({"task_id": "task-qa", "message": TASK_CREATED_MESSAGE}, response)
+
+    @unittest.skipUnless(HAS_ROUTE_DEPS, "stock topic analysis route dependencies are not installed")
     async def test_read_stock_topic_matches_maps_value_error_to_400(self):
         from fastapi import HTTPException
 
