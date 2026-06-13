@@ -112,6 +112,7 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     request_exception_plan,
     retry_exhausted_message,
     risk_event_header_profile_label,
+    risk_event_row,
     risk_event_user_agent_label,
     sec_ch_ua_for_user_agent,
     should_log_full_response,
@@ -365,22 +366,18 @@ class ZSXQFileDownloader:
 
         path = Path(self.risk_event_log_path)
         path.parent.mkdir(parents=True, exist_ok=True)
-        user_agent = ""
-        if headers:
-            user_agent = headers.get("User-Agent") or headers.get("user-agent") or ""
-        row = {
-            "timestamp": datetime.datetime.now().isoformat(timespec="seconds"),
-            "group_id": self.group_id,
-            "file_id": file_id,
-            "phase": phase,
-            "attempt": attempt,
-            "ua_label": self._user_agent_label(user_agent),
-            "header_profile": self._header_profile_label(headers or {}),
-            "status": status,
-            "http_status": "" if http_status is None else http_status,
-            "api_code": "" if api_code is None else api_code,
-            "api_message": api_message or "",
-        }
+        row = risk_event_row(
+            datetime.datetime.now().isoformat(timespec="seconds"),
+            self.group_id,
+            file_id,
+            phase,
+            attempt,
+            headers,
+            http_status,
+            api_code,
+            api_message,
+            status,
+        )
         fieldnames = tuple(row.keys())
         write_header = not path.exists()
         with path.open("a", encoding="utf-8-sig", newline="") as file_obj:

@@ -110,6 +110,7 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     request_exception_plan,
     retry_exhausted_message,
     risk_event_header_profile_label,
+    risk_event_row,
     risk_event_user_agent_label,
     sec_ch_ua_for_user_agent,
     safe_download_filename,
@@ -2259,6 +2260,53 @@ class FileDownloaderRetryHelperTests(unittest.TestCase):
             ),
         )
         self.assertEqual("minimal", risk_event_header_profile_label({}))
+
+    def test_risk_event_row_preserves_field_order_labels_and_empty_values(self):
+        row = risk_event_row(
+            "2026-06-13T22:15:00",
+            "group-1",
+            101,
+            "download_url_response",
+            2,
+            {
+                "user-agent": "Mozilla/5.0 (X11; Linux x86_64) Firefox/132.0",
+                "Referer": "https://wx.zsxq.com/dweb2/index/group/group-1",
+                "Sec-Ch-Ua": '"Chromium";v="131"',
+                "X-Request-Id": "req-1",
+            },
+            None,
+            "",
+            None,
+            "api_failed",
+        )
+
+        self.assertEqual(
+            [
+                "timestamp",
+                "group_id",
+                "file_id",
+                "phase",
+                "attempt",
+                "ua_label",
+                "header_profile",
+                "status",
+                "http_status",
+                "api_code",
+                "api_message",
+            ],
+            list(row.keys()),
+        )
+        self.assertEqual("2026-06-13T22:15:00", row["timestamp"])
+        self.assertEqual("group-1", row["group_id"])
+        self.assertEqual(101, row["file_id"])
+        self.assertEqual("download_url_response", row["phase"])
+        self.assertEqual(2, row["attempt"])
+        self.assertEqual("Firefox Linux", row["ua_label"])
+        self.assertEqual("referer+sec-ch+x-request-id", row["header_profile"])
+        self.assertEqual("api_failed", row["status"])
+        self.assertEqual("", row["http_status"])
+        self.assertEqual("", row["api_code"])
+        self.assertEqual("", row["api_message"])
 
     def test_sec_ch_ua_for_user_agent_preserves_existing_mapping(self):
         self.assertEqual(

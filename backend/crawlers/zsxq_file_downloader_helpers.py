@@ -176,6 +176,36 @@ def risk_event_header_profile_label(headers: Dict[str, str]) -> str:
     return "+".join(labels) or "minimal"
 
 
+def risk_event_row(
+    timestamp: str,
+    group_id: Any,
+    file_id: int,
+    phase: str,
+    attempt: int = 0,
+    headers: Optional[Dict[str, str]] = None,
+    http_status: Optional[int] = None,
+    api_code: Optional[Any] = None,
+    api_message: Optional[str] = None,
+    status: str = "observed",
+) -> Dict[str, Any]:
+    user_agent = ""
+    if headers:
+        user_agent = headers.get("User-Agent") or headers.get("user-agent") or ""
+    return {
+        "timestamp": timestamp,
+        "group_id": group_id,
+        "file_id": file_id,
+        "phase": phase,
+        "attempt": attempt,
+        "ua_label": risk_event_user_agent_label(user_agent),
+        "header_profile": risk_event_header_profile_label(headers or {}),
+        "status": status,
+        "http_status": "" if http_status is None else http_status,
+        "api_code": "" if api_code is None else api_code,
+        "api_message": api_message or "",
+    }
+
+
 def sec_ch_ua_for_user_agent(user_agent: str) -> str:
     if "Chrome" in user_agent:
         if "131.0.0.0" in user_agent:

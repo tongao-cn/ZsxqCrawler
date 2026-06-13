@@ -13044,6 +13044,43 @@ Result:
 - PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-13 - P9 file downloader risk event row helper
+
+Changed:
+
+- Added `risk_event_row()` in `backend/crawlers/zsxq_file_downloader_helpers.py`.
+- Reused it in `ZSXQFileDownloader._record_risk_event()` while keeping timestamp creation, CSV
+  path handling, header-writing decision, encoding, and append behavior in the original method.
+- Added direct helper coverage for row field order, user-agent label derivation, header-profile
+  derivation, status, and empty fallback values.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Risk-event CSV field order, timestamp precision source, group/file/phase/attempt values,
+  user-agent/header-profile labels, empty `http_status`/`api_code`/`api_message` fallback values,
+  CSV encoding, append behavior, task/public APIs, storage schema, fallback/legacy behavior, and
+  config semantics are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py backend\crawlers\zsxq_file_downloader_helpers.py tests\test_zsxq_file_downloader_helpers.py
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderRetryHelperTests.test_risk_event_row_preserves_field_order_labels_and_empty_values -v
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers -v
+uv run python -m unittest discover -s tests
+uv run python scripts\scan_postgres_compat_debt.py
+npm --prefix frontend run build
+```
+
+Result:
+
+- Focused risk-event row helper test passed.
+- Downloader helper tests passed: 156 tests.
+- Full backend unittest discovery passed: 873 tests, 15 skipped.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:
