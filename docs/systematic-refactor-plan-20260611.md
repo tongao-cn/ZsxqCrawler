@@ -11232,6 +11232,49 @@ Result:
 - Full backend unittest discovery passed: 804 tests passed, 15 skipped.
 - `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
 
+### 2026-06-13 - P6 stock analysis date helper module
+
+Changed:
+
+- Added `frontend/src/lib/stock-analysis-format.ts` with shared
+  `formatStockAnalysisDateTime()`.
+- Removed the duplicate date formatter from `StockQuestionPanel`.
+- Moved stock-topic result dialog and table date rendering to the shared lib helper.
+- Kept `StockTopicAnalysisDisplay` focused on stock-topic status label and badge rendering.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Stock analysis date rendering still returns `-` for empty values.
+- Valid values still render with `new Date(value).toLocaleString('zh-CN')`.
+- The existing exception fallback still returns the original value.
+- No stock-question search, stock-topic analysis status, AI output, public API, route behavior,
+  task behavior, backend path, storage schema, fallback path, legacy path, or dependency semantics
+  changed.
+
+Verification:
+
+```powershell
+rg -n "formatStockTopicAnalysisDateTime|formatStockAnalysisDateTime|function formatDateTime\(value\?: string \| null\)|StockTopicAnalysisDisplay" frontend\src\components frontend\src\lib --glob "*.ts" --glob "*.tsx" --glob "!node_modules/**"
+npm --prefix frontend run build
+npm exec -- tsc -p tsconfig.json --noEmit --noUnusedLocals --pretty false  # from frontend/
+uv run python scripts\scan_postgres_compat_debt.py
+uv run python -m unittest discover -s tests
+git diff --check
+```
+
+Result:
+
+- Stock-question and stock-topic analysis date display now use the shared lib helper.
+- No `formatStockTopicAnalysisDateTime` reference remains.
+- The only remaining `function formatDateTime(value?: string | null)` hit is the separate daily
+  topic helper, intentionally left in its domain.
+- Frontend build passed, including Next.js lint/type checks.
+- Standalone TypeScript unused-local check passed.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Full backend unittest discovery passed: 804 tests passed, 15 skipped.
+- `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
+
 ## Stop Conditions
 
 Pause before editing if:

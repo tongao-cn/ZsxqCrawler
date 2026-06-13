@@ -14,21 +14,11 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Textarea } from '@/components/ui/textarea';
 import { useTaskStatus } from '@/hooks/useTaskStatus';
 import { apiClient, StockQuestionResponse } from '@/lib/api';
+import { formatStockAnalysisDateTime } from '@/lib/stock-analysis-format';
 
 interface StockQuestionPanelProps {
   groupId: number | string;
   onTaskCreated?: (taskId: string) => void;
-}
-
-function formatDateTime(value?: string | null) {
-  if (!value) {
-    return '-';
-  }
-  try {
-    return new Date(value).toLocaleString('zh-CN');
-  } catch {
-    return value;
-  }
 }
 
 export default function StockQuestionPanel({ groupId, onTaskCreated }: StockQuestionPanelProps) {
@@ -182,7 +172,9 @@ export default function StockQuestionPanel({ groupId, onTaskCreated }: StockQues
                         <TableCell className="whitespace-nowrap text-right text-xs text-muted-foreground">
                           赞 {topic.likes_count} / 评 {topic.comments_count} / 读 {topic.reading_count}
                         </TableCell>
-                        <TableCell className="whitespace-nowrap text-xs text-muted-foreground">{formatDateTime(topic.create_time)}</TableCell>
+                        <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
+                          {formatStockAnalysisDateTime(topic.create_time)}
+                        </TableCell>
                       </TableRow>
                     ))}
                   </TableBody>

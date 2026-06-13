@@ -6,10 +6,8 @@ import remarkGfm from 'remark-gfm';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import {
-  formatStockTopicAnalysisDateTime,
-  StockTopicAnalysisStatusBadge,
-} from '@/components/StockTopicAnalysisDisplay';
+import { StockTopicAnalysisStatusBadge } from '@/components/StockTopicAnalysisDisplay';
+import { formatStockAnalysisDateTime } from '@/lib/stock-analysis-format';
 import type { StockTopicAnalysisResponse } from '@/lib/api';
 
 interface StockTopicAnalysisResultDialogProps {
@@ -36,7 +34,7 @@ export default function StockTopicAnalysisResultDialog({
             <DialogHeader>
               <DialogTitle className="text-xl">{selectedResult.stock_name} AI 总结</DialogTitle>
               <DialogDescription>
-                {formatStockCode(selectedResult)} · 话题 {selectedResult.topic_count} · 待处理话题 {selectedResult.new_topic_count ?? 0} · 推荐 {selectedResult.recommendation_count} · {formatStockTopicAnalysisDateTime(selectedResult.updated_at)}
+                {formatStockCode(selectedResult)} · 话题 {selectedResult.topic_count} · 待处理话题 {selectedResult.new_topic_count ?? 0} · 推荐 {selectedResult.recommendation_count} · {formatStockAnalysisDateTime(selectedResult.updated_at)}
               </DialogDescription>
             </DialogHeader>
             <div className="grid gap-3 text-sm sm:grid-cols-4">

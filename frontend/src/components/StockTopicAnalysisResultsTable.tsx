@@ -5,10 +5,8 @@ import { Eye, Sparkles } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import {
-  formatStockTopicAnalysisDateTime,
-  StockTopicAnalysisStatusBadge,
-} from '@/components/StockTopicAnalysisDisplay';
+import { StockTopicAnalysisStatusBadge } from '@/components/StockTopicAnalysisDisplay';
+import { formatStockAnalysisDateTime } from '@/lib/stock-analysis-format';
 import type { StockTopicAnalysisResponse } from '@/lib/api';
 
 interface StockTopicAnalysisResultsTableProps {
@@ -98,7 +96,7 @@ export default function StockTopicAnalysisResultsTable({
               <TableCell className="text-right">{result.recommendation_count}</TableCell>
               <TableCell><StockTopicAnalysisStatusBadge result={result} /></TableCell>
               <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
-                {formatStockTopicAnalysisDateTime(result.updated_at)}
+                {formatStockAnalysisDateTime(result.updated_at)}
               </TableCell>
               <TableCell className="text-right">
                 <div className="flex justify-end gap-2 whitespace-nowrap">
