@@ -1,6 +1,6 @@
 import unittest
 from importlib.util import find_spec
-from unittest.mock import Mock, patch
+from unittest.mock import patch
 
 
 HAS_ROUTE_DEPS = find_spec("fastapi") is not None and find_spec("pydantic") is not None

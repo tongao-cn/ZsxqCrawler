@@ -10548,6 +10548,49 @@ Result:
 - Frontend build passed, including Next.js lint/type checks.
 - `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
 
+### 2026-06-13 - P2 script and route test unused import cleanup
+
+Changed:
+
+- Removed unused `socketserver` and `datetime` imports from `scripts.csv_chart_server`.
+- Removed unused `Mock` import from `tests.test_stock_topic_analysis_routes_helpers`.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- The CSV chart server still uses the same argparse options, CSV reader, HTML builder,
+  `ThreadingHTTPServer`, route handler, and `serve_forever` behavior.
+- Stock-topic route helper tests still patch the same route dependencies and assert the same task
+  creation, enqueue, error mapping, image extraction, and summary response contracts.
+- No schema, crawler, storage, fallback, legacy, route, public response, script entrypoint, or
+  dependency behavior was removed.
+- Existing dirty downloader risk-log files and scripts remain outside this P2 slice.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_stock_topic_analysis_routes_helpers -v
+uv run python -m py_compile scripts\csv_chart_server.py tests\test_stock_topic_analysis_routes_helpers.py
+uv run python -m scripts.csv_chart_server --help
+rg -n "\bsocketserver\b|\bdatetime\b|\bMock\b" scripts\csv_chart_server.py tests\test_stock_topic_analysis_routes_helpers.py
+uv run python scripts\scan_postgres_compat_debt.py
+uv run python -m unittest discover -s tests
+cmd.exe /d /c npm --prefix frontend run build
+git diff --check
+```
+
+Result:
+
+- Baseline stock-topic route helper tests passed before removing the imports: 10 tests passed.
+- Focused stock-topic route helper tests passed after the import cleanup: 10 tests passed.
+- `py_compile` passed.
+- `uv run python -m scripts.csv_chart_server --help` preserved the CLI help path.
+- `rg` returned no matches for the removed import names in the edited files.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Full backend unittest discovery passed: 795 tests passed, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+- `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
+
 ## Stop Conditions
 
 Pause before editing if:
