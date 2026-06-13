@@ -183,9 +183,19 @@ Verification:
 
 ## Progress Log
 
+### 2026-06-13 - Phase 1 Display Split Follow-Up
+
+- Added stock-table display separation for normalized industry concepts and signal tags.
+- Added selected-item related distribution:
+  - selected industry concept shows top related signal tags.
+  - selected signal tag shows top related industry concepts.
+- Kept the implementation display-layer only; no database schema or raw extraction rows changed.
+- Remaining Phase 1 work:
+  - add compact unmapped raw term counts.
+  - add a stronger manual browser smoke once Playwright browser binaries are available.
+
 ### 2026-06-13 - Initial Plan
 
 - Created this plan after the display-layer concept/signal split landed.
 - Current implementation keeps raw data intact and separates concept versus signal statistics in
   the frontend stock concept tab.
-

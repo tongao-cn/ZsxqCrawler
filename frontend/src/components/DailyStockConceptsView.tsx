@@ -43,6 +43,7 @@ interface DailyStockConceptsViewProps {
   selectedConcept: string | null;
   selectedConceptStat: ConceptStat | null;
   selectedConceptTrend: ConceptTrendItem | null;
+  selectedRelatedStats: ConceptStat[];
   signalStats: ConceptStat[];
   stockConcepts: DailyStockConceptResponse | null;
 }
@@ -134,6 +135,7 @@ export default function DailyStockConceptsView({
   selectedConcept,
   selectedConceptStat,
   selectedConceptTrend,
+  selectedRelatedStats,
   signalStats,
   stockConcepts,
 }: DailyStockConceptsViewProps) {
@@ -222,6 +224,7 @@ export default function DailyStockConceptsView({
                       onOpenTopicDetail={onOpenTopicDetail}
                       selectedConceptStat={selectedConceptStat}
                       selectedConceptTrend={selectedConceptTrend}
+                      selectedRelatedStats={selectedRelatedStats}
                     />
                   </div>
 

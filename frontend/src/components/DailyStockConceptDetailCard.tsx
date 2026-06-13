@@ -10,6 +10,7 @@ interface DailyStockConceptDetailCardProps {
   onOpenTopicDetail: (topicId: string | number) => void;
   selectedConceptStat: ConceptStat | null;
   selectedConceptTrend: ConceptTrendItem | null;
+  selectedRelatedStats: ConceptStat[];
 }
 
 export default function DailyStockConceptDetailCard({
@@ -18,6 +19,7 @@ export default function DailyStockConceptDetailCard({
   onOpenTopicDetail,
   selectedConceptStat,
   selectedConceptTrend,
+  selectedRelatedStats,
 }: DailyStockConceptDetailCardProps) {
   if (!selectedConceptStat) {
     return (
@@ -51,6 +53,23 @@ export default function DailyStockConceptDetailCard({
               <Badge key={`${selectedConceptStat.concept}-alias-${alias}`} variant="outline">
                 {alias}
               </Badge>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {selectedRelatedStats.length > 0 && (
+        <div>
+          <div className="mb-2 text-sm font-medium">关联分布</div>
+          <div className="grid gap-2 sm:grid-cols-2">
+            {selectedRelatedStats.map((item) => (
+              <div key={`${selectedConceptStat.concept}-related-${item.concept}`} className="rounded-md border border-gray-200 bg-gray-50 p-2">
+                <div className="truncate text-sm font-medium" title={item.concept}>{item.concept}</div>
+                <div className="mt-1 flex flex-wrap gap-1">
+                  <Badge variant="secondary">话题 {item.topicCount}</Badge>
+                  <Badge variant="outline">股 {item.stockCount}</Badge>
+                </div>
+              </div>
             ))}
           </div>
         </div>
