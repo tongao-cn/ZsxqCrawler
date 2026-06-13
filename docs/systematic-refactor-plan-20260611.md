@@ -12417,6 +12417,45 @@ Result:
 - PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-13 - P9 file downloader collect-all log helpers
+
+Changed:
+
+- Added `file_collection_*` helpers in `backend/crawlers/zsxq_file_downloader_helpers.py` for
+  collect-all stats initialization and visible collection log messages.
+- Reused the helpers in `ZSXQFileDownloader.collect_all_files_to_database()`.
+- Added direct helper coverage for initial stats, start/page/failure/empty/import/storage/
+  interruption/exception/completion messages.
+- Added collect-all success-path coverage for collection-log insert/update, import call,
+  fetch arguments, returned stats, and stdout text.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Collection-log insert/update order, commit count, page fetch arguments, import call payload,
+  per-page stats accumulation, empty-page/fetch-failure/storage-failure behavior, pagination
+  cursor handling, sleep side effects, stdout text, task/public APIs, storage schema, and config
+  semantics are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py backend\crawlers\zsxq_file_downloader_helpers.py tests\test_zsxq_file_downloader_helpers.py
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderPaginationTests.test_file_collection_helpers_preserve_messages_and_stats_defaults tests.test_zsxq_file_downloader_helpers.FileDownloaderPaginationTests.test_collect_all_files_preserves_success_import_log_and_collection_record tests.test_zsxq_file_downloader_helpers.FileDownloaderPaginationTests.test_collect_all_files_stops_when_page_import_fails -v
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers -v
+uv run python -m unittest discover -s tests
+uv run python scripts\scan_postgres_compat_debt.py
+npm --prefix frontend run build
+```
+
+Result:
+
+- Focused collect-all helper and integration tests passed.
+- Downloader helper tests passed: 129 tests.
+- Full backend unittest discovery passed: 839 tests, 15 skipped.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:

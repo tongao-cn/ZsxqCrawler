@@ -185,6 +185,69 @@ def file_list_next_index_message(next_index: Any) -> str:
     return "📭 没有更多文件"
 
 
+def file_collection_stats() -> Dict[str, int]:
+    return {"total_files": 0, "new_files": 0, "skipped_files": 0}
+
+
+def file_collection_start_message() -> str:
+    return "\n📊 开始收集文件列表到数据库..."
+
+
+def file_collection_page_message(page_count: int) -> str:
+    return f"\n📄 收集第{page_count}页文件列表..."
+
+
+def file_collection_fetch_failed_messages(page_count: int) -> tuple[str, str]:
+    return (
+        f"❌ 第{page_count}页获取失败，收集过程中断",
+        f"💾 已成功收集前{page_count-1}页的数据",
+    )
+
+
+def file_collection_empty_page_message() -> str:
+    return "📭 没有更多文件"
+
+
+def file_collection_page_files_message(file_count: int) -> str:
+    return f"   📋 当前页面: {file_count} 个文件"
+
+
+def file_collection_page_import_messages(page_stats: Dict[str, int]) -> tuple[str, str]:
+    return (
+        f"      ✅ 新增文件: {page_stats.get('files', 0)}",
+        (
+            f"      📊 其他数据: 话题+{page_stats.get('topics', 0)}, "
+            f"用户+{page_stats.get('users', 0)}"
+        ),
+    )
+
+
+def file_collection_storage_failed_message(page_count: int, exc: Exception) -> str:
+    return f"   ❌ 第{page_count}页存储失败: {exc}"
+
+
+def file_collection_page_stored_message(page_count: int) -> str:
+    return f"   ✅ 第{page_count}页存储完成"
+
+
+def file_collection_interrupted_message() -> str:
+    return "\n⏹️ 用户中断收集"
+
+
+def file_collection_exception_message(exc: Exception) -> str:
+    return f"\n❌ 收集过程异常: {exc}"
+
+
+def file_collection_completion_messages(stats: Dict[str, int], page_count: int) -> tuple[str, ...]:
+    return (
+        "\n🎉 文件列表收集完成:",
+        f"   📊 处理文件数: {stats['total_files']}",
+        f"   ✅ 新增文件: {stats['new_files']}",
+        f"   ⚠️ 跳过重复: {stats.get('skipped_files', 0)}",
+        f"   📄 收集页数: {page_count}",
+    )
+
+
 def api_failure_detail(data: Dict[str, Any]) -> tuple[Any, Any]:
     return data.get("message", data.get("error", "未知错误")), data.get("code", "N/A")
 

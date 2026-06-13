@@ -54,6 +54,18 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     download_url_api_failure_plan,
     empty_import_stats,
     existing_file_matches,
+    file_collection_completion_messages,
+    file_collection_empty_page_message,
+    file_collection_exception_message,
+    file_collection_fetch_failed_messages,
+    file_collection_interrupted_message,
+    file_collection_page_files_message,
+    file_collection_page_import_messages,
+    file_collection_page_message,
+    file_collection_page_stored_message,
+    file_collection_start_message,
+    file_collection_stats,
+    file_collection_storage_failed_message,
     file_list_item_display_lines,
     file_list_next_index_message,
     file_list_request_params,
@@ -119,6 +131,29 @@ class FailingImportFileDb:
     def get_database_stats(self):
         self.stats_calls += 1
         return {"files": 0}
+
+
+class CollectAllFileDb:
+    def __init__(self):
+        self.cursor = self
+        self.conn = self
+        self.executed = []
+        self.commits = 0
+        self.imported_responses = []
+
+    def execute(self, query, params=()):
+        self.executed.append((query, tuple(params)))
+        return self
+
+    def fetchone(self):
+        return (99,)
+
+    def commit(self):
+        self.commits += 1
+
+    def import_file_response(self, data):
+        self.imported_responses.append(data)
+        return {"files": 2, "topics": 3, "users": 4}
 
 
 class FakeDownloadFileDb:
@@ -265,12 +300,52 @@ class FileDownloaderPaginationTests(unittest.TestCase):
                 "succeeded": True,
                 "resp_data": {
                     "index": "next-index",
-                    "files": [{"file": {"file_id": 101, "create_time": "2026-02-01T10:00:00.000+0800"}}],
+                    "files": [
+                        {"file": {"file_id": 101, "create_time": "2026-02-01T10:00:00.000+0800"}}
+                    ],
                 },
             }
 
         downloader.fetch_file_list = fetch_file_list
         return downloader
+
+    def test_file_collection_helpers_preserve_messages_and_stats_defaults(self):
+        self.assertEqual(
+            {"total_files": 0, "new_files": 0, "skipped_files": 0},
+            file_collection_stats(),
+        )
+        self.assertEqual("\n📊 开始收集文件列表到数据库...", file_collection_start_message())
+        self.assertEqual("\n📄 收集第2页文件列表...", file_collection_page_message(2))
+        self.assertEqual(
+            ("❌ 第2页获取失败，收集过程中断", "💾 已成功收集前1页的数据"),
+            file_collection_fetch_failed_messages(2),
+        )
+        self.assertEqual("📭 没有更多文件", file_collection_empty_page_message())
+        self.assertEqual("   📋 当前页面: 3 个文件", file_collection_page_files_message(3))
+        self.assertEqual(
+            ("      ✅ 新增文件: 0", "      📊 其他数据: 话题+0, 用户+0"),
+            file_collection_page_import_messages({}),
+        )
+        self.assertEqual(
+            "   ❌ 第4页存储失败: stable import failure",
+            file_collection_storage_failed_message(4, RuntimeError("stable import failure")),
+        )
+        self.assertEqual("   ✅ 第4页存储完成", file_collection_page_stored_message(4))
+        self.assertEqual("\n⏹️ 用户中断收集", file_collection_interrupted_message())
+        self.assertEqual(
+            "\n❌ 收集过程异常: boom",
+            file_collection_exception_message(RuntimeError("boom")),
+        )
+        self.assertEqual(
+            (
+                "\n🎉 文件列表收集完成:",
+                "   📊 处理文件数: 2",
+                "   ✅ 新增文件: 1",
+                "   ⚠️ 跳过重复: 0",
+                "   📄 收集页数: 3",
+            ),
+            file_collection_completion_messages({"total_files": 2, "new_files": 1}, 3),
+        )
 
     def test_collect_all_files_stops_when_page_import_fails(self):
         downloader = self._downloader_with_failing_import()
@@ -280,6 +355,58 @@ class FileDownloaderPaginationTests(unittest.TestCase):
         self.assertEqual(1, len(downloader.fetch_calls))
         self.assertEqual(1, downloader.file_db.import_calls)
         self.assertEqual({"total_files": 0, "new_files": 0, "skipped_files": 0}, stats)
+
+    def test_collect_all_files_preserves_success_import_log_and_collection_record(self):
+        page = {
+            "resp_data": {
+                "index": None,
+                "files": [
+                    {
+                        "file": {
+                            "file_id": 101,
+                            "create_time": "2026-02-01T10:00:00.000+0800",
+                        }
+                    },
+                    {
+                        "file": {
+                            "file_id": 102,
+                            "create_time": "2026-02-02T10:00:00.000+0800",
+                        }
+                    },
+                ],
+            }
+        }
+        downloader = object.__new__(ZSXQFileDownloader)
+        downloader.file_db = CollectAllFileDb()
+        downloader.fetch_calls = []
+
+        def fetch_file_list(**kwargs):
+            downloader.fetch_calls.append(kwargs)
+            return page
+
+        downloader.fetch_file_list = fetch_file_list
+
+        with contextlib.redirect_stdout(io.StringIO()) as output:
+            stats = ZSXQFileDownloader.collect_all_files_to_database(downloader)
+
+        self.assertEqual({"total_files": 2, "new_files": 2, "skipped_files": 0}, stats)
+        self.assertEqual([{"count": 20, "index": None}], downloader.fetch_calls)
+        self.assertEqual([page], downloader.file_db.imported_responses)
+        self.assertEqual(2, downloader.file_db.commits)
+        self.assertIn("INSERT INTO collection_log", downloader.file_db.executed[0][0])
+        update_query, update_params = downloader.file_db.executed[-1]
+        self.assertIn("UPDATE collection_log SET", update_query)
+        self.assertEqual(2, update_params[1])
+        self.assertEqual(2, update_params[2])
+        self.assertEqual(99, update_params[3])
+        printed = output.getvalue()
+        self.assertIn("📊 开始收集文件列表到数据库", printed)
+        self.assertIn("📄 收集第1页文件列表", printed)
+        self.assertIn("   📋 当前页面: 2 个文件", printed)
+        self.assertIn("      ✅ 新增文件: 2", printed)
+        self.assertIn("      📊 其他数据: 话题+3, 用户+4", printed)
+        self.assertIn("   ✅ 第1页存储完成", printed)
+        self.assertIn("🎉 文件列表收集完成", printed)
 
     def test_collect_files_by_time_stops_when_page_import_fails(self):
         downloader = self._downloader_with_failing_import()

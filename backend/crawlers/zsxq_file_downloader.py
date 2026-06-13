@@ -64,6 +64,18 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     download_url_success_plan,
     empty_import_stats,
     existing_file_matches,
+    file_collection_completion_messages,
+    file_collection_empty_page_message,
+    file_collection_exception_message,
+    file_collection_fetch_failed_messages,
+    file_collection_interrupted_message,
+    file_collection_page_files_message,
+    file_collection_page_import_messages,
+    file_collection_page_message,
+    file_collection_page_stored_message,
+    file_collection_start_message,
+    file_collection_stats,
+    file_collection_storage_failed_message,
     file_list_item_display_lines,
     file_list_next_index_message,
     file_list_request_params,
@@ -1125,7 +1137,7 @@ class ZSXQFileDownloader:
     
     def collect_all_files_to_database(self) -> Dict[str, int]:
         """收集所有文件信息到数据库"""
-        print(f"\n📊 开始收集文件列表到数据库...")
+        print(file_collection_start_message())
         
         # 创建收集记录
         self.file_db.cursor.execute(
@@ -1136,29 +1148,29 @@ class ZSXQFileDownloader:
         log_id = row[0] if row else None
         self.file_db.conn.commit()
         
-        stats = {'total_files': 0, 'new_files': 0, 'skipped_files': 0}
+        stats = file_collection_stats()
         current_index = None
         page_count = 0
         
         try:
             while True:
                 page_count += 1
-                print(f"\n📄 收集第{page_count}页文件列表...")
+                print(file_collection_page_message(page_count))
                 
                 # 获取文件列表
                 data = self.fetch_file_list(count=20, index=current_index)
                 if not data:
-                    print(f"❌ 第{page_count}页获取失败，收集过程中断")
-                    print(f"💾 已成功收集前{page_count-1}页的数据")
+                    for message in file_collection_fetch_failed_messages(page_count):
+                        print(message)
                     break
                 
                 files, next_index = file_list_response_page(data)
                 
                 if not files:
-                    print("📭 没有更多文件")
+                    print(file_collection_empty_page_message())
                     break
                 
-                print(f"   📋 当前页面: {len(files)} 个文件")
+                print(file_collection_page_files_message(len(files)))
                 
                 # 使用完整数据库导入整个API响应
                 try:
@@ -1167,14 +1179,14 @@ class ZSXQFileDownloader:
                     stats['new_files'] += page_stats.get('files', 0)
                     stats['total_files'] += len(files)
                     
-                    print(f"      ✅ 新增文件: {page_stats.get('files', 0)}")
-                    print(f"      📊 其他数据: 话题+{page_stats.get('topics', 0)}, 用户+{page_stats.get('users', 0)}")
+                    for message in file_collection_page_import_messages(page_stats):
+                        print(message)
                     
                 except Exception as e:
-                    print(f"   ❌ 第{page_count}页存储失败: {e}")
+                    print(file_collection_storage_failed_message(page_count, e))
                     break
                 
-                print(f"   ✅ 第{page_count}页存储完成")
+                print(file_collection_page_stored_message(page_count))
                 
                 # 准备下一页
                 if next_index:
@@ -1185,9 +1197,9 @@ class ZSXQFileDownloader:
                     break
                     
         except KeyboardInterrupt:
-            print(f"\n⏹️ 用户中断收集")
+            print(file_collection_interrupted_message())
         except Exception as e:
-            print(f"\n❌ 收集过程异常: {e}")
+            print(file_collection_exception_message(e))
         
         # 更新收集记录
         self.file_db.cursor.execute('''
@@ -1198,11 +1210,8 @@ class ZSXQFileDownloader:
               stats['new_files'], log_id))
         self.file_db.conn.commit()
         
-        print(f"\n🎉 文件列表收集完成:")
-        print(f"   📊 处理文件数: {stats['total_files']}")
-        print(f"   ✅ 新增文件: {stats['new_files']}")
-        print(f"   ⚠️ 跳过重复: {stats.get('skipped_files', 0)}")
-        print(f"   📄 收集页数: {page_count}")
+        for message in file_collection_completion_messages(stats, page_count):
+            print(message)
         
         return stats
     
