@@ -160,6 +160,20 @@ class AShareRoutesHelperTests(unittest.TestCase):
         update_task.assert_not_called()
 
     @unittest.skipUnless(HAS_A_SHARE_ROUTE_DEPS, "a-share route dependencies are not installed")
+    def test_complete_a_share_analysis_task_preserves_status_result_and_log(self):
+        from backend.routes.a_share_routes import _complete_a_share_analysis_task
+
+        result = {"processed": 3}
+        with (
+            patch("backend.routes.a_share_routes.update_task") as update_task,
+            patch("backend.routes.a_share_routes.add_task_log") as add_task_log,
+        ):
+            _complete_a_share_analysis_task("task-a-share", result)
+
+        update_task.assert_called_once_with("task-a-share", "completed", "A股公司分析完成", result)
+        add_task_log.assert_called_once_with("task-a-share", "✅ A股公司分析完成")
+
+    @unittest.skipUnless(HAS_A_SHARE_ROUTE_DEPS, "a-share route dependencies are not installed")
     def test_normalize_group_scope_keeps_existing_labels(self):
         from backend.routes.a_share_routes import _normalize_group_scope
 

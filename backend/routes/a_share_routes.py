@@ -189,6 +189,11 @@ def _fail_a_share_analysis_task(task_id: str, error: Exception) -> None:
         pass
 
 
+def _complete_a_share_analysis_task(task_id: str, result: dict) -> None:
+    update_task(task_id, "completed", "A股公司分析完成", result)
+    add_task_log(task_id, "✅ A股公司分析完成")
+
+
 def run_a_share_analysis_task(task_id: str, request: AShareAnalysisRunRequest):
     """后台执行A股公司提及分析任务"""
     try:
@@ -207,8 +212,7 @@ def run_a_share_analysis_task(task_id: str, request: AShareAnalysisRunRequest):
 
         result = _run_a_share_analysis_for_task(task_id, normalized_group_id, request)
 
-        update_task(task_id, "completed", "A股公司分析完成", result)
-        add_task_log(task_id, "✅ A股公司分析完成")
+        _complete_a_share_analysis_task(task_id, result)
     except Exception as e:
         _fail_a_share_analysis_task(task_id, e)
 

@@ -13654,6 +13654,41 @@ Result:
 - PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-13 - P5 A-share completion helper
+
+Changed:
+
+- Added `_complete_a_share_analysis_task()` in `backend.routes.a_share_routes`.
+- Reused it from `run_a_share_analysis_task()` for the successful terminal task update and completion log.
+- Added route helper coverage for the current completed status, message, result payload, and completion log text.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- A-share successful task completion still updates the task to `completed` with message `A股公司分析完成`,
+  preserves the exact result payload, and then logs `✅ A股公司分析完成`.
+- OpenAI API key preflight, initial stopped check, running/failure handling, service-call arguments,
+  task/public APIs, storage schema, fallback/legacy behavior, and config semantics are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m py_compile backend\routes\a_share_routes.py tests\test_a_share_routes_helpers.py
+uv run python -m unittest tests.test_a_share_routes_helpers.AShareRoutesHelperTests.test_complete_a_share_analysis_task_preserves_status_result_and_log -v
+uv run python -m unittest tests.test_a_share_routes_helpers tests.test_a_share_analysis_service_helpers tests.test_a_share_analysis_db_storage_helpers -v
+uv run python -m unittest discover -s tests
+uv run python scripts\scan_postgres_compat_debt.py
+npm --prefix frontend run build
+```
+
+Result:
+
+- Focused A-share completion helper test passed.
+- Related A-share route/service/storage tests passed: 56 tests.
+- Full backend unittest discovery passed: 895 tests, 15 skipped.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:
