@@ -40,6 +40,8 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     database_download_start_messages,
     database_download_time_range_message,
     database_stats_table_emoji,
+    database_time_range_query,
+    database_time_range_result,
     date_range_collection_start_messages,
     download_exception_detail,
     download_expected_size,
@@ -180,6 +182,28 @@ class QueryCaptureFileDb:
 
     def fetchall(self):
         return list(self.rows)
+
+
+class DatabaseTimeRangeFileDb:
+    def __init__(self, stats, row=None):
+        self.cursor = self
+        self.stats = dict(stats)
+        self.row = row
+        self.executed = []
+        self.stats_calls = 0
+        self.fetchone_calls = 0
+
+    def get_database_stats(self):
+        self.stats_calls += 1
+        return dict(self.stats)
+
+    def execute(self, query, params=()):
+        self.executed.append((query, tuple(params)))
+        return self
+
+    def fetchone(self):
+        self.fetchone_calls += 1
+        return self.row
 
 
 class TimeDedupeFileDb:
@@ -466,6 +490,64 @@ class FileDownloaderPaginationTests(unittest.TestCase):
         uniform.assert_called_once_with(2, 5)
         sleep.assert_called_once_with(2.5)
         self.assertEqual({"total_files": 2, "new_files": 4, "skipped_files": 0}, stats)
+
+    def test_get_database_time_range_preserves_empty_database_without_query(self):
+        downloader = object.__new__(ZSXQFileDownloader)
+        downloader.group_id = "511"
+        downloader.file_db = DatabaseTimeRangeFileDb({"files": 0})
+
+        result = ZSXQFileDownloader.get_database_time_range(downloader)
+
+        self.assertEqual({"has_data": False, "total_files": 0}, result)
+        self.assertEqual(1, downloader.file_db.stats_calls)
+        self.assertEqual([], downloader.file_db.executed)
+        self.assertEqual(0, downloader.file_db.fetchone_calls)
+
+    def test_get_database_time_range_preserves_query_params_and_result_shape(self):
+        downloader = object.__new__(ZSXQFileDownloader)
+        downloader.group_id = "511"
+        downloader.file_db = DatabaseTimeRangeFileDb(
+            {"files": 10},
+            ("2026-01-01T00:00:00", "2026-02-01T00:00:00", 7),
+        )
+
+        result = ZSXQFileDownloader.get_database_time_range(downloader)
+
+        self.assertEqual(
+            {
+                "has_data": True,
+                "total_files": 10,
+                "oldest_time": "2026-01-01T00:00:00",
+                "newest_time": "2026-02-01T00:00:00",
+                "time_based_count": 7,
+            },
+            result,
+        )
+        query, params = downloader.file_db.executed[0]
+        self.assertIn("SELECT MIN(create_time) as oldest_time", query)
+        self.assertIn("COUNT(*) as total_count", query)
+        self.assertIn("group_id = ?", query)
+        self.assertIn("create_time IS NOT NULL AND create_time != ''", query)
+        self.assertEqual((511,), params)
+        self.assertEqual(1, downloader.file_db.fetchone_calls)
+
+    def test_get_database_time_range_preserves_missing_row_defaults(self):
+        downloader = object.__new__(ZSXQFileDownloader)
+        downloader.group_id = "511"
+        downloader.file_db = DatabaseTimeRangeFileDb({"files": 5}, None)
+
+        result = ZSXQFileDownloader.get_database_time_range(downloader)
+
+        self.assertEqual(
+            {
+                "has_data": True,
+                "total_files": 5,
+                "oldest_time": None,
+                "newest_time": None,
+                "time_based_count": 0,
+            },
+            result,
+        )
 
     def test_collect_files_by_time_stops_when_page_import_fails(self):
         downloader = self._downloader_with_failing_import()
@@ -1182,6 +1264,40 @@ class FileDownloaderTimeHelperTests(unittest.TestCase):
         self.assertIn("group_id = ?", query)
         self.assertIn("create_time IS NOT NULL AND create_time != ''", query)
         self.assertEqual((511,), params)
+
+    def test_database_time_range_helpers_preserve_query_and_result_defaults(self):
+        query, params = database_time_range_query(511)
+
+        self.assertIn("SELECT MIN(create_time) as oldest_time", query)
+        self.assertIn("MAX(create_time) as newest_time", query)
+        self.assertIn("COUNT(*) as total_count", query)
+        self.assertIn("group_id = ?", query)
+        self.assertIn("create_time IS NOT NULL AND create_time != ''", query)
+        self.assertEqual((511,), params)
+        self.assertEqual(
+            {"has_data": False, "total_files": 0},
+            database_time_range_result(0, ("old", "new", 2)),
+        )
+        self.assertEqual(
+            {
+                "has_data": True,
+                "total_files": 5,
+                "oldest_time": None,
+                "newest_time": None,
+                "time_based_count": 0,
+            },
+            database_time_range_result(5, None),
+        )
+        self.assertEqual(
+            {
+                "has_data": True,
+                "total_files": 5,
+                "oldest_time": "old",
+                "newest_time": "new",
+                "time_based_count": 2,
+            },
+            database_time_range_result(5, ("old", "new", 2)),
+        )
 
     def test_time_collection_mode_preserves_dedupe_and_force_refresh_rules(self):
         default_mode = time_collection_mode("by_create_time", False, None)

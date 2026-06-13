@@ -12531,6 +12531,44 @@ Result:
 - PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-13 - P9 file downloader database time-range helpers
+
+Changed:
+
+- Added `database_time_range_query()` and `database_time_range_result()` in
+  `backend/crawlers/zsxq_file_downloader_helpers.py`.
+- Reused them in `ZSXQFileDownloader.get_database_time_range()`.
+- Added direct helper coverage for SQL shape, parameter order, empty-database return, missing-row
+  defaults, and populated result shape.
+- Added method-level coverage for the empty-database no-query path, non-empty query parameters,
+  group-id normalization, fetched row mapping, and missing-row defaults.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Stats lookup order, empty-database short-circuiting, SQL predicates and aliases, query
+  parameters, group-id conversion, fetched row handling, result keys/defaults, task/public APIs,
+  storage schema, and config semantics are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py backend\crawlers\zsxq_file_downloader_helpers.py tests\test_zsxq_file_downloader_helpers.py
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderPaginationTests.test_get_database_time_range_preserves_empty_database_without_query tests.test_zsxq_file_downloader_helpers.FileDownloaderPaginationTests.test_get_database_time_range_preserves_query_params_and_result_shape tests.test_zsxq_file_downloader_helpers.FileDownloaderPaginationTests.test_get_database_time_range_preserves_missing_row_defaults tests.test_zsxq_file_downloader_helpers.FileDownloaderTimeHelperTests.test_database_time_range_helpers_preserve_query_and_result_defaults -v
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers -v
+uv run python -m unittest discover -s tests
+uv run python scripts\scan_postgres_compat_debt.py
+npm --prefix frontend run build
+```
+
+Result:
+
+- Focused database time-range helper and integration tests passed.
+- Downloader helper tests passed: 134 tests.
+- Full backend unittest discovery passed: 844 tests, 15 skipped.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:

@@ -543,6 +543,32 @@ def incremental_start_index(oldest_time: Any) -> str:
     return str(timestamp_ms)
 
 
+def database_time_range_query(query_group_id: Any) -> tuple[str, tuple[Any, ...]]:
+    return (
+        '''
+            SELECT MIN(create_time) as oldest_time,
+                   MAX(create_time) as newest_time,
+                   COUNT(*) as total_count
+            FROM files
+            WHERE group_id = ?
+              AND create_time IS NOT NULL AND create_time != ''
+        ''',
+        (query_group_id,),
+    )
+
+
+def database_time_range_result(total_files: Any, result: Any) -> Dict[str, Any]:
+    if total_files == 0:
+        return {"has_data": False, "total_files": 0}
+    return {
+        "has_data": True,
+        "total_files": total_files,
+        "oldest_time": result[0] if result else None,
+        "newest_time": result[1] if result else None,
+        "time_based_count": result[2] if result else 0,
+    }
+
+
 def latest_file_create_time_query(query_group_id: Any) -> tuple[str, tuple[Any, ...]]:
     return (
         '''
