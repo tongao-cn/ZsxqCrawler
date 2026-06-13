@@ -24,6 +24,7 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     API_FAILURE_RETRY,
     HTTP_FAILURE_NON_RETRY,
     HTTP_FAILURE_RETRY,
+    add_file_collection_page_stats,
     api_failure_detail,
     add_import_stats,
     batch_download_completion_messages,
@@ -69,6 +70,8 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     file_collection_exception_message,
     file_collection_fetch_failed_messages,
     file_collection_interrupted_message,
+    file_collection_log_insert_query,
+    file_collection_log_update_query,
     file_collection_next_page_plan,
     file_collection_page_files_message,
     file_collection_page_import_messages,
@@ -1141,10 +1144,10 @@ class ZSXQFileDownloader:
         print(file_collection_start_message())
         
         # 创建收集记录
-        self.file_db.cursor.execute(
-            "INSERT INTO collection_log (start_time) VALUES (?) RETURNING id",
-            (datetime.datetime.now().isoformat(),),
+        insert_query, insert_params = file_collection_log_insert_query(
+            datetime.datetime.now().isoformat()
         )
+        self.file_db.cursor.execute(insert_query, insert_params)
         row = self.file_db.cursor.fetchone()
         log_id = row[0] if row else None
         self.file_db.conn.commit()
@@ -1177,8 +1180,7 @@ class ZSXQFileDownloader:
                 try:
                     page_stats = self.file_db.import_file_response(data)
                     
-                    stats['new_files'] += page_stats.get('files', 0)
-                    stats['total_files'] += len(files)
+                    add_file_collection_page_stats(stats, len(files), page_stats)
                     
                     for message in file_collection_page_import_messages(page_stats):
                         print(message)
@@ -1203,12 +1205,12 @@ class ZSXQFileDownloader:
             print(file_collection_exception_message(e))
         
         # 更新收集记录
-        self.file_db.cursor.execute('''
-            UPDATE collection_log SET 
-                end_time = ?, total_files = ?, new_files = ?, status = 'completed'
-            WHERE id = ?
-        ''', (datetime.datetime.now().isoformat(), stats['total_files'], 
-              stats['new_files'], log_id))
+        update_query, update_params = file_collection_log_update_query(
+            datetime.datetime.now().isoformat(),
+            stats,
+            log_id,
+        )
+        self.file_db.cursor.execute(update_query, update_params)
         self.file_db.conn.commit()
         
         for message in file_collection_completion_messages(stats, page_count):

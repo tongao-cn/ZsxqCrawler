@@ -17,6 +17,7 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     HTTP_FAILURE_NON_RETRY,
     HTTP_FAILURE_RETRY,
     HTTP_FAILURE_RETRY_EXHAUSTED,
+    add_file_collection_page_stats,
     add_import_stats,
     api_failure_detail,
     batch_download_completion_messages,
@@ -59,6 +60,8 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     file_collection_exception_message,
     file_collection_fetch_failed_messages,
     file_collection_interrupted_message,
+    file_collection_log_insert_query,
+    file_collection_log_update_query,
     file_collection_next_page_plan,
     file_collection_page_files_message,
     file_collection_page_import_messages,
@@ -315,6 +318,23 @@ class FileDownloaderPaginationTests(unittest.TestCase):
             {"total_files": 0, "new_files": 0, "skipped_files": 0},
             file_collection_stats(),
         )
+        stats = file_collection_stats()
+        add_file_collection_page_stats(stats, 3, {})
+        self.assertEqual({"total_files": 3, "new_files": 0, "skipped_files": 0}, stats)
+        add_file_collection_page_stats(stats, 1, {"files": 2})
+        self.assertEqual({"total_files": 4, "new_files": 2, "skipped_files": 0}, stats)
+        self.assertEqual(
+            ("INSERT INTO collection_log (start_time) VALUES (?) RETURNING id", ("start",)),
+            file_collection_log_insert_query("start"),
+        )
+        update_query, update_params = file_collection_log_update_query(
+            "end",
+            {"total_files": 4, "new_files": 2, "skipped_files": 0},
+            99,
+        )
+        self.assertIn("UPDATE collection_log SET", update_query)
+        self.assertIn("status = 'completed'", update_query)
+        self.assertEqual(("end", 4, 2, 99), update_params)
         self.assertEqual(
             {"has_next": True, "next_index": "next-index", "delay_min": 2, "delay_max": 5},
             file_collection_next_page_plan("next-index"),

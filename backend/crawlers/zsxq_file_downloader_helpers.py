@@ -189,6 +189,34 @@ def file_collection_stats() -> Dict[str, int]:
     return {"total_files": 0, "new_files": 0, "skipped_files": 0}
 
 
+def add_file_collection_page_stats(
+    stats: Dict[str, int],
+    file_count: int,
+    page_stats: Dict[str, int],
+) -> None:
+    stats["new_files"] += page_stats.get("files", 0)
+    stats["total_files"] += file_count
+
+
+def file_collection_log_insert_query(start_time: str) -> tuple[str, tuple[str]]:
+    return "INSERT INTO collection_log (start_time) VALUES (?) RETURNING id", (start_time,)
+
+
+def file_collection_log_update_query(
+    end_time: str,
+    stats: Dict[str, int],
+    log_id: Any,
+) -> tuple[str, tuple[Any, ...]]:
+    return (
+        '''
+            UPDATE collection_log SET
+                end_time = ?, total_files = ?, new_files = ?, status = 'completed'
+            WHERE id = ?
+        ''',
+        (end_time, stats["total_files"], stats["new_files"], log_id),
+    )
+
+
 def file_collection_next_page_plan(next_index: Any) -> Dict[str, Any]:
     if next_index:
         return {
