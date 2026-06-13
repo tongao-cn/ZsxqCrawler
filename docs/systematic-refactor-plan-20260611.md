@@ -11021,6 +11021,47 @@ Result:
 - Full backend unittest discovery passed: 804 tests passed, 15 skipped.
 - `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warning.
 
+### 2026-06-13 - P6 stock analysis status badge extraction
+
+Changed:
+
+- Added `frontend/src/components/StockTopicAnalysisStatusBadge.tsx` for the stock-topic analysis
+  status label and Badge rendering logic.
+- Removed duplicate status label/Badge branches from `StockTopicAnalysisPanel` and
+  `StockTopicAnalysisResultDialog`.
+- Reused the shared status Badge component from both the batch results table render prop and the
+  result detail dialog.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Status branch ordering, Chinese labels, dynamic "有 N 条待处理话题" text, Badge variants, and
+  color classes are preserved.
+- No public API, route behavior, task behavior, backend path, storage schema, fallback path,
+  legacy path, or dependency semantics changed.
+
+Verification:
+
+```powershell
+rg -n "function getStatusLabel\(result: StockTopicAnalysisResponse\)|function getStatusBadge\(result: StockTopicAnalysisResponse\)" frontend\src\components --glob "!node_modules/**"
+npm --prefix frontend run build
+npm exec -- tsc -p tsconfig.json --noEmit --noUnusedLocals --pretty false  # from frontend/
+uv run python scripts\scan_postgres_compat_debt.py
+uv run python -m unittest discover -s tests
+git diff --check
+```
+
+Result:
+
+- Duplicate stock-topic analysis status helper search found no remaining local duplicate functions.
+- Frontend build passed, including Next.js lint/type checks.
+- Standalone TypeScript unused-local check passed when run after the build completed. An earlier
+  parallel `tsc` probe raced with `next build` while `.next/types` was being rebuilt, so it was
+  rerun serially.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Full backend unittest discovery passed: 804 tests passed, 15 skipped.
+- `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
+
 ## Stop Conditions
 
 Pause before editing if:
