@@ -112,6 +112,36 @@ class StockTopicAnalysisRoutesHelperTests(unittest.IsolatedAsyncioTestCase):
         )
 
     @unittest.skipUnless(HAS_ROUTE_DEPS, "stock topic analysis route dependencies are not installed")
+    async def test_run_stock_question_task_uses_runtime_workflow_lifecycle(self):
+        from backend.routes.stock_topic_analysis_routes import StockQuestionRequest, run_stock_question_task
+
+        request = StockQuestionRequest(question="固态电池怎么看")
+        with (
+            patch("backend.routes.stock_topic_analysis_routes.run_workflow") as run_workflow,
+            patch(
+                "backend.routes.stock_topic_analysis_routes.answer_stock_question",
+                return_value={"answer": "ok"},
+            ) as answer_stock_question,
+            patch("backend.routes.stock_topic_analysis_routes.add_task_log") as add_task_log,
+        ):
+            run_stock_question_task("task-qa", "51111112855254", request)
+
+            run_workflow.assert_called_once()
+            args, kwargs = run_workflow.call_args
+            self.assertEqual(("task-qa",), args)
+            self.assertEqual("开始A股问答分析...", kwargs["running_message"])
+            self.assertEqual("A股问答分析完成", kwargs["completed_message"])
+            self.assertEqual("A股问答", kwargs["failure_label"])
+
+            result = kwargs["work"]()
+            self.assertEqual({"answer": "ok"}, result)
+            add_task_log.assert_called_once_with("task-qa", "❓ 问题: 固态电池怎么看")
+            answer_stock_question.assert_called_once()
+            call_args, call_kwargs = answer_stock_question.call_args
+            self.assertEqual(("51111112855254", "固态电池怎么看"), call_args)
+            self.assertTrue(callable(call_kwargs["log_callback"]))
+
+    @unittest.skipUnless(HAS_ROUTE_DEPS, "stock topic analysis route dependencies are not installed")
     async def test_create_stock_topic_analysis_enqueues_runtime_task(self):
         from backend.routes.stock_topic_analysis_routes import (
             StockTopicAnalysisRequest,

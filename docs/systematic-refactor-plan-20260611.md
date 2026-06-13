@@ -13221,6 +13221,50 @@ Result:
 - PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-13 - P5 stock question workflow lifecycle reuse
+
+Changed:
+
+- Reused `backend.services.task_runtime.run_workflow()` in
+  `backend.routes.stock_topic_analysis_routes.run_stock_question_task()`.
+- Kept stock topic single/batch runners outside this slice; batch completion message still depends
+  on result summary and should be migrated separately only with dedicated coverage.
+- Removed `_fail_stock_question_task_unless_stopped()` after repository search showed it had no
+  remaining references.
+- Added route wiring coverage for A-share question workflow messages, failure label, question log,
+  result callback, `answer_stock_question()` arguments, and log callback creation.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- A-share question task running/completed messages, failure message text, initial/post-work stop
+  checks, question log text, `answer_stock_question()` arguments, task creation response,
+  route behavior, task/public APIs, storage schema, fallback/legacy behavior, and config semantics
+  are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m py_compile backend\routes\stock_topic_analysis_routes.py tests\test_stock_topic_analysis_routes_helpers.py
+uv run python -m unittest tests.test_stock_topic_analysis_routes_helpers.StockTopicAnalysisRoutesHelperTests.test_run_stock_question_task_uses_runtime_workflow_lifecycle -v
+uv run python -m unittest tests.test_stock_topic_analysis_routes_helpers -v
+uv run python -m unittest tests.test_task_runtime_helpers tests.test_stock_topic_analysis_routes_helpers -v
+uv run python -m unittest discover -s tests
+uv run python scripts\scan_postgres_compat_debt.py
+npm --prefix frontend run build
+rg -n "_fail_stock_question_task_unless_stopped|run_stock_question_task|run_workflow" backend\routes\stock_topic_analysis_routes.py tests\test_stock_topic_analysis_routes_helpers.py
+```
+
+Result:
+
+- Focused stock question workflow wiring test passed.
+- Stock topic analysis route helper tests passed: 11 tests.
+- Related runtime/stock route helper tests passed: 53 tests.
+- Full backend unittest discovery passed: 881 tests, 15 skipped.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Frontend build passed, including Next.js lint/type checks.
+- Search confirmed the removed stock-question failure helper has no remaining references.
+
 ## Stop Conditions
 
 Pause before editing if:

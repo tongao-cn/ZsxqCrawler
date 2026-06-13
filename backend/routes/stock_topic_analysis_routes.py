@@ -17,7 +17,14 @@ from backend.services.stock_topic_analysis_service import (
     search_stock_question_topics,
     search_stock_topics,
 )
-from backend.services.task_runtime import add_task_log, create_task, enqueue_runtime_task, is_task_stopped, update_task
+from backend.services.task_runtime import (
+    add_task_log,
+    create_task,
+    enqueue_runtime_task,
+    is_task_stopped,
+    run_workflow,
+    update_task,
+)
 
 
 router = APIRouter(prefix="/api/analysis/stock-topics", tags=["stock-topic-analysis"])
@@ -60,14 +67,6 @@ def _fail_stock_topic_task_unless_stopped(task_id: str, error: Exception) -> Non
     update_task(task_id, "failed", message)
 
 
-def _fail_stock_question_task_unless_stopped(task_id: str, error: Exception) -> None:
-    if is_task_stopped(task_id):
-        return
-    message = f"A股问答失败: {str(error)}"
-    add_task_log(task_id, f"❌ {message}")
-    update_task(task_id, "failed", message)
-
-
 def _create_stock_task_response(
     task_type: str,
     description: str,
@@ -100,21 +99,18 @@ def run_stock_topic_analysis_task(task_id: str, group_id: str, request: StockTop
 
 
 def run_stock_question_task(task_id: str, group_id: str, request: StockQuestionRequest) -> None:
-    try:
-        if is_task_stopped(task_id):
-            return
-
+    def work() -> dict:
         log_callback = _build_stock_topic_log_callback(task_id)
-        update_task(task_id, "running", "开始A股问答分析...")
         log_callback(f"❓ 问题: {request.question}")
-        result = answer_stock_question(group_id, request.question, log_callback=log_callback)
+        return answer_stock_question(group_id, request.question, log_callback=log_callback)
 
-        if is_task_stopped(task_id):
-            return
-
-        update_task(task_id, "completed", "A股问答分析完成", result)
-    except Exception as exc:
-        _fail_stock_question_task_unless_stopped(task_id, exc)
+    run_workflow(
+        task_id,
+        running_message="开始A股问答分析...",
+        completed_message="A股问答分析完成",
+        failure_label="A股问答",
+        work=work,
+    )
 
 
 def run_stock_topic_analysis_batch_task(task_id: str, group_id: str, request: StockTopicAnalysisBatchRequest) -> None:
