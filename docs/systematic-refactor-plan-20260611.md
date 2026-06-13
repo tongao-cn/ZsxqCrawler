@@ -12228,6 +12228,45 @@ Result:
 - PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-13 - P9 file downloader batch next-page plan helper
+
+Changed:
+
+- Added `batch_download_next_page_plan()` in
+  `backend/crawlers/zsxq_file_downloader_helpers.py`.
+- Reused the helper in `ZSXQFileDownloader.download_files_batch()` for next-page continuation,
+  logging, index assignment, and the fixed 2-second page delay.
+- Added direct helper coverage for truthy/falsy `next_index`, max-file limit behavior, and
+  unlimited-download behavior.
+- Added batch integration coverage for second-page fetch parameters, next-page log, and sleep
+  duration.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- `next_index` truthiness, max-file continuation condition, page fetch order, page sleep duration,
+  per-file download payloads, returned stats payload, task/public APIs, storage schema, and config
+  semantics are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py backend\crawlers\zsxq_file_downloader_helpers.py tests\test_zsxq_file_downloader_helpers.py
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderBatchDownloadTests.test_batch_download_next_page_plan_preserves_truthiness_limit_and_delay tests.test_zsxq_file_downloader_helpers.FileDownloaderBatchDownloadTests.test_download_files_batch_preserves_next_page_sleep_and_fetch_index tests.test_zsxq_file_downloader_helpers.FileDownloaderBatchDownloadTests.test_download_files_batch_preserves_result_stats_payloads_and_delays -v
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers -v
+uv run python -m unittest discover -s tests
+uv run python scripts\scan_postgres_compat_debt.py
+npm --prefix frontend run build
+```
+
+Result:
+
+- Focused batch next-page helper and batch download integration tests passed.
+- Downloader helper tests passed: 121 tests.
+- Full backend unittest discovery passed: 831 tests, 15 skipped.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:

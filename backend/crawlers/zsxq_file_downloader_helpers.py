@@ -635,6 +635,27 @@ def batch_download_skipped_message() -> str:
     return "   ⚠️ 文件已跳过，继续下一个"
 
 
+def batch_download_next_page_plan(
+    next_index: Any,
+    downloaded_in_batch: int,
+    max_files: Optional[int],
+) -> Dict[str, Any]:
+    should_continue = max_files is None or downloaded_in_batch < max_files
+    if next_index and should_continue:
+        return {
+            "should_continue": True,
+            "next_index": next_index,
+            "message": f"📄 准备获取下一页: {next_index}",
+            "delay": 2,
+        }
+    return {
+        "should_continue": False,
+        "next_index": None,
+        "message": None,
+        "delay": None,
+    }
+
+
 def batch_download_completion_messages(stats: Dict[str, int]) -> tuple[str, ...]:
     return _download_completion_messages("🎉 批量下载完成:", stats)
 

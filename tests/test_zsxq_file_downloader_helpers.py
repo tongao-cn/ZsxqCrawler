@@ -21,6 +21,7 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     api_failure_detail,
     batch_download_completion_messages,
     batch_download_item_message,
+    batch_download_next_page_plan,
     batch_download_skipped_message,
     batch_download_start_messages,
     classify_api_failure,
@@ -428,6 +429,44 @@ class FileDownloaderBatchDownloadTests(unittest.TestCase):
             batch_download_skipped_message(),
         )
 
+    def test_batch_download_next_page_plan_preserves_truthiness_limit_and_delay(self):
+        self.assertEqual(
+            {
+                "should_continue": True,
+                "next_index": "next-page",
+                "message": "📄 准备获取下一页: next-page",
+                "delay": 2,
+            },
+            batch_download_next_page_plan("next-page", 1, 2),
+        )
+        self.assertEqual(
+            {
+                "should_continue": True,
+                "next_index": "next-page",
+                "message": "📄 准备获取下一页: next-page",
+                "delay": 2,
+            },
+            batch_download_next_page_plan("next-page", 99, None),
+        )
+        self.assertEqual(
+            {
+                "should_continue": False,
+                "next_index": None,
+                "message": None,
+                "delay": None,
+            },
+            batch_download_next_page_plan("next-page", 2, 2),
+        )
+        self.assertEqual(
+            {
+                "should_continue": False,
+                "next_index": None,
+                "message": None,
+                "delay": None,
+            },
+            batch_download_next_page_plan("", 1, None),
+        )
+
     def test_download_files_batch_preserves_result_stats_payloads_and_delays(self):
         files = [
             {"file": {"id": 101, "name": "skip.pdf"}},
@@ -460,6 +499,38 @@ class FileDownloaderBatchDownloadTests(unittest.TestCase):
         self.assertIn("【2/2】bad.pdf", downloader.logs)
         self.assertIn("   ⚠️ 文件已跳过，继续下一个", downloader.logs)
         self.assertEqual("   ❌ 失败: 1", downloader.logs[-1])
+
+    def test_download_files_batch_preserves_next_page_sleep_and_fetch_index(self):
+        downloader = object.__new__(ZSXQFileDownloader)
+        downloader.logs = []
+        downloader.log = downloader.logs.append
+        downloader.check_stop = lambda: False
+        downloader.fetch_calls = []
+        pages = [
+            {"resp_data": {"files": [{"file": {"id": 101, "name": "first.pdf"}}], "index": "next-page"}},
+            {"resp_data": {"files": [{"file": {"id": 102, "name": "second.pdf"}}], "index": None}},
+        ]
+
+        def fetch_file_list(**kwargs):
+            downloader.fetch_calls.append(kwargs)
+            return pages.pop(0)
+
+        downloader.fetch_file_list = fetch_file_list
+        downloader.download_file = lambda file_info: True
+        downloader.check_long_delay = lambda: None
+        downloader.download_delay = lambda: None
+
+        with patch("backend.crawlers.zsxq_file_downloader.time.sleep") as sleep:
+            stats = ZSXQFileDownloader.download_files_batch(downloader, max_files=2, start_index="start")
+
+        self.assertEqual({"total_files": 2, "downloaded": 2, "skipped": 0, "failed": 0}, stats)
+        self.assertEqual(
+            [{"count": 20, "index": "start"}, {"count": 20, "index": "next-page"}],
+            downloader.fetch_calls,
+        )
+        sleep.assert_called_once_with(2)
+        self.assertIn("📄 准备获取下一页: next-page", downloader.logs)
+        self.assertEqual("   ❌ 失败: 0", downloader.logs[-1])
 
 
 class FileDownloaderDatabaseDownloadTests(unittest.TestCase):

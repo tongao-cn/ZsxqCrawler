@@ -28,6 +28,7 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     add_import_stats,
     batch_download_completion_messages,
     batch_download_item_message,
+    batch_download_next_page_plan,
     batch_download_skipped_message,
     batch_download_start_messages,
     classify_api_failure,
@@ -1082,11 +1083,11 @@ class ZSXQFileDownloader:
                 )
             
             # 准备下一页
-            should_continue = max_files is None or downloaded_in_batch < max_files
-            if next_index and should_continue:
-                current_index = next_index
-                self.log(f"📄 准备获取下一页: {next_index}")
-                time.sleep(2)  # 页面间短暂延迟
+            next_page = batch_download_next_page_plan(next_index, downloaded_in_batch, max_files)
+            if next_page["should_continue"]:
+                current_index = next_page["next_index"]
+                self.log(next_page["message"])
+                time.sleep(next_page["delay"])  # 页面间短暂延迟
             else:
                 break
 
