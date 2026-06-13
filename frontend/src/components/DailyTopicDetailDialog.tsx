@@ -2,6 +2,7 @@
 
 import type { TopicDetail } from '@/lib/api';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { formatDateTime } from '@/components/DailyTopicAnalysisPanelUtils';
 import { createSafeHtml, extractPlainText } from '@/lib/zsxq-content-renderer';
 
 interface DailyTopicDetailDialogProps {
@@ -10,13 +11,6 @@ interface DailyTopicDetailDialogProps {
   open: boolean;
   topicDetail: TopicDetail | null;
   topicId: string | null;
-}
-
-function formatDateTime(value?: string | null) {
-  if (!value) {
-    return '暂无';
-  }
-  return new Date(value).toLocaleString('zh-CN');
 }
 
 export default function DailyTopicDetailDialog({

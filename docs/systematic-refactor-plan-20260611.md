@@ -11149,6 +11149,44 @@ Result:
 - Full backend unittest discovery passed: 804 tests passed, 15 skipped.
 - `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
 
+### 2026-06-13 - P6 daily topic detail date helper reuse
+
+Changed:
+
+- Reused `formatDateTime()` from `DailyTopicAnalysisPanelUtils` in
+  `DailyTopicDetailDialog`.
+- Removed the duplicate local date formatter from the detail dialog.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Missing-date fallback remains `暂无`.
+- Date rendering still uses `new Date(value).toLocaleString('zh-CN')` with no added validation,
+  exception handling, timezone override, or fallback.
+- No public API, route behavior, task behavior, backend path, storage schema, fallback path,
+  legacy path, or dependency semantics changed.
+
+Verification:
+
+```powershell
+rg -n "DailyTopicDetailDialog|function formatDateTime\(value\?: string \| null\)|import \{ formatDateTime \} from '@/components/DailyTopicAnalysisPanelUtils'" frontend\src\components\DailyTopicDetailDialog.tsx frontend\src\components\DailyTopicAnalysisPanelUtils.ts
+npm --prefix frontend run build
+npm exec -- tsc -p tsconfig.json --noEmit --noUnusedLocals --pretty false  # from frontend/
+uv run python scripts\scan_postgres_compat_debt.py
+uv run python -m unittest discover -s tests
+git diff --check
+```
+
+Result:
+
+- Daily topic detail now uses the exported shared helper; no local duplicate remains.
+- Frontend build passed, including Next.js lint/type checks.
+- Standalone TypeScript unused-local check passed after a serial rerun; an earlier parallel probe
+  raced with Next.js `.next/types` rebuild.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Full backend unittest discovery passed: 804 tests passed, 15 skipped.
+- `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
+
 ## Stop Conditions
 
 Pause before editing if:
