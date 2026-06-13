@@ -10867,6 +10867,46 @@ Result:
 - Full backend unittest discovery passed: 804 tests passed, 15 skipped.
 - `git diff --check` passed.
 
+### 2026-06-13 - P7 Tailwind legacy animate plugin reference cleanup
+
+Changed:
+
+- Removed the stale `require("tailwindcss-animate")` plugin entry from `frontend/tailwind.config.js`.
+- Kept the declared `@tailwindcss/typography` plugin entry unchanged.
+- Kept `tw-animate-css` imported from `frontend/src/app/globals.css`; it remains the installed
+  animation utility source for current `animate-in` and `animate-out` classes.
+
+Behavior impact:
+
+- Intended behavior change: none for the current Next/Tailwind build output.
+- Before the change, directly loading `frontend/tailwind.config.js` failed because
+  `tailwindcss-animate` is not declared or installed.
+- After the change, the config loads successfully with the currently declared dependencies.
+- No route, component, generated CSS gate, backend path, schema, crawler, fallback, legacy, or
+  public API behavior changed.
+
+Verification:
+
+```powershell
+node -e "require('./frontend/tailwind.config.js'); console.log('tailwind config loaded')"
+npm --prefix frontend ls tw-animate-css tailwindcss-animate @tailwindcss/typography --depth=0
+npm --prefix frontend run build
+uv run python scripts\scan_postgres_compat_debt.py
+uv run python -m unittest discover -s tests
+git diff --check
+```
+
+Result:
+
+- Baseline config load failed before the cleanup with `Cannot find module 'tailwindcss-animate'`.
+- Dependency tree shows `tw-animate-css@1.3.5` and `@tailwindcss/typography@0.5.16`; it does not
+  include `tailwindcss-animate`.
+- Post-change config load passed.
+- Frontend build passed, including Next.js lint/type checks.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Full backend unittest discovery passed: 804 tests passed, 15 skipped.
+- `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warning.
+
 ## Stop Conditions
 
 Pause before editing if:
