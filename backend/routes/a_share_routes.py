@@ -129,6 +129,30 @@ def _create_a_share_analysis_task_response(
     return {"task_id": task_id, "message": TASK_CREATED_MESSAGE}
 
 
+def _run_a_share_analysis_for_task(
+    task_id: str,
+    normalized_group_id: Optional[str],
+    request: AShareAnalysisRunRequest,
+) -> dict:
+    def log_callback(message: str):
+        add_task_log(task_id, message)
+
+    return run_analysis(
+        days=request.days,
+        group_id=normalized_group_id,
+        model=request.model,
+        api_base=request.api_base,
+        wire_api=request.wire_api,
+        reasoning_effort=request.reasoning_effort,
+        concurrency=request.concurrency,
+        start_date=request.start_date,
+        end_date=request.end_date,
+        reset_start_date=request.reset_start_date,
+        reset_end_date=request.reset_end_date,
+        log_callback=log_callback,
+    )
+
+
 def run_a_share_analysis_task(task_id: str, request: AShareAnalysisRunRequest):
     """后台执行A股公司提及分析任务"""
     try:
@@ -159,23 +183,7 @@ def run_a_share_analysis_task(task_id: str, request: AShareAnalysisRunRequest):
                 f"🧹 删除并重跑区间: {request.reset_start_date or '-'} ~ {request.reset_end_date or '-'}",
             )
 
-        def log_callback(message: str):
-            add_task_log(task_id, message)
-
-        result = run_analysis(
-            days=request.days,
-            group_id=normalized_group_id,
-            model=request.model,
-            api_base=request.api_base,
-            wire_api=request.wire_api,
-            reasoning_effort=request.reasoning_effort,
-            concurrency=request.concurrency,
-            start_date=request.start_date,
-            end_date=request.end_date,
-            reset_start_date=request.reset_start_date,
-            reset_end_date=request.reset_end_date,
-            log_callback=log_callback,
-        )
+        result = _run_a_share_analysis_for_task(task_id, normalized_group_id, request)
 
         update_task(task_id, "completed", "A股公司分析完成", result)
         add_task_log(task_id, "✅ A股公司分析完成")

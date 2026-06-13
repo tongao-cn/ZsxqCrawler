@@ -49,6 +49,49 @@ class AShareRoutesHelperTests(unittest.TestCase):
         self.assertEqual({"task_id": "task-a-share", "message": TASK_CREATED_MESSAGE}, response)
 
     @unittest.skipUnless(HAS_A_SHARE_ROUTE_DEPS, "a-share route dependencies are not installed")
+    def test_run_a_share_analysis_for_task_preserves_service_arguments(self):
+        from backend.routes.a_share_routes import AShareAnalysisRunRequest, _run_a_share_analysis_for_task
+
+        request = AShareAnalysisRunRequest(
+            group_id="51111112855254",
+            days=30,
+            concurrency=4,
+            model="model-a",
+            api_base="https://api.example.test",
+            wire_api="responses",
+            reasoning_effort="low",
+            start_date="2026-05-01",
+            end_date="2026-05-07",
+            reset_start_date="2026-05-02",
+            reset_end_date="2026-05-03",
+        )
+        expected = {"ok": True}
+        with (
+            patch("backend.routes.a_share_routes.run_analysis", return_value=expected) as run_analysis,
+            patch("backend.routes.a_share_routes.add_task_log") as add_task_log,
+        ):
+            result = _run_a_share_analysis_for_task("task-a-share", "51111112855254", request)
+
+            self.assertEqual(expected, result)
+            run_analysis.assert_called_once()
+            _, call_kwargs = run_analysis.call_args
+            self.assertEqual(30, call_kwargs["days"])
+            self.assertEqual("51111112855254", call_kwargs["group_id"])
+            self.assertEqual("model-a", call_kwargs["model"])
+            self.assertEqual("https://api.example.test", call_kwargs["api_base"])
+            self.assertEqual("responses", call_kwargs["wire_api"])
+            self.assertEqual("low", call_kwargs["reasoning_effort"])
+            self.assertEqual(4, call_kwargs["concurrency"])
+            self.assertEqual("2026-05-01", call_kwargs["start_date"])
+            self.assertEqual("2026-05-07", call_kwargs["end_date"])
+            self.assertEqual("2026-05-02", call_kwargs["reset_start_date"])
+            self.assertEqual("2026-05-03", call_kwargs["reset_end_date"])
+
+            call_kwargs["log_callback"]("analysis log")
+
+        add_task_log.assert_called_once_with("task-a-share", "analysis log")
+
+    @unittest.skipUnless(HAS_A_SHARE_ROUTE_DEPS, "a-share route dependencies are not installed")
     def test_normalize_group_scope_keeps_existing_labels(self):
         from backend.routes.a_share_routes import _normalize_group_scope
 

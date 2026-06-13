@@ -13499,6 +13499,48 @@ Result:
 - PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-13 - P5 A-share analysis service-call helper
+
+Changed:
+
+- Added `_run_a_share_analysis_for_task()` in `backend.routes.a_share_routes`.
+- Reused it from `run_a_share_analysis_task()` for the `run_analysis()` call and task-bound
+  log callback.
+- Added helper coverage for current `run_analysis()` arguments, result pass-through, and log
+  callback wiring.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- API key validation, initial stopped check, group-scope normalization, run-range validation,
+  running status update, parameter log text, reset-range log text, completed status, completed log,
+  failure message text, task/public APIs, storage schema, fallback/legacy behavior, and config
+  semantics are unchanged.
+- A-share analysis still passes the same days, normalized group ID, model, API base, wire API,
+  reasoning effort, concurrency, explicit date range, reset range, and task log callback into
+  `run_analysis()`.
+
+Verification:
+
+```powershell
+uv run python -m py_compile backend\routes\a_share_routes.py tests\test_a_share_routes_helpers.py
+uv run python -m unittest tests.test_a_share_routes_helpers.AShareRoutesHelperTests.test_run_a_share_analysis_for_task_preserves_service_arguments -v
+uv run python -m unittest tests.test_a_share_routes_helpers -v
+uv run python -m unittest tests.test_a_share_routes_helpers tests.test_a_share_analysis_service_helpers tests.test_a_share_analysis_db_storage_helpers -v
+uv run python -m unittest discover -s tests
+uv run python scripts\scan_postgres_compat_debt.py
+npm --prefix frontend run build
+```
+
+Result:
+
+- Focused A-share service-call helper test passed.
+- A-share route helper tests passed: 9 tests.
+- Related A-share route/service/storage tests passed: 52 tests.
+- Full backend unittest discovery passed: 889 tests, 15 skipped.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:
