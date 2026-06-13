@@ -49,6 +49,7 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     download_target_path,
     download_total_size,
     download_url_failure_detail,
+    download_url_success_plan,
     empty_import_stats,
     existing_file_matches,
     file_list_request_params,
@@ -568,26 +569,16 @@ class ZSXQFileDownloader:
                     if data.get('succeeded'):
                         download_url = data.get('resp_data', {}).get('download_url')
                         if download_url:
-                            if attempt > 0:
-                                print(f"   ✅ 重试成功！第{attempt}次重试获取到下载链接")
-                                self._record_risk_event(
-                                    file_id=file_id,
-                                    phase="download_url_retry_response",
-                                    attempt=attempt,
-                                    headers=headers,
-                                    http_status=response.status_code,
-                                    status="api_success",
-                                )
-                            else:
-                                print(f"   ✅ 获取下载链接成功")
-                                self._record_risk_event(
-                                    file_id=file_id,
-                                    phase="download_url_response",
-                                    attempt=0,
-                                    headers=headers,
-                                    http_status=response.status_code,
-                                    status="api_success",
-                                )
+                            success_message, success_phase = download_url_success_plan(attempt)
+                            print(success_message)
+                            self._record_risk_event(
+                                file_id=file_id,
+                                phase=success_phase,
+                                attempt=attempt,
+                                headers=headers,
+                                http_status=response.status_code,
+                                status="api_success",
+                            )
                             return download_url
                         print(f"   ❌ 响应中无下载链接字段")
                     else:

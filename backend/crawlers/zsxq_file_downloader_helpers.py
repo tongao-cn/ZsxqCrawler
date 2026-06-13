@@ -211,6 +211,12 @@ def json_decode_failure_plan(exc: Exception, response_text: Any, attempt: int, m
     return {"should_retry": should_retry, "messages": tuple(messages)}
 
 
+def download_url_success_plan(attempt: int) -> tuple[str, str]:
+    if attempt > 0:
+        return f"   ✅ 重试成功！第{attempt}次重试获取到下载链接", "download_url_retry_response"
+    return "   ✅ 获取下载链接成功", "download_url_response"
+
+
 def parse_create_time(value: Optional[str]) -> Optional[datetime.datetime]:
     if not value:
         return None

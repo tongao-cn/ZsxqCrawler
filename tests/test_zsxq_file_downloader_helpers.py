@@ -44,6 +44,7 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     existing_file_matches,
     file_list_request_params,
     file_list_start_messages,
+    download_url_success_plan,
     filter_files_newer_than,
     has_retry_attempt_remaining,
     http_failure_plan,
@@ -1100,6 +1101,16 @@ class FileDownloaderRetryHelperTests(unittest.TestCase):
                 "   📄 原始响应: not-json",
             ),
             terminal_plan["messages"],
+        )
+
+    def test_download_url_success_plan_preserves_first_attempt_and_retry_messages(self):
+        self.assertEqual(
+            ("   ✅ 获取下载链接成功", "download_url_response"),
+            download_url_success_plan(0),
+        )
+        self.assertEqual(
+            ("   ✅ 重试成功！第2次重试获取到下载链接", "download_url_retry_response"),
+            download_url_success_plan(2),
         )
 
     def test_risk_event_user_agent_label_preserves_browser_platform_labels(self):
