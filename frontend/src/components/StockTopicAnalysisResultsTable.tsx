@@ -1,11 +1,14 @@
 'use client';
 
-import { ReactNode } from 'react';
 import { Eye, Sparkles } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import {
+  formatStockTopicAnalysisDateTime,
+  StockTopicAnalysisStatusBadge,
+} from '@/components/StockTopicAnalysisDisplay';
 import type { StockTopicAnalysisResponse } from '@/lib/api';
 
 interface StockTopicAnalysisResultsTableProps {
@@ -17,20 +20,8 @@ interface StockTopicAnalysisResultsTableProps {
   onOpenResult: (result: StockTopicAnalysisResponse) => void;
   onToggleAllResults: (checked: boolean) => void;
   onToggleResult: (result: StockTopicAnalysisResponse, checked: boolean) => void;
-  renderStatusBadge: (result: StockTopicAnalysisResponse) => ReactNode;
   results: StockTopicAnalysisResponse[];
   selectedStockNames: Set<string>;
-}
-
-function formatDateTime(value?: string | null) {
-  if (!value) {
-    return '-';
-  }
-  try {
-    return new Date(value).toLocaleString('zh-CN');
-  } catch {
-    return value;
-  }
 }
 
 export default function StockTopicAnalysisResultsTable({
@@ -42,7 +33,6 @@ export default function StockTopicAnalysisResultsTable({
   onOpenResult,
   onToggleAllResults,
   onToggleResult,
-  renderStatusBadge,
   results,
   selectedStockNames,
 }: StockTopicAnalysisResultsTableProps) {
@@ -106,8 +96,10 @@ export default function StockTopicAnalysisResultsTable({
                 )}
               </TableCell>
               <TableCell className="text-right">{result.recommendation_count}</TableCell>
-              <TableCell>{renderStatusBadge(result)}</TableCell>
-              <TableCell className="whitespace-nowrap text-xs text-muted-foreground">{formatDateTime(result.updated_at)}</TableCell>
+              <TableCell><StockTopicAnalysisStatusBadge result={result} /></TableCell>
+              <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
+                {formatStockTopicAnalysisDateTime(result.updated_at)}
+              </TableCell>
               <TableCell className="text-right">
                 <div className="flex justify-end gap-2 whitespace-nowrap">
                   <Button

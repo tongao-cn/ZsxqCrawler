@@ -8,7 +8,6 @@ import StockTopicAnalysisInputCard from '@/components/StockTopicAnalysisInputCar
 import StockTopicAnalysisResultDialog from '@/components/StockTopicAnalysisResultDialog';
 import StockTopicAnalysisResultsTable from '@/components/StockTopicAnalysisResultsTable';
 import StockTopicAnalysisStatsCard from '@/components/StockTopicAnalysisStatsCard';
-import { StockTopicAnalysisStatusBadge } from '@/components/StockTopicAnalysisStatusBadge';
 import { MAX_STOCK_COUNT, getStockTopicResultKey, useStockTopicAnalysisPanel } from '@/hooks/useStockTopicAnalysisPanel';
 
 interface StockTopicAnalysisPanelProps {
@@ -107,7 +106,6 @@ export default function StockTopicAnalysisPanel({ groupId, onTaskCreated }: Stoc
               onOpenResult={setSelectedResult}
               onToggleAllResults={toggleAllResults}
               onToggleResult={toggleResult}
-              renderStatusBadge={(result) => <StockTopicAnalysisStatusBadge result={result} />}
               results={results}
               selectedStockNames={selectedStockNames}
             />

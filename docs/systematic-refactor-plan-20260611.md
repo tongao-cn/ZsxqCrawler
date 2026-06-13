@@ -11062,6 +11062,50 @@ Result:
 - Full backend unittest discovery passed: 804 tests passed, 15 skipped.
 - `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
 
+### 2026-06-13 - P6 stock analysis display helper consolidation
+
+Changed:
+
+- Renamed the stock-topic analysis status helper module to
+  `frontend/src/components/StockTopicAnalysisDisplay.tsx`.
+- Added shared `formatStockTopicAnalysisDateTime()` for the identical saved-time formatting used by
+  the stock-topic analysis result table and detail dialog.
+- Let `StockTopicAnalysisResultsTable` import `StockTopicAnalysisStatusBadge` directly, removing
+  the single-call-site `renderStatusBadge` prop from `StockTopicAnalysisPanel`.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Missing-date fallback, invalid-date fallback, `toLocaleString('zh-CN')` formatting, status label
+  branch order, status labels, Badge variants, and color classes are preserved.
+- The remaining `formatDateTime` helpers in other frontend domains were intentionally left in
+  place to avoid cross-domain abstraction.
+- No public API, route behavior, task behavior, backend path, storage schema, fallback path,
+  legacy path, or dependency semantics changed.
+
+Verification:
+
+```powershell
+rg -n "StockTopicAnalysisStatusBadge|StockTopicAnalysisDisplay|StockTopicAnalysisStatusBadge.tsx|renderStatusBadge|function formatDateTime\(value\?: string \| null\)" frontend\src\components --glob "!node_modules/**"
+npm --prefix frontend run build
+npm exec -- tsc -p tsconfig.json --noEmit --noUnusedLocals --pretty false  # from frontend/
+uv run python scripts\scan_postgres_compat_debt.py
+uv run python -m unittest discover -s tests
+git diff --check
+```
+
+Result:
+
+- Stock-topic analysis references now resolve through `StockTopicAnalysisDisplay`; no
+  `renderStatusBadge` usage remains.
+- The duplicate stock-topic analysis `formatDateTime` helpers were removed; same-named helpers in
+  other feature domains remain untouched.
+- Frontend build passed, including Next.js lint/type checks.
+- Standalone TypeScript unused-local check passed.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Full backend unittest discovery passed: 804 tests passed, 15 skipped.
+- `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
+
 ## Stop Conditions
 
 Pause before editing if:

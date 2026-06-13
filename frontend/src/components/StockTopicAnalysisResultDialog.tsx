@@ -6,23 +6,15 @@ import remarkGfm from 'remark-gfm';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { StockTopicAnalysisStatusBadge } from '@/components/StockTopicAnalysisStatusBadge';
+import {
+  formatStockTopicAnalysisDateTime,
+  StockTopicAnalysisStatusBadge,
+} from '@/components/StockTopicAnalysisDisplay';
 import type { StockTopicAnalysisResponse } from '@/lib/api';
 
 interface StockTopicAnalysisResultDialogProps {
   onOpenChange: (open: boolean) => void;
   selectedResult: StockTopicAnalysisResponse | null;
-}
-
-function formatDateTime(value?: string | null) {
-  if (!value) {
-    return '-';
-  }
-  try {
-    return new Date(value).toLocaleString('zh-CN');
-  } catch {
-    return value;
-  }
 }
 
 function formatStockCode(result: StockTopicAnalysisResponse) {
@@ -44,7 +36,7 @@ export default function StockTopicAnalysisResultDialog({
             <DialogHeader>
               <DialogTitle className="text-xl">{selectedResult.stock_name} AI 总结</DialogTitle>
               <DialogDescription>
-                {formatStockCode(selectedResult)} · 话题 {selectedResult.topic_count} · 待处理话题 {selectedResult.new_topic_count ?? 0} · 推荐 {selectedResult.recommendation_count} · {formatDateTime(selectedResult.updated_at)}
+                {formatStockCode(selectedResult)} · 话题 {selectedResult.topic_count} · 待处理话题 {selectedResult.new_topic_count ?? 0} · 推荐 {selectedResult.recommendation_count} · {formatStockTopicAnalysisDateTime(selectedResult.updated_at)}
               </DialogDescription>
             </DialogHeader>
             <div className="grid gap-3 text-sm sm:grid-cols-4">

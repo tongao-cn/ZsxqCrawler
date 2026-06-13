@@ -1,6 +1,17 @@
 import { Badge } from '@/components/ui/badge';
 import type { StockTopicAnalysisResponse } from '@/lib/api';
 
+export function formatStockTopicAnalysisDateTime(value?: string | null) {
+  if (!value) {
+    return '-';
+  }
+  try {
+    return new Date(value).toLocaleString('zh-CN');
+  } catch {
+    return value;
+  }
+}
+
 export function getStockTopicAnalysisStatusLabel(result: StockTopicAnalysisResponse) {
   if ((result.new_topic_count ?? 0) > 0 && result.summary_markdown) {
     return `有 ${result.new_topic_count} 条待处理话题`;
