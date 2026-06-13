@@ -29,6 +29,7 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     download_url_failure_detail,
     download_file_data,
     download_interval_plan,
+    download_result_stats,
     download_target_path,
     empty_import_stats,
     existing_file_matches,
@@ -643,6 +644,16 @@ class FileDownloaderFileDataHelperTests(unittest.TestCase):
         self.assertEqual(
             202,
             download_file_data({"file": {"id": 202, "name": "memo.pdf"}})["file_id"],
+        )
+
+    def test_download_result_stats_preserves_return_shape(self):
+        self.assertEqual(
+            {"total_files": 0, "downloaded": 0, "skipped": 0, "failed": 0},
+            download_result_stats(),
+        )
+        self.assertEqual(
+            {"total_files": 3, "downloaded": 0, "skipped": 0, "failed": 0},
+            download_result_stats(3),
         )
 
     def test_safe_download_filename_keeps_supported_characters(self):

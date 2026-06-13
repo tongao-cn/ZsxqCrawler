@@ -35,6 +35,7 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     download_http_failure_detail,
     download_interval_plan,
     download_progress_message,
+    download_result_stats,
     download_retry_wait,
     download_size_mismatch_detail,
     download_target_path,
@@ -1045,9 +1046,9 @@ class ZSXQFileDownloader:
         # 检查是否需要停止
         if self.check_stop():
             self.log("🛑 任务被停止")
-            return {'total_files': 0, 'downloaded': 0, 'skipped': 0, 'failed': 0}
+            return download_result_stats()
 
-        stats = {'total_files': 0, 'downloaded': 0, 'skipped': 0, 'failed': 0}
+        stats = download_result_stats()
         current_index = start_index
         downloaded_in_batch = 0
         
@@ -1560,13 +1561,13 @@ class ZSXQFileDownloader:
         # 检查是否需要停止
         if self.check_stop():
             self.log("🛑 任务被停止")
-            return {'total_files': 0, 'downloaded': 0, 'skipped': 0, 'failed': 0}
+            return download_result_stats()
         self.file_db.cursor.execute(query_plan["query"], query_plan["params"])
         files_to_download = self.file_db.cursor.fetchall()
         
         if not files_to_download:
             self.log(f"📭 数据库中没有符合条件的文件可下载")
-            return {'total_files': 0, 'downloaded': 0, 'skipped': 0, 'failed': 0}
+            return download_result_stats()
 
         self.log(f"📋 找到 {len(files_to_download)} 个待下载文件")
         if sort_by == 'create_time' and files_to_download:
@@ -1574,7 +1575,7 @@ class ZSXQFileDownloader:
             oldest = files_to_download[-1][4]
             self.log(f"   🗓️ 本次待下载文件时间范围: {newest} ~ {oldest}")
 
-        stats = {'total_files': len(files_to_download), 'downloaded': 0, 'skipped': 0, 'failed': 0}
+        stats = download_result_stats(len(files_to_download))
 
         for i, file_row in enumerate(files_to_download, 1):
             # 检查是否需要停止

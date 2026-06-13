@@ -11386,6 +11386,39 @@ Result:
 - PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-13 - P9 file downloader result stats helper
+
+Changed:
+
+- Added `download_result_stats()` in `backend/crawlers/zsxq_file_downloader_helpers.py`.
+- Reused the helper for batch-download and database-download zero/default stats initialization.
+- Added direct helper coverage for the empty result shape and nonzero `total_files` shape.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Download result keys, key order, zero defaults, stop-path return shape, no-files return shape,
+  and existing stats mutation timing are preserved.
+- No public API, route behavior, task behavior, crawler request order, download retry behavior,
+  storage schema, fallback path, legacy path, or config semantics changed.
+
+Verification:
+
+```powershell
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py backend\crawlers\zsxq_file_downloader_helpers.py
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers -v
+uv run python -m unittest discover -s tests
+uv run python scripts\scan_postgres_compat_debt.py
+npm --prefix frontend run build
+```
+
+Result:
+
+- Downloader helper tests passed: 97 tests.
+- Full backend unittest discovery passed: 807 tests, 15 skipped.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:

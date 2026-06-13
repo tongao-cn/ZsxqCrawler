@@ -366,6 +366,15 @@ def download_file_data(file_info: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+def download_result_stats(total_files: int = 0) -> Dict[str, int]:
+    return {
+        "total_files": int(total_files),
+        "downloaded": 0,
+        "skipped": 0,
+        "failed": 0,
+    }
+
+
 def existing_file_matches(file_path: str, expected_size: int) -> tuple[bool, bool, int]:
     if not os.path.exists(file_path):
         return False, False, 0
