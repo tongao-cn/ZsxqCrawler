@@ -12761,6 +12761,41 @@ Result:
   dirty during concurrent work; after those changes landed and the worktree was clean, the build
   passed, including Next.js lint/type checks.
 
+### 2026-06-13 - P9 file downloader settings display helper
+
+Changed:
+
+- Added `download_settings_display_lines()` in `backend/crawlers/zsxq_file_downloader_helpers.py`.
+- Reused it in `ZSXQFileDownloader.adjust_settings()` for the current-settings display block.
+- Added direct helper coverage for the existing setting labels, second/minute formatting, and
+  download-directory text.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Current-setting display text/order, input prompt order, invalid-input handling, minimum interval
+  clamp, download-directory update, `os.makedirs()` side effect, task/public APIs, storage schema,
+  fallback/legacy behavior, and config semantics are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py backend\crawlers\zsxq_file_downloader_helpers.py tests\test_zsxq_file_downloader_helpers.py
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderFileDataHelperTests.test_download_settings_display_lines_preserve_existing_text -v
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers -v
+uv run python -m unittest discover -s tests
+uv run python scripts\scan_postgres_compat_debt.py
+npm --prefix frontend run build
+```
+
+Result:
+
+- Focused settings display helper test passed.
+- Downloader helper tests passed: 148 tests.
+- Full backend unittest discovery passed: 858 tests, 15 skipped.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:

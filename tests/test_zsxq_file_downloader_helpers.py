@@ -57,6 +57,7 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     download_interval_plan,
     download_query_group_id,
     download_result_stats,
+    download_settings_display_lines,
     download_target_path,
     download_url_api_failure_plan,
     empty_import_stats,
@@ -1748,6 +1749,18 @@ class FileDownloaderFileDataHelperTests(unittest.TestCase):
         self.assertEqual(
             "SELECT succeeded, COUNT(*) FROM api_responses GROUP BY succeeded",
             compact_api_query,
+        )
+
+    def test_download_settings_display_lines_preserve_existing_text(self):
+        self.assertEqual(
+            (
+                "\n🔧 当前下载设置:",
+                "   下载间隔: 60-120秒 (1.0-2.0分钟)",
+                "   长休眠间隔: 每5个文件",
+                "   长休眠时间: 300-600秒 (5.0-10.0分钟)",
+                "   下载目录: output/downloads",
+            ),
+            download_settings_display_lines(60, 120, 5, 300, 600, "output/downloads"),
         )
 
     def test_download_query_group_id_preserves_cast_and_blank_semantics(self):

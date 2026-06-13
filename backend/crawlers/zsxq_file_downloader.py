@@ -53,6 +53,7 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     database_time_range_query,
     database_time_range_result,
     date_range_collection_start_messages,
+    download_settings_display_lines,
     download_file_data,
     download_exception_detail,
     download_expected_size,
@@ -1620,11 +1621,15 @@ class ZSXQFileDownloader:
     
     def adjust_settings(self):
         """调整下载设置"""
-        print(f"\n🔧 当前下载设置:")
-        print(f"   下载间隔: {self.download_interval_min}-{self.download_interval_max}秒 ({self.download_interval_min/60:.1f}-{self.download_interval_max/60:.1f}分钟)")
-        print(f"   长休眠间隔: 每{self.long_delay_interval}个文件")
-        print(f"   长休眠时间: {self.long_delay_min}-{self.long_delay_max}秒 ({self.long_delay_min/60:.1f}-{self.long_delay_max/60:.1f}分钟)")
-        print(f"   下载目录: {self.download_dir}")
+        for line in download_settings_display_lines(
+            self.download_interval_min,
+            self.download_interval_max,
+            self.long_delay_interval,
+            self.long_delay_min,
+            self.long_delay_max,
+            self.download_dir,
+        ):
+            print(line)
         
         try:
             new_interval = int(input(f"长休眠间隔 (当前每{self.long_delay_interval}个文件): ") or self.long_delay_interval)

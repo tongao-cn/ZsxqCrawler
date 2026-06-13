@@ -1009,6 +1009,23 @@ def database_stats_api_response_query() -> str:
         '''
 
 
+def download_settings_display_lines(
+    download_interval_min: float,
+    download_interval_max: float,
+    long_delay_interval: int,
+    long_delay_min: float,
+    long_delay_max: float,
+    download_dir: str,
+) -> tuple[str, ...]:
+    return (
+        "\n🔧 当前下载设置:",
+        f"   下载间隔: {download_interval_min}-{download_interval_max}秒 ({download_interval_min/60:.1f}-{download_interval_max/60:.1f}分钟)",
+        f"   长休眠间隔: 每{long_delay_interval}个文件",
+        f"   长休眠时间: {long_delay_min}-{long_delay_max}秒 ({long_delay_min/60:.1f}-{long_delay_max/60:.1f}分钟)",
+        f"   下载目录: {download_dir}",
+    )
+
+
 def download_query_group_id(group_id: Any) -> Any:
     value = str(group_id or "").strip()
     return int(value) if value.isdigit() else value
