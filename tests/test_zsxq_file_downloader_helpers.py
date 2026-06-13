@@ -74,6 +74,7 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     time_collection_final_summary,
     time_collection_mode,
     time_collection_next_page_plan,
+    time_collection_start_messages,
     time_dedupe_page_plan,
 )
 
@@ -731,6 +732,28 @@ class FileDownloaderTimeHelperTests(unittest.TestCase):
         heat_mode = time_collection_mode("by_download_count", False, None)
         self.assertFalse(heat_mode["enable_time_dedupe"])
         self.assertIsNone(heat_mode["mode_message"])
+
+    def test_time_collection_start_messages_preserve_optional_lines(self):
+        self.assertEqual(
+            (
+                "📊 开始按时间顺序收集文件列表到完整数据库...",
+                "   📅 排序方式: by_create_time",
+            ),
+            time_collection_start_messages("by_create_time", "", None),
+        )
+        self.assertEqual(
+            (
+                "📊 开始按时间顺序收集文件列表到完整数据库...",
+                "   📅 排序方式: by_download_count",
+                "   ⏰ 起始时间: 2026-05-01T00:00:00",
+                "   🎯 收集边界: 覆盖到 2026-05-01 即停止",
+            ),
+            time_collection_start_messages(
+                "by_download_count",
+                "2026-05-01T00:00:00",
+                datetime.datetime(2026, 5, 1, 12, 30),
+            ),
+        )
 
     def test_time_collection_next_page_plan_preserves_messages_and_next_index(self):
         next_plan = time_collection_next_page_plan("next-page")

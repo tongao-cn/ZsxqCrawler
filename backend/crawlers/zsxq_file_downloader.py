@@ -73,6 +73,7 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     time_collection_final_summary,
     time_collection_mode,
     time_collection_next_page_plan,
+    time_collection_start_messages,
     time_dedupe_page_plan,
 )
 from backend.storage.postgres_core_schema import CORE_SCHEMA
@@ -1254,12 +1255,8 @@ class ZSXQFileDownloader:
         **kwargs,
     ) -> Dict[str, int]:
         """按时间顺序收集文件列表到数据库（使用完整的数据库结构）"""
-        self.log(f"📊 开始按时间顺序收集文件列表到完整数据库...")
-        self.log(f"   📅 排序方式: {sort}")
-        if start_time:
-            self.log(f"   ⏰ 起始时间: {start_time}")
-        if stop_before_time:
-            self.log(f"   🎯 收集边界: 覆盖到 {stop_before_time.strftime('%Y-%m-%d')} 即停止")
+        for message in time_collection_start_messages(sort, start_time, stop_before_time):
+            self.log(message)
 
         mode = time_collection_mode(sort, kwargs.get('force_refresh', False), stop_before_time)
         enable_time_dedupe = mode["enable_time_dedupe"]

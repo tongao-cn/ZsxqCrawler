@@ -12012,6 +12012,42 @@ Result:
 - PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-13 - P9 file downloader time collection start log helper
+
+Changed:
+
+- Added `time_collection_start_messages()` in `backend/crawlers/zsxq_file_downloader_helpers.py`.
+- Reused the helper in `ZSXQFileDownloader.collect_files_by_time()` for the existing start log
+  sequence.
+- Added direct helper coverage for default logging and optional `start_time` /
+  `stop_before_time` logging.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Start log text, log ordering, `start_time` truthiness behavior, stop-boundary date formatting,
+  pagination, dedupe/fallback behavior, import side effects, task/public APIs, storage schema, and
+  config semantics are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py backend\crawlers\zsxq_file_downloader_helpers.py tests\test_zsxq_file_downloader_helpers.py
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderTimeHelperTests.test_time_collection_start_messages_preserve_optional_lines tests.test_zsxq_file_downloader_helpers.FileDownloaderPaginationTests.test_collect_files_by_time_preserves_next_index_sleep_and_last_page_log tests.test_zsxq_file_downloader_helpers.FileDownloaderPaginationTests.test_collect_files_by_time_filters_old_files_and_stops_after_mixed_page -v
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers -v
+uv run python -m unittest discover -s tests
+uv run python scripts\scan_postgres_compat_debt.py
+npm --prefix frontend run build
+```
+
+Result:
+
+- Focused start-log helper and collect-by-time behavior tests passed.
+- Downloader helper tests passed: 114 tests.
+- Full backend unittest discovery passed: 824 tests, 15 skipped.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:

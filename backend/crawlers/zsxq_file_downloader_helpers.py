@@ -428,6 +428,22 @@ def time_collection_mode(
     }
 
 
+def time_collection_start_messages(
+    sort: str,
+    start_time: Optional[str],
+    stop_before_time: Optional[datetime.datetime],
+) -> tuple[str, ...]:
+    messages = [
+        "📊 开始按时间顺序收集文件列表到完整数据库...",
+        f"   📅 排序方式: {sort}",
+    ]
+    if start_time:
+        messages.append(f"   ⏰ 起始时间: {start_time}")
+    if stop_before_time:
+        messages.append(f"   🎯 收集边界: 覆盖到 {stop_before_time.strftime('%Y-%m-%d')} 即停止")
+    return tuple(messages)
+
+
 def time_collection_next_page_plan(next_index: Any) -> Dict[str, Any]:
     if next_index:
         return {
