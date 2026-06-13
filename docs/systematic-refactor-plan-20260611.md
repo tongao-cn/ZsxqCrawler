@@ -11275,6 +11275,40 @@ Result:
 - Full backend unittest discovery passed: 804 tests passed, 15 skipped.
 - `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
 
+### 2026-06-13 - P6 unused legacy task panel cleanup
+
+Changed:
+
+- Deleted `frontend/src/components/TaskPanel.tsx`.
+
+Behavior impact:
+
+- Intended behavior change: none for the current app routes.
+- Static reference search found no remaining `TaskPanel` imports or route references.
+- The active task UI remains `TaskDock` plus `TaskListCompact`.
+- No public API, route behavior, task runtime behavior, fallback polling, backend path, storage
+  schema, fallback path, legacy path, or dependency semantics changed.
+
+Verification:
+
+```powershell
+rg -n "TaskPanel" frontend\src --glob "*.ts" --glob "*.tsx" --glob "!node_modules/**"
+npm --prefix frontend run build
+npm exec -- tsc -p tsconfig.json --noEmit --noUnusedLocals --pretty false  # from frontend/
+uv run python scripts\scan_postgres_compat_debt.py
+uv run python -m unittest discover -s tests
+git diff --check
+```
+
+Result:
+
+- `rg` found no `TaskPanel` references after deletion.
+- Frontend build passed, including Next.js lint/type checks.
+- Standalone TypeScript unused-local check passed.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Full backend unittest discovery passed: 804 tests passed, 15 skipped.
+- `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
+
 ## Stop Conditions
 
 Pause before editing if:
