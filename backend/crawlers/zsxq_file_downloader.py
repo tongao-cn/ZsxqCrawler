@@ -114,12 +114,17 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     time_collection_database_status_message,
     time_collection_empty_page_message,
     time_collection_fetch_failed_messages,
+    time_collection_exception_message,
+    time_collection_initial_stop_message,
+    time_collection_interrupted_message,
     time_collection_latest_file_time_message,
+    time_collection_loop_stop_message,
     time_collection_page_import_messages,
     time_collection_page_files_message,
     time_collection_page_message,
     time_collection_page_time_range_message,
     time_collection_storage_failed_message,
+    time_collection_stop_before_boundary_message,
     time_collection_final_summary,
     time_collection_mode,
     time_collection_next_page_plan,
@@ -1271,7 +1276,7 @@ class ZSXQFileDownloader:
 
         # 检查是否需要停止
         if self.check_stop():
-            self.log("🛑 任务被停止")
+            self.log(time_collection_initial_stop_message())
             return {'total_files': 0, 'new_files': 0}
 
         # 使用完整数据库的统计信息
@@ -1296,7 +1301,7 @@ class ZSXQFileDownloader:
             while True:
                 # 检查是否需要停止
                 if self.check_stop():
-                    self.log("🛑 文件收集任务被停止")
+                    self.log(time_collection_loop_stop_message())
                     break
 
                 page_count += 1
@@ -1359,10 +1364,7 @@ class ZSXQFileDownloader:
                 if stop_before_time:
                     crossed_stop_before, oldest_page_time = page_crosses_stop_before(files, stop_before_time)
                     if crossed_stop_before and oldest_page_time:
-                        self.log(
-                            f"🛑 当前页最老文件时间 {oldest_page_time.strftime('%Y-%m-%d %H:%M:%S')} "
-                            f"早于目标起始时间 {stop_before_time.strftime('%Y-%m-%d')}，停止继续收集更早文件"
-                        )
+                        self.log(time_collection_stop_before_boundary_message(oldest_page_time, stop_before_time))
                         break
                 
                 next_page = time_collection_next_page_plan(next_index)
@@ -1374,9 +1376,9 @@ class ZSXQFileDownloader:
                     break
 
         except KeyboardInterrupt:
-            self.log(f"⏹️ 用户中断收集")
+            self.log(time_collection_interrupted_message())
         except Exception as e:
-            self.log(f"❌ 收集过程异常: {e}")
+            self.log(time_collection_exception_message(e))
 
         # 最终统计
         final_stats = self.file_db.get_database_stats()

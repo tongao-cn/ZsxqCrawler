@@ -114,13 +114,18 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     time_dedupe_page_messages,
     time_collection_database_status_message,
     time_collection_empty_page_message,
+    time_collection_exception_message,
     time_collection_fetch_failed_messages,
+    time_collection_initial_stop_message,
+    time_collection_interrupted_message,
     time_collection_latest_file_time_message,
+    time_collection_loop_stop_message,
     time_collection_page_import_messages,
     time_collection_page_files_message,
     time_collection_page_message,
     time_collection_page_time_range_message,
     time_collection_storage_failed_message,
+    time_collection_stop_before_boundary_message,
     time_collection_final_summary,
     time_collection_mode,
     time_collection_next_page_plan,
@@ -778,6 +783,41 @@ class FileDownloaderPaginationTests(unittest.TestCase):
         self.assertEqual(2, stats["total_files"])
         self.assertEqual(2, stats["new_files"])
         self.assertEqual(2, stats["pages"])
+
+    def test_collect_files_by_time_preserves_stop_before_boundary_log_and_break(self):
+        downloader = object.__new__(ZSXQFileDownloader)
+        downloader.group_id = "511"
+        downloader.file_db = TimeDedupeFileDb(None, initial_files=0, final_files=1)
+        downloader.logs = []
+        downloader.fetch_calls = []
+        downloader.log = downloader.logs.append
+        downloader.check_stop = lambda: False
+
+        def fetch_file_list(**kwargs):
+            downloader.fetch_calls.append(kwargs)
+            return {
+                "resp_data": {
+                    "index": "next-page",
+                    "files": [{"file": {"file_id": 101, "create_time": "2026-05-01 09:00:00"}}],
+                }
+            }
+
+        downloader.fetch_file_list = fetch_file_list
+
+        stats = ZSXQFileDownloader.collect_files_by_time(
+            downloader,
+            stop_before_time=datetime.datetime(2026, 5, 2),
+        )
+
+        self.assertEqual([{"count": 20, "index": None, "sort": "by_create_time"}], downloader.fetch_calls)
+        self.assertIn(
+            "🛑 当前页最老文件时间 2026-05-01 09:00:00 早于目标起始时间 2026-05-02，停止继续收集更早文件",
+            downloader.logs,
+        )
+        self.assertNotIn("   ⏭️ 下一页时间戳: next-page", downloader.logs)
+        self.assertEqual(1, stats["total_files"])
+        self.assertEqual(1, stats["new_files"])
+        self.assertEqual(1, stats["pages"])
 
     def test_show_file_list_preserves_page_output_and_next_index(self):
         downloader = object.__new__(ZSXQFileDownloader)
@@ -1555,6 +1595,19 @@ class FileDownloaderTimeHelperTests(unittest.TestCase):
             "   ❌ 第2页存储失败: stable import failure",
             time_collection_storage_failed_message(2, RuntimeError("stable import failure")),
         )
+
+    def test_time_collection_stop_and_exception_messages_preserve_existing_text(self):
+        self.assertEqual("🛑 任务被停止", time_collection_initial_stop_message())
+        self.assertEqual("🛑 文件收集任务被停止", time_collection_loop_stop_message())
+        self.assertEqual(
+            "🛑 当前页最老文件时间 2026-05-01 09:00:00 早于目标起始时间 2026-05-02，停止继续收集更早文件",
+            time_collection_stop_before_boundary_message(
+                datetime.datetime(2026, 5, 1, 9, 0, 0),
+                datetime.datetime(2026, 5, 2, 12, 30, 0),
+            ),
+        )
+        self.assertEqual("⏹️ 用户中断收集", time_collection_interrupted_message())
+        self.assertEqual("❌ 收集过程异常: boom", time_collection_exception_message(RuntimeError("boom")))
 
     def test_time_collection_next_page_plan_preserves_messages_and_next_index(self):
         next_plan = time_collection_next_page_plan("next-page")

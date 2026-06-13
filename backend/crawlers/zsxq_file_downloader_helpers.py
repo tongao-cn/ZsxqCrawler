@@ -696,6 +696,32 @@ def time_collection_storage_failed_message(page_count: int, exc: Exception) -> s
     return f"   ❌ 第{page_count}页存储失败: {exc}"
 
 
+def time_collection_initial_stop_message() -> str:
+    return "🛑 任务被停止"
+
+
+def time_collection_loop_stop_message() -> str:
+    return "🛑 文件收集任务被停止"
+
+
+def time_collection_stop_before_boundary_message(
+    oldest_page_time: datetime.datetime,
+    stop_before_time: datetime.datetime,
+) -> str:
+    return (
+        f"🛑 当前页最老文件时间 {oldest_page_time.strftime('%Y-%m-%d %H:%M:%S')} "
+        f"早于目标起始时间 {stop_before_time.strftime('%Y-%m-%d')}，停止继续收集更早文件"
+    )
+
+
+def time_collection_interrupted_message() -> str:
+    return "⏹️ 用户中断收集"
+
+
+def time_collection_exception_message(exc: Exception) -> str:
+    return f"❌ 收集过程异常: {exc}"
+
+
 def time_collection_next_page_plan(next_index: Any) -> Dict[str, Any]:
     if next_index:
         return {

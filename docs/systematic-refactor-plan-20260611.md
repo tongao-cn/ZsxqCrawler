@@ -12685,6 +12685,44 @@ Result:
 - PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-13 - P9 file downloader time collection stop/boundary helpers
+
+Changed:
+
+- Added time-collection stop, exception, and stop-before boundary message helpers in
+  `backend/crawlers/zsxq_file_downloader_helpers.py`.
+- Reused them in `ZSXQFileDownloader.collect_files_by_time()`.
+- Added direct helper coverage for initial stop, loop stop, stop-before boundary, keyboard
+  interrupt, and collection exception messages.
+- Added method-path coverage showing `stop_before_time` still logs the boundary message and
+  stops before requesting the next page.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Initial stop return shape, loop stop break behavior, stop-before date formatting, fetch/import
+  order, next-page suppression after boundary stop, interrupt handling, exception logging,
+  task/public APIs, storage schema, fallback/legacy behavior, and config semantics are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py backend\crawlers\zsxq_file_downloader_helpers.py tests\test_zsxq_file_downloader_helpers.py
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderTimeHelperTests.test_time_collection_stop_and_exception_messages_preserve_existing_text tests.test_zsxq_file_downloader_helpers.FileDownloaderPaginationTests.test_collect_files_by_time_preserves_stop_before_boundary_log_and_break -v
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers -v
+uv run python -m unittest discover -s tests
+uv run python scripts\scan_postgres_compat_debt.py
+npm --prefix frontend run build
+```
+
+Result:
+
+- Focused time-collection stop/boundary helper and method-path tests passed.
+- Downloader helper tests passed: 145 tests.
+- Full backend unittest discovery passed: 855 tests, 15 skipped.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:
