@@ -656,6 +656,46 @@ def time_collection_start_messages(
     return tuple(messages)
 
 
+def time_collection_database_status_message(initial_files: Any) -> str:
+    return f"   📊 数据库初始状态: {initial_files} 个文件"
+
+
+def time_collection_latest_file_time_message(db_latest_time: Any) -> str:
+    return f"   📅 数据库最新文件时间: {db_latest_time}"
+
+
+def time_collection_page_message(page_count: int) -> str:
+    return f"📄 收集第{page_count}页文件列表..."
+
+
+def time_collection_fetch_failed_messages(page_count: int) -> tuple[str, str]:
+    return (
+        f"❌ 第{page_count}页获取失败，收集过程中断",
+        f"💾 已成功收集前{page_count-1}页的数据",
+    )
+
+
+def time_collection_empty_page_message() -> str:
+    return "📭 没有更多文件"
+
+
+def time_collection_page_files_message(file_count: int) -> str:
+    return f"   📋 当前页面: {file_count} 个文件"
+
+
+def time_collection_page_time_range_message(
+    page_oldest: Optional[str],
+    page_newest: Optional[str],
+) -> Optional[str]:
+    if page_oldest and page_newest:
+        return f"   🗓️ 当前页文件时间范围: {page_newest} ~ {page_oldest}"
+    return None
+
+
+def time_collection_storage_failed_message(page_count: int, exc: Exception) -> str:
+    return f"   ❌ 第{page_count}页存储失败: {exc}"
+
+
 def time_collection_next_page_plan(next_index: Any) -> Dict[str, Any]:
     if next_index:
         return {

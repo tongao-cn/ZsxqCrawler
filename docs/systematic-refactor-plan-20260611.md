@@ -12646,6 +12646,45 @@ Result:
 - PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-13 - P9 file downloader time collection page status helpers
+
+Changed:
+
+- Added time-collection page/status message helpers in
+  `backend/crawlers/zsxq_file_downloader_helpers.py`.
+- Reused them in `ZSXQFileDownloader.collect_files_by_time()`.
+- Added direct helper coverage for initial database status, latest database time, page start,
+  fetch failure, empty page, page file count, page time range, and storage failure messages.
+- Re-ran method-path coverage for dedupe filtering, next-page sleep, terminal-page logging, and
+  page import failure behavior.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Database stats lookup, latest-time query, fetch order, empty-page handling, page time-range
+  conditions, import side effects, dedupe filtering, next-page sleep, storage-failure break,
+  task/public APIs, storage schema, fallback/legacy behavior, and config semantics are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py backend\crawlers\zsxq_file_downloader_helpers.py tests\test_zsxq_file_downloader_helpers.py
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderTimeHelperTests.test_time_collection_page_status_messages_preserve_existing_text -v
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderPaginationTests.test_collect_files_by_time_filters_old_files_and_stops_after_mixed_page tests.test_zsxq_file_downloader_helpers.FileDownloaderPaginationTests.test_collect_files_by_time_preserves_next_index_sleep_and_last_page_log tests.test_zsxq_file_downloader_helpers.FileDownloaderPaginationTests.test_collect_files_by_time_stops_when_page_import_fails -v
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers -v
+uv run python -m unittest discover -s tests
+uv run python scripts\scan_postgres_compat_debt.py
+npm --prefix frontend run build
+```
+
+Result:
+
+- Focused time-collection page/status helper and method-path tests passed.
+- Downloader helper tests passed: 143 tests.
+- Full backend unittest discovery passed: 853 tests, 15 skipped.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:

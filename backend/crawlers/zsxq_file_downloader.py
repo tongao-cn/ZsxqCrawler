@@ -111,7 +111,15 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     should_log_full_response,
     summarize_page_time_range,
     time_dedupe_page_messages,
+    time_collection_database_status_message,
+    time_collection_empty_page_message,
+    time_collection_fetch_failed_messages,
+    time_collection_latest_file_time_message,
     time_collection_page_import_messages,
+    time_collection_page_files_message,
+    time_collection_page_message,
+    time_collection_page_time_range_message,
+    time_collection_storage_failed_message,
     time_collection_final_summary,
     time_collection_mode,
     time_collection_next_page_plan,
@@ -1269,7 +1277,7 @@ class ZSXQFileDownloader:
         # 使用完整数据库的统计信息
         initial_stats = self.file_db.get_database_stats()
         initial_files = initial_stats.get('files', 0)
-        self.log(f"   📊 数据库初始状态: {initial_files} 个文件")
+        self.log(time_collection_database_status_message(initial_files))
         
         db_latest_time = None
         if enable_time_dedupe and initial_files > 0:
@@ -1278,7 +1286,7 @@ class ZSXQFileDownloader:
             result = self.file_db.cursor.fetchone()
             if result and result[0]:
                 db_latest_time = result[0]
-                self.log(f"   📅 数据库最新文件时间: {db_latest_time}")
+                self.log(time_collection_latest_file_time_message(db_latest_time))
         
         total_imported_stats = empty_import_stats()
         current_index = start_time  # 使用时间戳作为index
@@ -1292,25 +1300,26 @@ class ZSXQFileDownloader:
                     break
 
                 page_count += 1
-                self.log(f"📄 收集第{page_count}页文件列表...")
+                self.log(time_collection_page_message(page_count))
 
                 # 获取文件列表（按时间排序）
                 data = self.fetch_file_list(count=20, index=current_index, sort=sort)
                 if not data:
-                    self.log(f"❌ 第{page_count}页获取失败，收集过程中断")
-                    self.log(f"💾 已成功收集前{page_count-1}页的数据")
+                    for message in time_collection_fetch_failed_messages(page_count):
+                        self.log(message)
                     break
                 
                 files, next_index = file_list_response_page(data)
                 
                 if not files:
-                    self.log("📭 没有更多文件")
+                    self.log(time_collection_empty_page_message())
                     break
 
-                self.log(f"   📋 当前页面: {len(files)} 个文件")
+                self.log(time_collection_page_files_message(len(files)))
                 page_oldest, page_newest = summarize_page_time_range(files)
-                if page_oldest and page_newest:
-                    self.log(f"   🗓️ 当前页文件时间范围: {page_newest} ~ {page_oldest}")
+                time_range_message = time_collection_page_time_range_message(page_oldest, page_newest)
+                if time_range_message:
+                    self.log(time_range_message)
 
                 should_stop_after_insert = False
                 if enable_time_dedupe and db_latest_time:
@@ -1344,7 +1353,7 @@ class ZSXQFileDownloader:
                         break
 
                 except Exception as e:
-                    self.log(f"   ❌ 第{page_count}页存储失败: {e}")
+                    self.log(time_collection_storage_failed_message(page_count, e))
                     break
 
                 if stop_before_time:

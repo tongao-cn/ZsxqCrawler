@@ -112,7 +112,15 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     should_log_full_response,
     summarize_page_time_range,
     time_dedupe_page_messages,
+    time_collection_database_status_message,
+    time_collection_empty_page_message,
+    time_collection_fetch_failed_messages,
+    time_collection_latest_file_time_message,
     time_collection_page_import_messages,
+    time_collection_page_files_message,
+    time_collection_page_message,
+    time_collection_page_time_range_message,
+    time_collection_storage_failed_message,
     time_collection_final_summary,
     time_collection_mode,
     time_collection_next_page_plan,
@@ -1516,6 +1524,36 @@ class FileDownloaderTimeHelperTests(unittest.TestCase):
                 "2026-05-01T00:00:00",
                 datetime.datetime(2026, 5, 1, 12, 30),
             ),
+        )
+
+    def test_time_collection_page_status_messages_preserve_existing_text(self):
+        self.assertEqual(
+            "   📊 数据库初始状态: 3 个文件",
+            time_collection_database_status_message(3),
+        )
+        self.assertEqual(
+            "   📅 数据库最新文件时间: 2026-05-02T00:00:00",
+            time_collection_latest_file_time_message("2026-05-02T00:00:00"),
+        )
+        self.assertEqual("📄 收集第2页文件列表...", time_collection_page_message(2))
+        self.assertEqual(
+            ("❌ 第2页获取失败，收集过程中断", "💾 已成功收集前1页的数据"),
+            time_collection_fetch_failed_messages(2),
+        )
+        self.assertEqual("📭 没有更多文件", time_collection_empty_page_message())
+        self.assertEqual("   📋 当前页面: 4 个文件", time_collection_page_files_message(4))
+        self.assertEqual(
+            "   🗓️ 当前页文件时间范围: 2026-05-07 10:00:00 ~ 2026-05-01 09:00:00",
+            time_collection_page_time_range_message(
+                "2026-05-01 09:00:00",
+                "2026-05-07 10:00:00",
+            ),
+        )
+        self.assertIsNone(time_collection_page_time_range_message(None, "2026-05-07 10:00:00"))
+        self.assertIsNone(time_collection_page_time_range_message("2026-05-01 09:00:00", None))
+        self.assertEqual(
+            "   ❌ 第2页存储失败: stable import failure",
+            time_collection_storage_failed_message(2, RuntimeError("stable import failure")),
         )
 
     def test_time_collection_next_page_plan_preserves_messages_and_next_index(self):
