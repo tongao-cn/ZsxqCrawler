@@ -74,6 +74,82 @@ class AShareRoutesHelperTests(unittest.TestCase):
         create_task_response.assert_not_called()
 
     @unittest.skipUnless(HAS_A_SHARE_ROUTE_DEPS, "a-share route dependencies are not installed")
+    def test_get_a_share_analysis_status_preserves_success_payload_shape(self):
+        import asyncio
+
+        from backend.routes import a_share_routes
+
+        summary = {"rows_count": 7, "processed_items": 5}
+        latest_task = {"id": "latest"}
+        running_task = {"id": "running"}
+        storage = {"enabled": True, "mode": "postgres"}
+        latest_export = {"block_name": "A-share"}
+
+        with (
+            patch.object(a_share_routes, "get_analysis_summary", return_value=summary) as get_summary,
+            patch.object(a_share_routes, "_a_share_status_tasks", return_value=(latest_task, running_task))
+            as get_tasks,
+            patch.object(a_share_routes, "_a_share_storage_status", return_value=storage) as get_storage_status,
+            patch.object(a_share_routes, "_latest_a_share_tdx_export", return_value=latest_export)
+            as get_latest_export,
+            patch.object(a_share_routes, "has_openai_api_key", return_value=True) as has_api_key,
+        ):
+            result = asyncio.run(a_share_routes.get_a_share_analysis_status(" 51111112855254 "))
+
+        self.assertEqual(
+            {
+                "summary": summary,
+                "group_id": "51111112855254",
+                "defaults": a_share_routes._analysis_defaults_payload(),
+                "api_key_configured": True,
+                "latest_task": latest_task,
+                "running_task": running_task,
+                "storage": storage,
+                "latest_tdx_export": latest_export,
+            },
+            result,
+        )
+        get_summary.assert_called_once_with(group_id="51111112855254")
+        get_tasks.assert_called_once_with("51111112855254")
+        get_storage_status.assert_awaited_once_with(summary, "51111112855254")
+        get_latest_export.assert_awaited_once_with("51111112855254")
+        has_api_key.assert_called_once_with()
+
+    @unittest.skipUnless(HAS_A_SHARE_ROUTE_DEPS, "a-share route dependencies are not installed")
+    def test_a_share_status_payload_preserves_response_shape(self):
+        from backend.routes import a_share_routes
+
+        summary = {"rows_count": 7}
+        latest_task = {"id": "latest"}
+        running_task = {"id": "running"}
+        storage = {"enabled": True}
+        latest_export = {"block_name": "A-share"}
+
+        with patch.object(a_share_routes, "has_openai_api_key", return_value=False) as has_api_key:
+            self.assertEqual(
+                {
+                    "summary": summary,
+                    "group_id": "51111112855254",
+                    "defaults": a_share_routes._analysis_defaults_payload(),
+                    "api_key_configured": False,
+                    "latest_task": latest_task,
+                    "running_task": running_task,
+                    "storage": storage,
+                    "latest_tdx_export": latest_export,
+                },
+                a_share_routes._a_share_status_payload(
+                    "51111112855254",
+                    summary,
+                    latest_task,
+                    running_task,
+                    storage,
+                    latest_export,
+                ),
+            )
+
+        has_api_key.assert_called_once_with()
+
+    @unittest.skipUnless(HAS_A_SHARE_ROUTE_DEPS, "a-share route dependencies are not installed")
     def test_get_a_share_analysis_status_preserves_storage_failure_fallback(self):
         import asyncio
 

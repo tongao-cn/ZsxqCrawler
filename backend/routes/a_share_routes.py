@@ -247,6 +247,26 @@ def _a_share_status_tasks(normalized_group_id: Optional[str]) -> tuple[Optional[
     return latest_task, running_task
 
 
+def _a_share_status_payload(
+    normalized_group_id: Optional[str],
+    summary: dict,
+    latest_task: Optional[dict],
+    running_task: Optional[dict],
+    storage: dict,
+    latest_tdx_export: Optional[dict],
+) -> dict:
+    return {
+        "summary": summary,
+        "group_id": normalized_group_id,
+        "defaults": _analysis_defaults_payload(),
+        "api_key_configured": has_openai_api_key(),
+        "latest_task": latest_task,
+        "running_task": running_task,
+        "storage": storage,
+        "latest_tdx_export": latest_tdx_export,
+    }
+
+
 def run_a_share_analysis_task(task_id: str, request: AShareAnalysisRunRequest):
     """后台执行A股公司提及分析任务"""
     try:
@@ -275,16 +295,14 @@ async def get_a_share_analysis_status(group_id: Optional[str] = None):
 
         latest_tdx_export = await _latest_a_share_tdx_export(normalized_group_id)
 
-        return {
-            "summary": summary,
-            "group_id": normalized_group_id,
-            "defaults": _analysis_defaults_payload(),
-            "api_key_configured": has_openai_api_key(),
-            "latest_task": latest_task,
-            "running_task": running_task,
-            "storage": storage,
-            "latest_tdx_export": latest_tdx_export,
-        }
+        return _a_share_status_payload(
+            normalized_group_id,
+            summary,
+            latest_task,
+            running_task,
+            storage,
+            latest_tdx_export,
+        )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"获取A股分析状态失败: {str(e)}")
 
