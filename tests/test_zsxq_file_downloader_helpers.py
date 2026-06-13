@@ -54,6 +54,8 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     download_url_api_failure_plan,
     empty_import_stats,
     existing_file_matches,
+    file_list_item_display_lines,
+    file_list_next_index_message,
     file_list_request_params,
     file_list_response_page,
     file_list_start_messages,
@@ -1317,6 +1319,43 @@ class FileDownloaderRetryHelperTests(unittest.TestCase):
         )
         with self.assertRaises(AttributeError):
             file_list_response_page({"resp_data": None})
+
+    def test_file_list_display_helpers_preserve_defaults_topic_and_footer(self):
+        topic_text = "12345678901234567890123456789012345678901234567890tail"
+        self.assertEqual(
+            (
+                " 3. 📄 demo.pdf",
+                "    📊 大小: 1,048,576 bytes (1.00 MB)",
+                "    📈 下载: 7 次",
+                "    ⏰ 时间: 2026-05-03T10:00:00",
+                "    💬 话题: 12345678901234567890123456789012345678901234567890...",
+                "",
+            ),
+            file_list_item_display_lines(
+                3,
+                {
+                    "file": {
+                        "name": "demo.pdf",
+                        "size": 1048576,
+                        "download_count": 7,
+                        "create_time": "2026-05-03T10:00:00",
+                    },
+                    "topic": {"talk": {"text": topic_text}},
+                },
+            ),
+        )
+        self.assertEqual(
+            (
+                " 1. 📄 Unknown",
+                "    📊 大小: 0 bytes (0.00 MB)",
+                "    📈 下载: 0 次",
+                "    ⏰ 时间: Unknown",
+                "",
+            ),
+            file_list_item_display_lines(1, {}),
+        )
+        self.assertEqual("📑 下一页索引: next-page", file_list_next_index_message("next-page"))
+        self.assertEqual("📭 没有更多文件", file_list_next_index_message(""))
 
     def test_api_failure_detail_preserves_message_error_code_fallbacks(self):
         self.assertEqual(

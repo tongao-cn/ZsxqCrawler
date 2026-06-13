@@ -153,6 +153,38 @@ def file_list_response_page(data: Dict[str, Any]) -> Tuple[Any, Any]:
     return resp_data.get("files", []), resp_data.get("index")
 
 
+def file_list_item_display_lines(position: int, file_info: Dict[str, Any]) -> tuple[str, ...]:
+    file_data = file_info.get("file", {})
+    topic_data = file_info.get("topic", {})
+
+    file_name = file_data.get("name", "Unknown")
+    file_size = file_data.get("size", 0)
+    download_count = file_data.get("download_count", 0)
+    create_time = file_data.get("create_time", "Unknown")
+    topic_title = (
+        topic_data.get("talk", {}).get("text", "")[:50]
+        if topic_data.get("talk")
+        else ""
+    )
+
+    lines = [
+        f"{position:2d}. 📄 {file_name}",
+        f"    📊 大小: {file_size:,} bytes ({file_size/1024/1024:.2f} MB)",
+        f"    📈 下载: {download_count} 次",
+        f"    ⏰ 时间: {create_time}",
+    ]
+    if topic_title:
+        lines.append(f"    💬 话题: {topic_title}...")
+    lines.append("")
+    return tuple(lines)
+
+
+def file_list_next_index_message(next_index: Any) -> str:
+    if next_index:
+        return f"📑 下一页索引: {next_index}"
+    return "📭 没有更多文件"
+
+
 def api_failure_detail(data: Dict[str, Any]) -> tuple[Any, Any]:
     return data.get("message", data.get("error", "未知错误")), data.get("code", "N/A")
 

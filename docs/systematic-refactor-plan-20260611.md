@@ -12379,6 +12379,44 @@ Result:
 - PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-13 - P9 file downloader list display helpers
+
+Changed:
+
+- Added `file_list_item_display_lines()` and `file_list_next_index_message()` in
+  `backend/crawlers/zsxq_file_downloader_helpers.py`.
+- Reused the helpers in `ZSXQFileDownloader.show_file_list()`.
+- Added direct helper coverage for file display defaults, byte/MB formatting, download-count text,
+  topic-title truncation, blank separator line, next-page message, and last-page message.
+- Kept existing `show_file_list()` integration coverage for printed output, fetch arguments, and
+  returned next-page index.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- File-list display text, spacing, default values, topic title truncation, next-page truthiness,
+  returned cursor, task/public APIs, storage schema, fallback/legacy behavior, and config semantics
+  are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py backend\crawlers\zsxq_file_downloader_helpers.py tests\test_zsxq_file_downloader_helpers.py
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderRetryHelperTests.test_file_list_display_helpers_preserve_defaults_topic_and_footer tests.test_zsxq_file_downloader_helpers.FileDownloaderPaginationTests.test_show_file_list_preserves_page_output_and_next_index tests.test_zsxq_file_downloader_helpers.FileDownloaderRetryHelperTests.test_file_list_response_page_preserves_nested_access_semantics -v
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers -v
+uv run python -m unittest discover -s tests
+uv run python scripts\scan_postgres_compat_debt.py
+npm --prefix frontend run build
+```
+
+Result:
+
+- Focused list-display helper and show-list integration tests passed.
+- Downloader helper tests passed: 127 tests.
+- Full backend unittest discovery passed: 837 tests, 15 skipped.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:
