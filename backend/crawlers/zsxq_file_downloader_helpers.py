@@ -493,6 +493,15 @@ def database_download_query_plan(
     }
 
 
+def database_download_effective_last_days(
+    last_days: Optional[int],
+    legacy_recent_days: Any,
+) -> Any:
+    if last_days is None and legacy_recent_days is not None:
+        return legacy_recent_days
+    return last_days
+
+
 def database_download_filter_messages(
     normalized_start: Optional[str],
     normalized_end: Optional[str],

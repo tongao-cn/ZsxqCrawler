@@ -12608,6 +12608,44 @@ Result:
 - PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-13 - P9 file downloader database download legacy last-days helper
+
+Changed:
+
+- Added `database_download_effective_last_days()` in
+  `backend/crawlers/zsxq_file_downloader_helpers.py`.
+- Reused it in `ZSXQFileDownloader.download_files_from_database()`.
+- Added direct helper coverage for `None`, legacy `recent_days`, explicit `last_days`
+  precedence, `0`, and empty-string legacy values.
+- Added database-download method coverage showing legacy `recent_days` still feeds the
+  query-plan date-filter path.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Legacy `recent_days` compatibility fallback, explicit `last_days` precedence,
+  falsey-but-not-`None` legacy values, query-plan inputs, date filter SQL shape,
+  log output, task/public APIs, storage schema, and config semantics are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py backend\crawlers\zsxq_file_downloader_helpers.py tests\test_zsxq_file_downloader_helpers.py
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderTimeHelperTests.test_database_download_effective_last_days_preserves_legacy_recent_days_fallback tests.test_zsxq_file_downloader_helpers.FileDownloaderDatabaseDownloadTests.test_download_files_from_database_preserves_legacy_recent_days_fallback_for_query_plan -v
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers -v
+uv run python -m unittest discover -s tests
+uv run python scripts\scan_postgres_compat_debt.py
+npm --prefix frontend run build
+```
+
+Result:
+
+- Focused legacy last-days helper and method-path tests passed.
+- Downloader helper tests passed: 142 tests.
+- Full backend unittest discovery passed: 852 tests, 15 skipped.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:

@@ -40,6 +40,7 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     batch_download_start_messages,
     classify_api_failure,
     database_download_completion_messages,
+    database_download_effective_last_days,
     database_download_filter_messages,
     database_download_file_info,
     database_download_query_plan,
@@ -1483,9 +1484,7 @@ class ZSXQFileDownloader:
         """从完整数据库下载文件（使用file_id字段）"""
         for message in database_download_start_messages(max_files, status_filter):
             self.log(message)
-        legacy_recent_days = kwargs.get('recent_days')
-        if last_days is None and legacy_recent_days is not None:
-            last_days = legacy_recent_days
+        last_days = database_download_effective_last_days(last_days, kwargs.get('recent_days'))
 
         query_plan = database_download_query_plan(
             _query_group_id(self.group_id),

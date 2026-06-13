@@ -35,6 +35,7 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     classify_http_failure,
     content_disposition_filename,
     database_download_completion_messages,
+    database_download_effective_last_days,
     database_download_filter_messages,
     database_download_file_info,
     database_download_start_messages,
@@ -1046,6 +1047,27 @@ class FileDownloaderDatabaseDownloadTests(unittest.TestCase):
         self.assertEqual(("group-1",), params)
         self.assertIn("   📌 下载排序: 按热度倒序", downloader.logs)
 
+    def test_download_files_from_database_preserves_legacy_recent_days_fallback_for_query_plan(self):
+        downloader = self._downloader_for_query_capture()
+
+        with patch(
+            "backend.crawlers.zsxq_file_downloader_helpers.normalize_date_range",
+            return_value=("2026-05-01", "2026-05-07", None),
+        ) as normalize:
+            stats = ZSXQFileDownloader.download_files_from_database(downloader, recent_days=7)
+
+        query, params = downloader.file_db.executed[-1]
+        compact_query = self._compact_sql(query)
+        self.assertEqual({"total_files": 0, "downloaded": 0, "skipped": 0, "failed": 0}, stats)
+        normalize.assert_called_once_with(start_date=None, end_date=None, last_days=7)
+        self.assertIn(
+            "WHERE group_id = ? AND download_status = ? AND substr(create_time, 1, 10) >= ? "
+            "AND substr(create_time, 1, 10) <= ?",
+            compact_query,
+        )
+        self.assertEqual((511, "pending", "2026-05-01", "2026-05-07"), params)
+        self.assertIn("   📅 下载区间: 2026-05-01 ~ 2026-05-07", downloader.logs)
+
     def test_download_files_from_database_preserves_result_stats_payloads_and_delays(self):
         downloader = self._downloader_for_query_capture(
             rows=[
@@ -1087,6 +1109,13 @@ class FileDownloaderDatabaseDownloadTests(unittest.TestCase):
 
 
 class FileDownloaderTimeHelperTests(unittest.TestCase):
+    def test_database_download_effective_last_days_preserves_legacy_recent_days_fallback(self):
+        self.assertIsNone(database_download_effective_last_days(None, None))
+        self.assertEqual(7, database_download_effective_last_days(None, 7))
+        self.assertEqual(5, database_download_effective_last_days(5, 7))
+        self.assertEqual(0, database_download_effective_last_days(0, 7))
+        self.assertEqual("", database_download_effective_last_days(None, ""))
+
     def test_database_download_file_info_preserves_nested_payload_shape(self):
         self.assertEqual(
             {
