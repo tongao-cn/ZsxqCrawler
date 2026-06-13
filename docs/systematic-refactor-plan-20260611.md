@@ -10591,6 +10591,48 @@ Result:
 - Frontend build passed, including Next.js lint/type checks.
 - `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
 
+### 2026-06-13 - P2 staging script unused datetime import cleanup
+
+Changed:
+
+- Removed unused `datetime` import from `scripts.stage_analysis_ready_files`.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Only an unused import was removed; group/date/extension arguments, database query SQL,
+  completed-download filtering, target path generation, copy/hardlink behavior, manifest fields,
+  dry-run stats, and printed summary lines are unchanged.
+- The script still imports `DEFAULT_EXTENSIONS`, `_format_size`, `_parse_extensions`, and
+  `_query_group_id` from `scripts.download_analysis_ready_files`; that existing dependency and the
+  current dirty downloader files remain outside this P2 slice.
+- No schema, crawler, storage, fallback, legacy, route, public response, script entrypoint, or
+  dependency behavior was removed.
+
+Verification:
+
+```powershell
+uv run python -m py_compile scripts\stage_analysis_ready_files.py
+uv run python -m scripts.stage_analysis_ready_files --help
+rg -n "\bdatetime\b" scripts\stage_analysis_ready_files.py
+uv run python scripts\scan_postgres_compat_debt.py
+uv run python -m unittest discover -s tests
+cmd.exe /d /c npm --prefix frontend run build
+git diff --check
+```
+
+Result:
+
+- Baseline `py_compile` passed before removing the import.
+- Baseline CLI help path passed before removing the import.
+- `py_compile` passed after the import cleanup.
+- `uv run python -m scripts.stage_analysis_ready_files --help` preserved the CLI help path.
+- `rg` returned no matches for `datetime` in the edited script.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Full backend unittest discovery passed: 795 tests passed, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+- `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
+
 ## Stop Conditions
 
 Pause before editing if:
