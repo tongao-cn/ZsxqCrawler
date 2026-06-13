@@ -52,15 +52,15 @@ const CONCEPT_ALIAS_GROUPS: Array<{ concept: string; aliases: string[] }> = [
   },
   {
     concept: '被动元器件/MLCC',
-    aliases: ['MLCC', 'MLCC粉体', '电容', '超级电容', '钽电容', '薄膜电容', '被动元器件', '电子元件'],
+    aliases: ['MLCC', 'MLCC涨价', 'MLCC粉体', '电容', '超级电容', '超容', '钽电容', '薄膜电容', '芯片电感', '被动元器件', '电子元件'],
   },
   {
     concept: '存储产业链',
-    aliases: ['存储', '存储产业链', '长江存储产业链', '长江存储上市', '存储扩产', '存储链', '利基存储', '长鑫存储', '长鑫', '国产存储', '长存产业链', '存储芯片', 'DRAM', 'HBM', 'MRDIMM'],
+    aliases: ['存储', '存储产业链', '长江存储产业链', '长江存储上市', '存储扩产', '存储链', '利基存储', '长鑫存储', '长鑫', '国产存储', '长存产业链', '存储芯片', '国内存储capex', 'DRAM', 'NAND', 'HBM', 'MRDIMM'],
   },
   {
     concept: '半导体设备/先进封装',
-    aliases: ['半导体设备', '先进封装', '先进封测', '半导体先进封装', 'CoWoS'],
+    aliases: ['半导体设备', '先进封装', 'AI先进封装', '先进封测', '半导体先进封装', '半导体封装', '3D封装', 'CoWoS', 'COPOS', 'COPS工艺', 'CSP', 'Scale Up'],
   },
   {
     concept: '半导体设备/零部件',
@@ -80,7 +80,7 @@ const CONCEPT_ALIAS_GROUPS: Array<{ concept: string; aliases: string[] }> = [
   },
   {
     concept: '玻璃基板/载板',
-    aliases: ['玻璃基板', '玻璃基载板', '玻璃载板', '玻璃基封装基板', '玻璃基封装载板', '玻璃基板TGV', 'TGV玻璃基板', 'TGV玻璃基板设备', 'ABF载板', 'IC载板', '封装基板', '载板'],
+    aliases: ['玻璃基板', '玻璃基载板', '玻璃载板', '玻璃基封装基板', '玻璃基封装载板', '玻璃基板TGV', 'TGV', 'TGV设备', 'TGV玻璃基板', 'TGV玻璃基板设备', '玻璃中介层', '玻璃原片', 'ABF载板', 'IC载板', '封装基板', '载板'],
   },
   {
     concept: '电力/变压器',
@@ -88,7 +88,7 @@ const CONCEPT_ALIAS_GROUPS: Array<{ concept: string; aliases: string[] }> = [
   },
   {
     concept: '储能',
-    aliases: ['储能', '户储', '光储', '大储', '工商储', '储能逆变器', '逆变器'],
+    aliases: ['储能', '户储', '光储', '大储', '工商储', 'AI储能', 'AIDC配套储能', '独立储能', '储能逆变器', '逆变器'],
   },
   {
     concept: '绿电',
@@ -100,11 +100,11 @@ const CONCEPT_ALIAS_GROUPS: Array<{ concept: string; aliases: string[] }> = [
   },
   {
     concept: '锂电/电池',
-    aliases: ['锂电', '锂电材料', '电池', '固态电池', '磷酸铁锂'],
+    aliases: ['锂电', '锂电池', '锂电材料', '电池', '固态电池', '磷酸铁锂', '电解液', '碳酸锂', '大容量电芯'],
   },
   {
     concept: '光通信/CPO',
-    aliases: ['光模块', '高速光模块', '光通信', '光互联', '光互连', 'CPO', '光芯片', '硅光', 'Micro LED光互联', '短距光互联', 'MPO', 'NPO', 'OCS', '1.6T', '1.6T光模块', '2.4T', '800G', '3.2T', '光器件', '光模块设备', 'DSP', 'EML', '光纤', '光纤光缆', '光引擎', 'CW光源', '保偏光纤', '空芯光纤', '通信'],
+    aliases: ['光模块', '高速光模块', '光通信', 'AI光通信', '光互联', '光互连', 'CPO', '光芯片', '硅光', 'Micro LED光互联', '短距光互联', 'MPO', 'NPO', 'OCS', '1.6T', '1.6T光模块', '2.4T', '800G', '3.2T', '光器件', '光模块设备', 'DSP', 'EML', '光纤', '光纤缆', '光纤光缆', '特种光纤', '光网络', '光设备', '光引擎', 'CW光源', '保偏光纤', '空芯光纤', '薄膜铌酸锂', '磷化铟', '高速互联', '算力互联', '通信'],
   },
   {
     concept: '液冷/热管理',
@@ -112,7 +112,7 @@ const CONCEPT_ALIAS_GROUPS: Array<{ concept: string; aliases: string[] }> = [
   },
   {
     concept: 'PCB',
-    aliases: ['PCB', 'AI PCB', 'AI设备及耗材', '光模块mSAP PCB', 'PCB钻针', '钻针', 'AI PCB钻针', 'PCB高端钻针', 'PCB高端铣刀', '金刚石涂层PCB钻针', 'PCB专用设备', 'PCB曝光设备', 'PCB高端设备', 'PCB设备', 'PCB设备&耗材', 'PCB耗材', 'PCB微钻', 'PCB上游', 'mSAP', 'MSAP'],
+    aliases: ['PCB', 'AI PCB', 'AI设备及耗材', '光模块mSAP PCB', 'PCB钻针', '钻针', 'AI PCB钻针', 'PCB高端钻针', '高长径比钻针', 'PCB钻针/铣刀', 'PCB高端铣刀', '金刚石涂层PCB钻针', 'PCB专用设备', 'PCB曝光设备', 'PCB高端设备', 'PCB设备', 'PCB设备&耗材', 'PCB耗材', 'PCB微钻', 'PCB上游', 'PCB半导体化', '高阶HDI', '钻孔供需', 'mSAP', 'MSAP'],
   },
   {
     concept: 'CCL',
@@ -128,7 +128,7 @@ const CONCEPT_ALIAS_GROUPS: Array<{ concept: string; aliases: string[] }> = [
   },
   {
     concept: '燃机/SOFC',
-    aliases: ['SOFC', '燃气轮机', '燃机', '固体氧化物燃料电池'],
+    aliases: ['SOFC', '燃气轮机', '燃机', '国产燃机', '固体氧化物燃料电池'],
   },
 ];
 
