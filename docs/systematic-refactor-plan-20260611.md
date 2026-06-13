@@ -9842,6 +9842,46 @@ Result:
 - Frontend build passed, including Next.js lint/type checks.
 - `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
 
+### 2026-06-13 - P2 task stream payload helpers
+
+Changed:
+
+- Added `backend.routes.task_routes._task_log_payload`, `_task_removed_payload`, and
+  `_task_heartbeat_payload`.
+- Replaced repeated SSE stream payload literals for log, removed-task, and heartbeat events.
+- Added helper coverage in `tests/test_task_routes_helpers.py` for the extracted payload shapes and
+  the existing removed-task Chinese message.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- SSE frame formatting remains owned by `_sse_event` and is unchanged.
+- Stream ordering, subscription lifecycle, polling timeout, drain behavior, task status payloads, and
+  terminal-task break conditions are unchanged.
+- Existing public task route paths, response payloads, status codes, and cleanup behavior are unchanged.
+- No schema, crawler, storage, legacy, or fallback-removal behavior changed.
+- Existing dirty downloader risk-log files and scripts remain outside this P2 slice.
+
+Verification:
+
+```powershell
+uv run python -m py_compile backend\routes\task_routes.py tests\test_task_routes_helpers.py
+uv run python -m unittest tests.test_task_routes_helpers -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run python -m unittest discover -s tests
+cmd.exe /d /c npm --prefix frontend run build
+git diff --check
+```
+
+Result:
+
+- Focused task route helper tests passed after payload helper extraction.
+- `py_compile` passed.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Full backend unittest discovery: 785 tests passed, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+- `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
+
 ## Stop Conditions
 
 Pause before editing if:

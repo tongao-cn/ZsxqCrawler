@@ -34,6 +34,18 @@ def _task_status_payload(task: dict) -> dict:
     return {"type": "status", "status": task["status"], "message": task["message"]}
 
 
+def _task_log_payload(message: str) -> dict:
+    return {"type": "log", "message": message}
+
+
+def _task_removed_payload() -> dict:
+    return {"type": "status", "status": "cancelled", "message": "任务记录已被清理"}
+
+
+def _task_heartbeat_payload() -> dict:
+    return {"type": "heartbeat"}
+
+
 def _streaming_response_headers() -> dict:
     return {
         "Cache-Control": "no-cache",
@@ -122,7 +134,7 @@ async def stream_task_logs(task_id: str):
             # 发送历史日志
             logs = get_task_logs_state(task_id) or []
             for log in logs:
-                yield _sse_event({"type": "log", "message": log})
+                yield _sse_event(_task_log_payload(log))
 
             # 发送任务状态
             task = get_task_state(task_id)
@@ -133,9 +145,9 @@ async def stream_task_logs(task_id: str):
             while True:
                 log = await asyncio.to_thread(_wait_for_task_log, subscription, 0.5)
                 if log is not None:
-                    yield _sse_event({"type": "log", "message": log})
+                    yield _sse_event(_task_log_payload(log))
                 for queued_log in _drain_task_logs(subscription):
-                    yield _sse_event({"type": "log", "message": queued_log})
+                    yield _sse_event(_task_log_payload(queued_log))
 
                 # 检查任务状态变化
                 task = get_task_state(task_id)
@@ -145,11 +157,11 @@ async def stream_task_logs(task_id: str):
                     if task["status"] in ["completed", "failed", "cancelled"]:
                         break
                 else:
-                    yield _sse_event({"type": "status", "status": "cancelled", "message": "任务记录已被清理"})
+                    yield _sse_event(_task_removed_payload())
                     break
 
                 # 发送心跳
-                yield _sse_event({"type": "heartbeat"})
+                yield _sse_event(_task_heartbeat_payload())
 
         except asyncio.CancelledError:
             # 客户端断开连接

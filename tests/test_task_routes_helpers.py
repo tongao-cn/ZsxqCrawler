@@ -27,6 +27,17 @@ class TaskRoutesHelperTests(unittest.TestCase):
         self.assertEqual({"type": "status", "status": "running", "message": "处理中"}, payload)
 
     @unittest.skipUnless(HAS_TASK_ROUTE_DEPS, "task route dependencies are not installed")
+    def test_task_stream_payload_helpers_keep_existing_shapes(self):
+        from backend.routes.task_routes import _task_heartbeat_payload, _task_log_payload, _task_removed_payload
+
+        self.assertEqual({"type": "log", "message": "hello"}, _task_log_payload("hello"))
+        self.assertEqual({"type": "heartbeat"}, _task_heartbeat_payload())
+        self.assertEqual(
+            {"type": "status", "status": "cancelled", "message": "任务记录已被清理"},
+            _task_removed_payload(),
+        )
+
+    @unittest.skipUnless(HAS_TASK_ROUTE_DEPS, "task route dependencies are not installed")
     def test_streaming_response_headers_keep_sse_defaults(self):
         from backend.routes.task_routes import _streaming_response_headers
 
