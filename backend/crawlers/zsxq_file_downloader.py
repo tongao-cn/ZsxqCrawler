@@ -27,6 +27,7 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     add_import_stats,
     classify_api_failure,
     classify_http_failure,
+    database_download_filter_messages,
     database_download_query_plan,
     database_stats_table_emoji,
     download_file_data,
@@ -1553,11 +1554,8 @@ class ZSXQFileDownloader:
         normalized_end = query_plan["normalized_end"]
         sort_by = query_plan["sort_by"]
 
-        if normalized_start or normalized_end:
-            self.log(f"   📅 下载区间: {normalized_start or '-'} ~ {normalized_end or '-'}")
-        elif last_days:
-            self.log(f"   📅 时间筛选: 最近{last_days}天")
-        self.log(f"   📌 下载排序: {'按时间倒序' if sort_by == 'create_time' else '按热度倒序'}")
+        for message in database_download_filter_messages(normalized_start, normalized_end, last_days, sort_by):
+            self.log(message)
 
         # 检查是否需要停止
         if self.check_stop():

@@ -21,6 +21,7 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     classify_api_failure,
     classify_http_failure,
     content_disposition_filename,
+    database_download_filter_messages,
     database_stats_table_emoji,
     download_exception_detail,
     download_expected_size,
@@ -496,6 +497,26 @@ class FileDownloaderDatabaseDownloadTests(unittest.TestCase):
 
 
 class FileDownloaderTimeHelperTests(unittest.TestCase):
+    def test_database_download_filter_messages_preserves_range_and_sort_labels(self):
+        self.assertEqual(
+            (
+                "   📅 下载区间: 2026-05-01 ~ 2026-05-07",
+                "   📌 下载排序: 按时间倒序",
+            ),
+            database_download_filter_messages("2026-05-01", "2026-05-07", 7, "create_time"),
+        )
+        self.assertEqual(
+            (
+                "   📅 时间筛选: 最近7天",
+                "   📌 下载排序: 按热度倒序",
+            ),
+            database_download_filter_messages(None, None, 7, "download_count"),
+        )
+        self.assertEqual(
+            ("   📅 下载区间: - ~ 2026-05-07", "   📌 下载排序: 按热度倒序"),
+            database_download_filter_messages(None, "2026-05-07", None, "download_count"),
+        )
+
     def test_parse_create_time_accepts_common_formats(self):
         self.assertEqual(
             datetime.datetime(2026, 5, 1, 10, 30, 0),

@@ -244,6 +244,21 @@ def database_download_query_plan(
     }
 
 
+def database_download_filter_messages(
+    normalized_start: Optional[str],
+    normalized_end: Optional[str],
+    last_days: Optional[int],
+    sort_by: str,
+) -> tuple[str, ...]:
+    messages = []
+    if normalized_start or normalized_end:
+        messages.append(f"   📅 下载区间: {normalized_start or '-'} ~ {normalized_end or '-'}")
+    elif last_days:
+        messages.append(f"   📅 时间筛选: 最近{last_days}天")
+    messages.append(f"   📌 下载排序: {'按时间倒序' if sort_by == 'create_time' else '按热度倒序'}")
+    return tuple(messages)
+
+
 def latest_file_create_time_query(query_group_id: Any) -> tuple[str, tuple[Any, ...]]:
     return (
         '''

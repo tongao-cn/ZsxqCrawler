@@ -11487,6 +11487,42 @@ Result:
 - PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-13 - P9 file downloader database filter log helper
+
+Changed:
+
+- Added `database_download_filter_messages()` in `backend/crawlers/zsxq_file_downloader_helpers.py`.
+- Reused the helper in `ZSXQFileDownloader.download_files_from_database()` for date-range,
+  recent-days, and sort-label log messages.
+- Added direct helper coverage for full date ranges, partial ranges, recent-days fallback, and
+  both sort labels.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Date-range log text, recent-days fallback text, sort label text, and message order are preserved.
+- SQL query construction, SQL parameters, stop checks, download loop, retry behavior, task/public
+  APIs, storage schema, fallback path, legacy path, and config semantics are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py backend\crawlers\zsxq_file_downloader_helpers.py
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers -v
+uv run python -m unittest discover -s tests
+uv run python scripts\scan_postgres_compat_debt.py
+npm --prefix frontend run build
+git diff --check
+```
+
+Result:
+
+- Downloader helper tests passed: 100 tests.
+- Full backend unittest discovery passed: 810 tests, 15 skipped.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Frontend build passed, including Next.js lint/type checks.
+- Diff whitespace check passed with only existing LF-to-CRLF working-copy warnings.
+
 ## Stop Conditions
 
 Pause before editing if:
