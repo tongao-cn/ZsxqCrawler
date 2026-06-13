@@ -21,6 +21,7 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     classify_api_failure,
     classify_http_failure,
     content_disposition_filename,
+    database_stats_table_emoji,
     download_exception_detail,
     download_expected_size,
     download_final_failure_detail,
@@ -655,6 +656,12 @@ class FileDownloaderFileDataHelperTests(unittest.TestCase):
             {"total_files": 3, "downloaded": 0, "skipped": 0, "failed": 0},
             download_result_stats(3),
         )
+
+    def test_database_stats_table_emoji_preserves_known_and_default_labels(self):
+        self.assertEqual("📄", database_stats_table_emoji("files"))
+        self.assertEqual("👥", database_stats_table_emoji("users"))
+        self.assertEqual("🔗", database_stats_table_emoji("file_topic_relations"))
+        self.assertEqual("📊", database_stats_table_emoji("unknown_table"))
 
     def test_safe_download_filename_keeps_supported_characters(self):
         self.assertEqual("memo（）[v1].pdf", safe_download_filename("memo（）[v1].pdf", 101))

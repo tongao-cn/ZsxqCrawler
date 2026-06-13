@@ -30,6 +30,25 @@ HTTP_FAILURE_RETRY = "retry"
 HTTP_FAILURE_NON_RETRY = "non_retry"
 HTTP_FAILURE_RETRY_EXHAUSTED = "retry_exhausted"
 DOWNLOAD_PROGRESS_INTERVAL_BYTES = 10 * 1024 * 1024
+DATABASE_STATS_TABLE_EMOJI = {
+    "files": "📄",
+    "groups": "🏠",
+    "users": "👥",
+    "topics": "💬",
+    "talks": "💭",
+    "images": "🖼️",
+    "topic_files": "📎",
+    "latest_likes": "👍",
+    "comments": "💬",
+    "like_emojis": "😊",
+    "user_liked_emojis": "❤️",
+    "columns": "📚",
+    "topic_columns": "🔗",
+    "solutions": "💡",
+    "solution_files": "📋",
+    "file_topic_relations": "🔗",
+    "api_responses": "📡",
+}
 
 
 def risk_event_user_agent_label(user_agent: str) -> str:
@@ -373,6 +392,10 @@ def download_result_stats(total_files: int = 0) -> Dict[str, int]:
         "skipped": 0,
         "failed": 0,
     }
+
+
+def database_stats_table_emoji(table_name: str) -> str:
+    return DATABASE_STATS_TABLE_EMOJI.get(table_name, "📊")
 
 
 def existing_file_matches(file_path: str, expected_size: int) -> tuple[bool, bool, int]:

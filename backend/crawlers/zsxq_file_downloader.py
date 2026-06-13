@@ -28,6 +28,7 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     classify_api_failure,
     classify_http_failure,
     database_download_query_plan,
+    database_stats_table_emoji,
     download_file_data,
     download_exception_detail,
     download_expected_size,
@@ -1637,16 +1638,7 @@ class ZSXQFileDownloader:
         print(f"\n📋 详细表统计:")
         for table_name, count in stats.items():
             if count > 0:
-                # 添加表情符号
-                emoji_map = {
-                    'files': '📄', 'groups': '🏠', 'users': '👥', 'topics': '💬',
-                    'talks': '💭', 'images': '🖼️', 'topic_files': '📎',
-                    'latest_likes': '👍', 'comments': '💬', 'like_emojis': '😊',
-                    'user_liked_emojis': '❤️', 'columns': '📚', 'topic_columns': '🔗',
-                    'solutions': '💡', 'solution_files': '📋', 'file_topic_relations': '🔗',
-                    'api_responses': '📡'
-                }
-                emoji = emoji_map.get(table_name, '📊')
+                emoji = database_stats_table_emoji(table_name)
                 print(f"   {emoji} {table_name}: {count:,}")
         
         # 文件创建时间范围

@@ -11419,6 +11419,39 @@ Result:
 - PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-13 - P9 file downloader database stats display helper
+
+Changed:
+
+- Added `database_stats_table_emoji()` in `backend/crawlers/zsxq_file_downloader_helpers.py`.
+- Moved the table-name emoji mapping out of `ZSXQFileDownloader.show_database_stats()`.
+- Added direct helper coverage for known table labels and the unknown-table fallback label.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Database stats queries, print order, table filtering, numeric formatting, known table emoji labels,
+  and unknown table fallback label are preserved.
+- No public API, route behavior, task behavior, crawler request order, download retry behavior,
+  storage schema, fallback path, legacy path, or config semantics changed.
+
+Verification:
+
+```powershell
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py backend\crawlers\zsxq_file_downloader_helpers.py
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers -v
+uv run python -m unittest discover -s tests
+uv run python scripts\scan_postgres_compat_debt.py
+npm --prefix frontend run build
+```
+
+Result:
+
+- Downloader helper tests passed: 98 tests.
+- Full backend unittest discovery passed: 808 tests, 15 skipped.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:
