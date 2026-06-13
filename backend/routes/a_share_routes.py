@@ -130,6 +130,32 @@ def _create_a_share_analysis_task_response(
     return {"task_id": task_id, "message": TASK_CREATED_MESSAGE}
 
 
+def _start_a_share_analysis_task(
+    task_id: str,
+    normalized_group_id: Optional[str],
+    scope_text: str,
+    run_range_text: str,
+    request: AShareAnalysisRunRequest,
+) -> str:
+    description = f"开始A股公司分析（{scope_text}），扫描{run_range_text}数据"
+    update_task(task_id, "running", description)
+    add_task_log(task_id, f"🚀 {description}")
+    add_task_log(
+        task_id,
+        f"⚙️ 参数: group_id={normalized_group_id or 'GLOBAL'}, concurrency={request.concurrency}, "
+        f"model={request.model}, api_base={request.api_base}, wire_api={request.wire_api}, "
+        f"reasoning_effort={request.reasoning_effort}",
+    )
+
+    if request.reset_start_date or request.reset_end_date:
+        add_task_log(
+            task_id,
+            f"🧹 删除并重跑区间: {request.reset_start_date or '-'} ~ {request.reset_end_date or '-'}",
+        )
+
+    return description
+
+
 def _run_a_share_analysis_for_task(
     task_id: str,
     normalized_group_id: Optional[str],
@@ -168,21 +194,7 @@ def run_a_share_analysis_task(task_id: str, request: AShareAnalysisRunRequest):
 
         normalized_group_id, scope_text = _normalize_group_scope(request.group_id)
         run_range_text = _run_range_text(request)
-        description = f"开始A股公司分析（{scope_text}），扫描{run_range_text}数据"
-        update_task(task_id, "running", description)
-        add_task_log(task_id, f"🚀 {description}")
-        add_task_log(
-            task_id,
-            f"⚙️ 参数: group_id={normalized_group_id or 'GLOBAL'}, concurrency={request.concurrency}, "
-            f"model={request.model}, api_base={request.api_base}, wire_api={request.wire_api}, "
-            f"reasoning_effort={request.reasoning_effort}",
-        )
-
-        if request.reset_start_date or request.reset_end_date:
-            add_task_log(
-                task_id,
-                f"🧹 删除并重跑区间: {request.reset_start_date or '-'} ~ {request.reset_end_date or '-'}",
-            )
+        _start_a_share_analysis_task(task_id, normalized_group_id, scope_text, run_range_text, request)
 
         result = _run_a_share_analysis_for_task(task_id, normalized_group_id, request)
 

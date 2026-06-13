@@ -92,6 +92,48 @@ class AShareRoutesHelperTests(unittest.TestCase):
         add_task_log.assert_called_once_with("task-a-share", "analysis log")
 
     @unittest.skipUnless(HAS_A_SHARE_ROUTE_DEPS, "a-share route dependencies are not installed")
+    def test_start_a_share_analysis_task_preserves_status_and_logs(self):
+        from backend.routes.a_share_routes import AShareAnalysisRunRequest, _start_a_share_analysis_task
+
+        request = AShareAnalysisRunRequest(
+            days=30,
+            concurrency=4,
+            model="model-a",
+            api_base="https://api.example.test",
+            wire_api="responses",
+            reasoning_effort="low",
+            reset_start_date="2026-05-02",
+            reset_end_date="2026-05-03",
+        )
+
+        with (
+            patch("backend.routes.a_share_routes.update_task") as update_task,
+            patch("backend.routes.a_share_routes.add_task_log") as add_task_log,
+        ):
+            description = _start_a_share_analysis_task(
+                "task-a-share",
+                None,
+                "全局聚合",
+                "最近 30 天",
+                request,
+            )
+
+        self.assertEqual("开始A股公司分析（全局聚合），扫描最近 30 天数据", description)
+        update_task.assert_called_once_with("task-a-share", "running", description)
+        self.assertEqual(
+            [
+                ("task-a-share", f"🚀 {description}"),
+                (
+                    "task-a-share",
+                    "⚙️ 参数: group_id=GLOBAL, concurrency=4, model=model-a, "
+                    "api_base=https://api.example.test, wire_api=responses, reasoning_effort=low",
+                ),
+                ("task-a-share", "🧹 删除并重跑区间: 2026-05-02 ~ 2026-05-03"),
+            ],
+            [call.args for call in add_task_log.call_args_list],
+        )
+
+    @unittest.skipUnless(HAS_A_SHARE_ROUTE_DEPS, "a-share route dependencies are not installed")
     def test_normalize_group_scope_keeps_existing_labels(self):
         from backend.routes.a_share_routes import _normalize_group_scope
 
