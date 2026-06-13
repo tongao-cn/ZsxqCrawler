@@ -20,11 +20,15 @@ export const DEFAULT_VISIBLE_CONCEPT_COUNT = 30;
 const CONCEPT_ALIAS_GROUPS: Array<{ concept: string; aliases: string[] }> = [
   {
     concept: '机器人',
-    aliases: ['人形机器人', '具身智能', 'Optimus', 'Optimus V3', '特斯拉Optimus', 'T链', 't链', 'T/S链', '机器人零部件', '机器人整机', '汽车零部件', '总成', '结构件', '塑料件', '减速器', '谐波减速器', '丝杠', '灵巧手', '传感器', '微型丝杠', '机器人传动部件', '行星滚柱丝杠', '核心传动部件', '滚珠丝杠'],
+    aliases: ['人形机器人', '具身智能', 'Optimus', 'Optimus V3', '特斯拉Optimus', '特斯拉机器人', 'T链', 't链', 'T/S链', '机器人零部件', '机器人整机', '国产机器人', '汽车零部件', '总成', 'T总成', '结构件', '塑料件', '减速器', '谐波减速器', '丝杠', '灵巧手', '传感器', '机器视觉', '3D视觉', '电子皮肤', '微型丝杠', '机器人传动部件', '行星滚柱丝杠', '核心传动部件', '核心部件', '滚珠丝杠', '旋转关节'],
   },
   {
     concept: '物理AI',
     aliases: ['物理AI', '物理ai'],
+  },
+  {
+    concept: 'AI应用/模型',
+    aliases: ['AI应用', 'AI推理', 'AI Agent', '大模型', '人工智能', '工业AI', '端侧AI', '端侧AI硬件配套', 'AIPC'],
   },
   {
     concept: 'AI算力/数据中心',
@@ -35,12 +39,20 @@ const CONCEPT_ALIAS_GROUPS: Array<{ concept: string; aliases: string[] }> = [
     aliases: ['AI电源', 'AIDC电源', '中压UPS', 'UPS', 'HVDC', 'SST', '高压直流', '服务器电源', '电源', 'AIDC供配电', '供配电'],
   },
   {
+    concept: 'AI电力/缺电',
+    aliases: ['AI缺电', 'AI电力', 'AIDC发电', '算电协同', 'AI通胀', '柴发', '800V HVDC', 'AI数据中心电源'],
+  },
+  {
     concept: 'CPU产业链',
     aliases: ['CPU', '国产CPU', 'CPU涨价', '服务器CPU', '数据中心CPU', 'CPU算力', 'x86'],
   },
   {
     concept: 'AI芯片/GPU',
-    aliases: ['GPU', '合封GPU', 'ASIC', 'AI芯片', '国产GPU'],
+    aliases: ['GPU', '合封GPU', 'ASIC', 'AI芯片', '国产GPU', 'Rubin', '英伟达供应链', '英伟达产业链', '英伟达', 'AI硬件', '算力芯片', 'AI算力芯片', 'HPC'],
+  },
+  {
+    concept: '被动元器件/MLCC',
+    aliases: ['MLCC', 'MLCC粉体', '电容', '超级电容', '钽电容', '薄膜电容', '被动元器件', '电子元件'],
   },
   {
     concept: '存储产业链',
@@ -49,6 +61,10 @@ const CONCEPT_ALIAS_GROUPS: Array<{ concept: string; aliases: string[] }> = [
   {
     concept: '半导体设备/先进封装',
     aliases: ['半导体设备', '先进封装', '先进封测', '半导体先进封装', 'CoWoS'],
+  },
+  {
+    concept: '半导体设备/零部件',
+    aliases: ['半导体设备零部件', '半导体零部件', '设备零部件', 'WFE', '中国应用材料', '电镀设备', '激光设备', '测试设备', '刻蚀', '薄膜沉积'],
   },
   {
     concept: '半导体材料/硅片',
