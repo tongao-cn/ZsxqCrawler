@@ -10127,6 +10127,47 @@ Result:
 - Frontend build passed, including Next.js lint/type checks.
 - `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
 
+### 2026-06-13 - P2 daily stock concept task response helper
+
+Changed:
+
+- Added `backend.routes.daily_stock_concept_routes._stock_concept_task_metadata`.
+- Added `backend.routes.daily_stock_concept_routes._create_daily_stock_concept_task_response`.
+- Reused the helper in the daily stock concept task creation endpoint.
+- Added helper coverage in `tests/test_daily_stock_concept_routes_helpers.py` for metadata
+  defaults, task creation, enqueue order, and response shape.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Existing task type, task description, metadata field names and values, task runner, enqueue
+  argument order, error wrapper, and response payload are unchanged.
+- The endpoint still accepts `background_tasks` for FastAPI compatibility even though this route
+  uses `enqueue_runtime_task` directly, matching the prior behavior.
+- No schema, crawler, storage, fallback, legacy, route, or public response behavior was removed.
+- Existing dirty downloader risk-log files and scripts remain outside this P2 slice.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_daily_stock_concept_routes_helpers -v
+uv run python -m py_compile backend\routes\daily_stock_concept_routes.py tests\test_daily_stock_concept_routes_helpers.py
+uv run python scripts\scan_postgres_compat_debt.py
+uv run python -m unittest discover -s tests
+cmd.exe /d /c npm --prefix frontend run build
+git diff --check
+```
+
+Result:
+
+- Existing daily stock concept route helper tests passed before production code changes.
+- Focused daily stock concept route helper tests passed after extracting the task response helper.
+- `py_compile` passed.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Full backend unittest discovery: 795 tests passed, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+- `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
+
 ## Stop Conditions
 
 Pause before editing if:

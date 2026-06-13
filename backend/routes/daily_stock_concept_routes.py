@@ -36,6 +36,23 @@ def _fail_stock_concept_task_unless_stopped(task_id: str, error: Exception) -> N
     update_task(task_id, "failed", message)
 
 
+def _stock_concept_task_metadata(group_id: str, report_date: Optional[str]) -> dict[str, Optional[str]]:
+    return {"group_id": group_id, "report_date": report_date}
+
+
+def _create_daily_stock_concept_task_response(
+    group_id: str,
+    request: DailyStockConceptRequest,
+) -> dict[str, str]:
+    task_id = create_task(
+        "daily_stock_concepts",
+        f"提取每日股票概念 (群组: {group_id})",
+        _stock_concept_task_metadata(group_id, request.date),
+    )
+    enqueue_runtime_task(run_daily_stock_concept_task, task_id, group_id, request)
+    return {"task_id": task_id, "message": TASK_CREATED_MESSAGE}
+
+
 def run_daily_stock_concept_task(task_id: str, group_id: str, request: DailyStockConceptRequest) -> None:
     try:
         if is_task_stopped(task_id):
@@ -64,13 +81,7 @@ async def create_daily_stock_concepts(
     background_tasks: BackgroundTasks,
 ):
     try:
-        task_id = create_task(
-            "daily_stock_concepts",
-            f"提取每日股票概念 (群组: {group_id})",
-            {"group_id": group_id, "report_date": request.date},
-        )
-        enqueue_runtime_task(run_daily_stock_concept_task, task_id, group_id, request)
-        return {"task_id": task_id, "message": TASK_CREATED_MESSAGE}
+        return _create_daily_stock_concept_task_response(group_id, request)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"创建每日股票概念提取任务失败: {str(e)}")
 

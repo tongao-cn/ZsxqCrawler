@@ -16,6 +16,49 @@ class FakeBackgroundTasks:
 
 class DailyStockConceptRoutesHelperTests(unittest.TestCase):
     @unittest.skipUnless(HAS_ROUTE_DEPS, "daily stock concept route dependencies are not installed")
+    def test_stock_concept_task_metadata_preserves_fields(self):
+        from backend.routes.daily_stock_concept_routes import _stock_concept_task_metadata
+
+        self.assertEqual(
+            {"group_id": "51111112855254", "report_date": "2026-06-13"},
+            _stock_concept_task_metadata("51111112855254", "2026-06-13"),
+        )
+        self.assertEqual(
+            {"group_id": "51111112855254", "report_date": None},
+            _stock_concept_task_metadata("51111112855254", None),
+        )
+
+    @unittest.skipUnless(HAS_ROUTE_DEPS, "daily stock concept route dependencies are not installed")
+    def test_create_daily_stock_concept_task_response_preserves_task_contract(self):
+        from backend.routes.daily_stock_concept_routes import (
+            TASK_CREATED_MESSAGE,
+            DailyStockConceptRequest,
+            _create_daily_stock_concept_task_response,
+            run_daily_stock_concept_task,
+        )
+
+        request = DailyStockConceptRequest(date="2026-06-13", commentsPerTopic=3)
+
+        with (
+            patch("backend.routes.daily_stock_concept_routes.create_task", return_value="task-concept") as create_task,
+            patch("backend.routes.daily_stock_concept_routes.enqueue_runtime_task") as enqueue_runtime_task,
+        ):
+            response = _create_daily_stock_concept_task_response("51111112855254", request)
+
+        create_task.assert_called_once_with(
+            "daily_stock_concepts",
+            "提取每日股票概念 (群组: 51111112855254)",
+            {"group_id": "51111112855254", "report_date": "2026-06-13"},
+        )
+        enqueue_runtime_task.assert_called_once_with(
+            run_daily_stock_concept_task,
+            "task-concept",
+            "51111112855254",
+            request,
+        )
+        self.assertEqual({"task_id": "task-concept", "message": TASK_CREATED_MESSAGE}, response)
+
+    @unittest.skipUnless(HAS_ROUTE_DEPS, "daily stock concept route dependencies are not installed")
     def test_build_stock_concept_log_callback_writes_task_log(self):
         from backend.routes.daily_stock_concept_routes import _build_stock_concept_log_callback
 
