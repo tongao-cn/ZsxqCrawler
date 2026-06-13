@@ -120,6 +120,32 @@ def should_log_full_response(attempt: int, max_retries: int, succeeded: Any) -> 
     return int(attempt) == 0 or int(attempt) == int(max_retries) - 1 or bool(succeeded)
 
 
+def file_list_request_params(count: int, sort: str, index: Optional[str]) -> Dict[str, str]:
+    params = {
+        "count": str(count),
+        "sort": sort,
+    }
+    if index:
+        params["index"] = index
+    return params
+
+
+def file_list_start_messages(
+    count: int,
+    sort: str,
+    index: Optional[str],
+    url: str,
+) -> tuple[str, ...]:
+    messages = [
+        "🌐 获取文件列表",
+        f"   📊 参数: count={count}, sort={sort}",
+    ]
+    if index:
+        messages.append(f"   📑 索引: {index}")
+    messages.append(f"   🌐 请求URL: {url}")
+    return tuple(messages)
+
+
 def classify_api_failure(error_code: Any, attempt: int, max_retries: int) -> str:
     if str(error_code) == "1030":
         return API_FAILURE_PERMISSION_DENIED_1030

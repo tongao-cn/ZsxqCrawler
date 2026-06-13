@@ -41,6 +41,8 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     download_target_path,
     empty_import_stats,
     existing_file_matches,
+    file_list_request_params,
+    file_list_start_messages,
     filter_files_newer_than,
     has_retry_attempt_remaining,
     incremental_start_index,
@@ -955,6 +957,43 @@ class FileDownloaderRetryHelperTests(unittest.TestCase):
         self.assertFalse(should_log_full_response(1, 3, False))
         self.assertTrue(should_log_full_response(1, 3, True))
         self.assertTrue(should_log_full_response(2, 3, False))
+
+    def test_file_list_request_params_preserve_index_truthiness_and_log_order(self):
+        self.assertEqual(
+            {"count": "20", "sort": "by_download_count", "index": "next-index"},
+            file_list_request_params(20, "by_download_count", "next-index"),
+        )
+        self.assertEqual(
+            {"count": "20", "sort": "by_create_time"},
+            file_list_request_params(20, "by_create_time", ""),
+        )
+        self.assertEqual(
+            (
+                "🌐 获取文件列表",
+                "   📊 参数: count=20, sort=by_download_count",
+                "   📑 索引: next-index",
+                "   🌐 请求URL: https://api.zsxq.com/v2/groups/511/files",
+            ),
+            file_list_start_messages(
+                20,
+                "by_download_count",
+                "next-index",
+                "https://api.zsxq.com/v2/groups/511/files",
+            ),
+        )
+        self.assertEqual(
+            (
+                "🌐 获取文件列表",
+                "   📊 参数: count=20, sort=by_create_time",
+                "   🌐 请求URL: https://api.zsxq.com/v2/groups/511/files",
+            ),
+            file_list_start_messages(
+                20,
+                "by_create_time",
+                None,
+                "https://api.zsxq.com/v2/groups/511/files",
+            ),
+        )
 
     def test_classify_api_failure_distinguishes_retry_and_terminal_cases(self):
         self.assertEqual(API_FAILURE_RETRY, classify_api_failure("1059", 0, 2))

@@ -51,6 +51,8 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     download_url_failure_detail,
     empty_import_stats,
     existing_file_matches,
+    file_list_request_params,
+    file_list_start_messages,
     has_retry_attempt_remaining,
     incremental_start_index,
     latest_file_create_time_query,
@@ -475,20 +477,10 @@ class ZSXQFileDownloader:
         """获取文件列表（带重试机制）"""
         url = f"{self.base_url}/v2/groups/{self.group_id}/files"
         max_retries = 10
-        
-        params = {
-            "count": str(count),
-            "sort": sort
-        }
-        
-        if index:
-            params["index"] = index
-        
-        self.log(f"🌐 获取文件列表")
-        self.log(f"   📊 参数: count={count}, sort={sort}")
-        if index:
-            self.log(f"   📑 索引: {index}")
-        self.log(f"   🌐 请求URL: {url}")
+
+        params = file_list_request_params(count, sort, index)
+        for message in file_list_start_messages(count, sort, index, url):
+            self.log(message)
         
         for attempt in range(max_retries):
             headers = self._prepare_retry_api_request(attempt)

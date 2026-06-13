@@ -11745,6 +11745,44 @@ Result:
 - Frontend build passed, including Next.js lint/type checks.
 - Diff whitespace check passed with only existing LF-to-CRLF working-copy warnings.
 
+### 2026-06-13 - P9 file downloader file-list request helper
+
+Changed:
+
+- Added `file_list_request_params()` and `file_list_start_messages()` in
+  `backend/crawlers/zsxq_file_downloader_helpers.py`.
+- Reused the helpers in `ZSXQFileDownloader.fetch_file_list()` for the existing file-list API
+  request params and pre-request log messages.
+- Added direct helper coverage for non-empty index params, empty-index omission, and log message
+  order.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Query param keys, `count` string conversion, `sort` passthrough, truthy-only `index` inclusion,
+  pre-request log text, and log order are preserved.
+- HTTP request execution, retry delays, response parsing, error classification, fallback behavior,
+  task/public APIs, storage schema, and config semantics are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py backend\crawlers\zsxq_file_downloader_helpers.py tests\test_zsxq_file_downloader_helpers.py
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers -v
+uv run python -m unittest discover -s tests
+uv run python scripts\scan_postgres_compat_debt.py
+npm --prefix frontend run build
+git diff --check
+```
+
+Result:
+
+- Downloader helper tests passed: 107 tests.
+- Full backend unittest discovery passed: 817 tests, 15 skipped.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Frontend build passed, including Next.js lint/type checks.
+- Diff whitespace check passed with only existing LF-to-CRLF working-copy warnings.
+
 ## Stop Conditions
 
 Pause before editing if:
