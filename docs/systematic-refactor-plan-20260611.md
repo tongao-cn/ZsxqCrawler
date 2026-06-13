@@ -13837,6 +13837,53 @@ Result:
 - PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-13 - P5 A-share ready-to-start preflight helper
+
+Changed:
+
+- Added characterization coverage for `run_a_share_analysis_task()` returning before group
+  normalization/start/run/complete when the task is stopped before analysis starts.
+- Added helper coverage for the API-key-missing short circuit, stopped branch, and ready branch.
+- Extracted `_a_share_task_ready_to_start()` in `backend.routes.a_share_routes`.
+- Reused it at the start of `run_a_share_analysis_task()` to combine the existing API key
+  preflight and stopped check.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- The A-share task still checks API key availability before checking stopped state.
+- Missing-key tasks still update `failed`, log the missing-key message, and do not call
+  `is_task_stopped()`.
+- When the task is stopped after API key preflight, it still returns before group normalization,
+  running status/logs, analysis service call, and completion handling.
+- Ready tasks still continue through the existing normalize/start/run/complete path.
+- Task/public APIs, storage schema, fallback/legacy behavior, and config semantics are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_a_share_routes_helpers.AShareRoutesHelperTests.test_run_a_share_analysis_task_returns_when_stopped_before_run -v
+uv run python -m py_compile backend\routes\a_share_routes.py tests\test_a_share_routes_helpers.py
+uv run python -m unittest tests.test_a_share_routes_helpers.AShareRoutesHelperTests.test_run_a_share_analysis_task_returns_when_stopped_before_run tests.test_a_share_routes_helpers.AShareRoutesHelperTests.test_a_share_task_ready_to_start_skips_stop_check_when_api_key_missing tests.test_a_share_routes_helpers.AShareRoutesHelperTests.test_a_share_task_ready_to_start_returns_false_when_stopped tests.test_a_share_routes_helpers.AShareRoutesHelperTests.test_a_share_task_ready_to_start_returns_true_when_not_stopped -v
+uv run python -m unittest tests.test_a_share_routes_helpers -v
+uv run python -m unittest tests.test_a_share_routes_helpers tests.test_a_share_analysis_service_helpers tests.test_a_share_analysis_db_storage_helpers -v
+uv run python -m unittest discover -s tests
+uv run python scripts\scan_postgres_compat_debt.py
+npm --prefix frontend run build
+```
+
+Result:
+
+- Focused stopped-before-run characterization test passed against the original inline
+  implementation before extraction: 1 test.
+- `py_compile` passed.
+- Focused A-share ready-to-start tests passed after extraction: 4 tests.
+- A-share route helper tests passed: 20 tests.
+- Related A-share route/service/storage tests passed: 63 tests.
+- Full backend unittest discovery passed: 908 tests, 15 skipped.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:

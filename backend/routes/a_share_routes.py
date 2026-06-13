@@ -204,13 +204,16 @@ def _a_share_api_key_available_or_fail_task(task_id: str) -> bool:
     return False
 
 
+def _a_share_task_ready_to_start(task_id: str) -> bool:
+    if not _a_share_api_key_available_or_fail_task(task_id):
+        return False
+    return not is_task_stopped(task_id)
+
+
 def run_a_share_analysis_task(task_id: str, request: AShareAnalysisRunRequest):
     """后台执行A股公司提及分析任务"""
     try:
-        if not _a_share_api_key_available_or_fail_task(task_id):
-            return
-
-        if is_task_stopped(task_id):
+        if not _a_share_task_ready_to_start(task_id):
             return
 
         normalized_group_id, scope_text = _normalize_group_scope(request.group_id)

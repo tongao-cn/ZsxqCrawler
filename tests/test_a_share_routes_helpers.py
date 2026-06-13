@@ -262,6 +262,74 @@ class AShareRoutesHelperTests(unittest.TestCase):
         add_task_log.assert_called_once_with("task-a-share", f"❌ {message}")
 
     @unittest.skipUnless(HAS_A_SHARE_ROUTE_DEPS, "a-share route dependencies are not installed")
+    def test_run_a_share_analysis_task_returns_when_stopped_before_run(self):
+        from backend.routes.a_share_routes import AShareAnalysisRunRequest, run_a_share_analysis_task
+
+        request = AShareAnalysisRunRequest(group_id="51111112855254")
+        with (
+            patch("backend.routes.a_share_routes._a_share_api_key_available_or_fail_task", return_value=True)
+            as api_key_preflight,
+            patch("backend.routes.a_share_routes.is_task_stopped", return_value=True) as is_task_stopped,
+            patch("backend.routes.a_share_routes._normalize_group_scope") as normalize_group_scope,
+            patch("backend.routes.a_share_routes._start_a_share_analysis_task") as start_task,
+            patch("backend.routes.a_share_routes._run_a_share_analysis_for_task") as run_analysis,
+            patch("backend.routes.a_share_routes._complete_a_share_analysis_task") as complete_task,
+        ):
+            run_a_share_analysis_task("task-a-share", request)
+
+        api_key_preflight.assert_called_once_with("task-a-share")
+        is_task_stopped.assert_called_once_with("task-a-share")
+        normalize_group_scope.assert_not_called()
+        start_task.assert_not_called()
+        run_analysis.assert_not_called()
+        complete_task.assert_not_called()
+
+    @unittest.skipUnless(HAS_A_SHARE_ROUTE_DEPS, "a-share route dependencies are not installed")
+    def test_a_share_task_ready_to_start_skips_stop_check_when_api_key_missing(self):
+        from backend.routes.a_share_routes import _a_share_task_ready_to_start
+
+        with (
+            patch("backend.routes.a_share_routes._a_share_api_key_available_or_fail_task", return_value=False)
+            as api_key_preflight,
+            patch("backend.routes.a_share_routes.is_task_stopped") as is_task_stopped,
+        ):
+            ready = _a_share_task_ready_to_start("task-a-share")
+
+        self.assertFalse(ready)
+        api_key_preflight.assert_called_once_with("task-a-share")
+        is_task_stopped.assert_not_called()
+
+    @unittest.skipUnless(HAS_A_SHARE_ROUTE_DEPS, "a-share route dependencies are not installed")
+    def test_a_share_task_ready_to_start_returns_false_when_stopped(self):
+        from backend.routes.a_share_routes import _a_share_task_ready_to_start
+
+        with (
+            patch("backend.routes.a_share_routes._a_share_api_key_available_or_fail_task", return_value=True)
+            as api_key_preflight,
+            patch("backend.routes.a_share_routes.is_task_stopped", return_value=True) as is_task_stopped,
+        ):
+            ready = _a_share_task_ready_to_start("task-a-share")
+
+        self.assertFalse(ready)
+        api_key_preflight.assert_called_once_with("task-a-share")
+        is_task_stopped.assert_called_once_with("task-a-share")
+
+    @unittest.skipUnless(HAS_A_SHARE_ROUTE_DEPS, "a-share route dependencies are not installed")
+    def test_a_share_task_ready_to_start_returns_true_when_not_stopped(self):
+        from backend.routes.a_share_routes import _a_share_task_ready_to_start
+
+        with (
+            patch("backend.routes.a_share_routes._a_share_api_key_available_or_fail_task", return_value=True)
+            as api_key_preflight,
+            patch("backend.routes.a_share_routes.is_task_stopped", return_value=False) as is_task_stopped,
+        ):
+            ready = _a_share_task_ready_to_start("task-a-share")
+
+        self.assertTrue(ready)
+        api_key_preflight.assert_called_once_with("task-a-share")
+        is_task_stopped.assert_called_once_with("task-a-share")
+
+    @unittest.skipUnless(HAS_A_SHARE_ROUTE_DEPS, "a-share route dependencies are not installed")
     def test_normalize_group_scope_keeps_existing_labels(self):
         from backend.routes.a_share_routes import _normalize_group_scope
 
