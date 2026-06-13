@@ -10984,6 +10984,43 @@ Result:
 - Full backend unittest discovery passed: 804 tests passed, 15 skipped.
 - `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warning.
 
+### 2026-06-13 - P7 unused empty comment CSS cleanup
+
+Changed:
+
+- Removed empty `.comments-clamp-3` and `.comments-expanded` rule blocks from
+  `frontend/src/app/globals.css`.
+- Removed the stale comments explaining that those empty class names were retained for possible
+  future use.
+- Left the still-used `.topic-cards-container` and `.line-clamp-8` rules unchanged.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- `rg` found no `comments-clamp-3` or `comments-expanded` references outside the removed CSS
+  blocks.
+- Empty CSS declarations had no current generated style effect.
+- No frontend route, topic-card layout, backend path, schema, crawler, fallback, legacy, or public
+  API behavior changed.
+
+Verification:
+
+```powershell
+rg -n "comments-clamp-3|comments-expanded" frontend --glob "!node_modules/**" --glob "!package-lock.json"
+npm --prefix frontend run build
+uv run python scripts\scan_postgres_compat_debt.py
+uv run python -m unittest discover -s tests
+git diff --check
+```
+
+Result:
+
+- Post-change reference search found no `comments-clamp-3` or `comments-expanded` references.
+- Frontend build passed, including Next.js lint/type checks.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Full backend unittest discovery passed: 804 tests passed, 15 skipped.
+- `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warning.
+
 ## Stop Conditions
 
 Pause before editing if:

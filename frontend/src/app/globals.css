@@ -171,15 +171,6 @@
     overflow: hidden;
   }
 
-  /* 评论数量限制 - 现在使用动态计算，保留类名以防需要 */
-  .comments-clamp-3 {
-    /* 不再使用固定高度截断 */
-  }
-
-  .comments-expanded {
-    /* 不再使用固定高度 */
-  }
-
   /* 强制链接对齐 - 覆盖prose类的样式 */
   .prose a[style*="display: inline-flex"],
   .prose a[style*="inline-flex"] {
