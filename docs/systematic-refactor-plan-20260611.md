@@ -10006,6 +10006,46 @@ Result:
 - Frontend build passed, including Next.js lint/type checks.
 - `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
 
+### 2026-06-13 - P2 topic page response helper
+
+Changed:
+
+- Added `backend.routes.topic_routes._build_topic_page_response`.
+- Reused it in the all-topics and group-topics list response builders.
+- Added helper coverage in `tests/test_topic_routes_helpers.py` for row formatting, pagination
+  shape, and query/count execution order.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Existing SQL builders, search parameters, ordering, count queries, row formatters, response field
+  names, pagination calculation, database close behavior, and route wrappers are unchanged.
+- The existing group search count-query behavior is preserved exactly; this slice only moves shared
+  response composition after queries are built.
+- No schema, crawler, storage, fallback, legacy, route, or public response behavior was removed.
+- Existing dirty downloader risk-log files and scripts remain outside this P2 slice.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_topic_routes_helpers -v
+uv run python -m py_compile backend\routes\topic_routes.py tests\test_topic_routes_helpers.py
+uv run python scripts\scan_postgres_compat_debt.py
+uv run python -m unittest discover -s tests
+cmd.exe /d /c npm --prefix frontend run build
+git diff --check
+```
+
+Result:
+
+- Existing topic route helper tests passed before production code changes.
+- Focused topic route helper tests passed after extracting the topic page response helper.
+- `py_compile` passed.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Full backend unittest discovery: 791 tests passed, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+- `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
+
 ## Stop Conditions
 
 Pause before editing if:

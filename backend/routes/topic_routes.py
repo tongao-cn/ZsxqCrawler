@@ -261,18 +261,39 @@ def _fetch_rows_and_total(cursor, query: str, params: tuple, count_query: str, c
     return rows, total
 
 
+def _build_topic_page_response(
+    cursor,
+    query: str,
+    params: tuple,
+    count_query: str,
+    count_params: tuple,
+    formatter,
+    page: int,
+    per_page: int,
+) -> dict:
+    topics, total = _fetch_rows_and_total(cursor, query, params, count_query, count_params)
+    return {
+        "topics": [formatter(topic) for topic in topics],
+        "pagination": _build_pagination(page, per_page, total),
+    }
+
+
 def _get_topics_response(page: int = 1, per_page: int = 20, search: Optional[str] = None) -> dict:
     db = None
     try:
         db = ZSXQDatabase()
 
         query, params, count_query, count_params = _build_topics_query(page, per_page, search)
-        topics, total = _fetch_rows_and_total(db.cursor, query, params, count_query, count_params)
-
-        return {
-            "topics": [_format_topic_row(topic) for topic in topics],
-            "pagination": _build_pagination(page, per_page, total),
-        }
+        return _build_topic_page_response(
+            db.cursor,
+            query,
+            params,
+            count_query,
+            count_params,
+            _format_topic_row,
+            page,
+            per_page,
+        )
     finally:
         _close_topic_db(db)
 
@@ -283,12 +304,16 @@ def _get_group_topics_response(group_id: int, page: int = 1, per_page: int = 20,
         db = ZSXQDatabase(str(group_id))
 
         query, params, count_query, count_params = _build_group_topics_query(group_id, page, per_page, search)
-        topics, total = _fetch_rows_and_total(db.cursor, query, params, count_query, count_params)
-
-        return {
-            "topics": [_format_group_topic_row(topic) for topic in topics],
-            "pagination": _build_pagination(page, per_page, total),
-        }
+        return _build_topic_page_response(
+            db.cursor,
+            query,
+            params,
+            count_query,
+            count_params,
+            _format_group_topic_row,
+            page,
+            per_page,
+        )
     finally:
         _close_topic_db(db)
 

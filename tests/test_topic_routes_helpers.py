@@ -315,6 +315,32 @@ class TopicRoutesHelperTests(unittest.TestCase):
         self.assertEqual([("SELECT rows", ("p",)), ("SELECT count", ("c",))], cursor.calls)
 
     @unittest.skipUnless(HAS_TOPIC_ROUTE_DEPS, "topic route dependencies are not installed")
+    def test_build_topic_page_response_formats_rows_and_pagination(self):
+        from backend.routes.topic_routes import _build_topic_page_response
+
+        cursor = FakeCursor(rows=[("row-1",), ("row-2",)], total=7)
+
+        response = _build_topic_page_response(
+            cursor,
+            "SELECT rows",
+            ("p",),
+            "SELECT count",
+            ("c",),
+            lambda row: {"value": row[0]},
+            page=2,
+            per_page=3,
+        )
+
+        self.assertEqual(
+            {
+                "topics": [{"value": "row-1"}, {"value": "row-2"}],
+                "pagination": {"page": 2, "per_page": 3, "total": 7, "pages": 3},
+            },
+            response,
+        )
+        self.assertEqual([("SELECT rows", ("p",)), ("SELECT count", ("c",))], cursor.calls)
+
+    @unittest.skipUnless(HAS_TOPIC_ROUTE_DEPS, "topic route dependencies are not installed")
     def test_read_routes_offload_sync_db_work_to_thread(self):
         from backend.routes import topic_routes
 
