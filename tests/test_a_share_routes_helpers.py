@@ -74,6 +74,73 @@ class AShareRoutesHelperTests(unittest.TestCase):
         create_task_response.assert_not_called()
 
     @unittest.skipUnless(HAS_A_SHARE_ROUTE_DEPS, "a-share route dependencies are not installed")
+    def test_get_a_share_analysis_status_preserves_storage_failure_fallback(self):
+        import asyncio
+
+        from backend.routes import a_share_routes
+
+        summary = {"rows_count": 7, "processed_items": 5}
+        latest_task = {"id": "latest"}
+        running_task = {"id": "running"}
+        latest_export = {"block_name": "A-share"}
+
+        def latest_task_side_effect(task_type, status=None, group_id=None):
+            self.assertEqual("a_share_analysis", task_type)
+            self.assertEqual("51111112855254", group_id)
+            return running_task if status == "running" else latest_task
+
+        with (
+            patch.object(a_share_routes, "get_analysis_summary", return_value=summary) as get_summary,
+            patch.object(a_share_routes, "get_latest_task_by_type", side_effect=latest_task_side_effect)
+            as get_latest_task,
+            patch.object(a_share_routes, "get_storage_health", side_effect=RuntimeError("temporary outage"))
+            as get_storage_health,
+            patch.object(a_share_routes, "get_latest_tdx_export", return_value=latest_export) as get_latest_export,
+            patch.object(a_share_routes, "has_openai_api_key", return_value=True) as has_api_key,
+        ):
+            result = asyncio.run(a_share_routes.get_a_share_analysis_status(" 51111112855254 "))
+
+        self.assertEqual(summary, result["summary"])
+        self.assertEqual("51111112855254", result["group_id"])
+        self.assertEqual(latest_task, result["latest_task"])
+        self.assertEqual(running_task, result["running_task"])
+        self.assertEqual(
+            {
+                "enabled": False,
+                "mode": "file_fallback",
+                "label": "本地文件降级（PostgreSQL 不可用: temporary outage）",
+                "daily_rows": 7,
+                "processed_rows": 5,
+            },
+            result["storage"],
+        )
+        self.assertEqual(latest_export, result["latest_tdx_export"])
+        self.assertTrue(result["api_key_configured"])
+        get_summary.assert_called_once_with(group_id="51111112855254")
+        self.assertEqual(2, get_latest_task.call_count)
+        get_storage_health.assert_called_once_with(group_id="51111112855254")
+        get_latest_export.assert_called_once_with("51111112855254")
+        has_api_key.assert_called_once_with()
+
+    @unittest.skipUnless(HAS_A_SHARE_ROUTE_DEPS, "a-share route dependencies are not installed")
+    def test_a_share_file_fallback_storage_status_defaults_missing_counts(self):
+        from backend.routes.a_share_routes import _a_share_file_fallback_storage_status
+
+        self.assertEqual(
+            {
+                "enabled": False,
+                "mode": "file_fallback",
+                "label": "本地文件降级（PostgreSQL 不可用: temporary outage）",
+                "daily_rows": 0,
+                "processed_rows": 0,
+            },
+            _a_share_file_fallback_storage_status(
+                {"rows_count": None},
+                RuntimeError("temporary outage"),
+            ),
+        )
+
+    @unittest.skipUnless(HAS_A_SHARE_ROUTE_DEPS, "a-share route dependencies are not installed")
     def test_run_a_share_analysis_for_task_preserves_service_arguments(self):
         from backend.routes.a_share_routes import AShareAnalysisRunRequest, _run_a_share_analysis_for_task
 

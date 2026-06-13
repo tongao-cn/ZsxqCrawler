@@ -13939,6 +13939,57 @@ Result:
   failed because the project does not define the `dev` extra, and `uv run ruff ...`
   failed because `ruff` is not available.
 
+### 2026-06-13 - P5 A-share status storage fallback helper
+
+Changed:
+
+- Added characterization coverage for `get_a_share_analysis_status()` when
+  `get_storage_health()` raises.
+- Locked the existing storage fallback payload shape: `enabled`, `mode`, `label`,
+  `daily_rows`, and `processed_rows`.
+- Extracted `_a_share_file_fallback_storage_status()` to build the fallback payload.
+- Extracted `_a_share_storage_status()` to preserve the current storage health call and
+  fallback behavior while simplifying the status route body.
+- Added helper coverage for missing/falsey summary counts defaulting to `0`.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- The status route still normalizes group scope before reading the summary and task status.
+- Storage health is still read through `asyncio.to_thread(get_storage_health, group_id=...)`.
+- Storage health failures still fall back to `mode: file_fallback` with the same Chinese label
+  and summary-derived row counts.
+- Latest TDX export lookup, API-key flag, task payload fields, HTTP error semantics, public API
+  shape, storage schema, config semantics, and fallback/legacy behavior are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_a_share_routes_helpers.AShareRoutesHelperTests.test_get_a_share_analysis_status_preserves_storage_failure_fallback -v
+uv run python -m py_compile backend\routes\a_share_routes.py tests\test_a_share_routes_helpers.py
+uv run python -m unittest tests.test_a_share_routes_helpers.AShareRoutesHelperTests.test_get_a_share_analysis_status_preserves_storage_failure_fallback tests.test_a_share_routes_helpers.AShareRoutesHelperTests.test_a_share_file_fallback_storage_status_defaults_missing_counts -v
+uv run python -m unittest tests.test_a_share_routes_helpers -v
+uv run python -m unittest tests.test_a_share_routes_helpers tests.test_a_share_analysis_service_helpers tests.test_a_share_analysis_db_storage_helpers -v
+uv run python -m unittest discover -s tests
+uv run python scripts\scan_postgres_compat_debt.py
+npm --prefix frontend run build
+uv run ruff check backend\routes\a_share_routes.py tests\test_a_share_routes_helpers.py --select F401,F841
+```
+
+Result:
+
+- Focused storage fallback characterization test passed against the original inline
+  implementation before extraction: 1 test.
+- `py_compile` passed.
+- Focused storage fallback/helper tests passed after extraction: 2 tests.
+- A-share route helper tests passed: 23 tests.
+- Related A-share route/service/storage tests passed: 66 tests.
+- Full backend unittest discovery passed: 911 tests, 15 skipped.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Frontend build passed, including Next.js lint/type checks.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because
+  `ruff` is not available.
+
 ## Stop Conditions
 
 Pause before editing if:

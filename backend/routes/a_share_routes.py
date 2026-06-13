@@ -210,6 +210,23 @@ def _a_share_task_ready_to_start(task_id: str) -> bool:
     return not is_task_stopped(task_id)
 
 
+def _a_share_file_fallback_storage_status(summary: dict, storage_error: Exception) -> dict:
+    return {
+        "enabled": False,
+        "mode": "file_fallback",
+        "label": f"本地文件降级（PostgreSQL 不可用: {storage_error}）",
+        "daily_rows": summary.get("rows_count") or 0,
+        "processed_rows": summary.get("processed_items") or 0,
+    }
+
+
+async def _a_share_storage_status(summary: dict, normalized_group_id: Optional[str]) -> dict:
+    try:
+        return await asyncio.to_thread(get_storage_health, group_id=normalized_group_id)
+    except Exception as storage_error:
+        return _a_share_file_fallback_storage_status(summary, storage_error)
+
+
 def run_a_share_analysis_task(task_id: str, request: AShareAnalysisRunRequest):
     """后台执行A股公司提及分析任务"""
     try:
@@ -242,16 +259,7 @@ async def get_a_share_analysis_status(group_id: Optional[str] = None):
             status="running",
             group_id=normalized_group_id,
         )
-        try:
-            storage = await asyncio.to_thread(get_storage_health, group_id=normalized_group_id)
-        except Exception as storage_error:
-            storage = {
-                "enabled": False,
-                "mode": "file_fallback",
-                "label": f"本地文件降级（PostgreSQL 不可用: {storage_error}）",
-                "daily_rows": summary.get("rows_count") or 0,
-                "processed_rows": summary.get("processed_items") or 0,
-            }
+        storage = await _a_share_storage_status(summary, normalized_group_id)
 
         try:
             latest_tdx_export = await asyncio.to_thread(get_latest_tdx_export, normalized_group_id)
