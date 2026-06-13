@@ -54,6 +54,10 @@ def _fail_daily_task_unless_stopped(task_id: str, label: str, error: Exception) 
     update_task(task_id, "failed", message)
 
 
+def _daily_task_metadata(group_id: str, report_date: Optional[str]) -> dict[str, Any]:
+    return {"group_id": group_id, "report_date": report_date}
+
+
 def _create_daily_task_response(
     background_tasks: BackgroundTasks,
     task_type: str,
@@ -130,7 +134,7 @@ async def create_daily_report(group_id: str, request: DailyAnalysisRequest, back
             background_tasks,
             "daily_topic_analysis",
             f"生成每日话题 AI 报告 (群组: {group_id})",
-            {"group_id": group_id, "report_date": request.date},
+            _daily_task_metadata(group_id, request.date),
             run_daily_analysis_task,
             group_id,
             request,
@@ -146,7 +150,7 @@ async def run_today_report(group_id: str, request: DailyRunTodayRequest, backgro
             background_tasks,
             "daily_topic_crawl_and_analysis",
             f"每日抓取与 AI 分析 (群组: {group_id})",
-            {"group_id": group_id, "report_date": request.date},
+            _daily_task_metadata(group_id, request.date),
             run_daily_today_task,
             group_id,
             request,

@@ -50,6 +50,19 @@ class DailyAnalysisRoutesHelperTests(unittest.TestCase):
         self.assertEqual([], background_tasks.tasks)
 
     @unittest.skipUnless(HAS_DAILY_ROUTE_DEPS, "daily analysis route dependencies are not installed")
+    def test_daily_task_metadata_preserves_group_and_report_date_fields(self):
+        from backend.routes.daily_analysis_routes import _daily_task_metadata
+
+        self.assertEqual(
+            {"group_id": "group-1", "report_date": "2026-05-07"},
+            _daily_task_metadata("group-1", "2026-05-07"),
+        )
+        self.assertEqual(
+            {"group_id": "group-1", "report_date": None},
+            _daily_task_metadata("group-1", None),
+        )
+
+    @unittest.skipUnless(HAS_DAILY_ROUTE_DEPS, "daily analysis route dependencies are not installed")
     def test_build_daily_log_callback_writes_task_log(self):
         from backend.routes.daily_analysis_routes import _build_daily_log_callback
 

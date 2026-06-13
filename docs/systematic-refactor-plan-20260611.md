@@ -10046,6 +10046,47 @@ Result:
 - Frontend build passed, including Next.js lint/type checks.
 - `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
 
+### 2026-06-13 - P2 daily task metadata helper
+
+Changed:
+
+- Added `backend.routes.daily_analysis_routes._daily_task_metadata`.
+- Reused it in daily report task creation and daily crawl-plus-analysis task creation.
+- Added helper coverage in `tests/test_daily_analysis_routes_helpers.py` for explicit report dates
+  and the existing `None` default date value.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Existing task types, task descriptions, metadata field names, `create_task` call order,
+  `enqueue_runtime_task` call order, response payload shape, and task runner arguments are
+  unchanged.
+- Both daily analysis entrypoints still attach `group_id` and `report_date` metadata exactly as
+  before.
+- No schema, crawler, storage, fallback, legacy, route, or public response behavior was removed.
+- Existing dirty downloader risk-log files and scripts remain outside this P2 slice.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_daily_analysis_routes_helpers -v
+uv run python -m py_compile backend\routes\daily_analysis_routes.py tests\test_daily_analysis_routes_helpers.py
+uv run python scripts\scan_postgres_compat_debt.py
+uv run python -m unittest discover -s tests
+cmd.exe /d /c npm --prefix frontend run build
+git diff --check
+```
+
+Result:
+
+- Existing daily analysis route helper tests passed before production code changes.
+- Focused daily analysis route helper tests passed after extracting the task metadata helper.
+- `py_compile` passed.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Full backend unittest discovery: 792 tests passed, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+- `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
+
 ## Stop Conditions
 
 Pause before editing if:
