@@ -43,7 +43,6 @@ class ColumnsSettingsRequest(BaseModel):
 
 
 def _create_columns_fetch_task_response(
-    background_tasks: BackgroundTasks,
     group_id: str,
     request: ColumnsSettingsRequest,
 ) -> Dict[str, Any]:
@@ -103,7 +102,7 @@ async def get_column_topic_detail(group_id: str, topic_id: int):
 async def fetch_group_columns(group_id: str, request: ColumnsSettingsRequest, background_tasks: BackgroundTasks):
     """采集群组的所有专栏内容（后台任务）"""
     try:
-        return _create_columns_fetch_task_response(background_tasks, group_id, request)
+        return _create_columns_fetch_task_response(group_id, request)
     except HTTPException:
         raise
     except Exception as exc:

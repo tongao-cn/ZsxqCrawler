@@ -56,7 +56,7 @@ class ColumnsRoutesHelperTests(unittest.TestCase):
             patch("backend.routes.columns_routes.update_task") as update_task,
             patch("backend.routes.columns_routes.enqueue_runtime_task") as enqueue_runtime_task,
         ):
-            response = _create_columns_fetch_task_response(background_tasks, "123", request)
+            response = _create_columns_fetch_task_response("123", request)
 
         create_task.assert_called_once_with("columns_fetch", "采集专栏内容 (群组: 123)", "123")
         update_task.assert_called_once_with("task-1", "running", "正在采集专栏内容...")
@@ -88,7 +88,7 @@ class ColumnsRoutesHelperTests(unittest.TestCase):
             patch("backend.routes.columns_routes.update_task") as update_task,
         ):
             with self.assertRaises(HTTPException) as raised:
-                _create_columns_fetch_task_response(background_tasks, "123", ColumnsSettingsRequest())
+                _create_columns_fetch_task_response("123", ColumnsSettingsRequest())
 
         self.assertEqual(409, raised.exception.status_code)
         self.assertEqual(

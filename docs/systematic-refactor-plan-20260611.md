@@ -10252,6 +10252,47 @@ Result:
 - Frontend build passed, including Next.js lint/type checks.
 - `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
 
+### 2026-06-13 - P3 columns fetch helper parameter cleanup
+
+Changed:
+
+- Removed the unused `background_tasks` parameter from
+  `backend.routes.columns_routes._create_columns_fetch_task_response`.
+- Updated the internal `fetch_group_columns` call site and focused helper tests.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- The public FastAPI route signature for `fetch_group_columns` still accepts `background_tasks`.
+- The helper still creates the same ingestion task, sets the same running status, enqueues the
+  same task runner with the same arguments, and returns the same response payload.
+- Existing focused tests already asserted that no `BackgroundTasks.add_task` callback is scheduled;
+  that behavior remains unchanged.
+- No schema, crawler, storage, fallback, legacy, route, or public response behavior was removed.
+- Existing dirty downloader risk-log files and scripts remain outside this P3 slice.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_columns_routes_helpers -v
+uv run python -m py_compile backend\routes\columns_routes.py tests\test_columns_routes_helpers.py
+rg -n "_create_columns_fetch_task_response\(" backend\routes\columns_routes.py tests\test_columns_routes_helpers.py
+uv run python scripts\scan_postgres_compat_debt.py
+uv run python -m unittest discover -s tests
+cmd.exe /d /c npm --prefix frontend run build
+git diff --check
+```
+
+Result:
+
+- Focused columns route helper tests passed after removing the unused private helper parameter.
+- `py_compile` passed.
+- `rg` showed only the helper definition, route call site, and updated tests reference the helper.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Full backend unittest discovery: 795 tests passed, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+- `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
+
 ## Stop Conditions
 
 Pause before editing if:
