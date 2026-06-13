@@ -46,7 +46,10 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     database_download_query_plan,
     database_download_start_messages,
     database_download_time_range_message,
+    database_stats_api_response_query,
     database_stats_table_emoji,
+    database_stats_time_range_query,
+    database_stats_total_size_query,
     database_time_range_query,
     database_time_range_result,
     date_range_collection_start_messages,
@@ -1575,10 +1578,8 @@ class ZSXQFileDownloader:
         print(f"   🏠 群组数量: {total_groups:,}")
         
         # 文件大小统计
-        self.file_db.cursor.execute(
-            "SELECT SUM(size) FROM files WHERE group_id = ? AND size IS NOT NULL",
-            (_query_group_id(self.group_id),),
-        )
+        query, params = database_stats_total_size_query(_query_group_id(self.group_id))
+        self.file_db.cursor.execute(query, params)
         result = self.file_db.cursor.fetchone()
         total_size = result[0] if result and result[0] else 0
         
@@ -1593,11 +1594,8 @@ class ZSXQFileDownloader:
                 print(f"   {emoji} {table_name}: {count:,}")
         
         # 文件创建时间范围
-        self.file_db.cursor.execute('''
-            SELECT MIN(create_time), MAX(create_time), COUNT(*) 
-            FROM files 
-            WHERE group_id = ? AND create_time IS NOT NULL
-        ''', (_query_group_id(self.group_id),))
+        query, params = database_stats_time_range_query(_query_group_id(self.group_id))
+        self.file_db.cursor.execute(query, params)
         time_result = self.file_db.cursor.fetchone()
         
         if time_result and time_result[2] > 0:
@@ -1608,11 +1606,7 @@ class ZSXQFileDownloader:
             print(f"   有时间信息的文件: {time_count:,}")
         
         # API响应统计
-        self.file_db.cursor.execute('''
-            SELECT succeeded, COUNT(*) 
-            FROM api_responses 
-            GROUP BY succeeded
-        ''')
+        self.file_db.cursor.execute(database_stats_api_response_query())
         api_stats = self.file_db.cursor.fetchall()
         
         if api_stats:

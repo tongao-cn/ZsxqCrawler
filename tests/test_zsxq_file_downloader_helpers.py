@@ -40,7 +40,10 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     database_download_file_info,
     database_download_start_messages,
     database_download_time_range_message,
+    database_stats_api_response_query,
     database_stats_table_emoji,
+    database_stats_time_range_query,
+    database_stats_total_size_query,
     database_time_range_query,
     database_time_range_result,
     date_range_collection_start_messages,
@@ -225,6 +228,35 @@ class DatabaseTimeRangeFileDb:
     def fetchone(self):
         self.fetchone_calls += 1
         return self.row
+
+
+class ShowDatabaseStatsFileDb:
+    def __init__(self):
+        self.cursor = self
+        self.executed = []
+        self.fetchone_results = [
+            (2 * 1024 * 1024,),
+            ("2026-05-01 09:00:00", "2026-05-07 10:00:00", 2),
+        ]
+
+    def get_database_stats(self):
+        return {
+            "files": 2,
+            "topics": 3,
+            "users": 0,
+            "groups": 1,
+            "unknown_table": 4,
+        }
+
+    def execute(self, query, params=()):
+        self.executed.append((query, tuple(params)))
+        return self
+
+    def fetchone(self):
+        return self.fetchone_results.pop(0)
+
+    def fetchall(self):
+        return [(1, 5), (0, 2)]
 
 
 class TimeDedupeFileDb:
@@ -1156,6 +1188,43 @@ class FileDownloaderDatabaseDownloadTests(unittest.TestCase):
         self.assertEqual("   ❌ 失败: 1", downloader.logs[-1])
 
 
+class FileDownloaderDatabaseStatsTests(unittest.TestCase):
+    def test_show_database_stats_preserves_query_order_and_output_shape(self):
+        downloader = object.__new__(ZSXQFileDownloader)
+        downloader.group_id = "511"
+        downloader.file_db = ShowDatabaseStatsFileDb()
+
+        with contextlib.redirect_stdout(io.StringIO()) as output:
+            ZSXQFileDownloader.show_database_stats(downloader)
+
+        executed = downloader.file_db.executed
+        self.assertEqual(3, len(executed))
+        size_query, size_params = executed[0]
+        time_query, time_params = executed[1]
+        api_query, api_params = executed[2]
+        self.assertEqual(
+            "SELECT SUM(size) FROM files WHERE group_id = ? AND size IS NOT NULL",
+            size_query,
+        )
+        self.assertEqual((511,), size_params)
+        self.assertIn("SELECT MIN(create_time), MAX(create_time), COUNT(*)", " ".join(time_query.split()))
+        self.assertEqual((511,), time_params)
+        self.assertIn("FROM api_responses", api_query)
+        self.assertIn("GROUP BY succeeded", api_query)
+        self.assertEqual((), api_params)
+
+        printed = output.getvalue()
+        self.assertIn("📊 完整数据库统计信息:", printed)
+        self.assertIn("📁 PostgreSQL schema:", printed)
+        self.assertIn("   📄 文件数量: 2", printed)
+        self.assertIn("   👥 用户数量: 0", printed)
+        self.assertIn("💾 总文件大小: 2.00 MB", printed)
+        self.assertIn("   📊 unknown_table: 4", printed)
+        self.assertIn("   最早文件: 2026-05-01 09:00:00", printed)
+        self.assertIn("   ✅ 成功: 5", printed)
+        self.assertIn("   ❌ 失败: 2", printed)
+
+
 class FileDownloaderTimeHelperTests(unittest.TestCase):
     def test_database_download_effective_last_days_preserves_legacy_recent_days_fallback(self):
         self.assertIsNone(database_download_effective_last_days(None, None))
@@ -1659,6 +1728,27 @@ class FileDownloaderFileDataHelperTests(unittest.TestCase):
         self.assertEqual("👥", database_stats_table_emoji("users"))
         self.assertEqual("🔗", database_stats_table_emoji("file_topic_relations"))
         self.assertEqual("📊", database_stats_table_emoji("unknown_table"))
+
+    def test_database_stats_queries_preserve_shape_and_params(self):
+        size_query, size_params = database_stats_total_size_query(511)
+        self.assertEqual(
+            "SELECT SUM(size) FROM files WHERE group_id = ? AND size IS NOT NULL",
+            size_query,
+        )
+        self.assertEqual((511,), size_params)
+
+        time_query, time_params = database_stats_time_range_query("group-1")
+        compact_time_query = " ".join(time_query.split())
+        self.assertIn("SELECT MIN(create_time), MAX(create_time), COUNT(*) FROM files", compact_time_query)
+        self.assertIn("WHERE group_id = ? AND create_time IS NOT NULL", compact_time_query)
+        self.assertEqual(("group-1",), time_params)
+
+        api_query = database_stats_api_response_query()
+        compact_api_query = " ".join(api_query.split())
+        self.assertEqual(
+            "SELECT succeeded, COUNT(*) FROM api_responses GROUP BY succeeded",
+            compact_api_query,
+        )
 
     def test_download_query_group_id_preserves_cast_and_blank_semantics(self):
         self.assertEqual(123, download_query_group_id("123"))

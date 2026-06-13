@@ -986,6 +986,29 @@ def database_stats_table_emoji(table_name: str) -> str:
     return DATABASE_STATS_TABLE_EMOJI.get(table_name, "📊")
 
 
+def database_stats_total_size_query(query_group_id: Any) -> tuple[str, tuple[Any, ...]]:
+    return "SELECT SUM(size) FROM files WHERE group_id = ? AND size IS NOT NULL", (query_group_id,)
+
+
+def database_stats_time_range_query(query_group_id: Any) -> tuple[str, tuple[Any, ...]]:
+    return (
+        '''
+            SELECT MIN(create_time), MAX(create_time), COUNT(*)
+            FROM files
+            WHERE group_id = ? AND create_time IS NOT NULL
+        ''',
+        (query_group_id,),
+    )
+
+
+def database_stats_api_response_query() -> str:
+    return '''
+            SELECT succeeded, COUNT(*)
+            FROM api_responses
+            GROUP BY succeeded
+        '''
+
+
 def download_query_group_id(group_id: Any) -> Any:
     value = str(group_id or "").strip()
     return int(value) if value.isdigit() else value

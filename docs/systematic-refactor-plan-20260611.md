@@ -12723,6 +12723,44 @@ Result:
 - PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-13 - P9 file downloader database stats query helpers
+
+Changed:
+
+- Added database stats SQL helpers in `backend/crawlers/zsxq_file_downloader_helpers.py`
+  for total file size, file time range, and API response stats queries.
+- Reused them in `ZSXQFileDownloader.show_database_stats()` without changing print/query order.
+- Added direct helper coverage for SQL shape and parameter contracts.
+- Added method-path coverage for `show_database_stats()` query order and key output text.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Header/core-stat printing, stats lookup timing, total-size query, time-range query, API stats
+  query arity, detailed table emoji fallback, output text, public method behavior, storage schema,
+  fallback/legacy behavior, and config semantics are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py backend\crawlers\zsxq_file_downloader_helpers.py tests\test_zsxq_file_downloader_helpers.py
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderFileDataHelperTests.test_database_stats_queries_preserve_shape_and_params tests.test_zsxq_file_downloader_helpers.FileDownloaderDatabaseStatsTests.test_show_database_stats_preserves_query_order_and_output_shape -v
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers -v
+uv run python -m unittest discover -s tests
+uv run python scripts\scan_postgres_compat_debt.py
+npm --prefix frontend run build
+```
+
+Result:
+
+- Focused database-stats SQL helper and method-path tests passed.
+- Downloader helper tests passed: 147 tests.
+- Full backend unittest discovery passed: 857 tests, 15 skipped.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Frontend build initially hit a transient prerender failure while unrelated frontend files were
+  dirty during concurrent work; after those changes landed and the worktree was clean, the build
+  passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:
