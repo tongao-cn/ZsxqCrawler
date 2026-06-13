@@ -174,6 +174,94 @@ class AShareRoutesHelperTests(unittest.TestCase):
         add_task_log.assert_called_once_with("task-a-share", "✅ A股公司分析完成")
 
     @unittest.skipUnless(HAS_A_SHARE_ROUTE_DEPS, "a-share route dependencies are not installed")
+    def test_run_a_share_analysis_task_fails_fast_without_api_key(self):
+        from backend.routes.a_share_routes import AShareAnalysisRunRequest, run_a_share_analysis_task
+
+        events = []
+
+        def update_task_side_effect(*args):
+            events.append(("update_task", args))
+
+        def add_task_log_side_effect(*args):
+            events.append(("add_task_log", args))
+
+        request = AShareAnalysisRunRequest(group_id="51111112855254")
+        message = "未配置 OpenAI API Key，请设置环境变量 OPENAI_API_KEY 或 config.toml [ai].api_key"
+
+        with (
+            patch("backend.routes.a_share_routes.has_openai_api_key", return_value=False),
+            patch("backend.routes.a_share_routes.update_task", side_effect=update_task_side_effect) as update_task,
+            patch("backend.routes.a_share_routes.add_task_log", side_effect=add_task_log_side_effect) as add_task_log,
+            patch("backend.routes.a_share_routes.is_task_stopped") as is_task_stopped,
+            patch("backend.routes.a_share_routes._start_a_share_analysis_task") as start_task,
+            patch("backend.routes.a_share_routes._run_a_share_analysis_for_task") as run_analysis,
+            patch("backend.routes.a_share_routes._complete_a_share_analysis_task") as complete_task,
+        ):
+            run_a_share_analysis_task("task-a-share", request)
+
+        self.assertEqual(
+            [
+                ("update_task", ("task-a-share", "failed", message)),
+                ("add_task_log", ("task-a-share", f"❌ {message}")),
+            ],
+            events,
+        )
+        update_task.assert_called_once_with("task-a-share", "failed", message)
+        add_task_log.assert_called_once_with("task-a-share", f"❌ {message}")
+        is_task_stopped.assert_not_called()
+        start_task.assert_not_called()
+        run_analysis.assert_not_called()
+        complete_task.assert_not_called()
+
+    @unittest.skipUnless(HAS_A_SHARE_ROUTE_DEPS, "a-share route dependencies are not installed")
+    def test_a_share_api_key_available_or_fail_task_returns_true_when_configured(self):
+        from backend.routes.a_share_routes import _a_share_api_key_available_or_fail_task
+
+        with (
+            patch("backend.routes.a_share_routes.has_openai_api_key", return_value=True) as has_api_key,
+            patch("backend.routes.a_share_routes.update_task") as update_task,
+            patch("backend.routes.a_share_routes.add_task_log") as add_task_log,
+        ):
+            available = _a_share_api_key_available_or_fail_task("task-a-share")
+
+        self.assertTrue(available)
+        has_api_key.assert_called_once_with()
+        update_task.assert_not_called()
+        add_task_log.assert_not_called()
+
+    @unittest.skipUnless(HAS_A_SHARE_ROUTE_DEPS, "a-share route dependencies are not installed")
+    def test_a_share_api_key_available_or_fail_task_records_missing_key_failure(self):
+        from backend.routes.a_share_routes import _a_share_api_key_available_or_fail_task
+
+        events = []
+
+        def update_task_side_effect(*args):
+            events.append(("update_task", args))
+
+        def add_task_log_side_effect(*args):
+            events.append(("add_task_log", args))
+
+        message = "未配置 OpenAI API Key，请设置环境变量 OPENAI_API_KEY 或 config.toml [ai].api_key"
+        with (
+            patch("backend.routes.a_share_routes.has_openai_api_key", return_value=False) as has_api_key,
+            patch("backend.routes.a_share_routes.update_task", side_effect=update_task_side_effect) as update_task,
+            patch("backend.routes.a_share_routes.add_task_log", side_effect=add_task_log_side_effect) as add_task_log,
+        ):
+            available = _a_share_api_key_available_or_fail_task("task-a-share")
+
+        self.assertFalse(available)
+        has_api_key.assert_called_once_with()
+        self.assertEqual(
+            [
+                ("update_task", ("task-a-share", "failed", message)),
+                ("add_task_log", ("task-a-share", f"❌ {message}")),
+            ],
+            events,
+        )
+        update_task.assert_called_once_with("task-a-share", "failed", message)
+        add_task_log.assert_called_once_with("task-a-share", f"❌ {message}")
+
+    @unittest.skipUnless(HAS_A_SHARE_ROUTE_DEPS, "a-share route dependencies are not installed")
     def test_normalize_group_scope_keeps_existing_labels(self):
         from backend.routes.a_share_routes import _normalize_group_scope
 

@@ -13786,6 +13786,57 @@ Result:
 - PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-13 - P5 A-share API key preflight helper
+
+Changed:
+
+- Added characterization coverage for `run_a_share_analysis_task()` when the OpenAI
+  API key is missing.
+- Added helper coverage for both configured-key and missing-key branches.
+- Extracted `_a_share_api_key_available_or_fail_task()` in
+  `backend.routes.a_share_routes`.
+- Reused it at the start of `run_a_share_analysis_task()` before stop checks,
+  group normalization, running logs, analysis execution, and completion handling.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- When no API key is configured, A-share analysis still updates the task to `failed`
+  with `未配置 OpenAI API Key，请设置环境变量 OPENAI_API_KEY 或 config.toml [ai].api_key`,
+  then logs the same message prefixed by `❌`, and returns immediately.
+- The failure update still happens before the failure log.
+- Missing-key tasks still skip the stop check, group normalization, running status/logs,
+  analysis service call, and completion handler.
+- Configured-key tasks still continue through the existing stopped/running/service/completion
+  path.
+- Task/public APIs, storage schema, fallback/legacy behavior, and config semantics are
+  unchanged.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_a_share_routes_helpers.AShareRoutesHelperTests.test_run_a_share_analysis_task_fails_fast_without_api_key -v
+uv run python -m py_compile backend\routes\a_share_routes.py tests\test_a_share_routes_helpers.py
+uv run python -m unittest tests.test_a_share_routes_helpers.AShareRoutesHelperTests.test_run_a_share_analysis_task_fails_fast_without_api_key tests.test_a_share_routes_helpers.AShareRoutesHelperTests.test_a_share_api_key_available_or_fail_task_returns_true_when_configured tests.test_a_share_routes_helpers.AShareRoutesHelperTests.test_a_share_api_key_available_or_fail_task_records_missing_key_failure -v
+uv run python -m unittest tests.test_a_share_routes_helpers -v
+uv run python -m unittest tests.test_a_share_routes_helpers tests.test_a_share_analysis_service_helpers tests.test_a_share_analysis_db_storage_helpers -v
+uv run python -m unittest discover -s tests
+uv run python scripts\scan_postgres_compat_debt.py
+npm --prefix frontend run build
+```
+
+Result:
+
+- Focused missing-key characterization test passed against the original inline
+  implementation before extraction: 1 test.
+- `py_compile` passed.
+- Focused A-share API key preflight tests passed after extraction: 3 tests.
+- A-share route helper tests passed: 16 tests.
+- Related A-share route/service/storage tests passed: 59 tests.
+- Full backend unittest discovery passed: 904 tests, 15 skipped.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:

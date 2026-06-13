@@ -194,13 +194,20 @@ def _complete_a_share_analysis_task(task_id: str, result: dict) -> None:
     add_task_log(task_id, "✅ A股公司分析完成")
 
 
+def _a_share_api_key_available_or_fail_task(task_id: str) -> bool:
+    if has_openai_api_key():
+        return True
+
+    message = "未配置 OpenAI API Key，请设置环境变量 OPENAI_API_KEY 或 config.toml [ai].api_key"
+    update_task(task_id, "failed", message)
+    add_task_log(task_id, f"❌ {message}")
+    return False
+
+
 def run_a_share_analysis_task(task_id: str, request: AShareAnalysisRunRequest):
     """后台执行A股公司提及分析任务"""
     try:
-        if not has_openai_api_key():
-            message = "未配置 OpenAI API Key，请设置环境变量 OPENAI_API_KEY 或 config.toml [ai].api_key"
-            update_task(task_id, "failed", message)
-            add_task_log(task_id, f"❌ {message}")
+        if not _a_share_api_key_available_or_fail_task(task_id):
             return
 
         if is_task_stopped(task_id):
