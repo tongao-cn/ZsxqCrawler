@@ -13990,6 +13990,57 @@ Result:
 - Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because
   `ruff` is not available.
 
+### 2026-06-13 - P5 A-share status latest TDX export fallback helper
+
+Changed:
+
+- Added characterization coverage for `get_a_share_analysis_status()` when
+  `get_latest_tdx_export()` raises.
+- Locked the existing latest TDX export fallback behavior: failures are swallowed and
+  `latest_tdx_export` is returned as `None`.
+- Extracted `_latest_a_share_tdx_export()` to preserve the `asyncio.to_thread()` service call
+  and fallback-to-`None` behavior outside the status route body.
+- Added helper coverage for both successful service payload passthrough and failure fallback.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- The status route still reads summary, latest/running tasks, storage status, latest TDX export,
+  and API-key flag in the existing shape.
+- Latest TDX export lookup failures remain non-fatal and still produce
+  `latest_tdx_export: None`.
+- Successful latest TDX export payloads are still returned unchanged.
+- Public API shape, HTTP error semantics, storage schema, config semantics, side effects, and
+  fallback/legacy behavior are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_a_share_routes_helpers.AShareRoutesHelperTests.test_get_a_share_analysis_status_preserves_latest_tdx_export_failure_fallback -v
+uv run python -m py_compile backend\routes\a_share_routes.py tests\test_a_share_routes_helpers.py
+uv run python -m unittest tests.test_a_share_routes_helpers.AShareRoutesHelperTests.test_get_a_share_analysis_status_preserves_latest_tdx_export_failure_fallback tests.test_a_share_routes_helpers.AShareRoutesHelperTests.test_latest_a_share_tdx_export_returns_service_payload tests.test_a_share_routes_helpers.AShareRoutesHelperTests.test_latest_a_share_tdx_export_returns_none_on_failure -v
+uv run python -m unittest tests.test_a_share_routes_helpers -v
+uv run python -m unittest tests.test_a_share_routes_helpers tests.test_a_share_analysis_service_helpers tests.test_a_share_analysis_db_storage_helpers -v
+uv run python -m unittest discover -s tests
+uv run python scripts\scan_postgres_compat_debt.py
+npm --prefix frontend run build
+uv run ruff check backend\routes\a_share_routes.py tests\test_a_share_routes_helpers.py --select F401,F841
+```
+
+Result:
+
+- Focused latest TDX export fallback characterization test passed against the original inline
+  implementation before extraction: 1 test.
+- `py_compile` passed.
+- Focused latest TDX export fallback/helper tests passed after extraction: 3 tests.
+- A-share route helper tests passed: 26 tests.
+- Related A-share route/service/storage tests passed: 69 tests.
+- Full backend unittest discovery passed: 914 tests, 15 skipped.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Frontend build passed, including Next.js lint/type checks.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because
+  `ruff` is not available.
+
 ## Stop Conditions
 
 Pause before editing if:

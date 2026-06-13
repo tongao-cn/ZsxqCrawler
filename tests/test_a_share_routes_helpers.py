@@ -123,6 +123,38 @@ class AShareRoutesHelperTests(unittest.TestCase):
         has_api_key.assert_called_once_with()
 
     @unittest.skipUnless(HAS_A_SHARE_ROUTE_DEPS, "a-share route dependencies are not installed")
+    def test_get_a_share_analysis_status_preserves_latest_tdx_export_failure_fallback(self):
+        import asyncio
+
+        from backend.routes import a_share_routes
+
+        summary = {"rows_count": 7, "processed_items": 5}
+        storage = {"enabled": True, "mode": "postgres"}
+
+        with (
+            patch.object(a_share_routes, "get_analysis_summary", return_value=summary) as get_summary,
+            patch.object(a_share_routes, "get_latest_task_by_type", return_value=None) as get_latest_task,
+            patch.object(a_share_routes, "_a_share_storage_status", return_value=storage) as get_storage_status,
+            patch.object(a_share_routes, "get_latest_tdx_export", side_effect=RuntimeError("tdx unavailable"))
+            as get_latest_export,
+            patch.object(a_share_routes, "has_openai_api_key", return_value=False) as has_api_key,
+        ):
+            result = asyncio.run(a_share_routes.get_a_share_analysis_status("51111112855254"))
+
+        self.assertEqual(summary, result["summary"])
+        self.assertEqual("51111112855254", result["group_id"])
+        self.assertIsNone(result["latest_task"])
+        self.assertIsNone(result["running_task"])
+        self.assertEqual(storage, result["storage"])
+        self.assertIsNone(result["latest_tdx_export"])
+        self.assertFalse(result["api_key_configured"])
+        get_summary.assert_called_once_with(group_id="51111112855254")
+        self.assertEqual(2, get_latest_task.call_count)
+        get_storage_status.assert_awaited_once_with(summary, "51111112855254")
+        get_latest_export.assert_called_once_with("51111112855254")
+        has_api_key.assert_called_once_with()
+
+    @unittest.skipUnless(HAS_A_SHARE_ROUTE_DEPS, "a-share route dependencies are not installed")
     def test_a_share_file_fallback_storage_status_defaults_missing_counts(self):
         from backend.routes.a_share_routes import _a_share_file_fallback_storage_status
 
@@ -139,6 +171,35 @@ class AShareRoutesHelperTests(unittest.TestCase):
                 RuntimeError("temporary outage"),
             ),
         )
+
+    @unittest.skipUnless(HAS_A_SHARE_ROUTE_DEPS, "a-share route dependencies are not installed")
+    def test_latest_a_share_tdx_export_returns_service_payload(self):
+        import asyncio
+
+        from backend.routes import a_share_routes
+
+        payload = {"block_name": "A-share"}
+        with patch.object(a_share_routes, "get_latest_tdx_export", return_value=payload) as get_latest_export:
+            result = asyncio.run(a_share_routes._latest_a_share_tdx_export("51111112855254"))
+
+        self.assertEqual(payload, result)
+        get_latest_export.assert_called_once_with("51111112855254")
+
+    @unittest.skipUnless(HAS_A_SHARE_ROUTE_DEPS, "a-share route dependencies are not installed")
+    def test_latest_a_share_tdx_export_returns_none_on_failure(self):
+        import asyncio
+
+        from backend.routes import a_share_routes
+
+        with patch.object(
+            a_share_routes,
+            "get_latest_tdx_export",
+            side_effect=RuntimeError("tdx unavailable"),
+        ) as get_latest_export:
+            result = asyncio.run(a_share_routes._latest_a_share_tdx_export("51111112855254"))
+
+        self.assertIsNone(result)
+        get_latest_export.assert_called_once_with("51111112855254")
 
     @unittest.skipUnless(HAS_A_SHARE_ROUTE_DEPS, "a-share route dependencies are not installed")
     def test_run_a_share_analysis_for_task_preserves_service_arguments(self):
