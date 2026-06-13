@@ -12,13 +12,14 @@ from backend.core.ai_provider_config import (
 )
 from backend.core.logger_config import log_debug, log_warning
 from backend.services.ai_json_utils import extract_json_object
+from backend.services.stock_concept_taxonomy import normalize_stock_concept_term
 
 
 DEFAULT_API_BASE = get_default_base_url()
 DEFAULT_WIRE_API = get_default_wire_api()
 DEFAULT_REASONING_EFFORT = get_extraction_reasoning_effort()
 DEFAULT_OPENAI_MAX_RETRIES = max(1, int(os.environ.get("OPENAI_MAX_RETRIES", "1")))
-TOPIC_STOCK_EXTRACTION_PROMPT_VERSION = "a-share-topic-stock-extraction-v2"
+TOPIC_STOCK_EXTRACTION_PROMPT_VERSION = "a-share-topic-stock-extraction-v3"
 A_SHARE_COMPANY_EXTRACTION_SCHEMA: Dict[str, Any] = {
     "type": "object",
     "properties": {
@@ -28,12 +29,22 @@ A_SHARE_COMPANY_EXTRACTION_SCHEMA: Dict[str, Any] = {
                 "type": "object",
                 "properties": {
                     "stock_name": {"type": "string"},
-                    "concepts": {"type": "array", "items": {"type": "string"}},
+                    "industry_concepts": {"type": "array", "items": {"type": "string"}},
+                    "signal_tags": {"type": "array", "items": {"type": "string"}},
+                    "raw_terms": {"type": "array", "items": {"type": "string"}},
                     "excerpt": {"type": "string"},
                     "reason": {"type": "string"},
                     "confidence": {"type": "number"},
                 },
-                "required": ["stock_name", "concepts", "excerpt", "reason", "confidence"],
+                "required": [
+                    "stock_name",
+                    "industry_concepts",
+                    "signal_tags",
+                    "raw_terms",
+                    "excerpt",
+                    "reason",
+                    "confidence",
+                ],
                 "additionalProperties": False,
             },
         },
@@ -109,6 +120,28 @@ def _safe_text_list(value: Any, *, limit: int = 10) -> List[str]:
     return cleaned
 
 
+def _normalize_extracted_concepts(raw: Dict[str, Any]) -> List[str]:
+    candidates: List[str] = []
+    industry_concepts = _safe_text_list(raw.get("industry_concepts"), limit=5)
+    signal_tags = _safe_text_list(raw.get("signal_tags"), limit=6)
+
+    if industry_concepts or signal_tags:
+        candidates.extend(industry_concepts)
+        candidates.extend(signal_tags)
+    else:
+        candidates.extend(_safe_text_list(raw.get("concepts"), limit=10))
+
+    concepts: List[str] = []
+    for candidate in candidates:
+        class_name, normalized = normalize_stock_concept_term(candidate)
+        if class_name == "empty" or not normalized or normalized in concepts:
+            continue
+        concepts.append(normalized)
+        if len(concepts) >= 10:
+            break
+    return concepts
+
+
 def _clean_company_name(raw: Any) -> str:
     company = str(raw or "").strip()
     company = (
@@ -149,28 +182,31 @@ def _parse_topic_stock_extraction_output(message: str) -> List[Dict[str, Any]]:
     for raw in raw_stocks:
         if isinstance(raw, dict):
             company = _clean_company_name(raw.get("stock_name") or raw.get("company") or raw.get("name"))
-            concepts = _safe_text_list(raw.get("concepts"), limit=10)
+            concepts = _normalize_extracted_concepts(raw)
+            raw_terms = _safe_text_list(raw.get("raw_terms"), limit=10)
             excerpt = str(raw.get("excerpt") or "").strip()[:2000]
             reason = str(raw.get("reason") or "").strip()[:1000]
             confidence = _safe_float(raw.get("confidence"))
         else:
             company = _clean_company_name(raw)
             concepts = []
+            raw_terms = []
             excerpt = ""
             reason = ""
             confidence = 0.7
 
         if not _is_valid_company_name(company) or company in seen:
             continue
-        cleaned.append(
-            {
-                "stock_name": company,
-                "concepts": concepts,
-                "excerpt": excerpt,
-                "reason": reason,
-                "confidence": confidence,
-            }
-        )
+        item = {
+            "stock_name": company,
+            "concepts": concepts,
+            "excerpt": excerpt,
+            "reason": reason,
+            "confidence": confidence,
+        }
+        if raw_terms:
+            item["raw_terms"] = raw_terms
+        cleaned.append(item)
         seen.add(company)
     return cleaned
 
@@ -230,13 +266,15 @@ def _build_topic_stock_extraction_prompt() -> str:
         "4. 港股、美股、ETF、指数、板块、行业、产品、基金、机构、人物都不要输出。\n"
         "5. 如果只是业务、产品、子公司、老板姓名，且无法唯一映射到A股上市公司，不要猜。\n"
         "6. 同一家公司如果同时出现全称和简称，只输出一个更常见的A股证券简称。\n"
-        "7. concepts 必须来自上下文，例如固态电池、机器人、算力、低空经济等；没有明确概念可给空数组。\n"
-        "8. excerpt 规则：\n"
+        "7. industry_concepts 填中粒度产业概念，每只股票最多 3-5 个，例如机器人、PCB、CCL、铜箔、储能、锂电/电池、光通信/CPO、AI算力/数据中心、半导体设备/先进封装；不要把涨价、国产替代、订单、出海这类催化属性放进这里。\n"
+        "8. signal_tags 填催化或属性信号，例如涨价/供需、国产替代/自主可控、出海/出口、订单/扩产、估值/分红；没有明确证据可给空数组。\n"
+        "9. raw_terms 可保留原文中的细分词或精确说法，例如 PCB钻针、CPU涨价、固态电池量产；没有可给空数组。raw_terms 用于回溯，不要为了凑数输出。\n"
+        "10. excerpt 规则：\n"
         "   - 如果全文都在讲一个股票，返回全文。\n"
         "   - 如果分段讲多个股票，只返回当前股票对应的那一段。\n"
         "   - 如果一段里同时讲多个股票，这一段要对每个相关股票都返回同一段 excerpt。\n"
         "   - 如果同一股票在全文多处出现，只保留最能说明其被推荐或受益的那一段，尽量保留原文，不要改写。\n"
-        "9. reason 简要说明该股票被推荐或受益的原因；如果只有负面或风险语义，应直接不输出，而不是降低 confidence。"
+        "11. reason 简要说明该股票被推荐或受益的原因；如果只有负面或风险语义，应直接不输出，而不是降低 confidence。"
     )
 
 

@@ -304,13 +304,17 @@ class AShareAnalysisServiceHelperTests(unittest.TestCase):
           "stocks": [
             {
               "stock_name": "宁德时代",
-              "concepts": ["固态电池", "储能"],
+              "industry_concepts": ["固态电池", "储能"],
+              "signal_tags": ["涨价", "国产替代"],
+              "raw_terms": ["固态电池量产", "CPU涨价"],
               "reason": "话题明确讨论宁德时代电池链。",
               "confidence": 0.86
             },
             {
               "stock_name": "沪深300ETF",
-              "concepts": ["指数"],
+              "industry_concepts": ["指数"],
+              "signal_tags": [],
+              "raw_terms": [],
               "reason": "不是股票",
               "confidence": 0.9
             }
@@ -324,7 +328,8 @@ class AShareAnalysisServiceHelperTests(unittest.TestCase):
             [
                 {
                     "stock_name": "宁德时代",
-                    "concepts": ["固态电池", "储能"],
+                    "concepts": ["锂电/电池", "储能", "涨价/供需", "国产替代/自主可控"],
+                    "raw_terms": ["固态电池量产", "CPU涨价"],
                     "excerpt": "",
                     "reason": "话题明确讨论宁德时代电池链。",
                     "confidence": 0.86,
@@ -352,7 +357,7 @@ class AShareAnalysisServiceHelperTests(unittest.TestCase):
 
         prompt = _build_topic_stock_extraction_prompt()
 
-        self.assertEqual("a-share-topic-stock-extraction-v2", TOPIC_STOCK_EXTRACTION_PROMPT_VERSION)
+        self.assertEqual("a-share-topic-stock-extraction-v3", TOPIC_STOCK_EXTRACTION_PROMPT_VERSION)
         self.assertIn("正向推荐或受益语义", prompt)
         self.assertIn("不要仅因为公司名称出现就输出", prompt)
         self.assertIn("excerpt 是从原文中直接摘出的证据片段", prompt)
@@ -360,6 +365,9 @@ class AShareAnalysisServiceHelperTests(unittest.TestCase):
         self.assertIn("风险、暴雷、利空、业绩下修", prompt)
         self.assertIn("如果只有负面或风险语义，应直接不输出", prompt)
         self.assertIn("重点关注、买入/增持、受益", prompt)
+        self.assertIn("industry_concepts 填中粒度产业概念", prompt)
+        self.assertIn("signal_tags 填催化或属性信号", prompt)
+        self.assertIn("raw_terms 可保留原文中的细分词", prompt)
 
     def test_call_openai_extract_topic_stocks_sends_recommendation_pool_prompt(self):
         from backend.services import a_share_analysis_service as service
@@ -382,6 +390,9 @@ class AShareAnalysisServiceHelperTests(unittest.TestCase):
         self.assertIn("负面风险、暴雷、利空、避雷、跌幅归因", messages[0]["content"])
         self.assertIn("不要仅因为公司名称出现就输出", messages[1]["content"])
         self.assertIn("excerpt 规则", messages[1]["content"])
+        self.assertIn("industry_concepts", messages[1]["content"])
+        self.assertIn("signal_tags", messages[1]["content"])
+        self.assertIn("raw_terms", messages[1]["content"])
         self.assertIn("业绩下修", messages[1]["content"])
         self.assertIn("营收利润重算后大幅下滑", messages[1]["content"])
 

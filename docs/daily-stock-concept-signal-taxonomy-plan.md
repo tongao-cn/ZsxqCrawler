@@ -233,6 +233,20 @@ Verification:
   - compare latest completed date before and after regeneration on real data.
   - decide whether to add additive `signal_tags_json` / `raw_terms_json` fields later.
 
+### 2026-06-13 - Phase 5 Extraction Prompt And Parser Start
+
+- Updated topic-level A-share stock extraction to prompt for:
+  - medium-grain `industry_concepts`.
+  - catalyst/style `signal_tags`.
+  - trace-only `raw_terms`.
+- Bumped topic stock extraction prompt version to `a-share-topic-stock-extraction-v3`.
+- Kept parser compatibility for legacy `concepts`, `companies`, and `a_share_companies` shapes.
+- Normalized extracted industry concepts and signal tags through the shared taxonomy before returning current `concepts`.
+- Kept `raw_terms` out of current `concepts_json` to avoid re-polluting concept rankings.
+- Remaining Phase 5 work:
+  - run a small no-write AI extraction smoke when API credentials/runtime are intended for live validation.
+  - decide whether raw terms need a durable additive storage field after observing v3 output quality.
+
 ### 2026-06-13 - Initial Plan
 
 - Created this plan after the display-layer concept/signal split landed.
