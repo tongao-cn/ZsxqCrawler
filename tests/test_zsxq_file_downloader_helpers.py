@@ -27,6 +27,7 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     database_download_start_messages,
     database_download_time_range_message,
     database_stats_table_emoji,
+    date_range_collection_start_messages,
     download_exception_detail,
     download_expected_size,
     download_final_failure_detail,
@@ -577,6 +578,26 @@ class FileDownloaderTimeHelperTests(unittest.TestCase):
         )
         self.assertIsNone(database_download_time_range_message(rows, "download_count"))
         self.assertIsNone(database_download_time_range_message([], "create_time"))
+
+    def test_date_range_collection_start_messages_preserves_optional_range_line(self):
+        self.assertEqual(
+            (
+                "📅 启动按时间范围收集文件列表...",
+                "   范围: 2026-05-01 ~ 2026-05-07",
+            ),
+            date_range_collection_start_messages("2026-05-01", "2026-05-07"),
+        )
+        self.assertEqual(
+            (
+                "📅 启动按时间范围收集文件列表...",
+                "   范围: - ~ 2026-05-07",
+            ),
+            date_range_collection_start_messages(None, "2026-05-07"),
+        )
+        self.assertEqual(
+            ("📅 启动按时间范围收集文件列表...",),
+            date_range_collection_start_messages(None, None),
+        )
 
     def test_parse_create_time_accepts_common_formats(self):
         self.assertEqual(

@@ -275,6 +275,16 @@ def database_download_time_range_message(files_to_download: list[Any], sort_by: 
     return None
 
 
+def date_range_collection_start_messages(
+    normalized_start: Optional[str],
+    normalized_end: Optional[str],
+) -> tuple[str, ...]:
+    messages = ["📅 启动按时间范围收集文件列表..."]
+    if normalized_start or normalized_end:
+        messages.append(f"   范围: {normalized_start or '-'} ~ {normalized_end or '-'}")
+    return tuple(messages)
+
+
 def latest_file_create_time_query(query_group_id: Any) -> tuple[str, tuple[Any, ...]]:
     return (
         '''

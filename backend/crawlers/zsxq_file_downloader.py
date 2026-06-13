@@ -34,6 +34,7 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     database_download_start_messages,
     database_download_time_range_message,
     database_stats_table_emoji,
+    date_range_collection_start_messages,
     download_file_data,
     download_exception_detail,
     download_expected_size,
@@ -1482,9 +1483,8 @@ class ZSXQFileDownloader:
             end_date=end_date,
             last_days=last_days,
         )
-        self.log("📅 启动按时间范围收集文件列表...")
-        if normalized_start or normalized_end:
-            self.log(f"   范围: {normalized_start or '-'} ~ {normalized_end or '-'}")
+        for message in date_range_collection_start_messages(normalized_start, normalized_end):
+            self.log(message)
         return self.collect_files_by_time(
             sort="by_create_time",
             start_time=None,
