@@ -13375,6 +13375,51 @@ Result:
 - PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-13 - P5 stock topic batch workflow lifecycle reuse
+
+Changed:
+
+- Extended `backend.services.task_runtime.run_workflow()` to accept callable running/completed
+  messages while preserving existing string message callers.
+- Reused `run_workflow()` in
+  `backend.routes.stock_topic_analysis_routes.run_stock_topic_analysis_batch_task()`.
+- Removed the now-unused `_fail_stock_topic_task_unless_stopped()` route helper.
+- Added runtime coverage for dynamic workflow message ordering and batch route wiring coverage for
+  parse order, running message, batch service arguments, log callback, and result-based completion
+  message.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Existing `run_workflow()` string callers keep the same public call shape, running/completed
+  updates, result payload handling, stopped checks, failure messages, and lock-release behavior.
+- Batch stock-name parsing still happens after the initial stopped check and before the running
+  status update; parse failures still use the same `"个股话题分析失败: ..."` failure message.
+- Batch running message text, `analyze_stock_topics_batch()` arguments, log callback side effects,
+  stopped-after-work behavior, completed status, result payload, terminal message text, task/public
+  APIs, storage schema, fallback/legacy behavior, and config semantics are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m py_compile backend\services\task_runtime.py backend\routes\stock_topic_analysis_routes.py tests\test_task_runtime_helpers.py tests\test_stock_topic_analysis_routes_helpers.py
+uv run python -m unittest tests.test_task_runtime_helpers.TaskRuntimeHelperTests.test_run_workflow_resolves_dynamic_messages_in_order tests.test_stock_topic_analysis_routes_helpers.StockTopicAnalysisRoutesHelperTests.test_run_stock_topic_analysis_batch_task_uses_runtime_workflow_lifecycle -v
+uv run python -m unittest tests.test_task_runtime_helpers tests.test_stock_topic_analysis_routes_helpers -v
+uv run python -m unittest discover -s tests
+uv run python scripts\scan_postgres_compat_debt.py
+npm --prefix frontend run build
+rg -n "_fail_stock_topic_task_unless_stopped|run_stock_topic_analysis_batch_task|_resolve_workflow_(running|completed)_message|WorkflowRunningMessage|WorkflowCompletedMessage" backend\services\task_runtime.py backend\routes\stock_topic_analysis_routes.py tests\test_task_runtime_helpers.py tests\test_stock_topic_analysis_routes_helpers.py
+```
+
+Result:
+
+- Focused dynamic workflow message and batch lifecycle tests passed.
+- Related runtime/stock route helper tests passed: 58 tests.
+- Full backend unittest discovery passed: 886 tests, 15 skipped.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Frontend build passed, including Next.js lint/type checks.
+- Search confirmed `_fail_stock_topic_task_unless_stopped()` has no remaining references.
+
 ## Stop Conditions
 
 Pause before editing if:

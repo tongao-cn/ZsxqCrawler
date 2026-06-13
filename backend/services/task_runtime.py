@@ -58,6 +58,8 @@ from backend.services.task_runtime_threads import (
 from backend.storage.task_store import TaskStore
 
 
+WorkflowRunningMessage = str | Callable[[], str]
+WorkflowCompletedMessage = str | Callable[[Any], str]
 task_store: Optional[TaskStore] = None
 TASK_LOCK_LEASE_MINUTES = 30
 TASK_LOCK_HEARTBEAT_SECONDS = 60
@@ -348,11 +350,19 @@ def update_task(
     _release_task_lock_on_terminal_status(task_id, status, now, store)
 
 
+def _resolve_workflow_running_message(message: WorkflowRunningMessage) -> str:
+    return message() if callable(message) else message
+
+
+def _resolve_workflow_completed_message(message: WorkflowCompletedMessage, result: Any) -> str:
+    return message(result) if callable(message) else message
+
+
 def run_workflow(
     task_id: str,
     *,
-    running_message: str,
-    completed_message: str,
+    running_message: WorkflowRunningMessage,
+    completed_message: WorkflowCompletedMessage,
     failure_label: str,
     work: Callable[[], Any],
 ) -> None:
@@ -360,13 +370,13 @@ def run_workflow(
         if is_task_stopped(task_id):
             return
 
-        update_task(task_id, "running", running_message)
+        update_task(task_id, "running", _resolve_workflow_running_message(running_message))
         result = work()
 
         if is_task_stopped(task_id):
             return
 
-        update_task(task_id, "completed", completed_message, result)
+        update_task(task_id, "completed", _resolve_workflow_completed_message(completed_message, result), result)
     except Exception as exc:
         if is_task_stopped(task_id):
             return

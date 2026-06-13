@@ -196,6 +196,54 @@ class StockTopicAnalysisRoutesHelperTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual("开始批量个股话题分析，共 0 只股票...", _stock_topic_batch_running_message(0))
 
     @unittest.skipUnless(HAS_ROUTE_DEPS, "stock topic analysis route dependencies are not installed")
+    async def test_run_stock_topic_analysis_batch_task_uses_runtime_workflow_lifecycle(self):
+        from backend.routes.stock_topic_analysis_routes import StockTopicAnalysisBatchRequest, run_stock_topic_analysis_batch_task
+
+        request = StockTopicAnalysisBatchRequest(stockNames=["宁德时代", "德龙激光", "宁德时代"])
+        events = []
+
+        def parse_stock_names(stock_names):
+            events.append(("parse", stock_names))
+            return ["宁德时代", "德龙激光"]
+
+        def analyze_stock_topics_batch(group_id, stock_names, *, log_callback):
+            events.append(("analyze", group_id, stock_names, callable(log_callback)))
+            log_callback("batch log")
+            return {"summary": {"success": 2, "failed": 0, "no_topics": 0}}
+
+        with (
+            patch("backend.routes.stock_topic_analysis_routes.run_workflow") as run_workflow,
+            patch("backend.routes.stock_topic_analysis_routes.parse_stock_names", side_effect=parse_stock_names),
+            patch(
+                "backend.routes.stock_topic_analysis_routes.analyze_stock_topics_batch",
+                side_effect=analyze_stock_topics_batch,
+            ),
+            patch("backend.routes.stock_topic_analysis_routes.add_task_log") as add_task_log,
+        ):
+            run_stock_topic_analysis_batch_task("task-batch", "51111112855254", request)
+
+            run_workflow.assert_called_once()
+            args, kwargs = run_workflow.call_args
+            self.assertEqual(("task-batch",), args)
+            self.assertEqual("个股话题分析", kwargs["failure_label"])
+
+            self.assertEqual("开始批量个股话题分析，共 2 只股票...", kwargs["running_message"]())
+            result = kwargs["work"]()
+            self.assertEqual(
+                "批量个股话题分析完成：成功 2，失败 0，无话题 0",
+                kwargs["completed_message"](result),
+            )
+
+        self.assertEqual(
+            [
+                ("parse", ["宁德时代", "德龙激光", "宁德时代"]),
+                ("analyze", "51111112855254", ["宁德时代", "德龙激光"], True),
+            ],
+            events,
+        )
+        add_task_log.assert_called_once_with("task-batch", "batch log")
+
+    @unittest.skipUnless(HAS_ROUTE_DEPS, "stock topic analysis route dependencies are not installed")
     async def test_create_stock_topic_analysis_enqueues_runtime_task(self):
         from backend.routes.stock_topic_analysis_routes import (
             StockTopicAnalysisRequest,

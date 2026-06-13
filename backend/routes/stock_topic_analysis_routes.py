@@ -21,9 +21,7 @@ from backend.services.task_runtime import (
     add_task_log,
     create_task,
     enqueue_runtime_task,
-    is_task_stopped,
     run_workflow,
-    update_task,
 )
 
 
@@ -57,14 +55,6 @@ def _build_stock_topic_log_callback(task_id: str) -> Callable[[str], None]:
         add_task_log(task_id, message)
 
     return log_callback
-
-
-def _fail_stock_topic_task_unless_stopped(task_id: str, error: Exception) -> None:
-    if is_task_stopped(task_id):
-        return
-    message = f"个股话题分析失败: {str(error)}"
-    add_task_log(task_id, f"❌ {message}")
-    update_task(task_id, "failed", message)
 
 
 def _create_stock_task_response(
@@ -123,26 +113,29 @@ def run_stock_question_task(task_id: str, group_id: str, request: StockQuestionR
 
 
 def run_stock_topic_analysis_batch_task(task_id: str, group_id: str, request: StockTopicAnalysisBatchRequest) -> None:
-    try:
-        if is_task_stopped(task_id):
-            return
+    workflow_state = {}
 
+    def running_message() -> str:
         log_callback = _build_stock_topic_log_callback(task_id)
         stock_names = parse_stock_names(request.stockNames)
-        update_task(task_id, "running", _stock_topic_batch_running_message(len(stock_names)))
-        result = analyze_stock_topics_batch(group_id, stock_names, log_callback=log_callback)
+        workflow_state["log_callback"] = log_callback
+        workflow_state["stock_names"] = stock_names
+        return _stock_topic_batch_running_message(len(stock_names))
 
-        if is_task_stopped(task_id):
-            return
-
-        update_task(
-            task_id,
-            "completed",
-            _stock_topic_batch_completed_message(result),
-            result,
+    def work() -> dict:
+        return analyze_stock_topics_batch(
+            group_id,
+            workflow_state["stock_names"],
+            log_callback=workflow_state["log_callback"],
         )
-    except Exception as exc:
-        _fail_stock_topic_task_unless_stopped(task_id, exc)
+
+    run_workflow(
+        task_id,
+        running_message=running_message,
+        completed_message=_stock_topic_batch_completed_message,
+        failure_label="个股话题分析",
+        work=work,
+    )
 
 
 @router.get("/{group_id}/questions")

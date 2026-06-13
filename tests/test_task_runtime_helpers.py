@@ -612,6 +612,41 @@ class TaskRuntimeHelperTests(unittest.TestCase):
         self.assertIn(("task-1", "状态更新: done now"), store.logs)
         self.assertEqual([("task-1", "completed")], store.released_locks)
 
+    def test_run_workflow_resolves_dynamic_messages_in_order(self):
+        from backend.services.task_runtime import run_workflow
+
+        store = FakeTaskStore()
+        store.tasks["task-1"] = {"task_id": "task-1", "status": "pending", "message": "queued"}
+        events = []
+
+        def running_message():
+            events.append("running_message")
+            return "running dynamic"
+
+        def work():
+            events.append("work")
+            return {"ok": True}
+
+        def completed_message(result):
+            events.append(("completed_message", result))
+            return "done dynamic"
+
+        with patch("backend.services.task_runtime.get_task_store", return_value=store):
+            run_workflow(
+                "task-1",
+                running_message=running_message,
+                completed_message=completed_message,
+                failure_label="每日股票概念提取",
+                work=work,
+            )
+
+        self.assertEqual(["running_message", "work", ("completed_message", {"ok": True})], events)
+        self.assertEqual("completed", store.tasks["task-1"]["status"])
+        self.assertEqual("done dynamic", store.tasks["task-1"]["message"])
+        self.assertEqual({"ok": True}, store.tasks["task-1"]["result"])
+        self.assertIn(("task-1", "状态更新: running dynamic"), store.logs)
+        self.assertIn(("task-1", "状态更新: done dynamic"), store.logs)
+
     def test_run_workflow_logs_and_fails_unstopped_exception(self):
         from backend.services.task_runtime import run_workflow
 
