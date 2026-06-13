@@ -10293,6 +10293,47 @@ Result:
 - Frontend build passed, including Next.js lint/type checks.
 - `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
 
+### 2026-06-13 - P3 columns route summary import cleanup
+
+Changed:
+
+- Removed unused `columns_fetch_summary` helper imports from
+  `backend.routes.columns_routes`.
+- Updated the focused route helper test to import `resolve_columns_fetch_config` directly from
+  `backend.services.columns_fetch_summary` instead of through the route module.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- The route module did not call `_build_columns_fetch_result`, `_build_columns_progress_message`,
+  or `_resolve_columns_fetch_config`; the aliases only acted as historical test coupling.
+- Existing columns fetch task creation, route signatures, status update, enqueue behavior, response
+  payloads, and service config resolver behavior are unchanged.
+- No schema, crawler, storage, fallback, legacy, route, or public response behavior was removed.
+- Existing dirty downloader risk-log files and scripts remain outside this P3 slice.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_columns_routes_helpers tests.test_columns_fetch_summary -v
+uv run python -m py_compile backend\routes\columns_routes.py tests\test_columns_routes_helpers.py
+rg -n "_build_columns_fetch_result|_build_columns_progress_message|_resolve_columns_fetch_config|resolve_columns_fetch_config" backend\routes\columns_routes.py tests\test_columns_routes_helpers.py tests\test_columns_fetch_summary.py
+uv run python scripts\scan_postgres_compat_debt.py
+uv run python -m unittest discover -s tests
+cmd.exe /d /c npm --prefix frontend run build
+git diff --check
+```
+
+Result:
+
+- Focused columns route and summary tests passed after removing the unused route aliases.
+- `py_compile` passed.
+- `rg` confirmed the route module no longer imports or exposes the removed summary helper aliases.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Full backend unittest discovery: 795 tests passed, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+- `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
+
 ## Stop Conditions
 
 Pause before editing if:

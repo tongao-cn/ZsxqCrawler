@@ -9,11 +9,6 @@ from pydantic import BaseModel, Field
 from backend.core.logger_config import log_exception
 from backend.routes.ingestion_helpers import create_ingestion_task_or_raise
 from backend.services.columns_comment_service import fetch_column_topic_full_comments
-from backend.services.columns_fetch_summary import (
-    build_columns_fetch_result as _build_columns_fetch_result,
-    build_columns_progress_message as _build_columns_progress_message,
-    resolve_columns_fetch_config as _resolve_columns_fetch_config,
-)
 from backend.services.columns_fetch_task_service import (
     delete_all_columns_response,
     get_column_topic_detail_response,

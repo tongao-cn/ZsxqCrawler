@@ -21,14 +21,15 @@ class FakeBackgroundTasks:
 class ColumnsRoutesHelperTests(unittest.TestCase):
     @unittest.skipUnless(HAS_COLUMNS_ROUTE_DEPS, "columns route dependencies are not installed")
     def test_resolve_columns_fetch_config_applies_defaults_and_overrides(self):
-        from backend.routes.columns_routes import ColumnsSettingsRequest, _resolve_columns_fetch_config
+        from backend.routes.columns_routes import ColumnsSettingsRequest
+        from backend.services.columns_fetch_summary import resolve_columns_fetch_config
 
-        default_config = _resolve_columns_fetch_config(ColumnsSettingsRequest())
+        default_config = resolve_columns_fetch_config(ColumnsSettingsRequest())
         self.assertEqual(2.0, default_config["crawl_interval_min"])
         self.assertTrue(default_config["download_files"])
         self.assertFalse(default_config["incremental_mode"])
 
-        override_config = _resolve_columns_fetch_config(
+        override_config = resolve_columns_fetch_config(
             ColumnsSettingsRequest(
                 crawlIntervalMin=3.0,
                 downloadFiles=False,
