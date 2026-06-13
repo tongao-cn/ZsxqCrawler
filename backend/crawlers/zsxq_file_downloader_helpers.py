@@ -518,6 +518,14 @@ def request_exception_plan(exc: Exception, attempt: int, max_retries: int) -> Di
     return {"should_retry": should_retry, "messages": tuple(messages)}
 
 
+def api_retry_wait_message(attempt: int, retry_delay: float) -> str:
+    return f"   🔄 第{attempt}次重试，等待{retry_delay:.1f}秒..."
+
+
+def api_retry_user_agent_message(attempt: int, headers: Dict[str, str]) -> str:
+    return f"   🔄 重试#{attempt}: 使用新的User-Agent: {headers.get('User-Agent', 'N/A')[:50]}..."
+
+
 def retry_exhausted_message(max_retries: int) -> str:
     return f"   🚫 已重试{max_retries}次，全部失败"
 

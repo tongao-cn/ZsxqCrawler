@@ -13081,6 +13081,42 @@ Result:
 - PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-13 - P9 file downloader API retry log helpers
+
+Changed:
+
+- Added `api_retry_wait_message()` and `api_retry_user_agent_message()` in
+  `backend/crawlers/zsxq_file_downloader_helpers.py`.
+- Reused them in `ZSXQFileDownloader._prepare_retry_api_request()`.
+- Added direct helper coverage for retry wait formatting, User-Agent display, 50-character
+  truncation, and missing User-Agent fallback.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Retry delay random range, sleep timing, smart-delay call, request-count increment,
+  stealth-header refresh, risk-event write order, retry log text, User-Agent truncation, task/public
+  APIs, storage schema, fallback/legacy behavior, and config semantics are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py backend\crawlers\zsxq_file_downloader_helpers.py tests\test_zsxq_file_downloader_helpers.py
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderRetryHelperTests.test_api_retry_messages_preserve_wait_format_and_user_agent_truncation -v
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers -v
+uv run python -m unittest discover -s tests
+uv run python scripts\scan_postgres_compat_debt.py
+npm --prefix frontend run build
+```
+
+Result:
+
+- Focused API retry message helper test passed.
+- Downloader helper tests passed: 157 tests.
+- Full backend unittest discovery passed: 874 tests, 15 skipped.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:

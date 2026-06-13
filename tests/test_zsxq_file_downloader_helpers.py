@@ -19,6 +19,8 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     HTTP_FAILURE_RETRY_EXHAUSTED,
     add_file_collection_page_stats,
     add_import_stats,
+    api_retry_user_agent_message,
+    api_retry_wait_message,
     api_failure_detail,
     batch_download_completion_messages,
     batch_download_empty_page_message,
@@ -2193,6 +2195,24 @@ class FileDownloaderRetryHelperTests(unittest.TestCase):
         self.assertFalse(terminal_plan["should_retry"])
         self.assertEqual(("   ❌ 请求异常: final",), terminal_plan["messages"])
         self.assertEqual("   🚫 已重试10次，全部失败", retry_exhausted_message(10))
+
+    def test_api_retry_messages_preserve_wait_format_and_user_agent_truncation(self):
+        self.assertEqual(
+            "   🔄 第2次重试，等待15.2秒...",
+            api_retry_wait_message(2, 15.24),
+        )
+        self.assertEqual(
+            "   🔄 重试#2: 使用新的User-Agent: abc...",
+            api_retry_user_agent_message(2, {"User-Agent": "abc"}),
+        )
+        self.assertEqual(
+            "   🔄 重试#3: 使用新的User-Agent: 12345678901234567890123456789012345678901234567890...",
+            api_retry_user_agent_message(3, {"User-Agent": "12345678901234567890123456789012345678901234567890tail"}),
+        )
+        self.assertEqual(
+            "   🔄 重试#4: 使用新的User-Agent: N/A...",
+            api_retry_user_agent_message(4, {}),
+        )
 
     def test_json_decode_failure_plan_preserves_redaction_and_retry_paths(self):
         decode_error = json.JSONDecodeError("bad json", "{", 0)

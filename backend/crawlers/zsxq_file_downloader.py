@@ -25,6 +25,8 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     HTTP_FAILURE_NON_RETRY,
     HTTP_FAILURE_RETRY,
     add_file_collection_page_stats,
+    api_retry_user_agent_message,
+    api_retry_wait_message,
     api_failure_detail,
     add_import_stats,
     batch_download_completion_messages,
@@ -436,7 +438,7 @@ class ZSXQFileDownloader:
     def _prepare_retry_api_request(self, attempt: int, file_id: Optional[int] = None) -> Dict[str, str]:
         if attempt > 0:
             retry_delay = random.uniform(15, 30)
-            print(f"   🔄 第{attempt}次重试，等待{retry_delay:.1f}秒...")
+            print(api_retry_wait_message(attempt, retry_delay))
             time.sleep(retry_delay)
 
         self.smart_delay()
@@ -454,7 +456,7 @@ class ZSXQFileDownloader:
             )
 
         if attempt > 0:
-            print(f"   🔄 重试#{attempt}: 使用新的User-Agent: {headers.get('User-Agent', 'N/A')[:50]}...")
+            print(api_retry_user_agent_message(attempt, headers))
         return headers
 
     def _parse_api_json_response(
