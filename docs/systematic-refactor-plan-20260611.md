@@ -13182,6 +13182,45 @@ Result:
 
 - Task runtime helper tests and daily stock concept route helper tests passed: 46 tests.
 
+### 2026-06-13 - P5 daily analysis workflow lifecycle reuse
+
+Changed:
+
+- Reused `backend.services.task_runtime.run_workflow()` in
+  `backend.routes.daily_analysis_routes.run_daily_analysis_task()`.
+- Kept `_fail_daily_task_unless_stopped()` in place for `run_daily_today_task()`, whose crawl-first
+  flow has additional stopped/failed checks and is intentionally outside this slice.
+- Added route wiring coverage for daily analysis workflow messages, failure label, result callback,
+  `comments_per_topic`, and log callback creation.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Daily analysis task running/completed messages, failure message text, initial/post-work stop
+  checks, `analyze_daily_topics()` arguments, task creation response, report route behavior,
+  task/public APIs, storage schema, fallback/legacy behavior, and config semantics are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m py_compile backend\routes\daily_analysis_routes.py tests\test_daily_analysis_routes_helpers.py
+uv run python -m unittest tests.test_daily_analysis_routes_helpers.DailyAnalysisRoutesHelperTests.test_run_daily_analysis_task_uses_runtime_workflow_lifecycle -v
+uv run python -m unittest tests.test_daily_analysis_routes_helpers -v
+uv run python -m unittest tests.test_task_runtime_helpers tests.test_daily_analysis_routes_helpers tests.test_daily_stock_concept_routes_helpers -v
+uv run python -m unittest discover -s tests
+uv run python scripts\scan_postgres_compat_debt.py
+npm --prefix frontend run build
+```
+
+Result:
+
+- Focused daily analysis workflow wiring test passed.
+- Daily analysis route helper tests passed: 8 tests.
+- Related runtime/daily route helper tests passed: 54 tests.
+- Full backend unittest discovery passed: 880 tests, 15 skipped.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:

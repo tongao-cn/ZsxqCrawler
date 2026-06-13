@@ -14,6 +14,7 @@ from backend.services.task_runtime import (
     current_tasks,
     enqueue_runtime_task,
     is_task_stopped,
+    run_workflow,
     update_task,
 )
 
@@ -76,25 +77,21 @@ def run_daily_analysis_task(
     group_id: str,
     request: DailyAnalysisRequest,
 ):
-    try:
-        if is_task_stopped(task_id):
-            return
-
-        update_task(task_id, "running", "开始生成每日话题 AI 报告...")
-
-        result = analyze_daily_topics(
+    def work() -> dict:
+        return analyze_daily_topics(
             group_id,
             request.date,
             comments_per_topic=request.commentsPerTopic,
             log_callback=_build_daily_log_callback(task_id),
         )
 
-        if is_task_stopped(task_id):
-            return
-
-        update_task(task_id, "completed", "每日话题 AI 报告生成完成", result)
-    except Exception as e:
-        _fail_daily_task_unless_stopped(task_id, "每日话题 AI 报告生成", e)
+    run_workflow(
+        task_id,
+        running_message="开始生成每日话题 AI 报告...",
+        completed_message="每日话题 AI 报告生成完成",
+        failure_label="每日话题 AI 报告生成",
+        work=work,
+    )
 
 
 def run_daily_today_task(

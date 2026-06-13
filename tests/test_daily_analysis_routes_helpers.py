@@ -74,6 +74,32 @@ class DailyAnalysisRoutesHelperTests(unittest.TestCase):
         add_task_log.assert_called_once_with("task-1", "hello")
 
     @unittest.skipUnless(HAS_DAILY_ROUTE_DEPS, "daily analysis route dependencies are not installed")
+    def test_run_daily_analysis_task_uses_runtime_workflow_lifecycle(self):
+        from backend.routes.daily_analysis_routes import DailyAnalysisRequest, run_daily_analysis_task
+
+        request = DailyAnalysisRequest(date="2026-06-13", commentsPerTopic=2)
+        with (
+            patch("backend.routes.daily_analysis_routes.run_workflow") as run_workflow,
+            patch("backend.routes.daily_analysis_routes.analyze_daily_topics", return_value={"report": []}) as analyze,
+        ):
+            run_daily_analysis_task("task-1", "51111112855254", request)
+
+            run_workflow.assert_called_once()
+            args, kwargs = run_workflow.call_args
+            self.assertEqual(("task-1",), args)
+            self.assertEqual("开始生成每日话题 AI 报告...", kwargs["running_message"])
+            self.assertEqual("每日话题 AI 报告生成完成", kwargs["completed_message"])
+            self.assertEqual("每日话题 AI 报告生成", kwargs["failure_label"])
+
+            result = kwargs["work"]()
+            self.assertEqual({"report": []}, result)
+            analyze.assert_called_once()
+            call_args, call_kwargs = analyze.call_args
+            self.assertEqual(("51111112855254", "2026-06-13"), call_args)
+            self.assertEqual(2, call_kwargs["comments_per_topic"])
+            self.assertTrue(callable(call_kwargs["log_callback"]))
+
+    @unittest.skipUnless(HAS_DAILY_ROUTE_DEPS, "daily analysis route dependencies are not installed")
     def test_daily_task_stopped_or_failed_checks_stop_before_status(self):
         from backend.routes import daily_analysis_routes
 
