@@ -10412,6 +10412,50 @@ Result:
 - Frontend build passed, including Next.js lint/type checks.
 - `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
 
+### 2026-06-13 - P2 topic route table constant import cleanup
+
+Changed:
+
+- Removed unused `GROUP_TOPIC_TABLES` and `TOPIC_DETAIL_TABLES` imports from
+  `backend.routes.topic_routes`.
+- Updated focused topic route helper tests to import those constants directly from
+  `backend.services.topic_workflow_service`.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Topic routes still call the same `_delete_single_topic_rows`, `_delete_group_topic_rows`, and
+  `_clear_group_topic_data` helpers from `backend.services.topic_workflow_service`.
+- The table constants remain defined in the workflow service and continue to drive the same delete
+  order and deleted-count expectations.
+- The route module no longer exposes those constants incidentally through historical test coupling.
+- No schema, crawler, storage, fallback, legacy, route, or public response behavior was removed.
+- Existing dirty downloader risk-log files and scripts remain outside this P2 slice.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_topic_routes_helpers -v
+uv run python -m py_compile backend\routes\topic_routes.py tests\test_topic_routes_helpers.py backend\services\topic_workflow_service.py
+rg -n "GROUP_TOPIC_TABLES|TOPIC_DETAIL_TABLES|_delete_single_topic_rows|_delete_group_topic_rows" backend\routes\topic_routes.py tests\test_topic_routes_helpers.py backend\services\topic_workflow_service.py
+uv run python scripts\scan_postgres_compat_debt.py
+uv run python -m unittest discover -s tests
+cmd.exe /d /c npm --prefix frontend run build
+git diff --check
+```
+
+Result:
+
+- Baseline focused topic route helper tests passed before removing the unused route imports.
+- Focused topic route helper tests passed after the import cleanup.
+- `py_compile` passed.
+- `rg` confirmed the route module no longer imports the removed table constants and still calls
+  the delete helpers used by production routes.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Full backend unittest discovery: 795 tests passed, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+- `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
+
 ## Stop Conditions
 
 Pause before editing if:

@@ -11,8 +11,6 @@ from backend.crawlers.official_topic_client import (
     official_payload_topic,
 )
 from backend.services.topic_workflow_service import (
-    GROUP_TOPIC_TABLES,
-    TOPIC_DETAIL_TABLES,
     _clear_group_topic_data,
     _delete_group_topic_rows,
     _delete_single_topic_rows,

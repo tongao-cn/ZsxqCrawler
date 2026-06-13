@@ -96,7 +96,8 @@ class TopicRoutesHelperTests(unittest.TestCase):
 
     @unittest.skipUnless(HAS_TOPIC_ROUTE_DEPS, "topic route dependencies are not installed")
     def test_delete_single_topic_rows_deletes_detail_tables_and_topic(self):
-        from backend.routes.topic_routes import TOPIC_DETAIL_TABLES, _delete_single_topic_rows
+        from backend.routes.topic_routes import _delete_single_topic_rows
+        from backend.services.topic_workflow_service import TOPIC_DETAIL_TABLES
 
         db = FakeSqlDb()
 
@@ -109,7 +110,8 @@ class TopicRoutesHelperTests(unittest.TestCase):
 
     @unittest.skipUnless(HAS_TOPIC_ROUTE_DEPS, "topic route dependencies are not installed")
     def test_delete_group_topic_rows_returns_deleted_counts(self):
-        from backend.routes.topic_routes import GROUP_TOPIC_TABLES, _delete_group_topic_rows
+        from backend.routes.topic_routes import _delete_group_topic_rows
+        from backend.services.topic_workflow_service import GROUP_TOPIC_TABLES
 
         db = FakeSqlDb()
 
