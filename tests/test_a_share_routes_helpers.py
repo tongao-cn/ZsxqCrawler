@@ -134,6 +134,32 @@ class AShareRoutesHelperTests(unittest.TestCase):
         )
 
     @unittest.skipUnless(HAS_A_SHARE_ROUTE_DEPS, "a-share route dependencies are not installed")
+    def test_fail_a_share_analysis_task_preserves_failure_status_and_log(self):
+        from backend.routes.a_share_routes import _fail_a_share_analysis_task
+
+        with (
+            patch("backend.routes.a_share_routes.add_task_log") as add_task_log,
+            patch("backend.routes.a_share_routes.update_task") as update_task,
+        ):
+            _fail_a_share_analysis_task("task-a-share", RuntimeError("boom"))
+
+        add_task_log.assert_called_once_with("task-a-share", "❌ A股公司分析失败: boom")
+        update_task.assert_called_once_with("task-a-share", "failed", "A股公司分析失败: boom")
+
+    @unittest.skipUnless(HAS_A_SHARE_ROUTE_DEPS, "a-share route dependencies are not installed")
+    def test_fail_a_share_analysis_task_swallows_failure_recording_errors(self):
+        from backend.routes.a_share_routes import _fail_a_share_analysis_task
+
+        with (
+            patch("backend.routes.a_share_routes.add_task_log", side_effect=RuntimeError("log failed")) as add_task_log,
+            patch("backend.routes.a_share_routes.update_task") as update_task,
+        ):
+            _fail_a_share_analysis_task("task-a-share", RuntimeError("boom"))
+
+        add_task_log.assert_called_once_with("task-a-share", "❌ A股公司分析失败: boom")
+        update_task.assert_not_called()
+
+    @unittest.skipUnless(HAS_A_SHARE_ROUTE_DEPS, "a-share route dependencies are not installed")
     def test_normalize_group_scope_keeps_existing_labels(self):
         from backend.routes.a_share_routes import _normalize_group_scope
 

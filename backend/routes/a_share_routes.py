@@ -180,6 +180,15 @@ def _run_a_share_analysis_for_task(
     )
 
 
+def _fail_a_share_analysis_task(task_id: str, error: Exception) -> None:
+    try:
+        message = f"A股公司分析失败: {str(error)}"
+        add_task_log(task_id, f"❌ {message}")
+        update_task(task_id, "failed", message)
+    except Exception:
+        pass
+
+
 def run_a_share_analysis_task(task_id: str, request: AShareAnalysisRunRequest):
     """后台执行A股公司提及分析任务"""
     try:
@@ -201,11 +210,7 @@ def run_a_share_analysis_task(task_id: str, request: AShareAnalysisRunRequest):
         update_task(task_id, "completed", "A股公司分析完成", result)
         add_task_log(task_id, "✅ A股公司分析完成")
     except Exception as e:
-        try:
-            add_task_log(task_id, f"❌ A股公司分析失败: {str(e)}")
-            update_task(task_id, "failed", f"A股公司分析失败: {str(e)}")
-        except Exception:
-            pass
+        _fail_a_share_analysis_task(task_id, e)
 
 
 @router.get("/status")
