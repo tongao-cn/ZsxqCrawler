@@ -10944,6 +10944,46 @@ Result:
 - Full backend unittest discovery passed: 804 tests passed, 15 skipped.
 - `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warning.
 
+### 2026-06-13 - P7 unused Tailwind accordion animation cleanup
+
+Changed:
+
+- Removed unused `accordion-down` and `accordion-up` keyframe definitions from
+  `frontend/tailwind.config.js`.
+- Removed the matching `accordion-down` and `accordion-up` animation aliases from the same config.
+- Left color tokens, radius tokens, typography plugin, and the installed `tw-animate-css` import
+  unchanged.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- `rg` found no `animate-accordion-*`, `accordion-down`, `accordion-up`, `Accordion`, or
+  `radix-accordion` references outside `frontend/tailwind.config.js`.
+- No current component, route, generated CSS gate, backend path, schema, crawler, fallback,
+  legacy, or public API behavior changed.
+
+Verification:
+
+```powershell
+rg -n "accordion-down|accordion-up|animate-accordion|radix-accordion" frontend --glob "!node_modules/**" --glob "!package-lock.json"
+rg -n "Accordion|accordion" frontend\src frontend\tailwind.config.js --glob "!node_modules/**"
+node -e "require('./frontend/tailwind.config.js'); console.log('tailwind config loaded')"
+npm --prefix frontend run build
+uv run python scripts\scan_postgres_compat_debt.py
+uv run python -m unittest discover -s tests
+git diff --check
+```
+
+Result:
+
+- Baseline reference searches found the accordion animation names only in
+  `frontend/tailwind.config.js`.
+- Tailwind config loaded successfully after the cleanup.
+- Frontend build passed, including Next.js lint/type checks.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Full backend unittest discovery passed: 804 tests passed, 15 skipped.
+- `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warning.
+
 ## Stop Conditions
 
 Pause before editing if:
