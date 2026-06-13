@@ -84,6 +84,35 @@ def stealth_platforms() -> list[str]:
     return list(STEALTH_PLATFORMS)
 
 
+def stealth_base_headers(
+    cookie: str,
+    group_id: Any,
+    selected_ua: str,
+    sec_ch_ua: str,
+    accept_language: str,
+    platform: str,
+) -> Dict[str, str]:
+    return {
+        'Accept': 'application/json, text/plain, */*',
+        'Accept-Language': accept_language,
+        'Accept-Encoding': 'gzip, deflate, br',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive',
+        'Cookie': cookie,
+        'Host': 'api.zsxq.com',
+        'Origin': 'https://wx.zsxq.com',
+        'Pragma': 'no-cache',
+        'Referer': f'https://wx.zsxq.com/dweb2/index/group/{group_id}',
+        'Sec-Ch-Ua': sec_ch_ua,
+        'Sec-Ch-Ua-Mobile': '?0',
+        'Sec-Ch-Ua-Platform': platform,
+        'Sec-Fetch-Dest': 'empty',
+        'Sec-Fetch-Mode': 'cors',
+        'Sec-Fetch-Site': 'same-site',
+        'User-Agent': selected_ua,
+    }
+
+
 def risk_event_user_agent_label(user_agent: str) -> str:
     text = str(user_agent or "")
     browser = "Other"

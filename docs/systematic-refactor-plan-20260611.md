@@ -12904,6 +12904,43 @@ Result:
 - PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-13 - P9 file downloader stealth base headers helper
+
+Changed:
+
+- Added `stealth_base_headers()` in `backend/crawlers/zsxq_file_downloader_helpers.py`.
+- Reused it in `ZSXQFileDownloader.get_stealth_headers()` after preserving the existing random
+  selection order for User-Agent, Accept-Language, and platform.
+- Added direct helper coverage for base-header key order and values, including Cookie, Referer,
+  `Sec-Ch-Ua`, fetch headers, and User-Agent.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Base header key order, header names/values, Referer formatting, Cookie propagation, User-Agent
+  propagation, `Sec-Ch-Ua` mapping, random selection order, optional header probabilities,
+  timestamp/request-id behavior, task/public APIs, storage schema, fallback/legacy behavior, and
+  config semantics are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py backend\crawlers\zsxq_file_downloader_helpers.py tests\test_zsxq_file_downloader_helpers.py
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderRetryHelperTests.test_stealth_base_headers_preserve_existing_values_and_order -v
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers -v
+uv run python -m unittest discover -s tests
+uv run python scripts\scan_postgres_compat_debt.py
+npm --prefix frontend run build
+```
+
+Result:
+
+- Focused stealth base headers helper test passed.
+- Downloader helper tests passed: 153 tests.
+- Full backend unittest discovery passed: 867 tests, 15 skipped.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:

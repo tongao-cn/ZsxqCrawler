@@ -117,6 +117,7 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     should_retry_http_status,
     should_log_full_response,
     stealth_accept_languages,
+    stealth_base_headers,
     stealth_platforms,
     stealth_user_agents,
     summarize_page_time_range,
@@ -2304,6 +2305,56 @@ class FileDownloaderRetryHelperTests(unittest.TestCase):
             stealth_accept_languages(),
         )
         self.assertEqual(['"Windows"', '"macOS"', '"Linux"'], stealth_platforms())
+
+    def test_stealth_base_headers_preserve_existing_values_and_order(self):
+        headers = stealth_base_headers(
+            "cookie-value",
+            "group-1",
+            "ua-value",
+            '"Chromium";v="131"',
+            'zh-CN,zh;q=0.9,en;q=0.8',
+            '"Windows"',
+        )
+
+        self.assertEqual(
+            [
+                'Accept',
+                'Accept-Language',
+                'Accept-Encoding',
+                'Cache-Control',
+                'Connection',
+                'Cookie',
+                'Host',
+                'Origin',
+                'Pragma',
+                'Referer',
+                'Sec-Ch-Ua',
+                'Sec-Ch-Ua-Mobile',
+                'Sec-Ch-Ua-Platform',
+                'Sec-Fetch-Dest',
+                'Sec-Fetch-Mode',
+                'Sec-Fetch-Site',
+                'User-Agent',
+            ],
+            list(headers.keys()),
+        )
+        self.assertEqual('application/json, text/plain, */*', headers['Accept'])
+        self.assertEqual('zh-CN,zh;q=0.9,en;q=0.8', headers['Accept-Language'])
+        self.assertEqual('gzip, deflate, br', headers['Accept-Encoding'])
+        self.assertEqual('no-cache', headers['Cache-Control'])
+        self.assertEqual('keep-alive', headers['Connection'])
+        self.assertEqual('cookie-value', headers['Cookie'])
+        self.assertEqual('api.zsxq.com', headers['Host'])
+        self.assertEqual('https://wx.zsxq.com', headers['Origin'])
+        self.assertEqual('no-cache', headers['Pragma'])
+        self.assertEqual('https://wx.zsxq.com/dweb2/index/group/group-1', headers['Referer'])
+        self.assertEqual('"Chromium";v="131"', headers['Sec-Ch-Ua'])
+        self.assertEqual('?0', headers['Sec-Ch-Ua-Mobile'])
+        self.assertEqual('"Windows"', headers['Sec-Ch-Ua-Platform'])
+        self.assertEqual('empty', headers['Sec-Fetch-Dest'])
+        self.assertEqual('cors', headers['Sec-Fetch-Mode'])
+        self.assertEqual('same-site', headers['Sec-Fetch-Site'])
+        self.assertEqual('ua-value', headers['User-Agent'])
 
     def test_prepare_retry_api_request_sleeps_counts_and_rotates_headers(self):
         downloader = object.__new__(ZSXQFileDownloader)

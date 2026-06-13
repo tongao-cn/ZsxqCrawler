@@ -116,6 +116,7 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     sec_ch_ua_for_user_agent,
     should_log_full_response,
     stealth_accept_languages,
+    stealth_base_headers,
     stealth_platforms,
     stealth_user_agents,
     summarize_page_time_range,
@@ -292,27 +293,18 @@ class ZSXQFileDownloader:
         accept_languages = stealth_accept_languages()
         
         platforms = stealth_platforms()
+        accept_language = random.choice(accept_languages)
+        platform = random.choice(platforms)
         
         # 基础头部
-        headers = {
-            'Accept': 'application/json, text/plain, */*',
-            'Accept-Language': random.choice(accept_languages),
-            'Accept-Encoding': 'gzip, deflate, br',
-            'Cache-Control': 'no-cache',
-            'Connection': 'keep-alive',
-            'Cookie': self.cookie,
-            'Host': 'api.zsxq.com',
-            'Origin': 'https://wx.zsxq.com',
-            'Pragma': 'no-cache',
-            'Referer': f'https://wx.zsxq.com/dweb2/index/group/{self.group_id}',
-            'Sec-Ch-Ua': sec_ch_ua,
-            'Sec-Ch-Ua-Mobile': '?0',
-            'Sec-Ch-Ua-Platform': random.choice(platforms),
-            'Sec-Fetch-Dest': 'empty',
-            'Sec-Fetch-Mode': 'cors',
-            'Sec-Fetch-Site': 'same-site',
-            'User-Agent': selected_ua
-        }
+        headers = stealth_base_headers(
+            self.cookie,
+            self.group_id,
+            selected_ua,
+            sec_ch_ua,
+            accept_language,
+            platform,
+        )
         
         # 随机添加可选头部
         optional_headers = {
