@@ -4,7 +4,7 @@ import { Upload } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { formatAShareDateTime } from '@/components/AShareAnalysisDisplay';
+import { formatAShareDateTime } from '@/lib/a-share-analysis-format';
 import type { AShareAnalysisLatestTdxExport } from '@/lib/api';
 
 interface AShareLatestExportSummaryProps {

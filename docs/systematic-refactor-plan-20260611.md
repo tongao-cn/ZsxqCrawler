@@ -11187,6 +11187,51 @@ Result:
 - Full backend unittest discovery passed: 804 tests passed, 15 skipped.
 - `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
 
+### 2026-06-13 - P6 A-share date format helper module
+
+Changed:
+
+- Added `frontend/src/lib/a-share-analysis-format.ts` as the pure A-share date-format helper
+  module.
+- Moved `formatAShareDateTime()` out of the component layer and updated A-share display callers to
+  import it from the lib helper.
+- Added shared `formatAShareInputDate()` and reused it from `AShareActionPanel` and
+  `useAShareAnalysisData`.
+- Deleted the now-unreferenced `AShareAnalysisDisplay.tsx` helper file.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- A-share date-time display still returns `暂无` for empty values and
+  `new Date(value).toLocaleString('zh-CN')` otherwise.
+- A-share input-date normalization still returns an empty string for empty values and
+  `value.slice(0, 10)` otherwise.
+- The deleted helper file had no remaining static references after the imports were moved.
+- No public API, route behavior, task behavior, backend path, storage schema, fallback path,
+  legacy path, or dependency semantics changed.
+
+Verification:
+
+```powershell
+rg -n "AShareAnalysisDisplay|formatAShareDateTime|formatAShareInputDate|function formatInputDate" frontend\src --glob "*.ts" --glob "*.tsx" --glob "!node_modules/**"
+npm --prefix frontend run build
+npm exec -- tsc -p tsconfig.json --noEmit --noUnusedLocals --pretty false  # from frontend/
+uv run python scripts\scan_postgres_compat_debt.py
+uv run python -m unittest discover -s tests
+git diff --check
+```
+
+Result:
+
+- A-share date display and input-date helpers now resolve through the pure lib module.
+- No `AShareAnalysisDisplay` import remains, and no local `function formatInputDate` duplicate
+  remains in the A-share frontend path.
+- Frontend build passed, including Next.js lint/type checks.
+- Standalone TypeScript unused-local check passed.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Full backend unittest discovery passed: 804 tests passed, 15 skipped.
+- `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
+
 ## Stop Conditions
 
 Pause before editing if:

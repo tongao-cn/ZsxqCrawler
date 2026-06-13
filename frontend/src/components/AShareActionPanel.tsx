@@ -8,6 +8,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { DatePickerButton } from '@/components/ui/date-picker-button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { formatAShareInputDate } from '@/lib/a-share-analysis-format';
 import type { AShareAnalysisLatestTdxExport, AShareAnalysisSummary } from '@/lib/api';
 
 interface AShareActionPanelProps {
@@ -34,13 +35,6 @@ interface AShareActionPanelProps {
   setRunEndDate: (value: string) => void;
   setRunStartDate: (value: string) => void;
   summary?: AShareAnalysisSummary;
-}
-
-function formatInputDate(value?: string | null) {
-  if (!value) {
-    return '';
-  }
-  return value.slice(0, 10);
 }
 
 export default function AShareActionPanel({
@@ -89,8 +83,16 @@ export default function AShareActionPanel({
                 <Label htmlFor="a-share-run-start">开始日期</Label>
                 <DatePickerButton
                   value={runStartDate}
-                  min={summary?.source_oldest_topic_time ? formatInputDate(summary.source_oldest_topic_time) : undefined}
-                  max={summary?.source_latest_topic_time ? formatInputDate(summary.source_latest_topic_time) : undefined}
+                  min={
+                    summary?.source_oldest_topic_time
+                      ? formatAShareInputDate(summary.source_oldest_topic_time)
+                      : undefined
+                  }
+                  max={
+                    summary?.source_latest_topic_time
+                      ? formatAShareInputDate(summary.source_latest_topic_time)
+                      : undefined
+                  }
                   onChange={setRunStartDate}
                 />
               </div>
@@ -98,8 +100,16 @@ export default function AShareActionPanel({
                 <Label htmlFor="a-share-run-end">结束日期</Label>
                 <DatePickerButton
                   value={runEndDate}
-                  min={summary?.source_oldest_topic_time ? formatInputDate(summary.source_oldest_topic_time) : undefined}
-                  max={summary?.source_latest_topic_time ? formatInputDate(summary.source_latest_topic_time) : undefined}
+                  min={
+                    summary?.source_oldest_topic_time
+                      ? formatAShareInputDate(summary.source_oldest_topic_time)
+                      : undefined
+                  }
+                  max={
+                    summary?.source_latest_topic_time
+                      ? formatAShareInputDate(summary.source_latest_topic_time)
+                      : undefined
+                  }
                   onChange={setRunEndDate}
                   align="end"
                 />

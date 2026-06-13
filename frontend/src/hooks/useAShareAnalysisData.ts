@@ -9,15 +9,9 @@ import {
   AShareAnalysisStatus,
   AShareAnalysisSummary,
 } from '@/lib/api';
+import { formatAShareInputDate } from '@/lib/a-share-analysis-format';
 
 const DEFAULT_CHART_RANGE_MONTHS = 1;
-
-function formatInputDate(value?: string | null) {
-  if (!value) {
-    return '';
-  }
-  return value.slice(0, 10);
-}
 
 function formatLocalDate(date: Date) {
   const year = date.getFullYear();
@@ -34,8 +28,8 @@ function subtractMonthsClamped(date: Date, months: number) {
 }
 
 function getDefaultChartDateRange(summary?: AShareAnalysisSummary) {
-  const availableStartDate = formatInputDate(summary?.available_start_date);
-  const availableEndDate = formatInputDate(summary?.available_end_date);
+  const availableStartDate = formatAShareInputDate(summary?.available_start_date);
+  const availableEndDate = formatAShareInputDate(summary?.available_end_date);
   if (!availableEndDate) {
     return { startDate: availableStartDate, endDate: '' };
   }

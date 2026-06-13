@@ -13,7 +13,7 @@ import { useAShareAnalysisActions } from '@/hooks/useAShareAnalysisActions';
 import { useAShareAnalysisData } from '@/hooks/useAShareAnalysisData';
 import { useTaskStatus } from '@/hooks/useTaskStatus';
 import AShareActionPanel from '@/components/AShareActionPanel';
-import { formatAShareDateTime } from '@/components/AShareAnalysisDisplay';
+import { formatAShareDateTime } from '@/lib/a-share-analysis-format';
 import AShareAnalysisResultsSection from '@/components/AShareAnalysisResultsSection';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
