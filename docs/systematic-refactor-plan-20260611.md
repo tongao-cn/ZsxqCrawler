@@ -10907,6 +10907,43 @@ Result:
 - Full backend unittest discovery passed: 804 tests passed, 15 skipped.
 - `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warning.
 
+### 2026-06-13 - P7 Tailwind content glob cleanup
+
+Changed:
+
+- Removed stale `./pages`, `./components`, and `./app` content globs from
+  `frontend/tailwind.config.js`.
+- Kept the actual `./src/**/*.{ts,tsx}` content glob unchanged.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- `frontend/pages`, `frontend/components`, and `frontend/app` do not exist in the current tree;
+  the frontend source files live under `frontend/src`.
+- No generated CSS gate, component source coverage, route behavior, backend path, schema, crawler,
+  fallback, legacy, or public API behavior changed.
+
+Verification:
+
+```powershell
+Test-Path frontend\pages; Test-Path frontend\components; Test-Path frontend\app; Test-Path frontend\src
+node -e "require('./frontend/tailwind.config.js'); console.log('tailwind config loaded')"
+npm --prefix frontend run build
+uv run python scripts\scan_postgres_compat_debt.py
+uv run python -m unittest discover -s tests
+git diff --check
+```
+
+Result:
+
+- Directory checks showed the removed root content directories do not exist, while `frontend/src`
+  exists.
+- Tailwind config loaded successfully after the cleanup.
+- Frontend build passed, including Next.js lint/type checks.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Full backend unittest discovery passed: 804 tests passed, 15 skipped.
+- `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warning.
+
 ## Stop Conditions
 
 Pause before editing if:
