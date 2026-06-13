@@ -10778,6 +10778,52 @@ Result:
 - Frontend build passed, including Next.js lint/type checks.
 - `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
 
+### 2026-06-13 - P7 redundant DOMPurify type package removal
+
+Changed:
+
+- Removed the direct `@types/dompurify` frontend dependency from `frontend/package.json`.
+- Updated `frontend/package-lock.json` with the package-manager-generated removal of the
+  `node_modules/@types/dompurify` entry.
+- Kept the runtime `dompurify` dependency unchanged.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- `dompurify@3.4.2` remains installed and exposes its own package type declarations through
+  `node_modules/dompurify/package.json`.
+- `rg` found no source, config, or manifest references to `@types/dompurify` after removal.
+- No frontend route, rendering behavior, sanitizer behavior, backend path, schema, crawler,
+  fallback, legacy, or public API behavior changed.
+
+Verification:
+
+```powershell
+rg -n "@types/dompurify|dompurify|github-markdown-css|react-day-picker|yet-another-react-lightbox|recharts|date-fns|@tailwindcss/typography|tw-animate-css|tailwindcss-animate" frontend --glob "!node_modules/**" --glob "!package-lock.json"
+node -e "const p=require('./frontend/node_modules/dompurify/package.json'); console.log(JSON.stringify({name:p.name,version:p.version,types:p.types,typings:p.typings,exports:p.exports}, null, 2))"
+npm --prefix frontend uninstall @types/dompurify
+Push-Location frontend; npm install; Pop-Location
+npm --prefix frontend ls dompurify --depth=0
+rg -n "@types/dompurify" frontend --glob "!node_modules/**"
+npm --prefix frontend run build
+uv run python scripts\scan_postgres_compat_debt.py
+uv run python -m unittest discover -s tests
+git diff --check
+```
+
+Result:
+
+- Source/config reference search showed `dompurify` is still used, while `@types/dompurify` was
+  only a manifest/lockfile dependency.
+- Local package metadata for `dompurify@3.4.2` showed bundled type declarations.
+- `npm --prefix frontend ls dompurify --depth=0` shows `dompurify@3.4.2` remains installed.
+- Post-change `rg` found no `@types/dompurify` references outside ignored `node_modules`.
+- Frontend build passed, including Next.js lint/type checks. Next emitted its existing SWC
+  lockfile self-check warning, but the reviewed lockfile diff contains no SWC dependency changes.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Full backend unittest discovery passed: 804 tests passed, 15 skipped.
+- `git diff --check` passed.
+
 ## Stop Conditions
 
 Pause before editing if:
