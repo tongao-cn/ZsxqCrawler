@@ -13310,9 +13310,11 @@ Changed:
 Behavior impact:
 
 - Intended behavior change: none.
-- Batch stock topic terminal message text, default counts, task status updates, result payload,
-  route behavior, task/public APIs, storage schema, fallback/legacy behavior, and config semantics
-  are unchanged.
+- Batch running message, parse order, `analyze_stock_topics_batch()` call, stopped checks,
+  completed status, result payload, terminal message text, default counts, failure message text,
+  task/public APIs, storage schema, fallback/legacy behavior, and config semantics are unchanged.
+- The helper intentionally keeps the original `result.get("summary")` behavior, including the same
+  exception semantics for non-dict results.
 
 Verification:
 
@@ -13320,12 +13322,20 @@ Verification:
 uv run python -m py_compile backend\routes\stock_topic_analysis_routes.py tests\test_stock_topic_analysis_routes_helpers.py
 uv run python -m unittest tests.test_stock_topic_analysis_routes_helpers.StockTopicAnalysisRoutesHelperTests.test_stock_topic_batch_completed_message_preserves_summary_defaults -v
 uv run python -m unittest tests.test_stock_topic_analysis_routes_helpers -v
+uv run python -m unittest tests.test_task_runtime_helpers tests.test_stock_topic_analysis_routes_helpers -v
+uv run python -m unittest discover -s tests
+uv run python scripts\scan_postgres_compat_debt.py
+npm --prefix frontend run build
 ```
 
 Result:
 
 - Focused batch completion message helper test passed.
 - Stock topic analysis route helper tests passed: 13 tests.
+- Related runtime/stock route helper tests passed: 55 tests.
+- Full backend unittest discovery passed: 883 tests, 15 skipped.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Frontend build passed, including Next.js lint/type checks.
 
 ## Stop Conditions
 
