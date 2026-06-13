@@ -74,6 +74,28 @@ class DailyAnalysisRoutesHelperTests(unittest.TestCase):
         add_task_log.assert_called_once_with("task-1", "hello")
 
     @unittest.skipUnless(HAS_DAILY_ROUTE_DEPS, "daily analysis route dependencies are not installed")
+    def test_analyze_daily_topics_for_task_preserves_service_arguments(self):
+        from backend.routes.daily_analysis_routes import DailyAnalysisRequest, _analyze_daily_topics_for_task
+
+        request = DailyAnalysisRequest(date="2026-06-13", commentsPerTopic=2)
+        expected = {"report": []}
+        with (
+            patch("backend.routes.daily_analysis_routes.analyze_daily_topics", return_value=expected) as analyze,
+            patch("backend.routes.daily_analysis_routes.add_task_log") as add_task_log,
+        ):
+            result = _analyze_daily_topics_for_task("task-1", "51111112855254", request)
+
+            self.assertEqual(expected, result)
+            analyze.assert_called_once()
+            call_args, call_kwargs = analyze.call_args
+            self.assertEqual(("51111112855254", "2026-06-13"), call_args)
+            self.assertEqual(2, call_kwargs["comments_per_topic"])
+
+            call_kwargs["log_callback"]("daily log")
+
+        add_task_log.assert_called_once_with("task-1", "daily log")
+
+    @unittest.skipUnless(HAS_DAILY_ROUTE_DEPS, "daily analysis route dependencies are not installed")
     def test_run_daily_analysis_task_uses_runtime_workflow_lifecycle(self):
         from backend.routes.daily_analysis_routes import DailyAnalysisRequest, run_daily_analysis_task
 

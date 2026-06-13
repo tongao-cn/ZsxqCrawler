@@ -13420,6 +13420,46 @@ Result:
 - Frontend build passed, including Next.js lint/type checks.
 - Search confirmed `_fail_stock_topic_task_unless_stopped()` has no remaining references.
 
+### 2026-06-13 - P5 daily analysis service-call helper
+
+Changed:
+
+- Added `_analyze_daily_topics_for_task()` in `backend.routes.daily_analysis_routes`.
+- Reused it from both `run_daily_analysis_task()` and `run_daily_today_task()` for the shared
+  daily-topic analysis service call.
+- Added helper coverage for the current group/date/comments arguments, result pass-through, and
+  task log callback wiring.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Daily report generation still passes the same group ID, report date, `commentsPerTopic`, and
+  task-bound log callback into `analyze_daily_topics()`.
+- `run_daily_today_task()` keeps its existing running status updates, optional latest-crawl step,
+  stopped/failed checks after crawl, completed status, result payload, failure message text,
+  task/public APIs, storage schema, fallback/legacy behavior, and config semantics.
+
+Verification:
+
+```powershell
+uv run python -m py_compile backend\routes\daily_analysis_routes.py tests\test_daily_analysis_routes_helpers.py
+uv run python -m unittest tests.test_daily_analysis_routes_helpers.DailyAnalysisRoutesHelperTests.test_analyze_daily_topics_for_task_preserves_service_arguments -v
+uv run python -m unittest tests.test_daily_analysis_routes_helpers -v
+uv run python -m unittest tests.test_task_runtime_helpers tests.test_daily_analysis_routes_helpers tests.test_daily_stock_concept_routes_helpers -v
+uv run python -m unittest discover -s tests
+uv run python scripts\scan_postgres_compat_debt.py
+npm --prefix frontend run build
+```
+
+Result:
+
+- Focused daily analysis helper test passed.
+- Daily analysis route helper tests passed: 9 tests.
+- Related runtime/daily route helper tests passed: 56 tests.
+- Full backend unittest discovery passed: 887 tests, 15 skipped.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:

@@ -72,18 +72,22 @@ def _create_daily_task_response(
     return {"task_id": task_id, "message": TASK_CREATED_MESSAGE}
 
 
+def _analyze_daily_topics_for_task(task_id: str, group_id: str, request: DailyAnalysisRequest) -> dict:
+    return analyze_daily_topics(
+        group_id,
+        request.date,
+        comments_per_topic=request.commentsPerTopic,
+        log_callback=_build_daily_log_callback(task_id),
+    )
+
+
 def run_daily_analysis_task(
     task_id: str,
     group_id: str,
     request: DailyAnalysisRequest,
 ):
     def work() -> dict:
-        return analyze_daily_topics(
-            group_id,
-            request.date,
-            comments_per_topic=request.commentsPerTopic,
-            log_callback=_build_daily_log_callback(task_id),
-        )
+        return _analyze_daily_topics_for_task(task_id, group_id, request)
 
     run_workflow(
         task_id,
@@ -109,12 +113,7 @@ def run_daily_today_task(
                 return
             update_task(task_id, "running", "最新话题抓取完成，开始 AI 分析...")
 
-        result = analyze_daily_topics(
-            group_id,
-            request.date,
-            comments_per_topic=request.commentsPerTopic,
-            log_callback=_build_daily_log_callback(task_id),
-        )
+        result = _analyze_daily_topics_for_task(task_id, group_id, request)
 
         if is_task_stopped(task_id):
             return
