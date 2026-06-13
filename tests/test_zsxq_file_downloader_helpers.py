@@ -22,7 +22,10 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     batch_download_completion_messages,
     batch_download_empty_page_message,
     batch_download_fetch_failed_message,
+    batch_download_file_stop_message,
+    batch_download_initial_stop_message,
     batch_download_item_message,
+    batch_download_loop_stop_message,
     batch_download_next_page_plan,
     batch_download_page_files_message,
     batch_download_skipped_message,
@@ -420,6 +423,11 @@ class FileDownloaderBatchDownloadTests(unittest.TestCase):
         self.assertEqual("📋 当前批次: 0 个文件", batch_download_page_files_message(0))
         self.assertEqual("📋 当前批次: 3 个文件", batch_download_page_files_message(3))
 
+    def test_batch_download_stop_messages_preserve_existing_logs(self):
+        self.assertEqual("🛑 任务被停止", batch_download_initial_stop_message())
+        self.assertEqual("🛑 批量下载任务被停止", batch_download_loop_stop_message())
+        self.assertEqual("🛑 文件下载过程中被停止", batch_download_file_stop_message())
+
     def test_batch_download_item_messages_preserve_numbering_and_skip_log(self):
         self.assertEqual(
             "【第3个文件】memo.pdf",
@@ -508,6 +516,19 @@ class FileDownloaderBatchDownloadTests(unittest.TestCase):
         self.assertIn("【2/2】bad.pdf", downloader.logs)
         self.assertIn("   ⚠️ 文件已跳过，继续下一个", downloader.logs)
         self.assertEqual("   ❌ 失败: 1", downloader.logs[-1])
+
+    def test_download_files_batch_initial_stop_returns_empty_stats_without_fetch_or_completion(self):
+        downloader = self._downloader_for_batch([{"file": {"id": 101, "name": "unused.pdf"}}])
+        downloader.check_stop = lambda: True
+
+        stats = ZSXQFileDownloader.download_files_batch(downloader, max_files=2, start_index="start")
+
+        self.assertEqual({"total_files": 0, "downloaded": 0, "skipped": 0, "failed": 0}, stats)
+        self.assertEqual([], downloader.fetch_calls)
+        self.assertEqual(
+            ["📥 开始批量下载文件 (最多2个)", "🛑 任务被停止"],
+            downloader.logs,
+        )
 
     def test_download_files_batch_preserves_next_page_sleep_and_fetch_index(self):
         downloader = object.__new__(ZSXQFileDownloader)

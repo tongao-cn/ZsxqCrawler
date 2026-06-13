@@ -647,6 +647,18 @@ def batch_download_page_files_message(file_count: int) -> str:
     return f"📋 当前批次: {file_count} 个文件"
 
 
+def batch_download_initial_stop_message() -> str:
+    return "🛑 任务被停止"
+
+
+def batch_download_loop_stop_message() -> str:
+    return "🛑 批量下载任务被停止"
+
+
+def batch_download_file_stop_message() -> str:
+    return "🛑 文件下载过程中被停止"
+
+
 def batch_download_next_page_plan(
     next_index: Any,
     downloaded_in_batch: int,

@@ -29,7 +29,10 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     batch_download_completion_messages,
     batch_download_empty_page_message,
     batch_download_fetch_failed_message,
+    batch_download_file_stop_message,
+    batch_download_initial_stop_message,
     batch_download_item_message,
+    batch_download_loop_stop_message,
     batch_download_next_page_plan,
     batch_download_page_files_message,
     batch_download_skipped_message,
@@ -1039,7 +1042,7 @@ class ZSXQFileDownloader:
 
         # 检查是否需要停止
         if self.check_stop():
-            self.log("🛑 任务被停止")
+            self.log(batch_download_initial_stop_message())
             return download_result_stats()
 
         stats = download_result_stats()
@@ -1049,7 +1052,7 @@ class ZSXQFileDownloader:
         while max_files is None or downloaded_in_batch < max_files:
             # 检查是否需要停止
             if self.check_stop():
-                self.log("🛑 批量下载任务被停止")
+                self.log(batch_download_loop_stop_message())
                 break
 
             # 获取文件列表
@@ -1070,7 +1073,7 @@ class ZSXQFileDownloader:
             for i, file_info in enumerate(files):
                 # 检查是否需要停止
                 if self.check_stop():
-                    self.log("🛑 文件下载过程中被停止")
+                    self.log(batch_download_file_stop_message())
                     break
 
                 if max_files is not None and downloaded_in_batch >= max_files:
