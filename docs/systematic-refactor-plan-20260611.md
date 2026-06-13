@@ -11899,6 +11899,46 @@ Result:
 - Frontend build passed, including Next.js lint/type checks.
 - Diff whitespace check passed with only existing LF-to-CRLF working-copy warnings.
 
+### 2026-06-13 - P9 file downloader JSON decode failure helper
+
+Changed:
+
+- Added `json_decode_failure_plan()` in `backend/crawlers/zsxq_file_downloader_helpers.py`.
+- Reused the helper in `ZSXQFileDownloader._parse_api_json_response()` for existing JSON decode
+  failure logs and retry decisions.
+- Added direct helper coverage for retryable decode errors, terminal decode errors, and response
+  body redaction with the existing `limit=500`.
+- Removed now-unused direct downloader imports for `redact_response_text` and
+  `has_retry_attempt_remaining`.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- JSON decode error text, raw response redaction, retry log text, retry-remaining condition, and
+  `(None, should_retry)` return values are preserved.
+- API response parsing for successful JSON, full-response logging, HTTP/API failure handling,
+  signed URL handling, fallback behavior, task/public APIs, storage schema, and config semantics are
+  unchanged.
+
+Verification:
+
+```powershell
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py backend\crawlers\zsxq_file_downloader_helpers.py tests\test_zsxq_file_downloader_helpers.py
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers -v
+uv run python -m unittest discover -s tests
+uv run python scripts\scan_postgres_compat_debt.py
+npm --prefix frontend run build
+git diff --check
+```
+
+Result:
+
+- Downloader helper tests passed: 111 tests.
+- Full backend unittest discovery passed: 821 tests, 15 skipped.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Frontend build passed, including Next.js lint/type checks.
+- Diff whitespace check passed with only existing LF-to-CRLF working-copy warnings.
+
 ## Stop Conditions
 
 Pause before editing if:

@@ -17,7 +17,7 @@ from typing import Dict, Optional, Any
 import requests
 
 from backend.core.console_output import safe_console_print as print
-from backend.core.log_redaction import redact_json_like, redact_response_text
+from backend.core.log_redaction import redact_json_like
 from backend.crawlers.zsxq_file_downloader_helpers import (
     API_FAILURE_NON_RETRY,
     API_FAILURE_PERMISSION_DENIED_1030,
@@ -53,9 +53,9 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     existing_file_matches,
     file_list_request_params,
     file_list_start_messages,
-    has_retry_attempt_remaining,
     http_failure_plan,
     incremental_start_index,
+    json_decode_failure_plan,
     latest_file_create_time_query,
     normalize_date_range,
     page_crosses_stop_before,
@@ -465,12 +465,10 @@ class ZSXQFileDownloader:
         try:
             data = response.json()
         except json.JSONDecodeError as e:
-            print(f"   ❌ JSON解析失败: {e}")
-            print(f"   📄 原始响应: {redact_response_text(response.text, limit=500)}")
-            if has_retry_attempt_remaining(attempt, max_retries):
-                print(f"   🔄 JSON解析失败，准备重试...")
-                return None, True
-            return None, False
+            decode_failure = json_decode_failure_plan(e, response.text, attempt, max_retries)
+            for message in decode_failure["messages"]:
+                print(message)
+            return None, decode_failure["should_retry"]
 
         if should_log_full_response(attempt, max_retries, data.get('succeeded')):
             print(f"   📋 响应内容: {json.dumps(redact_json_like(data), ensure_ascii=False, indent=2)}")

@@ -200,6 +200,17 @@ def retry_exhausted_message(max_retries: int) -> str:
     return f"   🚫 已重试{max_retries}次，全部失败"
 
 
+def json_decode_failure_plan(exc: Exception, response_text: Any, attempt: int, max_retries: int) -> Dict[str, Any]:
+    should_retry = has_retry_attempt_remaining(attempt, max_retries)
+    messages = [
+        f"   ❌ JSON解析失败: {exc}",
+        f"   📄 原始响应: {redact_response_text(response_text, limit=500)}",
+    ]
+    if should_retry:
+        messages.append("   🔄 JSON解析失败，准备重试...")
+    return {"should_retry": should_retry, "messages": tuple(messages)}
+
+
 def parse_create_time(value: Optional[str]) -> Optional[datetime.datetime]:
     if not value:
         return None

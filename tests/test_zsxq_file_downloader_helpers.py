@@ -50,6 +50,7 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     incremental_start_index,
     is_retryable_api_error,
     is_retryable_http_status,
+    json_decode_failure_plan,
     latest_file_create_time_query,
     normalize_date_range,
     page_crosses_stop_before,
@@ -1072,6 +1073,34 @@ class FileDownloaderRetryHelperTests(unittest.TestCase):
         self.assertFalse(terminal_plan["should_retry"])
         self.assertEqual(("   ❌ 请求异常: final",), terminal_plan["messages"])
         self.assertEqual("   🚫 已重试10次，全部失败", retry_exhausted_message(10))
+
+    def test_json_decode_failure_plan_preserves_redaction_and_retry_paths(self):
+        decode_error = json.JSONDecodeError("bad json", "{", 0)
+        retry_plan = json_decode_failure_plan(
+            decode_error,
+            '{"download_url": "https://signed.example/file.pdf", "message": "bad"}',
+            0,
+            2,
+        )
+        self.assertTrue(retry_plan["should_retry"])
+        self.assertEqual(
+            (
+                "   ❌ JSON解析失败: bad json: line 1 column 1 (char 0)",
+                '   📄 原始响应: {"download_url": "<redacted>", "message": "bad"}',
+                "   🔄 JSON解析失败，准备重试...",
+            ),
+            retry_plan["messages"],
+        )
+
+        terminal_plan = json_decode_failure_plan(decode_error, "not-json", 1, 2)
+        self.assertFalse(terminal_plan["should_retry"])
+        self.assertEqual(
+            (
+                "   ❌ JSON解析失败: bad json: line 1 column 1 (char 0)",
+                "   📄 原始响应: not-json",
+            ),
+            terminal_plan["messages"],
+        )
 
     def test_risk_event_user_agent_label_preserves_browser_platform_labels(self):
         self.assertEqual(
