@@ -28,7 +28,7 @@ from backend.services.a_share_analysis_dates import (
     get_required_days_for_start_date,
     normalize_date_range as _normalize_date_range,
     select_available_date_range as _select_available_date_range,
-    validate_day,
+    validate_day,  # noqa: F401 - compatibility re-export for scripts
 )
 from backend.services.a_share_analysis_chart import (
     DEFAULT_RANKING_TOP_N,
@@ -44,10 +44,10 @@ from backend.services.a_share_analysis_ai import (
     DEFAULT_REASONING_EFFORT,
     DEFAULT_WIRE_API,
     TOPIC_STOCK_EXTRACTION_PROMPT_VERSION,
-    _build_topic_stock_extraction_prompt,
-    _extract_response_text,
-    _parse_company_extraction_output,
-    _parse_topic_stock_extraction_output,
+    _build_topic_stock_extraction_prompt,  # noqa: F401 - compatibility re-export for tests/tools
+    _extract_response_text,  # noqa: F401 - compatibility re-export for tests/tools
+    _parse_company_extraction_output,  # noqa: F401 - compatibility re-export for tests/tools
+    _parse_topic_stock_extraction_output,  # noqa: F401 - compatibility re-export for tests/tools
     call_openai_extract_companies as _call_openai_extract_companies,
     call_openai_extract_topic_stocks as _call_openai_extract_topic_stocks,
 )
@@ -62,9 +62,9 @@ from backend.services.a_share_analysis_aggregation import (
 from backend.services.a_share_analysis_local_store import (
     DEFAULT_OUTPUT_PATH,
     DEFAULT_STATE_PATH,
-    GROUP_ANALYSIS_DIRNAME,
-    GROUP_OUTPUT_FILENAME,
-    GROUP_STATE_FILENAME,
+    GROUP_ANALYSIS_DIRNAME,  # noqa: F401 - compatibility re-export for local-storage tools
+    GROUP_OUTPUT_FILENAME,  # noqa: F401 - compatibility re-export for local-storage tools
+    GROUP_STATE_FILENAME,  # noqa: F401 - compatibility re-export for local-storage tools
     get_group_analysis_paths as _get_group_analysis_paths,
     load_state_file as _load_state_file_impl,
     normalize_group_id,

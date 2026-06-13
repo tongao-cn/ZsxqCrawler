@@ -13,7 +13,7 @@ def read_csv(path: str) -> Tuple[List[str], Dict[str, Dict[str, int]]]:
         return [], {}
     with open(path, "r", encoding="utf-8") as f:
         r = csv.reader(f)
-        header = next(r, None)
+        next(r, None)
         for row in r:
             if len(row) < 3:
                 continue

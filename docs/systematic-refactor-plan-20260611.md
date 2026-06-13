@@ -10730,6 +10730,54 @@ Result:
 - Frontend build passed, including Next.js lint/type checks.
 - `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
 
+### 2026-06-13 - P7 F401/F841 lint cleanup and compatibility export markers
+
+Changed:
+
+- Added characterization coverage for `scripts.csv_chart_server.read_csv` header-skipping,
+  aggregation, invalid-count fallback, short-row skipping, and missing-file behavior.
+- Removed the unused CSV header local variable while preserving the header-skipping side effect.
+- Removed the true unused `_serialize_json_list` import from
+  `backend.services.stock_topic_analysis_service`.
+- Marked intentional compatibility re-exports in `backend.services.a_share_analysis_service` and
+  `backend.services.task_runtime` with focused `# noqa: F401` comments instead of deleting them.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- `read_csv` still skips the first CSV row, preserves aggregation and invalid-count behavior, and
+  returns empty data for missing files.
+- A-share parsing/prompt helpers, `validate_day`, local-store filename constants, and
+  `INGESTION_LOCK_TYPES` remain importable from their compatibility modules; this preserves
+  existing test/script import paths.
+- No public route, task, crawler, storage, AI output, fallback, or config semantics changed.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_csv_chart_server -v
+uv run python -m py_compile scripts\csv_chart_server.py tests\test_csv_chart_server.py backend\services\a_share_analysis_service.py backend\services\stock_topic_analysis_service.py backend\services\task_runtime.py
+uvx ruff check backend scripts tests --select F401,F841
+uv run python -m unittest tests.test_csv_chart_server tests.test_a_share_analysis_service_helpers tests.test_stock_topic_analysis_service_helpers tests.test_task_runtime_helpers -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run python -m unittest discover -s tests
+cmd.exe /d /c npm --prefix frontend run build
+git diff --check
+```
+
+Result:
+
+- Baseline CSV chart server characterization tests passed before the unused-variable cleanup:
+  2 tests passed.
+- Post-change focused CSV chart tests passed: 2 tests passed.
+- `py_compile` passed.
+- Repo-wide F401/F841 ruff check passed.
+- Focused affected backend tests passed: 109 tests passed.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Full backend unittest discovery passed: 804 tests passed, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+- `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
+
 ## Stop Conditions
 
 Pause before editing if:

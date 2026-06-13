@@ -34,7 +34,6 @@ from backend.services.stock_topic_analysis_helpers import (
     _parse_json_list,
     _reconcile_processed_topic_ids,
     _safe_float,
-    _serialize_json_list,
     _stock_analysis_mode,
     _topic_ids_from_result,
 )

@@ -38,7 +38,7 @@ from backend.services.task_runtime_resources import (
 )
 from backend.services.task_runtime_status import (
     INGESTION_LOCK_KEY,
-    INGESTION_LOCK_TYPES,
+    INGESTION_LOCK_TYPES,  # noqa: F401 - compatibility re-export for task runtime callers
     _is_active_task_status,
     _is_runtime_terminal_status,
     _matches_latest_task_query,
