@@ -111,6 +111,7 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     download_total_size,
     request_exception_plan,
     retry_exhausted_message,
+    risk_event_header_user_agent,
     risk_event_header_profile_label,
     risk_event_row,
     risk_event_user_agent_label,
@@ -2280,6 +2281,15 @@ class FileDownloaderRetryHelperTests(unittest.TestCase):
             ),
         )
         self.assertEqual("minimal", risk_event_header_profile_label({}))
+
+    def test_risk_event_header_user_agent_preserves_case_fallback_order(self):
+        self.assertEqual(
+            "upper-ua",
+            risk_event_header_user_agent({"User-Agent": "upper-ua", "user-agent": "lower-ua"}),
+        )
+        self.assertEqual("lower-ua", risk_event_header_user_agent({"user-agent": "lower-ua"}))
+        self.assertEqual("", risk_event_header_user_agent({}))
+        self.assertEqual("", risk_event_header_user_agent(None))
 
     def test_risk_event_row_preserves_field_order_labels_and_empty_values(self):
         row = risk_event_row(

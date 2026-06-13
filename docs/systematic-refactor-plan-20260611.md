@@ -13117,6 +13117,41 @@ Result:
 - PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-13 - P9 file downloader risk event user-agent helper
+
+Changed:
+
+- Added `risk_event_header_user_agent()` in `backend/crawlers/zsxq_file_downloader_helpers.py`.
+- Reused it in both `risk_event_row()` and `ZSXQFileDownloader._prepare_retry_api_request()`.
+- Added direct helper coverage for `User-Agent` priority, `user-agent` fallback, empty headers,
+  and missing headers.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Header key priority, lowercase fallback, empty fallback, UA classification, risk-event row values,
+  retry request UA log text, CSV output, retry timing/order, task/public APIs, storage schema,
+  fallback/legacy behavior, and config semantics are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py backend\crawlers\zsxq_file_downloader_helpers.py tests\test_zsxq_file_downloader_helpers.py
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderRetryHelperTests.test_risk_event_header_user_agent_preserves_case_fallback_order -v
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers -v
+uv run python -m unittest discover -s tests
+uv run python scripts\scan_postgres_compat_debt.py
+npm --prefix frontend run build
+```
+
+Result:
+
+- Focused risk-event header User-Agent helper test passed.
+- Downloader helper tests passed: 158 tests.
+- Full backend unittest discovery passed: 875 tests, 15 skipped.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:

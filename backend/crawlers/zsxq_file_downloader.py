@@ -113,6 +113,7 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     response_filename_override,
     request_exception_plan,
     retry_exhausted_message,
+    risk_event_header_user_agent,
     risk_event_header_profile_label,
     risk_event_row,
     risk_event_user_agent_label,
@@ -445,7 +446,7 @@ class ZSXQFileDownloader:
         self.request_count += 1
         headers = self.get_stealth_headers()
         if file_id is not None and getattr(self, "risk_event_log_path", None):
-            user_agent = headers.get("User-Agent") or headers.get("user-agent") or ""
+            user_agent = risk_event_header_user_agent(headers)
             self.log(f"   🧭 UA分类: {self._user_agent_label(user_agent)}")
         if file_id is not None:
             self._record_risk_event(

@@ -176,6 +176,12 @@ def risk_event_header_profile_label(headers: Dict[str, str]) -> str:
     return "+".join(labels) or "minimal"
 
 
+def risk_event_header_user_agent(headers: Optional[Dict[str, str]]) -> str:
+    if not headers:
+        return ""
+    return headers.get("User-Agent") or headers.get("user-agent") or ""
+
+
 def risk_event_row(
     timestamp: str,
     group_id: Any,
@@ -188,9 +194,7 @@ def risk_event_row(
     api_message: Optional[str] = None,
     status: str = "observed",
 ) -> Dict[str, Any]:
-    user_agent = ""
-    if headers:
-        user_agent = headers.get("User-Agent") or headers.get("user-agent") or ""
+    user_agent = risk_event_header_user_agent(headers)
     return {
         "timestamp": timestamp,
         "group_id": group_id,
