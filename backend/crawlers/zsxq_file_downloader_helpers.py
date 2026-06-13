@@ -259,6 +259,14 @@ def database_download_filter_messages(
     return tuple(messages)
 
 
+def database_download_start_messages(max_files: Optional[int], status_filter: str) -> tuple[str, ...]:
+    messages = ["📥 开始从完整数据库下载文件..."]
+    if max_files:
+        messages.append(f"   🎯 下载限制: {max_files}个文件")
+    messages.append(f"   🔍 状态筛选: {status_filter}")
+    return tuple(messages)
+
+
 def latest_file_create_time_query(query_group_id: Any) -> tuple[str, tuple[Any, ...]]:
     return (
         '''

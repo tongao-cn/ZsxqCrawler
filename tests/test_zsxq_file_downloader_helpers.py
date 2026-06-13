@@ -24,6 +24,7 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     database_download_completion_messages,
     database_download_filter_messages,
     database_download_file_info,
+    database_download_start_messages,
     database_stats_table_emoji,
     download_exception_detail,
     download_expected_size,
@@ -544,6 +545,23 @@ class FileDownloaderTimeHelperTests(unittest.TestCase):
         self.assertEqual(
             ("   📅 下载区间: - ~ 2026-05-07", "   📌 下载排序: 按热度倒序"),
             database_download_filter_messages(None, "2026-05-07", None, "download_count"),
+        )
+
+    def test_database_download_start_messages_preserves_limit_and_status_lines(self):
+        self.assertEqual(
+            (
+                "📥 开始从完整数据库下载文件...",
+                "   🎯 下载限制: 5个文件",
+                "   🔍 状态筛选: failed",
+            ),
+            database_download_start_messages(5, "failed"),
+        )
+        self.assertEqual(
+            (
+                "📥 开始从完整数据库下载文件...",
+                "   🔍 状态筛选: pending",
+            ),
+            database_download_start_messages(None, "pending"),
         )
 
     def test_parse_create_time_accepts_common_formats(self):

@@ -31,6 +31,7 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     database_download_filter_messages,
     database_download_file_info,
     database_download_query_plan,
+    database_download_start_messages,
     database_stats_table_emoji,
     download_file_data,
     download_exception_detail,
@@ -1527,10 +1528,8 @@ class ZSXQFileDownloader:
         **kwargs,
     ) -> Dict[str, int]:
         """从完整数据库下载文件（使用file_id字段）"""
-        self.log(f"📥 开始从完整数据库下载文件...")
-        if max_files:
-            self.log(f"   🎯 下载限制: {max_files}个文件")
-        self.log(f"   🔍 状态筛选: {status_filter}")
+        for message in database_download_start_messages(max_files, status_filter):
+            self.log(message)
         legacy_recent_days = kwargs.get('recent_days')
         if last_days is None and legacy_recent_days is not None:
             last_days = legacy_recent_days
