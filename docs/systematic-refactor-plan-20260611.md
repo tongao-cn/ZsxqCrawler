@@ -14041,6 +14041,55 @@ Result:
 - Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because
   `ruff` is not available.
 
+### 2026-06-13 - P5 A-share status task lookup helper
+
+Changed:
+
+- Added route-level characterization coverage for `get_a_share_analysis_status()` preserving
+  the latest-task lookup before the running-task lookup.
+- Extracted `_a_share_status_tasks()` in `backend.routes.a_share_routes`.
+- Reused the helper from the status route to keep latest/running task lookup details out of the
+  response assembly path.
+- Added helper coverage for returning the latest and running task payloads unchanged.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- The status route still calls `get_latest_task_by_type("a_share_analysis", group_id=...)`
+  before `get_latest_task_by_type("a_share_analysis", status="running", group_id=...)`.
+- Latest/running task payloads are still returned unchanged in the same response fields.
+- Summary lookup, storage status fallback, latest TDX export fallback, API-key flag, public API
+  shape, HTTP error semantics, storage schema, config semantics, side effects, and
+  fallback/legacy behavior are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_a_share_routes_helpers.AShareRoutesHelperTests.test_a_share_status_tasks_preserves_latest_then_running_lookup_order -v
+uv run python -m py_compile backend\routes\a_share_routes.py tests\test_a_share_routes_helpers.py
+uv run python -m unittest tests.test_a_share_routes_helpers.AShareRoutesHelperTests.test_a_share_status_tasks_preserves_latest_then_running_lookup_order tests.test_a_share_routes_helpers.AShareRoutesHelperTests.test_a_share_status_tasks_returns_latest_and_running_tasks -v
+uv run python -m unittest tests.test_a_share_routes_helpers -v
+uv run python -m unittest tests.test_a_share_routes_helpers tests.test_a_share_analysis_service_helpers tests.test_a_share_analysis_db_storage_helpers -v
+uv run python -m unittest discover -s tests
+uv run python scripts\scan_postgres_compat_debt.py
+npm --prefix frontend run build
+uv run ruff check backend\routes\a_share_routes.py tests\test_a_share_routes_helpers.py --select F401,F841
+```
+
+Result:
+
+- Focused status task lookup characterization test passed against the original inline
+  implementation before extraction: 1 test.
+- `py_compile` passed.
+- Focused status task lookup/helper tests passed after extraction: 2 tests.
+- A-share route helper tests passed: 28 tests.
+- Related A-share route/service/storage tests passed: 71 tests.
+- Full backend unittest discovery passed: 916 tests, 15 skipped.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Frontend build passed, including Next.js lint/type checks.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because
+  `ruff` is not available.
+
 ## Stop Conditions
 
 Pause before editing if:

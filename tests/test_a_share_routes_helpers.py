@@ -155,6 +155,68 @@ class AShareRoutesHelperTests(unittest.TestCase):
         has_api_key.assert_called_once_with()
 
     @unittest.skipUnless(HAS_A_SHARE_ROUTE_DEPS, "a-share route dependencies are not installed")
+    def test_a_share_status_tasks_preserves_latest_then_running_lookup_order(self):
+        import asyncio
+
+        from backend.routes import a_share_routes
+
+        summary = {"rows_count": 7}
+        storage = {"enabled": True, "mode": "postgres"}
+        latest_export = {"block_name": "A-share"}
+        latest_task = {"id": "latest"}
+        running_task = {"id": "running"}
+        events = []
+
+        def latest_task_side_effect(*args, **kwargs):
+            events.append((args, kwargs))
+            return latest_task if len(events) == 1 else running_task
+
+        with (
+            patch.object(a_share_routes, "get_analysis_summary", return_value=summary),
+            patch.object(
+                a_share_routes,
+                "get_latest_task_by_type",
+                side_effect=latest_task_side_effect,
+            ) as get_latest_task,
+            patch.object(a_share_routes, "_a_share_storage_status", return_value=storage),
+            patch.object(a_share_routes, "_latest_a_share_tdx_export", return_value=latest_export),
+            patch.object(a_share_routes, "has_openai_api_key", return_value=True),
+        ):
+            result = asyncio.run(a_share_routes.get_a_share_analysis_status("51111112855254"))
+
+        self.assertEqual(latest_task, result["latest_task"])
+        self.assertEqual(running_task, result["running_task"])
+        self.assertEqual(
+            [
+                (("a_share_analysis",), {"group_id": "51111112855254"}),
+                (("a_share_analysis",), {"status": "running", "group_id": "51111112855254"}),
+            ],
+            events,
+        )
+        self.assertEqual(2, get_latest_task.call_count)
+
+    @unittest.skipUnless(HAS_A_SHARE_ROUTE_DEPS, "a-share route dependencies are not installed")
+    def test_a_share_status_tasks_returns_latest_and_running_tasks(self):
+        from backend.routes import a_share_routes
+
+        latest_task = {"id": "latest"}
+        running_task = {"id": "running"}
+
+        with patch.object(
+            a_share_routes,
+            "get_latest_task_by_type",
+            side_effect=[latest_task, running_task],
+        ) as get_latest_task:
+            self.assertEqual(
+                (latest_task, running_task),
+                a_share_routes._a_share_status_tasks("51111112855254"),
+            )
+
+        get_latest_task.assert_any_call("a_share_analysis", group_id="51111112855254")
+        get_latest_task.assert_any_call("a_share_analysis", status="running", group_id="51111112855254")
+        self.assertEqual(2, get_latest_task.call_count)
+
+    @unittest.skipUnless(HAS_A_SHARE_ROUTE_DEPS, "a-share route dependencies are not installed")
     def test_a_share_file_fallback_storage_status_defaults_missing_counts(self):
         from backend.routes.a_share_routes import _a_share_file_fallback_storage_status
 

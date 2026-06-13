@@ -234,6 +234,19 @@ async def _latest_a_share_tdx_export(normalized_group_id: Optional[str]) -> Opti
         return None
 
 
+def _a_share_status_tasks(normalized_group_id: Optional[str]) -> tuple[Optional[dict], Optional[dict]]:
+    latest_task = get_latest_task_by_type(
+        "a_share_analysis",
+        group_id=normalized_group_id,
+    )
+    running_task = get_latest_task_by_type(
+        "a_share_analysis",
+        status="running",
+        group_id=normalized_group_id,
+    )
+    return latest_task, running_task
+
+
 def run_a_share_analysis_task(task_id: str, request: AShareAnalysisRunRequest):
     """后台执行A股公司提及分析任务"""
     try:
@@ -257,15 +270,7 @@ async def get_a_share_analysis_status(group_id: Optional[str] = None):
     try:
         normalized_group_id = normalize_group_id(group_id)
         summary = await asyncio.to_thread(get_analysis_summary, group_id=normalized_group_id)
-        latest_task = get_latest_task_by_type(
-            "a_share_analysis",
-            group_id=normalized_group_id,
-        )
-        running_task = get_latest_task_by_type(
-            "a_share_analysis",
-            status="running",
-            group_id=normalized_group_id,
-        )
+        latest_task, running_task = _a_share_status_tasks(normalized_group_id)
         storage = await _a_share_storage_status(summary, normalized_group_id)
 
         latest_tdx_export = await _latest_a_share_tdx_export(normalized_group_id)
