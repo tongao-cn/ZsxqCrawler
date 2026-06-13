@@ -13738,6 +13738,54 @@ Result:
 - PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-13 - P5 daily today completion helper
+
+Changed:
+
+- Added characterization coverage for `run_daily_today_task()` returning without a
+  completed update when the task is stopped after AI analysis.
+- Added helper coverage for the completed-result update and stopped-task skip branch.
+- Extracted `_complete_daily_today_task_unless_stopped()` in
+  `backend.routes.daily_analysis_routes`.
+- Reused it from `run_daily_today_task()` after `_analyze_daily_topics_for_task()`.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- The combined daily crawl-and-analysis task still runs AI analysis at the same point,
+  then checks `is_task_stopped(task_id)` before writing a terminal completed status.
+- If the task is stopped after analysis, it still returns without writing
+  `completed`.
+- If not stopped, it still updates the task to `completed` with message
+  `每日抓取与 AI 分析完成` and preserves the exact result payload.
+- Initial running status, optional crawl-first behavior, failure handling,
+  task/public APIs, fallback/legacy behavior, and config semantics are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_daily_analysis_routes_helpers.DailyAnalysisRoutesHelperTests.test_run_daily_today_task_returns_when_stopped_after_analysis -v
+uv run python -m py_compile backend\routes\daily_analysis_routes.py tests\test_daily_analysis_routes_helpers.py
+uv run python -m unittest tests.test_daily_analysis_routes_helpers.DailyAnalysisRoutesHelperTests.test_run_daily_today_task_returns_when_stopped_after_analysis tests.test_daily_analysis_routes_helpers.DailyAnalysisRoutesHelperTests.test_complete_daily_today_task_unless_stopped_preserves_completed_result tests.test_daily_analysis_routes_helpers.DailyAnalysisRoutesHelperTests.test_complete_daily_today_task_unless_stopped_skips_stopped_task -v
+uv run python -m unittest tests.test_daily_analysis_routes_helpers -v
+uv run python -m unittest tests.test_daily_analysis_routes_helpers tests.test_daily_stock_concept_routes_helpers tests.test_stock_topic_analysis_routes_helpers tests.test_task_runtime_helpers -v
+uv run python -m unittest discover -s tests
+uv run python scripts\scan_postgres_compat_debt.py
+npm --prefix frontend run build
+```
+
+Result:
+
+- Focused stopped-after-analysis characterization test passed against the original
+  inline implementation before extraction: 1 test.
+- `py_compile` passed.
+- Focused daily today completion helper tests passed after extraction: 3 tests.
+- Daily route helper tests passed: 15 tests.
+- Related route/task-runtime tests passed: 80 tests.
+- Full backend unittest discovery passed: 901 tests, 15 skipped.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:

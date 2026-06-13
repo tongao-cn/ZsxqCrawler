@@ -94,6 +94,12 @@ def _run_daily_today_crawl_first_step(task_id: str, group_id: str, request: Dail
     return True
 
 
+def _complete_daily_today_task_unless_stopped(task_id: str, result: dict) -> None:
+    if is_task_stopped(task_id):
+        return
+    update_task(task_id, "completed", "每日抓取与 AI 分析完成", result)
+
+
 def run_daily_analysis_task(
     task_id: str,
     group_id: str,
@@ -124,10 +130,7 @@ def run_daily_today_task(
 
         result = _analyze_daily_topics_for_task(task_id, group_id, request)
 
-        if is_task_stopped(task_id):
-            return
-
-        update_task(task_id, "completed", "每日抓取与 AI 分析完成", result)
+        _complete_daily_today_task_unless_stopped(task_id, result)
     except Exception as e:
         _fail_daily_task_unless_stopped(task_id, "每日抓取与 AI 分析", e)
 

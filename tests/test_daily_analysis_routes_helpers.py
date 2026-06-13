@@ -259,6 +259,54 @@ class DailyAnalysisRoutesHelperTests(unittest.TestCase):
         analyze.assert_called_once_with("task-1", "group-1", request)
         is_task_stopped.assert_called_once_with("task-1")
 
+    @unittest.skipUnless(HAS_DAILY_ROUTE_DEPS, "daily analysis route dependencies are not installed")
+    def test_run_daily_today_task_returns_when_stopped_after_analysis(self):
+        from backend.routes.daily_analysis_routes import DailyRunTodayRequest, run_daily_today_task
+
+        request = DailyRunTodayRequest(date="2026-06-13", crawlLatestFirst=False)
+
+        with (
+            patch("backend.routes.daily_analysis_routes.update_task") as update_task,
+            patch("backend.routes.daily_analysis_routes._run_daily_today_crawl_first_step", return_value=True)
+            as crawl_first_step,
+            patch("backend.routes.daily_analysis_routes._analyze_daily_topics_for_task", return_value={"report": []})
+            as analyze,
+            patch("backend.routes.daily_analysis_routes.is_task_stopped", return_value=True) as is_task_stopped,
+        ):
+            run_daily_today_task("task-1", "group-1", request)
+
+        update_task.assert_called_once_with("task-1", "running", "开始每日抓取与 AI 分析...")
+        crawl_first_step.assert_called_once_with("task-1", "group-1", request)
+        analyze.assert_called_once_with("task-1", "group-1", request)
+        is_task_stopped.assert_called_once_with("task-1")
+
+    @unittest.skipUnless(HAS_DAILY_ROUTE_DEPS, "daily analysis route dependencies are not installed")
+    def test_complete_daily_today_task_unless_stopped_preserves_completed_result(self):
+        from backend.routes.daily_analysis_routes import _complete_daily_today_task_unless_stopped
+
+        result = {"report": []}
+        with (
+            patch("backend.routes.daily_analysis_routes.is_task_stopped", return_value=False) as is_task_stopped,
+            patch("backend.routes.daily_analysis_routes.update_task") as update_task,
+        ):
+            _complete_daily_today_task_unless_stopped("task-1", result)
+
+        is_task_stopped.assert_called_once_with("task-1")
+        update_task.assert_called_once_with("task-1", "completed", "每日抓取与 AI 分析完成", result)
+
+    @unittest.skipUnless(HAS_DAILY_ROUTE_DEPS, "daily analysis route dependencies are not installed")
+    def test_complete_daily_today_task_unless_stopped_skips_stopped_task(self):
+        from backend.routes.daily_analysis_routes import _complete_daily_today_task_unless_stopped
+
+        with (
+            patch("backend.routes.daily_analysis_routes.is_task_stopped", return_value=True) as is_task_stopped,
+            patch("backend.routes.daily_analysis_routes.update_task") as update_task,
+        ):
+            _complete_daily_today_task_unless_stopped("task-1", {"report": []})
+
+        is_task_stopped.assert_called_once_with("task-1")
+        update_task.assert_not_called()
+
 
 if __name__ == "__main__":
     unittest.main()
