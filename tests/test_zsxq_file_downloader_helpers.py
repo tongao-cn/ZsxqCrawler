@@ -46,6 +46,7 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     file_list_start_messages,
     filter_files_newer_than,
     has_retry_attempt_remaining,
+    http_failure_plan,
     incremental_start_index,
     is_retryable_api_error,
     is_retryable_http_status,
@@ -1015,6 +1016,44 @@ class FileDownloaderRetryHelperTests(unittest.TestCase):
         self.assertEqual(HTTP_FAILURE_RETRY, classify_http_failure(429, 0, 2))
         self.assertEqual(HTTP_FAILURE_RETRY_EXHAUSTED, classify_http_failure(503, 1, 2))
         self.assertEqual(HTTP_FAILURE_NON_RETRY, classify_http_failure(403, 0, 2))
+
+    def test_http_failure_plan_preserves_messages_redaction_and_terminal_paths(self):
+        retry_plan = http_failure_plan(
+            429,
+            '{"download_url": "https://signed.example/file.pdf", "message": "slow down"}',
+            0,
+            2,
+        )
+        self.assertEqual(HTTP_FAILURE_RETRY, retry_plan["failure_class"])
+        self.assertEqual(
+            (
+                "   ❌ HTTP错误: 429",
+                '   📄 响应内容: {"download_url": "<redacted>", "message": "slow down"}',
+                "   🔄 服务器错误，准备重试...",
+            ),
+            retry_plan["messages"],
+        )
+
+        non_retry_plan = http_failure_plan(403, "forbidden", 0, 2)
+        self.assertEqual(HTTP_FAILURE_NON_RETRY, non_retry_plan["failure_class"])
+        self.assertEqual(
+            (
+                "   ❌ HTTP错误: 403",
+                "   📄 响应内容: forbidden",
+                "   🚫 非可重试HTTP错误，停止重试",
+            ),
+            non_retry_plan["messages"],
+        )
+
+        exhausted_plan = http_failure_plan(503, "temporary", 1, 2)
+        self.assertEqual(HTTP_FAILURE_RETRY_EXHAUSTED, exhausted_plan["failure_class"])
+        self.assertEqual(
+            (
+                "   ❌ HTTP错误: 503",
+                "   📄 响应内容: temporary",
+            ),
+            exhausted_plan["messages"],
+        )
 
     def test_risk_event_user_agent_label_preserves_browser_platform_labels(self):
         self.assertEqual(

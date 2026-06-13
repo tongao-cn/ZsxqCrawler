@@ -27,7 +27,6 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     api_failure_detail,
     add_import_stats,
     classify_api_failure,
-    classify_http_failure,
     database_download_completion_messages,
     database_download_filter_messages,
     database_download_file_info,
@@ -55,6 +54,7 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     file_list_request_params,
     file_list_start_messages,
     has_retry_attempt_remaining,
+    http_failure_plan,
     incremental_start_index,
     latest_file_create_time_query,
     normalize_date_range,
@@ -517,14 +517,13 @@ class ZSXQFileDownloader:
                         return None
                         
                 else:
-                    http_failure_class = classify_http_failure(response.status_code, attempt, max_retries)
-                    print(f"   ❌ HTTP错误: {response.status_code}")
-                    print(f"   📄 响应内容: {redact_response_text(response.text, limit=200)}")
+                    http_failure = http_failure_plan(response.status_code, response.text, attempt, max_retries)
+                    for message in http_failure["messages"]:
+                        print(message)
+                    http_failure_class = http_failure["failure_class"]
                     if http_failure_class == HTTP_FAILURE_RETRY:
-                        print(f"   🔄 服务器错误，准备重试...")
                         continue
                     if http_failure_class == HTTP_FAILURE_NON_RETRY:
-                        print(f"   🚫 非可重试HTTP错误，停止重试")
                         return None
                     
             except Exception as e:
@@ -622,14 +621,13 @@ class ZSXQFileDownloader:
                             return None
                         
                 else:
-                    http_failure_class = classify_http_failure(response.status_code, attempt, max_retries)
-                    print(f"   ❌ HTTP错误: {response.status_code}")
-                    print(f"   📄 响应内容: {redact_response_text(response.text, limit=200)}")
+                    http_failure = http_failure_plan(response.status_code, response.text, attempt, max_retries)
+                    for message in http_failure["messages"]:
+                        print(message)
+                    http_failure_class = http_failure["failure_class"]
                     if http_failure_class == HTTP_FAILURE_RETRY:
-                        print(f"   🔄 服务器错误，准备重试...")
                         continue
                     if http_failure_class == HTTP_FAILURE_NON_RETRY:
-                        print(f"   🚫 非可重试HTTP错误，停止重试")
                         return None
                     
             except Exception as e:

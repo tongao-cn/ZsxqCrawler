@@ -7,6 +7,8 @@ import os
 import re
 from typing import Any, Dict, Optional, Tuple
 
+from backend.core.log_redaction import redact_response_text
+
 
 IMPORT_STAT_KEYS = (
     "files",
@@ -166,6 +168,24 @@ def classify_http_failure(status_code: int, attempt: int, max_retries: int) -> s
     if has_retry_attempt_remaining(attempt, max_retries):
         return HTTP_FAILURE_RETRY
     return HTTP_FAILURE_RETRY_EXHAUSTED
+
+
+def http_failure_plan(
+    status_code: int,
+    response_text: Any,
+    attempt: int,
+    max_retries: int,
+) -> Dict[str, Any]:
+    failure_class = classify_http_failure(status_code, attempt, max_retries)
+    messages = [
+        f"   ❌ HTTP错误: {status_code}",
+        f"   📄 响应内容: {redact_response_text(response_text, limit=200)}",
+    ]
+    if failure_class == HTTP_FAILURE_RETRY:
+        messages.append("   🔄 服务器错误，准备重试...")
+    elif failure_class == HTTP_FAILURE_NON_RETRY:
+        messages.append("   🚫 非可重试HTTP错误，停止重试")
+    return {"failure_class": failure_class, "messages": tuple(messages)}
 
 
 def parse_create_time(value: Optional[str]) -> Optional[datetime.datetime]:
