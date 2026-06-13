@@ -25,6 +25,15 @@ def _account_cookie_value(account: Optional[Dict[str, Any]]) -> Optional[str]:
     return cookie or None
 
 
+def _account_summary_value(account: Dict[str, Any]) -> Dict[str, Any]:
+    return {
+        "id": account.get("id"),
+        "name": account.get("name"),
+        "created_at": account.get("created_at"),
+        "cookie": account.get("cookie"),
+    }
+
+
 def get_primary_cookie() -> Optional[str]:
     try:
         sql_mgr = get_accounts_sql_manager()
@@ -90,12 +99,7 @@ def get_account_summary_for_group_auto(group_id: str) -> Optional[Dict[str, Any]
 
         first_acc = sql_mgr.get_first_account(mask_cookie=True)
         if first_acc:
-            return {
-                "id": first_acc.get("id"),
-                "name": first_acc.get("name"),
-                "created_at": first_acc.get("created_at"),
-                "cookie": first_acc.get("cookie"),
-            }
+            return _account_summary_value(first_acc)
     except Exception:
         pass
 
@@ -131,12 +135,7 @@ def build_account_group_detection() -> Dict[str, Dict[str, Any]]:
             account = sql_mgr.get_account_by_id(account_id, mask_cookie=True)
             if not account:
                 continue
-            mapping[str(group_id)] = {
-                "id": account.get("id"),
-                "name": account.get("name"),
-                "created_at": account.get("created_at"),
-                "cookie": account.get("cookie"),
-            }
+            mapping[str(group_id)] = _account_summary_value(account)
     except Exception as exc:
         print(f"⚠️ 构建群组账号映射失败: {exc}")
 
