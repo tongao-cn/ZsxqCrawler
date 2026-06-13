@@ -283,6 +283,15 @@ async def _a_share_chart_payload(
     )
 
 
+async def _reset_a_share_analysis_range(request: AShareAnalysisResetRangeRequest) -> dict:
+    return await asyncio.to_thread(
+        reset_analysis_range,
+        request.start_date,
+        request.end_date,
+        group_id=normalize_group_id(request.group_id),
+    )
+
+
 def run_a_share_analysis_task(task_id: str, request: AShareAnalysisRunRequest):
     """后台执行A股公司提及分析任务"""
     try:
@@ -363,12 +372,7 @@ async def start_a_share_analysis(request: AShareAnalysisRunRequest, background_t
 async def reset_a_share_analysis_date_range(request: AShareAnalysisResetRangeRequest):
     """删除A股分析结果中的指定日期区间"""
     try:
-        result = await asyncio.to_thread(
-            reset_analysis_range,
-            request.start_date,
-            request.end_date,
-            group_id=normalize_group_id(request.group_id),
-        )
+        result = await _reset_a_share_analysis_range(request)
         return _success_payload(result)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))

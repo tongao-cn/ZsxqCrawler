@@ -477,6 +477,65 @@ class AShareRoutesHelperTests(unittest.TestCase):
         )
 
     @unittest.skipUnless(HAS_A_SHARE_ROUTE_DEPS, "a-share route dependencies are not installed")
+    def test_reset_a_share_analysis_date_range_preserves_service_arguments(self):
+        import asyncio
+
+        from backend.routes import a_share_routes
+        from backend.routes.a_share_routes import AShareAnalysisResetRangeRequest
+
+        reset_result = {"deleted": 3}
+        with patch.object(
+            a_share_routes,
+            "reset_analysis_range",
+            return_value=reset_result,
+        ) as reset_analysis_range:
+            result = asyncio.run(
+                a_share_routes.reset_a_share_analysis_date_range(
+                    AShareAnalysisResetRangeRequest(
+                        group_id=" 51111112855254 ",
+                        start_date="2026-05-01",
+                        end_date="2026-05-07",
+                    )
+                )
+            )
+
+        self.assertEqual({"success": True, "deleted": 3}, result)
+        reset_analysis_range.assert_called_once_with(
+            "2026-05-01",
+            "2026-05-07",
+            group_id="51111112855254",
+        )
+
+    @unittest.skipUnless(HAS_A_SHARE_ROUTE_DEPS, "a-share route dependencies are not installed")
+    def test_reset_a_share_analysis_range_preserves_global_group_scope(self):
+        import asyncio
+
+        from backend.routes import a_share_routes
+        from backend.routes.a_share_routes import AShareAnalysisResetRangeRequest
+
+        reset_result = {"deleted": 0}
+        with patch.object(
+            a_share_routes,
+            "reset_analysis_range",
+            return_value=reset_result,
+        ) as reset_analysis_range:
+            result = asyncio.run(
+                a_share_routes._reset_a_share_analysis_range(
+                    AShareAnalysisResetRangeRequest(
+                        start_date="2026-05-01",
+                        end_date="2026-05-07",
+                    )
+                )
+            )
+
+        self.assertEqual(reset_result, result)
+        reset_analysis_range.assert_called_once_with(
+            "2026-05-01",
+            "2026-05-07",
+            group_id=None,
+        )
+
+    @unittest.skipUnless(HAS_A_SHARE_ROUTE_DEPS, "a-share route dependencies are not installed")
     def test_fail_a_share_analysis_task_preserves_failure_status_and_log(self):
         from backend.routes.a_share_routes import _fail_a_share_analysis_task
 

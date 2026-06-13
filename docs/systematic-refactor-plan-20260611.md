@@ -14192,6 +14192,54 @@ Result:
 - Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because
   `ruff` is not available.
 
+### 2026-06-14 - P5 A-share reset-range helper
+
+Changed:
+
+- Added route-level characterization coverage for `reset_a_share_analysis_date_range()`
+  preserving `reset_analysis_range()` arguments and `_success_payload()` wrapping.
+- Extracted `_reset_a_share_analysis_range()` in `backend.routes.a_share_routes`.
+- Reused the helper from the reset-range route so group normalization and service-call
+  argument assembly are isolated.
+- Added helper coverage for preserving global group scope as `group_id=None`.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- The reset-range route still normalizes `group_id` before calling `reset_analysis_range()`.
+- `start_date` and `end_date` are still forwarded unchanged.
+- Successful service results are still wrapped through `_success_payload()`.
+- ValueError-to-400 handling, generic 500 handling, public API shape, storage schema, config
+  semantics, side effects, and fallback/legacy behavior are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_a_share_routes_helpers.AShareRoutesHelperTests.test_reset_a_share_analysis_date_range_preserves_service_arguments -v
+uv run python -m py_compile backend\routes\a_share_routes.py tests\test_a_share_routes_helpers.py
+uv run python -m unittest tests.test_a_share_routes_helpers.AShareRoutesHelperTests.test_reset_a_share_analysis_date_range_preserves_service_arguments tests.test_a_share_routes_helpers.AShareRoutesHelperTests.test_reset_a_share_analysis_range_preserves_global_group_scope -v
+uv run python -m unittest tests.test_a_share_routes_helpers -v
+uv run python -m unittest tests.test_a_share_routes_helpers tests.test_a_share_analysis_service_helpers tests.test_a_share_analysis_db_storage_helpers -v
+uv run python -m unittest discover -s tests
+uv run python scripts\scan_postgres_compat_debt.py
+npm --prefix frontend run build
+uv run ruff check backend\routes\a_share_routes.py tests\test_a_share_routes_helpers.py --select F401,F841
+```
+
+Result:
+
+- Focused reset-range route characterization test passed against the original inline
+  implementation before extraction: 1 test.
+- `py_compile` passed.
+- Focused reset-range route/helper tests passed after extraction: 2 tests.
+- A-share route helper tests passed: 34 tests.
+- Related A-share route/service/storage tests passed: 77 tests.
+- Full backend unittest discovery passed: 922 tests, 15 skipped.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Frontend build passed, including Next.js lint/type checks.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because
+  `ruff` is not available.
+
 ## Stop Conditions
 
 Pause before editing if:
