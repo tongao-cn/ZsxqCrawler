@@ -635,6 +635,18 @@ def batch_download_skipped_message() -> str:
     return "   ⚠️ 文件已跳过，继续下一个"
 
 
+def batch_download_fetch_failed_message() -> str:
+    return "❌ 获取文件列表失败"
+
+
+def batch_download_empty_page_message() -> str:
+    return "📭 没有更多文件"
+
+
+def batch_download_page_files_message(file_count: int) -> str:
+    return f"📋 当前批次: {file_count} 个文件"
+
+
 def batch_download_next_page_plan(
     next_index: Any,
     downloaded_in_batch: int,

@@ -27,8 +27,11 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     api_failure_detail,
     add_import_stats,
     batch_download_completion_messages,
+    batch_download_empty_page_message,
+    batch_download_fetch_failed_message,
     batch_download_item_message,
     batch_download_next_page_plan,
+    batch_download_page_files_message,
     batch_download_skipped_message,
     batch_download_start_messages,
     classify_api_failure,
@@ -1052,17 +1055,17 @@ class ZSXQFileDownloader:
             # 获取文件列表
             data = self.fetch_file_list(count=20, index=current_index)
             if not data:
-                self.log("❌ 获取文件列表失败")
+                self.log(batch_download_fetch_failed_message())
                 break
 
             files = data.get('resp_data', {}).get('files', [])
             next_index = data.get('resp_data', {}).get('index')
 
             if not files:
-                self.log("📭 没有更多文件")
+                self.log(batch_download_empty_page_message())
                 break
 
-            self.log(f"📋 当前批次: {len(files)} 个文件")
+            self.log(batch_download_page_files_message(len(files)))
             
             for i, file_info in enumerate(files):
                 # 检查是否需要停止

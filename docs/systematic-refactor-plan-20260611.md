@@ -12267,6 +12267,42 @@ Result:
 - PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-13 - P9 file downloader batch page log helpers
+
+Changed:
+
+- Added `batch_download_fetch_failed_message()`, `batch_download_empty_page_message()`, and
+  `batch_download_page_files_message()` in `backend/crawlers/zsxq_file_downloader_helpers.py`.
+- Reused the helpers in `ZSXQFileDownloader.download_files_batch()` for page fetch failure,
+  empty-page, and current-batch count logs.
+- Added direct helper coverage for failure, empty, zero-count, and nonzero-count page messages.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Fetch failure branching, empty-page branching, files extraction, current batch file count,
+  per-file download payloads, returned stats payload, task/public APIs, storage schema, and config
+  semantics are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py backend\crawlers\zsxq_file_downloader_helpers.py tests\test_zsxq_file_downloader_helpers.py
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderBatchDownloadTests.test_batch_download_page_messages_preserve_failure_empty_and_count_logs tests.test_zsxq_file_downloader_helpers.FileDownloaderBatchDownloadTests.test_download_files_batch_preserves_result_stats_payloads_and_delays -v
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers -v
+uv run python -m unittest discover -s tests
+uv run python scripts\scan_postgres_compat_debt.py
+npm --prefix frontend run build
+```
+
+Result:
+
+- Focused batch page helper and batch download integration tests passed.
+- Downloader helper tests passed: 122 tests.
+- Full backend unittest discovery passed: 832 tests, 15 skipped.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:

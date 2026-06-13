@@ -20,8 +20,11 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     add_import_stats,
     api_failure_detail,
     batch_download_completion_messages,
+    batch_download_empty_page_message,
+    batch_download_fetch_failed_message,
     batch_download_item_message,
     batch_download_next_page_plan,
+    batch_download_page_files_message,
     batch_download_skipped_message,
     batch_download_start_messages,
     classify_api_failure,
@@ -410,6 +413,12 @@ class FileDownloaderBatchDownloadTests(unittest.TestCase):
                 {"total_files": 3, "downloaded": 1, "skipped": 1, "failed": 1}
             ),
         )
+
+    def test_batch_download_page_messages_preserve_failure_empty_and_count_logs(self):
+        self.assertEqual("❌ 获取文件列表失败", batch_download_fetch_failed_message())
+        self.assertEqual("📭 没有更多文件", batch_download_empty_page_message())
+        self.assertEqual("📋 当前批次: 0 个文件", batch_download_page_files_message(0))
+        self.assertEqual("📋 当前批次: 3 个文件", batch_download_page_files_message(3))
 
     def test_batch_download_item_messages_preserve_numbering_and_skip_log(self):
         self.assertEqual(
