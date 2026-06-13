@@ -425,6 +425,58 @@ class AShareRoutesHelperTests(unittest.TestCase):
         )
 
     @unittest.skipUnless(HAS_A_SHARE_ROUTE_DEPS, "a-share route dependencies are not installed")
+    def test_get_a_share_analysis_chart_preserves_service_arguments(self):
+        import asyncio
+
+        from backend.routes import a_share_routes
+
+        payload = {"chart": "payload"}
+        with patch.object(a_share_routes, "build_chart_payload", return_value=payload) as build_chart_payload:
+            result = asyncio.run(
+                a_share_routes.get_a_share_analysis_chart(
+                    group_id=" 51111112855254 ",
+                    start_date="2026-05-01",
+                    end_date="2026-05-07",
+                    top_n=101,
+                )
+            )
+
+        self.assertEqual(payload, result)
+        build_chart_payload.assert_called_once_with(
+            start_date="2026-05-01",
+            end_date="2026-05-07",
+            top_n=100,
+            ranking_windows=a_share_routes.A_SHARE_DEFAULT_RANKING_WINDOWS,
+            group_id="51111112855254",
+        )
+
+    @unittest.skipUnless(HAS_A_SHARE_ROUTE_DEPS, "a-share route dependencies are not installed")
+    def test_a_share_chart_payload_preserves_service_arguments(self):
+        import asyncio
+
+        from backend.routes import a_share_routes
+
+        payload = {"chart": "payload"}
+        with patch.object(a_share_routes, "build_chart_payload", return_value=payload) as build_chart_payload:
+            result = asyncio.run(
+                a_share_routes._a_share_chart_payload(
+                    "51111112855254",
+                    "2026-05-01",
+                    "2026-05-07",
+                    0,
+                )
+            )
+
+        self.assertEqual(payload, result)
+        build_chart_payload.assert_called_once_with(
+            start_date="2026-05-01",
+            end_date="2026-05-07",
+            top_n=1,
+            ranking_windows=a_share_routes.A_SHARE_DEFAULT_RANKING_WINDOWS,
+            group_id="51111112855254",
+        )
+
+    @unittest.skipUnless(HAS_A_SHARE_ROUTE_DEPS, "a-share route dependencies are not installed")
     def test_fail_a_share_analysis_task_preserves_failure_status_and_log(self):
         from backend.routes.a_share_routes import _fail_a_share_analysis_task
 

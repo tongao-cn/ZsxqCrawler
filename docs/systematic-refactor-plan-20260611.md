@@ -14140,6 +14140,58 @@ Result:
 - Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because
   `ruff` is not available.
 
+### 2026-06-14 - P5 A-share chart payload helper
+
+Changed:
+
+- Added route-level characterization coverage for `get_a_share_analysis_chart()` preserving
+  `build_chart_payload()` arguments.
+- Locked group id normalization, `top_n` clamping, ranking window forwarding, date forwarding,
+  and chart payload passthrough.
+- Extracted `_a_share_chart_payload()` in `backend.routes.a_share_routes`.
+- Reused the helper from the chart route so request normalization, service argument assembly,
+  and HTTP error mapping are easier to read.
+- Added helper coverage for lower-bound `top_n` clamping and service argument forwarding.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- The chart route still normalizes `group_id` before building the chart payload.
+- `top_n` is still clamped through `_bounded_chart_top_n()` before calling
+  `build_chart_payload()`.
+- `A_SHARE_DEFAULT_RANKING_WINDOWS`, start/end dates, and group scope are still passed through
+  unchanged.
+- ValueError-to-400 handling, generic 500 handling, public API shape, storage schema, config
+  semantics, side effects, and fallback/legacy behavior are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_a_share_routes_helpers.AShareRoutesHelperTests.test_get_a_share_analysis_chart_preserves_service_arguments -v
+uv run python -m py_compile backend\routes\a_share_routes.py tests\test_a_share_routes_helpers.py
+uv run python -m unittest tests.test_a_share_routes_helpers.AShareRoutesHelperTests.test_get_a_share_analysis_chart_preserves_service_arguments tests.test_a_share_routes_helpers.AShareRoutesHelperTests.test_a_share_chart_payload_preserves_service_arguments -v
+uv run python -m unittest tests.test_a_share_routes_helpers -v
+uv run python -m unittest tests.test_a_share_routes_helpers tests.test_a_share_analysis_service_helpers tests.test_a_share_analysis_db_storage_helpers -v
+uv run python -m unittest discover -s tests
+uv run python scripts\scan_postgres_compat_debt.py
+npm --prefix frontend run build
+uv run ruff check backend\routes\a_share_routes.py tests\test_a_share_routes_helpers.py --select F401,F841
+```
+
+Result:
+
+- Focused chart route characterization test passed against the original inline implementation
+  before extraction: 1 test.
+- `py_compile` passed.
+- Focused chart route/helper tests passed after extraction: 2 tests.
+- A-share route helper tests passed: 32 tests.
+- Related A-share route/service/storage tests passed: 75 tests.
+- Full backend unittest discovery passed: 920 tests, 15 skipped.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Frontend build passed, including Next.js lint/type checks.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because
+  `ruff` is not available.
+
 ## Stop Conditions
 
 Pause before editing if:

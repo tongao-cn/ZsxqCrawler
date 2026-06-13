@@ -267,6 +267,22 @@ def _a_share_status_payload(
     }
 
 
+async def _a_share_chart_payload(
+    normalized_group_id: Optional[str],
+    start_date: Optional[str],
+    end_date: Optional[str],
+    top_n: int,
+) -> dict:
+    return await asyncio.to_thread(
+        build_chart_payload,
+        start_date=start_date,
+        end_date=end_date,
+        top_n=_bounded_chart_top_n(top_n),
+        ranking_windows=A_SHARE_DEFAULT_RANKING_WINDOWS,
+        group_id=normalized_group_id,
+    )
+
+
 def run_a_share_analysis_task(task_id: str, request: AShareAnalysisRunRequest):
     """后台执行A股公司提及分析任务"""
     try:
@@ -317,15 +333,7 @@ async def get_a_share_analysis_chart(
     """获取A股分析图表和榜单数据"""
     try:
         normalized_group_id = normalize_group_id(group_id)
-        payload = await asyncio.to_thread(
-            build_chart_payload,
-            start_date=start_date,
-            end_date=end_date,
-            top_n=_bounded_chart_top_n(top_n),
-            ranking_windows=A_SHARE_DEFAULT_RANKING_WINDOWS,
-            group_id=normalized_group_id,
-        )
-        return payload
+        return await _a_share_chart_payload(normalized_group_id, start_date, end_date, top_n)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
