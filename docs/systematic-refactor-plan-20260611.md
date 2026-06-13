@@ -11452,6 +11452,41 @@ Result:
 - PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-13 - P9 file downloader query group id helper
+
+Changed:
+
+- Added `download_query_group_id()` in `backend/crawlers/zsxq_file_downloader_helpers.py`.
+- Kept module-private `_query_group_id()` in `backend/crawlers/zsxq_file_downloader.py` as a
+  compatibility wrapper around the new helper.
+- Added direct helper coverage for numeric casts, whitespace trimming, non-numeric IDs, and the
+  existing `None` to empty-string behavior.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- SQL parameter normalization for downloader database queries and stats queries is preserved.
+- The existing private `_query_group_id()` entrypoint remains callable for local code/tests.
+- No public API, route behavior, task behavior, crawler request order, download retry behavior,
+  storage schema, fallback path, legacy path, or config semantics changed.
+
+Verification:
+
+```powershell
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py backend\crawlers\zsxq_file_downloader_helpers.py
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers -v
+uv run python -m unittest discover -s tests
+uv run python scripts\scan_postgres_compat_debt.py
+npm --prefix frontend run build
+```
+
+Result:
+
+- Downloader helper tests passed: 99 tests.
+- Full backend unittest discovery passed: 809 tests, 15 skipped.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:

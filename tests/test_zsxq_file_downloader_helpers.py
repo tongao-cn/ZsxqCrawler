@@ -30,6 +30,7 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     download_url_failure_detail,
     download_file_data,
     download_interval_plan,
+    download_query_group_id,
     download_result_stats,
     download_target_path,
     empty_import_stats,
@@ -662,6 +663,12 @@ class FileDownloaderFileDataHelperTests(unittest.TestCase):
         self.assertEqual("👥", database_stats_table_emoji("users"))
         self.assertEqual("🔗", database_stats_table_emoji("file_topic_relations"))
         self.assertEqual("📊", database_stats_table_emoji("unknown_table"))
+
+    def test_download_query_group_id_preserves_cast_and_blank_semantics(self):
+        self.assertEqual(123, download_query_group_id("123"))
+        self.assertEqual(123, download_query_group_id(" 123 "))
+        self.assertEqual("abc", download_query_group_id("abc"))
+        self.assertEqual("", download_query_group_id(None))
 
     def test_safe_download_filename_keeps_supported_characters(self):
         self.assertEqual("memo（）[v1].pdf", safe_download_filename("memo（）[v1].pdf", 101))

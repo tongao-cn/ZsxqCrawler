@@ -398,6 +398,11 @@ def database_stats_table_emoji(table_name: str) -> str:
     return DATABASE_STATS_TABLE_EMOJI.get(table_name, "📊")
 
 
+def download_query_group_id(group_id: Any) -> Any:
+    value = str(group_id or "").strip()
+    return int(value) if value.isdigit() else value
+
+
 def existing_file_matches(file_path: str, expected_size: int) -> tuple[bool, bool, int]:
     if not os.path.exists(file_path):
         return False, False, 0

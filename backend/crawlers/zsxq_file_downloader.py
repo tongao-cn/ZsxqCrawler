@@ -36,6 +36,7 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     download_http_failure_detail,
     download_interval_plan,
     download_progress_message,
+    download_query_group_id,
     download_result_stats,
     download_retry_wait,
     download_size_mismatch_detail,
@@ -65,8 +66,7 @@ from backend.storage.zsxq_file_database import ZSXQFileDatabase
 
 
 def _query_group_id(group_id: str) -> Any:
-    value = str(group_id or "").strip()
-    return int(value) if value.isdigit() else value
+    return download_query_group_id(group_id)
 
 
 class ZSXQFileDownloader:
