@@ -12048,6 +12048,41 @@ Result:
 - PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-13 - P9 file downloader time dedupe page messages helper
+
+Changed:
+
+- Added `time_dedupe_page_messages()` in `backend/crawlers/zsxq_file_downloader_helpers.py`.
+- Reused the helper in `ZSXQFileDownloader.collect_files_by_time()` for existing time-dedupe log
+  planning.
+- Added direct helper coverage for all-new, all-old, and mixed-page dedupe log sequences.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Time-dedupe counts, all-old stop behavior, mixed-page filtering, post-insert stop behavior, log
+  text/order, pagination, import side effects, fallback behavior, task/public APIs, storage schema,
+  and config semantics are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py backend\crawlers\zsxq_file_downloader_helpers.py tests\test_zsxq_file_downloader_helpers.py
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderTimeHelperTests.test_time_dedupe_page_messages_preserve_analysis_stop_and_filter_logs tests.test_zsxq_file_downloader_helpers.FileDownloaderTimeHelperTests.test_time_dedupe_page_plan_flags_mixed_and_all_old_pages tests.test_zsxq_file_downloader_helpers.FileDownloaderPaginationTests.test_collect_files_by_time_filters_old_files_and_stops_after_mixed_page -v
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers -v
+uv run python -m unittest discover -s tests
+uv run python scripts\scan_postgres_compat_debt.py
+npm --prefix frontend run build
+```
+
+Result:
+
+- Focused time-dedupe helper and collect-by-time behavior tests passed.
+- Downloader helper tests passed: 115 tests.
+- Full backend unittest discovery passed: 825 tests, 15 skipped.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:

@@ -70,6 +70,7 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     risk_event_user_agent_label,
     should_log_full_response,
     summarize_page_time_range,
+    time_dedupe_page_messages,
     time_collection_final_summary,
     time_collection_mode,
     time_collection_next_page_plan,
@@ -1318,18 +1319,13 @@ class ZSXQFileDownloader:
                 should_stop_after_insert = False
                 if enable_time_dedupe and db_latest_time:
                     dedupe_plan = time_dedupe_page_plan(files, db_latest_time)
-                    newer_count = dedupe_plan["newer_count"]
-                    older_count = dedupe_plan["older_count"]
-                    
-                    self.log(f"   📊 时间分析: 新于数据库{newer_count}个, 旧于或等于数据库{older_count}个")
+                    for message in time_dedupe_page_messages(dedupe_plan):
+                        self.log(message)
                     
                     if dedupe_plan["should_stop_before_insert"]:
-                        self.log(f"   ✅ 本页全部文件均已存在于数据库（时间不晚于数据库最新），停止收集")
-                        self.log(f"   💡 提示: 如需强制重新收集，请传入 force_refresh=True 参数")
                         break
                     
                     if dedupe_plan["should_filter_before_insert"]:
-                        self.log(f"   🔄 过滤掉{older_count}个旧数据，只插入{newer_count}个新数据")
                         data['resp_data']['files'] = dedupe_plan["newer_files"]
                         should_stop_after_insert = dedupe_plan["should_stop_after_insert"]
 

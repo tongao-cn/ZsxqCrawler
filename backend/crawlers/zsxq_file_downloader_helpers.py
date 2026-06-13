@@ -496,6 +496,23 @@ def time_dedupe_page_plan(files: list[Dict[str, Any]], latest_time: str) -> Dict
     }
 
 
+def time_dedupe_page_messages(dedupe_plan: Dict[str, Any]) -> tuple[str, ...]:
+    newer_count = dedupe_plan["newer_count"]
+    older_count = dedupe_plan["older_count"]
+    messages = [
+        f"   📊 时间分析: 新于数据库{newer_count}个, 旧于或等于数据库{older_count}个",
+    ]
+
+    if dedupe_plan["should_stop_before_insert"]:
+        messages.append("   ✅ 本页全部文件均已存在于数据库（时间不晚于数据库最新），停止收集")
+        messages.append("   💡 提示: 如需强制重新收集，请传入 force_refresh=True 参数")
+
+    if dedupe_plan["should_filter_before_insert"]:
+        messages.append(f"   🔄 过滤掉{older_count}个旧数据，只插入{newer_count}个新数据")
+
+    return tuple(messages)
+
+
 def time_collection_final_summary(
     final_stats: Dict[str, int],
     initial_files: int,

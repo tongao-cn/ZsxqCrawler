@@ -71,6 +71,7 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     should_retry_http_status,
     should_log_full_response,
     summarize_page_time_range,
+    time_dedupe_page_messages,
     time_collection_final_summary,
     time_collection_mode,
     time_collection_next_page_plan,
@@ -682,6 +683,47 @@ class FileDownloaderTimeHelperTests(unittest.TestCase):
         self.assertTrue(old_plan["should_stop_before_insert"])
         self.assertFalse(old_plan["should_filter_before_insert"])
         self.assertFalse(old_plan["should_stop_after_insert"])
+
+    def test_time_dedupe_page_messages_preserve_analysis_stop_and_filter_logs(self):
+        all_new_plan = {
+            "newer_count": 2,
+            "older_count": 0,
+            "should_stop_before_insert": False,
+            "should_filter_before_insert": False,
+        }
+        self.assertEqual(
+            ("   📊 时间分析: 新于数据库2个, 旧于或等于数据库0个",),
+            time_dedupe_page_messages(all_new_plan),
+        )
+
+        all_old_plan = {
+            "newer_count": 0,
+            "older_count": 2,
+            "should_stop_before_insert": True,
+            "should_filter_before_insert": False,
+        }
+        self.assertEqual(
+            (
+                "   📊 时间分析: 新于数据库0个, 旧于或等于数据库2个",
+                "   ✅ 本页全部文件均已存在于数据库（时间不晚于数据库最新），停止收集",
+                "   💡 提示: 如需强制重新收集，请传入 force_refresh=True 参数",
+            ),
+            time_dedupe_page_messages(all_old_plan),
+        )
+
+        mixed_plan = {
+            "newer_count": 1,
+            "older_count": 2,
+            "should_stop_before_insert": False,
+            "should_filter_before_insert": True,
+        }
+        self.assertEqual(
+            (
+                "   📊 时间分析: 新于数据库1个, 旧于或等于数据库2个",
+                "   🔄 过滤掉2个旧数据，只插入1个新数据",
+            ),
+            time_dedupe_page_messages(mixed_plan),
+        )
 
     def test_time_collection_final_summary_preserves_result_and_positive_log_items(self):
         total_imported_stats = empty_import_stats()
