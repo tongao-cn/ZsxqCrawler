@@ -18,14 +18,20 @@ def clear_account_detect_cache() -> None:
     _account_detect_cache = None
 
 
+def _account_cookie_value(account: Optional[Dict[str, Any]]) -> Optional[str]:
+    if not account:
+        return None
+    cookie = (account.get("cookie") or "").strip()
+    return cookie or None
+
+
 def get_primary_cookie() -> Optional[str]:
     try:
         sql_mgr = get_accounts_sql_manager()
         first_acc = sql_mgr.get_first_account(mask_cookie=False)
-        if first_acc:
-            cookie = (first_acc.get("cookie") or "").strip()
-            if cookie:
-                return cookie
+        cookie = _account_cookie_value(first_acc)
+        if cookie:
+            return cookie
     except Exception:
         pass
 
@@ -67,10 +73,9 @@ def get_cookie_for_group(group_id: str) -> Optional[str]:
     try:
         sql_mgr = get_accounts_sql_manager()
         acc = sql_mgr.get_account_for_group(group_id, mask_cookie=False)
-        if acc:
-            cookie = (acc.get("cookie") or "").strip()
-            if cookie:
-                return cookie
+        cookie = _account_cookie_value(acc)
+        if cookie:
+            return cookie
     except Exception:
         pass
     return get_primary_cookie()

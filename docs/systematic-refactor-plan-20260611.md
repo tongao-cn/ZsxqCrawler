@@ -9710,6 +9710,49 @@ Result:
 - Frontend build passed, including Next.js lint/type checks.
 - `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
 
+### 2026-06-13 - P2 account cookie value helper
+
+Changed:
+
+- Added characterization coverage for account cookie resolution in `tests/test_account_context.py`.
+- Covered database account cookie precedence, whitespace trimming, config fallback, placeholder config
+  rejection, group cookie precedence, and group-to-primary fallback.
+- Added `backend.core.account_context._account_cookie_value`.
+- Replaced duplicated account-cookie extraction in `get_primary_cookie` and `get_cookie_for_group`.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Public API behavior is unchanged: both functions still return stripped non-empty cookies or `None`.
+- Fallback order is unchanged: primary cookie prefers the first SQL account before config; group cookie
+  prefers the group SQL account before primary cookie fallback.
+- Error semantics are unchanged: SQL/config lookup failures are still swallowed exactly at the existing
+  try/except boundaries.
+- Existing config placeholder handling remains unchanged: `your_cookie_here` is ignored.
+- No schema, task, route, crawler, legacy, or fallback-removal behavior changed.
+- Existing dirty downloader risk-log files and scripts remain outside this P2 slice.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_account_context -v
+uv run python -m py_compile backend\core\account_context.py tests\test_account_context.py
+uv run python scripts\scan_postgres_compat_debt.py
+uv run python -m unittest discover -s tests
+cmd.exe /d /c npm --prefix frontend run build
+git diff --check
+```
+
+Result:
+
+- Characterization tests passed before production code changes.
+- Focused account context tests passed after helper extraction.
+- `py_compile` passed.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Full backend unittest discovery: 779 tests passed, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+- `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
+
 ## Stop Conditions
 
 Pause before editing if:
