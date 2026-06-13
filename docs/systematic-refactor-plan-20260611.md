@@ -10824,6 +10824,49 @@ Result:
 - Full backend unittest discovery passed: 804 tests passed, 15 skipped.
 - `git diff --check` passed.
 
+### 2026-06-13 - P7 redundant direct date-fns dependency removal
+
+Changed:
+
+- Removed the direct `date-fns` frontend dependency from `frontend/package.json`.
+- Updated `frontend/package-lock.json` so the root project no longer declares `date-fns` as a
+  direct dependency.
+- Kept `react-day-picker` unchanged; it still brings in `date-fns@4.1.0` as a transitive
+  dependency for the calendar component.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- `rg` found no direct source or config references to `date-fns` outside package manifests.
+- `npm --prefix frontend ls date-fns react-day-picker --depth=2` shows `react-day-picker@10.0.1`
+  still resolves `date-fns@4.1.0`.
+- No frontend route, calendar behavior, rendering behavior, backend path, schema, crawler,
+  fallback, legacy, or public API behavior changed.
+
+Verification:
+
+```powershell
+rg -n "date-fns" frontend --glob "!node_modules/**" --glob "!package-lock.json"
+node -e "const p=require('./frontend/node_modules/react-day-picker/package.json'); console.log(JSON.stringify({name:p.name,version:p.version,dependencies:p.dependencies,peerDependencies:p.peerDependencies,optionalDependencies:p.optionalDependencies}, null, 2))"
+npm --prefix frontend uninstall date-fns
+npm --prefix frontend ls date-fns react-day-picker --depth=2
+npm --prefix frontend run build
+uv run python scripts\scan_postgres_compat_debt.py
+uv run python -m unittest discover -s tests
+git diff --check
+```
+
+Result:
+
+- Source/config reference search showed no direct `date-fns` usage outside package manifests.
+- Local `react-day-picker@10.0.1` metadata declares `date-fns` as its own dependency.
+- Post-change dependency tree still resolves `react-day-picker@10.0.1 -> date-fns@4.1.0`.
+- Frontend build passed, including Next.js lint/type checks. Next emitted its existing SWC
+  lockfile self-check warning, but the reviewed lockfile diff contains no SWC dependency changes.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Full backend unittest discovery passed: 804 tests passed, 15 skipped.
+- `git diff --check` passed.
+
 ## Stop Conditions
 
 Pause before editing if:
