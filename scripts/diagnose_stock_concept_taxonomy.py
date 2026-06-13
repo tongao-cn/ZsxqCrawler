@@ -1,10 +1,8 @@
 from __future__ import annotations
 
 import argparse
-import ast
 import csv
 import json
-import re
 import sys
 from collections import Counter, defaultdict
 from pathlib import Path
@@ -15,9 +13,9 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from backend.storage.db_compat import connect  # noqa: E402
+from backend.services.stock_concept_taxonomy import get_taxonomy_maps, normalize_stock_concept_term  # noqa: E402
 
 
-TAXONOMY_PATH = PROJECT_ROOT / "frontend" / "src" / "components" / "DailyTopicAnalysisPanelUtils.ts"
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
 if hasattr(sys.stderr, "reconfigure"):
@@ -34,31 +32,6 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def _literal_list(source: str) -> list[str]:
-    value = ast.literal_eval(source)
-    return [str(item) for item in value if str(item).strip()]
-
-
-def load_taxonomy() -> tuple[dict[str, str], dict[str, str]]:
-    content = TAXONOMY_PATH.read_text(encoding="utf-8")
-    concept_block = content.split("const CONCEPT_ALIAS_GROUPS", 1)[1].split("const CONCEPT_ALIAS_MAP", 1)[0]
-    signal_block = content.split("const SIGNAL_TAG_ALIAS_GROUPS", 1)[1].split("const SIGNAL_TAG_ALIAS_MAP", 1)[0]
-
-    concept_map: dict[str, str] = {}
-    for concept, aliases_source in re.findall(r"concept: '([^']+)',\s*aliases: (\[[^\]]*\])", concept_block, re.S):
-        concept_map[concept.lower()] = concept
-        for alias in _literal_list(aliases_source):
-            concept_map[alias.lower()] = concept
-
-    signal_map: dict[str, str] = {}
-    for tag, aliases_source in re.findall(r"tag: '([^']+)',\s*aliases: (\[[^\]]*\])", signal_block, re.S):
-        signal_map[tag.lower()] = tag
-        for alias in _literal_list(aliases_source):
-            signal_map[alias.lower()] = tag
-
-    return concept_map, signal_map
-
-
 def parse_json_list(value: Any) -> list[str]:
     try:
         parsed = json.loads(value or "[]")
@@ -70,12 +43,7 @@ def parse_json_list(value: Any) -> list[str]:
 
 
 def classify_term(term: str, concept_map: dict[str, str], signal_map: dict[str, str]) -> tuple[str, str]:
-    key = term.lower()
-    if key in signal_map:
-        return "signal", signal_map[key]
-    if key in concept_map:
-        return "concept", concept_map[key]
-    return "unmapped", term
+    return normalize_stock_concept_term(term)
 
 
 def latest_completed_group_date(group_id: str, as_of: str) -> tuple[str, str]:
@@ -253,7 +221,7 @@ def write_unmapped_csv(path: Path, rows: list[dict[str, Any]]) -> None:
 
 def main() -> int:
     args = parse_args()
-    concept_map, signal_map = load_taxonomy()
+    concept_map, signal_map = get_taxonomy_maps()
     group_id, as_of = latest_completed_group_date(args.group_id.strip(), args.as_of.strip())
     print(
         f"taxonomy\tconcept_aliases={len(concept_map)}\tsignal_aliases={len(signal_map)}\tgroup_id={group_id}\tas_of={as_of}"

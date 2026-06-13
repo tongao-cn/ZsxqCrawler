@@ -197,7 +197,7 @@ Verification:
 ### 2026-06-13 - Phase 2 Taxonomy Diagnostics Script
 
 - Added `scripts/diagnose_stock_concept_taxonomy.py`.
-- The script parses the current frontend taxonomy, reads `daily_stock_concepts`, and reports:
+- The script reads the shared taxonomy, reads `daily_stock_concepts`, and reports:
   - raw concept hits.
   - raw unique terms.
   - normalized unique terms.
@@ -206,6 +206,21 @@ Verification:
   - top normalized concepts/signals.
 - Added optional CSV export for the recent-window unmapped term table.
 - Verified against group `51111112855254` as of latest completed date `2026-06-12`.
+
+### 2026-06-13 - Phase 3 Shared Taxonomy Foundation
+
+- Moved frontend taxonomy data into `frontend/src/components/stockConceptTaxonomy.json`.
+- Updated the frontend utility module to read concept and signal aliases from the JSON taxonomy.
+- Added `backend/services/stock_concept_taxonomy.py` with shared normalization helpers:
+  - `normalize_stock_concept_term`
+  - `normalize_stock_concept_terms`
+  - `normalize_concept_name`
+  - `normalize_signal_tag_name`
+- Updated the diagnostics script to use the backend normalization module instead of parsing TS.
+- Added focused unit tests in `tests/test_stock_concept_taxonomy_helpers.py`.
+- Remaining Phase 3 work:
+  - decide whether the JSON should stay under frontend or move to a top-level shared package.
+  - wire backend daily aggregation to the shared normalization helpers.
 
 ### 2026-06-13 - Initial Plan
 
