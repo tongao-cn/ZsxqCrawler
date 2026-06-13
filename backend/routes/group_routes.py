@@ -200,6 +200,13 @@ def _build_local_group_entry(group_id: int, fields: Dict[str, Any]) -> Dict[str,
     }
 
 
+def _build_local_group_entry_from_sources(group_id: int) -> Dict[str, Any]:
+    fields = _default_local_group_fields(group_id)
+    fields = _apply_local_group_meta(fields, _read_local_group_meta(group_id))
+    fields = _load_local_group_db_fields(group_id, fields)
+    return _build_local_group_entry(group_id, fields)
+
+
 def _coerce_group_id(group_id: str) -> int | str:
     try:
         return int(group_id)
@@ -308,10 +315,7 @@ def _get_groups_response() -> Dict[str, Any]:
                 by_id[gid_int]["source"] = f"{src}|local"
             _persist_group_meta_local(gid_int, by_id[gid_int])
         else:
-            fields = _default_local_group_fields(gid_int)
-            fields = _apply_local_group_meta(fields, _read_local_group_meta(gid_int))
-            fields = _load_local_group_db_fields(gid_int, fields)
-            by_id[gid_int] = _build_local_group_entry(gid_int, fields)
+            by_id[gid_int] = _build_local_group_entry_from_sources(gid_int)
 
     merged = [by_id[k] for k in sorted(by_id.keys())]
 

@@ -9965,6 +9965,47 @@ Result:
 - Frontend build passed, including Next.js lint/type checks.
 - `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
 
+### 2026-06-13 - P2 local group fallback entry helper
+
+Changed:
+
+- Added `backend.routes.group_routes._build_local_group_entry_from_sources`.
+- Moved the local-only group entry composition path into the helper: default fields, local
+  `group_meta.json`, local database enrichment, and final entry construction.
+- Added helper coverage in `tests/test_group_routes_helpers.py` to lock the meta-before-database
+  fallback ordering.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Official groups are still merged first, and groups present in both official and local sources
+  still get the existing `source|local` marker and persisted local metadata.
+- Local-only groups still use the same default fields, `group_meta.json` fields, SQLite-compatible
+  local metadata reads, statistics fallback, sorted response order, and final response shape.
+- No fallback, legacy, schema, crawler, storage, route, or public response behavior was removed.
+- Existing dirty downloader risk-log files and scripts remain outside this P2 slice.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_group_routes_helpers -v
+uv run python -m py_compile backend\routes\group_routes.py tests\test_group_routes_helpers.py
+uv run python scripts\scan_postgres_compat_debt.py
+uv run python -m unittest discover -s tests
+cmd.exe /d /c npm --prefix frontend run build
+git diff --check
+```
+
+Result:
+
+- Existing group route helper tests passed before production code changes.
+- Focused group route helper tests passed after extracting the local fallback entry helper.
+- `py_compile` passed.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Full backend unittest discovery: 790 tests passed, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+- `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
+
 ## Stop Conditions
 
 Pause before editing if:

@@ -97,6 +97,48 @@ class GroupRoutesHelperTests(unittest.TestCase):
         self.assertEqual(entry["source"], "local")
         self.assertIsNone(entry["account"])
 
+    def test_build_local_group_entry_from_sources_applies_meta_then_db_fields(self):
+        seen_fields = []
+
+        def fake_load_local_group_db_fields(group_id, fields):
+            seen_fields.append((group_id, dict(fields)))
+            result = dict(fields)
+            result["local_name"] = "数据库群"
+            result["statistics"] = {"topics": {"topics_count": 3}}
+            return result
+
+        with (
+            patch.object(
+                group_routes,
+                "_read_local_group_meta",
+                return_value={
+                    "name": "Meta 群",
+                    "background_url": "https://example.com/meta.png",
+                    "join_time": "2024-01-01",
+                },
+            ),
+            patch.object(group_routes, "_load_local_group_db_fields", side_effect=fake_load_local_group_db_fields),
+        ):
+            entry = group_routes._build_local_group_entry_from_sources(123)
+
+        expected_fields_before_db_load = {
+            "local_name": "Meta 群",
+            "local_type": "local",
+            "local_bg": "https://example.com/meta.png",
+            "owner": {},
+            "join_time": "2024-01-01",
+            "expiry_time": None,
+            "last_active_time": None,
+            "description": "",
+            "statistics": {},
+        }
+
+        self.assertEqual([(123, expected_fields_before_db_load)], seen_fields)
+        self.assertEqual(123, entry["group_id"])
+        self.assertEqual("数据库群", entry["name"])
+        self.assertEqual({"topics": {"topics_count": 3}}, entry["statistics"])
+        self.assertEqual("local", entry["source"])
+
     def test_apply_local_group_meta_preserves_defaults_for_empty_values(self):
         fields = group_routes._default_local_group_fields(123)
         updated = group_routes._apply_local_group_meta(
