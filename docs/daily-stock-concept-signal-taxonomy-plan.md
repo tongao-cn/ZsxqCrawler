@@ -194,6 +194,19 @@ Verification:
   - add compact unmapped raw term counts.
   - add a stronger manual browser smoke once Playwright browser binaries are available.
 
+### 2026-06-13 - Phase 2 Taxonomy Diagnostics Script
+
+- Added `scripts/diagnose_stock_concept_taxonomy.py`.
+- The script parses the current frontend taxonomy, reads `daily_stock_concepts`, and reports:
+  - raw concept hits.
+  - raw unique terms.
+  - normalized unique terms.
+  - concept, signal, and unmapped hit counts.
+  - top unmapped raw terms by topic count, stock count, active dates, and hits.
+  - top normalized concepts/signals.
+- Added optional CSV export for the recent-window unmapped term table.
+- Verified against group `51111112855254` as of latest completed date `2026-06-12`.
+
 ### 2026-06-13 - Initial Plan
 
 - Created this plan after the display-layer concept/signal split landed.
