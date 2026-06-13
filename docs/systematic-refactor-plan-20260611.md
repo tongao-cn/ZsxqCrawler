@@ -11309,6 +11309,46 @@ Result:
 - Full backend unittest discovery passed: 804 tests passed, 15 skipped.
 - `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
 
+### 2026-06-13 - P6 unused legacy crawl and file panels cleanup
+
+Changed:
+
+- Deleted `frontend/src/components/CrawlPanel.tsx`.
+- Deleted `frontend/src/components/FilePanel.tsx`.
+- Deleted `frontend/src/components/CrawlLatestDialog.tsx`, which was only referenced by the
+  unused `CrawlPanel`.
+
+Behavior impact:
+
+- Intended behavior change: none for the current app routes.
+- Static reference search found no remaining `CrawlPanel`, `FilePanel`, or `CrawlLatestDialog`
+  imports or route references.
+- The active group workbench still uses `GroupContextActionPanel`, group-scoped crawl/download
+  action panels, and `TaskDock`.
+- No public API, route behavior, task runtime behavior, crawler behavior, file workflow behavior,
+  fallback polling, backend path, storage schema, fallback path, legacy path, or dependency
+  semantics changed.
+
+Verification:
+
+```powershell
+rg -n "CrawlPanel|FilePanel|CrawlLatestDialog" frontend\src --glob "*.ts" --glob "*.tsx" --glob "!node_modules/**"
+npm --prefix frontend run build
+npm exec -- tsc -p tsconfig.json --noEmit --noUnusedLocals --pretty false  # from frontend/
+uv run python scripts\scan_postgres_compat_debt.py
+uv run python -m unittest discover -s tests
+git diff --check
+```
+
+Result:
+
+- `rg` found no `CrawlPanel`, `FilePanel`, or `CrawlLatestDialog` references after deletion.
+- Frontend build passed, including Next.js lint/type checks.
+- Standalone TypeScript unused-local check passed.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Full backend unittest discovery passed: 804 tests passed, 15 skipped.
+- `git diff --check` passed with only Git's existing LF-to-CRLF working-copy warnings.
+
 ## Stop Conditions
 
 Pause before editing if:
