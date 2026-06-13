@@ -12192,6 +12192,42 @@ Result:
 - PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-13 - P9 file downloader batch item log helpers
+
+Changed:
+
+- Added `batch_download_item_message()` and `batch_download_skipped_message()` in
+  `backend/crawlers/zsxq_file_downloader_helpers.py`.
+- Reused the helpers in `ZSXQFileDownloader._download_batch_file_item()`.
+- Added direct helper coverage for infinite/limited numbering, `None` filename formatting, and the
+  skipped-file continuation log.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Per-file `download_file()` payloads, skipped/success/failed stats, downloaded-count based
+  numbering, delay side effects, `None` filename f-string behavior, returned stats payload,
+  task/public APIs, storage schema, and config semantics are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py backend\crawlers\zsxq_file_downloader_helpers.py tests\test_zsxq_file_downloader_helpers.py
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderBatchDownloadTests.test_batch_download_item_messages_preserve_numbering_and_skip_log tests.test_zsxq_file_downloader_helpers.FileDownloaderBatchDownloadTests.test_download_files_batch_preserves_result_stats_payloads_and_delays -v
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers -v
+uv run python -m unittest discover -s tests
+uv run python scripts\scan_postgres_compat_debt.py
+npm --prefix frontend run build
+```
+
+Result:
+
+- Focused batch item helper and batch download integration tests passed.
+- Downloader helper tests passed: 119 tests.
+- Full backend unittest discovery passed: 829 tests, 15 skipped.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:

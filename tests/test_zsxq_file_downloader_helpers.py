@@ -20,6 +20,8 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     add_import_stats,
     api_failure_detail,
     batch_download_completion_messages,
+    batch_download_item_message,
+    batch_download_skipped_message,
     batch_download_start_messages,
     classify_api_failure,
     classify_http_failure,
@@ -406,6 +408,24 @@ class FileDownloaderBatchDownloadTests(unittest.TestCase):
             batch_download_completion_messages(
                 {"total_files": 3, "downloaded": 1, "skipped": 1, "failed": 1}
             ),
+        )
+
+    def test_batch_download_item_messages_preserve_numbering_and_skip_log(self):
+        self.assertEqual(
+            "【第3个文件】memo.pdf",
+            batch_download_item_message(3, None, "memo.pdf"),
+        )
+        self.assertEqual(
+            "【1/2】skip.pdf",
+            batch_download_item_message(1, 2, "skip.pdf"),
+        )
+        self.assertEqual(
+            "【2/2】None",
+            batch_download_item_message(2, 2, None),
+        )
+        self.assertEqual(
+            "   ⚠️ 文件已跳过，继续下一个",
+            batch_download_skipped_message(),
         )
 
     def test_download_files_batch_preserves_result_stats_payloads_and_delays(self):

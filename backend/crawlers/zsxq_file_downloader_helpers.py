@@ -625,6 +625,16 @@ def batch_download_start_messages(max_files: Optional[int]) -> tuple[str, ...]:
     return (f"📥 开始批量下载文件 (最多{max_files}个)",)
 
 
+def batch_download_item_message(item_number: int, max_files: Optional[int], file_name: Any) -> str:
+    if max_files is None:
+        return f"【第{item_number}个文件】{file_name}"
+    return f"【{item_number}/{max_files}】{file_name}"
+
+
+def batch_download_skipped_message() -> str:
+    return "   ⚠️ 文件已跳过，继续下一个"
+
+
 def batch_download_completion_messages(stats: Dict[str, int]) -> tuple[str, ...]:
     return _download_completion_messages("🎉 批量下载完成:", stats)
 

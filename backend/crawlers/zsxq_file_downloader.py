@@ -27,6 +27,8 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     api_failure_detail,
     add_import_stats,
     batch_download_completion_messages,
+    batch_download_item_message,
+    batch_download_skipped_message,
     batch_download_start_messages,
     classify_api_failure,
     database_download_completion_messages,
@@ -1005,16 +1007,13 @@ class ZSXQFileDownloader:
         file_data = file_info.get('file', {})
         file_name = file_data.get('name', 'Unknown')
 
-        if max_files is None:
-            self.log(f"【第{item_number}个文件】{file_name}")
-        else:
-            self.log(f"【{item_number}/{max_files}】{file_name}")
+        self.log(batch_download_item_message(item_number, max_files, file_name))
 
         result = self.download_file(file_info)
 
         if result == "skipped":
             stats['skipped'] += 1
-            self.log(f"   ⚠️ 文件已跳过，继续下一个")
+            self.log(batch_download_skipped_message())
         elif result:
             stats['downloaded'] += 1
             downloaded_in_batch += 1
