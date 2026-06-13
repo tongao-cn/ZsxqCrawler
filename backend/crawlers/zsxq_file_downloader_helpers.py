@@ -189,6 +189,22 @@ def file_collection_stats() -> Dict[str, int]:
     return {"total_files": 0, "new_files": 0, "skipped_files": 0}
 
 
+def file_collection_next_page_plan(next_index: Any) -> Dict[str, Any]:
+    if next_index:
+        return {
+            "has_next": True,
+            "next_index": next_index,
+            "delay_min": 2,
+            "delay_max": 5,
+        }
+    return {
+        "has_next": False,
+        "next_index": None,
+        "delay_min": None,
+        "delay_max": None,
+    }
+
+
 def file_collection_start_message() -> str:
     return "\n📊 开始收集文件列表到数据库..."
 

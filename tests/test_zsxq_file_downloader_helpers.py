@@ -59,6 +59,7 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     file_collection_exception_message,
     file_collection_fetch_failed_messages,
     file_collection_interrupted_message,
+    file_collection_next_page_plan,
     file_collection_page_files_message,
     file_collection_page_import_messages,
     file_collection_page_message,
@@ -314,6 +315,14 @@ class FileDownloaderPaginationTests(unittest.TestCase):
             {"total_files": 0, "new_files": 0, "skipped_files": 0},
             file_collection_stats(),
         )
+        self.assertEqual(
+            {"has_next": True, "next_index": "next-index", "delay_min": 2, "delay_max": 5},
+            file_collection_next_page_plan("next-index"),
+        )
+        self.assertEqual(
+            {"has_next": False, "next_index": None, "delay_min": None, "delay_max": None},
+            file_collection_next_page_plan(""),
+        )
         self.assertEqual("\n📊 开始收集文件列表到数据库...", file_collection_start_message())
         self.assertEqual("\n📄 收集第2页文件列表...", file_collection_page_message(2))
         self.assertEqual(
@@ -407,6 +416,36 @@ class FileDownloaderPaginationTests(unittest.TestCase):
         self.assertIn("      📊 其他数据: 话题+3, 用户+4", printed)
         self.assertIn("   ✅ 第1页存储完成", printed)
         self.assertIn("🎉 文件列表收集完成", printed)
+
+    def test_collect_all_files_preserves_next_page_sleep_and_fetch_index(self):
+        pages = [
+            {"resp_data": {"index": "next-page", "files": [{"file": {"file_id": 101}}]}},
+            {"resp_data": {"index": None, "files": [{"file": {"file_id": 102}}]}},
+        ]
+        downloader = object.__new__(ZSXQFileDownloader)
+        downloader.file_db = CollectAllFileDb()
+        downloader.fetch_calls = []
+
+        def fetch_file_list(**kwargs):
+            downloader.fetch_calls.append(kwargs)
+            return pages.pop(0)
+
+        downloader.fetch_file_list = fetch_file_list
+
+        with (
+            contextlib.redirect_stdout(io.StringIO()),
+            patch("backend.crawlers.zsxq_file_downloader.random.uniform", return_value=2.5) as uniform,
+            patch("backend.crawlers.zsxq_file_downloader.time.sleep") as sleep,
+        ):
+            stats = ZSXQFileDownloader.collect_all_files_to_database(downloader)
+
+        self.assertEqual(
+            [{"count": 20, "index": None}, {"count": 20, "index": "next-page"}],
+            downloader.fetch_calls,
+        )
+        uniform.assert_called_once_with(2, 5)
+        sleep.assert_called_once_with(2.5)
+        self.assertEqual({"total_files": 2, "new_files": 4, "skipped_files": 0}, stats)
 
     def test_collect_files_by_time_stops_when_page_import_fails(self):
         downloader = self._downloader_with_failing_import()

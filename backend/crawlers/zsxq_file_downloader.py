@@ -69,6 +69,7 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     file_collection_exception_message,
     file_collection_fetch_failed_messages,
     file_collection_interrupted_message,
+    file_collection_next_page_plan,
     file_collection_page_files_message,
     file_collection_page_import_messages,
     file_collection_page_message,
@@ -1188,11 +1189,11 @@ class ZSXQFileDownloader:
                 
                 print(file_collection_page_stored_message(page_count))
                 
-                # 准备下一页
-                if next_index:
-                    current_index = next_index
+                next_page = file_collection_next_page_plan(next_index)
+                if next_page["has_next"]:
+                    current_index = next_page["next_index"]
                     # 页面间短暂延迟
-                    time.sleep(random.uniform(2, 5))
+                    time.sleep(random.uniform(next_page["delay_min"], next_page["delay_max"]))
                 else:
                     break
                     
