@@ -16,6 +16,15 @@ class FakeBackgroundTasks:
 
 class DailyStockConceptRoutesHelperTests(unittest.TestCase):
     @unittest.skipUnless(HAS_ROUTE_DEPS, "daily stock concept route dependencies are not installed")
+    def test_daily_stock_concept_route_error_preserves_status_and_detail_format(self):
+        from backend.routes.daily_stock_concept_routes import _daily_stock_concept_route_error
+
+        error = _daily_stock_concept_route_error("获取每日股票概念失败", RuntimeError("boom"))
+
+        self.assertEqual(500, error.status_code)
+        self.assertEqual("获取每日股票概念失败: boom", error.detail)
+
+    @unittest.skipUnless(HAS_ROUTE_DEPS, "daily stock concept route dependencies are not installed")
     def test_stock_concept_task_metadata_preserves_fields(self):
         from backend.routes.daily_stock_concept_routes import _stock_concept_task_metadata
 
@@ -57,6 +66,33 @@ class DailyStockConceptRoutesHelperTests(unittest.TestCase):
             request,
         )
         self.assertEqual({"task_id": "task-concept", "message": TASK_CREATED_MESSAGE}, response)
+
+    @unittest.skipUnless(HAS_ROUTE_DEPS, "daily stock concept route dependencies are not installed")
+    def test_create_daily_stock_concepts_preserves_wrapped_unexpected_error(self):
+        import asyncio
+
+        from fastapi import HTTPException
+
+        from backend.routes import daily_stock_concept_routes
+
+        request = daily_stock_concept_routes.DailyStockConceptRequest(date="2026-06-13")
+
+        with patch.object(
+            daily_stock_concept_routes,
+            "_create_daily_stock_concept_task_response",
+            side_effect=RuntimeError("boom"),
+        ):
+            with self.assertRaises(HTTPException) as raised:
+                asyncio.run(
+                    daily_stock_concept_routes.create_daily_stock_concepts(
+                        "group-1",
+                        request,
+                        FakeBackgroundTasks(),
+                    )
+                )
+
+        self.assertEqual(500, raised.exception.status_code)
+        self.assertEqual("创建每日股票概念提取任务失败: boom", raised.exception.detail)
 
     @unittest.skipUnless(HAS_ROUTE_DEPS, "daily stock concept route dependencies are not installed")
     def test_build_stock_concept_log_callback_writes_task_log(self):
@@ -166,6 +202,25 @@ class DailyStockConceptRoutesHelperTests(unittest.TestCase):
         self.assertEqual(404, raised.exception.status_code)
         self.assertEqual("股票概念结果不存在，请先提取", raised.exception.detail)
         get_concepts.assert_called_once_with("group-1", None)
+
+    @unittest.skipUnless(HAS_ROUTE_DEPS, "daily stock concept route dependencies are not installed")
+    def test_read_daily_stock_concepts_preserves_wrapped_unexpected_error(self):
+        import asyncio
+
+        from fastapi import HTTPException
+
+        from backend.routes import daily_stock_concept_routes
+
+        with patch.object(
+            daily_stock_concept_routes,
+            "_daily_stock_concepts_or_404",
+            side_effect=RuntimeError("boom"),
+        ):
+            with self.assertRaises(HTTPException) as raised:
+                asyncio.run(daily_stock_concept_routes.read_daily_stock_concepts("group-1", None))
+
+        self.assertEqual(500, raised.exception.status_code)
+        self.assertEqual("获取每日股票概念失败: boom", raised.exception.detail)
 
     @unittest.skipUnless(HAS_ROUTE_DEPS, "daily stock concept route dependencies are not installed")
     def test_daily_stock_concepts_or_404_preserves_missing_result_404(self):

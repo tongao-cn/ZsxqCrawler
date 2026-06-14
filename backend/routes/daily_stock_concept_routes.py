@@ -51,6 +51,10 @@ def _create_daily_stock_concept_task_response(
     return {"task_id": task_id, "message": TASK_CREATED_MESSAGE}
 
 
+def _daily_stock_concept_route_error(message: str, error: Exception) -> HTTPException:
+    return HTTPException(status_code=500, detail=f"{message}: {str(error)}")
+
+
 def _extract_daily_stock_concepts_for_task(task_id: str, group_id: str, request: DailyStockConceptRequest) -> dict:
     return extract_daily_stock_concepts(
         group_id,
@@ -89,7 +93,7 @@ async def create_daily_stock_concepts(
     try:
         return _create_daily_stock_concept_task_response(group_id, request)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"创建每日股票概念提取任务失败: {str(e)}")
+        raise _daily_stock_concept_route_error("创建每日股票概念提取任务失败", e)
 
 
 @router.get("/{group_id}")
@@ -102,4 +106,4 @@ async def read_daily_stock_concepts(
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"获取每日股票概念失败: {str(e)}")
+        raise _daily_stock_concept_route_error("获取每日股票概念失败", e)
