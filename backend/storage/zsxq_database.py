@@ -985,10 +985,7 @@ class ZSXQDatabase:
                 return tag_id
             else:
                 # 插入新标签
-                current_time = _beijing_now_timestamp()
-                
-                sql, params = _insert_tag_statement(group_id, tag_name, hid, current_time)
-                self.cursor.execute(sql, params)
+                self._execute_timestamped_statement(_insert_tag_statement, group_id, tag_name, hid)
 
                 row = self.cursor.fetchone()
                 return row[0] if row else None

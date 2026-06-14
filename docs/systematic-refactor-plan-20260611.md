@@ -17254,6 +17254,52 @@ Result:
 - Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because
   `ruff` is not available.
 
+### 2026-06-14 - P2 topic storage tag upsert timestamped write helper
+
+Changed:
+
+- Ran existing tag upsert characterization against the original inline timestamp-and-execute
+  implementation before extraction.
+- Reused `_execute_timestamped_statement()` from the `_upsert_tag()` new-tag insert branch.
+- Left existing-tag lookup, optional hid update, missing-return handling, and exception fallback
+  unchanged.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Existing tag lookup, hid update behavior, new-tag insert SQL shape, parameter order, timestamp
+  format, `fetchone()` return handling, missing-return behavior, and exception-swallowing fallback
+  are unchanged.
+- Topic tag extraction/linking, tag-link count refresh semantics, like/latest-like paired timestamp
+  semantics, comment-image numeric fallback defaults, schema behavior, read paths, public APIs,
+  route behavior, task runtime behavior, and configuration semantics are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_upsert_tag_preserves_existing_update_insert_and_missing_return_branches -v
+uv run python -m py_compile backend\storage\zsxq_database.py tests\test_zsxq_database_helpers.py
+uv run python -m unittest tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_upsert_tag_preserves_existing_update_insert_and_missing_return_branches tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_execute_timestamped_statement_preserves_builder_args_and_execute_params -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run python -m unittest tests.test_zsxq_database_helpers -v
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+uv run ruff check backend\storage\zsxq_database.py tests\test_zsxq_database_helpers.py --select F401,F841
+```
+
+Result:
+
+- Existing tag upsert characterization passed against the original duplicate inline implementation:
+  1 test.
+- `py_compile` passed.
+- Focused tag upsert and shared timestamped helper tests passed after extraction: 2 tests.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Topic database helper tests passed: 80 tests.
+- Full backend unittest discovery passed: 1068 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because
+  `ruff` is not available.
+
 ## Stop Conditions
 
 Pause before editing if:
