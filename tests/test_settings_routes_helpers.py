@@ -1,6 +1,6 @@
 import unittest
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from fastapi import HTTPException
 
@@ -13,6 +13,7 @@ from backend.routes.settings_routes import (
     _default_downloader_settings,
     _get_crawl_settings_response,
     _get_crawler_settings_response,
+    _get_downloader_settings_response,
     _settings_from_attrs,
     _settings_update_response,
     _update_crawl_settings_response,
@@ -20,6 +21,7 @@ from backend.routes.settings_routes import (
     CrawlerSettingsRequest,
     get_crawl_settings,
     get_crawler_settings,
+    get_downloader_settings,
     update_crawl_settings,
     update_crawler_settings,
 )
@@ -327,6 +329,76 @@ class SettingsRoutesHelpersTest(unittest.TestCase):
         self.assertEqual(caught.exception.status_code, 400)
         self.assertEqual(caught.exception.detail, "最小延迟必须小于最大延迟")
         self.assertEqual(crawler.min_delay, 1.5)
+
+    def test_get_downloader_settings_route_preserves_default_when_uninitialized(self):
+        import asyncio
+
+        with patch("backend.routes.settings_routes.get_crawler_safe", return_value=None) as get_crawler:
+            result = asyncio.run(get_downloader_settings())
+
+        self.assertEqual(result, _default_downloader_settings())
+        get_crawler.assert_called_once_with()
+
+    def test_get_downloader_settings_route_preserves_runtime_attrs(self):
+        import asyncio
+
+        downloader = SimpleNamespace(
+            download_interval_min=4,
+            download_interval_max=16,
+            long_delay_interval=6,
+            long_delay_min=120,
+            long_delay_max=240,
+        )
+        crawler = SimpleNamespace(get_file_downloader=Mock(return_value=downloader))
+
+        with patch("backend.routes.settings_routes.get_crawler_safe", return_value=crawler) as get_crawler:
+            result = asyncio.run(get_downloader_settings())
+
+        self.assertEqual(
+            result,
+            {
+                "download_interval_min": 4,
+                "download_interval_max": 16,
+                "long_delay_interval": 6,
+                "long_delay_min": 120,
+                "long_delay_max": 240,
+            },
+        )
+        get_crawler.assert_called_once_with()
+        crawler.get_file_downloader.assert_called_once_with()
+
+    def test_get_downloader_settings_response_preserves_default_when_uninitialized(self):
+        with patch("backend.routes.settings_routes.get_crawler_safe", return_value=None) as get_crawler:
+            result = _get_downloader_settings_response()
+
+        self.assertEqual(result, _default_downloader_settings())
+        get_crawler.assert_called_once_with()
+
+    def test_get_downloader_settings_response_preserves_runtime_attrs(self):
+        downloader = SimpleNamespace(
+            download_interval_min=4,
+            download_interval_max=16,
+            long_delay_interval=6,
+            long_delay_min=120,
+            long_delay_max=240,
+        )
+        crawler = SimpleNamespace(get_file_downloader=Mock(return_value=downloader))
+
+        with patch("backend.routes.settings_routes.get_crawler_safe", return_value=crawler) as get_crawler:
+            result = _get_downloader_settings_response()
+
+        self.assertEqual(
+            result,
+            {
+                "download_interval_min": 4,
+                "download_interval_max": 16,
+                "long_delay_interval": 6,
+                "long_delay_min": 120,
+                "long_delay_max": 240,
+            },
+        )
+        get_crawler.assert_called_once_with()
+        crawler.get_file_downloader.assert_called_once_with()
 
 
 if __name__ == "__main__":

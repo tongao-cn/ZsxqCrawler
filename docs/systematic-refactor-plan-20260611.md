@@ -15947,6 +15947,53 @@ Result:
 - Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because
   `ruff` is not available.
 
+### 2026-06-14 - P5 downloader settings read response helper
+
+Changed:
+
+- Added route-level characterization coverage for downloader-settings read before extraction.
+- Extracted `_get_downloader_settings_response()` in `backend.routes.settings_routes`.
+- Reused the helper from `get_downloader_settings()` so the route keeps only exception
+  mapping.
+- Added helper coverage for both current compatibility paths: crawler unavailable and
+  downloader runtime attributes available.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- `get_downloader_settings()` still calls `get_crawler_safe()` once.
+- When the crawler is unavailable, the route still returns `_default_downloader_settings()`.
+- When the crawler is available, the route still calls `crawler.get_file_downloader()` once
+  and returns `_settings_from_attrs(downloader, _DOWNLOADER_SETTING_FIELDS)`.
+- Existing route path, response payload shape, default values, exception mapping, runtime
+  lookup behavior, and config semantics are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_settings_routes_helpers.SettingsRoutesHelpersTest.test_get_downloader_settings_route_preserves_default_when_uninitialized tests.test_settings_routes_helpers.SettingsRoutesHelpersTest.test_get_downloader_settings_route_preserves_runtime_attrs -v
+uv run python -m py_compile backend\routes\settings_routes.py tests\test_settings_routes_helpers.py
+uv run python -m unittest tests.test_settings_routes_helpers.SettingsRoutesHelpersTest.test_get_downloader_settings_route_preserves_default_when_uninitialized tests.test_settings_routes_helpers.SettingsRoutesHelpersTest.test_get_downloader_settings_route_preserves_runtime_attrs tests.test_settings_routes_helpers.SettingsRoutesHelpersTest.test_get_downloader_settings_response_preserves_default_when_uninitialized tests.test_settings_routes_helpers.SettingsRoutesHelpersTest.test_get_downloader_settings_response_preserves_runtime_attrs -v
+uv run python -m unittest tests.test_settings_routes_helpers -v
+uv run python -m unittest discover -s tests
+uv run python scripts\scan_postgres_compat_debt.py
+npm --prefix frontend run build
+uv run ruff check backend\routes\settings_routes.py tests\test_settings_routes_helpers.py --select F401,F841
+```
+
+Result:
+
+- Existing downloader settings read route characterization tests passed against the original
+  inline implementation before extraction: 2 tests.
+- `py_compile` passed.
+- Focused downloader settings read route/helper tests passed after extraction: 4 tests.
+- Settings route helper tests passed: 22 tests.
+- Full backend unittest discovery passed: 996 tests, 15 skipped.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Frontend build passed, including Next.js lint/type checks.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because
+  `ruff` is not available.
+
 ## Stop Conditions
 
 Pause before editing if:
