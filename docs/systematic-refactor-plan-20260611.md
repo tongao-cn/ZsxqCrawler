@@ -16785,6 +16785,51 @@ Result:
 - Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because
   `ruff` is not available.
 
+### 2026-06-14 - P3 topic storage tag mapped row fetch helper
+
+Changed:
+
+- Ran existing characterization coverage for tag list, tag topic pagination, and tag-topic
+  exception fallback against the original inline implementation before extraction.
+- Added direct helper coverage that the new mapped-row fetch helper preserves existing
+  `cursor.execute(sql, params)` arity and row mapping output shape.
+- Extracted `_fetch_mapped_rows()` in `backend.storage.zsxq_database`.
+- Reused the helper from tag list and tag-topic list reads.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Public storage method signatures, SQL helper usage, execute params, row mapper output fields,
+  count query order, pagination calculation, and exception fallback return shapes are unchanged.
+- No schema, write paths, legacy path, task runtime behavior, route behavior, or configuration
+  semantics changed.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_get_tags_by_group_uses_helper_query_and_preserves_response_shape tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_get_topics_by_tag_uses_helper_queries_and_preserves_pagination tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_get_topics_by_tag_preserves_exception_fallback_shape -v
+uv run python -m py_compile backend\storage\zsxq_database.py tests\test_zsxq_database_helpers.py
+uv run python -m unittest tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_fetch_mapped_rows_preserves_execute_params_and_mapping tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_get_tags_by_group_uses_helper_query_and_preserves_response_shape tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_get_topics_by_tag_uses_helper_queries_and_preserves_pagination tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_get_topics_by_tag_preserves_exception_fallback_shape -v
+uv run python -m unittest tests.test_zsxq_database_helpers -v
+uv run python -m unittest discover -s tests
+uv run python scripts\scan_postgres_compat_debt.py
+npm --prefix frontend run build
+uv run ruff check backend\storage\zsxq_database.py tests\test_zsxq_database_helpers.py --select F401,F841
+```
+
+Result:
+
+- Existing tag read-method characterization passed against the original duplicate inline
+  fetch/map implementation before extraction: 3 tests.
+- `py_compile` passed.
+- Focused mapped-row helper and tag read-method tests passed after extraction: 4 tests.
+- Topic database helper tests passed: 76 tests.
+- Full backend unittest discovery passed: 1064 tests, 15 skipped.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Frontend build passed, including Next.js lint/type checks.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because
+  `ruff` is not available.
+
 ## Stop Conditions
 
 Pause before editing if:

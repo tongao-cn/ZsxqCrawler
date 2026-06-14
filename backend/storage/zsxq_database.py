@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-from typing import Dict, Any, Optional, List
+from typing import Callable, Dict, Any, Optional, List
 
 from backend.storage.db_compat import connect
 from backend.storage.zsxq_database_helpers import (
@@ -1040,14 +1040,21 @@ class ZSXQDatabase:
             
         except Exception as e:
             print(f"关联话题标签失败: {e}")
+
+    def _fetch_mapped_rows(
+        self,
+        sql: str,
+        params: Any,
+        row_mapper: Callable[[Any], Dict[str, Any]],
+    ) -> List[Dict[str, Any]]:
+        self.cursor.execute(sql, params)
+        return [row_mapper(row) for row in self.cursor.fetchall()]
     
     def get_tags_by_group(self, group_id: int) -> List[Dict[str, Any]]:
         """获取指定群组的所有标签"""
         try:
             sql, params = _tags_by_group_query(group_id)
-            self.cursor.execute(sql, params)
-            
-            return [_format_tag_row(row) for row in self.cursor.fetchall()]
+            return self._fetch_mapped_rows(sql, params, _format_tag_row)
         except Exception as e:
             print(f"获取标签列表失败: {e}")
             return []
@@ -1059,9 +1066,7 @@ class ZSXQDatabase:
             
             # 获取话题列表 - 包含所有详细信息，与get_group_topics保持一致
             sql, params = _topics_by_tag_query(tag_id, per_page, offset)
-            self.cursor.execute(sql, params)
-            
-            topics = [_format_tag_topic_row(topic) for topic in self.cursor.fetchall()]
+            topics = self._fetch_mapped_rows(sql, params, _format_tag_topic_row)
             
             # 获取总数
             sql, params = _topic_count_by_tag_query(tag_id)

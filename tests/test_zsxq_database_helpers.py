@@ -2612,6 +2612,30 @@ class ZSXQDatabaseHelperTests(unittest.TestCase):
         mocked_print.assert_called_once()
         self.assertEqual(1, len(failing_db.cursor.calls))
 
+    def test_fetch_mapped_rows_preserves_execute_params_and_mapping(self):
+        from backend.storage.zsxq_database import ZSXQDatabase
+
+        class FetchRowsCursor(FakeCursor):
+            def fetchall(self):
+                return [(7, "AI"), (8, "Quant")]
+
+        db = object.__new__(ZSXQDatabase)
+        db.cursor = FetchRowsCursor()
+
+        self.assertEqual(
+            [{"tag_id": 7, "tag_name": "AI"}, {"tag_id": 8, "tag_name": "Quant"}],
+            ZSXQDatabase._fetch_mapped_rows(
+                db,
+                "SELECT tag_id, tag_name FROM tags WHERE group_id = ?",
+                (303,),
+                lambda row: {"tag_id": row[0], "tag_name": row[1]},
+            ),
+        )
+        self.assertEqual(
+            [("SELECT tag_id, tag_name FROM tags WHERE group_id = ?", (303,))],
+            db.cursor.calls,
+        )
+
     def test_get_tags_by_group_uses_helper_query_and_preserves_response_shape(self):
         from backend.storage.zsxq_database import ZSXQDatabase
 
