@@ -12,6 +12,15 @@ HAS_A_SHARE_ROUTE_DEPS = (
 
 class AShareRoutesHelperTests(unittest.TestCase):
     @unittest.skipUnless(HAS_A_SHARE_ROUTE_DEPS, "a-share route dependencies are not installed")
+    def test_a_share_route_error_preserves_status_and_detail_format(self):
+        from backend.routes.a_share_routes import _a_share_route_error
+
+        error = _a_share_route_error("获取A股分析状态失败", RuntimeError("route boom"))
+
+        self.assertEqual(500, error.status_code)
+        self.assertEqual("获取A股分析状态失败: route boom", error.detail)
+
+    @unittest.skipUnless(HAS_A_SHARE_ROUTE_DEPS, "a-share route dependencies are not installed")
     def test_a_share_task_metadata_preserves_group_field(self):
         from backend.routes.a_share_routes import _a_share_task_metadata
 
@@ -72,6 +81,71 @@ class AShareRoutesHelperTests(unittest.TestCase):
         has_api_key.assert_called_once_with()
         normalize_group_scope.assert_not_called()
         create_task_response.assert_not_called()
+
+    @unittest.skipUnless(HAS_A_SHARE_ROUTE_DEPS, "a-share route dependencies are not installed")
+    def test_a_share_routes_preserve_wrapped_unexpected_errors(self):
+        import asyncio
+
+        from fastapi import HTTPException
+
+        from backend.routes import a_share_routes
+        from backend.routes.a_share_routes import (
+            AShareAnalysisExportTdxRequest,
+            AShareAnalysisResetRangeRequest,
+            AShareAnalysisRunRequest,
+        )
+
+        def assert_wrapped_error(route_call, patch_target: str, expected_detail: str):
+            with patch(patch_target, side_effect=Exception("route boom")):
+                with self.assertRaises(HTTPException) as raised:
+                    asyncio.run(route_call())
+
+            self.assertEqual(500, raised.exception.status_code)
+            self.assertEqual(expected_detail, raised.exception.detail)
+
+        assert_wrapped_error(
+            lambda: a_share_routes.get_a_share_analysis_status("51111112855254"),
+            "backend.routes.a_share_routes._a_share_analysis_summary",
+            "获取A股分析状态失败: route boom",
+        )
+        assert_wrapped_error(
+            lambda: a_share_routes.get_a_share_analysis_chart(
+                group_id="51111112855254",
+                start_date="2026-05-01",
+                end_date="2026-05-07",
+            ),
+            "backend.routes.a_share_routes._a_share_chart_payload",
+            "获取A股分析图表失败: route boom",
+        )
+
+        with patch("backend.routes.a_share_routes.has_openai_api_key", return_value=True):
+            assert_wrapped_error(
+                lambda: a_share_routes.start_a_share_analysis(
+                    AShareAnalysisRunRequest(group_id="51111112855254"),
+                    None,
+                ),
+                "backend.routes.a_share_routes._a_share_analysis_task_context",
+                "创建A股分析任务失败: route boom",
+            )
+
+        assert_wrapped_error(
+            lambda: a_share_routes.reset_a_share_analysis_date_range(
+                AShareAnalysisResetRangeRequest(
+                    group_id="51111112855254",
+                    start_date="2026-05-01",
+                    end_date="2026-05-07",
+                )
+            ),
+            "backend.routes.a_share_routes._reset_a_share_analysis_range",
+            "删除A股分析日期区间失败: route boom",
+        )
+        assert_wrapped_error(
+            lambda: a_share_routes.export_a_share_analysis_to_tdx(
+                AShareAnalysisExportTdxRequest(group_id="51111112855254")
+            ),
+            "backend.routes.a_share_routes._export_a_share_analysis_to_tdx",
+            "导入通达信失败: route boom",
+        )
 
     @unittest.skipUnless(HAS_A_SHARE_ROUTE_DEPS, "a-share route dependencies are not installed")
     def test_start_a_share_analysis_enqueues_runtime_task(self):

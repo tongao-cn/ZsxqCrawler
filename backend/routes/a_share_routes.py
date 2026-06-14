@@ -39,6 +39,10 @@ TASK_CREATED_MESSAGE = "任务已创建，正在后台执行"
 A_SHARE_MISSING_API_KEY_MESSAGE = "未配置 OpenAI API Key，请设置环境变量 OPENAI_API_KEY 或 config.toml [ai].api_key"
 
 
+def _a_share_route_error(message: str, error: Exception) -> HTTPException:
+    return HTTPException(status_code=500, detail=f"{message}: {str(error)}")
+
+
 class AShareAnalysisRunRequest(BaseModel):
     group_id: Optional[str | int] = Field(default=None, description="指定群组ID；为空时使用全局聚合")
     days: int = Field(default=21, ge=1, le=365, description="分析最近多少天的话题")
@@ -350,7 +354,7 @@ async def get_a_share_analysis_status(group_id: Optional[str] = None):
             latest_tdx_export,
         )
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"获取A股分析状态失败: {str(e)}")
+        raise _a_share_route_error("获取A股分析状态失败", e)
 
 
 @router.get("/chart")
@@ -367,7 +371,7 @@ async def get_a_share_analysis_chart(
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"获取A股分析图表失败: {str(e)}")
+        raise _a_share_route_error("获取A股分析图表失败", e)
 
 
 @router.post("/run")
@@ -390,7 +394,7 @@ async def start_a_share_analysis(request: AShareAnalysisRunRequest, background_t
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"创建A股分析任务失败: {str(e)}")
+        raise _a_share_route_error("创建A股分析任务失败", e)
 
 
 @router.post("/reset-range")
@@ -402,7 +406,7 @@ async def reset_a_share_analysis_date_range(request: AShareAnalysisResetRangeReq
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"删除A股分析日期区间失败: {str(e)}")
+        raise _a_share_route_error("删除A股分析日期区间失败", e)
 
 
 @router.post("/export-tdx")
@@ -418,4 +422,4 @@ async def export_a_share_analysis_to_tdx(request: AShareAnalysisExportTdxRequest
     except requests.RequestException as e:
         raise HTTPException(status_code=502, detail=f"获取股票主数据失败: {str(e)}")
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"导入通达信失败: {str(e)}")
+        raise _a_share_route_error("导入通达信失败", e)

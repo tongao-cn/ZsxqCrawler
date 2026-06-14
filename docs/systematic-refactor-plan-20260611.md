@@ -16643,6 +16643,59 @@ Result:
 - Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because
   `ruff` is not available.
 
+### 2026-06-14 - P5 A-share route error helper
+
+Changed:
+
+- Added route-level characterization coverage for A-share route unexpected-error wrappers.
+- Preserved existing coverage for the `start_a_share_analysis()` missing-API-key compatibility
+  behavior that wraps an internal `HTTPException(status_code=400)` as a route-level 500.
+- Extracted `_a_share_route_error()` in `backend.routes.a_share_routes`.
+- Reused the helper from all 5 A-share route wrappers that map unexpected exceptions to
+  route-level 500 responses.
+- Added direct helper coverage for the 500 status and `"{message}: {str(error)}"` detail format.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- The 5 A-share routes still map unexpected exceptions to route-level
+  `HTTPException(status_code=500)` with the same Chinese prefixes.
+- Existing `ValueError` to 400 mapping is unchanged.
+- Existing `RuntimeError` to 400 and `requests.RequestException` to 502 mappings in the
+  TDX export route are unchanged.
+- Existing `start_a_share_analysis()` compatibility behavior is preserved, including wrapping
+  internally raised `HTTPException` values as `创建A股分析任务失败: {str(error)}` 500 details.
+- Existing route paths, query/default fields, task type/description/function/argument order,
+  API-key guard, storage fallback, TDX export fallback, response payload shapes, and
+  `str(error)` formatting are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_a_share_routes_helpers.AShareRoutesHelperTests.test_a_share_routes_preserve_wrapped_unexpected_errors -v
+uv run python -m py_compile backend\routes\a_share_routes.py tests\test_a_share_routes_helpers.py
+uv run python -m unittest tests.test_a_share_routes_helpers.AShareRoutesHelperTests.test_a_share_route_error_preserves_status_and_detail_format tests.test_a_share_routes_helpers.AShareRoutesHelperTests.test_a_share_routes_preserve_wrapped_unexpected_errors tests.test_a_share_routes_helpers.AShareRoutesHelperTests.test_start_a_share_analysis_preserves_missing_api_key_http_error -v
+uv run python -m unittest tests.test_a_share_routes_helpers -v
+uv run python -m unittest discover -s tests
+uv run python scripts\scan_postgres_compat_debt.py
+npm --prefix frontend run build
+uv run ruff check backend\routes\a_share_routes.py tests\test_a_share_routes_helpers.py --select F401,F841
+```
+
+Result:
+
+- Existing A-share route unexpected-error characterization test passed against the original
+  duplicate inline wrappers before extraction: 1 test covering 5 wrappers.
+- `py_compile` passed.
+- Focused A-share route error helper and missing-key compatibility tests passed after
+  extraction: 3 tests.
+- A-share route helper tests passed: 40 tests.
+- Full backend unittest discovery passed: 1058 tests, 15 skipped.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Frontend build passed, including Next.js lint/type checks.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because
+  `ruff` is not available.
+
 ## Stop Conditions
 
 Pause before editing if:
