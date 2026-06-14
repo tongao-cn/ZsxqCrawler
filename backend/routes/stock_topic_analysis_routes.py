@@ -150,6 +150,10 @@ def _external_stock_summaries(group_id: str, request: ExternalStockSummaryReques
     return get_external_stock_summaries(group_id, request.stockNames, report_date=request.date)
 
 
+def _latest_stock_topic_analyses(group_id: str, stock_names: str) -> dict:
+    return get_latest_stock_topic_analyses(group_id, stock_names)
+
+
 @router.get("/{group_id}/questions")
 async def read_stock_question_matches(
     group_id: str,
@@ -288,7 +292,7 @@ async def read_latest_stock_topic_analyses(
     stock_names: str = Query(..., min_length=1, description="股票名称，支持逗号、顿号、空格或换行分隔"),
 ):
     try:
-        return get_latest_stock_topic_analyses(group_id, stock_names)
+        return _latest_stock_topic_analyses(group_id, stock_names)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     except Exception as exc:

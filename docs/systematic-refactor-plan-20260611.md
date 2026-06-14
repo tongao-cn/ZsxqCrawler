@@ -14492,6 +14492,56 @@ Result:
 - Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because
   `ruff` is not available.
 
+### 2026-06-14 - P5 latest stock topic batch helper
+
+Changed:
+
+- Strengthened route-level characterization coverage for `read_latest_stock_topic_analyses()`
+  preserving `get_latest_stock_topic_analyses()` arguments and result passthrough.
+- Extracted `_latest_stock_topic_analyses()` in `backend.routes.stock_topic_analysis_routes`.
+- Reused the helper from the latest stock-topic batch route so group and raw stock-name
+  argument forwarding are isolated.
+- Added helper coverage for preserving the raw `stock_names` string without route-level
+  pre-parsing or normalization.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- `read_latest_stock_topic_analyses()` still returns the service result object unchanged.
+- `group_id` and `stock_names` are still forwarded to the service unchanged.
+- The route still maps `ValueError` to 400 and unexpected exceptions to the existing 500
+  response text.
+- Public API shape, task behavior, storage schema, config semantics, side effects, and
+  fallback/legacy behavior are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_stock_topic_analysis_routes_helpers.StockTopicAnalysisRoutesHelperTests.test_read_latest_stock_topic_analyses_returns_mixed_rows -v
+uv run python -m py_compile backend\routes\stock_topic_analysis_routes.py tests\test_stock_topic_analysis_routes_helpers.py
+uv run python -m unittest tests.test_stock_topic_analysis_routes_helpers.StockTopicAnalysisRoutesHelperTests.test_read_latest_stock_topic_analyses_returns_mixed_rows tests.test_stock_topic_analysis_routes_helpers.StockTopicAnalysisRoutesHelperTests.test_latest_stock_topic_analyses_preserves_raw_stock_names -v
+uv run python -m unittest tests.test_stock_topic_analysis_routes_helpers -v
+uv run python -m unittest tests.test_daily_analysis_routes_helpers tests.test_daily_stock_concept_routes_helpers tests.test_stock_topic_analysis_routes_helpers tests.test_task_runtime_helpers -v
+uv run python -m unittest discover -s tests
+uv run python scripts\scan_postgres_compat_debt.py
+npm --prefix frontend run build
+uv run ruff check backend\routes\stock_topic_analysis_routes.py tests\test_stock_topic_analysis_routes_helpers.py --select F401,F841
+```
+
+Result:
+
+- Focused latest stock-topic batch route characterization test passed against the original
+  inline implementation before extraction: 1 test.
+- `py_compile` passed.
+- Focused latest stock-topic batch route/helper tests passed after extraction: 2 tests.
+- Stock-topic route helper tests passed: 19 tests.
+- Related daily/stock-topic/task-runtime route helper tests passed: 90 tests.
+- Full backend unittest discovery passed: 933 tests, 15 skipped.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Frontend build passed, including Next.js lint/type checks.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because
+  `ruff` is not available.
+
 ## Stop Conditions
 
 Pause before editing if:

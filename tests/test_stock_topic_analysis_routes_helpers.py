@@ -358,10 +358,31 @@ class StockTopicAnalysisRoutesHelperTests(unittest.IsolatedAsyncioTestCase):
                 {"stock_name": "德龙激光", "status": "missing"},
             ],
         }
-        with patch("backend.routes.stock_topic_analysis_routes.get_latest_stock_topic_analyses", return_value=expected):
+        with patch(
+            "backend.routes.stock_topic_analysis_routes.get_latest_stock_topic_analyses",
+            return_value=expected,
+        ) as get_latest:
             result = await read_latest_stock_topic_analyses("51111112855254", "宁德时代、德龙激光")
 
         self.assertEqual(expected, result)
+        get_latest.assert_called_once_with("51111112855254", "宁德时代、德龙激光")
+
+    @unittest.skipUnless(HAS_ROUTE_DEPS, "stock topic analysis route dependencies are not installed")
+    async def test_latest_stock_topic_analyses_preserves_raw_stock_names(self):
+        from backend.routes import stock_topic_analysis_routes
+
+        expected = {"group_id": "51111112855254", "stocks": []}
+        with patch(
+            "backend.routes.stock_topic_analysis_routes.get_latest_stock_topic_analyses",
+            return_value=expected,
+        ) as get_latest:
+            result = stock_topic_analysis_routes._latest_stock_topic_analyses(
+                "51111112855254",
+                "宁德时代 德龙激光",
+            )
+
+        self.assertEqual(expected, result)
+        get_latest.assert_called_once_with("51111112855254", "宁德时代 德龙激光")
 
     @unittest.skipUnless(HAS_ROUTE_DEPS, "stock topic analysis route dependencies are not installed")
     async def test_read_external_stock_summaries_calls_service(self):
