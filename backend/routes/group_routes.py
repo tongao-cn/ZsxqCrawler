@@ -414,11 +414,27 @@ def _get_group_database_info_response(group_id: int) -> Dict[str, Any]:
     }
 
 
+async def _groups() -> Dict[str, Any]:
+    return await asyncio.to_thread(_get_groups_response)
+
+
+async def _group_info(group_id: str) -> Dict[str, Any]:
+    return await asyncio.to_thread(_get_group_info_response, group_id)
+
+
+async def _group_stats(group_id: int) -> Dict[str, Any]:
+    return await asyncio.to_thread(_get_group_stats_response, group_id)
+
+
+async def _group_database_info(group_id: int) -> Dict[str, Any]:
+    return await asyncio.to_thread(_get_group_database_info_response, group_id)
+
+
 @router.get("/groups")
 async def get_groups():
     """获取群组列表：账号群 ∪ 本地目录群（去重合并）"""
     try:
-        return await asyncio.to_thread(_get_groups_response)
+        return await _groups()
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"获取群组列表失败: {str(e)}")
 
@@ -427,7 +443,7 @@ async def get_groups():
 async def get_group_info(group_id: str):
     """获取群组信息（带本地回退，避免401/500导致前端报错）"""
     try:
-        return await asyncio.to_thread(_get_group_info_response, group_id)
+        return await _group_info(group_id)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"获取群组信息失败: {str(e)}")
 
@@ -436,7 +452,7 @@ async def get_group_info(group_id: str):
 async def get_group_stats(group_id: int):
     """获取指定群组的统计信息"""
     try:
-        return await asyncio.to_thread(_get_group_stats_response, group_id)
+        return await _group_stats(group_id)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"获取群组统计失败: {str(e)}")
 
@@ -445,7 +461,7 @@ async def get_group_stats(group_id: int):
 async def get_group_database_info(group_id: int):
     """获取指定群组的数据库信息"""
     try:
-        return await asyncio.to_thread(_get_group_database_info_response, group_id)
+        return await _group_database_info(group_id)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"获取数据库信息失败: {str(e)}")
 

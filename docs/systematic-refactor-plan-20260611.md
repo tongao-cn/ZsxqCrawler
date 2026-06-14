@@ -15324,6 +15324,57 @@ Result:
 - Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because
   `ruff` is not available.
 
+### 2026-06-14 - P5 group read helpers
+
+Changed:
+
+- Reused existing route-level characterization coverage for group read routes:
+  groups list, group info, group stats, and group database info.
+- Extracted `_groups()`, `_group_info()`, `_group_stats()`, and
+  `_group_database_info()` in `backend.routes.group_routes`.
+- Reused the helpers from the public group read routes so threaded response-builder access is
+  isolated from each route's existing exception wrapper.
+- Added helper coverage for preserving each response builder binding and argument shape.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Public group read routes still call the same response builders through `asyncio.to_thread()`
+  with the same group id argument shapes.
+- Successful payloads are still returned unchanged.
+- Existing per-route exception mappings and Chinese detail strings are unchanged.
+- Group/account/local-source merge behavior, local metadata fallback behavior, database stats
+  behavior, public API shape, route paths, response payloads, storage behavior, config
+  semantics, and fallback/legacy behavior are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_group_routes_helpers.GroupRoutesHelperTests.test_group_read_routes_offload_sync_work_to_thread -v
+uv run python -m py_compile backend\routes\group_routes.py tests\test_group_routes_helpers.py
+uv run python -m unittest tests.test_group_routes_helpers.GroupRoutesHelperTests.test_group_read_routes_offload_sync_work_to_thread tests.test_group_routes_helpers.GroupRoutesHelperTests.test_group_read_helpers_preserve_service_call_shapes -v
+uv run python -m unittest tests.test_group_routes_helpers -v
+uv run python -m unittest tests.test_group_routes_helpers tests.test_local_group_runtime tests.test_backfill_postgres_core_group_ids -v
+uv run python -m unittest discover -s tests
+uv run python scripts\scan_postgres_compat_debt.py
+npm --prefix frontend run build
+uv run ruff check backend\routes\group_routes.py tests\test_group_routes_helpers.py --select F401,F841
+```
+
+Result:
+
+- Existing group read route characterization test passed against the original inline
+  implementation before extraction: 1 test.
+- `py_compile` passed.
+- Focused group read route/helper tests passed after extraction: 2 tests.
+- Group route helper tests passed: 15 tests.
+- Related group/local-runtime/backfill tests passed: 19 tests.
+- Full backend unittest discovery passed: 961 tests, 15 skipped.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Frontend build passed, including Next.js lint/type checks.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because
+  `ruff` is not available.
+
 ## Stop Conditions
 
 Pause before editing if:

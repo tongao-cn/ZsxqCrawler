@@ -326,6 +326,33 @@ class GroupRoutesHelperTests(unittest.TestCase):
         self.assertEqual({"called": "_get_group_stats_response", "args": (123,)}, stats)
         self.assertEqual({"called": "_get_group_database_info_response", "args": (123,)}, database_info)
 
+    def test_group_read_helpers_preserve_service_call_shapes(self):
+        calls = []
+
+        async def fake_to_thread(func, *args):
+            calls.append((func, args))
+            return {"called": func.__name__, "args": args}
+
+        with patch("backend.routes.group_routes.asyncio.to_thread", side_effect=fake_to_thread):
+            groups = self._run_async(group_routes._groups())
+            info = self._run_async(group_routes._group_info("123"))
+            stats = self._run_async(group_routes._group_stats(123))
+            database_info = self._run_async(group_routes._group_database_info(123))
+
+        self.assertEqual(
+            [
+                (group_routes._get_groups_response, ()),
+                (group_routes._get_group_info_response, ("123",)),
+                (group_routes._get_group_stats_response, (123,)),
+                (group_routes._get_group_database_info_response, (123,)),
+            ],
+            calls,
+        )
+        self.assertEqual({"called": "_get_groups_response", "args": ()}, groups)
+        self.assertEqual({"called": "_get_group_info_response", "args": ("123",)}, info)
+        self.assertEqual({"called": "_get_group_stats_response", "args": (123,)}, stats)
+        self.assertEqual({"called": "_get_group_database_info_response", "args": (123,)}, database_info)
+
 
 if __name__ == "__main__":
     unittest.main()
