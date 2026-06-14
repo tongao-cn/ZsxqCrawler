@@ -213,6 +213,18 @@ def _latest_like_insert_statement(
     return latest_like_insert_statement(topic_id, user_id, like_data, created_at)
 
 
+def _like_insert_statement_pair(
+    topic_id: int,
+    user_id: Any,
+    like_data: Dict[str, Any],
+    timestamp: str,
+) -> tuple[tuple[str, tuple[Any, ...]], tuple[str, tuple[Any, ...]]]:
+    return (
+        _like_insert_statement(topic_id, user_id, like_data, timestamp),
+        _latest_like_insert_statement(topic_id, user_id, like_data, timestamp),
+    )
+
+
 def _like_emoji_insert_statement(
     topic_id: int,
     emoji_data: Dict[str, Any],
@@ -526,6 +538,14 @@ class ZSXQDatabase:
         sql, params = statement_builder(*args, _beijing_now_timestamp())
         self.cursor.execute(sql, params)
 
+    def _execute_timestamped_statements(
+        self,
+        statement_builder: Callable[..., tuple[tuple[str, tuple[Any, ...]], ...]],
+        *args: Any,
+    ) -> None:
+        for sql, params in statement_builder(*args, _beijing_now_timestamp()):
+            self.cursor.execute(sql, params)
+
     def _fetch_first_column_or_default(self, sql: str, params: Any, default: Any) -> Any:
         self.cursor.execute(sql, params)
         row = self.cursor.fetchone()
@@ -649,13 +669,12 @@ class ZSXQDatabase:
         self.cursor.execute(sql, params)
 
         for like, user_id in _iter_valid_latest_like_payloads(topic_data['latest_likes']):
-            # 获取当前时间作为imported_at（使用东八区时间格式）
-            current_time = _beijing_now_timestamp()
-
-            sql, params = _like_insert_statement(topic_id, user_id, like, current_time)
-            self.cursor.execute(sql, params)
-            sql, params = _latest_like_insert_statement(topic_id, user_id, like, current_time)
-            self.cursor.execute(sql, params)
+            self._execute_timestamped_statements(
+                _like_insert_statement_pair,
+                topic_id,
+                user_id,
+                like,
+            )
 
     def _import_like_emojis(self, topic_id: int, topic_data: Dict[str, Any]):
         """导入表情点赞信息"""

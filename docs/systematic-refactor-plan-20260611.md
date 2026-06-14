@@ -17443,6 +17443,58 @@ Result:
 - Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because
   `ruff` is not available.
 
+### 2026-06-14 - P2 topic storage latest-like paired timestamp helper
+
+Changed:
+
+- Strengthened existing latest-like characterization to assert that the `likes` insert and
+  matching `latest_likes` upsert share the same generated timestamp.
+- Added `_like_insert_statement_pair()` to build the `likes` and `latest_likes` statements with a
+  single timestamp value.
+- Added `_execute_timestamped_statements()` for timestamped statement batches and reused it from
+  `_import_likes()`.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Missing `latest_likes` skip behavior, delete-before-insert ordering, invalid owner filtering,
+  `likes` insert SQL shape, `latest_likes` upsert SQL shape, parameter order, and statement
+  execution order are unchanged.
+- Each valid like still writes one `likes` row followed by one matching `latest_likes` row, and the
+  two writes still share one generated timestamp.
+- Like emoji writes, user-liked emoji writes, comment-image numeric fallback defaults, article
+  create-time semantics, schema behavior, read paths, public APIs, route behavior, task runtime
+  behavior, and configuration semantics are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_import_likes_preserves_delete_skip_and_insert_order -v
+uv run python -m py_compile backend\storage\zsxq_database.py tests\test_zsxq_database_helpers.py
+uv run python -m unittest tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_import_likes_preserves_delete_skip_and_insert_order tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_like_statement_helpers_preserve_sql_shape_and_params -v
+uv run python -m unittest tests.test_zsxq_database_helpers -v
+uv run python scripts\scan_postgres_compat_debt.py
+rg -n "current_time\s*=\s*_beijing_now_timestamp|_beijing_now_timestamp\(" backend\storage\zsxq_database.py
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+uv run ruff check backend\storage\zsxq_database.py tests\test_zsxq_database_helpers.py --select F401,F841
+```
+
+Result:
+
+- Existing latest-like characterization passed against the original duplicate inline
+  implementation after adding the shared-timestamp assertion: 1 test.
+- `py_compile` passed.
+- Focused latest-like and statement-helper tests passed after extraction: 2 tests.
+- Topic database helper tests passed: 80 tests.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Remaining `_beijing_now_timestamp()` usages in `backend/storage/zsxq_database.py` are confined to
+  the timestamp wrapper and timestamped batch helper.
+- Full backend unittest discovery passed: 1068 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because
+  `ruff` is not available.
+
 ## Stop Conditions
 
 Pause before editing if:

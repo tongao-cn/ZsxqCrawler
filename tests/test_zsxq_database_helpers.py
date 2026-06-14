@@ -2172,6 +2172,7 @@ class ZSXQDatabaseHelperTests(unittest.TestCase):
         )
         self.assertEqual((202, 901, "2026-01-01T10:00:00.000+0800"), latest_params[:3])
         self.assertRegex(latest_params[3], r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}\+0800$")
+        self.assertEqual(likes_params[3], latest_params[3])
 
     def test_import_like_emojis_preserves_skip_defaults_and_upsert_params(self):
         from backend.storage.zsxq_database import ZSXQDatabase
