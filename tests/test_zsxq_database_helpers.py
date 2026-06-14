@@ -1538,6 +1538,22 @@ class ZSXQDatabaseHelperTests(unittest.TestCase):
         )
         self.assertEqual((303, 303, 303, 303, 303), users_params)
 
+    def test_fetch_first_column_preserves_execute_params_and_missing_row_error(self):
+        from backend.storage.zsxq_database import ZSXQDatabase
+
+        db = object.__new__(ZSXQDatabase)
+        db.cursor = FakeTimestampCursor([(42,)])
+
+        self.assertEqual(42, ZSXQDatabase._fetch_first_column(db, "SELECT COUNT(*) FROM topics", ()))
+        self.assertEqual([("SELECT COUNT(*) FROM topics", ())], db.cursor.calls)
+
+        missing_db = object.__new__(ZSXQDatabase)
+        missing_db.cursor = FakeTimestampCursor([])
+
+        with self.assertRaises(TypeError):
+            ZSXQDatabase._fetch_first_column(missing_db, "SELECT COUNT(*) FROM topics", ())
+        self.assertEqual([("SELECT COUNT(*) FROM topics", ())], missing_db.cursor.calls)
+
     def test_get_database_stats_preserves_unscoped_and_scoped_queries(self):
         from backend.storage.zsxq_database import ZSXQDatabase
 

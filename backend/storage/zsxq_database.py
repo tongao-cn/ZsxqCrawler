@@ -515,6 +515,10 @@ class ZSXQDatabase:
             traceback.print_exc()
             return False
 
+    def _fetch_first_column(self, sql: str, params: Any) -> Any:
+        self.cursor.execute(sql, params)
+        return self.cursor.fetchone()[0]
+
     def get_database_stats(self) -> Dict[str, Any]:
         """获取数据库统计信息"""
         stats = {}
@@ -526,8 +530,7 @@ class ZSXQDatabase:
         for table in tables:
             try:
                 sql, params = _database_stats_count_query(table, self.group_id)
-                self.cursor.execute(sql, params)
-                stats[table] = self.cursor.fetchone()[0]
+                stats[table] = self._fetch_first_column(sql, params)
             except Exception as e:
                 print(f"获取表 {table} 统计信息失败: {e}")
                 stats[table] = 0
@@ -551,8 +554,7 @@ class ZSXQDatabase:
             
             # 获取话题总数
             sql, params = _topic_count_query(self.group_id)
-            self.cursor.execute(sql, params)
-            total_topics = self.cursor.fetchone()[0]
+            total_topics = self._fetch_first_column(sql, params)
             
             # 判断是否有数据
             has_data = newest_time is not None and oldest_time is not None
@@ -1070,8 +1072,7 @@ class ZSXQDatabase:
             
             # 获取总数
             sql, params = _topic_count_by_tag_query(tag_id)
-            self.cursor.execute(sql, params)
-            total = self.cursor.fetchone()[0]
+            total = self._fetch_first_column(sql, params)
             
             return {
                 'topics': topics,
