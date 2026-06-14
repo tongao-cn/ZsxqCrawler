@@ -903,6 +903,111 @@ class CrawlRoutesHelperTests(unittest.TestCase):
         self.assertEqual([], background_tasks.tasks)
 
     @unittest.skipUnless(HAS_CRAWL_ROUTE_DEPS, "crawl route dependencies are not installed")
+    def test_crawl_route_error_preserves_status_and_detail_format(self):
+        from backend.routes import crawl_routes
+
+        error = crawl_routes._crawl_route_error("创建爬取任务失败", RuntimeError("boom"))
+
+        self.assertEqual(500, error.status_code)
+        self.assertEqual("创建爬取任务失败: boom", error.detail)
+
+    @unittest.skipUnless(HAS_CRAWL_ROUTE_DEPS, "crawl route dependencies are not installed")
+    def test_crawl_routes_preserve_wrapped_unexpected_errors(self):
+        import asyncio
+
+        from backend.routes import crawl_routes
+
+        background_tasks = FakeBackgroundTasks()
+        historical_request = crawl_routes.CrawlHistoricalRequest()
+        settings_request = crawl_routes.CrawlSettingsRequest()
+        range_request = crawl_routes.CrawlTimeRangeRequest()
+
+        cases = [
+            (
+                "historical",
+                crawl_routes.crawl_historical,
+                historical_request,
+                "_create_historical_crawl_task_response",
+                "创建爬取任务失败: boom",
+            ),
+            (
+                "all",
+                crawl_routes.crawl_all,
+                settings_request,
+                "_create_all_crawl_task_response",
+                "创建全量爬取任务失败: boom",
+            ),
+            (
+                "incremental",
+                crawl_routes.crawl_incremental,
+                historical_request,
+                "_create_incremental_crawl_task_response",
+                "创建增量爬取任务失败: boom",
+            ),
+            (
+                "latest",
+                crawl_routes.crawl_latest_until_complete,
+                settings_request,
+                "_create_latest_crawl_task_response",
+                "创建获取最新记录任务失败: boom",
+            ),
+            (
+                "range",
+                crawl_routes.crawl_by_time_range,
+                range_request,
+                "_create_time_range_crawl_task_response",
+                "创建时间区间爬取任务失败: boom",
+            ),
+        ]
+
+        for case_name, route, request, helper_name, expected_detail in cases:
+            with self.subTest(case_name=case_name), patch(
+                f"backend.routes.crawl_routes.{helper_name}",
+                side_effect=RuntimeError("boom"),
+            ):
+                with self.assertRaises(crawl_routes.HTTPException) as raised:
+                    asyncio.run(route("group-1", request, background_tasks))
+
+                self.assertEqual(500, raised.exception.status_code)
+                self.assertEqual(expected_detail, raised.exception.detail)
+
+        self.assertEqual([], background_tasks.tasks)
+
+    @unittest.skipUnless(HAS_CRAWL_ROUTE_DEPS, "crawl route dependencies are not installed")
+    def test_crawl_routes_preserve_http_exception_passthrough(self):
+        import asyncio
+
+        from backend.routes import crawl_routes
+
+        background_tasks = FakeBackgroundTasks()
+        historical_request = crawl_routes.CrawlHistoricalRequest()
+        settings_request = crawl_routes.CrawlSettingsRequest()
+        range_request = crawl_routes.CrawlTimeRangeRequest()
+        original_error = crawl_routes.HTTPException(status_code=409, detail="conflict")
+
+        cases = [
+            (crawl_routes.crawl_historical, historical_request, "_create_historical_crawl_task_response"),
+            (crawl_routes.crawl_all, settings_request, "_create_all_crawl_task_response"),
+            (crawl_routes.crawl_incremental, historical_request, "_create_incremental_crawl_task_response"),
+            (crawl_routes.crawl_latest_until_complete, settings_request, "_create_latest_crawl_task_response"),
+            (crawl_routes.crawl_by_time_range, range_request, "_create_time_range_crawl_task_response"),
+        ]
+
+        for route, request, helper_name in cases:
+            with self.subTest(helper=helper_name), patch(
+                f"backend.routes.crawl_routes.{helper_name}",
+                side_effect=original_error,
+            ):
+                with self.assertRaises(crawl_routes.HTTPException) as raised:
+                    asyncio.run(route("group-1", request, background_tasks))
+
+                self.assertIs(original_error, raised.exception)
+                self.assertEqual(409, raised.exception.status_code)
+                self.assertEqual("conflict", raised.exception.detail)
+
+        self.assertEqual([], background_tasks.tasks)
+
+    @unittest.skipUnless(HAS_CRAWL_ROUTE_DEPS, "crawl route dependencies are not installed")
     def test_create_crawl_task_response_creates_and_enqueues_task(self):
         from backend.routes.crawl_routes import _create_crawl_task_response
 

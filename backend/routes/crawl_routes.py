@@ -114,6 +114,10 @@ def _create_time_range_crawl_task_response(
     )
 
 
+def _crawl_route_error(message: str, error: Exception) -> HTTPException:
+    return HTTPException(status_code=500, detail=f"{message}: {str(error)}")
+
+
 @router.post("/historical/{group_id}")
 async def crawl_historical(group_id: str, request: CrawlHistoricalRequest, background_tasks: BackgroundTasks):
     """爬取历史数据"""
@@ -122,7 +126,7 @@ async def crawl_historical(group_id: str, request: CrawlHistoricalRequest, backg
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"创建爬取任务失败: {str(e)}")
+        raise _crawl_route_error("创建爬取任务失败", e)
 
 
 @router.post("/all/{group_id}")
@@ -133,7 +137,7 @@ async def crawl_all(group_id: str, request: CrawlSettingsRequest, background_tas
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"创建全量爬取任务失败: {str(e)}")
+        raise _crawl_route_error("创建全量爬取任务失败", e)
 
 
 @router.post("/incremental/{group_id}")
@@ -144,7 +148,7 @@ async def crawl_incremental(group_id: str, request: CrawlHistoricalRequest, back
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"创建增量爬取任务失败: {str(e)}")
+        raise _crawl_route_error("创建增量爬取任务失败", e)
 
 
 @router.post("/latest-until-complete/{group_id}")
@@ -155,7 +159,7 @@ async def crawl_latest_until_complete(group_id: str, request: CrawlSettingsReque
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"创建获取最新记录任务失败: {str(e)}")
+        raise _crawl_route_error("创建获取最新记录任务失败", e)
 
 
 @router.post("/range/{group_id}")
@@ -166,4 +170,4 @@ async def crawl_by_time_range(group_id: str, request: CrawlTimeRangeRequest, bac
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"创建时间区间爬取任务失败: {str(e)}")
+        raise _crawl_route_error("创建时间区间爬取任务失败", e)

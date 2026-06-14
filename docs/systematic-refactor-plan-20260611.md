@@ -16429,6 +16429,56 @@ Result:
 - Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because
   `ruff` is not available.
 
+### 2026-06-14 - P5 crawl route error helper
+
+Changed:
+
+- Added route-level characterization coverage for crawl route unexpected-error wrappers.
+- Added route-level characterization coverage that existing `HTTPException` instances still
+  pass through unchanged.
+- Extracted `_crawl_route_error()` in `backend.routes.crawl_routes`.
+- Reused the helper from `crawl_historical()`, `crawl_all()`, `crawl_incremental()`,
+  `crawl_latest_until_complete()`, and `crawl_by_time_range()`.
+- Added direct helper coverage for the 500 status and `"{message}: {str(error)}"`
+  detail format.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- The five crawl task creation routes still map unexpected exceptions to route-level
+  `HTTPException(status_code=500)` with the same Chinese prefixes.
+- Existing `HTTPException` pass-through behavior is preserved before the generic
+  exception wrapper.
+- Existing task type, task description, task function, group id, request argument order,
+  route paths, response payload shape, same-group ingestion conflict behavior, and
+  `str(error)` formatting are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_crawl_routes_helpers.CrawlRoutesHelperTests.test_crawl_routes_preserve_wrapped_unexpected_errors tests.test_crawl_routes_helpers.CrawlRoutesHelperTests.test_crawl_routes_preserve_http_exception_passthrough -v
+uv run python -m py_compile backend\routes\crawl_routes.py tests\test_crawl_routes_helpers.py
+uv run python -m unittest tests.test_crawl_routes_helpers.CrawlRoutesHelperTests.test_crawl_route_error_preserves_status_and_detail_format tests.test_crawl_routes_helpers.CrawlRoutesHelperTests.test_crawl_routes_preserve_wrapped_unexpected_errors tests.test_crawl_routes_helpers.CrawlRoutesHelperTests.test_crawl_routes_preserve_http_exception_passthrough -v
+uv run python -m unittest tests.test_crawl_routes_helpers -v
+uv run python -m unittest discover -s tests
+uv run python scripts\scan_postgres_compat_debt.py
+npm --prefix frontend run build
+uv run ruff check backend\routes\crawl_routes.py tests\test_crawl_routes_helpers.py --select F401,F841
+```
+
+Result:
+
+- Existing crawl route unexpected-error and `HTTPException` pass-through characterization
+  tests passed against the original duplicate inline wrappers before extraction: 2 tests.
+- `py_compile` passed.
+- Focused crawl route error helper tests passed after extraction: 3 tests.
+- Crawl route helper tests passed: 58 tests.
+- Full backend unittest discovery passed: 1043 tests, 15 skipped.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Frontend build passed, including Next.js lint/type checks.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because
+  `ruff` is not available.
+
 ## Stop Conditions
 
 Pause before editing if:
