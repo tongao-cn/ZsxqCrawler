@@ -188,6 +188,18 @@ def _create_stock_topic_task_response(group_id: str, request: StockTopicAnalysis
     )
 
 
+def _create_stock_topic_batch_task_response(group_id: str, stock_names: list[str]) -> dict[str, str]:
+    normalized_request = StockTopicAnalysisBatchRequest(stockNames=stock_names)
+    return _create_stock_task_response(
+        "stock_topic_analysis_batch",
+        f"批量个股话题分析 (群组: {group_id}, 股票数: {len(stock_names)})",
+        {"group_id": str(group_id), "stock_names": stock_names},
+        run_stock_topic_analysis_batch_task,
+        group_id,
+        normalized_request,
+    )
+
+
 @router.get("/{group_id}/questions")
 async def read_stock_question_matches(
     group_id: str,
@@ -263,15 +275,7 @@ async def create_stock_topic_analysis_batch(
         stock_names = parse_stock_names(request.stockNames)
         if not stock_names:
             raise ValueError("stock_names 不能为空")
-        normalized_request = StockTopicAnalysisBatchRequest(stockNames=stock_names)
-        return _create_stock_task_response(
-            "stock_topic_analysis_batch",
-            f"批量个股话题分析 (群组: {group_id}, 股票数: {len(stock_names)})",
-            {"group_id": str(group_id), "stock_names": stock_names},
-            run_stock_topic_analysis_batch_task,
-            group_id,
-            normalized_request,
-        )
+        return _create_stock_topic_batch_task_response(group_id, stock_names)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     except Exception as exc:

@@ -427,11 +427,43 @@ class StockTopicAnalysisRoutesHelperTests(unittest.IsolatedAsyncioTestCase):
             )
 
         self.assertEqual("task-2", result["task_id"])
-        create_task.assert_called_once()
-        self.assertEqual("stock_topic_analysis_batch", create_task.call_args.args[0])
+        create_task.assert_called_once_with(
+            "stock_topic_analysis_batch",
+            "批量个股话题分析 (群组: 51111112855254, 股票数: 2)",
+            {"group_id": "51111112855254", "stock_names": ["宁德时代", "德龙激光"]},
+        )
         enqueue_runtime_task.assert_called_once_with(
             run_stock_topic_analysis_batch_task,
             "task-2",
+            "51111112855254",
+            StockTopicAnalysisBatchRequest(stockNames=["宁德时代", "德龙激光"]),
+        )
+
+    @unittest.skipUnless(HAS_ROUTE_DEPS, "stock topic analysis route dependencies are not installed")
+    async def test_create_stock_topic_batch_task_response_preserves_task_contract(self):
+        from backend.routes import stock_topic_analysis_routes
+        from backend.routes.stock_topic_analysis_routes import (
+            StockTopicAnalysisBatchRequest,
+            run_stock_topic_analysis_batch_task,
+        )
+
+        stock_names = ["宁德时代", "德龙激光"]
+        expected = {"task_id": "task-2", "message": "任务已创建，正在后台执行"}
+        with patch(
+            "backend.routes.stock_topic_analysis_routes._create_stock_task_response",
+            return_value=expected,
+        ) as create_response:
+            result = stock_topic_analysis_routes._create_stock_topic_batch_task_response(
+                "51111112855254",
+                stock_names,
+            )
+
+        self.assertEqual(expected, result)
+        create_response.assert_called_once_with(
+            "stock_topic_analysis_batch",
+            "批量个股话题分析 (群组: 51111112855254, 股票数: 2)",
+            {"group_id": "51111112855254", "stock_names": ["宁德时代", "德龙激光"]},
+            run_stock_topic_analysis_batch_task,
             "51111112855254",
             StockTopicAnalysisBatchRequest(stockNames=["宁德时代", "德龙激光"]),
         )
