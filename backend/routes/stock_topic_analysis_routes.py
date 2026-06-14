@@ -166,6 +166,17 @@ def _stock_names_from_image(request: StockTopicImageExtractRequest) -> dict:
     return extract_stock_names_from_image(request.imageDataUrl)
 
 
+def _create_stock_question_task_response(group_id: str, request: StockQuestionRequest) -> dict[str, str]:
+    return _create_stock_task_response(
+        "stock_question_analysis",
+        f"A股问答 (群组: {group_id})",
+        {"group_id": str(group_id), "question": request.question},
+        run_stock_question_task,
+        group_id,
+        request,
+    )
+
+
 @router.get("/{group_id}/questions")
 async def read_stock_question_matches(
     group_id: str,
@@ -187,14 +198,7 @@ async def create_stock_question_analysis(
     try:
         if not request.question.strip():
             raise ValueError("question 不能为空")
-        return _create_stock_task_response(
-            "stock_question_analysis",
-            f"A股问答 (群组: {group_id})",
-            {"group_id": str(group_id), "question": request.question},
-            run_stock_question_task,
-            group_id,
-            request,
-        )
+        return _create_stock_question_task_response(group_id, request)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     except Exception as exc:

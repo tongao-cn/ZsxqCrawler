@@ -180,15 +180,45 @@ class StockTopicAnalysisRoutesHelperTests(unittest.IsolatedAsyncioTestCase):
             result = await create_stock_question_analysis(
                 "51111112855254",
                 StockQuestionRequest(question="固态电池怎么看"),
-            )
+        )
 
         self.assertEqual("task-qa", result["task_id"])
-        self.assertEqual("stock_question_analysis", create_task.call_args.args[0])
+        create_task.assert_called_once_with(
+            "stock_question_analysis",
+            "A股问答 (群组: 51111112855254)",
+            {"group_id": "51111112855254", "question": "固态电池怎么看"},
+        )
         enqueue_runtime_task.assert_called_once_with(
             run_stock_question_task,
             "task-qa",
             "51111112855254",
             StockQuestionRequest(question="固态电池怎么看"),
+        )
+
+    @unittest.skipUnless(HAS_ROUTE_DEPS, "stock topic analysis route dependencies are not installed")
+    async def test_create_stock_question_task_response_preserves_task_contract(self):
+        from backend.routes import stock_topic_analysis_routes
+        from backend.routes.stock_topic_analysis_routes import StockQuestionRequest, run_stock_question_task
+
+        request = StockQuestionRequest(question="固态电池怎么看")
+        expected = {"task_id": "task-qa", "message": "任务已创建，正在后台执行"}
+        with patch(
+            "backend.routes.stock_topic_analysis_routes._create_stock_task_response",
+            return_value=expected,
+        ) as create_response:
+            result = stock_topic_analysis_routes._create_stock_question_task_response(
+                "51111112855254",
+                request,
+            )
+
+        self.assertEqual(expected, result)
+        create_response.assert_called_once_with(
+            "stock_question_analysis",
+            "A股问答 (群组: 51111112855254)",
+            {"group_id": "51111112855254", "question": "固态电池怎么看"},
+            run_stock_question_task,
+            "51111112855254",
+            request,
         )
 
     @unittest.skipUnless(HAS_ROUTE_DEPS, "stock topic analysis route dependencies are not installed")
