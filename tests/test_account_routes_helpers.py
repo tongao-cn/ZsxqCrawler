@@ -91,6 +91,19 @@ class FakeAccountsAssignSqlManager:
 
 @unittest.skipUnless(HAS_ACCOUNT_ROUTE_DEPS, "account route dependencies are not installed")
 class AccountRoutesHelperTests(unittest.TestCase):
+    def test_account_route_error_preserves_status_and_detail_format(self):
+        default_error = account_routes._account_route_error("Failed to create account", RuntimeError("boom"))
+        network_error = account_routes._account_route_error(
+            "Network request failed",
+            RuntimeError("boom"),
+            status_code=502,
+        )
+
+        self.assertEqual(500, default_error.status_code)
+        self.assertEqual("Failed to create account: boom", default_error.detail)
+        self.assertEqual(502, network_error.status_code)
+        self.assertEqual("Network request failed: boom", network_error.detail)
+
     def test_fetch_self_api_data_returns_payload_and_uses_stealth_headers(self):
         payload = {"succeeded": True, "resp_data": {"user": {"uid": "u1"}}}
         response = FakeResponse(payload)
@@ -199,6 +212,16 @@ class AccountRoutesHelperTests(unittest.TestCase):
         self.assertEqual({"accounts": accounts}, result)
         self.assertEqual([True], manager.calls)
 
+    def test_list_accounts_route_preserves_wrapped_unexpected_error(self):
+        import asyncio
+
+        with patch.object(account_routes, "_list_accounts_response", side_effect=RuntimeError("boom")):
+            with self.assertRaises(HTTPException) as ctx:
+                asyncio.run(account_routes.list_accounts())
+
+        self.assertEqual(500, ctx.exception.status_code)
+        self.assertEqual("Failed to retrieve account list: boom", ctx.exception.detail)
+
     def test_list_accounts_response_preserves_masked_lookup(self):
         accounts = [{"id": "acc-1", "cookie": "***"}]
         manager = FakeAccountsListSqlManager(accounts)
@@ -232,6 +255,18 @@ class AccountRoutesHelperTests(unittest.TestCase):
             manager.calls,
         )
         clear_cache.assert_called_once_with()
+
+    def test_create_account_route_preserves_wrapped_unexpected_error(self):
+        import asyncio
+
+        request = account_routes.AccountCreateRequest(cookie="raw-cookie", name="Account A")
+
+        with patch.object(account_routes, "_create_account_response", side_effect=RuntimeError("boom")):
+            with self.assertRaises(HTTPException) as ctx:
+                asyncio.run(account_routes.create_account(request))
+
+        self.assertEqual(500, ctx.exception.status_code)
+        self.assertEqual("Failed to create account: boom", ctx.exception.detail)
 
     def test_create_account_response_preserves_add_mask_and_cache_clear(self):
         manager = FakeAccountsCreateSqlManager(
@@ -285,6 +320,16 @@ class AccountRoutesHelperTests(unittest.TestCase):
         self.assertEqual(["missing"], manager.calls)
         clear_cache.assert_not_called()
 
+    def test_remove_account_route_preserves_wrapped_unexpected_error(self):
+        import asyncio
+
+        with patch.object(account_routes, "_remove_account_response", side_effect=RuntimeError("boom")):
+            with self.assertRaises(HTTPException) as ctx:
+                asyncio.run(account_routes.remove_account("acc-1"))
+
+        self.assertEqual(500, ctx.exception.status_code)
+        self.assertEqual("Failed to delete account: boom", ctx.exception.detail)
+
     def test_remove_account_response_preserves_success_response_and_cache_clear(self):
         manager = FakeAccountsDeleteSqlManager(True)
 
@@ -337,6 +382,18 @@ class AccountRoutesHelperTests(unittest.TestCase):
         self.assertEqual("missing account", ctx.exception.detail)
         self.assertEqual([("group-1", "missing")], manager.calls)
 
+    def test_assign_account_to_group_route_preserves_wrapped_unexpected_error(self):
+        import asyncio
+
+        request = account_routes.AssignGroupAccountRequest(account_id="acc-1")
+
+        with patch.object(account_routes, "_assign_account_to_group_response", side_effect=RuntimeError("boom")):
+            with self.assertRaises(HTTPException) as ctx:
+                asyncio.run(account_routes.assign_account_to_group("group-1", request))
+
+        self.assertEqual(500, ctx.exception.status_code)
+        self.assertEqual("Failed to assign account: boom", ctx.exception.detail)
+
     def test_assign_account_to_group_response_preserves_success_response(self):
         manager = FakeAccountsAssignSqlManager((True, "assigned"))
         request = account_routes.AssignGroupAccountRequest(account_id="acc-1")
@@ -358,6 +415,16 @@ class AccountRoutesHelperTests(unittest.TestCase):
         self.assertEqual(400, ctx.exception.status_code)
         self.assertEqual("missing account", ctx.exception.detail)
         self.assertEqual([("group-1", "missing")], manager.calls)
+
+    def test_get_group_account_route_preserves_wrapped_unexpected_error(self):
+        import asyncio
+
+        with patch.object(account_routes, "_get_group_account_response", side_effect=RuntimeError("boom")):
+            with self.assertRaises(HTTPException) as ctx:
+                asyncio.run(account_routes.get_group_account("group-1"))
+
+        self.assertEqual(500, ctx.exception.status_code)
+        self.assertEqual("获取群组账号失败: boom", ctx.exception.detail)
 
 
 @unittest.skipUnless(HAS_ACCOUNT_ROUTE_DEPS, "account route dependencies are not installed")

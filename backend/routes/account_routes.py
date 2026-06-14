@@ -80,6 +80,10 @@ def _save_self_info_response(db: Any, account_id: str, data: Dict[str, Any]) -> 
     return {"self": db.get_self_info(account_id)}
 
 
+def _account_route_error(message: str, error: Exception, *, status_code: int = 500) -> HTTPException:
+    return HTTPException(status_code=status_code, detail=f"{message}: {str(error)}")
+
+
 def _get_account_self_response(account_id: str) -> Dict[str, Any]:
     db = get_account_info_db()
     info = db.get_self_info(account_id)
@@ -164,9 +168,9 @@ async def _run_self_response_route(
     except HTTPException:
         raise
     except requests.RequestException as e:
-        raise HTTPException(status_code=502, detail=f"{network_error_prefix}: {str(e)}")
+        raise _account_route_error(network_error_prefix, e, status_code=502)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"{generic_error_prefix}: {str(e)}")
+        raise _account_route_error(generic_error_prefix, e)
 
 
 @router.get("/accounts")
@@ -175,7 +179,7 @@ async def list_accounts():
     try:
         return _list_accounts_response()
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to retrieve account list: {str(e)}")
+        raise _account_route_error("Failed to retrieve account list", e)
 
 
 @router.post("/accounts")
@@ -184,7 +188,7 @@ async def create_account(request: AccountCreateRequest):
     try:
         return _create_account_response(request)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to create account: {str(e)}")
+        raise _account_route_error("Failed to create account", e)
 
 
 @router.delete("/accounts/{account_id}")
@@ -195,7 +199,7 @@ async def remove_account(account_id: str):
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to delete account: {str(e)}")
+        raise _account_route_error("Failed to delete account", e)
 
 
 @router.post("/groups/{group_id}/assign-account")
@@ -206,7 +210,7 @@ async def assign_account_to_group(group_id: str, request: AssignGroupAccountRequ
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to assign account: {str(e)}")
+        raise _account_route_error("Failed to assign account", e)
 
 
 @router.get("/groups/{group_id}/account")
@@ -214,7 +218,7 @@ async def get_group_account(group_id: str):
     try:
         return _get_group_account_response(group_id)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"获取群组账号失败: {str(e)}")
+        raise _account_route_error("获取群组账号失败", e)
 
 
 @router.get("/accounts/{account_id}/self")

@@ -16189,6 +16189,54 @@ Result:
 - Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because
   `ruff` is not available.
 
+### 2026-06-14 - P5 account route error helper
+
+Changed:
+
+- Added route-level characterization coverage for account route unexpected-error wrappers.
+- Extracted `_account_route_error()` in `backend.routes.account_routes`.
+- Reused the helper from account list/create/remove/assign/group-account routes and the
+  shared self-info route runner.
+- Added direct helper coverage for default 500 errors and explicit 502 network errors.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- `list_accounts()`, `create_account()`, `remove_account()`, `assign_account_to_group()`,
+  and `get_group_account()` still map unexpected exceptions to the same 500 status and
+  detail strings.
+- The self-info routes still pass through `HTTPException`, map `requests.RequestException`
+  to 502, and map other exceptions to 500.
+- Existing English/Chinese error prefixes, `str(error)` formatting, route paths, response
+  payload shapes, account cache-clearing side effects, account summary lookup behavior,
+  thread offload behavior, and account fallback behavior are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_account_routes_helpers.AccountRoutesHelperTests.test_list_accounts_route_preserves_wrapped_unexpected_error tests.test_account_routes_helpers.AccountRoutesHelperTests.test_create_account_route_preserves_wrapped_unexpected_error tests.test_account_routes_helpers.AccountRoutesHelperTests.test_remove_account_route_preserves_wrapped_unexpected_error tests.test_account_routes_helpers.AccountRoutesHelperTests.test_assign_account_to_group_route_preserves_wrapped_unexpected_error tests.test_account_routes_helpers.AccountRoutesHelperTests.test_get_group_account_route_preserves_wrapped_unexpected_error -v
+uv run python -m py_compile backend\routes\account_routes.py tests\test_account_routes_helpers.py
+uv run python -m unittest tests.test_account_routes_helpers.AccountRoutesHelperTests.test_account_route_error_preserves_status_and_detail_format tests.test_account_routes_helpers.AccountRoutesHelperTests.test_list_accounts_route_preserves_wrapped_unexpected_error tests.test_account_routes_helpers.AccountRoutesHelperTests.test_create_account_route_preserves_wrapped_unexpected_error tests.test_account_routes_helpers.AccountRoutesHelperTests.test_remove_account_route_preserves_wrapped_unexpected_error tests.test_account_routes_helpers.AccountRoutesHelperTests.test_assign_account_to_group_route_preserves_wrapped_unexpected_error tests.test_account_routes_helpers.AccountRoutesHelperTests.test_get_group_account_route_preserves_wrapped_unexpected_error tests.test_account_routes_helpers.AccountRoutesAsyncTests.test_self_routes_preserve_network_error_details tests.test_account_routes_helpers.AccountRoutesAsyncTests.test_self_routes_preserve_generic_error_details -v
+uv run python -m unittest tests.test_account_routes_helpers -v
+uv run python -m unittest discover -s tests
+uv run python scripts\scan_postgres_compat_debt.py
+npm --prefix frontend run build
+uv run ruff check backend\routes\account_routes.py tests\test_account_routes_helpers.py --select F401,F841
+```
+
+Result:
+
+- Existing account route unexpected-error characterization tests passed against the original
+  duplicate inline wrappers before extraction: 5 tests.
+- `py_compile` passed.
+- Focused account route error helper tests passed after extraction: 8 tests.
+- Account route helper tests passed: 29 tests.
+- Full backend unittest discovery passed: 1027 tests, 15 skipped.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Frontend build passed, including Next.js lint/type checks.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because
+  `ruff` is not available.
+
 ## Stop Conditions
 
 Pause before editing if:
