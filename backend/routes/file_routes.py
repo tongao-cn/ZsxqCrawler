@@ -44,6 +44,33 @@ from backend.services.file_workflow_service import (
 router = APIRouter(prefix="/api/files", tags=["files"])
 
 
+async def _file_status(group_id: str, file_id: int) -> dict:
+    return await asyncio.to_thread(_get_file_status_response, group_id, file_id)
+
+
+async def _local_file_status(group_id: str, file_name: str, file_size: int) -> dict:
+    return await asyncio.to_thread(_check_local_file_status_response, group_id, file_name, file_size)
+
+
+async def _file_stats(group_id: str) -> dict:
+    return await asyncio.to_thread(_get_file_stats_response, group_id)
+
+
+async def _clear_file_database(group_id: str) -> dict:
+    return await asyncio.to_thread(_clear_file_database_response, group_id)
+
+
+async def _files_page(
+    group_id: str,
+    page: int,
+    per_page: int,
+    status: Optional[str],
+    search: Optional[str],
+    analysis_status: Optional[str],
+) -> dict:
+    return await asyncio.to_thread(_get_files_response, group_id, page, per_page, status, search, analysis_status)
+
+
 @router.post("/collect/{group_id}")
 async def collect_files(group_id: str, request: FileCollectRequest, background_tasks: BackgroundTasks):
     """收集文件列表"""
@@ -171,7 +198,7 @@ async def download_filtered_files(
 async def get_file_status(group_id: str, file_id: int):
     """获取文件下载状态"""
     try:
-        return await asyncio.to_thread(_get_file_status_response, group_id, file_id)
+        return await _file_status(group_id, file_id)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"获取文件状态失败: {str(e)}")
 
@@ -180,7 +207,7 @@ async def get_file_status(group_id: str, file_id: int):
 async def check_local_file_status(group_id: str, file_name: str, file_size: int):
     """检查本地文件状态（不依赖数据库）"""
     try:
-        return await asyncio.to_thread(_check_local_file_status_response, group_id, file_name, file_size)
+        return await _local_file_status(group_id, file_name, file_size)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"检查本地文件失败: {str(e)}")
 
@@ -289,7 +316,7 @@ async def create_selected_file_analysis_task(
 async def get_file_stats(group_id: str):
     """获取指定群组的文件统计信息"""
     try:
-        return await asyncio.to_thread(_get_file_stats_response, group_id)
+        return await _file_stats(group_id)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"获取文件统计失败: {str(e)}")
 
@@ -298,7 +325,7 @@ async def get_file_stats(group_id: str):
 async def clear_file_database(group_id: str):
     """删除指定群组的 PostgreSQL 文件数据"""
     try:
-        return await asyncio.to_thread(_clear_file_database_response, group_id)
+        return await _clear_file_database(group_id)
     except HTTPException:
         raise
     except Exception as e:
@@ -336,6 +363,6 @@ async def get_files(
 ):
     """获取指定群组的文件列表"""
     try:
-        return await asyncio.to_thread(_get_files_response, group_id, page, per_page, status, search, analysis_status)
+        return await _files_page(group_id, page, per_page, status, search, analysis_status)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"获取文件列表失败: {str(e)}")

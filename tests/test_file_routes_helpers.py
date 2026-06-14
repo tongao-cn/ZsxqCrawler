@@ -649,6 +649,47 @@ class FileRoutesHelperTests(unittest.TestCase):
         self.assertEqual([(file_routes._get_files_response, ("group-1", 2, 5, "completed", "pdf", "pending"))], calls)
         self.assertEqual({"files": [], "pagination": {"page": 2, "per_page": 5, "total": 0, "pages": 0}}, response)
 
+    def test_file_read_helpers_preserve_service_call_shapes(self):
+        from backend.routes import file_routes
+
+        calls = []
+
+        async def fake_to_thread(func, *args):
+            calls.append((func, args))
+            return {"called": func.__name__, "args": args}
+
+        with patch("backend.routes.file_routes.asyncio.to_thread", side_effect=fake_to_thread):
+            file_status = self._run_async(file_routes._file_status("group-1", 123))
+            local_status = self._run_async(file_routes._local_file_status("group-1", "file.pdf", 456))
+            stats = self._run_async(file_routes._file_stats("group-1"))
+            clear_response = self._run_async(file_routes._clear_file_database("group-1"))
+            files = self._run_async(
+                file_routes._files_page(
+                    "group-1",
+                    2,
+                    5,
+                    "completed",
+                    "pdf",
+                    "pending",
+                )
+            )
+
+        self.assertEqual(
+            [
+                (file_routes._get_file_status_response, ("group-1", 123)),
+                (file_routes._check_local_file_status_response, ("group-1", "file.pdf", 456)),
+                (file_routes._get_file_stats_response, ("group-1",)),
+                (file_routes._clear_file_database_response, ("group-1",)),
+                (file_routes._get_files_response, ("group-1", 2, 5, "completed", "pdf", "pending")),
+            ],
+            calls,
+        )
+        self.assertEqual({"called": "_get_file_status_response", "args": ("group-1", 123)}, file_status)
+        self.assertEqual({"called": "_check_local_file_status_response", "args": ("group-1", "file.pdf", 456)}, local_status)
+        self.assertEqual({"called": "_get_file_stats_response", "args": ("group-1",)}, stats)
+        self.assertEqual({"called": "_clear_file_database_response", "args": ("group-1",)}, clear_response)
+        self.assertEqual({"called": "_get_files_response", "args": ("group-1", 2, 5, "completed", "pdf", "pending")}, files)
+
     def test_get_files_response_filters_analysis_status_in_database_query(self):
         from backend.services import file_workflow_service
 

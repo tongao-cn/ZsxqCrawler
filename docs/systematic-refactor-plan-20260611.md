@@ -15216,6 +15216,57 @@ Result:
 - Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because
   `ruff` is not available.
 
+### 2026-06-14 - P5 file read helpers
+
+Changed:
+
+- Added helper-level characterization coverage for file read route helper call shapes.
+- Extracted `_file_status()`, `_local_file_status()`, `_file_stats()`,
+  `_clear_file_database()`, and `_files_page()` in `backend.routes.file_routes`.
+- Reused the helpers from public file read routes so threaded service access is isolated from
+  each route's existing exception wrapper.
+- Kept existing route-level characterization tests for `get_file_status()`,
+  `check_local_file_status()`, `get_file_stats()`, `clear_file_database()`, and `get_files()`.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Public file read routes still call the same service functions through `asyncio.to_thread()`
+  with the same group id, file id, file name, file size, pagination, status, search, and
+  analysis-status arguments.
+- Successful payloads are still returned unchanged.
+- Existing per-route exception mappings and Chinese detail strings are unchanged.
+- Public API shape, route paths, response payloads, logging behavior, storage behavior, config
+  semantics, and fallback/legacy behavior are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_file_routes_helpers.FileRoutesHelperTests.test_file_status_routes_offload_sync_work_to_thread tests.test_file_routes_helpers.FileRoutesHelperTests.test_clear_file_database_offloads_sync_work_to_thread tests.test_file_routes_helpers.FileRoutesHelperTests.test_get_files_offloads_sync_work_to_thread -v
+uv run python -m py_compile backend\routes\file_routes.py tests\test_file_routes_helpers.py
+uv run python -m unittest tests.test_file_routes_helpers.FileRoutesHelperTests.test_file_status_routes_offload_sync_work_to_thread tests.test_file_routes_helpers.FileRoutesHelperTests.test_clear_file_database_offloads_sync_work_to_thread tests.test_file_routes_helpers.FileRoutesHelperTests.test_get_files_offloads_sync_work_to_thread tests.test_file_routes_helpers.FileRoutesHelperTests.test_file_read_helpers_preserve_service_call_shapes -v
+uv run python -m unittest tests.test_file_routes_helpers -v
+uv run python -m unittest tests.test_file_routes_helpers tests.test_columns_file_download_service tests.test_download_analysis_ready_files tests.test_file_ai_analysis_service_helpers tests.test_zsxq_file_database_helpers tests.test_zsxq_file_downloader_helpers -v
+uv run python -m unittest discover -s tests
+uv run python scripts\scan_postgres_compat_debt.py
+npm --prefix frontend run build
+uv run ruff check backend\routes\file_routes.py tests\test_file_routes_helpers.py --select F401,F841
+```
+
+Result:
+
+- Existing file read route characterization tests passed against the original inline
+  implementation before extraction: 3 tests.
+- `py_compile` passed.
+- Focused file read route/helper tests passed after extraction: 4 tests.
+- File route helper tests passed: 39 tests.
+- Related file route/service/storage/downloader tests passed: 248 tests.
+- Full backend unittest discovery passed: 956 tests, 15 skipped.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Frontend build passed, including Next.js lint/type checks.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because
+  `ruff` is not available.
+
 ## Stop Conditions
 
 Pause before editing if:
