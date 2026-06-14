@@ -15013,6 +15013,56 @@ Result:
 - Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because
   `ruff` is not available.
 
+### 2026-06-14 - P5 crawl task response helpers
+
+Changed:
+
+- Added route-level characterization coverage for the five crawl task creation endpoints:
+  historical, all, incremental, latest-until-complete, and time-range.
+- Extracted endpoint-specific task response helpers in `backend.routes.crawl_routes`:
+  `_create_historical_crawl_task_response()`, `_create_all_crawl_task_response()`,
+  `_create_incremental_crawl_task_response()`, `_create_latest_crawl_task_response()`,
+  and `_create_time_range_crawl_task_response()`.
+- Reused the new helpers from the public route functions so task type, description,
+  task function, group id, and task argument assembly are isolated from exception mapping.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Each public crawl route still delegates to `_create_crawl_task_response()` with the same
+  `BackgroundTasks` object, task type, description text, task function, group id, and task
+  arguments in the same order.
+- Existing ingestion-task creation, conflict handling, runtime enqueue behavior, response
+  shape, and per-route `HTTPException`/500 wrapping are unchanged.
+- Legacy/official crawl source behavior, crawler fallback branches, task runtime semantics,
+  storage schema, config semantics, and public API shape are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_crawl_routes_helpers.CrawlRoutesHelperTests.test_crawl_route_task_responses_preserve_contracts -v
+uv run python -m py_compile backend\routes\crawl_routes.py tests\test_crawl_routes_helpers.py
+uv run python -m unittest tests.test_crawl_routes_helpers.CrawlRoutesHelperTests.test_crawl_route_task_responses_preserve_contracts tests.test_crawl_routes_helpers.CrawlRoutesHelperTests.test_create_crawl_task_response_creates_and_enqueues_task tests.test_crawl_routes_helpers.CrawlRoutesHelperTests.test_create_crawl_task_response_rejects_same_group_ingestion_conflict -v
+uv run python -m unittest tests.test_crawl_routes_helpers -v
+uv run python -m unittest discover -s tests
+uv run python scripts\scan_postgres_compat_debt.py
+npm --prefix frontend run build
+uv run ruff check backend\routes\crawl_routes.py tests\test_crawl_routes_helpers.py --select F401,F841
+```
+
+Result:
+
+- New route-level crawl task response characterization test passed against the original inline
+  implementation before extraction: 1 test.
+- `py_compile` passed.
+- Focused crawl task response tests passed after extraction: 3 tests.
+- Crawl route helper tests passed: 55 tests.
+- Full backend unittest discovery passed: 948 tests, 15 skipped.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Frontend build passed, including Next.js lint/type checks.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because
+  `ruff` is not available.
+
 ## Stop Conditions
 
 Pause before editing if:
