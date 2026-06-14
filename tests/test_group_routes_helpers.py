@@ -326,6 +326,37 @@ class GroupRoutesHelperTests(unittest.TestCase):
         self.assertEqual({"called": "_get_group_stats_response", "args": (123,)}, stats)
         self.assertEqual({"called": "_get_group_database_info_response", "args": (123,)}, database_info)
 
+    def test_group_route_error_preserves_status_and_detail_format(self):
+        error = group_routes._group_route_error("获取群组列表失败", RuntimeError("boom"))
+
+        self.assertEqual(500, error.status_code)
+        self.assertEqual("获取群组列表失败: boom", error.detail)
+
+    def test_group_read_routes_preserve_wrapped_unexpected_errors(self):
+        cases = [
+            (group_routes.get_groups, (), "_groups", "获取群组列表失败: boom"),
+            (group_routes.get_group_info, ("123",), "_group_info", "获取群组信息失败: boom"),
+            (group_routes.get_group_stats, (123,), "_group_stats", "获取群组统计失败: boom"),
+            (
+                group_routes.get_group_database_info,
+                (123,),
+                "_group_database_info",
+                "获取数据库信息失败: boom",
+            ),
+        ]
+
+        for route, route_args, helper_name, expected_detail in cases:
+            with self.subTest(helper=helper_name), patch.object(
+                group_routes,
+                helper_name,
+                side_effect=RuntimeError("boom"),
+            ):
+                with self.assertRaises(group_routes.HTTPException) as ctx:
+                    self._run_async(route(*route_args))
+
+                self.assertEqual(500, ctx.exception.status_code)
+                self.assertEqual(expected_detail, ctx.exception.detail)
+
     def test_group_read_helpers_preserve_service_call_shapes(self):
         calls = []
 

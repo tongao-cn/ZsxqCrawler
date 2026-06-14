@@ -430,13 +430,17 @@ async def _group_database_info(group_id: int) -> Dict[str, Any]:
     return await asyncio.to_thread(_get_group_database_info_response, group_id)
 
 
+def _group_route_error(message: str, error: Exception) -> HTTPException:
+    return HTTPException(status_code=500, detail=f"{message}: {str(error)}")
+
+
 @router.get("/groups")
 async def get_groups():
     """获取群组列表：账号群 ∪ 本地目录群（去重合并）"""
     try:
         return await _groups()
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"获取群组列表失败: {str(e)}")
+        raise _group_route_error("获取群组列表失败", e)
 
 
 @router.get("/groups/{group_id}/info")
@@ -445,7 +449,7 @@ async def get_group_info(group_id: str):
     try:
         return await _group_info(group_id)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"获取群组信息失败: {str(e)}")
+        raise _group_route_error("获取群组信息失败", e)
 
 
 @router.get("/groups/{group_id}/stats")
@@ -454,7 +458,7 @@ async def get_group_stats(group_id: int):
     try:
         return await _group_stats(group_id)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"获取群组统计失败: {str(e)}")
+        raise _group_route_error("获取群组统计失败", e)
 
 
 @router.get("/groups/{group_id}/database-info")
@@ -463,7 +467,7 @@ async def get_group_database_info(group_id: int):
     try:
         return await _group_database_info(group_id)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"获取数据库信息失败: {str(e)}")
+        raise _group_route_error("获取数据库信息失败", e)
 
 
 @router.delete("/groups/{group_id}")
