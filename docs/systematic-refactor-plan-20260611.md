@@ -17117,6 +17117,52 @@ Result:
 - Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because
   `ruff` is not available.
 
+### 2026-06-14 - P2 topic storage Q&A timestamped write helper
+
+Changed:
+
+- Ran existing question and answer upsert characterization against the original inline
+  timestamp-and-execute implementation before extraction.
+- Reused `_execute_timestamped_statement()` from `_upsert_question()` and `_upsert_answer()`.
+- Kept the article path out of this slice because `_upsert_article()` intentionally uses the
+  topic create time fetched from storage rather than the current Beijing timestamp.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Anonymous question persistence, question skip conditions, owner/questionee extraction,
+  owner-detail fallback defaults, answer owner skip behavior, SQL shapes, parameter order,
+  timestamp format, and `cursor.execute(sql, params)` behavior are unchanged.
+- Article create-time semantics, like/latest-like paired timestamp semantics, comment-image numeric
+  fallback defaults, schema behavior, read paths, public APIs, route behavior, task runtime
+  behavior, and configuration semantics are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_upsert_question_preserves_anonymous_skip_defaults_and_owner_detail_fallback tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_upsert_answer_preserves_skip_defaults_and_insert_params -v
+uv run python -m py_compile backend\storage\zsxq_database.py tests\test_zsxq_database_helpers.py
+uv run python -m unittest tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_upsert_question_preserves_anonymous_skip_defaults_and_owner_detail_fallback tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_upsert_answer_preserves_skip_defaults_and_insert_params tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_execute_timestamped_statement_preserves_builder_args_and_execute_params -v
+uv run python -m unittest tests.test_zsxq_database_helpers -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run ruff check backend\storage\zsxq_database.py tests\test_zsxq_database_helpers.py --select F401,F841
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- Existing Q&A upsert characterization passed against the original duplicate inline
+  implementation: 2 tests.
+- `py_compile` passed.
+- Focused Q&A upsert and shared timestamped helper tests passed after extraction: 3 tests.
+- Topic database helper tests passed: 80 tests.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Full backend unittest discovery passed: 1068 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because
+  `ruff` is not available.
+
 ## Stop Conditions
 
 Pause before editing if:

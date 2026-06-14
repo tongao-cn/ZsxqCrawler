@@ -756,18 +756,14 @@ class ZSXQDatabase:
         if not owner_user_id and not question_data.get('text'):
             return
 
-        # 获取当前时间作为created_at（使用东八区时间格式）
-        current_time = _beijing_now_timestamp()
-
-        sql, params = _question_insert_statement(
+        self._execute_timestamped_statement(
+            _question_insert_statement,
             topic_id,
             owner_user_id,
             questionee_user_id,
             is_anonymous,
             question_data,
-            current_time,
         )
-        self.cursor.execute(sql, params)
 
     
     def _upsert_answer(self, topic_id: int, answer_data: Dict[str, Any]):
@@ -776,17 +772,13 @@ class ZSXQDatabase:
         
         if not owner_user_id:
             return
-        
-        # 获取当前时间作为created_at（使用东八区时间格式）
-        current_time = _beijing_now_timestamp()
-        
-        sql, params = _answer_insert_statement(
+
+        self._execute_timestamped_statement(
+            _answer_insert_statement,
             topic_id,
             owner_user_id,
             answer_data,
-            current_time,
         )
-        self.cursor.execute(sql, params)
 
     
     def _import_articles(self, topic_id: int, topic_data: Dict[str, Any]):
