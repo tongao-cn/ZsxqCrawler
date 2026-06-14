@@ -10,6 +10,8 @@ from backend.routes.settings_routes import (
     _default_downloader_settings,
     _settings_from_attrs,
     _settings_update_response,
+    _update_crawl_settings_response,
+    update_crawl_settings,
 )
 
 
@@ -108,6 +110,20 @@ class SettingsRoutesHelpersTest(unittest.TestCase):
                 "message": "updated",
                 "settings": settings,
             },
+        )
+
+    def test_update_crawl_settings_route_preserves_fixed_success_response(self):
+        import asyncio
+
+        self.assertEqual(
+            asyncio.run(update_crawl_settings({"ignored": "value"})),
+            {"success": True, "message": "爬取设置已更新"},
+        )
+
+    def test_update_crawl_settings_response_preserves_fixed_success_response(self):
+        self.assertEqual(
+            _update_crawl_settings_response({"ignored": "value"}),
+            {"success": True, "message": "爬取设置已更新"},
         )
 
 

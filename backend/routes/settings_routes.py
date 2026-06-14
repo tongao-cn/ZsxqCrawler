@@ -70,6 +70,10 @@ def _settings_update_response(message: str, settings: dict) -> dict:
     }
 
 
+def _update_crawl_settings_response(settings: dict) -> dict:
+    return {"success": True, "message": "爬取设置已更新"}
+
+
 class CrawlerSettingsRequest(BaseModel):
     min_delay: float = Field(default=2.0, ge=0.5, le=10.0)
     max_delay: float = Field(default=5.0, ge=1.0, le=20.0)
@@ -99,7 +103,7 @@ async def get_crawl_settings():
 async def update_crawl_settings(settings: dict):
     """更新话题爬取设置"""
     try:
-        return {"success": True, "message": "爬取设置已更新"}
+        return _update_crawl_settings_response(settings)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"更新爬取设置失败: {str(e)}")
 
