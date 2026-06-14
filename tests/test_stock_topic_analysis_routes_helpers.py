@@ -371,12 +371,42 @@ class StockTopicAnalysisRoutesHelperTests(unittest.IsolatedAsyncioTestCase):
             )
 
         self.assertEqual("task-1", result["task_id"])
-        create_task.assert_called_once()
+        create_task.assert_called_once_with(
+            "stock_topic_analysis",
+            "个股话题分析 (群组: 51111112855254, 股票: 宁德时代)",
+            {"group_id": "51111112855254", "stock_name": "宁德时代"},
+        )
         enqueue_runtime_task.assert_called_once_with(
             run_stock_topic_analysis_task,
             "task-1",
             "51111112855254",
             StockTopicAnalysisRequest(stockName="宁德时代"),
+        )
+
+    @unittest.skipUnless(HAS_ROUTE_DEPS, "stock topic analysis route dependencies are not installed")
+    async def test_create_stock_topic_task_response_preserves_task_contract(self):
+        from backend.routes import stock_topic_analysis_routes
+        from backend.routes.stock_topic_analysis_routes import StockTopicAnalysisRequest, run_stock_topic_analysis_task
+
+        request = StockTopicAnalysisRequest(stockName="宁德时代")
+        expected = {"task_id": "task-1", "message": "任务已创建，正在后台执行"}
+        with patch(
+            "backend.routes.stock_topic_analysis_routes._create_stock_task_response",
+            return_value=expected,
+        ) as create_response:
+            result = stock_topic_analysis_routes._create_stock_topic_task_response(
+                "51111112855254",
+                request,
+            )
+
+        self.assertEqual(expected, result)
+        create_response.assert_called_once_with(
+            "stock_topic_analysis",
+            "个股话题分析 (群组: 51111112855254, 股票: 宁德时代)",
+            {"group_id": "51111112855254", "stock_name": "宁德时代"},
+            run_stock_topic_analysis_task,
+            "51111112855254",
+            request,
         )
 
     @unittest.skipUnless(HAS_ROUTE_DEPS, "stock topic analysis route dependencies are not installed")

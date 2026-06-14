@@ -177,6 +177,17 @@ def _create_stock_question_task_response(group_id: str, request: StockQuestionRe
     )
 
 
+def _create_stock_topic_task_response(group_id: str, request: StockTopicAnalysisRequest) -> dict[str, str]:
+    return _create_stock_task_response(
+        "stock_topic_analysis",
+        f"个股话题分析 (群组: {group_id}, 股票: {request.stockName})",
+        {"group_id": str(group_id), "stock_name": request.stockName},
+        run_stock_topic_analysis_task,
+        group_id,
+        request,
+    )
+
+
 @router.get("/{group_id}/questions")
 async def read_stock_question_matches(
     group_id: str,
@@ -236,14 +247,7 @@ async def create_stock_topic_analysis(
     try:
         if not request.stockName.strip():
             raise ValueError("stock_name 不能为空")
-        return _create_stock_task_response(
-            "stock_topic_analysis",
-            f"个股话题分析 (群组: {group_id}, 股票: {request.stockName})",
-            {"group_id": str(group_id), "stock_name": request.stockName},
-            run_stock_topic_analysis_task,
-            group_id,
-            request,
-        )
+        return _create_stock_topic_task_response(group_id, request)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     except Exception as exc:
