@@ -17069,6 +17069,54 @@ Result:
 - Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because
   `ruff` is not available.
 
+### 2026-06-14 - P2 topic storage like-emoji timestamped write helper
+
+Changed:
+
+- Ran existing like-emoji import characterization against the original inline
+  timestamp-and-execute implementation before extraction.
+- Reused `_execute_timestamped_statement()` from `_import_like_emojis()` for each valid
+  like-emoji upsert row.
+- Kept `_import_likes()` out of this slice because each like currently shares one timestamp across
+  both `likes` and `latest_likes` writes, which the existing single-statement helper should not
+  collapse without a separate characterization and helper design.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Missing `likes_detail`, missing `emojis`, empty emoji lists, invalid emoji rows, SQL shape,
+  default `likes_count=0`, timestamp format, and `cursor.execute(sql, params)` behavior are
+  unchanged.
+- Like/latest-like paired timestamp semantics, comment-image numeric fallback defaults, schema
+  behavior, read paths, public APIs, route behavior, task runtime behavior, and configuration
+  semantics are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_import_like_emojis_preserves_skip_defaults_and_upsert_params -v
+uv run python -m py_compile backend\storage\zsxq_database.py tests\test_zsxq_database_helpers.py
+uv run python -m unittest tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_import_like_emojis_preserves_skip_defaults_and_upsert_params tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_execute_timestamped_statement_preserves_builder_args_and_execute_params -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run python -m unittest tests.test_zsxq_database_helpers -v
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+uv run ruff check backend\storage\zsxq_database.py tests\test_zsxq_database_helpers.py --select F401,F841
+```
+
+Result:
+
+- Existing like-emoji import characterization passed against the original duplicate inline
+  implementation: 1 test.
+- `py_compile` passed.
+- Focused like-emoji import and shared timestamped helper tests passed after extraction: 2 tests.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Topic database helper tests passed: 80 tests.
+- Full backend unittest discovery passed: 1068 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because
+  `ruff` is not available.
+
 ## Stop Conditions
 
 Pause before editing if:

@@ -652,11 +652,7 @@ class ZSXQDatabase:
             return
 
         for emoji in _iter_valid_like_emoji_payloads(topic_data['likes_detail']['emojis']):
-            # 获取当前时间作为created_at（使用东八区时间格式）
-            current_time = _beijing_now_timestamp()
-
-            sql, params = _like_emoji_insert_statement(topic_id, emoji, current_time)
-            self.cursor.execute(sql, params)
+            self._execute_timestamped_statement(_like_emoji_insert_statement, topic_id, emoji)
 
     def _import_user_liked_emojis(self, topic_id: int, topic_data: Dict[str, Any]):
         """导入用户表情点赞信息"""
