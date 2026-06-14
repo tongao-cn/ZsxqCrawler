@@ -15621,6 +15621,53 @@ Result:
 - Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because
   `ruff` is not available.
 
+### 2026-06-14 - P5 account create response helper
+
+Changed:
+
+- Added route-level characterization coverage for the account create response before extraction.
+- Extracted `_create_account_response()` in `backend.routes.account_routes`.
+- Reused the helper from `create_account()` so the route keeps only exception mapping.
+- Added helper coverage for preserving account creation, masked account lookup, cache clear,
+  and response shape.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- `create_account()` still calls `add_account(request.cookie, request.name)`, then reads the
+  created account with `mask_cookie=True`, clears the account-detection cache, and returns
+  `{"account": safe_acc}` unchanged.
+- Existing route path, request schema, response payload shape, exception mapping, cookie
+  masking behavior, cache side effect, storage access, and config semantics are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_account_routes_helpers.AccountRoutesHelperTests.test_create_account_route_preserves_add_mask_and_cache_clear -v
+uv run python -m py_compile backend\routes\account_routes.py tests\test_account_routes_helpers.py
+uv run python -m unittest tests.test_account_routes_helpers.AccountRoutesHelperTests.test_create_account_route_preserves_add_mask_and_cache_clear tests.test_account_routes_helpers.AccountRoutesHelperTests.test_create_account_response_preserves_add_mask_and_cache_clear -v
+uv run python -m unittest tests.test_account_routes_helpers -v
+uv run python -m unittest tests.test_account_routes_helpers tests.test_account_context tests.test_account_info_db_helpers tests.test_accounts_sql_manager_helpers -v
+uv run python -m unittest discover -s tests
+uv run python scripts\scan_postgres_compat_debt.py
+npm --prefix frontend run build
+uv run ruff check backend\routes\account_routes.py tests\test_account_routes_helpers.py --select F401,F841
+```
+
+Result:
+
+- Existing account create route characterization test passed against the original inline
+  implementation before extraction: 1 test.
+- `py_compile` passed.
+- Focused account create route/helper tests passed after extraction: 2 tests.
+- Account route helper tests passed: 15 tests.
+- Related account route/context/storage tests passed: 34 tests, 1 skipped.
+- Full backend unittest discovery passed: 970 tests, 15 skipped.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Frontend build passed, including Next.js lint/type checks.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because
+  `ruff` is not available.
+
 ## Stop Conditions
 
 Pause before editing if:

@@ -54,6 +54,21 @@ class FakeAccountsListSqlManager:
         return self.accounts
 
 
+class FakeAccountsCreateSqlManager:
+    def __init__(self, created_account, safe_account):
+        self.created_account = created_account
+        self.safe_account = safe_account
+        self.calls = []
+
+    def add_account(self, cookie, name):
+        self.calls.append(("add_account", cookie, name))
+        return self.created_account
+
+    def get_account_by_id(self, account_id, mask_cookie=True):
+        self.calls.append(("get_account_by_id", account_id, mask_cookie))
+        return self.safe_account
+
+
 @unittest.skipUnless(HAS_ACCOUNT_ROUTE_DEPS, "account route dependencies are not installed")
 class AccountRoutesHelperTests(unittest.TestCase):
     def test_fetch_self_api_data_returns_payload_and_uses_stealth_headers(self):
@@ -173,6 +188,52 @@ class AccountRoutesHelperTests(unittest.TestCase):
 
         self.assertEqual({"accounts": accounts}, result)
         self.assertEqual([True], manager.calls)
+
+    def test_create_account_route_preserves_add_mask_and_cache_clear(self):
+        import asyncio
+
+        manager = FakeAccountsCreateSqlManager(
+            {"id": "acc-1", "cookie": "raw-cookie"},
+            {"id": "acc-1", "cookie": "***"},
+        )
+        request = account_routes.AccountCreateRequest(cookie="raw-cookie", name="Account A")
+
+        with patch.object(account_routes, "get_accounts_sql_manager", return_value=manager), patch.object(
+            account_routes, "clear_account_detect_cache"
+        ) as clear_cache:
+            result = asyncio.run(account_routes.create_account(request))
+
+        self.assertEqual({"account": {"id": "acc-1", "cookie": "***"}}, result)
+        self.assertEqual(
+            [
+                ("add_account", "raw-cookie", "Account A"),
+                ("get_account_by_id", "acc-1", True),
+            ],
+            manager.calls,
+        )
+        clear_cache.assert_called_once_with()
+
+    def test_create_account_response_preserves_add_mask_and_cache_clear(self):
+        manager = FakeAccountsCreateSqlManager(
+            {"id": "acc-1", "cookie": "raw-cookie"},
+            {"id": "acc-1", "cookie": "***"},
+        )
+        request = account_routes.AccountCreateRequest(cookie="raw-cookie", name="Account A")
+
+        with patch.object(account_routes, "get_accounts_sql_manager", return_value=manager), patch.object(
+            account_routes, "clear_account_detect_cache"
+        ) as clear_cache:
+            result = account_routes._create_account_response(request)
+
+        self.assertEqual({"account": {"id": "acc-1", "cookie": "***"}}, result)
+        self.assertEqual(
+            [
+                ("add_account", "raw-cookie", "Account A"),
+                ("get_account_by_id", "acc-1", True),
+            ],
+            manager.calls,
+        )
+        clear_cache.assert_called_once_with()
 
 
 @unittest.skipUnless(HAS_ACCOUNT_ROUTE_DEPS, "account route dependencies are not installed")

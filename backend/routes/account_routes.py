@@ -127,6 +127,14 @@ def _list_accounts_response() -> Dict[str, Any]:
     return {"accounts": accounts}
 
 
+def _create_account_response(request: AccountCreateRequest) -> Dict[str, Any]:
+    sql_mgr = get_accounts_sql_manager()
+    acc = sql_mgr.add_account(request.cookie, request.name)
+    safe_acc = sql_mgr.get_account_by_id(acc.get("id"), mask_cookie=True)
+    clear_account_detect_cache()
+    return {"account": safe_acc}
+
+
 async def _run_self_response_route(
     helper: Callable[[str], Dict[str, Any]],
     identifier: str,
@@ -157,11 +165,7 @@ async def list_accounts():
 async def create_account(request: AccountCreateRequest):
     """创建新账号"""
     try:
-        sql_mgr = get_accounts_sql_manager()
-        acc = sql_mgr.add_account(request.cookie, request.name)
-        safe_acc = sql_mgr.get_account_by_id(acc.get("id"), mask_cookie=True)
-        clear_account_detect_cache()
-        return {"account": safe_acc}
+        return _create_account_response(request)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to create account: {str(e)}")
 
