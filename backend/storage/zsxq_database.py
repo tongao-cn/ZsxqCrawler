@@ -482,13 +482,9 @@ class ZSXQDatabase:
             if not topic_id:
                 return False
 
-            # 获取当前时间作为imported_at（使用东八区时间格式）
-            current_time = _beijing_now_timestamp()
-
             # 只更新统计相关字段，不更新内容字段
             scoped_group_id = _group_id_param(self.group_id)
-            sql, params = _topic_stats_update_statement(topic_data, topic_id, scoped_group_id, current_time)
-            self.cursor.execute(sql, params)
+            self._execute_timestamped_statement(_topic_stats_update_statement, topic_data, topic_id, scoped_group_id)
 
             # 检查是否有行被更新
             if self.cursor.rowcount > 0:

@@ -17347,6 +17347,54 @@ Result:
 - Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because
   `ruff` is not available.
 
+### 2026-06-14 - P2 topic storage stats update timestamped write helper
+
+Changed:
+
+- Ran existing topic stats update characterization against the original inline
+  timestamp-and-execute implementation before extraction.
+- Reused `_execute_timestamped_statement()` from `update_topic_stats()` after deriving the scoped
+  group id.
+- Left the update-only semantics, rowcount success check, missing-topic warning, and exception
+  fallback unchanged.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Topic stats update SQL shape, parameter order, imported-at timestamp format, scoped/unscoped group
+  parameters, `rowcount > 0` success semantics, missing-topic warning text, and exception
+  traceback behavior are unchanged.
+- Topic content upsert behavior, comment group fallback lookup, additional-comment import order,
+  comment-image import behavior, article create-time semantics, like/latest-like paired timestamp
+  semantics, schema behavior, read paths, public APIs, route behavior, task runtime behavior, and
+  configuration semantics are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_update_topic_stats_preserves_skip_rowcount_and_exception_branches -v
+uv run python -m py_compile backend\storage\zsxq_database.py tests\test_zsxq_database_helpers.py
+uv run python -m unittest tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_update_topic_stats_preserves_skip_rowcount_and_exception_branches tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_execute_timestamped_statement_preserves_builder_args_and_execute_params -v
+uv run python -m unittest tests.test_zsxq_database_helpers -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+uv run ruff check backend\storage\zsxq_database.py tests\test_zsxq_database_helpers.py --select F401,F841
+```
+
+Result:
+
+- Existing topic stats update characterization passed against the original duplicate inline
+  implementation: 1 test.
+- `py_compile` passed.
+- Focused topic stats update and shared timestamped helper tests passed after extraction: 2 tests.
+- Topic database helper tests passed: 80 tests.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Full backend unittest discovery passed: 1068 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because
+  `ruff` is not available.
+
 ## Stop Conditions
 
 Pause before editing if:
