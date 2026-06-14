@@ -176,6 +176,21 @@ def _image_insert_statement(
     )
 
 
+def _comment_image_insert_statement(
+    topic_id: int,
+    image_data: Dict[str, Any],
+    comment_id: int,
+    created_at: str,
+) -> tuple[str, tuple[Any, ...]]:
+    return _image_insert_statement(
+        topic_id,
+        image_data,
+        comment_id,
+        created_at,
+        missing_numeric_default=0,
+    )
+
+
 def _delete_latest_likes_statement(topic_id: int) -> tuple[str, tuple[Any, ...]]:
     return delete_latest_likes_statement(topic_id)
 
@@ -726,17 +741,12 @@ class ZSXQDatabase:
     def _import_comment_images(self, topic_id: int, comment_id: int, images: List[Dict[str, Any]]):
         """导入评论的图片信息"""
         for image in _iter_valid_comment_image_payloads(images):
-            # 获取当前时间作为created_at（使用东八区时间格式）
-            current_time = _beijing_now_timestamp()
-
-            sql, params = _image_insert_statement(
+            self._execute_timestamped_statement(
+                _comment_image_insert_statement,
                 topic_id,
                 image,
                 comment_id,
-                current_time,
-                missing_numeric_default=0,
             )
-            self.cursor.execute(sql, params)
 
     def _upsert_question(self, topic_id: int, question_data: Dict[str, Any]):
         """插入或更新问题信息"""
