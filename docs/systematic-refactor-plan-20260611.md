@@ -16237,6 +16237,55 @@ Result:
 - Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because
   `ruff` is not available.
 
+### 2026-06-14 - P5 columns route error helper
+
+Changed:
+
+- Added route-level characterization coverage for columns route unexpected-error wrappers.
+- Extracted `_columns_route_error()` in `backend.routes.columns_routes`.
+- Reused the helper from the group-columns, column-topics, topic-detail, fetch-task, stats,
+  delete-all, and full-comments routes.
+- Added direct helper coverage for the 500 status and `"{message}: {str(error)}"` detail
+  format.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- The seven columns routes still map unexpected exceptions to route-level
+  `HTTPException(status_code=500)` with the same Chinese prefixes.
+- `get_column_topic_detail()` and `fetch_group_columns()` still pass through explicit
+  `HTTPException` values such as 404 and ingestion-task conflicts.
+- `get_column_topic_full_comments()` still logs unexpected errors before wrapping them.
+- Existing `raise ... from exc` exception chaining, `str(error)` formatting, route paths,
+  response payload shapes, task creation behavior, service-thread offload behavior, and
+  full-comments HTTP passthrough behavior are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_columns_routes_helpers.ColumnsRoutesHelperTests.test_columns_read_routes_preserve_wrapped_unexpected_errors tests.test_columns_routes_helpers.ColumnsRoutesHelperTests.test_get_column_topic_detail_preserves_wrapped_unexpected_error tests.test_columns_routes_helpers.ColumnsRoutesHelperTests.test_fetch_group_columns_preserves_wrapped_unexpected_error tests.test_columns_routes_helpers.ColumnsRoutesHelperTests.test_get_column_topic_full_comments_logs_unexpected_error -v
+uv run python -m py_compile backend\routes\columns_routes.py tests\test_columns_routes_helpers.py
+uv run python -m unittest tests.test_columns_routes_helpers.ColumnsRoutesHelperTests.test_columns_route_error_preserves_status_and_detail_format tests.test_columns_routes_helpers.ColumnsRoutesHelperTests.test_columns_read_routes_preserve_wrapped_unexpected_errors tests.test_columns_routes_helpers.ColumnsRoutesHelperTests.test_get_column_topic_detail_preserves_wrapped_unexpected_error tests.test_columns_routes_helpers.ColumnsRoutesHelperTests.test_fetch_group_columns_preserves_wrapped_unexpected_error tests.test_columns_routes_helpers.ColumnsRoutesHelperTests.test_get_column_topic_full_comments_logs_unexpected_error tests.test_columns_routes_helpers.ColumnsRoutesHelperTests.test_get_column_topic_full_comments_preserves_http_exception_passthrough -v
+uv run python -m unittest tests.test_columns_routes_helpers -v
+uv run python -m unittest discover -s tests
+uv run python scripts\scan_postgres_compat_debt.py
+npm --prefix frontend run build
+uv run ruff check backend\routes\columns_routes.py tests\test_columns_routes_helpers.py --select F401,F841
+```
+
+Result:
+
+- Existing columns route unexpected-error characterization tests passed against the original
+  duplicate inline wrappers before extraction: 4 tests covering 7 wrappers.
+- `py_compile` passed.
+- Focused columns route error helper tests passed after extraction: 6 tests.
+- Columns route helper tests passed: 16 tests.
+- Full backend unittest discovery passed: 1031 tests, 15 skipped.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Frontend build passed, including Next.js lint/type checks.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because
+  `ruff` is not available.
+
 ## Stop Conditions
 
 Pause before editing if:

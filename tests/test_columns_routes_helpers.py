@@ -20,6 +20,15 @@ class FakeBackgroundTasks:
 
 class ColumnsRoutesHelperTests(unittest.TestCase):
     @unittest.skipUnless(HAS_COLUMNS_ROUTE_DEPS, "columns route dependencies are not installed")
+    def test_columns_route_error_preserves_status_and_detail_format(self):
+        from backend.routes.columns_routes import _columns_route_error
+
+        error = _columns_route_error("获取专栏目录失败", RuntimeError("boom"))
+
+        self.assertEqual(500, error.status_code)
+        self.assertEqual("获取专栏目录失败: boom", error.detail)
+
+    @unittest.skipUnless(HAS_COLUMNS_ROUTE_DEPS, "columns route dependencies are not installed")
     def test_resolve_columns_fetch_config_applies_defaults_and_overrides(self):
         from backend.routes.columns_routes import ColumnsSettingsRequest
         from backend.services.columns_fetch_summary import resolve_columns_fetch_config
@@ -161,6 +170,54 @@ class ColumnsRoutesHelperTests(unittest.TestCase):
                 self.assertEqual([(service_func, service_args)], calls)
 
     @unittest.skipUnless(HAS_COLUMNS_ROUTE_DEPS, "columns route dependencies are not installed")
+    def test_columns_read_routes_preserve_wrapped_unexpected_errors(self):
+        from fastapi import HTTPException
+        from backend.routes import columns_routes
+
+        cases = [
+            (
+                "group_columns",
+                columns_routes.get_group_columns,
+                ("123",),
+                "_group_columns",
+                "获取专栏目录失败: boom",
+            ),
+            (
+                "column_topics",
+                columns_routes.get_column_topics,
+                ("123", 456),
+                "_column_topics",
+                "获取专栏文章列表失败: boom",
+            ),
+            (
+                "columns_stats",
+                columns_routes.get_columns_stats,
+                ("123",),
+                "_columns_stats",
+                "获取专栏统计失败: boom",
+            ),
+            (
+                "delete_all_columns",
+                columns_routes.delete_all_columns,
+                ("123",),
+                "_delete_all_columns",
+                "删除专栏数据失败: boom",
+            ),
+        ]
+
+        for case_name, route, route_args, helper_name, expected_detail in cases:
+            with self.subTest(case_name=case_name):
+                error = RuntimeError("boom")
+
+                with patch.object(columns_routes, helper_name, side_effect=error):
+                    with self.assertRaises(HTTPException) as raised:
+                        asyncio.run(route(*route_args))
+
+                self.assertEqual(500, raised.exception.status_code)
+                self.assertEqual(expected_detail, raised.exception.detail)
+                self.assertIs(error, raised.exception.__cause__)
+
+    @unittest.skipUnless(HAS_COLUMNS_ROUTE_DEPS, "columns route dependencies are not installed")
     def test_columns_read_helpers_preserve_service_call_shapes(self):
         from backend.routes import columns_routes
 
@@ -255,6 +312,21 @@ class ColumnsRoutesHelperTests(unittest.TestCase):
         self.assertEqual("文章详情不存在", raised.exception.detail)
 
     @unittest.skipUnless(HAS_COLUMNS_ROUTE_DEPS, "columns route dependencies are not installed")
+    def test_get_column_topic_detail_preserves_wrapped_unexpected_error(self):
+        from fastapi import HTTPException
+        from backend.routes import columns_routes
+
+        error = RuntimeError("boom")
+
+        with patch.object(columns_routes, "_column_topic_detail_or_404", side_effect=error):
+            with self.assertRaises(HTTPException) as raised:
+                asyncio.run(columns_routes.get_column_topic_detail("123", 456))
+
+        self.assertEqual(500, raised.exception.status_code)
+        self.assertEqual("获取文章详情失败: boom", raised.exception.detail)
+        self.assertIs(error, raised.exception.__cause__)
+
+    @unittest.skipUnless(HAS_COLUMNS_ROUTE_DEPS, "columns route dependencies are not installed")
     def test_column_topic_detail_or_404_preserves_success_and_missing_detail(self):
         from fastapi import HTTPException
         from backend.routes import columns_routes
@@ -288,6 +360,27 @@ class ColumnsRoutesHelperTests(unittest.TestCase):
 
         self.assertEqual(404, raised.exception.status_code)
         self.assertEqual("文章详情不存在", raised.exception.detail)
+
+    @unittest.skipUnless(HAS_COLUMNS_ROUTE_DEPS, "columns route dependencies are not installed")
+    def test_fetch_group_columns_preserves_wrapped_unexpected_error(self):
+        from fastapi import HTTPException
+        from backend.routes import columns_routes
+
+        error = RuntimeError("boom")
+
+        with patch.object(columns_routes, "_create_columns_fetch_task_response", side_effect=error):
+            with self.assertRaises(HTTPException) as raised:
+                asyncio.run(
+                    columns_routes.fetch_group_columns(
+                        "123",
+                        columns_routes.ColumnsSettingsRequest(),
+                        FakeBackgroundTasks(),
+                    )
+                )
+
+        self.assertEqual(500, raised.exception.status_code)
+        self.assertEqual("启动专栏采集失败: boom", raised.exception.detail)
+        self.assertIs(error, raised.exception.__cause__)
 
     @unittest.skipUnless(HAS_COLUMNS_ROUTE_DEPS, "columns route dependencies are not installed")
     def test_get_column_topic_full_comments_runs_service_in_thread(self):
@@ -370,6 +463,7 @@ class ColumnsRoutesHelperTests(unittest.TestCase):
 
         self.assertEqual(500, raised.exception.status_code)
         self.assertEqual("获取完整评论失败: boom", raised.exception.detail)
+        self.assertIsInstance(raised.exception.__cause__, RuntimeError)
         log_exception.assert_called_once_with("获取专栏完整评论失败: topic_id=456")
 
 

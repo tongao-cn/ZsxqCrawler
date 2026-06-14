@@ -55,6 +55,10 @@ def _create_columns_fetch_task_response(
     }
 
 
+def _columns_route_error(message: str, error: Exception) -> HTTPException:
+    return HTTPException(status_code=500, detail=f"{message}: {str(error)}")
+
+
 @router.get("/groups/{group_id}/columns/summary")
 async def get_group_columns_summary(group_id: str):
     """获取群组专栏摘要信息，检查是否存在专栏内容"""
@@ -71,7 +75,7 @@ async def get_group_columns(group_id: str):
     try:
         return await _group_columns(group_id)
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"获取专栏目录失败: {str(exc)}") from exc
+        raise _columns_route_error("获取专栏目录失败", exc) from exc
 
 
 async def _column_topics(group_id: str, column_id: int) -> Dict[str, Any]:
@@ -84,7 +88,7 @@ async def get_column_topics(group_id: str, column_id: int):
     try:
         return await _column_topics(group_id, column_id)
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"获取专栏文章列表失败: {str(exc)}") from exc
+        raise _columns_route_error("获取专栏文章列表失败", exc) from exc
 
 
 async def _column_topic_detail_or_404(group_id: str, topic_id: int) -> Dict[str, Any]:
@@ -102,7 +106,7 @@ async def get_column_topic_detail(group_id: str, topic_id: int):
     except HTTPException:
         raise
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"获取文章详情失败: {str(exc)}") from exc
+        raise _columns_route_error("获取文章详情失败", exc) from exc
 
 
 @router.post("/groups/{group_id}/columns/fetch")
@@ -113,7 +117,7 @@ async def fetch_group_columns(group_id: str, request: ColumnsSettingsRequest, ba
     except HTTPException:
         raise
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"启动专栏采集失败: {str(exc)}") from exc
+        raise _columns_route_error("启动专栏采集失败", exc) from exc
 
 
 async def _columns_stats(group_id: str) -> Dict[str, Any]:
@@ -126,7 +130,7 @@ async def get_columns_stats(group_id: str):
     try:
         return await _columns_stats(group_id)
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"获取专栏统计失败: {str(exc)}") from exc
+        raise _columns_route_error("获取专栏统计失败", exc) from exc
 
 
 async def _delete_all_columns(group_id: str) -> Dict[str, Any]:
@@ -139,7 +143,7 @@ async def delete_all_columns(group_id: str):
     try:
         return await _delete_all_columns(group_id)
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"删除专栏数据失败: {str(exc)}") from exc
+        raise _columns_route_error("删除专栏数据失败", exc) from exc
 
 
 async def _column_topic_full_comments(group_id: str, topic_id: int) -> Dict[str, Any]:
@@ -155,4 +159,4 @@ async def get_column_topic_full_comments(group_id: str, topic_id: int):
         raise
     except Exception as exc:
         log_exception(f"获取专栏完整评论失败: topic_id={topic_id}")
-        raise HTTPException(status_code=500, detail=f"获取完整评论失败: {str(exc)}") from exc
+        raise _columns_route_error("获取完整评论失败", exc) from exc
