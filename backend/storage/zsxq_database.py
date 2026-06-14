@@ -704,20 +704,17 @@ class ZSXQDatabase:
         owner_user_id = comment_data.get('owner', {}).get('user_id')
         repliee_user_id = comment_data.get('repliee', {}).get('user_id')
         
-        # 获取当前时间作为imported_at（使用东八区时间格式）
-        current_time = _beijing_now_timestamp()
         group_id = self._resolve_topic_group_id(topic_id, comment_data.get('group_id'))
-        
-        sql, params = _comment_insert_statement(
+
+        self._execute_timestamped_statement(
+            _comment_insert_statement,
             topic_id,
             comment_id,
             group_id,
             owner_user_id,
             repliee_user_id,
             comment_data,
-            current_time,
         )
-        self.cursor.execute(sql, params)
 
     def _resolve_topic_group_id(self, topic_id: int, explicit_group_id: Optional[Any] = None):
         """Resolve group_id for comments fetched separately from topic payloads."""
