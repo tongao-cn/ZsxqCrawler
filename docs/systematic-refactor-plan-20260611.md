@@ -15810,6 +15810,48 @@ Result:
 - Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because
   `ruff` is not available.
 
+### 2026-06-14 - P5 crawl settings read response helper
+
+Changed:
+
+- Added route-level characterization coverage for crawl-settings read before extraction.
+- Extracted `_get_crawl_settings_response()` in `backend.routes.settings_routes`.
+- Reused the helper from `get_crawl_settings()` so the route keeps only exception mapping.
+- Added helper coverage for preserving the default crawl-settings payload.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- `get_crawl_settings()` still returns `_default_crawl_settings()` unchanged.
+- Existing route path, response payload shape, default values, exception mapping, config
+  semantics, and current read behavior are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_settings_routes_helpers.SettingsRoutesHelpersTest.test_get_crawl_settings_route_preserves_default_payload -v
+uv run python -m py_compile backend\routes\settings_routes.py tests\test_settings_routes_helpers.py
+uv run python -m unittest tests.test_settings_routes_helpers.SettingsRoutesHelpersTest.test_get_crawl_settings_route_preserves_default_payload tests.test_settings_routes_helpers.SettingsRoutesHelpersTest.test_get_crawl_settings_response_preserves_default_payload -v
+uv run python -m unittest tests.test_settings_routes_helpers -v
+uv run python -m unittest discover -s tests
+uv run python scripts\scan_postgres_compat_debt.py
+npm --prefix frontend run build
+uv run ruff check backend\routes\settings_routes.py tests\test_settings_routes_helpers.py --select F401,F841
+```
+
+Result:
+
+- Existing crawl settings read route characterization test passed against the original inline
+  implementation before extraction: 1 test.
+- `py_compile` passed.
+- Focused crawl settings read route/helper tests passed after extraction: 2 tests.
+- Settings route helper tests passed: 8 tests.
+- Full backend unittest discovery passed: 982 tests, 15 skipped.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Frontend build passed, including Next.js lint/type checks.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because
+  `ruff` is not available.
+
 ## Stop Conditions
 
 Pause before editing if:

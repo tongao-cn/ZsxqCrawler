@@ -70,6 +70,10 @@ def _settings_update_response(message: str, settings: dict) -> dict:
     }
 
 
+def _get_crawl_settings_response() -> dict:
+    return _default_crawl_settings()
+
+
 def _update_crawl_settings_response(settings: dict) -> dict:
     return {"success": True, "message": "爬取设置已更新"}
 
@@ -94,7 +98,7 @@ class DownloaderSettingsRequest(BaseModel):
 async def get_crawl_settings():
     """获取话题爬取设置"""
     try:
-        return _default_crawl_settings()
+        return _get_crawl_settings_response()
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"获取爬取设置失败: {str(e)}")
 

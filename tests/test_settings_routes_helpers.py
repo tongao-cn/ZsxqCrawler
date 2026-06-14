@@ -8,9 +8,11 @@ from backend.routes.settings_routes import (
     _default_crawl_settings,
     _default_crawler_settings,
     _default_downloader_settings,
+    _get_crawl_settings_response,
     _settings_from_attrs,
     _settings_update_response,
     _update_crawl_settings_response,
+    get_crawl_settings,
     update_crawl_settings,
 )
 
@@ -125,6 +127,14 @@ class SettingsRoutesHelpersTest(unittest.TestCase):
             _update_crawl_settings_response({"ignored": "value"}),
             {"success": True, "message": "爬取设置已更新"},
         )
+
+    def test_get_crawl_settings_route_preserves_default_payload(self):
+        import asyncio
+
+        self.assertEqual(asyncio.run(get_crawl_settings()), _default_crawl_settings())
+
+    def test_get_crawl_settings_response_preserves_default_payload(self):
+        self.assertEqual(_get_crawl_settings_response(), _default_crawl_settings())
 
 
 if __name__ == "__main__":
