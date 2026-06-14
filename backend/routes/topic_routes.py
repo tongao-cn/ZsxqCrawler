@@ -24,6 +24,10 @@ def _log_topic_event(level: str, message: str) -> None:
     print(f"[{level}] {message}")
 
 
+def _topic_route_error(message: str, error: Exception) -> HTTPException:
+    return HTTPException(status_code=500, detail=f"{message}: {str(error)}")
+
+
 def _close_topic_db(db) -> None:
     try:
         if db:
@@ -562,7 +566,7 @@ async def get_topics(page: int = 1, per_page: int = 20, search: Optional[str] = 
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"获取话题列表失败: {str(e)}")
+        raise _topic_route_error("获取话题列表失败", e)
 
 
 @router.get("/groups/{group_id}/topics")
@@ -573,7 +577,7 @@ async def get_group_topics(group_id: int, page: int = 1, per_page: int = 20, sea
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"获取群组话题失败: {str(e)}")
+        raise _topic_route_error("获取群组话题失败", e)
 
 
 @router.post("/topics/clear/{group_id}")
@@ -585,7 +589,7 @@ async def clear_topic_database(group_id: str):
         raise
     except Exception as e:
         _log_topic_event("ERROR", f"删除话题数据库失败: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"删除话题数据库失败: {str(e)}")
+        raise _topic_route_error("删除话题数据库失败", e)
 
 
 @router.get("/topics/{topic_id}/{group_id}")
@@ -596,7 +600,7 @@ async def get_topic_detail(topic_id: int, group_id: str):
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"获取话题详情失败: {str(e)}")
+        raise _topic_route_error("获取话题详情失败", e)
 
 
 @router.post("/topics/{topic_id}/{group_id}/refresh")
@@ -607,7 +611,7 @@ async def refresh_topic(topic_id: int, group_id: str):
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"更新话题失败: {str(e)}")
+        raise _topic_route_error("更新话题失败", e)
 
 
 @router.post("/topics/{topic_id}/{group_id}/fetch-comments")
@@ -618,7 +622,7 @@ async def fetch_more_comments(topic_id: int, group_id: str):
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"获取更多评论失败: {str(e)}")
+        raise _topic_route_error("获取更多评论失败", e)
 
 
 @router.delete("/topics/{topic_id}/{group_id}")
@@ -629,7 +633,7 @@ async def delete_single_topic(topic_id: int, group_id: int):
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"删除话题失败: {str(e)}")
+        raise _topic_route_error("删除话题失败", e)
 
 
 @router.post("/topics/fetch-single/{group_id}/{topic_id}")
@@ -640,7 +644,7 @@ async def fetch_single_topic(group_id: str, topic_id: int, fetch_comments: bool 
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"单个话题采集失败: {str(e)}")
+        raise _topic_route_error("单个话题采集失败", e)
 
 
 @router.get("/groups/{group_id}/tags")
@@ -651,7 +655,7 @@ async def get_group_tags(group_id: str):
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"获取标签列表失败: {str(e)}")
+        raise _topic_route_error("获取标签列表失败", e)
 
 
 @router.get("/groups/{group_id}/tags/{tag_id}/topics")
@@ -662,7 +666,7 @@ async def get_topics_by_tag(group_id: int, tag_id: int, page: int = 1, per_page:
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"根据标签获取话题失败: {str(e)}")
+        raise _topic_route_error("根据标签获取话题失败", e)
 
 
 @router.delete("/groups/{group_id}/topics")
@@ -673,4 +677,4 @@ async def delete_group_topics(group_id: int):
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"删除话题数据失败: {str(e)}")
+        raise _topic_route_error("删除话题数据失败", e)

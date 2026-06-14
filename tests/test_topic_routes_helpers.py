@@ -439,6 +439,122 @@ class TopicRoutesHelperTests(unittest.TestCase):
         self.assertEqual({"called": "_delete_group_topics_response", "args": (123,)}, delete_group_result)
 
     @unittest.skipUnless(HAS_TOPIC_ROUTE_DEPS, "topic route dependencies are not installed")
+    def test_topic_route_error_preserves_status_and_detail_format(self):
+        from backend.routes import topic_routes
+
+        error = topic_routes._topic_route_error("获取话题列表失败", RuntimeError("boom"))
+
+        self.assertEqual(500, error.status_code)
+        self.assertEqual("获取话题列表失败: boom", error.detail)
+
+    @unittest.skipUnless(HAS_TOPIC_ROUTE_DEPS, "topic route dependencies are not installed")
+    def test_topic_routes_preserve_wrapped_unexpected_errors(self):
+        from backend.routes import topic_routes
+
+        cases = [
+            (
+                topic_routes.get_topics,
+                (),
+                {"page": 2, "per_page": 5, "search": "offer"},
+                "_topics_page",
+                "获取话题列表失败: boom",
+                None,
+            ),
+            (
+                topic_routes.get_group_topics,
+                (123,),
+                {"page": 3, "per_page": 10, "search": "alpha"},
+                "_group_topics_page",
+                "获取群组话题失败: boom",
+                None,
+            ),
+            (
+                topic_routes.clear_topic_database,
+                ("group-1",),
+                {},
+                "_cleared_topic_database",
+                "删除话题数据库失败: boom",
+                ("ERROR", "删除话题数据库失败: boom"),
+            ),
+            (topic_routes.get_topic_detail, (99, "123"), {}, "_topic_detail", "获取话题详情失败: boom", None),
+            (topic_routes.refresh_topic, (11, "group-1"), {}, "_refreshed_topic", "更新话题失败: boom", None),
+            (topic_routes.fetch_more_comments, (12, "group-1"), {}, "_more_comments", "获取更多评论失败: boom", None),
+            (topic_routes.delete_single_topic, (13, 123), {}, "_deleted_single_topic", "删除话题失败: boom", None),
+            (
+                topic_routes.fetch_single_topic,
+                ("123", 14),
+                {"fetch_comments": False},
+                "_fetched_single_topic",
+                "单个话题采集失败: boom",
+                None,
+            ),
+            (topic_routes.get_group_tags, ("123",), {}, "_group_tags", "获取标签列表失败: boom", None),
+            (
+                topic_routes.get_topics_by_tag,
+                (123, 9),
+                {"page": 2, "per_page": 5},
+                "_tagged_topics",
+                "根据标签获取话题失败: boom",
+                None,
+            ),
+            (topic_routes.delete_group_topics, (123,), {}, "_deleted_group_topics", "删除话题数据失败: boom", None),
+        ]
+
+        for route, route_args, route_kwargs, helper_name, expected_detail, expected_log in cases:
+            with (
+                self.subTest(helper=helper_name),
+                patch.object(topic_routes, helper_name, side_effect=RuntimeError("boom")),
+                patch.object(topic_routes, "_log_topic_event") as log_topic_event,
+            ):
+                with self.assertRaises(topic_routes.HTTPException) as ctx:
+                    self._run_async(route(*route_args, **route_kwargs))
+
+                self.assertEqual(500, ctx.exception.status_code)
+                self.assertEqual(expected_detail, ctx.exception.detail)
+                if expected_log:
+                    log_topic_event.assert_called_once_with(*expected_log)
+                else:
+                    log_topic_event.assert_not_called()
+
+    @unittest.skipUnless(HAS_TOPIC_ROUTE_DEPS, "topic route dependencies are not installed")
+    def test_topic_routes_preserve_http_exception_passthrough(self):
+        from backend.routes import topic_routes
+
+        cases = [
+            (topic_routes.get_topics, (), {"page": 2, "per_page": 5, "search": "offer"}, "_topics_page"),
+            (
+                topic_routes.get_group_topics,
+                (123,),
+                {"page": 3, "per_page": 10, "search": "alpha"},
+                "_group_topics_page",
+            ),
+            (topic_routes.clear_topic_database, ("group-1",), {}, "_cleared_topic_database"),
+            (topic_routes.get_topic_detail, (99, "123"), {}, "_topic_detail"),
+            (topic_routes.refresh_topic, (11, "group-1"), {}, "_refreshed_topic"),
+            (topic_routes.fetch_more_comments, (12, "group-1"), {}, "_more_comments"),
+            (topic_routes.delete_single_topic, (13, 123), {}, "_deleted_single_topic"),
+            (topic_routes.fetch_single_topic, ("123", 14), {"fetch_comments": False}, "_fetched_single_topic"),
+            (topic_routes.get_group_tags, ("123",), {}, "_group_tags"),
+            (topic_routes.get_topics_by_tag, (123, 9), {"page": 2, "per_page": 5}, "_tagged_topics"),
+            (topic_routes.delete_group_topics, (123,), {}, "_deleted_group_topics"),
+        ]
+
+        for route, route_args, route_kwargs, helper_name in cases:
+            original_error = topic_routes.HTTPException(status_code=409, detail="conflict")
+            with (
+                self.subTest(helper=helper_name),
+                patch.object(topic_routes, helper_name, side_effect=original_error),
+                patch.object(topic_routes, "_log_topic_event") as log_topic_event,
+            ):
+                with self.assertRaises(topic_routes.HTTPException) as ctx:
+                    self._run_async(route(*route_args, **route_kwargs))
+
+                self.assertIs(original_error, ctx.exception)
+                self.assertEqual(409, ctx.exception.status_code)
+                self.assertEqual("conflict", ctx.exception.detail)
+                log_topic_event.assert_not_called()
+
+    @unittest.skipUnless(HAS_TOPIC_ROUTE_DEPS, "topic route dependencies are not installed")
     def test_operation_helpers_preserve_service_call_shapes(self):
         from backend.routes import topic_routes
 
