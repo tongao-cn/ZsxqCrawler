@@ -142,11 +142,15 @@ async def delete_all_columns(group_id: str):
         raise HTTPException(status_code=500, detail=f"删除专栏数据失败: {str(exc)}") from exc
 
 
+async def _column_topic_full_comments(group_id: str, topic_id: int) -> Dict[str, Any]:
+    return await asyncio.to_thread(fetch_column_topic_full_comments, group_id, topic_id)
+
+
 @router.get("/groups/{group_id}/columns/topics/{topic_id}/comments")
 async def get_column_topic_full_comments(group_id: str, topic_id: int):
     """获取专栏文章的完整评论列表（从API实时获取并持久化到数据库）"""
     try:
-        return await asyncio.to_thread(fetch_column_topic_full_comments, group_id, topic_id)
+        return await _column_topic_full_comments(group_id, topic_id)
     except HTTPException:
         raise
     except Exception as exc:

@@ -15163,6 +15163,59 @@ Result:
 - Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because
   `ruff` is not available.
 
+### 2026-06-14 - P5 columns full-comments helper
+
+Changed:
+
+- Added route-level characterization coverage for `get_column_topic_full_comments()` preserving
+  `HTTPException` passthrough and unexpected-error logging/500 wrapping.
+- Extracted `_column_topic_full_comments()` in `backend.routes.columns_routes`.
+- Reused the helper from the public route so threaded service access is isolated from the
+  existing exception handling block.
+- Added helper coverage for preserving the `fetch_column_topic_full_comments` service binding
+  and `(group_id, topic_id)` argument shape.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- The public route still calls `fetch_column_topic_full_comments` through
+  `asyncio.to_thread()` with the same group id and topic id.
+- Successful payloads are still returned unchanged.
+- `HTTPException` from the service layer is still passed through unchanged and does not call
+  `log_exception`.
+- Unexpected exceptions still call `log_exception("获取专栏完整评论失败: topic_id=...")` and
+  raise `HTTPException(status_code=500, detail="获取完整评论失败: ...")`.
+- Public API shape, route path, response payloads, logging behavior, storage behavior, config
+  semantics, and fallback/legacy behavior are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_columns_routes_helpers.ColumnsRoutesHelperTests.test_get_column_topic_full_comments_runs_service_in_thread tests.test_columns_routes_helpers.ColumnsRoutesHelperTests.test_get_column_topic_full_comments_preserves_http_exception_passthrough tests.test_columns_routes_helpers.ColumnsRoutesHelperTests.test_get_column_topic_full_comments_logs_unexpected_error -v
+uv run python -m py_compile backend\routes\columns_routes.py tests\test_columns_routes_helpers.py
+uv run python -m unittest tests.test_columns_routes_helpers.ColumnsRoutesHelperTests.test_get_column_topic_full_comments_runs_service_in_thread tests.test_columns_routes_helpers.ColumnsRoutesHelperTests.test_column_topic_full_comments_preserves_service_call_shape tests.test_columns_routes_helpers.ColumnsRoutesHelperTests.test_get_column_topic_full_comments_preserves_http_exception_passthrough tests.test_columns_routes_helpers.ColumnsRoutesHelperTests.test_get_column_topic_full_comments_logs_unexpected_error -v
+uv run python -m unittest tests.test_columns_routes_helpers -v
+uv run python -m unittest tests.test_columns_routes_helpers tests.test_columns_fetch_task_service tests.test_columns_comment_service tests.test_columns_fetch_summary -v
+uv run python -m unittest discover -s tests
+uv run python scripts\scan_postgres_compat_debt.py
+npm --prefix frontend run build
+uv run ruff check backend\routes\columns_routes.py tests\test_columns_routes_helpers.py --select F401,F841
+```
+
+Result:
+
+- New full-comments route characterization tests passed against the original inline
+  implementation before extraction: 3 tests.
+- `py_compile` passed.
+- Focused full-comments route/helper tests passed after extraction: 4 tests.
+- Columns route helper tests passed: 12 tests.
+- Related columns route/service tests passed: 22 tests.
+- Full backend unittest discovery passed: 955 tests, 15 skipped.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Frontend build passed, including Next.js lint/type checks.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because
+  `ruff` is not available.
+
 ## Stop Conditions
 
 Pause before editing if:

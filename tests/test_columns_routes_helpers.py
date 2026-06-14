@@ -305,6 +305,73 @@ class ColumnsRoutesHelperTests(unittest.TestCase):
         self.assertEqual({"success": True, "comments": [], "total": 0}, result)
         self.assertEqual([(columns_routes.fetch_column_topic_full_comments, ("123", 456))], calls)
 
+    @unittest.skipUnless(HAS_COLUMNS_ROUTE_DEPS, "columns route dependencies are not installed")
+    def test_column_topic_full_comments_preserves_service_call_shape(self):
+        from backend.routes import columns_routes
+
+        calls = []
+
+        async def fake_to_thread(func, *args):
+            calls.append((func, args))
+            return {"success": True, "comments": [], "total": 0}
+
+        with patch(
+            "backend.routes.columns_routes.asyncio.to_thread",
+            side_effect=fake_to_thread,
+        ):
+            result = asyncio.run(columns_routes._column_topic_full_comments("123", 456))
+
+        self.assertEqual({"success": True, "comments": [], "total": 0}, result)
+        self.assertEqual(
+            [(columns_routes.fetch_column_topic_full_comments, ("123", 456))],
+            calls,
+        )
+
+    @unittest.skipUnless(HAS_COLUMNS_ROUTE_DEPS, "columns route dependencies are not installed")
+    def test_get_column_topic_full_comments_preserves_http_exception_passthrough(self):
+        from fastapi import HTTPException
+        from backend.routes import columns_routes
+
+        http_error = HTTPException(status_code=429, detail="rate limited")
+
+        async def fake_to_thread(func, *args):
+            raise http_error
+
+        with (
+            patch(
+                "backend.routes.columns_routes.asyncio.to_thread",
+                side_effect=fake_to_thread,
+            ),
+            patch("backend.routes.columns_routes.log_exception") as log_exception,
+        ):
+            with self.assertRaises(HTTPException) as raised:
+                asyncio.run(columns_routes.get_column_topic_full_comments("123", 456))
+
+        self.assertIs(http_error, raised.exception)
+        log_exception.assert_not_called()
+
+    @unittest.skipUnless(HAS_COLUMNS_ROUTE_DEPS, "columns route dependencies are not installed")
+    def test_get_column_topic_full_comments_logs_unexpected_error(self):
+        from fastapi import HTTPException
+        from backend.routes import columns_routes
+
+        async def fake_to_thread(func, *args):
+            raise RuntimeError("boom")
+
+        with (
+            patch(
+                "backend.routes.columns_routes.asyncio.to_thread",
+                side_effect=fake_to_thread,
+            ),
+            patch("backend.routes.columns_routes.log_exception") as log_exception,
+        ):
+            with self.assertRaises(HTTPException) as raised:
+                asyncio.run(columns_routes.get_column_topic_full_comments("123", 456))
+
+        self.assertEqual(500, raised.exception.status_code)
+        self.assertEqual("获取完整评论失败: boom", raised.exception.detail)
+        log_exception.assert_called_once_with("获取专栏完整评论失败: topic_id=456")
+
 
 if __name__ == "__main__":
     unittest.main()
