@@ -292,6 +292,16 @@ async def _reset_a_share_analysis_range(request: AShareAnalysisResetRangeRequest
     )
 
 
+async def _export_a_share_analysis_to_tdx(request: AShareAnalysisExportTdxRequest) -> dict:
+    return await asyncio.to_thread(
+        export_a_share_rankings_to_tdx,
+        request.start_date,
+        request.end_date,
+        group_id=normalize_group_id(request.group_id),
+        group_name=request.group_name,
+    )
+
+
 def run_a_share_analysis_task(task_id: str, request: AShareAnalysisRunRequest):
     """后台执行A股公司提及分析任务"""
     try:
@@ -384,13 +394,7 @@ async def reset_a_share_analysis_date_range(request: AShareAnalysisResetRangeReq
 async def export_a_share_analysis_to_tdx(request: AShareAnalysisExportTdxRequest):
     """把当前A股推荐池覆盖导入到通达信现有板块"""
     try:
-        result = await asyncio.to_thread(
-            export_a_share_rankings_to_tdx,
-            request.start_date,
-            request.end_date,
-            group_id=normalize_group_id(request.group_id),
-            group_name=request.group_name,
-        )
+        result = await _export_a_share_analysis_to_tdx(request)
         return _success_payload(result)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))

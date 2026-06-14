@@ -14240,6 +14240,58 @@ Result:
 - Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because
   `ruff` is not available.
 
+### 2026-06-14 - P5 A-share TDX export helper
+
+Changed:
+
+- Reused the existing route-level characterization coverage for
+  `export_a_share_analysis_to_tdx()` preserving `export_a_share_rankings_to_tdx()`
+  arguments and `_success_payload()` wrapping.
+- Extracted `_export_a_share_analysis_to_tdx()` in `backend.routes.a_share_routes`.
+- Reused the helper from the TDX export route so group normalization and service-call
+  argument assembly are isolated.
+- Added helper coverage for preserving global group scope as `group_id=None` and
+  `group_name=None`.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- The TDX export route still normalizes `group_id` before calling
+  `export_a_share_rankings_to_tdx()`.
+- `start_date`, `end_date`, and `group_name` are still forwarded unchanged.
+- Successful service results are still wrapped through `_success_payload()`.
+- ValueError/RuntimeError-to-400 handling, `requests.RequestException`-to-502 handling,
+  generic 500 handling, public API shape, storage schema, config semantics, side effects,
+  and fallback/legacy behavior are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_a_share_routes_helpers.AShareRoutesHelperTests.test_export_tdx_passes_group_name_to_service -v
+uv run python -m py_compile backend\routes\a_share_routes.py tests\test_a_share_routes_helpers.py
+uv run python -m unittest tests.test_a_share_routes_helpers.AShareRoutesHelperTests.test_export_tdx_passes_group_name_to_service tests.test_a_share_routes_helpers.AShareRoutesHelperTests.test_export_a_share_analysis_to_tdx_preserves_global_group_scope -v
+uv run python -m unittest tests.test_a_share_routes_helpers -v
+uv run python -m unittest tests.test_a_share_routes_helpers tests.test_a_share_analysis_service_helpers tests.test_a_share_analysis_db_storage_helpers -v
+uv run python -m unittest discover -s tests
+uv run python scripts\scan_postgres_compat_debt.py
+npm --prefix frontend run build
+uv run ruff check backend\routes\a_share_routes.py tests\test_a_share_routes_helpers.py --select F401,F841
+```
+
+Result:
+
+- Existing focused TDX export route characterization test passed against the original inline
+  implementation before extraction: 1 test.
+- `py_compile` passed.
+- Focused TDX export route/helper tests passed after extraction: 2 tests.
+- A-share route helper tests passed: 35 tests.
+- Related A-share route/service/storage tests passed: 78 tests.
+- Full backend unittest discovery passed: 923 tests, 15 skipped.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Frontend build passed, including Next.js lint/type checks.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because
+  `ruff` is not available.
+
 ## Stop Conditions
 
 Pause before editing if:

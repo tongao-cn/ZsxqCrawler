@@ -797,6 +797,33 @@ class AShareRoutesHelperTests(unittest.TestCase):
         )
 
     @unittest.skipUnless(HAS_A_SHARE_ROUTE_DEPS, "a-share route dependencies are not installed")
+    def test_export_a_share_analysis_to_tdx_preserves_global_group_scope(self):
+        import asyncio
+
+        from backend.routes import a_share_routes
+        from backend.routes.a_share_routes import AShareAnalysisExportTdxRequest
+
+        payload = {"group_id": None, "blocks": []}
+        with patch.object(
+            a_share_routes,
+            "export_a_share_rankings_to_tdx",
+            return_value=payload,
+        ) as export_mock:
+            result = asyncio.run(
+                a_share_routes._export_a_share_analysis_to_tdx(
+                    AShareAnalysisExportTdxRequest()
+                )
+            )
+
+        self.assertEqual(payload, result)
+        export_mock.assert_called_once_with(
+            None,
+            None,
+            group_id=None,
+            group_name=None,
+        )
+
+    @unittest.skipUnless(HAS_A_SHARE_ROUTE_DEPS, "a-share route dependencies are not installed")
     def test_bounded_chart_top_n_clamps_to_existing_range(self):
         from backend.routes.a_share_routes import _bounded_chart_top_n
 
