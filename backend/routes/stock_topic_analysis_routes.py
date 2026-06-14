@@ -162,6 +162,10 @@ def _stock_topic_matches(group_id: str, stock_name: str) -> dict:
     return search_stock_topics(group_id, stock_name)
 
 
+def _stock_names_from_image(request: StockTopicImageExtractRequest) -> dict:
+    return extract_stock_names_from_image(request.imageDataUrl)
+
+
 @router.get("/{group_id}/questions")
 async def read_stock_question_matches(
     group_id: str,
@@ -213,7 +217,7 @@ async def read_stock_topic_matches(
 @router.post("/extract-stocks-from-image")
 async def extract_stock_topics_from_image(request: StockTopicImageExtractRequest):
     try:
-        return extract_stock_names_from_image(request.imageDataUrl)
+        return _stock_names_from_image(request)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     except Exception as exc:

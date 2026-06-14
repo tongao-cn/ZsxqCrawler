@@ -102,6 +102,24 @@ class StockTopicAnalysisRoutesHelperTests(unittest.IsolatedAsyncioTestCase):
         service.assert_called_once_with("data:image/png;base64,aW1n")
 
     @unittest.skipUnless(HAS_ROUTE_DEPS, "stock topic analysis route dependencies are not installed")
+    async def test_stock_names_from_image_preserves_data_url(self):
+        from backend.routes import stock_topic_analysis_routes
+        from backend.routes.stock_topic_analysis_routes import StockTopicImageExtractRequest
+
+        data_url = "data:image/png;base64,aW1n"
+        expected = {"stockNames": ["宁德时代"], "model": "test-model"}
+        with patch(
+            "backend.routes.stock_topic_analysis_routes.extract_stock_names_from_image",
+            return_value=expected,
+        ) as service:
+            result = stock_topic_analysis_routes._stock_names_from_image(
+                StockTopicImageExtractRequest(imageDataUrl=data_url),
+            )
+
+        self.assertEqual(expected, result)
+        service.assert_called_once_with(data_url)
+
+    @unittest.skipUnless(HAS_ROUTE_DEPS, "stock topic analysis route dependencies are not installed")
     async def test_read_stock_question_matches_maps_value_error_to_400(self):
         from fastapi import HTTPException
 
