@@ -352,6 +352,167 @@ class FileRoutesHelperTests(unittest.TestCase):
             task_group_id="group-1",
         )
 
+    def test_file_analysis_routes_preserve_success_payloads(self):
+        from backend.routes import file_routes
+        from backend.schemas.files import FileAIAnalysisRequest
+
+        calls = []
+
+        async def fake_to_thread(func, *args, **kwargs):
+            calls.append((func, args, kwargs))
+            return {"called": func.__name__, "args": args, "kwargs": kwargs}
+
+        with (
+            patch("backend.routes.file_routes.asyncio.to_thread", side_effect=fake_to_thread),
+            patch("backend.routes.file_routes.has_openai_api_key", return_value=True),
+        ):
+            cached = self._run_async(file_routes.get_file_analysis("group-1", 123))
+            created = self._run_async(
+                file_routes.create_file_analysis("group-1", 456, FileAIAnalysisRequest(force=True))
+            )
+
+        self.assertEqual(
+            [
+                (file_routes.get_group_file_analysis, ("group-1", 123), {}),
+                (
+                    file_routes.analyze_group_file,
+                    ("group-1", 456),
+                    {
+                        "force": True,
+                        "model": file_routes.A_SHARE_DEFAULT_MODEL,
+                        "api_base": file_routes.A_SHARE_DEFAULT_API_BASE,
+                        "wire_api": file_routes.A_SHARE_DEFAULT_WIRE_API,
+                        "reasoning_effort": file_routes.DEFAULT_FILE_ANALYSIS_REASONING_EFFORT,
+                    },
+                ),
+            ],
+            calls,
+        )
+        self.assertEqual(
+            {"analysis": {"called": "get_group_file_analysis", "args": ("group-1", 123), "kwargs": {}}},
+            cached,
+        )
+        self.assertEqual(
+            {
+                "analysis": {
+                    "called": "analyze_group_file",
+                    "args": ("group-1", 456),
+                    "kwargs": {
+                        "force": True,
+                        "model": file_routes.A_SHARE_DEFAULT_MODEL,
+                        "api_base": file_routes.A_SHARE_DEFAULT_API_BASE,
+                        "wire_api": file_routes.A_SHARE_DEFAULT_WIRE_API,
+                        "reasoning_effort": file_routes.DEFAULT_FILE_ANALYSIS_REASONING_EFFORT,
+                    },
+                }
+            },
+            created,
+        )
+
+    def test_file_analysis_helpers_preserve_service_call_shapes(self):
+        from backend.routes import file_routes
+
+        calls = []
+
+        async def fake_to_thread(func, *args, **kwargs):
+            calls.append((func, args, kwargs))
+            return {"called": func.__name__, "args": args, "kwargs": kwargs}
+
+        with patch("backend.routes.file_routes.asyncio.to_thread", side_effect=fake_to_thread):
+            cached = self._run_async(file_routes._file_analysis("group-1", 123))
+            created = self._run_async(file_routes._created_file_analysis("group-1", 456, True))
+
+        self.assertEqual(
+            [
+                (file_routes.get_group_file_analysis, ("group-1", 123), {}),
+                (
+                    file_routes.analyze_group_file,
+                    ("group-1", 456),
+                    {
+                        "force": True,
+                        "model": file_routes.A_SHARE_DEFAULT_MODEL,
+                        "api_base": file_routes.A_SHARE_DEFAULT_API_BASE,
+                        "wire_api": file_routes.A_SHARE_DEFAULT_WIRE_API,
+                        "reasoning_effort": file_routes.DEFAULT_FILE_ANALYSIS_REASONING_EFFORT,
+                    },
+                ),
+            ],
+            calls,
+        )
+        self.assertEqual(
+            {"analysis": {"called": "get_group_file_analysis", "args": ("group-1", 123), "kwargs": {}}},
+            cached,
+        )
+        self.assertEqual(
+            {
+                "analysis": {
+                    "called": "analyze_group_file",
+                    "args": ("group-1", 456),
+                    "kwargs": {
+                        "force": True,
+                        "model": file_routes.A_SHARE_DEFAULT_MODEL,
+                        "api_base": file_routes.A_SHARE_DEFAULT_API_BASE,
+                        "wire_api": file_routes.A_SHARE_DEFAULT_WIRE_API,
+                        "reasoning_effort": file_routes.DEFAULT_FILE_ANALYSIS_REASONING_EFFORT,
+                    },
+                }
+            },
+            created,
+        )
+
+    def test_create_file_analysis_preserves_missing_api_key_wrapped_error(self):
+        from backend.routes import file_routes
+        from backend.schemas.files import FileAIAnalysisRequest
+        from fastapi import HTTPException
+
+        with (
+            patch("backend.routes.file_routes.has_openai_api_key", return_value=False),
+            patch("backend.routes.file_routes.asyncio.to_thread") as to_thread,
+        ):
+            with self.assertRaises(HTTPException) as raised:
+                self._run_async(file_routes.create_file_analysis("group-1", 456, FileAIAnalysisRequest(force=True)))
+
+        self.assertEqual(500, raised.exception.status_code)
+        self.assertEqual(
+            "文件 AI 分析失败: 400: 未配置 OpenAI API Key，请设置环境变量 OPENAI_API_KEY 或 config.toml [ai].api_key",
+            raised.exception.detail,
+        )
+        to_thread.assert_not_called()
+
+    def test_create_file_analysis_preserves_service_error_mapping(self):
+        from backend.routes import file_routes
+        from backend.schemas.files import FileAIAnalysisRequest
+        from fastapi import HTTPException
+
+        async def raise_value_error(*_args, **_kwargs):
+            raise ValueError("bad value")
+
+        async def raise_runtime_error(*_args, **_kwargs):
+            raise RuntimeError("bad runtime")
+
+        cases = [
+            (raise_value_error, "bad value"),
+            (raise_runtime_error, "bad runtime"),
+        ]
+
+        for side_effect, detail in cases:
+            with self.subTest(detail=detail):
+                with (
+                    patch("backend.routes.file_routes.has_openai_api_key", return_value=True),
+                    patch("backend.routes.file_routes.asyncio.to_thread", side_effect=side_effect),
+                ):
+                    with self.assertRaises(HTTPException) as raised:
+                        self._run_async(
+                            file_routes.create_file_analysis(
+                                "group-1",
+                                456,
+                                FileAIAnalysisRequest(force=True),
+                            )
+                        )
+
+                self.assertEqual(400, raised.exception.status_code)
+                self.assertEqual(detail, raised.exception.detail)
+
     def test_run_file_analysis_task_dedupes_ids_and_preserves_mixed_stats(self):
         from backend.services import file_workflow_service
 

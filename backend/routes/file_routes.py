@@ -71,6 +71,25 @@ async def _files_page(
     return await asyncio.to_thread(_get_files_response, group_id, page, per_page, status, search, analysis_status)
 
 
+async def _file_analysis(group_id: str, file_id: int) -> dict:
+    result = await asyncio.to_thread(get_group_file_analysis, group_id, file_id)
+    return {"analysis": result}
+
+
+async def _created_file_analysis(group_id: str, file_id: int, force: bool) -> dict:
+    result = await asyncio.to_thread(
+        analyze_group_file,
+        group_id,
+        file_id,
+        force=force,
+        model=A_SHARE_DEFAULT_MODEL,
+        api_base=A_SHARE_DEFAULT_API_BASE,
+        wire_api=A_SHARE_DEFAULT_WIRE_API,
+        reasoning_effort=DEFAULT_FILE_ANALYSIS_REASONING_EFFORT,
+    )
+    return {"analysis": result}
+
+
 @router.post("/collect/{group_id}")
 async def collect_files(group_id: str, request: FileCollectRequest, background_tasks: BackgroundTasks):
     """收集文件列表"""
@@ -216,8 +235,7 @@ async def check_local_file_status(group_id: str, file_name: str, file_size: int)
 async def get_file_analysis(group_id: str, file_id: int):
     """获取文件 AI 分析缓存"""
     try:
-        result = await asyncio.to_thread(get_group_file_analysis, group_id, file_id)
-        return {"analysis": result}
+        return await _file_analysis(group_id, file_id)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"获取文件 AI 分析失败: {str(e)}")
 
@@ -232,17 +250,7 @@ async def create_file_analysis(group_id: str, file_id: int, request: FileAIAnaly
                 detail="未配置 OpenAI API Key，请设置环境变量 OPENAI_API_KEY 或 config.toml [ai].api_key",
             )
 
-        result = await asyncio.to_thread(
-            analyze_group_file,
-            group_id,
-            file_id,
-            force=request.force,
-            model=A_SHARE_DEFAULT_MODEL,
-            api_base=A_SHARE_DEFAULT_API_BASE,
-            wire_api=A_SHARE_DEFAULT_WIRE_API,
-            reasoning_effort=DEFAULT_FILE_ANALYSIS_REASONING_EFFORT,
-        )
-        return {"analysis": result}
+        return await _created_file_analysis(group_id, file_id, request.force)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except RuntimeError as e:

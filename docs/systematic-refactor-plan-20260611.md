@@ -15267,6 +15267,63 @@ Result:
 - Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because
   `ruff` is not available.
 
+### 2026-06-14 - P5 file analysis helpers
+
+Changed:
+
+- Added route-level characterization coverage for immediate file AI analysis routes:
+  cached-analysis reads, synchronous analysis creation, missing API key behavior, and
+  `ValueError`/`RuntimeError` mappings.
+- Added helper-level characterization coverage for preserving file AI analysis service binding
+  and argument/keyword shape.
+- Extracted `_file_analysis()` and `_created_file_analysis()` in
+  `backend.routes.file_routes`.
+- Reused the helpers from `get_file_analysis()` and `create_file_analysis()` so threaded
+  service access is isolated from each route's existing exception wrapper.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- `get_file_analysis()` still calls `get_group_file_analysis` through `asyncio.to_thread()`
+  with the same `(group_id, file_id)` arguments and returns `{"analysis": result}`.
+- `create_file_analysis()` still calls `analyze_group_file` through `asyncio.to_thread()`
+  with the same `(group_id, file_id)` arguments and the same `force`, model, API base, wire
+  API, and reasoning-effort keyword arguments.
+- The current missing-API-key behavior is explicitly preserved and tested: the inner
+  `HTTPException(status_code=400, ...)` is still wrapped by the route's generic exception
+  handler into `HTTPException(status_code=500, detail="文件 AI 分析失败: 400: ...")`.
+- Existing `ValueError` and `RuntimeError` -> 400 mappings are unchanged.
+- Public API shape, route paths, response payloads, logging behavior, storage behavior, config
+  semantics, and fallback/legacy behavior are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_file_routes_helpers.FileRoutesHelperTests.test_file_analysis_routes_preserve_success_payloads tests.test_file_routes_helpers.FileRoutesHelperTests.test_create_file_analysis_preserves_missing_api_key_wrapped_error tests.test_file_routes_helpers.FileRoutesHelperTests.test_create_file_analysis_preserves_service_error_mapping -v
+uv run python -m py_compile backend\routes\file_routes.py tests\test_file_routes_helpers.py
+uv run python -m unittest tests.test_file_routes_helpers.FileRoutesHelperTests.test_file_analysis_routes_preserve_success_payloads tests.test_file_routes_helpers.FileRoutesHelperTests.test_file_analysis_helpers_preserve_service_call_shapes tests.test_file_routes_helpers.FileRoutesHelperTests.test_create_file_analysis_preserves_missing_api_key_wrapped_error tests.test_file_routes_helpers.FileRoutesHelperTests.test_create_file_analysis_preserves_service_error_mapping -v
+uv run python -m unittest tests.test_file_routes_helpers -v
+uv run python -m unittest tests.test_file_routes_helpers tests.test_columns_file_download_service tests.test_download_analysis_ready_files tests.test_file_ai_analysis_service_helpers tests.test_zsxq_file_database_helpers tests.test_zsxq_file_downloader_helpers -v
+uv run python -m unittest discover -s tests
+uv run python scripts\scan_postgres_compat_debt.py
+npm --prefix frontend run build
+uv run ruff check backend\routes\file_routes.py tests\test_file_routes_helpers.py --select F401,F841
+```
+
+Result:
+
+- New file AI analysis route characterization tests passed against the original inline
+  implementation before extraction: 3 tests.
+- `py_compile` passed.
+- Focused file AI analysis route/helper tests passed after extraction: 4 tests.
+- File route helper tests passed: 43 tests.
+- Related file route/service/storage/downloader tests passed: 252 tests.
+- Full backend unittest discovery passed: 960 tests, 15 skipped.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Frontend build passed, including Next.js lint/type checks.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because
+  `ruff` is not available.
+
 ## Stop Conditions
 
 Pause before editing if:
