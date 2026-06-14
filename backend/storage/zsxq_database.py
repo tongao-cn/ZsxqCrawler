@@ -837,11 +837,7 @@ class ZSXQDatabase:
             if not file_data.get('file_id'):
                 continue
 
-            # 获取当前时间作为created_at（使用东八区时间格式）
-            current_time = _beijing_now_timestamp()
-
-            sql, params = _topic_file_insert_statement(topic_id, file_data, current_time)
-            self.cursor.execute(sql, params)
+            self._execute_timestamped_statement(_topic_file_insert_statement, topic_id, file_data)
 
     def _sync_topic_files_to_core_tables(self, topic_data: Dict[str, Any], files_data: List[Dict[str, Any]]):
         """把话题采集到的 talk.files 同步到核心 files/relations 表。"""

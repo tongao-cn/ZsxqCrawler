@@ -17163,6 +17163,52 @@ Result:
 - Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because
   `ruff` is not available.
 
+### 2026-06-14 - P2 topic storage file timestamped write helper
+
+Changed:
+
+- Ran existing topic-file import characterization against the original inline
+  timestamp-and-execute implementation before extraction.
+- Reused `_execute_timestamped_statement()` from `_import_files()` for each valid `topic_files`
+  upsert row.
+- Left `_sync_topic_files_to_core_tables()` untouched because it writes the core files and relation
+  tables through separate helper boundaries.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Empty file batches, missing `file_id` skip behavior, SQL shape, parameter order, default file
+  metadata values, timestamp format, and `cursor.execute(sql, params)` behavior are unchanged.
+- Core files/relations sync semantics, article create-time semantics, like/latest-like paired
+  timestamp semantics, comment-image numeric fallback defaults, schema behavior, read paths, public
+  APIs, route behavior, task runtime behavior, and configuration semantics are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_import_files_preserves_skip_defaults_and_timestamp -v
+uv run python -m py_compile backend\storage\zsxq_database.py tests\test_zsxq_database_helpers.py
+uv run python -m unittest tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_import_files_preserves_skip_defaults_and_timestamp tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_execute_timestamped_statement_preserves_builder_args_and_execute_params -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run python -m unittest tests.test_zsxq_database_helpers -v
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+uv run ruff check backend\storage\zsxq_database.py tests\test_zsxq_database_helpers.py --select F401,F841
+```
+
+Result:
+
+- Existing topic-file import characterization passed against the original duplicate inline
+  implementation: 1 test.
+- `py_compile` passed.
+- Focused topic-file import and shared timestamped helper tests passed after extraction: 2 tests.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Topic database helper tests passed: 80 tests.
+- Full backend unittest discovery passed: 1068 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because
+  `ruff` is not available.
+
 ## Stop Conditions
 
 Pause before editing if:
