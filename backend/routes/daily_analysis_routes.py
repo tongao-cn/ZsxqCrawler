@@ -73,6 +73,22 @@ def _create_daily_task_response(
     return {"task_id": task_id, "message": TASK_CREATED_MESSAGE}
 
 
+def _create_daily_report_task_response(
+    group_id: str,
+    request: DailyAnalysisRequest,
+    background_tasks: BackgroundTasks,
+) -> dict[str, str]:
+    return _create_daily_task_response(
+        background_tasks,
+        "daily_topic_analysis",
+        f"生成每日话题 AI 报告 (群组: {group_id})",
+        _daily_task_metadata(group_id, request.date),
+        run_daily_analysis_task,
+        group_id,
+        request,
+    )
+
+
 def _analyze_daily_topics_for_task(task_id: str, group_id: str, request: DailyAnalysisRequest) -> dict:
     return analyze_daily_topics(
         group_id,
@@ -145,15 +161,7 @@ def run_daily_today_task(
 @router.post("/{group_id}")
 async def create_daily_report(group_id: str, request: DailyAnalysisRequest, background_tasks: BackgroundTasks):
     try:
-        return _create_daily_task_response(
-            background_tasks,
-            "daily_topic_analysis",
-            f"生成每日话题 AI 报告 (群组: {group_id})",
-            _daily_task_metadata(group_id, request.date),
-            run_daily_analysis_task,
-            group_id,
-            request,
-        )
+        return _create_daily_report_task_response(group_id, request, background_tasks)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"创建每日分析任务失败: {str(e)}")
 

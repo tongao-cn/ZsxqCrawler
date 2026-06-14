@@ -1,3 +1,4 @@
+import asyncio
 import unittest
 from importlib.util import find_spec
 from unittest.mock import call, patch
@@ -48,6 +49,65 @@ class DailyAnalysisRoutesHelperTests(unittest.TestCase):
         self.assertEqual({"task_id": "task-1", "message": "任务已创建，正在后台执行"}, response)
         enqueue_runtime_task.assert_called_once_with(fake_task, "task-1", "group-1", "request")
         self.assertEqual([], background_tasks.tasks)
+
+    @unittest.skipUnless(HAS_DAILY_ROUTE_DEPS, "daily analysis route dependencies are not installed")
+    def test_create_daily_report_enqueues_runtime_task(self):
+        from backend.routes.daily_analysis_routes import (
+            DailyAnalysisRequest,
+            create_daily_report,
+            run_daily_analysis_task,
+        )
+
+        background_tasks = FakeBackgroundTasks()
+        request = DailyAnalysisRequest(date="2026-06-13", commentsPerTopic=2)
+        with (
+            patch("backend.routes.daily_analysis_routes.create_task", return_value="task-daily") as create_task,
+            patch("backend.routes.daily_analysis_routes.enqueue_runtime_task") as enqueue_runtime_task,
+        ):
+            result = asyncio.run(create_daily_report("51111112855254", request, background_tasks))
+
+        self.assertEqual({"task_id": "task-daily", "message": "任务已创建，正在后台执行"}, result)
+        create_task.assert_called_once_with(
+            "daily_topic_analysis",
+            "生成每日话题 AI 报告 (群组: 51111112855254)",
+            {"group_id": "51111112855254", "report_date": "2026-06-13"},
+        )
+        enqueue_runtime_task.assert_called_once_with(
+            run_daily_analysis_task,
+            "task-daily",
+            "51111112855254",
+            request,
+        )
+        self.assertEqual([], background_tasks.tasks)
+
+    @unittest.skipUnless(HAS_DAILY_ROUTE_DEPS, "daily analysis route dependencies are not installed")
+    def test_create_daily_report_task_response_preserves_task_contract(self):
+        from backend.routes import daily_analysis_routes
+        from backend.routes.daily_analysis_routes import DailyAnalysisRequest, run_daily_analysis_task
+
+        background_tasks = FakeBackgroundTasks()
+        request = DailyAnalysisRequest(date="2026-06-13", commentsPerTopic=2)
+        expected = {"task_id": "task-daily", "message": "任务已创建，正在后台执行"}
+        with patch(
+            "backend.routes.daily_analysis_routes._create_daily_task_response",
+            return_value=expected,
+        ) as create_response:
+            result = daily_analysis_routes._create_daily_report_task_response(
+                "51111112855254",
+                request,
+                background_tasks,
+            )
+
+        self.assertEqual(expected, result)
+        create_response.assert_called_once_with(
+            background_tasks,
+            "daily_topic_analysis",
+            "生成每日话题 AI 报告 (群组: 51111112855254)",
+            {"group_id": "51111112855254", "report_date": "2026-06-13"},
+            run_daily_analysis_task,
+            "51111112855254",
+            request,
+        )
 
     @unittest.skipUnless(HAS_DAILY_ROUTE_DEPS, "daily analysis route dependencies are not installed")
     def test_daily_task_metadata_preserves_group_and_report_date_fields(self):
