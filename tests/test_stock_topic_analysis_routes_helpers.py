@@ -60,6 +60,37 @@ class StockTopicAnalysisRoutesHelperTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(400, raised.exception.status_code)
 
     @unittest.skipUnless(HAS_ROUTE_DEPS, "stock topic analysis route dependencies are not installed")
+    async def test_read_stock_topic_matches_returns_service_result(self):
+        from backend.routes.stock_topic_analysis_routes import read_stock_topic_matches
+
+        expected = {"stock_name": "宁德时代", "topics": [{"topic_id": "201"}]}
+        with patch(
+            "backend.routes.stock_topic_analysis_routes.search_stock_topics",
+            return_value=expected,
+        ) as search:
+            result = await read_stock_topic_matches("51111112855254", "宁德时代")
+
+        self.assertEqual(expected, result)
+        search.assert_called_once_with("51111112855254", "宁德时代")
+
+    @unittest.skipUnless(HAS_ROUTE_DEPS, "stock topic analysis route dependencies are not installed")
+    async def test_stock_topic_matches_preserves_raw_stock_name(self):
+        from backend.routes import stock_topic_analysis_routes
+
+        expected = {"stock_name": "  宁德时代  ", "topics": []}
+        with patch(
+            "backend.routes.stock_topic_analysis_routes.search_stock_topics",
+            return_value=expected,
+        ) as search:
+            result = stock_topic_analysis_routes._stock_topic_matches(
+                "51111112855254",
+                "  宁德时代  ",
+            )
+
+        self.assertEqual(expected, result)
+        search.assert_called_once_with("51111112855254", "  宁德时代  ")
+
+    @unittest.skipUnless(HAS_ROUTE_DEPS, "stock topic analysis route dependencies are not installed")
     async def test_extract_stock_topics_from_image_calls_service(self):
         from backend.routes.stock_topic_analysis_routes import StockTopicImageExtractRequest, extract_stock_topics_from_image
 
