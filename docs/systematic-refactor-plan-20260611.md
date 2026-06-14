@@ -16696,6 +16696,49 @@ Result:
 - Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because
   `ruff` is not available.
 
+### 2026-06-14 - P5 diagnostics route error helper
+
+Changed:
+
+- Added route-level characterization coverage for the diagnostics PostgreSQL activity route
+  success payload and unexpected-error wrapper.
+- Extracted `_diagnostics_route_error()` in `backend.routes.diagnostics_routes`.
+- Reused the helper from the diagnostics route wrapper that maps unexpected exceptions to a
+  route-level 500 response.
+- Added direct helper coverage for the 500 status and `"{message}: {str(error)}"` detail format.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- The diagnostics PostgreSQL activity route still returns `{"activity": ...}` on success.
+- Unexpected exceptions still map to route-level `HTTPException(status_code=500)` with the
+  same Chinese prefix.
+- Existing route path, query validation, service call arguments, response payload shape, and
+  `str(error)` formatting are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_diagnostics_routes_helpers -v
+uv run python -m py_compile backend\routes\diagnostics_routes.py tests\test_diagnostics_routes_helpers.py
+uv run python -m unittest discover -s tests
+uv run python scripts\scan_postgres_compat_debt.py
+npm --prefix frontend run build
+uv run ruff check backend\routes\diagnostics_routes.py tests\test_diagnostics_routes_helpers.py --select F401,F841
+```
+
+Result:
+
+- Existing diagnostics route success and unexpected-error characterization tests passed against
+  the original duplicate inline wrapper before extraction: 2 tests.
+- `py_compile` passed.
+- Diagnostics route helper tests passed: 3 tests.
+- Full backend unittest discovery passed: 1061 tests, 15 skipped.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Frontend build passed, including Next.js lint/type checks.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because
+  `ruff` is not available.
+
 ## Stop Conditions
 
 Pause before editing if:

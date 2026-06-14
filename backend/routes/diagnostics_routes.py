@@ -8,10 +8,14 @@ from backend.services.postgres_activity import list_postgres_activity
 router = APIRouter(prefix="/api/diagnostics", tags=["diagnostics"])
 
 
+def _diagnostics_route_error(message: str, error: Exception) -> HTTPException:
+    return HTTPException(status_code=500, detail=f"{message}: {str(error)}")
+
+
 @router.get("/postgres/activity")
 async def get_postgres_activity(limit: int = Query(default=30, ge=1, le=200)):
     """查看当前 PostgreSQL 活动/等待会话。"""
     try:
         return {"activity": list_postgres_activity(limit=limit)}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"获取 PostgreSQL 活动失败: {str(e)}")
+        raise _diagnostics_route_error("获取 PostgreSQL 活动失败", e)
