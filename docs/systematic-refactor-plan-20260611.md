@@ -15994,6 +15994,60 @@ Result:
 - Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because
   `ruff` is not available.
 
+### 2026-06-14 - P5 downloader settings update response helper
+
+Changed:
+
+- Added route-level characterization coverage for downloader-settings update before
+  extraction.
+- Extracted `_update_downloader_settings_response()` in `backend.routes.settings_routes`.
+- Reused the helper from `update_downloader_settings()` so the route keeps only exception
+  mapping.
+- Added helper coverage for success, missing-crawler, invalid-download-interval, and
+  invalid-long-delay paths.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- `update_downloader_settings()` still calls `get_crawler_safe()` once on each covered path.
+- Successful updates still call `crawler.get_file_downloader()` once, mutate only
+  `_DOWNLOADER_SETTING_FIELDS`, and return
+  `{"message": "下载器设置已更新", "settings": ...}`.
+- Invalid interval paths still fail before calling `crawler.get_file_downloader()`.
+- The current compatibility behavior is preserved: missing crawler, invalid download
+  interval, and invalid long-delay interval still raise route-level
+  `HTTPException(status_code=500)` with the original 404/400 detail string embedded in the
+  error detail.
+- The extracted helper raises the original direct 404/400 errors before the route wrapper.
+- Existing route path, request model, response payload shape, validation conditions,
+  exception mapping, runtime lookup behavior, and config semantics are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_settings_routes_helpers.SettingsRoutesHelpersTest.test_update_downloader_settings_route_preserves_success_payload_and_side_effects tests.test_settings_routes_helpers.SettingsRoutesHelpersTest.test_update_downloader_settings_route_preserves_wrapped_missing_crawler_error tests.test_settings_routes_helpers.SettingsRoutesHelpersTest.test_update_downloader_settings_route_preserves_wrapped_invalid_download_interval_error tests.test_settings_routes_helpers.SettingsRoutesHelpersTest.test_update_downloader_settings_route_preserves_wrapped_invalid_long_delay_error -v
+uv run python -m py_compile backend\routes\settings_routes.py tests\test_settings_routes_helpers.py
+uv run python -m unittest tests.test_settings_routes_helpers.SettingsRoutesHelpersTest.test_update_downloader_settings_route_preserves_success_payload_and_side_effects tests.test_settings_routes_helpers.SettingsRoutesHelpersTest.test_update_downloader_settings_route_preserves_wrapped_missing_crawler_error tests.test_settings_routes_helpers.SettingsRoutesHelpersTest.test_update_downloader_settings_route_preserves_wrapped_invalid_download_interval_error tests.test_settings_routes_helpers.SettingsRoutesHelpersTest.test_update_downloader_settings_route_preserves_wrapped_invalid_long_delay_error tests.test_settings_routes_helpers.SettingsRoutesHelpersTest.test_update_downloader_settings_response_preserves_success_payload_and_side_effects tests.test_settings_routes_helpers.SettingsRoutesHelpersTest.test_update_downloader_settings_response_preserves_missing_crawler_error tests.test_settings_routes_helpers.SettingsRoutesHelpersTest.test_update_downloader_settings_response_preserves_invalid_download_interval_error tests.test_settings_routes_helpers.SettingsRoutesHelpersTest.test_update_downloader_settings_response_preserves_invalid_long_delay_error -v
+uv run python -m unittest tests.test_settings_routes_helpers -v
+uv run python -m unittest discover -s tests
+uv run python scripts\scan_postgres_compat_debt.py
+npm --prefix frontend run build
+uv run ruff check backend\routes\settings_routes.py tests\test_settings_routes_helpers.py --select F401,F841
+```
+
+Result:
+
+- Existing downloader settings update route characterization tests passed against the
+  original inline implementation before extraction: 4 tests.
+- `py_compile` passed.
+- Focused downloader settings update route/helper tests passed after extraction: 8 tests.
+- Settings route helper tests passed: 30 tests.
+- Full backend unittest discovery passed: 1004 tests, 15 skipped.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Frontend build passed, including Next.js lint/type checks.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because
+  `ruff` is not available.
+
 ## Stop Conditions
 
 Pause before editing if:

@@ -18,12 +18,15 @@ from backend.routes.settings_routes import (
     _settings_update_response,
     _update_crawl_settings_response,
     _update_crawler_settings_response,
+    _update_downloader_settings_response,
     CrawlerSettingsRequest,
+    DownloaderSettingsRequest,
     get_crawl_settings,
     get_crawler_settings,
     get_downloader_settings,
     update_crawl_settings,
     update_crawler_settings,
+    update_downloader_settings,
 )
 
 
@@ -399,6 +402,156 @@ class SettingsRoutesHelpersTest(unittest.TestCase):
         )
         get_crawler.assert_called_once_with()
         crawler.get_file_downloader.assert_called_once_with()
+
+    def test_update_downloader_settings_route_preserves_success_payload_and_side_effects(self):
+        import asyncio
+
+        downloader = SimpleNamespace(
+            download_interval_min=30,
+            download_interval_max=60,
+            long_delay_interval=10,
+            long_delay_min=300,
+            long_delay_max=600,
+            unrelated="unchanged",
+        )
+        crawler = SimpleNamespace(get_file_downloader=Mock(return_value=downloader))
+        request = DownloaderSettingsRequest(
+            download_interval_min=5,
+            download_interval_max=25,
+            long_delay_interval=7,
+            long_delay_min=180,
+            long_delay_max=360,
+        )
+
+        with patch("backend.routes.settings_routes.get_crawler_safe", return_value=crawler) as get_crawler:
+            result = asyncio.run(update_downloader_settings(request))
+
+        expected_settings = {
+            "download_interval_min": 5,
+            "download_interval_max": 25,
+            "long_delay_interval": 7,
+            "long_delay_min": 180,
+            "long_delay_max": 360,
+        }
+        self.assertEqual(result, {"message": "下载器设置已更新", "settings": expected_settings})
+        self.assertEqual(_settings_from_attrs(downloader, _DOWNLOADER_SETTING_FIELDS), expected_settings)
+        self.assertEqual(downloader.unrelated, "unchanged")
+        get_crawler.assert_called_once_with()
+        crawler.get_file_downloader.assert_called_once_with()
+
+    def test_update_downloader_settings_route_preserves_wrapped_missing_crawler_error(self):
+        import asyncio
+
+        with patch("backend.routes.settings_routes.get_crawler_safe", return_value=None):
+            with self.assertRaises(HTTPException) as caught:
+                asyncio.run(update_downloader_settings(DownloaderSettingsRequest()))
+
+        self.assertEqual(caught.exception.status_code, 500)
+        self.assertEqual(caught.exception.detail, "更新下载器设置失败: 404: 爬虫未初始化")
+
+    def test_update_downloader_settings_route_preserves_wrapped_invalid_download_interval_error(self):
+        import asyncio
+
+        crawler = SimpleNamespace(get_file_downloader=Mock())
+        request = DownloaderSettingsRequest(download_interval_min=60, download_interval_max=60)
+
+        with patch("backend.routes.settings_routes.get_crawler_safe", return_value=crawler):
+            with self.assertRaises(HTTPException) as caught:
+                asyncio.run(update_downloader_settings(request))
+
+        self.assertEqual(caught.exception.status_code, 500)
+        self.assertEqual(caught.exception.detail, "更新下载器设置失败: 400: 最小下载间隔必须小于最大下载间隔")
+        crawler.get_file_downloader.assert_not_called()
+
+    def test_update_downloader_settings_route_preserves_wrapped_invalid_long_delay_error(self):
+        import asyncio
+
+        crawler = SimpleNamespace(get_file_downloader=Mock())
+        request = DownloaderSettingsRequest(
+            download_interval_min=10,
+            download_interval_max=20,
+            long_delay_min=300,
+            long_delay_max=300,
+        )
+
+        with patch("backend.routes.settings_routes.get_crawler_safe", return_value=crawler):
+            with self.assertRaises(HTTPException) as caught:
+                asyncio.run(update_downloader_settings(request))
+
+        self.assertEqual(caught.exception.status_code, 500)
+        self.assertEqual(caught.exception.detail, "更新下载器设置失败: 400: 最小长休眠时间必须小于最大长休眠时间")
+        crawler.get_file_downloader.assert_not_called()
+
+    def test_update_downloader_settings_response_preserves_success_payload_and_side_effects(self):
+        downloader = SimpleNamespace(
+            download_interval_min=30,
+            download_interval_max=60,
+            long_delay_interval=10,
+            long_delay_min=300,
+            long_delay_max=600,
+            unrelated="unchanged",
+        )
+        crawler = SimpleNamespace(get_file_downloader=Mock(return_value=downloader))
+        request = DownloaderSettingsRequest(
+            download_interval_min=5,
+            download_interval_max=25,
+            long_delay_interval=7,
+            long_delay_min=180,
+            long_delay_max=360,
+        )
+
+        with patch("backend.routes.settings_routes.get_crawler_safe", return_value=crawler) as get_crawler:
+            result = _update_downloader_settings_response(request)
+
+        expected_settings = {
+            "download_interval_min": 5,
+            "download_interval_max": 25,
+            "long_delay_interval": 7,
+            "long_delay_min": 180,
+            "long_delay_max": 360,
+        }
+        self.assertEqual(result, {"message": "下载器设置已更新", "settings": expected_settings})
+        self.assertEqual(_settings_from_attrs(downloader, _DOWNLOADER_SETTING_FIELDS), expected_settings)
+        self.assertEqual(downloader.unrelated, "unchanged")
+        get_crawler.assert_called_once_with()
+        crawler.get_file_downloader.assert_called_once_with()
+
+    def test_update_downloader_settings_response_preserves_missing_crawler_error(self):
+        with patch("backend.routes.settings_routes.get_crawler_safe", return_value=None):
+            with self.assertRaises(HTTPException) as caught:
+                _update_downloader_settings_response(DownloaderSettingsRequest())
+
+        self.assertEqual(caught.exception.status_code, 404)
+        self.assertEqual(caught.exception.detail, "爬虫未初始化")
+
+    def test_update_downloader_settings_response_preserves_invalid_download_interval_error(self):
+        crawler = SimpleNamespace(get_file_downloader=Mock())
+        request = DownloaderSettingsRequest(download_interval_min=60, download_interval_max=60)
+
+        with patch("backend.routes.settings_routes.get_crawler_safe", return_value=crawler):
+            with self.assertRaises(HTTPException) as caught:
+                _update_downloader_settings_response(request)
+
+        self.assertEqual(caught.exception.status_code, 400)
+        self.assertEqual(caught.exception.detail, "最小下载间隔必须小于最大下载间隔")
+        crawler.get_file_downloader.assert_not_called()
+
+    def test_update_downloader_settings_response_preserves_invalid_long_delay_error(self):
+        crawler = SimpleNamespace(get_file_downloader=Mock())
+        request = DownloaderSettingsRequest(
+            download_interval_min=10,
+            download_interval_max=20,
+            long_delay_min=300,
+            long_delay_max=300,
+        )
+
+        with patch("backend.routes.settings_routes.get_crawler_safe", return_value=crawler):
+            with self.assertRaises(HTTPException) as caught:
+                _update_downloader_settings_response(request)
+
+        self.assertEqual(caught.exception.status_code, 400)
+        self.assertEqual(caught.exception.detail, "最小长休眠时间必须小于最大长休眠时间")
+        crawler.get_file_downloader.assert_not_called()
 
 
 if __name__ == "__main__":

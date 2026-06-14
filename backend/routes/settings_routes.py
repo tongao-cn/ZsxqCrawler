@@ -111,6 +111,27 @@ def _get_downloader_settings_response() -> dict:
     return _settings_from_attrs(downloader, _DOWNLOADER_SETTING_FIELDS)
 
 
+def _update_downloader_settings_response(request: "DownloaderSettingsRequest") -> dict:
+    crawler = get_crawler_safe()
+    if not crawler:
+        raise HTTPException(status_code=404, detail="爬虫未初始化")
+
+    if request.download_interval_min >= request.download_interval_max:
+        raise HTTPException(status_code=400, detail="最小下载间隔必须小于最大下载间隔")
+
+    if request.long_delay_min >= request.long_delay_max:
+        raise HTTPException(status_code=400, detail="最小长休眠时间必须小于最大长休眠时间")
+
+    downloader = crawler.get_file_downloader()
+
+    _apply_settings(downloader, request, _DOWNLOADER_SETTING_FIELDS)
+
+    return _settings_update_response(
+        "下载器设置已更新",
+        _settings_from_attrs(downloader, _DOWNLOADER_SETTING_FIELDS),
+    )
+
+
 class CrawlerSettingsRequest(BaseModel):
     min_delay: float = Field(default=2.0, ge=0.5, le=10.0)
     max_delay: float = Field(default=5.0, ge=1.0, le=20.0)
@@ -176,23 +197,6 @@ async def get_downloader_settings():
 async def update_downloader_settings(request: DownloaderSettingsRequest):
     """更新文件下载器设置"""
     try:
-        crawler = get_crawler_safe()
-        if not crawler:
-            raise HTTPException(status_code=404, detail="爬虫未初始化")
-
-        if request.download_interval_min >= request.download_interval_max:
-            raise HTTPException(status_code=400, detail="最小下载间隔必须小于最大下载间隔")
-
-        if request.long_delay_min >= request.long_delay_max:
-            raise HTTPException(status_code=400, detail="最小长休眠时间必须小于最大长休眠时间")
-
-        downloader = crawler.get_file_downloader()
-
-        _apply_settings(downloader, request, _DOWNLOADER_SETTING_FIELDS)
-
-        return _settings_update_response(
-            "下载器设置已更新",
-            _settings_from_attrs(downloader, _DOWNLOADER_SETTING_FIELDS),
-        )
+        return _update_downloader_settings_response(request)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"更新下载器设置失败: {str(e)}")
