@@ -16739,6 +16739,52 @@ Result:
 - Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because
   `ruff` is not available.
 
+### 2026-06-14 - P3 columns storage mapped row fetch helper
+
+Changed:
+
+- Added method-level characterization coverage for column list, column topic list, and topic
+  attachment read methods returning non-empty mapped row shapes.
+- Added direct coverage that the new mapped-row fetch helper preserves existing optional-params
+  `cursor.execute()` arity, including the unscoped queue-query branch that calls `execute(sql)`.
+- Extracted `_fetch_mapped_rows()` in `backend.storage.zsxq_columns_database`.
+- Reused the helper from column list, column topic list, topic image/file/video, comment image,
+  pending video/file, and uncached image read methods.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- SQL text, generated params, execute arity, row mapper output fields, group scoping,
+  pending queue unscoped branches, comment image loading, and returned list shapes are unchanged.
+- No schema, commit order, write paths, legacy path, fallback behavior, or public storage method
+  signatures changed.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_columns_database_helpers.ZSXQColumnsDatabaseHelperTests.test_column_and_attachment_read_methods_preserve_row_shapes -v
+uv run python -m py_compile backend\storage\zsxq_columns_database.py tests\test_zsxq_columns_database_helpers.py
+uv run python -m unittest tests.test_zsxq_columns_database_helpers.ZSXQColumnsDatabaseHelperTests.test_column_and_attachment_read_methods_preserve_row_shapes tests.test_zsxq_columns_database_helpers.ZSXQColumnsDatabaseHelperTests.test_fetch_mapped_rows_preserves_optional_params_execute_arity tests.test_zsxq_columns_database_helpers.ZSXQColumnsDatabaseHelperTests.test_pending_queue_methods_preserve_execute_arity_and_row_shapes -v
+uv run python -m unittest tests.test_zsxq_columns_database_helpers -v
+uv run python -m unittest discover -s tests
+uv run python scripts\scan_postgres_compat_debt.py
+npm --prefix frontend run build
+uv run ruff check backend\storage\zsxq_columns_database.py tests\test_zsxq_columns_database_helpers.py --select F401,F841
+```
+
+Result:
+
+- Existing column/attachment read-method characterization passed against the original duplicate
+  inline fetch/map implementation before extraction: 1 test.
+- `py_compile` passed.
+- Focused mapped-row helper and related read-method tests passed after extraction: 3 tests.
+- Columns database helper tests passed: 73 tests.
+- Full backend unittest discovery passed: 1063 tests, 15 skipped.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Frontend build passed, including Next.js lint/type checks.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because
+  `ruff` is not available.
+
 ## Stop Conditions
 
 Pause before editing if:

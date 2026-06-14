@@ -5,7 +5,7 @@
 用于存储专栏目录、文章和相关信息
 """
 
-from typing import Dict, List, Any, Optional
+from typing import Callable, Dict, List, Any, Optional
 
 from backend.storage.db_compat import connect
 from backend.storage.zsxq_columns_database_helpers import (
@@ -104,9 +104,7 @@ class ZSXQColumnsDatabase:
     def get_columns(self, group_id: int) -> List[Dict[str, Any]]:
         """获取群组的所有专栏目录"""
         sql, params = _columns_query(group_id)
-        self.cursor.execute(sql, params)
-        
-        return [_column_row_to_dict(row) for row in self.cursor.fetchall()]
+        return self._fetch_mapped_rows(sql, params, _column_row_to_dict)
     
     def get_column(self, column_id: int, group_id: Optional[Any] = None) -> Optional[Dict[str, Any]]:
         """获取单个专栏目录"""
@@ -135,9 +133,7 @@ class ZSXQColumnsDatabase:
         """获取专栏下的所有文章列表"""
         scope_group_id = self._scope_group_id_param(group_id)
         sql, params = _column_topics_query(column_id, scope_group_id)
-        self.cursor.execute(sql, params)
-        
-        return [_column_topic_row_to_dict(row) for row in self.cursor.fetchall()]
+        return self._fetch_mapped_rows(sql, params, _column_topic_row_to_dict)
     
     # ==================== 文章详情操作 ====================
     
@@ -305,25 +301,19 @@ class ZSXQColumnsDatabase:
         """获取文章的所有图片"""
         scope_group_id = self._scope_group_id_param(group_id)
         sql, params = _topic_images_query(topic_id, scope_group_id)
-        self.cursor.execute(sql, params)
-        
-        return [_topic_image_row_to_dict(row) for row in self.cursor.fetchall()]
+        return self._fetch_mapped_rows(sql, params, _topic_image_row_to_dict)
     
     def get_topic_files(self, topic_id: int, group_id: Optional[Any] = None) -> List[Dict[str, Any]]:
         """获取文章的所有文件"""
         scope_group_id = self._scope_group_id_param(group_id)
         sql, params = _topic_files_query(topic_id, scope_group_id)
-        self.cursor.execute(sql, params)
-        
-        return [_topic_file_row_to_dict(row) for row in self.cursor.fetchall()]
+        return self._fetch_mapped_rows(sql, params, _topic_file_row_to_dict)
     
     def get_topic_videos(self, topic_id: int, group_id: Optional[Any] = None) -> List[Dict[str, Any]]:
         """获取文章的所有视频"""
         scope_group_id = self._scope_group_id_param(group_id)
         sql, params = _topic_videos_query(topic_id, scope_group_id)
-        self.cursor.execute(sql, params)
-        
-        return [_topic_video_row_to_dict(row) for row in self.cursor.fetchall()]
+        return self._fetch_mapped_rows(sql, params, _topic_video_row_to_dict)
     
     def update_video_cover_path(self, video_id: int, local_path: str):
         """更新视频封面本地缓存路径"""
@@ -344,10 +334,18 @@ class ZSXQColumnsDatabase:
             self.cursor.execute(sql)
         return self.cursor.fetchall()
 
+    def _fetch_mapped_rows(
+        self,
+        sql: str,
+        params: Any,
+        row_mapper: Callable[[Any], Dict[str, Any]],
+    ) -> List[Dict[str, Any]]:
+        return [row_mapper(row) for row in self._fetch_optional_params_rows(sql, params)]
+
     def get_pending_videos(self, group_id: int = None) -> List[Dict[str, Any]]:
         """获取待下载的视频列表"""
         sql, params = _pending_videos_query(group_id)
-        return [_pending_video_row_to_dict(row) for row in self._fetch_optional_params_rows(sql, params)]
+        return self._fetch_mapped_rows(sql, params, _pending_video_row_to_dict)
 
     def _load_topic_comment_images(
         self,
@@ -356,8 +354,7 @@ class ZSXQColumnsDatabase:
         topic_id: int,
     ) -> List[Dict[str, Any]]:
         sql, params = _comment_images_query(comment_id, scope_group_id, topic_id)
-        self.cursor.execute(sql, params)
-        return [_comment_image_row_to_dict(row) for row in self.cursor.fetchall()]
+        return self._fetch_mapped_rows(sql, params, _comment_image_row_to_dict)
     
     def get_topic_comments(self, topic_id: int, group_id: Optional[Any] = None) -> List[Dict[str, Any]]:
         """获取文章的所有评论（支持嵌套结构）"""
@@ -391,7 +388,7 @@ class ZSXQColumnsDatabase:
     def get_pending_files(self, group_id: int = None) -> List[Dict[str, Any]]:
         """获取待下载的文件列表"""
         sql, params = _pending_files_query(group_id)
-        return [_pending_file_row_to_dict(row) for row in self._fetch_optional_params_rows(sql, params)]
+        return self._fetch_mapped_rows(sql, params, _pending_file_row_to_dict)
     
     # ==================== 图片缓存 ====================
     
@@ -404,7 +401,7 @@ class ZSXQColumnsDatabase:
     def get_uncached_images(self, group_id: int = None) -> List[Dict[str, Any]]:
         """获取未缓存的图片列表"""
         sql, params = _uncached_images_query(group_id)
-        return [_uncached_image_row_to_dict(row) for row in self._fetch_optional_params_rows(sql, params)]
+        return self._fetch_mapped_rows(sql, params, _uncached_image_row_to_dict)
     
     # ==================== 统计信息 ====================
     

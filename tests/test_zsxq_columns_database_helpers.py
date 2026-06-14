@@ -1097,6 +1097,37 @@ class ZSXQColumnsDatabaseHelperTests(unittest.TestCase):
         self.assertIn("WHERE i.local_path IS NULL AND i.original_url IS NOT NULL", self._sql(db.cursor.calls[2][0]))
         self.assertNotIn("AND td.group_id = ?", self._sql(db.cursor.calls[2][0]))
 
+    def test_fetch_mapped_rows_preserves_optional_params_execute_arity(self):
+        from backend.storage.zsxq_columns_database import ZSXQColumnsDatabase
+
+        class FakeCursor:
+            def __init__(self):
+                self.calls = []
+                self.fetchall_results = [[("first",)], [("second",)]]
+
+            def execute(self, *args):
+                self.calls.append(args)
+
+            def fetchall(self):
+                return self.fetchall_results.pop(0)
+
+        db = object.__new__(ZSXQColumnsDatabase)
+        db.cursor = FakeCursor()
+
+        mapper = lambda row: {"value": row[0]}
+
+        self.assertEqual(
+            [{"value": "first"}],
+            ZSXQColumnsDatabase._fetch_mapped_rows(db, "SELECT first", None, mapper),
+        )
+        self.assertEqual(
+            [{"value": "second"}],
+            ZSXQColumnsDatabase._fetch_mapped_rows(db, "SELECT second WHERE id = ?", (202,), mapper),
+        )
+
+        self.assertEqual(("SELECT first",), db.cursor.calls[0])
+        self.assertEqual(("SELECT second WHERE id = ?", (202,)), db.cursor.calls[1])
+
     def test_column_queries_preserve_scope_params_and_order(self):
         columns_sql, columns_params = _columns_query(303)
         self.assertIn("SELECT column_id, group_id, name, cover_url, topics_count", self._sql(columns_sql))
@@ -2058,6 +2089,143 @@ class ZSXQColumnsDatabaseHelperTests(unittest.TestCase):
         comments_sql, comments_params = db.cursor.calls[-1]
         self.assertIn("WHERE c.topic_id = ? AND (? IS NULL OR c.group_id = ?)", comments_sql)
         self.assertEqual((202, 303, 303), comments_params)
+
+    def test_column_and_attachment_read_methods_preserve_row_shapes(self):
+        from backend.storage.zsxq_columns_database import ZSXQColumnsDatabase
+
+        class FakeCursor:
+            def __init__(self):
+                self.calls = []
+                self.fetchall_results = [
+                    [
+                        (
+                            101,
+                            303,
+                            "column name",
+                            "cover-url",
+                            7,
+                            "2026-06-10T10:00:00",
+                            "2026-06-10T11:00:00",
+                            "2026-06-10 12:00:00",
+                        )
+                    ],
+                    [
+                        (
+                            202,
+                            101,
+                            303,
+                            "topic title",
+                            "topic text",
+                            "2026-06-10T12:00:00",
+                            "2026-06-10T13:00:00",
+                            "2026-06-10 14:00:00",
+                            1,
+                        )
+                    ],
+                    [
+                        (
+                            301,
+                            "image",
+                            "thumb-url",
+                            10,
+                            20,
+                            "large-url",
+                            30,
+                            40,
+                            "original-url",
+                            50,
+                            60,
+                            70,
+                            "cache/image.jpg",
+                        )
+                    ],
+                    [
+                        (
+                            401,
+                            "file.pdf",
+                            "hash",
+                            8192,
+                            30,
+                            5,
+                            "2026-06-10T15:00:00",
+                            "pending",
+                            "downloads/file.pdf",
+                            "2026-06-10 16:00:00",
+                        )
+                    ],
+                    [
+                        (
+                            501,
+                            4096,
+                            60,
+                            "cover-url",
+                            320,
+                            180,
+                            "cache/cover.jpg",
+                            "video-url",
+                            "completed",
+                            "downloads/video.mp4",
+                            "2026-06-10 17:00:00",
+                        )
+                    ],
+                ]
+
+            def execute(self, sql, params=()):
+                self.calls.append((" ".join(sql.split()), params))
+                return self
+
+            def fetchall(self):
+                return self.fetchall_results.pop(0)
+
+        db = object.__new__(ZSXQColumnsDatabase)
+        db.cursor = FakeCursor()
+        db.group_id = "303"
+
+        self.assertEqual(
+            [
+                {
+                    "column_id": 101,
+                    "group_id": 303,
+                    "name": "column name",
+                    "cover_url": "cover-url",
+                    "topics_count": 7,
+                    "create_time": "2026-06-10T10:00:00",
+                    "last_topic_attach_time": "2026-06-10T11:00:00",
+                    "imported_at": "2026-06-10 12:00:00",
+                }
+            ],
+            ZSXQColumnsDatabase.get_columns(db, 303),
+        )
+        self.assertEqual(
+            [
+                {
+                    "topic_id": 202,
+                    "column_id": 101,
+                    "group_id": 303,
+                    "title": "topic title",
+                    "text": "topic text",
+                    "create_time": "2026-06-10T12:00:00",
+                    "attached_to_column_time": "2026-06-10T13:00:00",
+                    "imported_at": "2026-06-10 14:00:00",
+                    "has_detail": True,
+                }
+            ],
+            ZSXQColumnsDatabase.get_column_topics(db, 101),
+        )
+        self.assertEqual(301, ZSXQColumnsDatabase.get_topic_images(db, 202)[0]["image_id"])
+        self.assertEqual("file.pdf", ZSXQColumnsDatabase.get_topic_files(db, 202)[0]["name"])
+        self.assertEqual(501, ZSXQColumnsDatabase.get_topic_videos(db, 202)[0]["video_id"])
+
+        self.assertIn("FROM columns WHERE group_id = ?", db.cursor.calls[0][0])
+        self.assertEqual((303,), db.cursor.calls[0][1])
+        self.assertIn("WHERE ct.column_id = ? AND (? IS NULL OR ct.group_id = ?)", db.cursor.calls[1][0])
+        self.assertEqual((101, 303, 303), db.cursor.calls[1][1])
+        self.assertIn("FROM images WHERE topic_id = ?", db.cursor.calls[2][0])
+        self.assertEqual((202, 303, 303), db.cursor.calls[2][1])
+        self.assertIn("FROM files WHERE topic_id = ?", db.cursor.calls[3][0])
+        self.assertEqual((202, 303, 303), db.cursor.calls[3][1])
+        self.assertIn("FROM videos WHERE topic_id = ?", db.cursor.calls[4][0])
+        self.assertEqual((202, 303, 303), db.cursor.calls[4][1])
 
     def test_topic_comments_preserve_comment_image_queries_and_nested_shape(self):
         from backend.storage.zsxq_columns_database import ZSXQColumnsDatabase
