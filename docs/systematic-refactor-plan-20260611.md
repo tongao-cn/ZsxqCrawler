@@ -17495,6 +17495,54 @@ Result:
 - Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because
   `ruff` is not available.
 
+### 2026-06-14 - P1 file workflow existing-count helper
+
+Changed:
+
+- Ran existing file download task characterization against the original inline file-count query
+  before extraction.
+- Added `_count_existing_file_records()` for the `run_file_download_task()` existing-files branch.
+- Reused the helper from `run_file_download_task()` while leaving downloader creation, task logs,
+  stop checks, collect/download branching, and cleanup unchanged.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Existing file-count SQL text, `_query_group_id()` parameter conversion, `fetchone()[0] or 0`
+  default behavior, skip-collection branch, empty-library collection branch, download options, task
+  status updates, task logs, and cleanup semantics are unchanged.
+- File listing, selected/filtered/single-file download paths, AI analysis, route behavior, storage
+  schema, fallback/legacy behavior, public APIs, and configuration semantics are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_file_routes_helpers.FileRoutesHelperTests.test_run_file_download_task_existing_files_uses_download_count_without_collect -v
+uv run python -m py_compile backend\services\file_workflow_service.py tests\test_file_routes_helpers.py
+uv run python -m unittest tests.test_file_routes_helpers.FileRoutesHelperTests.test_run_file_download_task_existing_files_uses_download_count_without_collect tests.test_file_routes_helpers.FileRoutesHelperTests.test_run_file_download_task_empty_create_time_collects_and_downloads_date_range -v
+uv run python -m unittest tests.test_file_routes_helpers -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+uv run ruff check backend\services\file_workflow_service.py tests\test_file_routes_helpers.py --select F401,F841
+uv run python -m py_compile backend\services\file_workflow_service.py
+uv run python -m unittest tests.test_file_routes_helpers.FileRoutesHelperTests.test_run_file_download_task_existing_files_uses_download_count_without_collect -v
+```
+
+Result:
+
+- Existing file download task characterization passed against the original inline implementation:
+  1 test.
+- `py_compile` passed.
+- Focused existing-files and empty-library download task tests passed after extraction: 2 tests.
+- File route/helper tests passed: 50 tests.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Full backend unittest discovery passed: 1068 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- Post-format `py_compile` and focused existing-files characterization recheck passed.
+
 ## Stop Conditions
 
 Pause before editing if:

@@ -613,6 +613,14 @@ def _build_file_download_options(
     }
 
 
+def _count_existing_file_records(downloader: ZSXQFileDownloader, group_id: str) -> int:
+    downloader.file_db.cursor.execute(
+        "SELECT COUNT(*) FROM files WHERE group_id = ?",
+        (_query_group_id(group_id),),
+    )
+    return downloader.file_db.cursor.fetchone()[0] or 0
+
+
 def run_file_download_task(
     task_id: str,
     group_id: str,
@@ -656,8 +664,7 @@ def run_file_download_task(
             return
 
         add_task_log(task_id, "📡 连接到知识星球API...")
-        downloader.file_db.cursor.execute("SELECT COUNT(*) FROM files WHERE group_id = ?", (_query_group_id(group_id),))
-        existing_files_count = downloader.file_db.cursor.fetchone()[0] or 0
+        existing_files_count = _count_existing_file_records(downloader, group_id)
 
         collect_result = None
         if existing_files_count == 0:
