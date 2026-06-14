@@ -307,6 +307,49 @@ class DailyAnalysisRoutesHelperTests(unittest.TestCase):
         is_task_stopped.assert_called_once_with("task-1")
         update_task.assert_not_called()
 
+    @unittest.skipUnless(HAS_DAILY_ROUTE_DEPS, "daily analysis route dependencies are not installed")
+    def test_read_daily_report_preserves_report_passthrough(self):
+        import asyncio
+
+        from backend.routes import daily_analysis_routes
+
+        report = {"date": "2026-06-13", "topics": []}
+        with patch.object(daily_analysis_routes, "get_daily_report", return_value=report) as get_report:
+            result = asyncio.run(daily_analysis_routes.read_daily_report("group-1", "2026-06-13"))
+
+        self.assertEqual(report, result)
+        get_report.assert_called_once_with("group-1", "2026-06-13")
+
+    @unittest.skipUnless(HAS_DAILY_ROUTE_DEPS, "daily analysis route dependencies are not installed")
+    def test_read_daily_report_preserves_missing_report_404(self):
+        import asyncio
+
+        from fastapi import HTTPException
+
+        from backend.routes import daily_analysis_routes
+
+        with patch.object(daily_analysis_routes, "get_daily_report", return_value=None) as get_report:
+            with self.assertRaises(HTTPException) as raised:
+                asyncio.run(daily_analysis_routes.read_daily_report("group-1", None))
+
+        self.assertEqual(404, raised.exception.status_code)
+        self.assertEqual("日报不存在，请先生成", raised.exception.detail)
+        get_report.assert_called_once_with("group-1", None)
+
+    @unittest.skipUnless(HAS_DAILY_ROUTE_DEPS, "daily analysis route dependencies are not installed")
+    def test_daily_report_or_404_preserves_missing_report_404(self):
+        from fastapi import HTTPException
+
+        from backend.routes import daily_analysis_routes
+
+        with patch.object(daily_analysis_routes, "get_daily_report", return_value={}) as get_report:
+            with self.assertRaises(HTTPException) as raised:
+                daily_analysis_routes._daily_report_or_404("group-1", "2026-06-13")
+
+        self.assertEqual(404, raised.exception.status_code)
+        self.assertEqual("日报不存在，请先生成", raised.exception.detail)
+        get_report.assert_called_once_with("group-1", "2026-06-13")
+
 
 if __name__ == "__main__":
     unittest.main()

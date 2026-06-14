@@ -100,6 +100,13 @@ def _complete_daily_today_task_unless_stopped(task_id: str, result: dict) -> Non
     update_task(task_id, "completed", "每日抓取与 AI 分析完成", result)
 
 
+def _daily_report_or_404(group_id: str, date: Optional[str]) -> dict:
+    report = get_daily_report(group_id, date)
+    if not report:
+        raise HTTPException(status_code=404, detail="日报不存在，请先生成")
+    return report
+
+
 def run_daily_analysis_task(
     task_id: str,
     group_id: str,
@@ -173,10 +180,7 @@ async def read_daily_report(
     date: Optional[str] = Query(default=None, description="报告日期，格式 YYYY-MM-DD；默认今天（东八区）"),
 ):
     try:
-        report = get_daily_report(group_id, date)
-        if not report:
-            raise HTTPException(status_code=404, detail="日报不存在，请先生成")
-        return report
+        return _daily_report_or_404(group_id, date)
     except HTTPException:
         raise
     except Exception as e:
