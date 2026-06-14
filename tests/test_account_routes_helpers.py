@@ -44,6 +44,16 @@ class FakeAccountsSqlManager:
         return self.account
 
 
+class FakeAccountsListSqlManager:
+    def __init__(self, accounts):
+        self.accounts = accounts
+        self.calls = []
+
+    def get_accounts(self, mask_cookie=True):
+        self.calls.append(mask_cookie)
+        return self.accounts
+
+
 @unittest.skipUnless(HAS_ACCOUNT_ROUTE_DEPS, "account route dependencies are not installed")
 class AccountRoutesHelperTests(unittest.TestCase):
     def test_fetch_self_api_data_returns_payload_and_uses_stealth_headers(self):
@@ -141,6 +151,28 @@ class AccountRoutesHelperTests(unittest.TestCase):
 
         self.assertEqual({"account": summary}, result)
         get_summary.assert_called_once_with("group-1")
+
+    def test_list_accounts_route_preserves_masked_response(self):
+        import asyncio
+
+        accounts = [{"id": "acc-1", "cookie": "***"}]
+        manager = FakeAccountsListSqlManager(accounts)
+
+        with patch.object(account_routes, "get_accounts_sql_manager", return_value=manager):
+            result = asyncio.run(account_routes.list_accounts())
+
+        self.assertEqual({"accounts": accounts}, result)
+        self.assertEqual([True], manager.calls)
+
+    def test_list_accounts_response_preserves_masked_lookup(self):
+        accounts = [{"id": "acc-1", "cookie": "***"}]
+        manager = FakeAccountsListSqlManager(accounts)
+
+        with patch.object(account_routes, "get_accounts_sql_manager", return_value=manager):
+            result = account_routes._list_accounts_response()
+
+        self.assertEqual({"accounts": accounts}, result)
+        self.assertEqual([True], manager.calls)
 
 
 @unittest.skipUnless(HAS_ACCOUNT_ROUTE_DEPS, "account route dependencies are not installed")

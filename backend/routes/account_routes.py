@@ -121,6 +121,12 @@ def _get_group_account_response(group_id: str) -> Dict[str, Any]:
     return {"account": summary}
 
 
+def _list_accounts_response() -> Dict[str, Any]:
+    sql_mgr = get_accounts_sql_manager()
+    accounts = sql_mgr.get_accounts(mask_cookie=True)
+    return {"accounts": accounts}
+
+
 async def _run_self_response_route(
     helper: Callable[[str], Dict[str, Any]],
     identifier: str,
@@ -142,9 +148,7 @@ async def _run_self_response_route(
 async def list_accounts():
     """获取所有账号列表"""
     try:
-        sql_mgr = get_accounts_sql_manager()
-        accounts = sql_mgr.get_accounts(mask_cookie=True)
-        return {"accounts": accounts}
+        return _list_accounts_response()
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to retrieve account list: {str(e)}")
 

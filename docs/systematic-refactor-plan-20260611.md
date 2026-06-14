@@ -15576,6 +15576,51 @@ Result:
 - Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because
   `ruff` is not available.
 
+### 2026-06-14 - P5 account list response helper
+
+Changed:
+
+- Added route-level characterization coverage for the account list response before extraction.
+- Extracted `_list_accounts_response()` in `backend.routes.account_routes`.
+- Reused the helper from `list_accounts()` so the route keeps only exception mapping.
+- Added helper coverage for preserving the masked account lookup and response shape.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- `list_accounts()` still calls `get_accounts_sql_manager().get_accounts(mask_cookie=True)`
+  and returns `{"accounts": accounts}` unchanged.
+- Existing route path, response payload shape, exception mapping, cookie masking behavior,
+  storage access, config semantics, and account fallback behavior are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_account_routes_helpers.AccountRoutesHelperTests.test_list_accounts_route_preserves_masked_response -v
+uv run python -m py_compile backend\routes\account_routes.py tests\test_account_routes_helpers.py
+uv run python -m unittest tests.test_account_routes_helpers.AccountRoutesHelperTests.test_list_accounts_route_preserves_masked_response tests.test_account_routes_helpers.AccountRoutesHelperTests.test_list_accounts_response_preserves_masked_lookup -v
+uv run python -m unittest tests.test_account_routes_helpers -v
+uv run python -m unittest tests.test_account_routes_helpers tests.test_account_context tests.test_account_info_db_helpers tests.test_accounts_sql_manager_helpers -v
+uv run python -m unittest discover -s tests
+uv run python scripts\scan_postgres_compat_debt.py
+npm --prefix frontend run build
+uv run ruff check backend\routes\account_routes.py tests\test_account_routes_helpers.py --select F401,F841
+```
+
+Result:
+
+- Existing account list route characterization test passed against the original inline
+  implementation before extraction: 1 test.
+- `py_compile` passed.
+- Focused account list route/helper tests passed after extraction: 2 tests.
+- Account route helper tests passed: 13 tests.
+- Related account route/context/storage tests passed: 32 tests, 1 skipped.
+- Full backend unittest discovery passed: 968 tests, 15 skipped.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Frontend build passed, including Next.js lint/type checks.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because
+  `ruff` is not available.
+
 ## Stop Conditions
 
 Pause before editing if:
