@@ -30,6 +30,10 @@ router = APIRouter(prefix="/api/analysis/stock-topics", tags=["stock-topic-analy
 TASK_CREATED_MESSAGE = "任务已创建，正在后台执行"
 
 
+def _stock_topic_route_error(message: str, error: Exception) -> HTTPException:
+    return HTTPException(status_code=500, detail=f"{message}: {str(error)}")
+
+
 class StockTopicAnalysisRequest(BaseModel):
     stockName: str = Field(..., min_length=1, description="股票名称")
 
@@ -210,7 +214,7 @@ async def read_stock_question_matches(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"搜索A股问答相关话题失败: {str(exc)}")
+        raise _stock_topic_route_error("搜索A股问答相关话题失败", exc)
 
 
 @router.post("/{group_id}/questions/analyze")
@@ -225,7 +229,7 @@ async def create_stock_question_analysis(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"创建A股问答任务失败: {str(exc)}")
+        raise _stock_topic_route_error("创建A股问答任务失败", exc)
 
 
 @router.get("/{group_id}")
@@ -238,7 +242,7 @@ async def read_stock_topic_matches(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"搜索股票相关话题失败: {str(exc)}")
+        raise _stock_topic_route_error("搜索股票相关话题失败", exc)
 
 
 @router.post("/extract-stocks-from-image")
@@ -248,7 +252,7 @@ async def extract_stock_topics_from_image(request: StockTopicImageExtractRequest
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"从图片提取股票失败: {str(exc)}")
+        raise _stock_topic_route_error("从图片提取股票失败", exc)
 
 
 @router.post("/{group_id}/analyze")
@@ -263,7 +267,7 @@ async def create_stock_topic_analysis(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"创建个股话题分析任务失败: {str(exc)}")
+        raise _stock_topic_route_error("创建个股话题分析任务失败", exc)
 
 
 @router.post("/{group_id}/analyze-batch")
@@ -279,7 +283,7 @@ async def create_stock_topic_analysis_batch(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"创建批量个股话题分析任务失败: {str(exc)}")
+        raise _stock_topic_route_error("创建批量个股话题分析任务失败", exc)
 
 
 @router.post("/{group_id}/external-summary")
@@ -292,7 +296,7 @@ async def read_external_stock_summaries(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"获取外部股票汇总失败: {str(exc)}")
+        raise _stock_topic_route_error("获取外部股票汇总失败", exc)
 
 
 @router.get("/{group_id}/latest")
@@ -307,7 +311,7 @@ async def read_latest_stock_topic_analysis(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"获取个股话题分析结果失败: {str(exc)}")
+        raise _stock_topic_route_error("获取个股话题分析结果失败", exc)
 
 
 @router.get("/{group_id}/latest-batch")
@@ -320,4 +324,4 @@ async def read_latest_stock_topic_analyses(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"获取批量个股话题分析结果失败: {str(exc)}")
+        raise _stock_topic_route_error("获取批量个股话题分析结果失败", exc)

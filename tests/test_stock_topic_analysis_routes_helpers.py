@@ -8,6 +8,15 @@ HAS_ROUTE_DEPS = find_spec("fastapi") is not None and find_spec("pydantic") is n
 
 class StockTopicAnalysisRoutesHelperTests(unittest.IsolatedAsyncioTestCase):
     @unittest.skipUnless(HAS_ROUTE_DEPS, "stock topic analysis route dependencies are not installed")
+    async def test_stock_topic_route_error_preserves_status_and_detail_format(self):
+        from backend.routes.stock_topic_analysis_routes import _stock_topic_route_error
+
+        error = _stock_topic_route_error("创建A股问答任务失败", RuntimeError("route boom"))
+
+        self.assertEqual(500, error.status_code)
+        self.assertEqual("创建A股问答任务失败: route boom", error.detail)
+
+    @unittest.skipUnless(HAS_ROUTE_DEPS, "stock topic analysis route dependencies are not installed")
     async def test_create_stock_task_response_preserves_task_creation_contract(self):
         from backend.routes.stock_topic_analysis_routes import (
             TASK_CREATED_MESSAGE,
@@ -594,6 +603,106 @@ class StockTopicAnalysisRoutesHelperTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(expected, result)
         service.assert_called_once_with("51111112855254", ["宁德时代"], report_date=None)
+
+    @unittest.skipUnless(HAS_ROUTE_DEPS, "stock topic analysis route dependencies are not installed")
+    async def test_stock_topic_routes_preserve_wrapped_unexpected_errors(self):
+        from fastapi import HTTPException
+
+        from backend.routes import stock_topic_analysis_routes
+        from backend.routes.stock_topic_analysis_routes import (
+            ExternalStockSummaryRequest,
+            StockQuestionRequest,
+            StockTopicAnalysisBatchRequest,
+            StockTopicAnalysisRequest,
+            StockTopicImageExtractRequest,
+        )
+
+        async def assert_wrapped_error(route_call, patch_target: str, expected_detail: str):
+            with patch(patch_target, side_effect=RuntimeError("route boom")):
+                with self.assertRaises(HTTPException) as raised:
+                    await route_call()
+
+            self.assertEqual(500, raised.exception.status_code)
+            self.assertEqual(expected_detail, raised.exception.detail)
+
+        await assert_wrapped_error(
+            lambda: stock_topic_analysis_routes.read_stock_question_matches("51111112855254", "固态电池怎么看"),
+            "backend.routes.stock_topic_analysis_routes._stock_question_matches",
+            "搜索A股问答相关话题失败: route boom",
+        )
+        await assert_wrapped_error(
+            lambda: stock_topic_analysis_routes.create_stock_question_analysis(
+                "51111112855254",
+                StockQuestionRequest(question="固态电池怎么看"),
+            ),
+            "backend.routes.stock_topic_analysis_routes._create_stock_question_task_response",
+            "创建A股问答任务失败: route boom",
+        )
+        await assert_wrapped_error(
+            lambda: stock_topic_analysis_routes.read_stock_topic_matches("51111112855254", "宁德时代"),
+            "backend.routes.stock_topic_analysis_routes._stock_topic_matches",
+            "搜索股票相关话题失败: route boom",
+        )
+        await assert_wrapped_error(
+            lambda: stock_topic_analysis_routes.extract_stock_topics_from_image(
+                StockTopicImageExtractRequest(imageDataUrl="data:image/png;base64,aW1n"),
+            ),
+            "backend.routes.stock_topic_analysis_routes._stock_names_from_image",
+            "从图片提取股票失败: route boom",
+        )
+        await assert_wrapped_error(
+            lambda: stock_topic_analysis_routes.create_stock_topic_analysis(
+                "51111112855254",
+                StockTopicAnalysisRequest(stockName="宁德时代"),
+            ),
+            "backend.routes.stock_topic_analysis_routes._create_stock_topic_task_response",
+            "创建个股话题分析任务失败: route boom",
+        )
+        await assert_wrapped_error(
+            lambda: stock_topic_analysis_routes.create_stock_topic_analysis_batch(
+                "51111112855254",
+                StockTopicAnalysisBatchRequest(stockNames=["宁德时代"]),
+            ),
+            "backend.routes.stock_topic_analysis_routes.parse_stock_names",
+            "创建批量个股话题分析任务失败: route boom",
+        )
+        await assert_wrapped_error(
+            lambda: stock_topic_analysis_routes.read_external_stock_summaries(
+                "51111112855254",
+                ExternalStockSummaryRequest(stockNames=["宁德时代"]),
+            ),
+            "backend.routes.stock_topic_analysis_routes._external_stock_summaries",
+            "获取外部股票汇总失败: route boom",
+        )
+        await assert_wrapped_error(
+            lambda: stock_topic_analysis_routes.read_latest_stock_topic_analysis("51111112855254", "宁德时代"),
+            "backend.routes.stock_topic_analysis_routes._latest_stock_topic_analysis_or_404",
+            "获取个股话题分析结果失败: route boom",
+        )
+        await assert_wrapped_error(
+            lambda: stock_topic_analysis_routes.read_latest_stock_topic_analyses(
+                "51111112855254",
+                "宁德时代",
+            ),
+            "backend.routes.stock_topic_analysis_routes._latest_stock_topic_analyses",
+            "获取批量个股话题分析结果失败: route boom",
+        )
+
+    @unittest.skipUnless(HAS_ROUTE_DEPS, "stock topic analysis route dependencies are not installed")
+    async def test_read_latest_stock_topic_analysis_preserves_http_exception_passthrough(self):
+        from fastapi import HTTPException
+
+        from backend.routes import stock_topic_analysis_routes
+
+        original = HTTPException(status_code=404, detail="existing missing")
+        with patch(
+            "backend.routes.stock_topic_analysis_routes._latest_stock_topic_analysis_or_404",
+            side_effect=original,
+        ):
+            with self.assertRaises(HTTPException) as raised:
+                await stock_topic_analysis_routes.read_latest_stock_topic_analysis("51111112855254", "宁德时代")
+
+        self.assertIs(original, raised.exception)
 
 
 if __name__ == "__main__":

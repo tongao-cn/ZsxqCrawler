@@ -16593,6 +16593,56 @@ Result:
 - Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because
   `ruff` is not available.
 
+### 2026-06-14 - P5 stock topic route error helper
+
+Changed:
+
+- Added route-level characterization coverage for stock topic analysis route unexpected-error
+  wrappers.
+- Added route-level characterization coverage that `read_latest_stock_topic_analysis()` still
+  passes through existing `HTTPException` instances unchanged.
+- Extracted `_stock_topic_route_error()` in `backend.routes.stock_topic_analysis_routes`.
+- Reused the helper from all 9 stock topic route wrappers that map unexpected exceptions to
+  route-level 500 responses.
+- Added direct helper coverage for the 500 status and `"{message}: {str(error)}"` detail format.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- The 9 stock topic routes still map unexpected exceptions to route-level
+  `HTTPException(status_code=500)` with the same Chinese prefixes.
+- Existing `ValueError` to 400 mapping is unchanged.
+- Existing `read_latest_stock_topic_analysis()` `HTTPException` pass-through behavior is preserved.
+- Existing route paths, query/default fields, task type/description/function/argument order,
+  request validation, service helper calls, response payload shapes, and `str(error)` formatting
+  are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_stock_topic_analysis_routes_helpers.StockTopicAnalysisRoutesHelperTests.test_stock_topic_routes_preserve_wrapped_unexpected_errors tests.test_stock_topic_analysis_routes_helpers.StockTopicAnalysisRoutesHelperTests.test_read_latest_stock_topic_analysis_preserves_http_exception_passthrough -v
+uv run python -m py_compile backend\routes\stock_topic_analysis_routes.py tests\test_stock_topic_analysis_routes_helpers.py
+uv run python -m unittest tests.test_stock_topic_analysis_routes_helpers.StockTopicAnalysisRoutesHelperTests.test_stock_topic_route_error_preserves_status_and_detail_format tests.test_stock_topic_analysis_routes_helpers.StockTopicAnalysisRoutesHelperTests.test_stock_topic_routes_preserve_wrapped_unexpected_errors tests.test_stock_topic_analysis_routes_helpers.StockTopicAnalysisRoutesHelperTests.test_read_latest_stock_topic_analysis_preserves_http_exception_passthrough -v
+uv run python -m unittest tests.test_stock_topic_analysis_routes_helpers -v
+uv run python -m unittest discover -s tests
+uv run python scripts\scan_postgres_compat_debt.py
+npm --prefix frontend run build
+uv run ruff check backend\routes\stock_topic_analysis_routes.py tests\test_stock_topic_analysis_routes_helpers.py --select F401,F841
+```
+
+Result:
+
+- Existing stock topic route unexpected-error and `HTTPException` pass-through characterization
+  tests passed against the original duplicate inline wrappers before extraction: 2 tests.
+- `py_compile` passed.
+- Focused stock topic route error helper tests passed after extraction: 3 tests.
+- Stock topic route helper tests passed: 30 tests.
+- Full backend unittest discovery passed: 1056 tests, 15 skipped.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Frontend build passed, including Next.js lint/type checks.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because
+  `ruff` is not available.
+
 ## Stop Conditions
 
 Pause before editing if:
