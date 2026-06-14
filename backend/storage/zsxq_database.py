@@ -519,10 +519,13 @@ class ZSXQDatabase:
         self.cursor.execute(sql, params)
         return self.cursor.fetchone()[0]
 
-    def _fetch_optional_first_column(self, sql: str, params: Any) -> Any:
+    def _fetch_first_column_or_default(self, sql: str, params: Any, default: Any) -> Any:
         self.cursor.execute(sql, params)
         row = self.cursor.fetchone()
-        return row[0] if row else None
+        return row[0] if row else default
+
+    def _fetch_optional_first_column(self, sql: str, params: Any) -> Any:
+        return self._fetch_first_column_or_default(sql, params, None)
 
     def get_database_stats(self) -> Dict[str, Any]:
         """获取数据库统计信息"""
@@ -838,9 +841,7 @@ class ZSXQDatabase:
         
         # 获取话题的创建时间作为文章创建时间
         sql, params = _topic_create_time_by_id_query(topic_id)
-        self.cursor.execute(sql, params)
-        result = self.cursor.fetchone()
-        created_at = result[0] if result else ''
+        created_at = self._fetch_first_column_or_default(sql, params, '')
         
         sql, params = _article_insert_statement(
             topic_id,

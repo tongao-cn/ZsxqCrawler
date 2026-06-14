@@ -1554,6 +1554,28 @@ class ZSXQDatabaseHelperTests(unittest.TestCase):
             ZSXQDatabase._fetch_first_column(missing_db, "SELECT COUNT(*) FROM topics", ())
         self.assertEqual([("SELECT COUNT(*) FROM topics", ())], missing_db.cursor.calls)
 
+    def test_fetch_first_column_or_default_preserves_missing_row_only_default(self):
+        from backend.storage.zsxq_database import ZSXQDatabase
+
+        db = object.__new__(ZSXQDatabase)
+        db.cursor = FakeTimestampCursor([("created-at",), (None,)])
+
+        self.assertEqual(
+            "created-at",
+            ZSXQDatabase._fetch_first_column_or_default(db, "SELECT create_time", (202,), ""),
+        )
+        self.assertIsNone(ZSXQDatabase._fetch_first_column_or_default(db, "SELECT create_time", (203,), ""))
+        self.assertEqual([("SELECT create_time", (202,)), ("SELECT create_time", (203,))], db.cursor.calls)
+
+        missing_db = object.__new__(ZSXQDatabase)
+        missing_db.cursor = FakeTimestampCursor([])
+
+        self.assertEqual(
+            "",
+            ZSXQDatabase._fetch_first_column_or_default(missing_db, "SELECT create_time", (204,), ""),
+        )
+        self.assertEqual([("SELECT create_time", (204,))], missing_db.cursor.calls)
+
     def test_fetch_optional_first_column_preserves_execute_params_and_none_semantics(self):
         from backend.storage.zsxq_database import ZSXQDatabase
 

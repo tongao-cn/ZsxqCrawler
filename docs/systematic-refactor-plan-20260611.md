@@ -16927,6 +16927,54 @@ Result:
 - Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because
   `ruff` is not available.
 
+### 2026-06-14 - P2 topic storage default scalar fetch helper
+
+Changed:
+
+- Ran existing characterization coverage for article create-time lookup/fallback and existing
+  scalar helper behavior against the original inline `fetchone()` implementation before
+  extraction.
+- Added direct helper coverage that `_fetch_first_column_or_default()` preserves
+  `cursor.execute(sql, params)` arity, uses the default only when no row exists, and preserves a
+  row whose first column is explicitly `None`.
+- Extracted `_fetch_first_column_or_default()` in `backend.storage.zsxq_database`.
+- Reused the helper from `_fetch_optional_first_column()` and article create-time lookup.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Article empty-payload skip, create-time query SQL/params, existing create-time passthrough,
+  missing-row empty-string fallback, explicit `None` first-column behavior, and optional scalar
+  helper semantics are unchanged.
+- No schema, write paths, legacy path, task runtime behavior, route behavior, public API, or
+  configuration semantics changed.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_upsert_article_uses_topic_create_time_and_preserves_empty_payload_skip tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_fetch_optional_first_column_preserves_execute_params_and_none_semantics tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_fetch_first_column_preserves_execute_params_and_missing_row_error -v
+uv run python -m py_compile backend\storage\zsxq_database.py tests\test_zsxq_database_helpers.py
+uv run python -m unittest tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_fetch_first_column_or_default_preserves_missing_row_only_default tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_fetch_optional_first_column_preserves_execute_params_and_none_semantics tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_upsert_article_uses_topic_create_time_and_preserves_empty_payload_skip -v
+uv run python -m unittest tests.test_zsxq_database_helpers -v
+uv run python -m unittest discover -s tests
+uv run python scripts\scan_postgres_compat_debt.py
+npm --prefix frontend run build
+uv run ruff check backend\storage\zsxq_database.py tests\test_zsxq_database_helpers.py --select F401,F841
+```
+
+Result:
+
+- Existing article/default scalar-fetch characterization passed against the original duplicate
+  inline implementation before extraction: 3 tests.
+- `py_compile` passed.
+- Focused default scalar helper and article read-method tests passed after extraction: 3 tests.
+- Topic database helper tests passed: 79 tests.
+- Full backend unittest discovery passed: 1067 tests, 15 skipped.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Frontend build passed, including Next.js lint/type checks.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because
+  `ruff` is not available.
+
 ## Stop Conditions
 
 Pause before editing if:
