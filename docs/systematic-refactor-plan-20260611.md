@@ -17592,6 +17592,56 @@ Result:
 - Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
   not available.
 
+### 2026-06-14 - P1 completed download statuses constant
+
+Changed:
+
+- Ran existing file-list and filtered-download characterization tests against the original repeated
+  completed-status parameter lists before extraction.
+- Added `_COMPLETED_DOWNLOAD_STATUSES` for the shared completed/downloaded/skipped status tuple.
+- Reused the constant in `_build_file_list_filters()` and `_load_filtered_download_file_records()`
+  while leaving the SQL condition strings, parameter order, search parameters, pagination, and
+  download record normalization unchanged.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- The completed-status filter still expands to `("completed", "downloaded", "skipped")` in the
+  same order for both file listing and filtered download queries.
+- Existing tests keep explicit expected parameter values so a future status-value change remains
+  visible.
+- The aggregate file-statistics SQL literal was intentionally left unchanged to avoid introducing
+  dynamic SQL for a low-value cleanup.
+- File listing, filtered download, selected download, single-file fallback behavior, AI analysis,
+  route behavior, storage schema, fallback/legacy behavior, public APIs, and configuration semantics
+  are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_file_routes_helpers.FileRoutesHelperTests.test_get_files_response_keeps_completed_search_and_pagination_shape tests.test_file_routes_helpers.FileRoutesHelperTests.test_load_filtered_download_file_records_keeps_default_search_and_limit_shape -v
+uv run python -m py_compile backend\services\file_workflow_service.py tests\test_file_routes_helpers.py
+uv run python -m unittest tests.test_file_routes_helpers.FileRoutesHelperTests.test_get_files_response_keeps_completed_search_and_pagination_shape tests.test_file_routes_helpers.FileRoutesHelperTests.test_load_filtered_download_file_records_keeps_default_search_and_limit_shape -v
+uv run python -m unittest tests.test_file_routes_helpers -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+uv run ruff check backend\services\file_workflow_service.py tests\test_file_routes_helpers.py --select F401,F841
+```
+
+Result:
+
+- Existing file-list and filtered-download completed-status characterization passed against the
+  original inline implementation: 2 tests.
+- `py_compile` passed.
+- Focused file-list and filtered-download tests passed after extraction: 2 tests.
+- File route/helper tests passed: 51 tests.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Full backend unittest discovery passed: 1069 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+
 ## Stop Conditions
 
 Pause before editing if:

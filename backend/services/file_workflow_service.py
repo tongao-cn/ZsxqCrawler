@@ -297,6 +297,7 @@ _FILES_FROM_CLAUSE = """
             FROM files f
             LEFT JOIN file_ai_analyses faa ON faa.file_id = f.file_id
         """
+_COMPLETED_DOWNLOAD_STATUSES = ("completed", "downloaded", "skipped")
 
 
 def _build_file_list_filters(
@@ -312,7 +313,7 @@ def _build_file_list_filters(
     if status:
         if status == "completed":
             conditions.append("f.download_status IN (?, ?, ?)")
-            params_prefix.extend(["completed", "downloaded", "skipped"])
+            params_prefix.extend(_COMPLETED_DOWNLOAD_STATUSES)
         else:
             conditions.append("f.download_status = ?")
             params_prefix.append(status)
@@ -803,13 +804,13 @@ def _load_filtered_download_file_records(
     if requested_status and requested_status != "all":
         if requested_status == "completed":
             conditions.append("f.download_status IN (?, ?, ?)")
-            params.extend(["completed", "downloaded", "skipped"])
+            params.extend(_COMPLETED_DOWNLOAD_STATUSES)
         else:
             conditions.append("f.download_status = ?")
             params.append(requested_status)
     else:
         conditions.append("(f.download_status IS NULL OR f.download_status NOT IN (?, ?, ?))")
-        params.extend(["completed", "downloaded", "skipped"])
+        params.extend(_COMPLETED_DOWNLOAD_STATUSES)
 
     _add_file_search_condition(conditions, params, search)
     limit_clause = "LIMIT ?" if max_files else ""
