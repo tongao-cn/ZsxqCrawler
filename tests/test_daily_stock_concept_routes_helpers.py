@@ -123,6 +123,64 @@ class DailyStockConceptRoutesHelperTests(unittest.TestCase):
             self.assertEqual(2, call_kwargs["comments_per_topic"])
             self.assertTrue(callable(call_kwargs["log_callback"]))
 
+    @unittest.skipUnless(HAS_ROUTE_DEPS, "daily stock concept route dependencies are not installed")
+    def test_read_daily_stock_concepts_preserves_result_passthrough(self):
+        import asyncio
+
+        from backend.routes import daily_stock_concept_routes
+
+        result_payload = {"date": "2026-06-13", "concepts": []}
+        with patch.object(
+            daily_stock_concept_routes,
+            "get_daily_stock_concepts",
+            return_value=result_payload,
+        ) as get_concepts:
+            result = asyncio.run(
+                daily_stock_concept_routes.read_daily_stock_concepts(
+                    "group-1",
+                    "2026-06-13",
+                )
+            )
+
+        self.assertEqual(result_payload, result)
+        get_concepts.assert_called_once_with("group-1", "2026-06-13")
+
+    @unittest.skipUnless(HAS_ROUTE_DEPS, "daily stock concept route dependencies are not installed")
+    def test_read_daily_stock_concepts_preserves_missing_result_404(self):
+        import asyncio
+
+        from fastapi import HTTPException
+
+        from backend.routes import daily_stock_concept_routes
+
+        with patch.object(
+            daily_stock_concept_routes,
+            "get_daily_stock_concepts",
+            return_value=None,
+        ) as get_concepts:
+            with self.assertRaises(HTTPException) as raised:
+                asyncio.run(
+                    daily_stock_concept_routes.read_daily_stock_concepts("group-1", None)
+                )
+
+        self.assertEqual(404, raised.exception.status_code)
+        self.assertEqual("股票概念结果不存在，请先提取", raised.exception.detail)
+        get_concepts.assert_called_once_with("group-1", None)
+
+    @unittest.skipUnless(HAS_ROUTE_DEPS, "daily stock concept route dependencies are not installed")
+    def test_daily_stock_concepts_or_404_preserves_missing_result_404(self):
+        from fastapi import HTTPException
+
+        from backend.routes import daily_stock_concept_routes
+
+        with patch.object(daily_stock_concept_routes, "get_daily_stock_concepts", return_value={}) as get_concepts:
+            with self.assertRaises(HTTPException) as raised:
+                daily_stock_concept_routes._daily_stock_concepts_or_404("group-1", "2026-06-13")
+
+        self.assertEqual(404, raised.exception.status_code)
+        self.assertEqual("股票概念结果不存在，请先提取", raised.exception.detail)
+        get_concepts.assert_called_once_with("group-1", "2026-06-13")
+
 
 if __name__ == "__main__":
     unittest.main()

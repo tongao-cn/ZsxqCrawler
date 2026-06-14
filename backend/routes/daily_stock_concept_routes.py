@@ -73,6 +73,13 @@ def run_daily_stock_concept_task(task_id: str, group_id: str, request: DailyStoc
     )
 
 
+def _daily_stock_concepts_or_404(group_id: str, date: Optional[str]) -> dict:
+    result = get_daily_stock_concepts(group_id, date)
+    if not result:
+        raise HTTPException(status_code=404, detail="股票概念结果不存在，请先提取")
+    return result
+
+
 @router.post("/{group_id}")
 async def create_daily_stock_concepts(
     group_id: str,
@@ -91,10 +98,7 @@ async def read_daily_stock_concepts(
     date: Optional[str] = Query(default=None, description="报告日期，格式 YYYY-MM-DD；默认今天（东八区）"),
 ):
     try:
-        result = get_daily_stock_concepts(group_id, date)
-        if not result:
-            raise HTTPException(status_code=404, detail="股票概念结果不存在，请先提取")
-        return result
+        return _daily_stock_concepts_or_404(group_id, date)
     except HTTPException:
         raise
     except Exception as e:
