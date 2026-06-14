@@ -300,6 +300,33 @@ _FILES_FROM_CLAUSE = """
 _COMPLETED_DOWNLOAD_STATUSES = ("completed", "downloaded", "skipped")
 
 
+def _add_file_download_status_condition(
+    conditions: list[str],
+    params: list[Any],
+    status: Optional[str],
+    *,
+    strip_status: bool = False,
+    treat_all_as_empty: bool = False,
+    exclude_completed_when_empty: bool = False,
+) -> None:
+    requested_status = str(status or "")
+    if strip_status:
+        requested_status = requested_status.strip()
+    if treat_all_as_empty and requested_status == "all":
+        requested_status = ""
+
+    if requested_status:
+        if requested_status == "completed":
+            conditions.append("f.download_status IN (?, ?, ?)")
+            params.extend(_COMPLETED_DOWNLOAD_STATUSES)
+        else:
+            conditions.append("f.download_status = ?")
+            params.append(requested_status)
+    elif exclude_completed_when_empty:
+        conditions.append("(f.download_status IS NULL OR f.download_status NOT IN (?, ?, ?))")
+        params.extend(_COMPLETED_DOWNLOAD_STATUSES)
+
+
 def _build_file_list_filters(
     group_id: str,
     status: Optional[str],
@@ -310,13 +337,7 @@ def _build_file_list_filters(
     params_prefix = [_query_group_id(group_id)]
     conditions.append("f.group_id = ?")
 
-    if status:
-        if status == "completed":
-            conditions.append("f.download_status IN (?, ?, ?)")
-            params_prefix.extend(_COMPLETED_DOWNLOAD_STATUSES)
-        else:
-            conditions.append("f.download_status = ?")
-            params_prefix.append(status)
+    _add_file_download_status_condition(conditions, params_prefix, status)
 
     if analysis_status == "analyzed":
         conditions.append("faa.updated_at IS NOT NULL")
@@ -800,17 +821,14 @@ def _load_filtered_download_file_records(
 ) -> list[tuple[int, str, int, int]]:
     conditions = ["f.group_id = ?"]
     params: list[Any] = [_query_group_id(group_id)]
-    requested_status = str(status or "").strip()
-    if requested_status and requested_status != "all":
-        if requested_status == "completed":
-            conditions.append("f.download_status IN (?, ?, ?)")
-            params.extend(_COMPLETED_DOWNLOAD_STATUSES)
-        else:
-            conditions.append("f.download_status = ?")
-            params.append(requested_status)
-    else:
-        conditions.append("(f.download_status IS NULL OR f.download_status NOT IN (?, ?, ?))")
-        params.extend(_COMPLETED_DOWNLOAD_STATUSES)
+    _add_file_download_status_condition(
+        conditions,
+        params,
+        status,
+        strip_status=True,
+        treat_all_as_empty=True,
+        exclude_completed_when_empty=True,
+    )
 
     _add_file_search_condition(conditions, params, search)
     limit_clause = "LIMIT ?" if max_files else ""

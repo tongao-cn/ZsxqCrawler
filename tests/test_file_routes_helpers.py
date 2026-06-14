@@ -1176,6 +1176,46 @@ class FileRoutesHelperTests(unittest.TestCase):
             )
         )
 
+    def test_get_files_response_without_status_keeps_download_status_unfiltered(self):
+        from backend.services import file_workflow_service
+
+        class FakeCursor:
+            def __init__(self):
+                self.executed = []
+
+            def execute(self, sql, params=()):
+                self.executed.append((sql, params))
+
+            def fetchall(self):
+                return []
+
+            def fetchone(self):
+                return (0,)
+
+        class FakeFileDb:
+            def __init__(self):
+                self.cursor = FakeCursor()
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+        fake_db = FakeFileDb()
+        with patch("backend.services.file_workflow_service._file_db", return_value=fake_db):
+            response = file_workflow_service._get_files_response("123")
+
+        query, params = fake_db.cursor.executed[0]
+        count_query, count_params = fake_db.cursor.executed[1]
+        self.assertEqual([], response["files"])
+        self.assertNotIn("f.download_status IN", query)
+        self.assertNotIn("f.download_status =", query)
+        self.assertNotIn("f.download_status IN", count_query)
+        self.assertNotIn("f.download_status =", count_query)
+        self.assertEqual((123, 20, 0), params)
+        self.assertEqual((123,), count_params)
+
     def test_get_files_response_keeps_completed_search_and_pagination_shape(self):
         from backend.services import file_workflow_service
 
@@ -1476,6 +1516,32 @@ class FileRoutesHelperTests(unittest.TestCase):
             ],
             records,
         )
+
+    def test_load_filtered_download_file_records_keeps_completed_status_shape(self):
+        class FakeCursor:
+            def __init__(self):
+                self.executed = []
+
+            def execute(self, sql, params=()):
+                self.executed.append((sql, params))
+
+            def fetchall(self):
+                return [(101, "Report.PDF", 123, 7)]
+
+        class FakeDownloader:
+            def __init__(self):
+                self.file_db = type("FakeFileDb", (), {"cursor": FakeCursor()})()
+
+        downloader = FakeDownloader()
+
+        records = _load_filtered_download_file_records(downloader, "123", status="completed")
+
+        query, params = downloader.file_db.cursor.executed[0]
+        self.assertIn("f.download_status IN (?, ?, ?)", query)
+        self.assertNotIn("f.download_status NOT IN", query)
+        self.assertNotIn("LIMIT ?", query)
+        self.assertEqual((123, "completed", "downloaded", "skipped"), params)
+        self.assertEqual([(101, "Report.PDF", 123, 7)], records)
 
     def test_load_download_file_records_dedupes_preserves_order_and_reports_missing(self):
         class FakeCursor:
