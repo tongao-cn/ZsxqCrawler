@@ -14,6 +14,7 @@ from backend.routes.settings_routes import (
     _get_crawl_settings_response,
     _get_crawler_settings_response,
     _get_downloader_settings_response,
+    _settings_route_error,
     _settings_from_attrs,
     _settings_update_response,
     _update_crawl_settings_response,
@@ -126,6 +127,12 @@ class SettingsRoutesHelpersTest(unittest.TestCase):
                 "settings": settings,
             },
         )
+
+    def test_settings_route_error_preserves_status_and_detail_format(self):
+        error = _settings_route_error("更新设置失败", RuntimeError("boom"))
+
+        self.assertEqual(error.status_code, 500)
+        self.assertEqual(error.detail, "更新设置失败: boom")
 
     def test_update_crawl_settings_route_preserves_fixed_success_response(self):
         import asyncio
@@ -552,6 +559,66 @@ class SettingsRoutesHelpersTest(unittest.TestCase):
         self.assertEqual(caught.exception.status_code, 400)
         self.assertEqual(caught.exception.detail, "最小长休眠时间必须小于最大长休眠时间")
         crawler.get_file_downloader.assert_not_called()
+
+    def test_get_crawl_settings_route_preserves_wrapped_unexpected_error(self):
+        import asyncio
+
+        with patch("backend.routes.settings_routes._get_crawl_settings_response", side_effect=RuntimeError("boom")):
+            with self.assertRaises(HTTPException) as caught:
+                asyncio.run(get_crawl_settings())
+
+        self.assertEqual(caught.exception.status_code, 500)
+        self.assertEqual(caught.exception.detail, "获取爬取设置失败: boom")
+
+    def test_update_crawl_settings_route_preserves_wrapped_unexpected_error(self):
+        import asyncio
+
+        with patch("backend.routes.settings_routes._update_crawl_settings_response", side_effect=RuntimeError("boom")):
+            with self.assertRaises(HTTPException) as caught:
+                asyncio.run(update_crawl_settings({"ignored": "value"}))
+
+        self.assertEqual(caught.exception.status_code, 500)
+        self.assertEqual(caught.exception.detail, "更新爬取设置失败: boom")
+
+    def test_get_crawler_settings_route_preserves_wrapped_unexpected_error(self):
+        import asyncio
+
+        with patch("backend.routes.settings_routes._get_crawler_settings_response", side_effect=RuntimeError("boom")):
+            with self.assertRaises(HTTPException) as caught:
+                asyncio.run(get_crawler_settings())
+
+        self.assertEqual(caught.exception.status_code, 500)
+        self.assertEqual(caught.exception.detail, "获取爬虫设置失败: boom")
+
+    def test_update_crawler_settings_route_preserves_wrapped_unexpected_error(self):
+        import asyncio
+
+        with patch("backend.routes.settings_routes._update_crawler_settings_response", side_effect=RuntimeError("boom")):
+            with self.assertRaises(HTTPException) as caught:
+                asyncio.run(update_crawler_settings(CrawlerSettingsRequest()))
+
+        self.assertEqual(caught.exception.status_code, 500)
+        self.assertEqual(caught.exception.detail, "更新爬虫设置失败: boom")
+
+    def test_get_downloader_settings_route_preserves_wrapped_unexpected_error(self):
+        import asyncio
+
+        with patch("backend.routes.settings_routes._get_downloader_settings_response", side_effect=RuntimeError("boom")):
+            with self.assertRaises(HTTPException) as caught:
+                asyncio.run(get_downloader_settings())
+
+        self.assertEqual(caught.exception.status_code, 500)
+        self.assertEqual(caught.exception.detail, "获取下载器设置失败: boom")
+
+    def test_update_downloader_settings_route_preserves_wrapped_unexpected_error(self):
+        import asyncio
+
+        with patch("backend.routes.settings_routes._update_downloader_settings_response", side_effect=RuntimeError("boom")):
+            with self.assertRaises(HTTPException) as caught:
+                asyncio.run(update_downloader_settings(DownloaderSettingsRequest()))
+
+        self.assertEqual(caught.exception.status_code, 500)
+        self.assertEqual(caught.exception.detail, "更新下载器设置失败: boom")
 
 
 if __name__ == "__main__":

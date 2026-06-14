@@ -16048,6 +16048,54 @@ Result:
 - Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because
   `ruff` is not available.
 
+### 2026-06-14 - P5 settings route error helper
+
+Changed:
+
+- Added route-level characterization coverage for all settings route unexpected-error wrappers.
+- Extracted `_settings_route_error()` in `backend.routes.settings_routes`.
+- Reused the helper from the six settings routes so each route keeps only its action-specific
+  message prefix.
+- Added direct helper coverage for the 500 status and `"{message}: {str(error)}"` detail
+  format.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- `get_crawl_settings()`, `update_crawl_settings()`, `get_crawler_settings()`,
+  `update_crawler_settings()`, `get_downloader_settings()`, and
+  `update_downloader_settings()` still map unexpected exceptions to route-level
+  `HTTPException(status_code=500)`.
+- Existing Chinese error prefixes, `str(error)` formatting, wrapped 404/400 compatibility
+  behavior, route paths, response payload shapes, validation behavior, runtime lookup behavior,
+  and config semantics are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_settings_routes_helpers.SettingsRoutesHelpersTest.test_get_crawl_settings_route_preserves_wrapped_unexpected_error tests.test_settings_routes_helpers.SettingsRoutesHelpersTest.test_update_crawl_settings_route_preserves_wrapped_unexpected_error tests.test_settings_routes_helpers.SettingsRoutesHelpersTest.test_get_crawler_settings_route_preserves_wrapped_unexpected_error tests.test_settings_routes_helpers.SettingsRoutesHelpersTest.test_update_crawler_settings_route_preserves_wrapped_unexpected_error tests.test_settings_routes_helpers.SettingsRoutesHelpersTest.test_get_downloader_settings_route_preserves_wrapped_unexpected_error tests.test_settings_routes_helpers.SettingsRoutesHelpersTest.test_update_downloader_settings_route_preserves_wrapped_unexpected_error -v
+uv run python -m py_compile backend\routes\settings_routes.py tests\test_settings_routes_helpers.py
+uv run python -m unittest tests.test_settings_routes_helpers.SettingsRoutesHelpersTest.test_settings_route_error_preserves_status_and_detail_format tests.test_settings_routes_helpers.SettingsRoutesHelpersTest.test_get_crawl_settings_route_preserves_wrapped_unexpected_error tests.test_settings_routes_helpers.SettingsRoutesHelpersTest.test_update_crawl_settings_route_preserves_wrapped_unexpected_error tests.test_settings_routes_helpers.SettingsRoutesHelpersTest.test_get_crawler_settings_route_preserves_wrapped_unexpected_error tests.test_settings_routes_helpers.SettingsRoutesHelpersTest.test_update_crawler_settings_route_preserves_wrapped_unexpected_error tests.test_settings_routes_helpers.SettingsRoutesHelpersTest.test_get_downloader_settings_route_preserves_wrapped_unexpected_error tests.test_settings_routes_helpers.SettingsRoutesHelpersTest.test_update_downloader_settings_route_preserves_wrapped_unexpected_error -v
+uv run python -m unittest tests.test_settings_routes_helpers -v
+uv run python -m unittest discover -s tests
+uv run python scripts\scan_postgres_compat_debt.py
+npm --prefix frontend run build
+uv run ruff check backend\routes\settings_routes.py tests\test_settings_routes_helpers.py --select F401,F841
+```
+
+Result:
+
+- Existing settings route unexpected-error characterization tests passed against the original
+  duplicate inline wrappers before extraction: 6 tests.
+- `py_compile` passed.
+- Focused settings route error helper tests passed after extraction: 7 tests.
+- Settings route helper tests passed: 37 tests.
+- Full backend unittest discovery passed: 1011 tests, 15 skipped.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Frontend build passed, including Next.js lint/type checks.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because
+  `ruff` is not available.
+
 ## Stop Conditions
 
 Pause before editing if:

@@ -70,6 +70,10 @@ def _settings_update_response(message: str, settings: dict) -> dict:
     }
 
 
+def _settings_route_error(message: str, error: Exception) -> HTTPException:
+    return HTTPException(status_code=500, detail=f"{message}: {str(error)}")
+
+
 def _get_crawl_settings_response() -> dict:
     return _default_crawl_settings()
 
@@ -154,7 +158,7 @@ async def get_crawl_settings():
     try:
         return _get_crawl_settings_response()
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"获取爬取设置失败: {str(e)}")
+        raise _settings_route_error("获取爬取设置失败", e)
 
 
 @router.post("/settings/crawl")
@@ -163,7 +167,7 @@ async def update_crawl_settings(settings: dict):
     try:
         return _update_crawl_settings_response(settings)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"更新爬取设置失败: {str(e)}")
+        raise _settings_route_error("更新爬取设置失败", e)
 
 
 @router.get("/settings/crawler")
@@ -172,7 +176,7 @@ async def get_crawler_settings():
     try:
         return _get_crawler_settings_response()
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"获取爬虫设置失败: {str(e)}")
+        raise _settings_route_error("获取爬虫设置失败", e)
 
 
 @router.post("/settings/crawler")
@@ -181,7 +185,7 @@ async def update_crawler_settings(request: CrawlerSettingsRequest):
     try:
         return _update_crawler_settings_response(request)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"更新爬虫设置失败: {str(e)}")
+        raise _settings_route_error("更新爬虫设置失败", e)
 
 
 @router.get("/settings/downloader")
@@ -190,7 +194,7 @@ async def get_downloader_settings():
     try:
         return _get_downloader_settings_response()
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"获取下载器设置失败: {str(e)}")
+        raise _settings_route_error("获取下载器设置失败", e)
 
 
 @router.post("/settings/downloader")
@@ -199,4 +203,4 @@ async def update_downloader_settings(request: DownloaderSettingsRequest):
     try:
         return _update_downloader_settings_response(request)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"更新下载器设置失败: {str(e)}")
+        raise _settings_route_error("更新下载器设置失败", e)
