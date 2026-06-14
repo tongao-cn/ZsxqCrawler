@@ -105,6 +105,29 @@ class ColumnsRoutesHelperTests(unittest.TestCase):
         update_task.assert_not_called()
 
     @unittest.skipUnless(HAS_COLUMNS_ROUTE_DEPS, "columns route dependencies are not installed")
+    def test_get_column_topic_detail_preserves_success_payload(self):
+        from backend.routes import columns_routes
+
+        detail = {"topic_id": 456, "title": "memo"}
+        calls = []
+
+        async def fake_to_thread(func, *args):
+            calls.append((func, args))
+            return detail
+
+        with patch(
+            "backend.routes.columns_routes.asyncio.to_thread",
+            side_effect=fake_to_thread,
+        ):
+            result = asyncio.run(columns_routes.get_column_topic_detail("123", 456))
+
+        self.assertEqual(detail, result)
+        self.assertEqual(
+            [(columns_routes.get_column_topic_detail_response, ("123", 456))],
+            calls,
+        )
+
+    @unittest.skipUnless(HAS_COLUMNS_ROUTE_DEPS, "columns route dependencies are not installed")
     def test_get_column_topic_detail_returns_404_for_missing_detail(self):
         from fastapi import HTTPException
         from backend.routes import columns_routes
@@ -115,6 +138,41 @@ class ColumnsRoutesHelperTests(unittest.TestCase):
         with patch("backend.routes.columns_routes.asyncio.to_thread", side_effect=fake_to_thread):
             with self.assertRaises(HTTPException) as raised:
                 asyncio.run(columns_routes.get_column_topic_detail("123", 456))
+
+        self.assertEqual(404, raised.exception.status_code)
+        self.assertEqual("文章详情不存在", raised.exception.detail)
+
+    @unittest.skipUnless(HAS_COLUMNS_ROUTE_DEPS, "columns route dependencies are not installed")
+    def test_column_topic_detail_or_404_preserves_success_and_missing_detail(self):
+        from fastapi import HTTPException
+        from backend.routes import columns_routes
+
+        detail = {"topic_id": 456, "title": "memo"}
+
+        async def fake_success_to_thread(func, *args):
+            self.assertEqual(columns_routes.get_column_topic_detail_response, func)
+            self.assertEqual(("123", 456), args)
+            return detail
+
+        with patch(
+            "backend.routes.columns_routes.asyncio.to_thread",
+            side_effect=fake_success_to_thread,
+        ):
+            result = asyncio.run(columns_routes._column_topic_detail_or_404("123", 456))
+
+        self.assertEqual(detail, result)
+
+        async def fake_missing_to_thread(func, *args):
+            self.assertEqual(columns_routes.get_column_topic_detail_response, func)
+            self.assertEqual(("123", 456), args)
+            return None
+
+        with patch(
+            "backend.routes.columns_routes.asyncio.to_thread",
+            side_effect=fake_missing_to_thread,
+        ):
+            with self.assertRaises(HTTPException) as raised:
+                asyncio.run(columns_routes._column_topic_detail_or_404("123", 456))
 
         self.assertEqual(404, raised.exception.status_code)
         self.assertEqual("文章详情不存在", raised.exception.detail)

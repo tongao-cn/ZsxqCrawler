@@ -79,14 +79,18 @@ async def get_column_topics(group_id: str, column_id: int):
         raise HTTPException(status_code=500, detail=f"获取专栏文章列表失败: {str(exc)}") from exc
 
 
+async def _column_topic_detail_or_404(group_id: str, topic_id: int) -> Dict[str, Any]:
+    detail = await asyncio.to_thread(get_column_topic_detail_response, group_id, topic_id)
+    if not detail:
+        raise HTTPException(status_code=404, detail="文章详情不存在")
+    return detail
+
+
 @router.get("/groups/{group_id}/columns/topics/{topic_id}")
 async def get_column_topic_detail(group_id: str, topic_id: int):
     """获取专栏文章详情（从本地数据库）"""
     try:
-        detail = await asyncio.to_thread(get_column_topic_detail_response, group_id, topic_id)
-        if not detail:
-            raise HTTPException(status_code=404, detail="文章详情不存在")
-        return detail
+        return await _column_topic_detail_or_404(group_id, topic_id)
     except HTTPException:
         raise
     except Exception as exc:

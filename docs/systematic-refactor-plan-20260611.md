@@ -15063,6 +15063,55 @@ Result:
 - Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because
   `ruff` is not available.
 
+### 2026-06-14 - P5 columns topic detail helper
+
+Changed:
+
+- Added route-level characterization coverage for `get_column_topic_detail()` preserving
+  successful payload passthrough and the `asyncio.to_thread()` service call shape.
+- Extracted `_column_topic_detail_or_404()` in `backend.routes.columns_routes`.
+- Reused the helper from the public route so threaded service access and missing-detail 404
+  handling are isolated from the route-level exception wrapper.
+- Added helper coverage for both successful detail payloads and missing-detail 404 responses.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- `get_column_topic_detail()` still calls `get_column_topic_detail_response` through
+  `asyncio.to_thread()` with the same group id and topic id.
+- Falsy detail payloads still raise `HTTPException(status_code=404, detail="文章详情不存在")`.
+- Existing `HTTPException` passthrough and unexpected exception -> 500 mapping are unchanged.
+- Public API shape, route path, response payloads, storage behavior, config semantics, and
+  fallback/legacy behavior are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_columns_routes_helpers.ColumnsRoutesHelperTests.test_get_column_topic_detail_preserves_success_payload -v
+uv run python -m py_compile backend\routes\columns_routes.py tests\test_columns_routes_helpers.py
+uv run python -m unittest tests.test_columns_routes_helpers.ColumnsRoutesHelperTests.test_get_column_topic_detail_preserves_success_payload tests.test_columns_routes_helpers.ColumnsRoutesHelperTests.test_get_column_topic_detail_returns_404_for_missing_detail tests.test_columns_routes_helpers.ColumnsRoutesHelperTests.test_column_topic_detail_or_404_preserves_success_and_missing_detail -v
+uv run python -m unittest tests.test_columns_routes_helpers -v
+uv run python -m unittest tests.test_columns_routes_helpers tests.test_columns_fetch_task_service tests.test_columns_comment_service tests.test_columns_fetch_summary -v
+uv run python -m unittest discover -s tests
+uv run python scripts\scan_postgres_compat_debt.py
+npm --prefix frontend run build
+uv run ruff check backend\routes\columns_routes.py tests\test_columns_routes_helpers.py --select F401,F841
+```
+
+Result:
+
+- New columns topic detail success characterization test passed against the original inline
+  implementation before extraction: 1 test.
+- `py_compile` passed.
+- Focused columns topic detail route/helper tests passed after extraction: 3 tests.
+- Columns route helper tests passed: 7 tests.
+- Related columns route/service tests passed: 17 tests.
+- Full backend unittest discovery passed: 950 tests, 15 skipped.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Frontend build passed, including Next.js lint/type checks.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because
+  `ruff` is not available.
+
 ## Stop Conditions
 
 Pause before editing if:
