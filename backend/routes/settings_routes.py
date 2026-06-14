@@ -78,6 +78,14 @@ def _update_crawl_settings_response(settings: dict) -> dict:
     return {"success": True, "message": "爬取设置已更新"}
 
 
+def _get_crawler_settings_response() -> dict:
+    crawler = get_crawler_safe()
+    if not crawler:
+        return _default_crawler_settings()
+
+    return _settings_from_attrs(crawler, _CRAWLER_SETTING_FIELDS)
+
+
 class CrawlerSettingsRequest(BaseModel):
     min_delay: float = Field(default=2.0, ge=0.5, le=10.0)
     max_delay: float = Field(default=5.0, ge=1.0, le=20.0)
@@ -116,11 +124,7 @@ async def update_crawl_settings(settings: dict):
 async def get_crawler_settings():
     """获取爬虫设置"""
     try:
-        crawler = get_crawler_safe()
-        if not crawler:
-            return _default_crawler_settings()
-
-        return _settings_from_attrs(crawler, _CRAWLER_SETTING_FIELDS)
+        return _get_crawler_settings_response()
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"获取爬虫设置失败: {str(e)}")
 

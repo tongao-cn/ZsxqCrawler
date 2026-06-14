@@ -1,5 +1,6 @@
 import unittest
 from types import SimpleNamespace
+from unittest.mock import patch
 
 from backend.routes.settings_routes import (
     _CRAWLER_SETTING_FIELDS,
@@ -9,10 +10,12 @@ from backend.routes.settings_routes import (
     _default_crawler_settings,
     _default_downloader_settings,
     _get_crawl_settings_response,
+    _get_crawler_settings_response,
     _settings_from_attrs,
     _settings_update_response,
     _update_crawl_settings_response,
     get_crawl_settings,
+    get_crawler_settings,
     update_crawl_settings,
 )
 
@@ -135,6 +138,72 @@ class SettingsRoutesHelpersTest(unittest.TestCase):
 
     def test_get_crawl_settings_response_preserves_default_payload(self):
         self.assertEqual(_get_crawl_settings_response(), _default_crawl_settings())
+
+    def test_get_crawler_settings_route_preserves_default_when_uninitialized(self):
+        import asyncio
+
+        with patch("backend.routes.settings_routes.get_crawler_safe", return_value=None) as get_crawler:
+            result = asyncio.run(get_crawler_settings())
+
+        self.assertEqual(result, _default_crawler_settings())
+        get_crawler.assert_called_once_with()
+
+    def test_get_crawler_settings_route_preserves_runtime_attrs(self):
+        import asyncio
+
+        crawler = SimpleNamespace(
+            min_delay=1.5,
+            max_delay=6.0,
+            long_delay_interval=20,
+            timestamp_offset_ms=7,
+            debug_mode=True,
+        )
+
+        with patch("backend.routes.settings_routes.get_crawler_safe", return_value=crawler) as get_crawler:
+            result = asyncio.run(get_crawler_settings())
+
+        self.assertEqual(
+            result,
+            {
+                "min_delay": 1.5,
+                "max_delay": 6.0,
+                "long_delay_interval": 20,
+                "timestamp_offset_ms": 7,
+                "debug_mode": True,
+            },
+        )
+        get_crawler.assert_called_once_with()
+
+    def test_get_crawler_settings_response_preserves_default_when_uninitialized(self):
+        with patch("backend.routes.settings_routes.get_crawler_safe", return_value=None) as get_crawler:
+            result = _get_crawler_settings_response()
+
+        self.assertEqual(result, _default_crawler_settings())
+        get_crawler.assert_called_once_with()
+
+    def test_get_crawler_settings_response_preserves_runtime_attrs(self):
+        crawler = SimpleNamespace(
+            min_delay=1.5,
+            max_delay=6.0,
+            long_delay_interval=20,
+            timestamp_offset_ms=7,
+            debug_mode=True,
+        )
+
+        with patch("backend.routes.settings_routes.get_crawler_safe", return_value=crawler) as get_crawler:
+            result = _get_crawler_settings_response()
+
+        self.assertEqual(
+            result,
+            {
+                "min_delay": 1.5,
+                "max_delay": 6.0,
+                "long_delay_interval": 20,
+                "timestamp_offset_ms": 7,
+                "debug_mode": True,
+            },
+        )
+        get_crawler.assert_called_once_with()
 
 
 if __name__ == "__main__":
