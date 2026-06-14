@@ -16975,6 +16975,54 @@ Result:
 - Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because
   `ruff` is not available.
 
+### 2026-06-14 - P2 topic storage timestamped write helper
+
+Changed:
+
+- Ran existing characterization coverage for group/user/topic/talk upsert skip branches, SQL
+  shapes, params, and timestamp formats against the original inline timestamp-and-execute
+  implementation before extraction.
+- Added direct helper coverage that `_execute_timestamped_statement()` preserves statement-builder
+  arguments, generated timestamp format, and final `cursor.execute(sql, params)` call.
+- Extracted `_execute_timestamped_statement()` in `backend.storage.zsxq_database`.
+- Reused the helper from the simple group, user, topic, and talk upsert write paths.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Skip branches, SQL helper usage, parameter order, timestamp format, execute call shape, and
+  public storage method signatures are unchanged.
+- More complex timestamped writes with additional defaults or per-row behavior, such as image,
+  comment, file, like, tag, and relation writes, were intentionally left untouched in this slice.
+- No schema, read paths, legacy path, task runtime behavior, route behavior, public API, or
+  configuration semantics changed.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_upsert_group_and_user_preserve_skip_and_insert_params tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_upsert_topic_preserves_skip_defaults_and_insert_params tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_upsert_talk_preserves_skip_and_insert_params -v
+uv run python -m py_compile backend\storage\zsxq_database.py tests\test_zsxq_database_helpers.py
+uv run python -m unittest tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_execute_timestamped_statement_preserves_builder_args_and_execute_params tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_upsert_group_and_user_preserve_skip_and_insert_params tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_upsert_topic_preserves_skip_defaults_and_insert_params tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_upsert_talk_preserves_skip_and_insert_params -v
+uv run python -m unittest tests.test_zsxq_database_helpers -v
+uv run python -m unittest discover -s tests
+uv run python scripts\scan_postgres_compat_debt.py
+npm --prefix frontend run build
+uv run ruff check backend\storage\zsxq_database.py tests\test_zsxq_database_helpers.py --select F401,F841
+```
+
+Result:
+
+- Existing timestamped-write characterization passed against the original duplicate inline
+  implementation before extraction: 3 tests.
+- `py_compile` passed.
+- Focused timestamped-write helper and upsert-method tests passed after extraction: 4 tests.
+- Topic database helper tests passed: 80 tests.
+- Full backend unittest discovery passed: 1068 tests, 15 skipped.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Frontend build passed, including Next.js lint/type checks.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because
+  `ruff` is not available.
+
 ## Stop Conditions
 
 Pause before editing if:

@@ -456,36 +456,24 @@ class ZSXQDatabase:
         group_id = group_data.get('group_id')
         if not group_id:
             return
-        
-        # 获取当前时间作为created_at（使用东八区时间格式）
-        current_time = _beijing_now_timestamp()
-        
-        sql, params = _group_insert_statement(group_data, current_time)
-        self.cursor.execute(sql, params)
+
+        self._execute_timestamped_statement(_group_insert_statement, group_data)
     
     def _upsert_user(self, user_data: Dict[str, Any]):
         """插入或更新用户信息"""
         user_id = user_data.get('user_id')
         if not user_id:
             return
-        
-        # 获取当前时间作为created_at（使用东八区时间格式）
-        current_time = _beijing_now_timestamp()
-        
-        sql, params = _user_insert_statement(user_data, current_time)
-        self.cursor.execute(sql, params)
+
+        self._execute_timestamped_statement(_user_insert_statement, user_data)
     
     def _upsert_topic(self, topic_data: Dict[str, Any]):
         """插入或更新话题信息"""
         topic_id = topic_data.get('topic_id')
         if not topic_id:
             return
-        
-        # 获取当前时间作为imported_at（使用东八区时间格式）
-        current_time = _beijing_now_timestamp()
-        
-        sql, params = _topic_insert_statement(topic_data, current_time)
-        self.cursor.execute(sql, params)
+
+        self._execute_timestamped_statement(_topic_insert_statement, topic_data)
     
     def update_topic_stats(self, topic_data: Dict[str, Any]) -> bool:
         """仅更新话题的统计信息，不导入其他相关数据"""
@@ -518,6 +506,14 @@ class ZSXQDatabase:
     def _fetch_first_column(self, sql: str, params: Any) -> Any:
         self.cursor.execute(sql, params)
         return self.cursor.fetchone()[0]
+
+    def _execute_timestamped_statement(
+        self,
+        statement_builder: Callable[..., tuple[str, tuple[Any, ...]]],
+        *args: Any,
+    ) -> None:
+        sql, params = statement_builder(*args, _beijing_now_timestamp())
+        self.cursor.execute(sql, params)
 
     def _fetch_first_column_or_default(self, sql: str, params: Any, default: Any) -> Any:
         self.cursor.execute(sql, params)
@@ -614,12 +610,8 @@ class ZSXQDatabase:
         owner_user_id = talk_data.get('owner', {}).get('user_id')
         if not owner_user_id:
             return
-        
-        # 获取当前时间作为created_at（使用东八区时间格式）
-        current_time = _beijing_now_timestamp()
-        
-        sql, params = _talk_insert_statement(topic_id, talk_data, current_time)
-        self.cursor.execute(sql, params)
+
+        self._execute_timestamped_statement(_talk_insert_statement, topic_id, talk_data)
 
     
     def _import_images(self, topic_id: int, topic_data: Dict[str, Any]):

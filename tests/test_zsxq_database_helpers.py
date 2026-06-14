@@ -1554,6 +1554,27 @@ class ZSXQDatabaseHelperTests(unittest.TestCase):
             ZSXQDatabase._fetch_first_column(missing_db, "SELECT COUNT(*) FROM topics", ())
         self.assertEqual([("SELECT COUNT(*) FROM topics", ())], missing_db.cursor.calls)
 
+    def test_execute_timestamped_statement_preserves_builder_args_and_execute_params(self):
+        from backend.storage.zsxq_database import ZSXQDatabase
+
+        captured = []
+
+        def statement_builder(value, current_time):
+            captured.append((value, current_time))
+            return "INSERT INTO demo (value, created_at) VALUES (?, ?)", (value, current_time)
+
+        db = object.__new__(ZSXQDatabase)
+        db.cursor = FakeCursor()
+
+        ZSXQDatabase._execute_timestamped_statement(db, statement_builder, 303)
+
+        self.assertEqual(303, captured[0][0])
+        self.assertRegex(captured[0][1], r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}\+0800$")
+        self.assertEqual(
+            [("INSERT INTO demo (value, created_at) VALUES (?, ?)", (303, captured[0][1]))],
+            db.cursor.calls,
+        )
+
     def test_fetch_first_column_or_default_preserves_missing_row_only_default(self):
         from backend.storage.zsxq_database import ZSXQDatabase
 
