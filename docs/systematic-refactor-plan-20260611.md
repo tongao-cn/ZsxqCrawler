@@ -15112,6 +15112,57 @@ Result:
 - Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because
   `ruff` is not available.
 
+### 2026-06-14 - P5 columns read/delete helpers
+
+Changed:
+
+- Added route-level characterization coverage for columns read/delete success paths:
+  group columns, column topics, columns stats, and delete-all-columns.
+- Extracted `_group_columns()`, `_column_topics()`, `_columns_stats()`, and
+  `_delete_all_columns()` in `backend.routes.columns_routes`.
+- Reused the helpers from the public routes so threaded service access is isolated from each
+  route's existing exception wrapper.
+- Added helper coverage for preserving each service function binding and argument shape.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- The four public routes still call the same service functions through `asyncio.to_thread()`
+  with the same group id/column id arguments.
+- Successful payloads are still returned unchanged.
+- Existing per-route unexpected exception -> 500 mappings and Chinese detail strings are
+  unchanged.
+- Public API shape, route paths, response payloads, storage behavior, config semantics, and
+  fallback/legacy behavior are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_columns_routes_helpers.ColumnsRoutesHelperTests.test_columns_read_routes_preserve_success_payloads -v
+uv run python -m py_compile backend\routes\columns_routes.py tests\test_columns_routes_helpers.py
+uv run python -m unittest tests.test_columns_routes_helpers.ColumnsRoutesHelperTests.test_columns_read_routes_preserve_success_payloads tests.test_columns_routes_helpers.ColumnsRoutesHelperTests.test_columns_read_helpers_preserve_service_call_shapes -v
+uv run python -m unittest tests.test_columns_routes_helpers -v
+uv run python -m unittest tests.test_columns_routes_helpers tests.test_columns_fetch_task_service tests.test_columns_comment_service tests.test_columns_fetch_summary -v
+uv run python -m unittest discover -s tests
+uv run python scripts\scan_postgres_compat_debt.py
+npm --prefix frontend run build
+uv run ruff check backend\routes\columns_routes.py tests\test_columns_routes_helpers.py --select F401,F841
+```
+
+Result:
+
+- New columns read/delete route characterization test passed against the original inline
+  implementation before extraction: 1 test.
+- `py_compile` passed.
+- Focused columns read/delete route/helper tests passed after extraction: 2 tests.
+- Columns route helper tests passed: 9 tests.
+- Related columns route/service tests passed: 19 tests.
+- Full backend unittest discovery passed: 952 tests, 15 skipped.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Frontend build passed, including Next.js lint/type checks.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because
+  `ruff` is not available.
+
 ## Stop Conditions
 
 Pause before editing if:

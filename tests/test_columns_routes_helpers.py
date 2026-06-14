@@ -105,6 +105,118 @@ class ColumnsRoutesHelperTests(unittest.TestCase):
         update_task.assert_not_called()
 
     @unittest.skipUnless(HAS_COLUMNS_ROUTE_DEPS, "columns route dependencies are not installed")
+    def test_columns_read_routes_preserve_success_payloads(self):
+        from backend.routes import columns_routes
+
+        cases = [
+            (
+                "group_columns",
+                columns_routes.get_group_columns,
+                ("123",),
+                columns_routes.get_group_columns_response,
+                ("123",),
+                {"columns": []},
+            ),
+            (
+                "column_topics",
+                columns_routes.get_column_topics,
+                ("123", 456),
+                columns_routes.get_column_topics_response,
+                ("123", 456),
+                {"topics": []},
+            ),
+            (
+                "columns_stats",
+                columns_routes.get_columns_stats,
+                ("123",),
+                columns_routes.get_columns_stats_response,
+                ("123",),
+                {"stats": {}},
+            ),
+            (
+                "delete_all_columns",
+                columns_routes.delete_all_columns,
+                ("123",),
+                columns_routes.delete_all_columns_response,
+                ("123",),
+                {"success": True},
+            ),
+        ]
+
+        for case_name, route, route_args, service_func, service_args, payload in cases:
+            with self.subTest(case_name=case_name):
+                calls = []
+
+                async def fake_to_thread(func, *args):
+                    calls.append((func, args))
+                    return payload
+
+                with patch(
+                    "backend.routes.columns_routes.asyncio.to_thread",
+                    side_effect=fake_to_thread,
+                ):
+                    result = asyncio.run(route(*route_args))
+
+                self.assertEqual(payload, result)
+                self.assertEqual([(service_func, service_args)], calls)
+
+    @unittest.skipUnless(HAS_COLUMNS_ROUTE_DEPS, "columns route dependencies are not installed")
+    def test_columns_read_helpers_preserve_service_call_shapes(self):
+        from backend.routes import columns_routes
+
+        cases = [
+            (
+                "group_columns",
+                columns_routes._group_columns,
+                ("123",),
+                columns_routes.get_group_columns_response,
+                ("123",),
+                {"columns": []},
+            ),
+            (
+                "column_topics",
+                columns_routes._column_topics,
+                ("123", 456),
+                columns_routes.get_column_topics_response,
+                ("123", 456),
+                {"topics": []},
+            ),
+            (
+                "columns_stats",
+                columns_routes._columns_stats,
+                ("123",),
+                columns_routes.get_columns_stats_response,
+                ("123",),
+                {"stats": {}},
+            ),
+            (
+                "delete_all_columns",
+                columns_routes._delete_all_columns,
+                ("123",),
+                columns_routes.delete_all_columns_response,
+                ("123",),
+                {"success": True},
+            ),
+        ]
+
+        for case_name, helper, helper_args, service_func, service_args, payload in cases:
+            with self.subTest(case_name=case_name):
+                calls = []
+
+                async def fake_to_thread(func, *args):
+                    calls.append((func, args))
+                    return payload
+
+                with patch(
+                    "backend.routes.columns_routes.asyncio.to_thread",
+                    side_effect=fake_to_thread,
+                ):
+                    result = asyncio.run(helper(*helper_args))
+
+                self.assertEqual(payload, result)
+                self.assertEqual([(service_func, service_args)], calls)
+
+    @unittest.skipUnless(HAS_COLUMNS_ROUTE_DEPS, "columns route dependencies are not installed")
     def test_get_column_topic_detail_preserves_success_payload(self):
         from backend.routes import columns_routes
 

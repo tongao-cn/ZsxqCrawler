@@ -61,20 +61,28 @@ async def get_group_columns_summary(group_id: str):
     return get_columns_summary(group_id)
 
 
+async def _group_columns(group_id: str) -> Dict[str, Any]:
+    return await asyncio.to_thread(get_group_columns_response, group_id)
+
+
 @router.get("/groups/{group_id}/columns")
 async def get_group_columns(group_id: str):
     """获取群组的专栏目录列表（从本地数据库）"""
     try:
-        return await asyncio.to_thread(get_group_columns_response, group_id)
+        return await _group_columns(group_id)
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"获取专栏目录失败: {str(exc)}") from exc
+
+
+async def _column_topics(group_id: str, column_id: int) -> Dict[str, Any]:
+    return await asyncio.to_thread(get_column_topics_response, group_id, column_id)
 
 
 @router.get("/groups/{group_id}/columns/{column_id}/topics")
 async def get_column_topics(group_id: str, column_id: int):
     """获取专栏下的文章列表（从本地数据库）"""
     try:
-        return await asyncio.to_thread(get_column_topics_response, group_id, column_id)
+        return await _column_topics(group_id, column_id)
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"获取专栏文章列表失败: {str(exc)}") from exc
 
@@ -108,20 +116,28 @@ async def fetch_group_columns(group_id: str, request: ColumnsSettingsRequest, ba
         raise HTTPException(status_code=500, detail=f"启动专栏采集失败: {str(exc)}") from exc
 
 
+async def _columns_stats(group_id: str) -> Dict[str, Any]:
+    return await asyncio.to_thread(get_columns_stats_response, group_id)
+
+
 @router.get("/groups/{group_id}/columns/stats")
 async def get_columns_stats(group_id: str):
     """获取专栏统计信息"""
     try:
-        return await asyncio.to_thread(get_columns_stats_response, group_id)
+        return await _columns_stats(group_id)
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"获取专栏统计失败: {str(exc)}") from exc
+
+
+async def _delete_all_columns(group_id: str) -> Dict[str, Any]:
+    return await asyncio.to_thread(delete_all_columns_response, group_id)
 
 
 @router.delete("/groups/{group_id}/columns/all")
 async def delete_all_columns(group_id: str):
     """删除群组的所有专栏数据"""
     try:
-        return await asyncio.to_thread(delete_all_columns_response, group_id)
+        return await _delete_all_columns(group_id)
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"删除专栏数据失败: {str(exc)}") from exc
 
