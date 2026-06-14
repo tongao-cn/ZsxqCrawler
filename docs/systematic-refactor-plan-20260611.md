@@ -17023,6 +17023,52 @@ Result:
 - Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because
   `ruff` is not available.
 
+### 2026-06-14 - P2 topic storage image timestamped write helper
+
+Changed:
+
+- Ran existing image-write characterization against the original inline timestamp-and-execute
+  implementation before extraction.
+- Reused `_execute_timestamped_statement()` from `_upsert_image()` for the default image insert
+  path.
+- Left `_import_comment_images()` untouched so its historical
+  `missing_numeric_default=0` compatibility behavior stays explicit and independently covered.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- `_upsert_image()` still skips payloads without `image_id`, calls the same statement helper, keeps
+  the same parameter order, uses the same Beijing timestamp format, and executes the same
+  `cursor.execute(sql, params)` shape through the shared helper.
+- Comment-image numeric fallback defaults, schema behavior, read paths, public APIs, route behavior,
+  task runtime behavior, and configuration semantics are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_image_writes_preserve_skip_paths_and_distinct_numeric_defaults -v
+uv run python -m py_compile backend\storage\zsxq_database.py tests\test_zsxq_database_helpers.py
+uv run python -m unittest tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_image_writes_preserve_skip_paths_and_distinct_numeric_defaults tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_execute_timestamped_statement_preserves_builder_args_and_execute_params -v
+uv run python -m unittest tests.test_zsxq_database_helpers -v
+uv run python -m unittest discover -s tests
+uv run python scripts\scan_postgres_compat_debt.py
+npm --prefix frontend run build
+uv run ruff check backend\storage\zsxq_database.py tests\test_zsxq_database_helpers.py --select F401,F841
+```
+
+Result:
+
+- Existing image-write characterization passed against the original duplicate inline implementation:
+  1 test.
+- `py_compile` passed.
+- Focused image-write and shared timestamped helper tests passed after extraction: 2 tests.
+- Topic database helper tests passed: 80 tests.
+- Full backend unittest discovery passed: 1068 tests, 15 skipped.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Frontend build passed, including Next.js lint/type checks.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because
+  `ruff` is not available.
+
 ## Stop Conditions
 
 Pause before editing if:

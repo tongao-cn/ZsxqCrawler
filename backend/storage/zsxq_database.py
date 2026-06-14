@@ -625,12 +625,8 @@ class ZSXQDatabase:
         image_id = image_data.get('image_id')
         if not image_id:
             return
-        
-        # 获取当前时间作为created_at（使用东八区时间格式）
-        current_time = _beijing_now_timestamp()
-        
-        sql, params = _image_insert_statement(topic_id, image_data, comment_id, current_time)
-        self.cursor.execute(sql, params)
+
+        self._execute_timestamped_statement(_image_insert_statement, topic_id, image_data, comment_id)
 
     
     def _import_likes(self, topic_id: int, topic_data: Dict[str, Any]):
