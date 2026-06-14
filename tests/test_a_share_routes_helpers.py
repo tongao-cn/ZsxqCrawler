@@ -182,6 +182,34 @@ class AShareRoutesHelperTests(unittest.TestCase):
         has_api_key.assert_called_once_with()
 
     @unittest.skipUnless(HAS_A_SHARE_ROUTE_DEPS, "a-share route dependencies are not installed")
+    def test_a_share_analysis_summary_preserves_service_call_shape(self):
+        import asyncio
+
+        from backend.routes import a_share_routes
+
+        calls = []
+        payload = {"rows_count": 7}
+
+        async def fake_to_thread(func, *args, **kwargs):
+            calls.append((func, args, kwargs))
+            return payload
+
+        with patch.object(a_share_routes.asyncio, "to_thread", side_effect=fake_to_thread):
+            result = asyncio.run(a_share_routes._a_share_analysis_summary("51111112855254"))
+
+        self.assertEqual(payload, result)
+        self.assertEqual(
+            [
+                (
+                    a_share_routes.get_analysis_summary,
+                    (),
+                    {"group_id": "51111112855254"},
+                )
+            ],
+            calls,
+        )
+
+    @unittest.skipUnless(HAS_A_SHARE_ROUTE_DEPS, "a-share route dependencies are not installed")
     def test_a_share_status_payload_preserves_response_shape(self):
         from backend.routes import a_share_routes
 

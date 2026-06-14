@@ -15482,6 +15482,55 @@ Result:
 - Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because
   `ruff` is not available.
 
+### 2026-06-14 - P5 A-share status summary helper
+
+Changed:
+
+- Reused existing route-level characterization coverage for the A-share status route.
+- Extracted `_a_share_analysis_summary()` in `backend.routes.a_share_routes`.
+- Reused the helper from `get_a_share_analysis_status()` so summary retrieval now matches
+  the nearby status storage/export helper structure.
+- Added helper coverage for preserving the `get_analysis_summary` binding and keyword
+  argument shape.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- The status route still normalizes `group_id` before reading the summary.
+- Summary retrieval still calls `get_analysis_summary` through `asyncio.to_thread()` with
+  `group_id=normalized_group_id`.
+- Existing status task lookup order, storage fallback, latest TDX export fallback, API-key
+  flag, response payload shape, route path, error mapping, config semantics, and
+  fallback/legacy behavior are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_a_share_routes_helpers.AShareRoutesHelperTests.test_get_a_share_analysis_status_preserves_success_payload_shape -v
+uv run python -m py_compile backend\routes\a_share_routes.py tests\test_a_share_routes_helpers.py
+uv run python -m unittest tests.test_a_share_routes_helpers.AShareRoutesHelperTests.test_get_a_share_analysis_status_preserves_success_payload_shape tests.test_a_share_routes_helpers.AShareRoutesHelperTests.test_a_share_analysis_summary_preserves_service_call_shape -v
+uv run python -m unittest tests.test_a_share_routes_helpers -v
+uv run python -m unittest tests.test_a_share_routes_helpers tests.test_a_share_analysis_service_helpers tests.test_a_share_analysis_db_storage_helpers tests.test_tdx_a_share_export_service_helpers -v
+uv run python -m unittest discover -s tests
+uv run python scripts\scan_postgres_compat_debt.py
+npm --prefix frontend run build
+uv run ruff check backend\routes\a_share_routes.py tests\test_a_share_routes_helpers.py --select F401,F841
+```
+
+Result:
+
+- Existing A-share status route characterization test passed against the original inline
+  implementation before extraction: 1 test.
+- `py_compile` passed.
+- Focused A-share status route/helper tests passed after extraction: 2 tests.
+- A-share route helper tests passed: 38 tests.
+- Related A-share route/service/storage/export tests passed: 95 tests.
+- Full backend unittest discovery passed: 964 tests, 15 skipped.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Frontend build passed, including Next.js lint/type checks.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because
+  `ruff` is not available.
+
 ## Stop Conditions
 
 Pause before editing if:
