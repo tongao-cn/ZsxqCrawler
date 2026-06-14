@@ -999,10 +999,7 @@ class ZSXQDatabase:
     def _link_topic_tag(self, topic_id: int, tag_id: int):
         """关联话题和标签"""
         try:
-            current_time = _beijing_now_timestamp()
-            
-            sql, params = _insert_topic_tag_statement(topic_id, tag_id, current_time)
-            self.cursor.execute(sql, params)
+            self._execute_timestamped_statement(_insert_topic_tag_statement, topic_id, tag_id)
             
             # 更新标签的话题计数
             sql, params = _refresh_tag_topic_count_statement(tag_id)

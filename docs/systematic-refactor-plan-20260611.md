@@ -17209,6 +17209,51 @@ Result:
 - Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because
   `ruff` is not available.
 
+### 2026-06-14 - P2 topic storage tag-link timestamped write helper
+
+Changed:
+
+- Ran existing topic-tag link characterization against the original inline timestamp-and-execute
+  implementation before extraction.
+- Reused `_execute_timestamped_statement()` from `_link_topic_tag()` for the initial
+  `topic_tags` relation insert.
+- Left the subsequent tag `topic_count` refresh query in place and in the same order.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Relation insert SQL shape, parameter order, timestamp format, tag-count refresh execution,
+  exception-swallowing behavior, and user-visible log message shape are unchanged.
+- Tag creation/update semantics, topic tag extraction, like/latest-like paired timestamp semantics,
+  comment-image numeric fallback defaults, schema behavior, read paths, public APIs, route
+  behavior, task runtime behavior, and configuration semantics are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_link_topic_tag_inserts_relation_refreshes_count_and_swallows_errors -v
+uv run python -m py_compile backend\storage\zsxq_database.py tests\test_zsxq_database_helpers.py
+uv run python -m unittest tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_link_topic_tag_inserts_relation_refreshes_count_and_swallows_errors tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_execute_timestamped_statement_preserves_builder_args_and_execute_params -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run python -m unittest tests.test_zsxq_database_helpers -v
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+uv run ruff check backend\storage\zsxq_database.py tests\test_zsxq_database_helpers.py --select F401,F841
+```
+
+Result:
+
+- Existing topic-tag link characterization passed against the original duplicate inline
+  implementation: 1 test.
+- `py_compile` passed.
+- Focused topic-tag link and shared timestamped helper tests passed after extraction: 2 tests.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Topic database helper tests passed: 80 tests.
+- Full backend unittest discovery passed: 1068 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because
+  `ruff` is not available.
+
 ## Stop Conditions
 
 Pause before editing if:
