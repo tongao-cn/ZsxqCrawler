@@ -146,6 +146,10 @@ def _latest_stock_topic_analysis_or_404(group_id: str, stock_name: str) -> dict:
     return result
 
 
+def _external_stock_summaries(group_id: str, request: ExternalStockSummaryRequest) -> dict:
+    return get_external_stock_summaries(group_id, request.stockNames, report_date=request.date)
+
+
 @router.get("/{group_id}/questions")
 async def read_stock_question_matches(
     group_id: str,
@@ -256,7 +260,7 @@ async def read_external_stock_summaries(
     request: ExternalStockSummaryRequest,
 ):
     try:
-        return get_external_stock_summaries(group_id, request.stockNames, report_date=request.date)
+        return _external_stock_summaries(group_id, request)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     except Exception as exc:

@@ -384,6 +384,24 @@ class StockTopicAnalysisRoutesHelperTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(expected, result)
         service.assert_called_once_with("51111112855254", ["宁德时代"], report_date="2026-06-09")
 
+    @unittest.skipUnless(HAS_ROUTE_DEPS, "stock topic analysis route dependencies are not installed")
+    async def test_external_stock_summaries_preserves_default_report_date(self):
+        from backend.routes import stock_topic_analysis_routes
+        from backend.routes.stock_topic_analysis_routes import ExternalStockSummaryRequest
+
+        expected = {"group_id": "51111112855254", "stocks": []}
+        with patch(
+            "backend.routes.stock_topic_analysis_routes.get_external_stock_summaries",
+            return_value=expected,
+        ) as service:
+            result = stock_topic_analysis_routes._external_stock_summaries(
+                "51111112855254",
+                ExternalStockSummaryRequest(stockNames=["宁德时代"]),
+            )
+
+        self.assertEqual(expected, result)
+        service.assert_called_once_with("51111112855254", ["宁德时代"], report_date=None)
+
 
 if __name__ == "__main__":
     unittest.main()

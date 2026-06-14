@@ -14442,6 +14442,56 @@ Result:
 - Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because
   `ruff` is not available.
 
+### 2026-06-14 - P5 external stock summaries helper
+
+Changed:
+
+- Reused route-level characterization coverage for `read_external_stock_summaries()`
+  preserving `get_external_stock_summaries()` arguments and result passthrough.
+- Extracted `_external_stock_summaries()` in `backend.routes.stock_topic_analysis_routes`.
+- Reused the helper from the external summary route so request field to service argument
+  assembly is isolated.
+- Added helper coverage for preserving the default `report_date=None` behavior.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- `read_external_stock_summaries()` still returns the service result object unchanged.
+- `group_id`, `stockNames`, and `date` are still forwarded to the service with the same
+  `report_date` keyword.
+- The route still maps `ValueError` to 400 and unexpected exceptions to the existing 500
+  response text.
+- Public API shape, task behavior, storage schema, config semantics, side effects, and
+  fallback/legacy behavior are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_stock_topic_analysis_routes_helpers.StockTopicAnalysisRoutesHelperTests.test_read_external_stock_summaries_calls_service -v
+uv run python -m py_compile backend\routes\stock_topic_analysis_routes.py tests\test_stock_topic_analysis_routes_helpers.py
+uv run python -m unittest tests.test_stock_topic_analysis_routes_helpers.StockTopicAnalysisRoutesHelperTests.test_read_external_stock_summaries_calls_service tests.test_stock_topic_analysis_routes_helpers.StockTopicAnalysisRoutesHelperTests.test_external_stock_summaries_preserves_default_report_date -v
+uv run python -m unittest tests.test_stock_topic_analysis_routes_helpers -v
+uv run python -m unittest tests.test_daily_analysis_routes_helpers tests.test_daily_stock_concept_routes_helpers tests.test_stock_topic_analysis_routes_helpers tests.test_task_runtime_helpers -v
+uv run python -m unittest discover -s tests
+uv run python scripts\scan_postgres_compat_debt.py
+npm --prefix frontend run build
+uv run ruff check backend\routes\stock_topic_analysis_routes.py tests\test_stock_topic_analysis_routes_helpers.py --select F401,F841
+```
+
+Result:
+
+- Existing focused external stock summaries route characterization test passed against the
+  original inline implementation before extraction: 1 test.
+- `py_compile` passed.
+- Focused external stock summaries route/helper tests passed after extraction: 2 tests.
+- Stock-topic route helper tests passed: 18 tests.
+- Related daily/stock-topic/task-runtime route helper tests passed: 89 tests.
+- Full backend unittest discovery passed: 932 tests, 15 skipped.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Frontend build passed, including Next.js lint/type checks.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because
+  `ruff` is not available.
+
 ## Stop Conditions
 
 Pause before editing if:
