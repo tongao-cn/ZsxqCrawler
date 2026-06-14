@@ -154,13 +154,17 @@ def _latest_stock_topic_analyses(group_id: str, stock_names: str) -> dict:
     return get_latest_stock_topic_analyses(group_id, stock_names)
 
 
+def _stock_question_matches(group_id: str, question: str) -> dict:
+    return search_stock_question_topics(group_id, question)
+
+
 @router.get("/{group_id}/questions")
 async def read_stock_question_matches(
     group_id: str,
     question: str = Query(..., min_length=1, description="A股问题"),
 ):
     try:
-        return search_stock_question_topics(group_id, question)
+        return _stock_question_matches(group_id, question)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     except Exception as exc:

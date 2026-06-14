@@ -86,6 +86,37 @@ class StockTopicAnalysisRoutesHelperTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(400, raised.exception.status_code)
 
     @unittest.skipUnless(HAS_ROUTE_DEPS, "stock topic analysis route dependencies are not installed")
+    async def test_read_stock_question_matches_returns_service_result(self):
+        from backend.routes.stock_topic_analysis_routes import read_stock_question_matches
+
+        expected = {"question": "固态电池怎么看", "topics": [{"topic_id": "101"}]}
+        with patch(
+            "backend.routes.stock_topic_analysis_routes.search_stock_question_topics",
+            return_value=expected,
+        ) as search:
+            result = await read_stock_question_matches("51111112855254", "固态电池怎么看")
+
+        self.assertEqual(expected, result)
+        search.assert_called_once_with("51111112855254", "固态电池怎么看")
+
+    @unittest.skipUnless(HAS_ROUTE_DEPS, "stock topic analysis route dependencies are not installed")
+    async def test_stock_question_matches_preserves_raw_question(self):
+        from backend.routes import stock_topic_analysis_routes
+
+        expected = {"question": "  固态电池怎么看  ", "topics": []}
+        with patch(
+            "backend.routes.stock_topic_analysis_routes.search_stock_question_topics",
+            return_value=expected,
+        ) as search:
+            result = stock_topic_analysis_routes._stock_question_matches(
+                "51111112855254",
+                "  固态电池怎么看  ",
+            )
+
+        self.assertEqual(expected, result)
+        search.assert_called_once_with("51111112855254", "  固态电池怎么看  ")
+
+    @unittest.skipUnless(HAS_ROUTE_DEPS, "stock topic analysis route dependencies are not installed")
     async def test_create_stock_question_analysis_enqueues_runtime_task(self):
         from backend.routes.stock_topic_analysis_routes import (
             StockQuestionRequest,
