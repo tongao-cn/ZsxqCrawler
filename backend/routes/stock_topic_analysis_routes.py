@@ -139,6 +139,13 @@ def run_stock_topic_analysis_batch_task(task_id: str, group_id: str, request: St
     )
 
 
+def _latest_stock_topic_analysis_or_404(group_id: str, stock_name: str) -> dict:
+    result = get_latest_stock_topic_analysis(group_id, stock_name)
+    if not result:
+        raise HTTPException(status_code=404, detail="个股话题分析结果不存在，请先分析")
+    return result
+
+
 @router.get("/{group_id}/questions")
 async def read_stock_question_matches(
     group_id: str,
@@ -262,10 +269,7 @@ async def read_latest_stock_topic_analysis(
     stock_name: str = Query(..., min_length=1, description="股票名称"),
 ):
     try:
-        result = get_latest_stock_topic_analysis(group_id, stock_name)
-        if not result:
-            raise HTTPException(status_code=404, detail="个股话题分析结果不存在，请先分析")
-        return result
+        return _latest_stock_topic_analysis_or_404(group_id, stock_name)
     except HTTPException:
         raise
     except ValueError as exc:

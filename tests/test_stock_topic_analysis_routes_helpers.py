@@ -297,16 +297,55 @@ class StockTopicAnalysisRoutesHelperTests(unittest.IsolatedAsyncioTestCase):
         )
 
     @unittest.skipUnless(HAS_ROUTE_DEPS, "stock topic analysis route dependencies are not installed")
+    async def test_read_latest_stock_topic_analysis_returns_service_result(self):
+        from backend.routes.stock_topic_analysis_routes import read_latest_stock_topic_analysis
+
+        expected = {"stock_name": "宁德时代", "status": "completed"}
+        with patch(
+            "backend.routes.stock_topic_analysis_routes.get_latest_stock_topic_analysis",
+            return_value=expected,
+        ) as get_latest:
+            result = await read_latest_stock_topic_analysis("51111112855254", "宁德时代")
+
+        self.assertEqual(expected, result)
+        get_latest.assert_called_once_with("51111112855254", "宁德时代")
+
+    @unittest.skipUnless(HAS_ROUTE_DEPS, "stock topic analysis route dependencies are not installed")
     async def test_read_latest_stock_topic_analysis_raises_404_when_missing(self):
         from fastapi import HTTPException
 
         from backend.routes.stock_topic_analysis_routes import read_latest_stock_topic_analysis
 
-        with patch("backend.routes.stock_topic_analysis_routes.get_latest_stock_topic_analysis", return_value=None):
+        with patch(
+            "backend.routes.stock_topic_analysis_routes.get_latest_stock_topic_analysis",
+            return_value=None,
+        ) as get_latest:
             with self.assertRaises(HTTPException) as raised:
                 await read_latest_stock_topic_analysis("51111112855254", "宁德时代")
 
         self.assertEqual(404, raised.exception.status_code)
+        self.assertEqual("个股话题分析结果不存在，请先分析", raised.exception.detail)
+        get_latest.assert_called_once_with("51111112855254", "宁德时代")
+
+    @unittest.skipUnless(HAS_ROUTE_DEPS, "stock topic analysis route dependencies are not installed")
+    async def test_latest_stock_topic_analysis_or_404_preserves_missing_404(self):
+        from fastapi import HTTPException
+
+        from backend.routes import stock_topic_analysis_routes
+
+        with patch(
+            "backend.routes.stock_topic_analysis_routes.get_latest_stock_topic_analysis",
+            return_value={},
+        ) as get_latest:
+            with self.assertRaises(HTTPException) as raised:
+                stock_topic_analysis_routes._latest_stock_topic_analysis_or_404(
+                    "51111112855254",
+                    "宁德时代",
+                )
+
+        self.assertEqual(404, raised.exception.status_code)
+        self.assertEqual("个股话题分析结果不存在，请先分析", raised.exception.detail)
+        get_latest.assert_called_once_with("51111112855254", "宁德时代")
 
     @unittest.skipUnless(HAS_ROUTE_DEPS, "stock topic analysis route dependencies are not installed")
     async def test_read_latest_stock_topic_analyses_returns_mixed_rows(self):

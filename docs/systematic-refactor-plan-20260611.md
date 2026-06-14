@@ -14389,6 +14389,59 @@ Result:
 - Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because
   `ruff` is not available.
 
+### 2026-06-14 - P5 latest stock topic read helper
+
+Changed:
+
+- Added route-level characterization coverage for `read_latest_stock_topic_analysis()`
+  preserving `get_latest_stock_topic_analysis()` arguments, result passthrough, and
+  missing-result 404 semantics.
+- Extracted `_latest_stock_topic_analysis_or_404()` in
+  `backend.routes.stock_topic_analysis_routes`.
+- Reused the helper from the latest stock-topic analysis read route so result lookup and
+  404 mapping are isolated.
+- Added helper coverage for the falsey-result 404 branch.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- `read_latest_stock_topic_analysis()` still returns the service result object unchanged
+  when present.
+- Missing or falsey results still raise
+  `HTTPException(status_code=404, detail="个股话题分析结果不存在，请先分析")`.
+- The route still re-raises `HTTPException` unchanged, maps `ValueError` to 400, and maps
+  unexpected exceptions to the existing 500 response text.
+- Public API shape, task behavior, storage schema, config semantics, side effects, and
+  fallback/legacy behavior are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_stock_topic_analysis_routes_helpers.StockTopicAnalysisRoutesHelperTests.test_read_latest_stock_topic_analysis_returns_service_result tests.test_stock_topic_analysis_routes_helpers.StockTopicAnalysisRoutesHelperTests.test_read_latest_stock_topic_analysis_raises_404_when_missing -v
+uv run python -m py_compile backend\routes\stock_topic_analysis_routes.py tests\test_stock_topic_analysis_routes_helpers.py
+uv run python -m unittest tests.test_stock_topic_analysis_routes_helpers.StockTopicAnalysisRoutesHelperTests.test_read_latest_stock_topic_analysis_returns_service_result tests.test_stock_topic_analysis_routes_helpers.StockTopicAnalysisRoutesHelperTests.test_read_latest_stock_topic_analysis_raises_404_when_missing tests.test_stock_topic_analysis_routes_helpers.StockTopicAnalysisRoutesHelperTests.test_latest_stock_topic_analysis_or_404_preserves_missing_404 -v
+uv run python -m unittest tests.test_stock_topic_analysis_routes_helpers -v
+uv run python -m unittest tests.test_daily_analysis_routes_helpers tests.test_daily_stock_concept_routes_helpers tests.test_stock_topic_analysis_routes_helpers tests.test_task_runtime_helpers -v
+uv run python -m unittest discover -s tests
+uv run python scripts\scan_postgres_compat_debt.py
+npm --prefix frontend run build
+uv run ruff check backend\routes\stock_topic_analysis_routes.py tests\test_stock_topic_analysis_routes_helpers.py --select F401,F841
+```
+
+Result:
+
+- Focused latest stock-topic read route characterization tests passed against the original
+  inline implementation before extraction: 2 tests.
+- `py_compile` passed.
+- Focused latest stock-topic route/helper tests passed after extraction: 3 tests.
+- Stock-topic route helper tests passed: 17 tests.
+- Related daily/stock-topic/task-runtime route helper tests passed: 88 tests.
+- Full backend unittest discovery passed: 931 tests, 15 skipped.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Frontend build passed, including Next.js lint/type checks.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because
+  `ruff` is not available.
+
 ## Stop Conditions
 
 Pause before editing if:
