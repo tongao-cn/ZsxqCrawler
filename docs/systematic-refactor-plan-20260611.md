@@ -14908,6 +14908,59 @@ Result:
 - Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because
   `ruff` is not available.
 
+### 2026-06-14 - P5 daily today task response helper
+
+Changed:
+
+- Added route-level characterization coverage for `run_today_report()` preserving
+  `create_task()` task type, description, metadata, response passthrough, runtime enqueue
+  arguments, and unused `BackgroundTasks` side effects.
+- Extracted `_create_daily_today_task_response()` in `backend.routes.daily_analysis_routes`.
+- Reused the helper from the daily crawl-and-analysis task creation route so task creation
+  metadata assembly is isolated.
+- Added helper coverage for preserving the exact task contract passed to
+  `_create_daily_task_response()`.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- `run_today_report()` still creates `daily_topic_crawl_and_analysis` tasks with the same
+  description and `_daily_task_metadata(group_id, request.date)` payload.
+- Runtime enqueue still calls `run_daily_today_task` with the same task id, group id, and
+  original request object.
+- `BackgroundTasks` remains accepted and unused, matching the prior behavior.
+- The route still maps unexpected exceptions to the existing 500 response text.
+- Public API shape, task behavior, storage schema, config semantics, side effects, and
+  fallback/legacy behavior are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_daily_analysis_routes_helpers.DailyAnalysisRoutesHelperTests.test_run_today_report_enqueues_runtime_task -v
+uv run python -m py_compile backend\routes\daily_analysis_routes.py tests\test_daily_analysis_routes_helpers.py
+uv run python -m unittest tests.test_daily_analysis_routes_helpers.DailyAnalysisRoutesHelperTests.test_run_today_report_enqueues_runtime_task tests.test_daily_analysis_routes_helpers.DailyAnalysisRoutesHelperTests.test_create_daily_today_task_response_preserves_task_contract -v
+uv run python -m unittest tests.test_daily_analysis_routes_helpers -v
+uv run python -m unittest tests.test_daily_analysis_routes_helpers tests.test_daily_stock_concept_routes_helpers tests.test_stock_topic_analysis_routes_helpers tests.test_task_runtime_helpers -v
+uv run python -m unittest discover -s tests
+uv run python scripts\scan_postgres_compat_debt.py
+npm --prefix frontend run build
+uv run ruff check backend\routes\daily_analysis_routes.py tests\test_daily_analysis_routes_helpers.py --select F401,F841
+```
+
+Result:
+
+- New focused daily today task creation characterization test passed against the original
+  inline implementation before extraction: 1 test.
+- `py_compile` passed.
+- Focused daily today task route/helper tests passed after extraction: 2 tests.
+- Daily route helper tests passed: 22 tests.
+- Related daily/stock-topic/task-runtime route helper tests passed: 102 tests.
+- Full backend unittest discovery passed: 945 tests, 15 skipped.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Frontend build passed, including Next.js lint/type checks.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because
+  `ruff` is not available.
+
 ## Stop Conditions
 
 Pause before editing if:
