@@ -1,4 +1,5 @@
 import unittest
+from contextlib import ExitStack
 from unittest.mock import patch
 
 from backend.services.file_workflow_service import (
@@ -352,6 +353,167 @@ class FileRoutesHelperTests(unittest.TestCase):
             task_group_id="group-1",
         )
 
+    def test_file_route_error_preserves_status_and_detail_format(self):
+        from backend.routes import file_routes
+
+        error = file_routes._file_route_error("创建文件收集任务失败", RuntimeError("boom"))
+
+        self.assertEqual(500, error.status_code)
+        self.assertEqual("创建文件收集任务失败: boom", error.detail)
+
+    def test_file_task_routes_preserve_wrapped_unexpected_errors(self):
+        from backend.routes import file_routes
+        from backend.schemas.files import (
+            FileAIAnalysisBatchRequest,
+            FileAIAnalysisRequest,
+            FileCollectRequest,
+            FileDownloadRequest,
+            FileFilteredDownloadRequest,
+            FileIdListRequest,
+        )
+
+        background_tasks = FakeBackgroundTasks()
+        cases = [
+            (
+                file_routes.collect_files,
+                ("group-1", FileCollectRequest(), background_tasks),
+                {},
+                "创建文件收集任务失败: boom",
+                False,
+            ),
+            (
+                file_routes.download_files,
+                ("group-1", FileDownloadRequest(), background_tasks),
+                {},
+                "创建文件下载任务失败: boom",
+                False,
+            ),
+            (
+                file_routes.download_single_file,
+                ("group-1", 123, background_tasks),
+                {"file_name": "file.pdf", "file_size": 456},
+                "创建单个文件下载任务失败: boom",
+                False,
+            ),
+            (
+                file_routes.download_selected_files,
+                ("group-1", FileIdListRequest(file_ids=[123, 456]), background_tasks),
+                {},
+                "创建选中文件下载任务失败: boom",
+                False,
+            ),
+            (
+                file_routes.download_filtered_files,
+                ("group-1", FileFilteredDownloadRequest(status="failed", search="pdf"), background_tasks),
+                {},
+                "创建筛选结果下载任务失败: boom",
+                False,
+            ),
+            (
+                file_routes.create_file_analysis_task,
+                ("group-1", 123, FileAIAnalysisRequest(force=True), background_tasks),
+                {},
+                "创建文件 AI 分析任务失败: boom",
+                True,
+            ),
+            (
+                file_routes.create_selected_file_analysis_task,
+                ("group-1", FileAIAnalysisBatchRequest(file_ids=[123, 456]), background_tasks),
+                {},
+                "创建批量文件 AI 分析任务失败: boom",
+                True,
+            ),
+            (
+                file_routes.sync_files_from_topics,
+                ("group-1", background_tasks),
+                {},
+                "创建同步文件记录任务失败: boom",
+                False,
+            ),
+        ]
+
+        for route, route_args, route_kwargs, expected_detail, needs_api_key in cases:
+            with self.subTest(route=route.__name__):
+                with ExitStack() as stack:
+                    stack.enter_context(
+                        patch("backend.routes.file_routes._enqueue_file_task", side_effect=RuntimeError("boom"))
+                    )
+                    if needs_api_key:
+                        stack.enter_context(patch("backend.routes.file_routes.has_openai_api_key", return_value=True))
+
+                    with self.assertRaises(file_routes.HTTPException) as raised:
+                        self._run_async(route(*route_args, **route_kwargs))
+
+                self.assertEqual(500, raised.exception.status_code)
+                self.assertEqual(expected_detail, raised.exception.detail)
+
+        self.assertEqual([], background_tasks.calls)
+
+    def test_file_task_routes_preserve_http_exception_passthrough(self):
+        from backend.routes import file_routes
+        from backend.schemas.files import (
+            FileAIAnalysisBatchRequest,
+            FileAIAnalysisRequest,
+            FileCollectRequest,
+            FileDownloadRequest,
+            FileFilteredDownloadRequest,
+            FileIdListRequest,
+        )
+
+        background_tasks = FakeBackgroundTasks()
+        cases = [
+            (file_routes.collect_files, ("group-1", FileCollectRequest(), background_tasks), {}, False),
+            (file_routes.download_files, ("group-1", FileDownloadRequest(), background_tasks), {}, False),
+            (
+                file_routes.download_single_file,
+                ("group-1", 123, background_tasks),
+                {"file_name": "file.pdf", "file_size": 456},
+                False,
+            ),
+            (
+                file_routes.download_selected_files,
+                ("group-1", FileIdListRequest(file_ids=[123, 456]), background_tasks),
+                {},
+                False,
+            ),
+            (
+                file_routes.download_filtered_files,
+                ("group-1", FileFilteredDownloadRequest(status="failed", search="pdf"), background_tasks),
+                {},
+                False,
+            ),
+            (
+                file_routes.create_file_analysis_task,
+                ("group-1", 123, FileAIAnalysisRequest(force=True), background_tasks),
+                {},
+                True,
+            ),
+            (
+                file_routes.create_selected_file_analysis_task,
+                ("group-1", FileAIAnalysisBatchRequest(file_ids=[123, 456]), background_tasks),
+                {},
+                True,
+            ),
+            (file_routes.sync_files_from_topics, ("group-1", background_tasks), {}, False),
+        ]
+
+        for route, route_args, route_kwargs, needs_api_key in cases:
+            original_error = file_routes.HTTPException(status_code=409, detail="conflict")
+            with self.subTest(route=route.__name__):
+                with ExitStack() as stack:
+                    stack.enter_context(patch("backend.routes.file_routes._enqueue_file_task", side_effect=original_error))
+                    if needs_api_key:
+                        stack.enter_context(patch("backend.routes.file_routes.has_openai_api_key", return_value=True))
+
+                    with self.assertRaises(file_routes.HTTPException) as raised:
+                        self._run_async(route(*route_args, **route_kwargs))
+
+                self.assertIs(original_error, raised.exception)
+                self.assertEqual(409, raised.exception.status_code)
+                self.assertEqual("conflict", raised.exception.detail)
+
+        self.assertEqual([], background_tasks.calls)
+
     def test_file_analysis_routes_preserve_success_payloads(self):
         from backend.routes import file_routes
         from backend.schemas.files import FileAIAnalysisRequest
@@ -512,6 +674,49 @@ class FileRoutesHelperTests(unittest.TestCase):
 
                 self.assertEqual(400, raised.exception.status_code)
                 self.assertEqual(detail, raised.exception.detail)
+
+    def test_create_file_analysis_preserves_wrapped_unexpected_error(self):
+        from backend.routes import file_routes
+        from backend.schemas.files import FileAIAnalysisRequest
+
+        with (
+            patch("backend.routes.file_routes.has_openai_api_key", return_value=True),
+            patch("backend.routes.file_routes._created_file_analysis", side_effect=Exception("boom")),
+        ):
+            with self.assertRaises(file_routes.HTTPException) as raised:
+                self._run_async(
+                    file_routes.create_file_analysis(
+                        "group-1",
+                        456,
+                        FileAIAnalysisRequest(force=True),
+                    )
+                )
+
+        self.assertEqual(500, raised.exception.status_code)
+        self.assertEqual("文件 AI 分析失败: boom", raised.exception.detail)
+
+    def test_create_file_analysis_preserves_internal_http_exception_wrapping(self):
+        from backend.routes import file_routes
+        from backend.schemas.files import FileAIAnalysisRequest
+
+        original_error = file_routes.HTTPException(status_code=409, detail="conflict")
+
+        with (
+            patch("backend.routes.file_routes.has_openai_api_key", return_value=True),
+            patch("backend.routes.file_routes._created_file_analysis", side_effect=original_error),
+        ):
+            with self.assertRaises(file_routes.HTTPException) as raised:
+                self._run_async(
+                    file_routes.create_file_analysis(
+                        "group-1",
+                        456,
+                        FileAIAnalysisRequest(force=True),
+                    )
+                )
+
+        self.assertIsNot(original_error, raised.exception)
+        self.assertEqual(500, raised.exception.status_code)
+        self.assertEqual("文件 AI 分析失败: 409: conflict", raised.exception.detail)
 
     def test_run_file_analysis_task_dedupes_ids_and_preserves_mixed_stats(self):
         from backend.services import file_workflow_service
@@ -770,6 +975,72 @@ class FileRoutesHelperTests(unittest.TestCase):
         self.assertEqual({"called": "_get_file_status_response", "args": ("group-1", 123)}, file_status)
         self.assertEqual({"called": "_check_local_file_status_response", "args": ("group-1", "file.pdf", 456)}, local_status)
         self.assertEqual({"called": "_get_file_stats_response", "args": ("group-1",)}, stats)
+
+    def test_file_read_routes_preserve_wrapped_unexpected_errors(self):
+        from backend.routes import file_routes
+
+        cases = [
+            (file_routes.get_file_status, ("group-1", 123), {}, "_file_status", "获取文件状态失败: boom", None),
+            (
+                file_routes.check_local_file_status,
+                ("group-1", "file.pdf", 456),
+                {},
+                "_local_file_status",
+                "检查本地文件失败: boom",
+                None,
+            ),
+            (file_routes.get_file_analysis, ("group-1", 123), {}, "_file_analysis", "获取文件 AI 分析失败: boom", None),
+            (file_routes.get_file_stats, ("group-1",), {}, "_file_stats", "获取文件统计失败: boom", None),
+            (
+                file_routes.clear_file_database,
+                ("group-1",),
+                {},
+                "_clear_file_database",
+                "删除文件数据库失败: boom",
+                ("ERROR", "删除文件数据库失败: boom"),
+            ),
+            (
+                file_routes.get_files,
+                ("group-1",),
+                {"page": 2, "per_page": 5, "status": "completed", "search": "pdf", "analysis_status": "pending"},
+                "_files_page",
+                "获取文件列表失败: boom",
+                None,
+            ),
+        ]
+
+        for route, route_args, route_kwargs, helper_name, expected_detail, expected_log in cases:
+            with (
+                self.subTest(helper=helper_name),
+                patch.object(file_routes, helper_name, side_effect=RuntimeError("boom")),
+                patch.object(file_routes, "_log_file_route_event") as log_file_route_event,
+            ):
+                with self.assertRaises(file_routes.HTTPException) as raised:
+                    self._run_async(route(*route_args, **route_kwargs))
+
+                self.assertEqual(500, raised.exception.status_code)
+                self.assertEqual(expected_detail, raised.exception.detail)
+                if expected_log:
+                    log_file_route_event.assert_called_once_with(*expected_log)
+                else:
+                    log_file_route_event.assert_not_called()
+
+    def test_clear_file_database_preserves_http_exception_passthrough(self):
+        from backend.routes import file_routes
+
+        original_error = file_routes.HTTPException(status_code=409, detail="conflict")
+
+        with (
+            patch.object(file_routes, "_clear_file_database", side_effect=original_error),
+            patch.object(file_routes, "_log_file_route_event") as log_file_route_event,
+        ):
+            with self.assertRaises(file_routes.HTTPException) as raised:
+                self._run_async(file_routes.clear_file_database("group-1"))
+
+        self.assertIs(original_error, raised.exception)
+        self.assertEqual(409, raised.exception.status_code)
+        self.assertEqual("conflict", raised.exception.detail)
+        log_file_route_event.assert_not_called()
 
     def test_clear_file_database_offloads_sync_work_to_thread(self):
         from backend.routes import file_routes

@@ -16533,6 +16533,66 @@ Result:
 - Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because
   `ruff` is not available.
 
+### 2026-06-14 - P5 file route error helper
+
+Changed:
+
+- Added route-level characterization coverage for file route unexpected-error wrappers.
+- Added route-level characterization coverage that task routes and `clear_file_database()`
+  still pass through existing `HTTPException` instances unchanged.
+- Added coverage for the existing `clear_file_database()` ERROR log side effect before
+  wrapping unexpected exceptions.
+- Added coverage for `create_file_analysis()` preserving its existing direct-analysis
+  error semantics: missing API key and internal `HTTPException` instances are still wrapped
+  as route-level 500 errors, while `ValueError` and `RuntimeError` still map to 400.
+- Extracted `_file_route_error()` in `backend.routes.file_routes`.
+- Reused the helper from all 15 file route wrappers that map unexpected exceptions to
+  route-level 500 responses.
+- Added direct helper coverage for the 500 status and `"{message}: {str(error)}"`
+  detail format.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- The 15 file routes still map unexpected exceptions to route-level
+  `HTTPException(status_code=500)` with the same Chinese prefixes.
+- Existing `HTTPException` pass-through behavior is preserved for task routes and
+  `clear_file_database()`.
+- Existing `create_file_analysis()` compatibility behavior is preserved, including wrapping
+  internally raised `HTTPException` values as `文件 AI 分析失败: {str(error)}` 500 details.
+- `clear_file_database()` still logs `ERROR` with the same message before raising the
+  route-level 500.
+- Existing route paths, request/default fields, task type/description/function/argument
+  order, group metadata, ingestion lock metadata, OpenAI key guard, AI service arguments,
+  response payload shapes, and `str(error)` formatting are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_file_routes_helpers.FileRoutesHelperTests.test_file_task_routes_preserve_wrapped_unexpected_errors tests.test_file_routes_helpers.FileRoutesHelperTests.test_file_task_routes_preserve_http_exception_passthrough tests.test_file_routes_helpers.FileRoutesHelperTests.test_file_read_routes_preserve_wrapped_unexpected_errors tests.test_file_routes_helpers.FileRoutesHelperTests.test_clear_file_database_preserves_http_exception_passthrough tests.test_file_routes_helpers.FileRoutesHelperTests.test_create_file_analysis_preserves_wrapped_unexpected_error tests.test_file_routes_helpers.FileRoutesHelperTests.test_create_file_analysis_preserves_internal_http_exception_wrapping -v
+uv run python -m py_compile backend\routes\file_routes.py tests\test_file_routes_helpers.py
+uv run python -m unittest tests.test_file_routes_helpers.FileRoutesHelperTests.test_file_route_error_preserves_status_and_detail_format tests.test_file_routes_helpers.FileRoutesHelperTests.test_file_task_routes_preserve_wrapped_unexpected_errors tests.test_file_routes_helpers.FileRoutesHelperTests.test_file_task_routes_preserve_http_exception_passthrough tests.test_file_routes_helpers.FileRoutesHelperTests.test_file_read_routes_preserve_wrapped_unexpected_errors tests.test_file_routes_helpers.FileRoutesHelperTests.test_clear_file_database_preserves_http_exception_passthrough tests.test_file_routes_helpers.FileRoutesHelperTests.test_create_file_analysis_preserves_wrapped_unexpected_error tests.test_file_routes_helpers.FileRoutesHelperTests.test_create_file_analysis_preserves_internal_http_exception_wrapping tests.test_file_routes_helpers.FileRoutesHelperTests.test_create_file_analysis_preserves_missing_api_key_wrapped_error tests.test_file_routes_helpers.FileRoutesHelperTests.test_create_file_analysis_preserves_service_error_mapping -v
+uv run python -m unittest tests.test_file_routes_helpers -v
+uv run python -m unittest discover -s tests
+uv run python scripts\scan_postgres_compat_debt.py
+npm --prefix frontend run build
+uv run ruff check backend\routes\file_routes.py tests\test_file_routes_helpers.py --select F401,F841
+```
+
+Result:
+
+- Existing file route unexpected-error, `HTTPException` pass-through, and direct-analysis
+  wrapping characterization tests passed against the original duplicate inline wrappers
+  before extraction: 6 tests.
+- `py_compile` passed.
+- Focused file route error helper tests passed after extraction: 9 tests.
+- File route helper tests passed: 50 tests.
+- Full backend unittest discovery passed: 1053 tests, 15 skipped.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Frontend build passed, including Next.js lint/type checks.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because
+  `ruff` is not available.
+
 ## Stop Conditions
 
 Pause before editing if:

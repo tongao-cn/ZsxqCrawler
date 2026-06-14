@@ -44,6 +44,10 @@ from backend.services.file_workflow_service import (
 router = APIRouter(prefix="/api/files", tags=["files"])
 
 
+def _file_route_error(message: str, error: Exception) -> HTTPException:
+    return HTTPException(status_code=500, detail=f"{message}: {str(error)}")
+
+
 async def _file_status(group_id: str, file_id: int) -> dict:
     return await asyncio.to_thread(_get_file_status_response, group_id, file_id)
 
@@ -106,7 +110,7 @@ async def collect_files(group_id: str, request: FileCollectRequest, background_t
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"创建文件收集任务失败: {str(e)}")
+        raise _file_route_error("创建文件收集任务失败", e)
 
 
 @router.post("/download/{group_id}")
@@ -136,7 +140,7 @@ async def download_files(group_id: str, request: FileDownloadRequest, background
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"创建文件下载任务失败: {str(e)}")
+        raise _file_route_error("创建文件下载任务失败", e)
 
 
 @router.post("/download-single/{group_id}/{file_id}")
@@ -164,7 +168,7 @@ async def download_single_file(
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"创建单个文件下载任务失败: {str(e)}")
+        raise _file_route_error("创建单个文件下载任务失败", e)
 
 
 @router.post("/download-selected/{group_id}")
@@ -184,7 +188,7 @@ async def download_selected_files(group_id: str, request: FileIdListRequest, bac
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"创建选中文件下载任务失败: {str(e)}")
+        raise _file_route_error("创建选中文件下载任务失败", e)
 
 
 @router.post("/download-filtered/{group_id}")
@@ -210,7 +214,7 @@ async def download_filtered_files(
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"创建筛选结果下载任务失败: {str(e)}")
+        raise _file_route_error("创建筛选结果下载任务失败", e)
 
 
 @router.get("/status/{group_id}/{file_id}")
@@ -219,7 +223,7 @@ async def get_file_status(group_id: str, file_id: int):
     try:
         return await _file_status(group_id, file_id)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"获取文件状态失败: {str(e)}")
+        raise _file_route_error("获取文件状态失败", e)
 
 
 @router.get("/check-local/{group_id}")
@@ -228,7 +232,7 @@ async def check_local_file_status(group_id: str, file_name: str, file_size: int)
     try:
         return await _local_file_status(group_id, file_name, file_size)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"检查本地文件失败: {str(e)}")
+        raise _file_route_error("检查本地文件失败", e)
 
 
 @router.get("/analysis/{group_id}/{file_id}")
@@ -237,7 +241,7 @@ async def get_file_analysis(group_id: str, file_id: int):
     try:
         return await _file_analysis(group_id, file_id)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"获取文件 AI 分析失败: {str(e)}")
+        raise _file_route_error("获取文件 AI 分析失败", e)
 
 
 @router.post("/analysis/{group_id}/{file_id}")
@@ -256,7 +260,7 @@ async def create_file_analysis(group_id: str, file_id: int, request: FileAIAnaly
     except RuntimeError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"文件 AI 分析失败: {str(e)}")
+        raise _file_route_error("文件 AI 分析失败", e)
 
 
 @router.post("/analysis-task/{group_id}/{file_id}")
@@ -287,7 +291,7 @@ async def create_file_analysis_task(
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"创建文件 AI 分析任务失败: {str(e)}")
+        raise _file_route_error("创建文件 AI 分析任务失败", e)
 
 
 @router.post("/analysis-selected/{group_id}")
@@ -317,7 +321,7 @@ async def create_selected_file_analysis_task(
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"创建批量文件 AI 分析任务失败: {str(e)}")
+        raise _file_route_error("创建批量文件 AI 分析任务失败", e)
 
 
 @router.get("/stats/{group_id}")
@@ -326,7 +330,7 @@ async def get_file_stats(group_id: str):
     try:
         return await _file_stats(group_id)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"获取文件统计失败: {str(e)}")
+        raise _file_route_error("获取文件统计失败", e)
 
 
 @router.post("/clear/{group_id}")
@@ -338,7 +342,7 @@ async def clear_file_database(group_id: str):
         raise
     except Exception as e:
         _log_file_route_event("ERROR", f"删除文件数据库失败: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"删除文件数据库失败: {str(e)}")
+        raise _file_route_error("删除文件数据库失败", e)
 
 
 @router.post("/sync-from-topics/{group_id}")
@@ -357,7 +361,7 @@ async def sync_files_from_topics(group_id: str, background_tasks: BackgroundTask
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"创建同步文件记录任务失败: {str(e)}")
+        raise _file_route_error("创建同步文件记录任务失败", e)
 
 
 @router.get("/{group_id}")
@@ -373,4 +377,4 @@ async def get_files(
     try:
         return await _files_page(group_id, page, per_page, status, search, analysis_status)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"获取文件列表失败: {str(e)}")
+        raise _file_route_error("获取文件列表失败", e)
