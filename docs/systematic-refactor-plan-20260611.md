@@ -15375,6 +15375,58 @@ Result:
 - Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because
   `ruff` is not available.
 
+### 2026-06-14 - P5 topic read helpers
+
+Changed:
+
+- Reused existing route-level characterization coverage for topic read routes:
+  topic list, group topic list, and topic detail.
+- Extracted `_topics_page()`, `_group_topics_page()`, and `_topic_detail()` in
+  `backend.routes.topic_routes`.
+- Reused the helpers from public topic read routes so threaded response-builder access is
+  isolated from each route's existing exception wrapper.
+- Added helper coverage for preserving each response builder binding and argument shape.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Public topic read routes still call the same response builders through `asyncio.to_thread()`
+  with the same page, per-page, search, topic id, and group id arguments.
+- Successful payloads are still returned unchanged.
+- Existing `HTTPException` passthrough, per-route unexpected-exception mappings, and Chinese
+  detail strings are unchanged.
+- Topic query/pagination formatting, topic detail fallback behavior, public API shape, route
+  paths, response payloads, storage behavior, config semantics, and fallback/legacy behavior
+  are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_topic_routes_helpers.TopicRoutesHelperTests.test_read_routes_offload_sync_db_work_to_thread -v
+uv run python -m py_compile backend\routes\topic_routes.py tests\test_topic_routes_helpers.py
+uv run python -m unittest tests.test_topic_routes_helpers.TopicRoutesHelperTests.test_read_routes_offload_sync_db_work_to_thread tests.test_topic_routes_helpers.TopicRoutesHelperTests.test_read_helpers_preserve_service_call_shapes -v
+uv run python -m unittest tests.test_topic_routes_helpers -v
+uv run python -m unittest tests.test_topic_routes_helpers tests.test_official_topic_client_helpers tests.test_columns_topic_persistence_service tests.test_daily_topic_analysis_service_helpers tests.test_stock_topic_analysis_routes_helpers tests.test_stock_topic_analysis_service_helpers -v
+uv run python -m unittest discover -s tests
+uv run python scripts\scan_postgres_compat_debt.py
+npm --prefix frontend run build
+uv run ruff check backend\routes\topic_routes.py tests\test_topic_routes_helpers.py --select F401,F841
+```
+
+Result:
+
+- Existing topic read route characterization test passed against the original inline
+  implementation before extraction: 1 test.
+- `py_compile` passed.
+- Focused topic read route/helper tests passed after extraction: 2 tests.
+- Topic route helper tests passed: 23 tests.
+- Related topic/client/persistence/analysis route-service tests passed: 121 tests.
+- Full backend unittest discovery passed: 962 tests, 15 skipped.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Frontend build passed, including Next.js lint/type checks.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because
+  `ruff` is not available.
+
 ## Stop Conditions
 
 Pause before editing if:

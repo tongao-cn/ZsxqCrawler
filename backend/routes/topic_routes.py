@@ -510,11 +510,23 @@ def _delete_group_topics_response(group_id: int) -> dict:
         _close_topic_db(db)
 
 
+async def _topics_page(page: int, per_page: int, search: Optional[str]) -> dict:
+    return await asyncio.to_thread(_get_topics_response, page, per_page, search)
+
+
+async def _group_topics_page(group_id: int, page: int, per_page: int, search: Optional[str]) -> dict:
+    return await asyncio.to_thread(_get_group_topics_response, group_id, page, per_page, search)
+
+
+async def _topic_detail(topic_id: int, group_id: str) -> dict:
+    return await asyncio.to_thread(_get_topic_detail_response, topic_id, group_id)
+
+
 @router.get("/topics")
 async def get_topics(page: int = 1, per_page: int = 20, search: Optional[str] = None):
     """获取话题列表"""
     try:
-        return await asyncio.to_thread(_get_topics_response, page, per_page, search)
+        return await _topics_page(page, per_page, search)
     except HTTPException:
         raise
     except Exception as e:
@@ -525,7 +537,7 @@ async def get_topics(page: int = 1, per_page: int = 20, search: Optional[str] = 
 async def get_group_topics(group_id: int, page: int = 1, per_page: int = 20, search: Optional[str] = None):
     """获取指定群组的话题列表"""
     try:
-        return await asyncio.to_thread(_get_group_topics_response, group_id, page, per_page, search)
+        return await _group_topics_page(group_id, page, per_page, search)
     except HTTPException:
         raise
     except Exception as e:
@@ -548,7 +560,7 @@ async def clear_topic_database(group_id: str):
 async def get_topic_detail(topic_id: int, group_id: str):
     """获取话题详情（仅从本地数据库读取，不主动爬取）"""
     try:
-        return await asyncio.to_thread(_get_topic_detail_response, topic_id, group_id)
+        return await _topic_detail(topic_id, group_id)
     except HTTPException:
         raise
     except Exception as e:

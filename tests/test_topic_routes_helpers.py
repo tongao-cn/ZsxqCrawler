@@ -370,6 +370,33 @@ class TopicRoutesHelperTests(unittest.TestCase):
         self.assertEqual({"called": "_get_topic_detail_response", "args": (99, "123")}, detail)
 
     @unittest.skipUnless(HAS_TOPIC_ROUTE_DEPS, "topic route dependencies are not installed")
+    def test_read_helpers_preserve_service_call_shapes(self):
+        from backend.routes import topic_routes
+
+        calls = []
+
+        async def fake_to_thread(func, *args):
+            calls.append((func, args))
+            return {"called": func.__name__, "args": args}
+
+        with patch("backend.routes.topic_routes.asyncio.to_thread", side_effect=fake_to_thread):
+            topics = self._run_async(topic_routes._topics_page(2, 5, "offer"))
+            group_topics = self._run_async(topic_routes._group_topics_page(123, 3, 10, "alpha"))
+            detail = self._run_async(topic_routes._topic_detail(99, "123"))
+
+        self.assertEqual(
+            [
+                (topic_routes._get_topics_response, (2, 5, "offer")),
+                (topic_routes._get_group_topics_response, (123, 3, 10, "alpha")),
+                (topic_routes._get_topic_detail_response, (99, "123")),
+            ],
+            calls,
+        )
+        self.assertEqual({"called": "_get_topics_response", "args": (2, 5, "offer")}, topics)
+        self.assertEqual({"called": "_get_group_topics_response", "args": (123, 3, 10, "alpha")}, group_topics)
+        self.assertEqual({"called": "_get_topic_detail_response", "args": (99, "123")}, detail)
+
+    @unittest.skipUnless(HAS_TOPIC_ROUTE_DEPS, "topic route dependencies are not installed")
     def test_operation_routes_offload_sync_work_to_thread(self):
         from backend.routes import topic_routes
 
