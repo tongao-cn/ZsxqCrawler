@@ -116,6 +116,11 @@ def _refresh_group_account_self_response(group_id: str) -> Dict[str, Any]:
     return _save_self_info_response(db, account_id, data)
 
 
+def _get_group_account_response(group_id: str) -> Dict[str, Any]:
+    summary = get_account_summary_for_group_auto(group_id)
+    return {"account": summary}
+
+
 async def _run_self_response_route(
     helper: Callable[[str], Dict[str, Any]],
     identifier: str,
@@ -191,8 +196,7 @@ async def assign_account_to_group(group_id: str, request: AssignGroupAccountRequ
 @router.get("/groups/{group_id}/account")
 async def get_group_account(group_id: str):
     try:
-        summary = get_account_summary_for_group_auto(group_id)
-        return {"account": summary}
+        return _get_group_account_response(group_id)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"获取群组账号失败: {str(e)}")
 

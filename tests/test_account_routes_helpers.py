@@ -122,6 +122,26 @@ class AccountRoutesHelperTests(unittest.TestCase):
         self.assertEqual(account_id, "default")
         self.assertEqual(cookie, "group-cookie")
 
+    def test_get_group_account_route_preserves_summary_response(self):
+        import asyncio
+
+        summary = {"id": "acc-1", "name": "Account A"}
+
+        with patch.object(account_routes, "get_account_summary_for_group_auto", return_value=summary) as get_summary:
+            result = asyncio.run(account_routes.get_group_account("group-1"))
+
+        self.assertEqual({"account": summary}, result)
+        get_summary.assert_called_once_with("group-1")
+
+    def test_get_group_account_response_preserves_summary_lookup(self):
+        summary = {"id": "acc-1", "name": "Account A"}
+
+        with patch.object(account_routes, "get_account_summary_for_group_auto", return_value=summary) as get_summary:
+            result = account_routes._get_group_account_response("group-1")
+
+        self.assertEqual({"account": summary}, result)
+        get_summary.assert_called_once_with("group-1")
+
 
 @unittest.skipUnless(HAS_ACCOUNT_ROUTE_DEPS, "account route dependencies are not installed")
 class AccountRoutesAsyncTests(unittest.IsolatedAsyncioTestCase):
