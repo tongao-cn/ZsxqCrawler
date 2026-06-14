@@ -69,6 +69,16 @@ class FakeAccountsCreateSqlManager:
         return self.safe_account
 
 
+class FakeAccountsDeleteSqlManager:
+    def __init__(self, deleted):
+        self.deleted = deleted
+        self.calls = []
+
+    def delete_account(self, account_id):
+        self.calls.append(account_id)
+        return self.deleted
+
+
 @unittest.skipUnless(HAS_ACCOUNT_ROUTE_DEPS, "account route dependencies are not installed")
 class AccountRoutesHelperTests(unittest.TestCase):
     def test_fetch_self_api_data_returns_payload_and_uses_stealth_headers(self):
@@ -234,6 +244,62 @@ class AccountRoutesHelperTests(unittest.TestCase):
             manager.calls,
         )
         clear_cache.assert_called_once_with()
+
+    def test_remove_account_route_preserves_success_response_and_cache_clear(self):
+        import asyncio
+
+        manager = FakeAccountsDeleteSqlManager(True)
+
+        with patch.object(account_routes, "get_accounts_sql_manager", return_value=manager), patch.object(
+            account_routes, "clear_account_detect_cache"
+        ) as clear_cache:
+            result = asyncio.run(account_routes.remove_account("acc-1"))
+
+        self.assertEqual({"success": True}, result)
+        self.assertEqual(["acc-1"], manager.calls)
+        clear_cache.assert_called_once_with()
+
+    def test_remove_account_route_preserves_missing_account_404(self):
+        import asyncio
+
+        manager = FakeAccountsDeleteSqlManager(False)
+
+        with patch.object(account_routes, "get_accounts_sql_manager", return_value=manager), patch.object(
+            account_routes, "clear_account_detect_cache"
+        ) as clear_cache:
+            with self.assertRaises(HTTPException) as ctx:
+                asyncio.run(account_routes.remove_account("missing"))
+
+        self.assertEqual(404, ctx.exception.status_code)
+        self.assertEqual("Account does not exist", ctx.exception.detail)
+        self.assertEqual(["missing"], manager.calls)
+        clear_cache.assert_not_called()
+
+    def test_remove_account_response_preserves_success_response_and_cache_clear(self):
+        manager = FakeAccountsDeleteSqlManager(True)
+
+        with patch.object(account_routes, "get_accounts_sql_manager", return_value=manager), patch.object(
+            account_routes, "clear_account_detect_cache"
+        ) as clear_cache:
+            result = account_routes._remove_account_response("acc-1")
+
+        self.assertEqual({"success": True}, result)
+        self.assertEqual(["acc-1"], manager.calls)
+        clear_cache.assert_called_once_with()
+
+    def test_remove_account_response_preserves_missing_account_404(self):
+        manager = FakeAccountsDeleteSqlManager(False)
+
+        with patch.object(account_routes, "get_accounts_sql_manager", return_value=manager), patch.object(
+            account_routes, "clear_account_detect_cache"
+        ) as clear_cache:
+            with self.assertRaises(HTTPException) as ctx:
+                account_routes._remove_account_response("missing")
+
+        self.assertEqual(404, ctx.exception.status_code)
+        self.assertEqual("Account does not exist", ctx.exception.detail)
+        self.assertEqual(["missing"], manager.calls)
+        clear_cache.assert_not_called()
 
 
 @unittest.skipUnless(HAS_ACCOUNT_ROUTE_DEPS, "account route dependencies are not installed")

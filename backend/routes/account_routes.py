@@ -135,6 +135,15 @@ def _create_account_response(request: AccountCreateRequest) -> Dict[str, Any]:
     return {"account": safe_acc}
 
 
+def _remove_account_response(account_id: str) -> Dict[str, Any]:
+    sql_mgr = get_accounts_sql_manager()
+    ok = sql_mgr.delete_account(account_id)
+    if not ok:
+        raise HTTPException(status_code=404, detail="Account does not exist")
+    clear_account_detect_cache()
+    return {"success": True}
+
+
 async def _run_self_response_route(
     helper: Callable[[str], Dict[str, Any]],
     identifier: str,
@@ -174,12 +183,7 @@ async def create_account(request: AccountCreateRequest):
 async def remove_account(account_id: str):
     """删除账号"""
     try:
-        sql_mgr = get_accounts_sql_manager()
-        ok = sql_mgr.delete_account(account_id)
-        if not ok:
-            raise HTTPException(status_code=404, detail="Account does not exist")
-        clear_account_detect_cache()
-        return {"success": True}
+        return _remove_account_response(account_id)
     except HTTPException:
         raise
     except Exception as e:
