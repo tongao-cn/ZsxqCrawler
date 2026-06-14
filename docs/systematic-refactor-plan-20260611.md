@@ -17543,6 +17543,55 @@ Result:
   not available.
 - Post-format `py_compile` and focused existing-files characterization recheck passed.
 
+### 2026-06-14 - P1 selected download file-id helper
+
+Changed:
+
+- Ran existing selected-download record loading characterization against the original inline
+  `int()` conversion, de-duplication, and order-preserving behavior before extraction.
+- Added `_unique_int_file_ids()` for the selected-file download ID normalization path.
+- Reused the helper from `_load_download_file_records()` and selected-download task stats while
+  leaving SQL text, query parameter order, missing-file calculation, task logs, download execution,
+  and task status updates unchanged.
+- Added a focused helper test to pin the existing selected-download normalization semantics.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Numeric string IDs are still converted with `int()`, duplicates are still removed after
+  conversion, and first-seen order is still preserved for query parameters and missing-file checks.
+- The separate file-analysis ID de-duplication path was intentionally left unchanged because its
+  historical conversion order is not the same as the selected-download path.
+- Filtered download, single-file download fallback behavior, file listing, AI analysis, route
+  behavior, storage schema, fallback/legacy behavior, public APIs, and configuration semantics are
+  unchanged.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_file_routes_helpers.FileRoutesHelperTests.test_load_download_file_records_dedupes_preserves_order_and_reports_missing -v
+uv run python -m py_compile backend\services\file_workflow_service.py tests\test_file_routes_helpers.py
+uv run python -m unittest tests.test_file_routes_helpers.FileRoutesHelperTests.test_load_download_file_records_dedupes_preserves_order_and_reports_missing tests.test_file_routes_helpers.FileRoutesHelperTests.test_unique_int_file_ids_preserves_existing_selected_download_semantics -v
+uv run python -m unittest tests.test_file_routes_helpers -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+uv run ruff check backend\services\file_workflow_service.py tests\test_file_routes_helpers.py --select F401,F841
+```
+
+Result:
+
+- Existing selected-download record loading characterization passed against the original inline
+  implementation: 1 test.
+- `py_compile` passed.
+- Focused selected-download record loading and helper tests passed after extraction: 2 tests.
+- File route/helper tests passed: 51 tests.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Full backend unittest discovery passed: 1069 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+
 ## Stop Conditions
 
 Pause before editing if:

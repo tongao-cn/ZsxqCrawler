@@ -621,6 +621,10 @@ def _count_existing_file_records(downloader: ZSXQFileDownloader, group_id: str) 
     return downloader.file_db.cursor.fetchone()[0] or 0
 
 
+def _unique_int_file_ids(file_ids: Sequence[int]) -> list[int]:
+    return list(dict.fromkeys(int(file_id) for file_id in file_ids))
+
+
 def run_file_download_task(
     task_id: str,
     group_id: str,
@@ -714,7 +718,7 @@ def _load_download_file_records(
     group_id: str,
     file_ids: Sequence[int],
 ) -> tuple[list[tuple[int, str, int, int]], list[int]]:
-    ordered_ids = [int(file_id) for file_id in dict.fromkeys(file_ids)]
+    ordered_ids = _unique_int_file_ids(file_ids)
     placeholders = ", ".join("?" for _ in ordered_ids)
     downloader.file_db.cursor.execute(
         f"""
@@ -856,7 +860,7 @@ def run_selected_file_download_task(task_id: str, group_id: str, file_ids: Seque
 
         records, missing = _load_download_file_records(downloader, group_id, file_ids)
         stats = _build_download_task_stats(
-            total_files=len(dict.fromkeys(int(file_id) for file_id in file_ids)),
+            total_files=len(_unique_int_file_ids(file_ids)),
             found=len(records),
             missing=len(missing),
         )

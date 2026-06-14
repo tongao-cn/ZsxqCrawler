@@ -17,6 +17,7 @@ from backend.services.file_workflow_service import (
     _load_filtered_download_file_records,
     _query_group_id,
     _resolve_download_record_status,
+    _unique_int_file_ids,
 )
 
 
@@ -1509,6 +1510,9 @@ class FileRoutesHelperTests(unittest.TestCase):
             records,
         )
         self.assertEqual([999], missing)
+
+    def test_unique_int_file_ids_preserves_existing_selected_download_semantics(self):
+        self.assertEqual([101, 102, 999], _unique_int_file_ids(["101", 102, "101", 999]))
 
     def test_close_crawler_file_databases_closes_file_and_topic_dbs(self):
         crawler = FakeCrawler()
