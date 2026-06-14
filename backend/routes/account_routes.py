@@ -144,6 +144,14 @@ def _remove_account_response(account_id: str) -> Dict[str, Any]:
     return {"success": True}
 
 
+def _assign_account_to_group_response(group_id: str, request: AssignGroupAccountRequest) -> Dict[str, Any]:
+    sql_mgr = get_accounts_sql_manager()
+    ok, msg = sql_mgr.assign_group_account(group_id, request.account_id)
+    if not ok:
+        raise HTTPException(status_code=400, detail=msg)
+    return {"success": True, "message": msg}
+
+
 async def _run_self_response_route(
     helper: Callable[[str], Dict[str, Any]],
     identifier: str,
@@ -194,11 +202,7 @@ async def remove_account(account_id: str):
 async def assign_account_to_group(group_id: str, request: AssignGroupAccountRequest):
     """分配群组到指定账号"""
     try:
-        sql_mgr = get_accounts_sql_manager()
-        ok, msg = sql_mgr.assign_group_account(group_id, request.account_id)
-        if not ok:
-            raise HTTPException(status_code=400, detail=msg)
-        return {"success": True, "message": msg}
+        return _assign_account_to_group_response(group_id, request)
     except HTTPException:
         raise
     except Exception as e:

@@ -15716,6 +15716,55 @@ Result:
 - Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because
   `ruff` is not available.
 
+### 2026-06-14 - P5 account assignment response helper
+
+Changed:
+
+- Added route-level characterization coverage for group-account assignment before extraction.
+- Extracted `_assign_account_to_group_response()` in `backend.routes.account_routes`.
+- Reused the helper from `assign_account_to_group()` so the route keeps only exception mapping.
+- Added helper coverage for preserving successful assignment, failure 400 behavior, and
+  response shape.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- `assign_account_to_group()` still calls `assign_group_account(group_id, request.account_id)`
+  with the original path id and request account id.
+- Failed assignments still raise `HTTPException(status_code=400, detail=msg)` with the
+  storage manager's original message.
+- Successful assignments still return `{"success": True, "message": msg}` unchanged.
+- Existing route path, request schema, response payload shape, exception mapping, storage
+  access, account fallback behavior, and config semantics are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_account_routes_helpers.AccountRoutesHelperTests.test_assign_account_to_group_route_preserves_success_response tests.test_account_routes_helpers.AccountRoutesHelperTests.test_assign_account_to_group_route_preserves_failure_400 -v
+uv run python -m py_compile backend\routes\account_routes.py tests\test_account_routes_helpers.py
+uv run python -m unittest tests.test_account_routes_helpers.AccountRoutesHelperTests.test_assign_account_to_group_route_preserves_success_response tests.test_account_routes_helpers.AccountRoutesHelperTests.test_assign_account_to_group_route_preserves_failure_400 tests.test_account_routes_helpers.AccountRoutesHelperTests.test_assign_account_to_group_response_preserves_success_response tests.test_account_routes_helpers.AccountRoutesHelperTests.test_assign_account_to_group_response_preserves_failure_400 -v
+uv run python -m unittest tests.test_account_routes_helpers -v
+uv run python -m unittest tests.test_account_routes_helpers tests.test_account_context tests.test_account_info_db_helpers tests.test_accounts_sql_manager_helpers -v
+uv run python -m unittest discover -s tests
+uv run python scripts\scan_postgres_compat_debt.py
+npm --prefix frontend run build
+uv run ruff check backend\routes\account_routes.py tests\test_account_routes_helpers.py --select F401,F841
+```
+
+Result:
+
+- Existing account assignment route characterization tests passed against the original inline
+  implementation before extraction: 2 tests.
+- `py_compile` passed.
+- Focused account assignment route/helper tests passed after extraction: 4 tests.
+- Account route helper tests passed: 23 tests.
+- Related account route/context/storage tests passed: 42 tests, 1 skipped.
+- Full backend unittest discovery passed: 978 tests, 15 skipped.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Frontend build passed, including Next.js lint/type checks.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because
+  `ruff` is not available.
+
 ## Stop Conditions
 
 Pause before editing if:

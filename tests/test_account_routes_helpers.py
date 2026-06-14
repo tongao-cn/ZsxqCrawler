@@ -79,6 +79,16 @@ class FakeAccountsDeleteSqlManager:
         return self.deleted
 
 
+class FakeAccountsAssignSqlManager:
+    def __init__(self, result):
+        self.result = result
+        self.calls = []
+
+    def assign_group_account(self, group_id, account_id):
+        self.calls.append((group_id, account_id))
+        return self.result
+
+
 @unittest.skipUnless(HAS_ACCOUNT_ROUTE_DEPS, "account route dependencies are not installed")
 class AccountRoutesHelperTests(unittest.TestCase):
     def test_fetch_self_api_data_returns_payload_and_uses_stealth_headers(self):
@@ -300,6 +310,54 @@ class AccountRoutesHelperTests(unittest.TestCase):
         self.assertEqual("Account does not exist", ctx.exception.detail)
         self.assertEqual(["missing"], manager.calls)
         clear_cache.assert_not_called()
+
+    def test_assign_account_to_group_route_preserves_success_response(self):
+        import asyncio
+
+        manager = FakeAccountsAssignSqlManager((True, "assigned"))
+        request = account_routes.AssignGroupAccountRequest(account_id="acc-1")
+
+        with patch.object(account_routes, "get_accounts_sql_manager", return_value=manager):
+            result = asyncio.run(account_routes.assign_account_to_group("group-1", request))
+
+        self.assertEqual({"success": True, "message": "assigned"}, result)
+        self.assertEqual([("group-1", "acc-1")], manager.calls)
+
+    def test_assign_account_to_group_route_preserves_failure_400(self):
+        import asyncio
+
+        manager = FakeAccountsAssignSqlManager((False, "missing account"))
+        request = account_routes.AssignGroupAccountRequest(account_id="missing")
+
+        with patch.object(account_routes, "get_accounts_sql_manager", return_value=manager):
+            with self.assertRaises(HTTPException) as ctx:
+                asyncio.run(account_routes.assign_account_to_group("group-1", request))
+
+        self.assertEqual(400, ctx.exception.status_code)
+        self.assertEqual("missing account", ctx.exception.detail)
+        self.assertEqual([("group-1", "missing")], manager.calls)
+
+    def test_assign_account_to_group_response_preserves_success_response(self):
+        manager = FakeAccountsAssignSqlManager((True, "assigned"))
+        request = account_routes.AssignGroupAccountRequest(account_id="acc-1")
+
+        with patch.object(account_routes, "get_accounts_sql_manager", return_value=manager):
+            result = account_routes._assign_account_to_group_response("group-1", request)
+
+        self.assertEqual({"success": True, "message": "assigned"}, result)
+        self.assertEqual([("group-1", "acc-1")], manager.calls)
+
+    def test_assign_account_to_group_response_preserves_failure_400(self):
+        manager = FakeAccountsAssignSqlManager((False, "missing account"))
+        request = account_routes.AssignGroupAccountRequest(account_id="missing")
+
+        with patch.object(account_routes, "get_accounts_sql_manager", return_value=manager):
+            with self.assertRaises(HTTPException) as ctx:
+                account_routes._assign_account_to_group_response("group-1", request)
+
+        self.assertEqual(400, ctx.exception.status_code)
+        self.assertEqual("missing account", ctx.exception.detail)
+        self.assertEqual([("group-1", "missing")], manager.calls)
 
 
 @unittest.skipUnless(HAS_ACCOUNT_ROUTE_DEPS, "account route dependencies are not installed")
