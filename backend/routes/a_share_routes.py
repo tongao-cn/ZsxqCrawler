@@ -116,6 +116,13 @@ def _a_share_task_metadata(normalized_group_id: Optional[str]) -> dict[str, Opti
     return {"group_id": normalized_group_id}
 
 
+def _a_share_analysis_task_context(
+    request: AShareAnalysisRunRequest,
+) -> tuple[Optional[str], str, str]:
+    normalized_group_id, scope_text = _normalize_group_scope(request.group_id)
+    return normalized_group_id, scope_text, _run_range_text(request)
+
+
 def _create_a_share_analysis_task_response(
     request: AShareAnalysisRunRequest,
     normalized_group_id: Optional[str],
@@ -369,9 +376,13 @@ async def start_a_share_analysis(request: AShareAnalysisRunRequest, background_t
                 detail=A_SHARE_MISSING_API_KEY_MESSAGE,
             )
 
-        normalized_group_id, scope_text = _normalize_group_scope(request.group_id)
-        run_range_text = _run_range_text(request)
-        return _create_a_share_analysis_task_response(request, normalized_group_id, scope_text, run_range_text)
+        normalized_group_id, scope_text, run_range_text = _a_share_analysis_task_context(request)
+        return _create_a_share_analysis_task_response(
+            request,
+            normalized_group_id,
+            scope_text,
+            run_range_text,
+        )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:

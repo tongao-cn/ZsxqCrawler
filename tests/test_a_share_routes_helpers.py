@@ -74,6 +74,72 @@ class AShareRoutesHelperTests(unittest.TestCase):
         create_task_response.assert_not_called()
 
     @unittest.skipUnless(HAS_A_SHARE_ROUTE_DEPS, "a-share route dependencies are not installed")
+    def test_start_a_share_analysis_enqueues_runtime_task(self):
+        import asyncio
+
+        from backend.routes.a_share_routes import (
+            AShareAnalysisRunRequest,
+            run_a_share_analysis_task,
+            start_a_share_analysis,
+        )
+
+        request = AShareAnalysisRunRequest(group_id="51111112855254", days=21)
+        with (
+            patch(
+                "backend.routes.a_share_routes.has_openai_api_key",
+                return_value=True,
+            ) as has_api_key,
+            patch(
+                "backend.routes.a_share_routes.create_task",
+                return_value="task-a-share",
+            ) as create_task,
+            patch(
+                "backend.routes.a_share_routes.enqueue_runtime_task"
+            ) as enqueue_runtime_task,
+        ):
+            response = asyncio.run(start_a_share_analysis(request, None))
+
+        has_api_key.assert_called_once_with()
+        create_task.assert_called_once_with(
+            "a_share_analysis",
+            "A股公司分析（群组 51111112855254，最近 21 天）",
+            metadata={"group_id": "51111112855254"},
+        )
+        enqueue_runtime_task.assert_called_once_with(
+            run_a_share_analysis_task,
+            "task-a-share",
+            request,
+        )
+        self.assertEqual(
+            {"task_id": "task-a-share", "message": "任务已创建，正在后台执行"},
+            response,
+        )
+
+    @unittest.skipUnless(HAS_A_SHARE_ROUTE_DEPS, "a-share route dependencies are not installed")
+    def test_a_share_analysis_task_context_preserves_scope_and_range(self):
+        from backend.routes.a_share_routes import (
+            AShareAnalysisRunRequest,
+            _a_share_analysis_task_context,
+        )
+
+        self.assertEqual(
+            ("51111112855254", "群组 51111112855254", "最近 21 天"),
+            _a_share_analysis_task_context(
+                AShareAnalysisRunRequest(group_id="51111112855254", days=21)
+            ),
+        )
+        self.assertEqual(
+            (None, "全局聚合", "2026-05-01 ~ 2026-05-07"),
+            _a_share_analysis_task_context(
+                AShareAnalysisRunRequest(
+                    group_id=None,
+                    start_date="2026-05-01",
+                    end_date="2026-05-07",
+                )
+            ),
+        )
+
+    @unittest.skipUnless(HAS_A_SHARE_ROUTE_DEPS, "a-share route dependencies are not installed")
     def test_get_a_share_analysis_status_preserves_success_payload_shape(self):
         import asyncio
 

@@ -14961,6 +14961,58 @@ Result:
 - Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because
   `ruff` is not available.
 
+### 2026-06-14 - P5 A-share task context helper
+
+Changed:
+
+- Added route-level characterization coverage for `start_a_share_analysis()` preserving
+  configured-key task type, description, metadata, response passthrough, and runtime enqueue
+  arguments.
+- Extracted `_a_share_analysis_task_context()` in `backend.routes.a_share_routes`.
+- Reused the helper from the A-share run route so group normalization and run-range text
+  assembly are isolated before task response creation.
+- Added helper coverage for grouped and global scopes.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- `start_a_share_analysis()` still checks `has_openai_api_key()` before normalizing group
+  scope or creating tasks.
+- Group normalization, scope labels, date-range validation/text, task type, description,
+  metadata, task function, request object, response shape, and enqueue order are unchanged.
+- Existing `ValueError` -> 400 mapping and existing unexpected/HTTPException wrapping
+  behavior are unchanged.
+- Public API shape, task behavior, storage schema, config semantics, side effects, and
+  fallback/legacy behavior are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_a_share_routes_helpers.AShareRoutesHelperTests.test_start_a_share_analysis_enqueues_runtime_task -v
+uv run python -m py_compile backend\routes\a_share_routes.py tests\test_a_share_routes_helpers.py
+uv run python -m unittest tests.test_a_share_routes_helpers.AShareRoutesHelperTests.test_start_a_share_analysis_enqueues_runtime_task tests.test_a_share_routes_helpers.AShareRoutesHelperTests.test_a_share_analysis_task_context_preserves_scope_and_range -v
+uv run python -m unittest tests.test_a_share_routes_helpers -v
+uv run python -m unittest tests.test_a_share_routes_helpers tests.test_a_share_analysis_service_helpers tests.test_a_share_analysis_db_storage_helpers -v
+uv run python -m unittest discover -s tests
+uv run python scripts\scan_postgres_compat_debt.py
+npm --prefix frontend run build
+uv run ruff check backend\routes\a_share_routes.py tests\test_a_share_routes_helpers.py --select F401,F841
+```
+
+Result:
+
+- New focused A-share start route characterization test passed against the original inline
+  implementation before extraction: 1 test.
+- `py_compile` passed.
+- Focused A-share start route/context helper tests passed after extraction: 2 tests.
+- A-share route helper tests passed: 37 tests.
+- A-share related route/service/storage tests passed: 80 tests.
+- Full backend unittest discovery passed: 947 tests, 15 skipped.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Frontend build passed, including Next.js lint/type checks.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because
+  `ruff` is not available.
+
 ## Stop Conditions
 
 Pause before editing if:
