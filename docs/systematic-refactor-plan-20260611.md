@@ -15898,6 +15898,55 @@ Result:
 - Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because
   `ruff` is not available.
 
+### 2026-06-14 - P5 crawler settings update response helper
+
+Changed:
+
+- Added route-level characterization coverage for crawler-settings update before extraction.
+- Extracted `_update_crawler_settings_response()` in `backend.routes.settings_routes`.
+- Reused the helper from `update_crawler_settings()` so the route keeps only exception
+  mapping.
+- Added helper coverage for success, missing-crawler, and invalid-delay paths.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- `update_crawler_settings()` still calls `get_crawler_safe()` once on each covered path.
+- Successful updates still mutate only `_CRAWLER_SETTING_FIELDS` and return
+  `{"message": "爬虫设置已更新", "settings": ...}`.
+- The current compatibility behavior is preserved: missing crawler and invalid delay still
+  raise route-level `HTTPException(status_code=500)` with the original 404/400 detail string
+  embedded in the error detail.
+- The extracted helper raises the original direct 404/400 errors before the route wrapper.
+- Existing route path, request model, response payload shape, validation condition, exception
+  mapping, runtime lookup behavior, and config semantics are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_settings_routes_helpers.SettingsRoutesHelpersTest.test_update_crawler_settings_route_preserves_success_payload_and_side_effects tests.test_settings_routes_helpers.SettingsRoutesHelpersTest.test_update_crawler_settings_route_preserves_wrapped_missing_crawler_error tests.test_settings_routes_helpers.SettingsRoutesHelpersTest.test_update_crawler_settings_route_preserves_wrapped_invalid_delay_error -v
+uv run python -m py_compile backend\routes\settings_routes.py tests\test_settings_routes_helpers.py
+uv run python -m unittest tests.test_settings_routes_helpers.SettingsRoutesHelpersTest.test_update_crawler_settings_route_preserves_success_payload_and_side_effects tests.test_settings_routes_helpers.SettingsRoutesHelpersTest.test_update_crawler_settings_route_preserves_wrapped_missing_crawler_error tests.test_settings_routes_helpers.SettingsRoutesHelpersTest.test_update_crawler_settings_route_preserves_wrapped_invalid_delay_error tests.test_settings_routes_helpers.SettingsRoutesHelpersTest.test_update_crawler_settings_response_preserves_success_payload_and_side_effects tests.test_settings_routes_helpers.SettingsRoutesHelpersTest.test_update_crawler_settings_response_preserves_missing_crawler_error tests.test_settings_routes_helpers.SettingsRoutesHelpersTest.test_update_crawler_settings_response_preserves_invalid_delay_error -v
+uv run python -m unittest tests.test_settings_routes_helpers -v
+uv run python -m unittest discover -s tests
+uv run python scripts\scan_postgres_compat_debt.py
+npm --prefix frontend run build
+uv run ruff check backend\routes\settings_routes.py tests\test_settings_routes_helpers.py --select F401,F841
+```
+
+Result:
+
+- Existing crawler settings update route characterization tests passed against the original
+  inline implementation before extraction: 3 tests.
+- `py_compile` passed.
+- Focused crawler settings update route/helper tests passed after extraction: 6 tests.
+- Settings route helper tests passed: 18 tests.
+- Full backend unittest discovery passed: 992 tests, 15 skipped.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Frontend build passed, including Next.js lint/type checks.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because
+  `ruff` is not available.
+
 ## Stop Conditions
 
 Pause before editing if:

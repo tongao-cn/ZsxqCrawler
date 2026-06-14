@@ -86,6 +86,22 @@ def _get_crawler_settings_response() -> dict:
     return _settings_from_attrs(crawler, _CRAWLER_SETTING_FIELDS)
 
 
+def _update_crawler_settings_response(request: "CrawlerSettingsRequest") -> dict:
+    crawler = get_crawler_safe()
+    if not crawler:
+        raise HTTPException(status_code=404, detail="爬虫未初始化")
+
+    if request.min_delay >= request.max_delay:
+        raise HTTPException(status_code=400, detail="最小延迟必须小于最大延迟")
+
+    _apply_settings(crawler, request, _CRAWLER_SETTING_FIELDS)
+
+    return _settings_update_response(
+        "爬虫设置已更新",
+        _settings_from_attrs(crawler, _CRAWLER_SETTING_FIELDS),
+    )
+
+
 class CrawlerSettingsRequest(BaseModel):
     min_delay: float = Field(default=2.0, ge=0.5, le=10.0)
     max_delay: float = Field(default=5.0, ge=1.0, le=20.0)
@@ -133,19 +149,7 @@ async def get_crawler_settings():
 async def update_crawler_settings(request: CrawlerSettingsRequest):
     """更新爬虫设置"""
     try:
-        crawler = get_crawler_safe()
-        if not crawler:
-            raise HTTPException(status_code=404, detail="爬虫未初始化")
-
-        if request.min_delay >= request.max_delay:
-            raise HTTPException(status_code=400, detail="最小延迟必须小于最大延迟")
-
-        _apply_settings(crawler, request, _CRAWLER_SETTING_FIELDS)
-
-        return _settings_update_response(
-            "爬虫设置已更新",
-            _settings_from_attrs(crawler, _CRAWLER_SETTING_FIELDS),
-        )
+        return _update_crawler_settings_response(request)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"更新爬虫设置失败: {str(e)}")
 

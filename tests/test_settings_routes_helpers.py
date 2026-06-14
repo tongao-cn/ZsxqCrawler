@@ -2,6 +2,8 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import patch
 
+from fastapi import HTTPException
+
 from backend.routes.settings_routes import (
     _CRAWLER_SETTING_FIELDS,
     _DOWNLOADER_SETTING_FIELDS,
@@ -14,9 +16,12 @@ from backend.routes.settings_routes import (
     _settings_from_attrs,
     _settings_update_response,
     _update_crawl_settings_response,
+    _update_crawler_settings_response,
+    CrawlerSettingsRequest,
     get_crawl_settings,
     get_crawler_settings,
     update_crawl_settings,
+    update_crawler_settings,
 )
 
 
@@ -204,6 +209,124 @@ class SettingsRoutesHelpersTest(unittest.TestCase):
             },
         )
         get_crawler.assert_called_once_with()
+
+    def test_update_crawler_settings_route_preserves_success_payload_and_side_effects(self):
+        import asyncio
+
+        crawler = SimpleNamespace(
+            min_delay=1.5,
+            max_delay=6.0,
+            long_delay_interval=20,
+            timestamp_offset_ms=7,
+            debug_mode=False,
+        )
+        request = CrawlerSettingsRequest(
+            min_delay=2.5,
+            max_delay=6.5,
+            long_delay_interval=30,
+            timestamp_offset_ms=9,
+            debug_mode=True,
+        )
+
+        with patch("backend.routes.settings_routes.get_crawler_safe", return_value=crawler) as get_crawler:
+            result = asyncio.run(update_crawler_settings(request))
+
+        expected_settings = {
+            "min_delay": 2.5,
+            "max_delay": 6.5,
+            "long_delay_interval": 30,
+            "timestamp_offset_ms": 9,
+            "debug_mode": True,
+        }
+        self.assertEqual(result, {"message": "爬虫设置已更新", "settings": expected_settings})
+        self.assertEqual(_settings_from_attrs(crawler, _CRAWLER_SETTING_FIELDS), expected_settings)
+        get_crawler.assert_called_once_with()
+
+    def test_update_crawler_settings_route_preserves_wrapped_missing_crawler_error(self):
+        import asyncio
+
+        with patch("backend.routes.settings_routes.get_crawler_safe", return_value=None):
+            with self.assertRaises(HTTPException) as caught:
+                asyncio.run(update_crawler_settings(CrawlerSettingsRequest()))
+
+        self.assertEqual(caught.exception.status_code, 500)
+        self.assertEqual(caught.exception.detail, "更新爬虫设置失败: 404: 爬虫未初始化")
+
+    def test_update_crawler_settings_route_preserves_wrapped_invalid_delay_error(self):
+        import asyncio
+
+        crawler = SimpleNamespace(
+            min_delay=1.5,
+            max_delay=6.0,
+            long_delay_interval=20,
+            timestamp_offset_ms=7,
+            debug_mode=False,
+        )
+        request = CrawlerSettingsRequest(min_delay=6.0, max_delay=6.0)
+
+        with patch("backend.routes.settings_routes.get_crawler_safe", return_value=crawler):
+            with self.assertRaises(HTTPException) as caught:
+                asyncio.run(update_crawler_settings(request))
+
+        self.assertEqual(caught.exception.status_code, 500)
+        self.assertEqual(caught.exception.detail, "更新爬虫设置失败: 400: 最小延迟必须小于最大延迟")
+        self.assertEqual(crawler.min_delay, 1.5)
+
+    def test_update_crawler_settings_response_preserves_success_payload_and_side_effects(self):
+        crawler = SimpleNamespace(
+            min_delay=1.5,
+            max_delay=6.0,
+            long_delay_interval=20,
+            timestamp_offset_ms=7,
+            debug_mode=False,
+        )
+        request = CrawlerSettingsRequest(
+            min_delay=2.5,
+            max_delay=6.5,
+            long_delay_interval=30,
+            timestamp_offset_ms=9,
+            debug_mode=True,
+        )
+
+        with patch("backend.routes.settings_routes.get_crawler_safe", return_value=crawler) as get_crawler:
+            result = _update_crawler_settings_response(request)
+
+        expected_settings = {
+            "min_delay": 2.5,
+            "max_delay": 6.5,
+            "long_delay_interval": 30,
+            "timestamp_offset_ms": 9,
+            "debug_mode": True,
+        }
+        self.assertEqual(result, {"message": "爬虫设置已更新", "settings": expected_settings})
+        self.assertEqual(_settings_from_attrs(crawler, _CRAWLER_SETTING_FIELDS), expected_settings)
+        get_crawler.assert_called_once_with()
+
+    def test_update_crawler_settings_response_preserves_missing_crawler_error(self):
+        with patch("backend.routes.settings_routes.get_crawler_safe", return_value=None):
+            with self.assertRaises(HTTPException) as caught:
+                _update_crawler_settings_response(CrawlerSettingsRequest())
+
+        self.assertEqual(caught.exception.status_code, 404)
+        self.assertEqual(caught.exception.detail, "爬虫未初始化")
+
+    def test_update_crawler_settings_response_preserves_invalid_delay_error(self):
+        crawler = SimpleNamespace(
+            min_delay=1.5,
+            max_delay=6.0,
+            long_delay_interval=20,
+            timestamp_offset_ms=7,
+            debug_mode=False,
+        )
+        request = CrawlerSettingsRequest(min_delay=6.0, max_delay=6.0)
+
+        with patch("backend.routes.settings_routes.get_crawler_safe", return_value=crawler):
+            with self.assertRaises(HTTPException) as caught:
+                _update_crawler_settings_response(request)
+
+        self.assertEqual(caught.exception.status_code, 400)
+        self.assertEqual(caught.exception.detail, "最小延迟必须小于最大延迟")
+        self.assertEqual(crawler.min_delay, 1.5)
 
 
 if __name__ == "__main__":
