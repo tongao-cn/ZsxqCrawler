@@ -519,6 +519,11 @@ class ZSXQDatabase:
         self.cursor.execute(sql, params)
         return self.cursor.fetchone()[0]
 
+    def _fetch_optional_first_column(self, sql: str, params: Any) -> Any:
+        self.cursor.execute(sql, params)
+        row = self.cursor.fetchone()
+        return row[0] if row else None
+
     def get_database_stats(self) -> Dict[str, Any]:
         """获取数据库统计信息"""
         stats = {}
@@ -542,15 +547,11 @@ class ZSXQDatabase:
         try:
             # 获取最新话题时间
             sql, params = _newest_topic_create_time_query(self.group_id, nullable_scope=True)
-            self.cursor.execute(sql, params)
-            newest_result = self.cursor.fetchone()
-            newest_time = newest_result[0] if newest_result else None
+            newest_time = self._fetch_optional_first_column(sql, params)
             
             # 获取最老话题时间
             sql, params = _oldest_topic_create_time_query(self.group_id, nullable_scope=True)
-            self.cursor.execute(sql, params)
-            oldest_result = self.cursor.fetchone()
-            oldest_time = oldest_result[0] if oldest_result else None
+            oldest_time = self._fetch_optional_first_column(sql, params)
             
             # 获取话题总数
             sql, params = _topic_count_query(self.group_id)
@@ -583,9 +584,7 @@ class ZSXQDatabase:
         """获取数据库中最老的话题时间戳"""
         try:
             sql, params = _oldest_topic_create_time_query(self.group_id)
-            self.cursor.execute(sql, params)
-            result = self.cursor.fetchone()
-            return result[0] if result else None
+            return self._fetch_optional_first_column(sql, params)
         except Exception as e:
             print(f"获取最老话题时间戳失败: {e}")
             return None
@@ -594,9 +593,7 @@ class ZSXQDatabase:
         """获取数据库中最新的话题时间戳"""
         try:
             sql, params = _newest_topic_create_time_query(self.group_id)
-            self.cursor.execute(sql, params)
-            result = self.cursor.fetchone()
-            return result[0] if result else None
+            return self._fetch_optional_first_column(sql, params)
         except Exception as e:
             print(f"获取最新话题时间戳失败: {e}")
             return None
@@ -742,9 +739,7 @@ class ZSXQDatabase:
             return _nullable_group_id_param(str(group_id))
         try:
             sql, params = _topic_group_id_query(topic_id)
-            self.cursor.execute(sql, params)
-            row = self.cursor.fetchone()
-            return row[0] if row and row[0] is not None else None
+            return self._fetch_optional_first_column(sql, params)
         except Exception:
             return None
 

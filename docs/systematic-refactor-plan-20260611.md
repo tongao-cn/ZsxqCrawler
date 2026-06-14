@@ -16878,6 +16878,55 @@ Result:
 - Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because
   `ruff` is not available.
 
+### 2026-06-14 - P2 topic storage optional scalar fetch helper
+
+Changed:
+
+- Ran existing characterization coverage for timestamp range info, legacy empty-group timestamp
+  scope, topic group-id fallback lookup, and comment group-id write behavior against the original
+  inline optional scalar-fetch implementation before extraction.
+- Added direct helper coverage that `_fetch_optional_first_column()` preserves `cursor.execute(sql,
+  params)` arity and the current `None` semantics for both missing rows and rows whose first
+  column is `None`.
+- Extracted `_fetch_optional_first_column()` in `backend.storage.zsxq_database`.
+- Reused the helper from timestamp range newest/oldest reads, newest/oldest timestamp methods,
+  and comment topic group-id fallback lookup.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- SQL helper usage, execute params, legacy empty-group timestamp scope params, missing-row `None`
+  semantics, first-column `None` semantics, timestamp fallbacks, and comment group-id fallback
+  behavior are unchanged.
+- No schema, write paths, legacy path, task runtime behavior, route behavior, public API, or
+  configuration semantics changed.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_timestamp_range_info_uses_nullable_scope_and_preserves_response_shape tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_topic_timestamp_methods_keep_legacy_group_scope_for_empty_group tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_resolve_topic_group_id_preserves_explicit_scope_lookup_and_exception_fallback tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_upsert_comment_writes_group_id_from_runtime_scope -v
+uv run python -m py_compile backend\storage\zsxq_database.py tests\test_zsxq_database_helpers.py
+uv run python -m unittest tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_fetch_optional_first_column_preserves_execute_params_and_none_semantics tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_timestamp_range_info_uses_nullable_scope_and_preserves_response_shape tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_topic_timestamp_methods_keep_legacy_group_scope_for_empty_group tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_resolve_topic_group_id_preserves_explicit_scope_lookup_and_exception_fallback tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_upsert_comment_writes_group_id_from_runtime_scope -v
+uv run python -m unittest tests.test_zsxq_database_helpers -v
+uv run python -m unittest discover -s tests
+uv run python scripts\scan_postgres_compat_debt.py
+npm --prefix frontend run build
+uv run ruff check backend\storage\zsxq_database.py tests\test_zsxq_database_helpers.py --select F401,F841
+```
+
+Result:
+
+- Existing optional scalar-fetch characterization passed against the original duplicate inline
+  implementation before extraction: 4 tests.
+- `py_compile` passed.
+- Focused optional scalar helper and storage read-method tests passed after extraction: 5 tests.
+- Topic database helper tests passed: 78 tests.
+- Full backend unittest discovery passed: 1066 tests, 15 skipped.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Frontend build passed, including Next.js lint/type checks.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because
+  `ruff` is not available.
+
 ## Stop Conditions
 
 Pause before editing if:

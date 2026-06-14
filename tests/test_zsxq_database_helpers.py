@@ -1554,6 +1554,22 @@ class ZSXQDatabaseHelperTests(unittest.TestCase):
             ZSXQDatabase._fetch_first_column(missing_db, "SELECT COUNT(*) FROM topics", ())
         self.assertEqual([("SELECT COUNT(*) FROM topics", ())], missing_db.cursor.calls)
 
+    def test_fetch_optional_first_column_preserves_execute_params_and_none_semantics(self):
+        from backend.storage.zsxq_database import ZSXQDatabase
+
+        db = object.__new__(ZSXQDatabase)
+        db.cursor = FakeTimestampCursor([("new-time",), (None,)])
+
+        self.assertEqual("new-time", ZSXQDatabase._fetch_optional_first_column(db, "SELECT create_time", (303,)))
+        self.assertIsNone(ZSXQDatabase._fetch_optional_first_column(db, "SELECT group_id", (202,)))
+        self.assertEqual([("SELECT create_time", (303,)), ("SELECT group_id", (202,))], db.cursor.calls)
+
+        missing_db = object.__new__(ZSXQDatabase)
+        missing_db.cursor = FakeTimestampCursor([])
+
+        self.assertIsNone(ZSXQDatabase._fetch_optional_first_column(missing_db, "SELECT group_id", (202,)))
+        self.assertEqual([("SELECT group_id", (202,))], missing_db.cursor.calls)
+
     def test_get_database_stats_preserves_unscoped_and_scoped_queries(self):
         from backend.storage.zsxq_database import ZSXQDatabase
 
