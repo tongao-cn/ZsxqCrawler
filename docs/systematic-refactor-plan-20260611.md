@@ -16335,6 +16335,54 @@ Result:
 - Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because
   `ruff` is not available.
 
+### 2026-06-14 - P5 daily analysis route error helper
+
+Changed:
+
+- Added route-level characterization coverage for daily analysis route unexpected-error
+  wrappers.
+- Extracted `_daily_analysis_route_error()` in `backend.routes.daily_analysis_routes`.
+- Reused the helper from `create_daily_report()`, `run_today_report()`, and
+  `read_daily_report()`.
+- Added direct helper coverage for the 500 status and `"{message}: {str(error)}"` detail
+  format.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- The three daily analysis routes still map unexpected exceptions to route-level
+  `HTTPException(status_code=500)` with the same Chinese prefixes.
+- `read_daily_report()` still passes through the existing 404 for missing reports.
+- Existing task creation response shape, task metadata, enqueue behavior, crawl-first
+  lifecycle, task failure handling, service read passthrough, route paths, query semantics,
+  and `str(error)` formatting are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_daily_analysis_routes_helpers.DailyAnalysisRoutesHelperTests.test_create_daily_report_preserves_wrapped_unexpected_error tests.test_daily_analysis_routes_helpers.DailyAnalysisRoutesHelperTests.test_run_today_report_preserves_wrapped_unexpected_error tests.test_daily_analysis_routes_helpers.DailyAnalysisRoutesHelperTests.test_read_daily_report_preserves_wrapped_unexpected_error -v
+uv run python -m py_compile backend\routes\daily_analysis_routes.py tests\test_daily_analysis_routes_helpers.py
+uv run python -m unittest tests.test_daily_analysis_routes_helpers.DailyAnalysisRoutesHelperTests.test_daily_analysis_route_error_preserves_status_and_detail_format tests.test_daily_analysis_routes_helpers.DailyAnalysisRoutesHelperTests.test_create_daily_report_preserves_wrapped_unexpected_error tests.test_daily_analysis_routes_helpers.DailyAnalysisRoutesHelperTests.test_run_today_report_preserves_wrapped_unexpected_error tests.test_daily_analysis_routes_helpers.DailyAnalysisRoutesHelperTests.test_read_daily_report_preserves_wrapped_unexpected_error tests.test_daily_analysis_routes_helpers.DailyAnalysisRoutesHelperTests.test_read_daily_report_preserves_missing_report_404 -v
+uv run python -m unittest tests.test_daily_analysis_routes_helpers -v
+uv run python -m unittest discover -s tests
+uv run python scripts\scan_postgres_compat_debt.py
+npm --prefix frontend run build
+uv run ruff check backend\routes\daily_analysis_routes.py tests\test_daily_analysis_routes_helpers.py --select F401,F841
+```
+
+Result:
+
+- Existing daily analysis route unexpected-error characterization tests passed against the
+  original duplicate inline wrappers before extraction: 3 tests.
+- `py_compile` passed.
+- Focused daily analysis route error helper tests passed after extraction: 5 tests.
+- Daily analysis route helper tests passed: 26 tests.
+- Full backend unittest discovery passed: 1038 tests, 15 skipped.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Frontend build passed, including Next.js lint/type checks.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because
+  `ruff` is not available.
+
 ## Stop Conditions
 
 Pause before editing if:

@@ -105,6 +105,10 @@ def _create_daily_today_task_response(
     )
 
 
+def _daily_analysis_route_error(message: str, error: Exception) -> HTTPException:
+    return HTTPException(status_code=500, detail=f"{message}: {str(error)}")
+
+
 def _analyze_daily_topics_for_task(task_id: str, group_id: str, request: DailyAnalysisRequest) -> dict:
     return analyze_daily_topics(
         group_id,
@@ -179,7 +183,7 @@ async def create_daily_report(group_id: str, request: DailyAnalysisRequest, back
     try:
         return _create_daily_report_task_response(group_id, request, background_tasks)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"创建每日分析任务失败: {str(e)}")
+        raise _daily_analysis_route_error("创建每日分析任务失败", e)
 
 
 @router.post("/run-today/{group_id}")
@@ -187,7 +191,7 @@ async def run_today_report(group_id: str, request: DailyRunTodayRequest, backgro
     try:
         return _create_daily_today_task_response(group_id, request, background_tasks)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"创建每日抓取分析任务失败: {str(e)}")
+        raise _daily_analysis_route_error("创建每日抓取分析任务失败", e)
 
 
 @router.get("/{group_id}")
@@ -200,4 +204,4 @@ async def read_daily_report(
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"获取每日报告失败: {str(e)}")
+        raise _daily_analysis_route_error("获取每日报告失败", e)
