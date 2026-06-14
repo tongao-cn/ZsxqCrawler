@@ -31,6 +31,10 @@ def _read_file_bytes(path: Path) -> bytes:
         return f.read()
 
 
+def _media_route_error(message: str, error: Exception) -> HTTPException:
+    return HTTPException(status_code=500, detail=f"{message}: {str(error)}")
+
+
 def _build_cached_image_response(cached_path: Path, cache_status: str) -> Response:
     return Response(
         content=_read_file_bytes(cached_path),
@@ -106,7 +110,7 @@ async def proxy_image(url: str, group_id: Optional[str] = None):
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"代理图片失败: {str(e)}")
+        raise _media_route_error("代理图片失败", e)
 
 
 @router.get("/proxy/image")
@@ -121,7 +125,7 @@ async def get_image_cache_info(group_id: str):
         cache_manager = get_image_cache_manager(group_id)
         return cache_manager.get_cache_info()
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"获取缓存信息失败: {str(e)}")
+        raise _media_route_error("获取缓存信息失败", e)
 
 
 @router.delete("/cache/images/{group_id}")
@@ -135,7 +139,7 @@ async def clear_image_cache(group_id: str):
             return {"success": True, "message": message}
         raise HTTPException(status_code=500, detail=message)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"清空缓存失败: {str(e)}")
+        raise _media_route_error("清空缓存失败", e)
 
 
 @router.get("/groups/{group_id}/images/{image_path:path}")
@@ -152,7 +156,7 @@ async def get_local_image(group_id: str, image_path: str):
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"获取图片失败: {str(e)}")
+        raise _media_route_error("获取图片失败", e)
 
 
 @router.get("/groups/{group_id}/videos/{video_path:path}")
@@ -173,4 +177,4 @@ async def get_local_video(group_id: str, video_path: str):
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"获取视频失败: {str(e)}")
+        raise _media_route_error("获取视频失败", e)

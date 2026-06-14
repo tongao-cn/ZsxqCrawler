@@ -16142,6 +16142,53 @@ Result:
 - Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because
   `ruff` is not available.
 
+### 2026-06-14 - P5 media route error helper
+
+Changed:
+
+- Added route-level characterization coverage for media route unexpected-error wrappers.
+- Extracted `_media_route_error()` in `backend.routes.media_routes`.
+- Reused the helper from `proxy_image()`, `get_image_cache_info()`,
+  `clear_image_cache()`, `get_local_image()`, and `get_local_video()`.
+- Added direct helper coverage for the 500 status and `"{message}: {str(error)}"` detail
+  format.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- HTTPException pass-through in proxy/local media routes remains unchanged.
+- `clear_image_cache()` still wraps internal failure HTTPException through the generic route
+  wrapper.
+- Existing Chinese error prefixes, `str(error)` formatting, route paths, response/header
+  shapes, cache behavior, local path safety behavior, cookie forwarding behavior, and
+  content-type behavior are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_media_routes_helpers.MediaRoutesHelperTests.test_proxy_image_route_preserves_wrapped_unexpected_error tests.test_media_routes_helpers.MediaRoutesHelperTests.test_get_image_cache_info_route_preserves_wrapped_unexpected_error tests.test_media_routes_helpers.MediaRoutesHelperTests.test_clear_image_cache_route_preserves_wrapped_unexpected_error tests.test_media_routes_helpers.MediaRoutesHelperTests.test_get_local_image_route_preserves_wrapped_unexpected_error tests.test_media_routes_helpers.MediaRoutesHelperTests.test_get_local_video_route_preserves_wrapped_unexpected_error -v
+uv run python -m py_compile backend\routes\media_routes.py tests\test_media_routes_helpers.py
+uv run python -m unittest tests.test_media_routes_helpers.MediaRoutesHelperTests.test_media_route_error_preserves_status_and_detail_format tests.test_media_routes_helpers.MediaRoutesHelperTests.test_proxy_image_route_preserves_wrapped_unexpected_error tests.test_media_routes_helpers.MediaRoutesHelperTests.test_get_image_cache_info_route_preserves_wrapped_unexpected_error tests.test_media_routes_helpers.MediaRoutesHelperTests.test_clear_image_cache_route_preserves_wrapped_unexpected_error tests.test_media_routes_helpers.MediaRoutesHelperTests.test_get_local_image_route_preserves_wrapped_unexpected_error tests.test_media_routes_helpers.MediaRoutesHelperTests.test_get_local_video_route_preserves_wrapped_unexpected_error -v
+uv run python -m unittest tests.test_media_routes_helpers -v
+uv run python -m unittest discover -s tests
+uv run python scripts\scan_postgres_compat_debt.py
+npm --prefix frontend run build
+uv run ruff check backend\routes\media_routes.py tests\test_media_routes_helpers.py --select F401,F841
+```
+
+Result:
+
+- Existing media route unexpected-error characterization tests passed against the original
+  duplicate inline wrappers before extraction: 5 tests.
+- `py_compile` passed.
+- Focused media route error helper tests passed after extraction: 6 tests.
+- Media route helper tests passed: 20 tests.
+- Full backend unittest discovery passed: 1021 tests, 15 skipped.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Frontend build passed, including Next.js lint/type checks.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because
+  `ruff` is not available.
+
 ## Stop Conditions
 
 Pause before editing if:

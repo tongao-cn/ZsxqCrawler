@@ -1,6 +1,7 @@
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 try:
     from fastapi import HTTPException
@@ -13,9 +14,15 @@ try:
         _existing_local_media_path,
         _guess_content_type,
         _is_blocked_proxy_ip,
+        _media_route_error,
         _read_file_bytes,
         _resolve_safe_child_path,
         _validate_proxy_image_url,
+        clear_image_cache,
+        get_image_cache_info,
+        get_local_image,
+        get_local_video,
+        proxy_image,
     )
 
     HAS_MEDIA_ROUTE_DEPS = True
@@ -35,6 +42,12 @@ class MediaRoutesHelperTests(unittest.TestCase):
             file_path.write_bytes(b"\x00media-bytes")
 
             self.assertEqual(b"\x00media-bytes", _read_file_bytes(file_path))
+
+    def test_media_route_error_preserves_status_and_detail_format(self):
+        error = _media_route_error("获取图片失败", RuntimeError("boom"))
+
+        self.assertEqual(500, error.status_code)
+        self.assertEqual("获取图片失败: boom", error.detail)
 
     def test_build_cached_image_response_preserves_cache_headers(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -177,6 +190,56 @@ class MediaRoutesHelperTests(unittest.TestCase):
         self.assertFalse(ok)
         self.assertIsNone(path)
         self.assertIn("图片过大", error)
+
+    def test_proxy_image_route_preserves_wrapped_unexpected_error(self):
+        import asyncio
+
+        with patch("backend.routes.media_routes._validate_proxy_image_url", side_effect=RuntimeError("boom")):
+            with self.assertRaises(HTTPException) as ctx:
+                asyncio.run(proxy_image("https://images.zsxq.com/a.jpg"))
+
+        self.assertEqual(500, ctx.exception.status_code)
+        self.assertEqual("代理图片失败: boom", ctx.exception.detail)
+
+    def test_get_image_cache_info_route_preserves_wrapped_unexpected_error(self):
+        import asyncio
+
+        with patch("backend.routes.media_routes.get_image_cache_manager", side_effect=RuntimeError("boom")):
+            with self.assertRaises(HTTPException) as ctx:
+                asyncio.run(get_image_cache_info("123"))
+
+        self.assertEqual(500, ctx.exception.status_code)
+        self.assertEqual("获取缓存信息失败: boom", ctx.exception.detail)
+
+    def test_clear_image_cache_route_preserves_wrapped_unexpected_error(self):
+        import asyncio
+
+        with patch("backend.routes.media_routes.get_image_cache_manager", side_effect=RuntimeError("boom")):
+            with self.assertRaises(HTTPException) as ctx:
+                asyncio.run(clear_image_cache("123"))
+
+        self.assertEqual(500, ctx.exception.status_code)
+        self.assertEqual("清空缓存失败: boom", ctx.exception.detail)
+
+    def test_get_local_image_route_preserves_wrapped_unexpected_error(self):
+        import asyncio
+
+        with patch("backend.routes.media_routes.get_db_path_manager", side_effect=RuntimeError("boom")):
+            with self.assertRaises(HTTPException) as ctx:
+                asyncio.run(get_local_image("123", "avatar.jpg"))
+
+        self.assertEqual(500, ctx.exception.status_code)
+        self.assertEqual("获取图片失败: boom", ctx.exception.detail)
+
+    def test_get_local_video_route_preserves_wrapped_unexpected_error(self):
+        import asyncio
+
+        with patch("backend.routes.media_routes.get_db_path_manager", side_effect=RuntimeError("boom")):
+            with self.assertRaises(HTTPException) as ctx:
+                asyncio.run(get_local_video("123", "clip.mp4"))
+
+        self.assertEqual(500, ctx.exception.status_code)
+        self.assertEqual("获取视频失败: boom", ctx.exception.detail)
 
 
 if __name__ == "__main__":
