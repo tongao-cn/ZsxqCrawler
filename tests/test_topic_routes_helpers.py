@@ -438,6 +438,48 @@ class TopicRoutesHelperTests(unittest.TestCase):
         self.assertEqual({"called": "_get_topics_by_tag_response", "args": (123, 9, 2, 5)}, tag_topics_result)
         self.assertEqual({"called": "_delete_group_topics_response", "args": (123,)}, delete_group_result)
 
+    @unittest.skipUnless(HAS_TOPIC_ROUTE_DEPS, "topic route dependencies are not installed")
+    def test_operation_helpers_preserve_service_call_shapes(self):
+        from backend.routes import topic_routes
+
+        calls = []
+
+        async def fake_to_thread(func, *args):
+            calls.append((func, args))
+            return {"called": func.__name__, "args": args}
+
+        with patch("backend.routes.topic_routes.asyncio.to_thread", side_effect=fake_to_thread):
+            clear_result = self._run_async(topic_routes._cleared_topic_database("group-1"))
+            refresh_result = self._run_async(topic_routes._refreshed_topic(11, "group-1"))
+            comments_result = self._run_async(topic_routes._more_comments(12, "group-1"))
+            delete_result = self._run_async(topic_routes._deleted_single_topic(13, 123))
+            fetch_single_result = self._run_async(topic_routes._fetched_single_topic("123", 14, False))
+            tags_result = self._run_async(topic_routes._group_tags("123"))
+            tag_topics_result = self._run_async(topic_routes._tagged_topics(123, 9, 2, 5))
+            delete_group_result = self._run_async(topic_routes._deleted_group_topics(123))
+
+        self.assertEqual(
+            [
+                (topic_routes._clear_topic_database_response, ("group-1",)),
+                (topic_routes._refresh_topic_response, (11, "group-1")),
+                (topic_routes._fetch_more_comments_response, (12, "group-1")),
+                (topic_routes._delete_single_topic_response, (13, 123)),
+                (topic_routes._fetch_single_topic_response, ("123", 14, False)),
+                (topic_routes._get_group_tags_response, ("123",)),
+                (topic_routes._get_topics_by_tag_response, (123, 9, 2, 5)),
+                (topic_routes._delete_group_topics_response, (123,)),
+            ],
+            calls,
+        )
+        self.assertEqual({"called": "_clear_topic_database_response", "args": ("group-1",)}, clear_result)
+        self.assertEqual({"called": "_refresh_topic_response", "args": (11, "group-1")}, refresh_result)
+        self.assertEqual({"called": "_fetch_more_comments_response", "args": (12, "group-1")}, comments_result)
+        self.assertEqual({"called": "_delete_single_topic_response", "args": (13, 123)}, delete_result)
+        self.assertEqual({"called": "_fetch_single_topic_response", "args": ("123", 14, False)}, fetch_single_result)
+        self.assertEqual({"called": "_get_group_tags_response", "args": ("123",)}, tags_result)
+        self.assertEqual({"called": "_get_topics_by_tag_response", "args": (123, 9, 2, 5)}, tag_topics_result)
+        self.assertEqual({"called": "_delete_group_topics_response", "args": (123,)}, delete_group_result)
+
 
 if __name__ == "__main__":
     unittest.main()

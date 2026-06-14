@@ -522,6 +522,38 @@ async def _topic_detail(topic_id: int, group_id: str) -> dict:
     return await asyncio.to_thread(_get_topic_detail_response, topic_id, group_id)
 
 
+async def _cleared_topic_database(group_id: str) -> dict:
+    return await asyncio.to_thread(_clear_topic_database_response, group_id)
+
+
+async def _refreshed_topic(topic_id: int, group_id: str) -> dict:
+    return await asyncio.to_thread(_refresh_topic_response, topic_id, group_id)
+
+
+async def _more_comments(topic_id: int, group_id: str) -> dict:
+    return await asyncio.to_thread(_fetch_more_comments_response, topic_id, group_id)
+
+
+async def _deleted_single_topic(topic_id: int, group_id: int) -> dict:
+    return await asyncio.to_thread(_delete_single_topic_response, topic_id, group_id)
+
+
+async def _fetched_single_topic(group_id: str, topic_id: int, fetch_comments: bool) -> dict:
+    return await asyncio.to_thread(_fetch_single_topic_response, group_id, topic_id, fetch_comments)
+
+
+async def _group_tags(group_id: str) -> dict:
+    return await asyncio.to_thread(_get_group_tags_response, group_id)
+
+
+async def _tagged_topics(group_id: int, tag_id: int, page: int, per_page: int) -> dict:
+    return await asyncio.to_thread(_get_topics_by_tag_response, group_id, tag_id, page, per_page)
+
+
+async def _deleted_group_topics(group_id: int) -> dict:
+    return await asyncio.to_thread(_delete_group_topics_response, group_id)
+
+
 @router.get("/topics")
 async def get_topics(page: int = 1, per_page: int = 20, search: Optional[str] = None):
     """获取话题列表"""
@@ -548,7 +580,7 @@ async def get_group_topics(group_id: int, page: int = 1, per_page: int = 20, sea
 async def clear_topic_database(group_id: str):
     """删除指定群组的 PostgreSQL 话题数据"""
     try:
-        return await asyncio.to_thread(_clear_topic_database_response, group_id)
+        return await _cleared_topic_database(group_id)
     except HTTPException:
         raise
     except Exception as e:
@@ -571,7 +603,7 @@ async def get_topic_detail(topic_id: int, group_id: str):
 async def refresh_topic(topic_id: int, group_id: str):
     """实时更新单个话题信息"""
     try:
-        return await asyncio.to_thread(_refresh_topic_response, topic_id, group_id)
+        return await _refreshed_topic(topic_id, group_id)
     except HTTPException:
         raise
     except Exception as e:
@@ -582,7 +614,7 @@ async def refresh_topic(topic_id: int, group_id: str):
 async def fetch_more_comments(topic_id: int, group_id: str):
     """手动获取话题的更多评论（在已存在本地话题记录的前提下）"""
     try:
-        return await asyncio.to_thread(_fetch_more_comments_response, topic_id, group_id)
+        return await _more_comments(topic_id, group_id)
     except HTTPException:
         raise
     except Exception as e:
@@ -593,7 +625,7 @@ async def fetch_more_comments(topic_id: int, group_id: str):
 async def delete_single_topic(topic_id: int, group_id: int):
     """删除单个话题及其所有关联数据"""
     try:
-        return await asyncio.to_thread(_delete_single_topic_response, topic_id, group_id)
+        return await _deleted_single_topic(topic_id, group_id)
     except HTTPException:
         raise
     except Exception as e:
@@ -604,7 +636,7 @@ async def delete_single_topic(topic_id: int, group_id: int):
 async def fetch_single_topic(group_id: str, topic_id: int, fetch_comments: bool = True):
     """爬取并导入单个话题（用于特殊话题测试），可选拉取完整评论"""
     try:
-        return await asyncio.to_thread(_fetch_single_topic_response, group_id, topic_id, fetch_comments)
+        return await _fetched_single_topic(group_id, topic_id, fetch_comments)
     except HTTPException:
         raise
     except Exception as e:
@@ -615,7 +647,7 @@ async def fetch_single_topic(group_id: str, topic_id: int, fetch_comments: bool 
 async def get_group_tags(group_id: str):
     """获取指定群组的所有标签"""
     try:
-        return await asyncio.to_thread(_get_group_tags_response, group_id)
+        return await _group_tags(group_id)
     except HTTPException:
         raise
     except Exception as e:
@@ -626,7 +658,7 @@ async def get_group_tags(group_id: str):
 async def get_topics_by_tag(group_id: int, tag_id: int, page: int = 1, per_page: int = 20):
     """根据标签获取指定群组的话题列表"""
     try:
-        return await asyncio.to_thread(_get_topics_by_tag_response, group_id, tag_id, page, per_page)
+        return await _tagged_topics(group_id, tag_id, page, per_page)
     except HTTPException:
         raise
     except Exception as e:
@@ -637,7 +669,7 @@ async def get_topics_by_tag(group_id: int, tag_id: int, page: int = 1, per_page:
 async def delete_group_topics(group_id: int):
     """删除指定群组的所有话题数据"""
     try:
-        return await asyncio.to_thread(_delete_group_topics_response, group_id)
+        return await _deleted_group_topics(group_id)
     except HTTPException:
         raise
     except Exception as e:
