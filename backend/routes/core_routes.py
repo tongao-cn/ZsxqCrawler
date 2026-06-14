@@ -44,6 +44,10 @@ def _masked_config_cookie(cookie: str) -> str:
     return "***" if cookie and cookie != "your_cookie_here" else "未配置"
 
 
+def _core_route_error(message: str, error: Exception) -> HTTPException:
+    return HTTPException(status_code=500, detail=f"{message}: {str(error)}")
+
+
 class ConfigModel(BaseModel):
     cookie: str = Field(..., description="知识星球Cookie")
 
@@ -79,7 +83,7 @@ async def get_config():
             "download": config.get("download", {}) if config else {},
         }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"获取配置失败: {str(e)}")
+        raise _core_route_error("获取配置失败", e)
 
 
 @router.post("/api/config")
@@ -122,7 +126,7 @@ api_key = ""
 
         return {"message": "配置更新成功", "success": True}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"更新配置失败: {str(e)}")
+        raise _core_route_error("更新配置失败", e)
 
 
 @router.get("/api/database/stats")
@@ -151,4 +155,4 @@ async def get_database_stats():
             },
         }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"获取数据库统计失败: {str(e)}")
+        raise _core_route_error("获取数据库统计失败", e)

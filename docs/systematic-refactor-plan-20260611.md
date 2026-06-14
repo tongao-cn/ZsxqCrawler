@@ -16096,6 +16096,52 @@ Result:
 - Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because
   `ruff` is not available.
 
+### 2026-06-14 - P5 core route error helper
+
+Changed:
+
+- Added route-level characterization coverage for the core route unexpected-error wrappers.
+- Extracted `_core_route_error()` in `backend.routes.core_routes`.
+- Reused the helper from `get_config()`, `update_config()`, and `get_database_stats()` so
+  each route keeps only its action-specific message prefix.
+- Added direct helper coverage for the 500 status and `"{message}: {str(error)}"` detail
+  format.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- `get_config()`, `update_config()`, and `get_database_stats()` still map unexpected
+  exceptions to route-level `HTTPException(status_code=500)`.
+- Existing Chinese error prefixes, `str(error)` formatting, route paths, response payload
+  shapes, config file write behavior, crawler clearing side effect, database stats lookup
+  behavior, and config semantics are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_core_routes_helpers.CoreRoutesHelperTests.test_get_config_route_preserves_wrapped_unexpected_error tests.test_core_routes_helpers.CoreRoutesHelperTests.test_update_config_route_preserves_wrapped_unexpected_error tests.test_core_routes_helpers.CoreRoutesHelperTests.test_get_database_stats_route_preserves_wrapped_unexpected_error -v
+uv run python -m py_compile backend\routes\core_routes.py tests\test_core_routes_helpers.py
+uv run python -m unittest tests.test_core_routes_helpers.CoreRoutesHelperTests.test_core_route_error_preserves_status_and_detail_format tests.test_core_routes_helpers.CoreRoutesHelperTests.test_get_config_route_preserves_wrapped_unexpected_error tests.test_core_routes_helpers.CoreRoutesHelperTests.test_update_config_route_preserves_wrapped_unexpected_error tests.test_core_routes_helpers.CoreRoutesHelperTests.test_get_database_stats_route_preserves_wrapped_unexpected_error -v
+uv run python -m unittest tests.test_core_routes_helpers -v
+uv run python -m unittest discover -s tests
+uv run python scripts\scan_postgres_compat_debt.py
+npm --prefix frontend run build
+uv run ruff check backend\routes\core_routes.py tests\test_core_routes_helpers.py --select F401,F841
+```
+
+Result:
+
+- Existing core route unexpected-error characterization tests passed against the original
+  duplicate inline wrappers before extraction: 3 tests.
+- `py_compile` passed.
+- Focused core route error helper tests passed after extraction: 4 tests.
+- Core route helper tests passed: 6 tests.
+- Full backend unittest discovery passed: 1015 tests, 15 skipped.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Frontend build passed, including Next.js lint/type checks.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because
+  `ruff` is not available.
+
 ## Stop Conditions
 
 Pause before editing if:

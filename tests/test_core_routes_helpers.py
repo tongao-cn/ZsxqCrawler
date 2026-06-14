@@ -1,5 +1,6 @@
 import unittest
 from importlib.util import find_spec
+from unittest.mock import patch
 
 
 HAS_CORE_ROUTE_DEPS = find_spec("fastapi") is not None and find_spec("pydantic") is not None
@@ -37,6 +38,60 @@ class CoreRoutesHelperTests(unittest.TestCase):
         self.assertEqual("未配置", _masked_config_cookie(""))
         self.assertEqual("未配置", _masked_config_cookie("your_cookie_here"))
         self.assertEqual("***", _masked_config_cookie("zsxq_access_token=secret"))
+
+    @unittest.skipUnless(HAS_CORE_ROUTE_DEPS, "core route dependencies are not installed")
+    def test_core_route_error_preserves_status_and_detail_format(self):
+        from backend.routes.core_routes import _core_route_error
+
+        error = _core_route_error("获取配置失败", RuntimeError("boom"))
+
+        self.assertEqual(error.status_code, 500)
+        self.assertEqual(error.detail, "获取配置失败: boom")
+
+    @unittest.skipUnless(HAS_CORE_ROUTE_DEPS, "core route dependencies are not installed")
+    def test_get_config_route_preserves_wrapped_unexpected_error(self):
+        import asyncio
+
+        from fastapi import HTTPException
+
+        from backend.routes.core_routes import get_config
+
+        with patch("backend.routes.core_routes.load_config", side_effect=RuntimeError("boom")):
+            with self.assertRaises(HTTPException) as caught:
+                asyncio.run(get_config())
+
+        self.assertEqual(caught.exception.status_code, 500)
+        self.assertEqual(caught.exception.detail, "获取配置失败: boom")
+
+    @unittest.skipUnless(HAS_CORE_ROUTE_DEPS, "core route dependencies are not installed")
+    def test_update_config_route_preserves_wrapped_unexpected_error(self):
+        import asyncio
+
+        from fastapi import HTTPException
+
+        from backend.routes.core_routes import ConfigModel, update_config
+
+        with patch("backend.routes.core_routes.load_config", side_effect=RuntimeError("boom")):
+            with self.assertRaises(HTTPException) as caught:
+                asyncio.run(update_config(ConfigModel(cookie="zsxq_access_token=secret")))
+
+        self.assertEqual(caught.exception.status_code, 500)
+        self.assertEqual(caught.exception.detail, "更新配置失败: boom")
+
+    @unittest.skipUnless(HAS_CORE_ROUTE_DEPS, "core route dependencies are not installed")
+    def test_get_database_stats_route_preserves_wrapped_unexpected_error(self):
+        import asyncio
+
+        from fastapi import HTTPException
+
+        from backend.routes.core_routes import get_database_stats
+
+        with patch("backend.routes.core_routes.is_configured", side_effect=RuntimeError("boom")):
+            with self.assertRaises(HTTPException) as caught:
+                asyncio.run(get_database_stats())
+
+        self.assertEqual(caught.exception.status_code, 500)
+        self.assertEqual(caught.exception.detail, "获取数据库统计失败: boom")
 
 
 if __name__ == "__main__":
