@@ -483,6 +483,17 @@ class ZSXQColumnsDatabase:
     def _fetch_group_topic_ids(self, group_id: int) -> List[Any]:
         sql, params = _group_topic_ids_query(group_id)
         return [row[0] for row in self._fetch_optional_params_rows(sql, params)]
+
+    def _apply_clear_delete_statements(
+        self,
+        stats: Dict[str, int],
+        statements: Any,
+        params: Any,
+    ):
+        for stat_key, sql in statements:
+            self._execute_statement(sql, params)
+            if stat_key:
+                stats[stat_key] = self.cursor.rowcount
     
     # ==================== 数据清理 ====================
     
@@ -495,16 +506,13 @@ class ZSXQColumnsDatabase:
             
             if topic_ids:
                 placeholders = ','.join('?' * len(topic_ids))
-                
-                for stat_key, sql in _topic_child_delete_statements(placeholders):
-                    self.cursor.execute(sql, topic_ids)
-                    if stat_key:
-                        stats[stat_key] = self.cursor.rowcount
-            
-            for stat_key, sql in _group_clear_delete_statements():
-                self.cursor.execute(sql, (group_id,))
-                if stat_key:
-                    stats[stat_key] = self.cursor.rowcount
+                self._apply_clear_delete_statements(
+                    stats,
+                    _topic_child_delete_statements(placeholders),
+                    topic_ids,
+                )
+
+            self._apply_clear_delete_statements(stats, _group_clear_delete_statements(), (group_id,))
             
             self.conn.commit()
             print(f"✅ 清空专栏数据完成: {stats}")

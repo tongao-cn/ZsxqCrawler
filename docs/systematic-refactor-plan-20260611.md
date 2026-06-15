@@ -21002,6 +21002,53 @@ Result:
 - Full backend unittest discovery passed: 1134 tests, 15 skipped.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-15 - P3 clear delete statement helper extraction
+
+Changed:
+
+- Extracted `_apply_clear_delete_statements(...)` in `ZSXQColumnsDatabase` for applying a sequence
+  of delete statements and copying rowcounts into the clear-data stats payload.
+- Reused the helper from both topic-child deletion and group-level deletion inside
+  `clear_all_data(...)`.
+- Confirmed existing characterization coverage for clear-data topic id loading, delete SQL order,
+  topic-id list params, group-id params, rowcount-to-stat mapping, commit, and rollback absence
+  before production extraction.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- `clear_all_data(...)` still loads topic ids first, skips topic-child deletes when none are found,
+  uses the same placeholders, executes deletes in the same order, records the same rowcount stats,
+  commits once after all deletes, prints the same success message, and preserves rollback/re-raise on
+  exceptions.
+- Public API, fallback behavior, legacy behavior, error semantics, SQL shape, params, storage
+  schema, and config semantics are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_columns_database_helpers.ZSXQColumnsDatabaseHelperTests.test_clear_all_data_preserves_delete_order_stats_and_commit -v
+uv run python -m py_compile backend\storage\zsxq_columns_database.py tests\test_zsxq_columns_database_helpers.py
+uv run python -m unittest tests.test_zsxq_columns_database_helpers.ZSXQColumnsDatabaseHelperTests.test_clear_all_data_preserves_delete_order_stats_and_commit -v
+uv run python -m unittest tests.test_zsxq_columns_database_helpers -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run ruff check backend\storage\zsxq_columns_database.py tests\test_zsxq_columns_database_helpers.py --select F401,F841
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- Existing clear-data characterization coverage passed before production extraction: 1 focused test.
+- `py_compile` passed.
+- Focused clear-data test passed after extraction: 1 test.
+- ZSXQ columns database helper tests passed: 79 tests.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- Full backend unittest discovery passed: 1134 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:
