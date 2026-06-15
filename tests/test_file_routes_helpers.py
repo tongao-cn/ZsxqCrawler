@@ -6,6 +6,7 @@ from backend.services.file_workflow_service import (
     _build_check_local_file_status_response,
     _build_download_file_info,
     _build_download_task_stats,
+    _build_file_analysis_stats,
     _build_file_status_response,
     _build_sync_files_response,
     _close_crawler_file_databases,
@@ -20,6 +21,7 @@ from backend.services.file_workflow_service import (
     _query_group_id,
     _resolve_download_record_status,
     _run_download_records,
+    _run_file_analysis_items,
     _unique_int_file_ids,
 )
 
@@ -838,6 +840,67 @@ class FileRoutesHelperTests(unittest.TestCase):
             "failed",
             "文件分析全部失败",
             {"analysis": {"total_files": 1, "completed": 0, "cached": 0, "failed": 1}},
+        )
+
+    def test_run_file_analysis_items_updates_stats_logs_and_continues_after_failure(self):
+        def analyze_side_effect(group_id, file_id, force):
+            if file_id == 3:
+                raise RuntimeError("boom")
+            return {"cached": file_id == 2}
+
+        stats = _build_file_analysis_stats(total_files=3)
+
+        with (
+            patch("backend.services.file_workflow_service.is_task_stopped", return_value=False),
+            patch("backend.services.file_workflow_service.add_task_log") as add_task_log,
+            patch(
+                "backend.services.file_workflow_service._analyze_group_file_with_defaults",
+                side_effect=analyze_side_effect,
+            ) as analyze,
+        ):
+            result = _run_file_analysis_items("task-1", "group-1", [1, 2, 3], stats, force=True)
+
+        self.assertTrue(result)
+        self.assertEqual(
+            [("group-1", 1, True), ("group-1", 2, True), ("group-1", 3, True)],
+            [call.args for call in analyze.call_args_list],
+        )
+        self.assertEqual({"total_files": 3, "completed": 1, "cached": 1, "failed": 1}, stats)
+        self.assertEqual(
+            [
+                ("task-1", "【1/3】分析文件 ID: 1"),
+                ("task-1", "✅ 文件分析完成: 1"),
+                ("task-1", "【2/3】分析文件 ID: 2"),
+                ("task-1", "✅ 文件分析完成: 2"),
+                ("task-1", "【3/3】分析文件 ID: 3"),
+                ("task-1", "❌ 文件分析失败: 3, boom"),
+            ],
+            [call.args for call in add_task_log.call_args_list],
+        )
+
+    def test_run_file_analysis_items_stops_before_next_file_without_completion_log(self):
+        stats = _build_file_analysis_stats(total_files=2)
+
+        with (
+            patch("backend.services.file_workflow_service.is_task_stopped", side_effect=[False, True]),
+            patch("backend.services.file_workflow_service.add_task_log") as add_task_log,
+            patch(
+                "backend.services.file_workflow_service._analyze_group_file_with_defaults",
+                return_value={"cached": False},
+            ) as analyze,
+        ):
+            result = _run_file_analysis_items("task-1", "group-1", [1, 2], stats, force=False)
+
+        self.assertFalse(result)
+        self.assertEqual([("group-1", 1, False)], [call.args for call in analyze.call_args_list])
+        self.assertEqual({"total_files": 2, "completed": 1, "cached": 0, "failed": 0}, stats)
+        self.assertEqual(
+            [
+                ("task-1", "【1/2】分析文件 ID: 1"),
+                ("task-1", "✅ 文件分析完成: 1"),
+                ("task-1", "🛑 文件分析任务被停止"),
+            ],
+            [call.args for call in add_task_log.call_args_list],
         )
 
     def test_enqueue_file_task_rejects_ingestion_conflict(self):
