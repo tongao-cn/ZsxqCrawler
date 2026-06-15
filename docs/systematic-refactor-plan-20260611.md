@@ -19723,6 +19723,51 @@ Result:
 - Full backend unittest discovery passed: 1119 tests, 15 skipped.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-15 - P2 topic comment image import helper extraction
+
+Changed:
+
+- Re-ran existing characterization coverage for topic comment import order, additional comment
+  user/comment/image order, comment image payload filtering, and existing comment image batch access
+  semantics before production changes.
+- Extracted `_upsert_comment_with_images(...)` in `backend/storage/zsxq_database.py` so regular
+  topic comment import and additional comment import share the same comment-then-image write path.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Regular topic comment import still upserts each comment before importing its images.
+- Additional comment import still upserts owner/repliee users before the comment and still keeps
+  empty-list print behavior unchanged.
+- Missing `comment_id` image-batch access semantics, invalid-image filtering, SQL builders,
+  timestamp generation, commit timing, rollback behavior, storage schema, public API, legacy paths,
+  fallback behavior, error semantics, and config semantics are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_import_comments_preserves_upsert_and_image_import_order tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_import_additional_comments_preserves_user_comment_image_order tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_image_writes_preserve_skip_paths_and_distinct_numeric_defaults tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_comment_image_batch_from_comment_preserves_existing_access_semantics tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_iter_additional_comment_user_payloads_preserves_truthy_owner_repliee_order -v
+uv run python -m py_compile backend\storage\zsxq_database.py tests\test_zsxq_database_helpers.py
+uv run python -m unittest tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_import_comments_preserves_upsert_and_image_import_order tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_import_additional_comments_preserves_user_comment_image_order tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_image_writes_preserve_skip_paths_and_distinct_numeric_defaults tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_comment_image_batch_from_comment_preserves_existing_access_semantics tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_iter_additional_comment_user_payloads_preserves_truthy_owner_repliee_order -v
+uv run python -m unittest tests.test_zsxq_database_helpers -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run ruff check backend\storage\zsxq_database.py tests\test_zsxq_database_helpers.py --select F401,F841
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- Existing topic comment import characterization tests passed before extraction: 5 focused tests.
+- `py_compile` passed.
+- Focused topic comment import tests passed after extraction: 5 tests.
+- ZSXQ database helper tests passed: 84 tests.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- Full backend unittest discovery passed: 1119 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:

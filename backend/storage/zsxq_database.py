@@ -716,12 +716,7 @@ class ZSXQDatabase:
     def _import_comments(self, topic_id: int, comments: List[Dict[str, Any]]):
         """导入评论信息"""
         for comment in comments:
-            self._upsert_comment(topic_id, comment)
-            # 导入评论的图片
-            image_batch = _comment_image_batch_from_comment(comment)
-            if image_batch:
-                comment_id, images = image_batch
-                self._import_comment_images(topic_id, comment_id, images)
+            self._upsert_comment_with_images(topic_id, comment)
 
     def import_additional_comments(self, topic_id: int, comments: List[Dict[str, Any]]):
         """导入额外获取的评论信息（来自评论API）"""
@@ -734,16 +729,16 @@ class ZSXQDatabase:
             for user_data in _iter_additional_comment_user_payloads(comment):
                 self._upsert_user(user_data)
 
-            # 导入评论
-            self._upsert_comment(topic_id, comment)
-
-            # 导入评论的图片
-            image_batch = _comment_image_batch_from_comment(comment)
-            if image_batch:
-                comment_id, images = image_batch
-                self._import_comment_images(topic_id, comment_id, images)
+            self._upsert_comment_with_images(topic_id, comment)
 
         print(f"✅ 完成导入 {len(comments)} 条评论")
+
+    def _upsert_comment_with_images(self, topic_id: int, comment_data: Dict[str, Any]):
+        self._upsert_comment(topic_id, comment_data)
+        image_batch = _comment_image_batch_from_comment(comment_data)
+        if image_batch:
+            comment_id, images = image_batch
+            self._import_comment_images(topic_id, comment_id, images)
 
     def _upsert_comment(self, topic_id: int, comment_data: Dict[str, Any]):
         """插入或更新评论信息"""
