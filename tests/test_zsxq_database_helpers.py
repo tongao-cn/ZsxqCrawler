@@ -1935,6 +1935,7 @@ class ZSXQDatabaseHelperTests(unittest.TestCase):
         db.group_id = "303"
         events = []
 
+        db._upsert_group = lambda group: events.append(("group", group))
         db._import_all_users = lambda topic: events.append(("users", topic))
         db._upsert_topic = lambda topic: events.append(("topic", topic.get("topic_id")))
         db._upsert_talk = lambda topic_id, talk: events.append(("talk", topic_id, talk))
@@ -1952,8 +1953,10 @@ class ZSXQDatabaseHelperTests(unittest.TestCase):
 
         files = [{"file_id": 501}]
         comments = [{"comment_id": 301}]
+        group = {"group_id": 303}
         topic_data = {
             "topic_id": 202,
+            "group": group,
             "talk": {"owner": {"user_id": 901}, "files": files},
             "show_comments": comments,
             "question": {"text": "question"},
@@ -1964,6 +1967,7 @@ class ZSXQDatabaseHelperTests(unittest.TestCase):
 
         self.assertEqual(
             [
+                ("group", group),
                 ("users", topic_data),
                 ("topic", 202),
                 ("talk", 202, topic_data["talk"]),

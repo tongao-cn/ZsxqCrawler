@@ -436,53 +436,7 @@ class ZSXQDatabase:
                 return True
             
 
-            
-            # 导入群组信息
-            if group_info:
-                self._upsert_group(group_info)
-            
-            # 导入话题相关的所有用户信息
-            self._import_all_users(topic_data)
-            
-            # 导入话题信息
-            self._upsert_topic(topic_data)
-            
-            # 导入话题内容(talk)
-            if 'talk' in topic_data and topic_data['talk']:
-                self._upsert_talk(topic_id, topic_data['talk'])
-            
-            # 导入文章信息（如果话题类型是文章）
-            self._import_articles(topic_id, topic_data)
-            
-            # 导入图片信息
-            self._import_images(topic_id, topic_data)
-            
-            # 导入点赞信息
-            self._import_likes(topic_id, topic_data)
-            
-            # 导入表情点赞信息
-            self._import_like_emojis(topic_id, topic_data)
-            
-            # 导入用户表情点赞信息
-            self._import_user_liked_emojis(topic_id, topic_data)
-            
-            # 导入评论信息
-            if 'show_comments' in topic_data:
-                self._import_comments(topic_id, topic_data['show_comments'])
-            
-            # 导入问题信息
-            if 'question' in topic_data and topic_data['question']:
-                self._upsert_question(topic_id, topic_data['question'])
-            
-            # 导入回答信息
-            if 'answer' in topic_data and topic_data['answer']:
-                self._upsert_answer(topic_id, topic_data['answer'])
-            
-            # 导入标签信息
-            self._import_tags(topic_id, topic_data)
-
-            # 导入文件信息
-            self._import_new_topic_talk_files(topic_id, topic_data)
+            self._import_new_topic_payloads(topic_id, topic_data, group_info)
 
             return True
             
@@ -516,6 +470,39 @@ class ZSXQDatabase:
             return
 
         self._execute_timestamped_statement(_topic_insert_statement, topic_data)
+
+    def _import_new_topic_payloads(
+        self,
+        topic_id: int,
+        topic_data: Dict[str, Any],
+        group_info: Dict[str, Any],
+    ):
+        if group_info:
+            self._upsert_group(group_info)
+
+        self._import_all_users(topic_data)
+        self._upsert_topic(topic_data)
+
+        if 'talk' in topic_data and topic_data['talk']:
+            self._upsert_talk(topic_id, topic_data['talk'])
+
+        self._import_articles(topic_id, topic_data)
+        self._import_images(topic_id, topic_data)
+        self._import_likes(topic_id, topic_data)
+        self._import_like_emojis(topic_id, topic_data)
+        self._import_user_liked_emojis(topic_id, topic_data)
+
+        if 'show_comments' in topic_data:
+            self._import_comments(topic_id, topic_data['show_comments'])
+
+        if 'question' in topic_data and topic_data['question']:
+            self._upsert_question(topic_id, topic_data['question'])
+
+        if 'answer' in topic_data and topic_data['answer']:
+            self._upsert_answer(topic_id, topic_data['answer'])
+
+        self._import_tags(topic_id, topic_data)
+        self._import_new_topic_talk_files(topic_id, topic_data)
 
     def _sync_existing_topic_talk_files(self, topic_data: Dict[str, Any]):
         has_talk_files, talk_files = _topic_talk_files_from_data(topic_data)
