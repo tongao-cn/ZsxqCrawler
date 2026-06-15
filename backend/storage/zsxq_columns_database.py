@@ -366,11 +366,10 @@ class ZSXQColumnsDatabase:
         """获取文章的所有评论（支持嵌套结构）"""
         scope_group_id = self._scope_group_id_param(group_id)
         sql, params = _topic_comments_query(topic_id, scope_group_id)
-        self.cursor.execute(sql, params)
 
         comments = []
 
-        for row in self.cursor.fetchall():
+        for row in self._fetch_optional_params_rows(sql, params):
             comment_id = row[0]
             images = self._load_topic_comment_images(comment_id, scope_group_id, topic_id)
             comments.append(_topic_comment_row_with_images(row, images))

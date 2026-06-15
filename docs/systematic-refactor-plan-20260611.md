@@ -19596,6 +19596,48 @@ Result:
 - Full backend unittest discovery passed: 1118 tests, 15 skipped.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-15 - P3 topic comments fetch helper reuse
+
+Changed:
+
+- Re-ran existing characterization coverage for topic comment query SQL/scope params, nested
+  comment payload shape, and comment image loader queries before production changes.
+- Reused `_fetch_optional_params_rows(...)` for the main `get_topic_comments(...)` comment query.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- The main topic-comments query still uses the same SQL and scope params.
+- Comment image loader call order, image query params, nested comment shape, and omission of empty
+  child image fields are unchanged.
+- No storage schema, public API, legacy path, fallback behavior, error semantics, or config
+  semantics changed.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_columns_database_helpers.ZSXQColumnsDatabaseHelperTests.test_topic_comments_preserve_comment_image_queries_and_nested_shape tests.test_zsxq_columns_database_helpers.ZSXQColumnsDatabaseHelperTests.test_topic_comments_query_preserves_scope_params_joins_and_order tests.test_zsxq_columns_database_helpers.ZSXQColumnsDatabaseHelperTests.test_load_topic_comment_images_preserves_query_params_and_shape -v
+uv run python -m py_compile backend\storage\zsxq_columns_database.py tests\test_zsxq_columns_database_helpers.py
+uv run python -m unittest tests.test_zsxq_columns_database_helpers.ZSXQColumnsDatabaseHelperTests.test_topic_comments_preserve_comment_image_queries_and_nested_shape tests.test_zsxq_columns_database_helpers.ZSXQColumnsDatabaseHelperTests.test_topic_comments_query_preserves_scope_params_joins_and_order tests.test_zsxq_columns_database_helpers.ZSXQColumnsDatabaseHelperTests.test_load_topic_comment_images_preserves_query_params_and_shape tests.test_zsxq_columns_database_helpers.ZSXQColumnsDatabaseHelperTests.test_fetch_mapped_rows_preserves_optional_params_execute_arity -v
+uv run python -m unittest tests.test_zsxq_columns_database_helpers -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run ruff check backend\storage\zsxq_columns_database.py tests\test_zsxq_columns_database_helpers.py --select F401,F841
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- Existing topic-comments characterization tests passed before extraction: 3 focused tests.
+- `py_compile` passed.
+- Focused topic-comments/fetch helper tests passed after extraction: 4 tests.
+- ZSXQ columns database helper tests passed: 78 tests.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- Full backend unittest discovery passed: 1118 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:
