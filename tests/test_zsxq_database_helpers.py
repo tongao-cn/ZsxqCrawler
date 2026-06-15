@@ -1864,6 +1864,43 @@ class ZSXQDatabaseHelperTests(unittest.TestCase):
         self.assertEqual(0, db.conn.commits)
         self.assertEqual(0, db.conn.rollbacks)
 
+    def test_import_topic_data_existing_topic_preserves_talk_files_key_semantics(self):
+        from backend.storage.zsxq_database import ZSXQDatabase
+
+        present_cursor = FakeCursor()
+        present_cursor.row = (1,)
+        present_db = object.__new__(ZSXQDatabase)
+        present_db.cursor = present_cursor
+        present_db.conn = FakeConnection()
+        present_db.group_id = "303"
+        present_synced = []
+        present_db._sync_topic_files_to_core_tables = (
+            lambda topic, files: present_synced.append((topic, files))
+        )
+
+        present_topic_data = {"topic_id": 202, "talk": {"files": None}}
+        with patch("builtins.print"):
+            self.assertTrue(ZSXQDatabase.import_topic_data(present_db, present_topic_data))
+
+        self.assertEqual([(present_topic_data, None)], present_synced)
+
+        missing_cursor = FakeCursor()
+        missing_cursor.row = (1,)
+        missing_db = object.__new__(ZSXQDatabase)
+        missing_db.cursor = missing_cursor
+        missing_db.conn = FakeConnection()
+        missing_db.group_id = "303"
+        missing_synced = []
+        missing_db._sync_topic_files_to_core_tables = (
+            lambda topic, files: missing_synced.append((topic, files))
+        )
+
+        missing_topic_data = {"topic_id": 203, "talk": {}}
+        with patch("builtins.print"):
+            self.assertTrue(ZSXQDatabase.import_topic_data(missing_db, missing_topic_data))
+
+        self.assertEqual([], missing_synced)
+
     def test_upsert_group_and_user_preserve_skip_and_insert_params(self):
         from backend.storage.zsxq_database import ZSXQDatabase
 

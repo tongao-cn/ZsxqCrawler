@@ -19098,6 +19098,52 @@ Result:
 - Full backend unittest discovery passed: 1111 tests, 15 skipped.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-15 - P2 topic talk files presence helper
+
+Changed:
+
+- Added characterization coverage for the existing `import_topic_data()` `talk.files` presence
+  semantics on the existing-topic skip path.
+- Added `topic_talk_files_from_data()` to `backend/storage/zsxq_database_helpers.py`, with a
+  compatibility wrapper in `backend/storage/zsxq_database.py`.
+- Reused the helper at the two original `talk.files` decision points in `import_topic_data()`.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Existing-topic imports still query topic existence first, then sync core file tables when
+  `talk.files` is present, print the same skip message, and return `True`.
+- New-topic imports still defer the `talk.files` check until after tags are imported, then call
+  `_import_files()` and `_sync_topic_files_to_core_tables()` with the same original value.
+- The legacy edge where `talk.files` exists but is `None` is preserved: the downstream method is
+  still called with `None` and performs its existing early return.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_import_topic_data_existing_topic_preserves_talk_files_key_semantics -v
+uv run python -m py_compile backend\storage\zsxq_database.py backend\storage\zsxq_database_helpers.py tests\test_zsxq_database_helpers.py
+uv run python -m unittest tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_import_topic_data_existing_topic_preserves_skip_and_file_sync tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_import_topic_data_existing_topic_preserves_talk_files_key_semantics tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_import_files_preserves_skip_defaults_and_timestamp -v
+uv run python -m unittest tests.test_zsxq_database_helpers -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run ruff check backend\storage\zsxq_database.py backend\storage\zsxq_database_helpers.py tests\test_zsxq_database_helpers.py --select F401,F841
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- New `talk.files` presence characterization test passed against the original inline condition:
+  1 focused test.
+- `py_compile` passed.
+- Focused existing-topic skip and file-import tests passed after extraction: 3 tests.
+- ZSXQ database helper tests passed: 83 tests.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- Full backend unittest discovery passed: 1112 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:

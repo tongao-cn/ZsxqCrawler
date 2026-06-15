@@ -966,6 +966,13 @@ def topic_file_group_payload_from_row(row) -> Optional[Dict[str, Any]]:
     }
 
 
+def topic_talk_files_from_data(topic_data: Dict[str, Any]) -> tuple[bool, Any]:
+    talk_data = topic_data.get("talk")
+    if talk_data and "files" in talk_data:
+        return True, talk_data["files"]
+    return False, None
+
+
 def topic_detail_image_payload(row, *, offset: int = 0) -> Dict[str, Any]:
     return {
         "image_id": row[offset],

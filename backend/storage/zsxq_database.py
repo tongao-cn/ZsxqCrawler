@@ -59,6 +59,7 @@ from backend.storage.zsxq_database_helpers import (
     topic_image_payloads_from_data,
     topic_insert_statement,
     topic_stats_update_statement,
+    topic_talk_files_from_data,
     topics_by_tag_query,
     topic_tags_from_data,
     update_tag_hid_statement,
@@ -396,6 +397,10 @@ def _topic_file_group_payload_from_row(row) -> Optional[Dict[str, Any]]:
     return topic_file_group_payload_from_row(row)
 
 
+def _topic_talk_files_from_data(topic_data: Dict[str, Any]) -> tuple[bool, Any]:
+    return topic_talk_files_from_data(topic_data)
+
+
 class ZSXQDatabase:
     """知识星球数据库管理器"""
     
@@ -423,8 +428,9 @@ class ZSXQDatabase:
             sql, params = _topic_exists_query(topic_id, self.group_id)
             self.cursor.execute(sql, params)
             if self.cursor.fetchone():
-                if 'talk' in topic_data and topic_data['talk'] and 'files' in topic_data['talk']:
-                    self._sync_topic_files_to_core_tables(topic_data, topic_data['talk']['files'])
+                has_talk_files, talk_files = _topic_talk_files_from_data(topic_data)
+                if has_talk_files:
+                    self._sync_topic_files_to_core_tables(topic_data, talk_files)
                 print(f"话题 {topic_id} 已存在，跳过导入")
                 return True
             
@@ -475,9 +481,10 @@ class ZSXQDatabase:
             self._import_tags(topic_id, topic_data)
 
             # 导入文件信息
-            if 'talk' in topic_data and topic_data['talk'] and 'files' in topic_data['talk']:
-                self._import_files(topic_id, topic_data['talk']['files'])
-                self._sync_topic_files_to_core_tables(topic_data, topic_data['talk']['files'])
+            has_talk_files, talk_files = _topic_talk_files_from_data(topic_data)
+            if has_talk_files:
+                self._import_files(topic_id, talk_files)
+                self._sync_topic_files_to_core_tables(topic_data, talk_files)
 
             return True
             
