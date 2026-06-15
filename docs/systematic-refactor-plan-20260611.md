@@ -19862,6 +19862,53 @@ Result:
 - Full backend unittest discovery passed: 1120 tests, 15 skipped.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-15 - P2 tag upsert lookup helper extraction
+
+Changed:
+
+- Re-ran existing characterization coverage for tag import source extraction/dedupe/link behavior,
+  tag SQL helper shapes, and `_upsert_tag(...)` existing/update, no-hid, insert, missing-return,
+  and exception fallback branches before production changes.
+- Extracted `_fetch_tag_id_by_name(...)` and `_update_tag_hid_if_present(...)` in
+  `backend/storage/zsxq_database.py`.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- `_upsert_tag(...)` still checks for an existing tag before inserting.
+- Existing tags still return the found tag ID, update `hid` only when a truthy `hid` is provided,
+  and skip the update when `hid` is empty/None.
+- New tags still use `_insert_tag_statement(...)` with the Beijing timestamp helper and still
+  return `row[0]` or `None` when no row is returned.
+- Exception handling still prints `插入标签失败: ...` and returns `None`.
+- Tag extraction/linking, SQL shapes, timestamp generation, storage schema, public API, legacy
+  paths, fallback behavior, error semantics, and config semantics are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_upsert_tag_preserves_existing_update_insert_and_missing_return_branches tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_import_tags_preserves_text_sources_decode_dedupe_and_link_behavior tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_tag_statement_helpers_preserve_sql_shape_and_params -v
+uv run python -m py_compile backend\storage\zsxq_database.py tests\test_zsxq_database_helpers.py
+uv run python -m unittest tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_upsert_tag_preserves_existing_update_insert_and_missing_return_branches tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_import_tags_preserves_text_sources_decode_dedupe_and_link_behavior tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_tag_statement_helpers_preserve_sql_shape_and_params -v
+uv run python -m unittest tests.test_zsxq_database_helpers -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run ruff check backend\storage\zsxq_database.py tests\test_zsxq_database_helpers.py --select F401,F841
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- Existing tag upsert characterization tests passed before extraction: 3 focused tests.
+- `py_compile` passed.
+- Focused tag upsert/import tests passed after extraction: 3 tests.
+- ZSXQ database helper tests passed: 85 tests.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- Full backend unittest discovery passed: 1120 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:

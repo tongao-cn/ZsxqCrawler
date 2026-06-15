@@ -971,27 +971,30 @@ class ZSXQDatabase:
     def _upsert_tag(self, group_id: int, tag_name: str, hid: str = None) -> Optional[int]:
         """插入或更新标签信息"""
         try:
-            # 检查标签是否已存在
-            sql, params = _tag_id_by_name_query(group_id, tag_name)
-            self.cursor.execute(sql, params)
-            
-            result = self.cursor.fetchone()
-            if result:
-                tag_id = result[0]
-                # 更新hid（如果提供了新的hid）
-                if hid:
-                    sql, params = _update_tag_hid_statement(tag_id, hid)
-                    self.cursor.execute(sql, params)
+            tag_id = self._fetch_tag_id_by_name(group_id, tag_name)
+            if tag_id:
+                self._update_tag_hid_if_present(tag_id, hid)
                 return tag_id
-            else:
-                # 插入新标签
-                self._execute_timestamped_statement(_insert_tag_statement, group_id, tag_name, hid)
 
-                row = self.cursor.fetchone()
-                return row[0] if row else None
+            self._execute_timestamped_statement(_insert_tag_statement, group_id, tag_name, hid)
+            row = self.cursor.fetchone()
+            return row[0] if row else None
         except Exception as e:
             print(f"插入标签失败: {e}")
             return None
+
+    def _fetch_tag_id_by_name(self, group_id: int, tag_name: str) -> Optional[int]:
+        sql, params = _tag_id_by_name_query(group_id, tag_name)
+        self.cursor.execute(sql, params)
+        row = self.cursor.fetchone()
+        return row[0] if row else None
+
+    def _update_tag_hid_if_present(self, tag_id: int, hid: str = None):
+        if not hid:
+            return
+
+        sql, params = _update_tag_hid_statement(tag_id, hid)
+        self.cursor.execute(sql, params)
     
     def _link_topic_tag(self, topic_id: int, tag_id: int):
         """关联话题和标签"""
