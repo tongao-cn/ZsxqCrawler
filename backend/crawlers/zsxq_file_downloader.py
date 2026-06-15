@@ -1397,6 +1397,20 @@ class ZSXQFileDownloader:
             self.log(message)
 
         return summary["result"]
+
+    def _collect_incremental_from_oldest_time(self, oldest_time: Any) -> Dict[str, int]:
+        self.log(incremental_collection_target_message())
+
+        try:
+            start_index = incremental_start_index(oldest_time)
+            self.log(incremental_collection_start_index_message(start_index))
+
+            return self.collect_files_by_time(start_time=start_index)
+
+        except Exception as e:
+            for message in incremental_collection_timestamp_failure_messages(e):
+                self.log(message)
+            return self.collect_files_by_time()
     
     def collect_files_by_time(
         self,
@@ -1515,20 +1529,7 @@ class ZSXQFileDownloader:
             self.log(incremental_collection_missing_time_message())
             return self.collect_files_by_time()
 
-        # 从最老时间戳开始收集更早的文件
-        self.log(incremental_collection_target_message())
-        
-        # 将时间戳转换为毫秒数用作index
-        try:
-            start_index = incremental_start_index(oldest_time)
-            self.log(incremental_collection_start_index_message(start_index))
-
-            return self.collect_files_by_time(start_time=start_index)
-
-        except Exception as e:
-            for message in incremental_collection_timestamp_failure_messages(e):
-                self.log(message)
-            return self.collect_files_by_time()
+        return self._collect_incremental_from_oldest_time(oldest_time)
     
     def collect_files_for_date_range(
         self,

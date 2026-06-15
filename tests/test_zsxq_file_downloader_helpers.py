@@ -725,8 +725,20 @@ class FileDownloaderPaginationTests(unittest.TestCase):
         result = ZSXQFileDownloader.collect_incremental_files(downloader)
 
         self.assertEqual({"total_files": 7, "new_files": 3}, result)
-        self.assertEqual("🔄 改为全量收集", downloader.logs[-1])
-        self.assertTrue(downloader.logs[-2].startswith("⚠️ 时间戳处理失败: "))
+        self.assertEqual(
+            [
+                "🔄 开始增量文件收集...",
+                "📊 数据库现状:",
+                "   现有文件数: 5",
+                "   最老时间: not-a-time",
+                "   最新时间: 2026-05-02",
+                "🎯 将从最老时间戳开始收集更早的文件...",
+            ],
+            downloader.logs[:6],
+        )
+        self.assertTrue(downloader.logs[6].startswith("⚠️ 时间戳处理失败: "))
+        self.assertEqual("🔄 改为全量收集", downloader.logs[7])
+        self.assertEqual(8, len(downloader.logs))
         self.assertEqual([((), {})], downloader.collect_calls)
 
     def test_collect_files_by_time_stops_when_page_import_fails(self):
