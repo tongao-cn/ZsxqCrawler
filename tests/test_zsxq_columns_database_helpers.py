@@ -35,6 +35,7 @@ from backend.storage.zsxq_columns_database import (
     _topic_comment_insert_statement,
     _topic_comments_query,
     _topic_comment_row_to_dict,
+    _topic_comment_row_with_images,
     _topic_detail_insert_params,
     _topic_detail_insert_statement,
     _topic_detail_exists_query,
@@ -462,6 +463,34 @@ class ZSXQColumnsDatabaseHelperTests(unittest.TestCase):
                 },
             },
         )
+
+    def test_topic_comment_row_with_images_preserves_truthy_image_field_semantics(self):
+        row = (
+            701,
+            None,
+            "comment text",
+            "2026-05-01T08:00:00+0800",
+            5,
+            6,
+            7,
+            False,
+            801,
+            "owner name",
+            "owner alias",
+            "owner-avatar",
+            "owner location",
+            None,
+            None,
+            None,
+            None,
+        )
+        image = {"image_id": 301}
+
+        without_images = _topic_comment_row_with_images(row, [])
+        with_images = _topic_comment_row_with_images(row, [image])
+
+        self.assertNotIn("images", without_images)
+        self.assertEqual([image], with_images["images"])
 
     def test_column_insert_params_preserve_column_order_and_defaults(self):
         self.assertEqual(

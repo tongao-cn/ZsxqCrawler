@@ -191,6 +191,13 @@ def _topic_comment_row_to_dict(row) -> Dict[str, Any]:
     return comment
 
 
+def _topic_comment_row_with_images(row, images: list[Dict[str, Any]]) -> Dict[str, Any]:
+    comment = _topic_comment_row_to_dict(row)
+    if images:
+        comment['images'] = images
+    return comment
+
+
 def _column_insert_params(group_id: int, column_data: Dict[str, Any]) -> tuple[Any, ...]:
     statistics = column_data.get('statistics', {})
 

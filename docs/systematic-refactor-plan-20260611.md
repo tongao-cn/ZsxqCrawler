@@ -19237,6 +19237,53 @@ Result:
 - Full backend unittest discovery passed: 1113 tests, 15 skipped.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-15 - P3 topic comment row images helper
+
+Changed:
+
+- Re-ran existing characterization coverage for `get_topic_comments()` comment-image query and
+  nested comment shape before the production change.
+- Added `_topic_comment_row_with_images(...)` to
+  `backend/storage/zsxq_columns_database_helpers.py`.
+- Reused the helper in `get_topic_comments()` while keeping `_topic_comment_row_to_dict` imported
+  by `backend/storage/zsxq_columns_database.py` as a compatibility re-export.
+- Added direct helper coverage for the existing truthy image-field semantics.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- `get_topic_comments()` still resolves scope the same way, executes the same comments query first,
+  then the same per-comment images query with the same parameters.
+- Only comments with truthy image lists receive the `images` field; empty image results still omit
+  `images`.
+- Nested comment shaping still delegates to `_nest_topic_comments`.
+- The old helper import surface from `backend.storage.zsxq_columns_database` remains available.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_columns_database_helpers.ZSXQColumnsDatabaseHelperTests.test_topic_comments_preserve_comment_image_queries_and_nested_shape -v
+uv run python -m py_compile backend\storage\zsxq_columns_database.py backend\storage\zsxq_columns_database_helpers.py tests\test_zsxq_columns_database_helpers.py
+uv run python -m unittest tests.test_zsxq_columns_database_helpers.ZSXQColumnsDatabaseHelperTests.test_topic_comment_row_with_images_preserves_truthy_image_field_semantics tests.test_zsxq_columns_database_helpers.ZSXQColumnsDatabaseHelperTests.test_topic_comments_preserve_comment_image_queries_and_nested_shape tests.test_zsxq_columns_database_helpers.ZSXQColumnsDatabaseHelperTests.test_load_topic_comment_images_preserves_query_params_and_shape -v
+uv run python -m unittest tests.test_zsxq_columns_database_helpers -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run ruff check backend\storage\zsxq_columns_database.py backend\storage\zsxq_columns_database_helpers.py tests\test_zsxq_columns_database_helpers.py --select F401,F841
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- Existing `get_topic_comments()` characterization test passed before extraction: 1 focused test.
+- `py_compile` passed.
+- Focused comment row/images tests passed after extraction: 3 tests.
+- ZSXQ columns database helper tests passed: 74 tests.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- Full backend unittest discovery passed: 1114 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:

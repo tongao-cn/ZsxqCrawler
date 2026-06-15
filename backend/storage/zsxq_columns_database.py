@@ -45,6 +45,7 @@ from backend.storage.zsxq_columns_database_helpers import (
     _topic_comment_insert_statement,
     _topic_comments_query,
     _topic_comment_row_to_dict,
+    _topic_comment_row_with_images,
     _topic_detail_insert_params,
     _topic_detail_insert_statement,
     _topic_detail_exists_query,
@@ -365,14 +366,9 @@ class ZSXQColumnsDatabase:
         comments = []
 
         for row in self.cursor.fetchall():
-            comment = _topic_comment_row_to_dict(row)
-            comment_id = comment['comment_id']
-
+            comment_id = row[0]
             images = self._load_topic_comment_images(comment_id, scope_group_id, topic_id)
-            if images:
-                comment['images'] = images
-
-            comments.append(comment)
+            comments.append(_topic_comment_row_with_images(row, images))
 
         return _nest_topic_comments(comments)
     
