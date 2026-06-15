@@ -1750,67 +1750,82 @@ class ZSXQFileDownloader:
             self.log(message)
         
         return stats
-    
-    def show_database_stats(self):
-        """显示完整数据库统计信息"""
-        print(f"\n📊 完整数据库统计信息:")
-        print("="*60)
-        print(f"📁 PostgreSQL schema: {CORE_SCHEMA}")
-        
-        # 使用新数据库的统计方法
-        stats = self.file_db.get_database_stats()
-        
-        # 主要数据统计
+
+    def _print_database_core_stats(self, stats: Dict[str, Any]) -> None:
         total_files = stats.get('files', 0)
         total_topics = stats.get('topics', 0)
         total_users = stats.get('users', 0)
         total_groups = stats.get('groups', 0)
-        
+
         print(f"📈 核心数据:")
         print(f"   📄 文件数量: {total_files:,}")
         print(f"   💬 话题数量: {total_topics:,}")
         print(f"   👥 用户数量: {total_users:,}")
         print(f"   🏠 群组数量: {total_groups:,}")
-        
-        # 文件大小统计
+
+    def _print_database_total_size(self) -> None:
         query, params = database_stats_total_size_query(_query_group_id(self.group_id))
         self.file_db.cursor.execute(query, params)
         result = self.file_db.cursor.fetchone()
         total_size = result[0] if result and result[0] else 0
-        
+
         if total_size > 0:
             print(f"💾 总文件大小: {total_size/1024/1024:.2f} MB")
-        
-        # 详细表统计
+
+    def _print_database_table_stats(self, stats: Dict[str, Any]) -> None:
         print(f"\n📋 详细表统计:")
         for table_name, count in stats.items():
             if count > 0:
                 emoji = database_stats_table_emoji(table_name)
                 print(f"   {emoji} {table_name}: {count:,}")
-        
-        # 文件创建时间范围
+
+    def _print_database_time_range(self) -> None:
         query, params = database_stats_time_range_query(_query_group_id(self.group_id))
         self.file_db.cursor.execute(query, params)
         time_result = self.file_db.cursor.fetchone()
-        
+
         if time_result and time_result[2] > 0:
             min_time, max_time, time_count = time_result
             print(f"\n⏰ 文件时间范围:")
             print(f"   最早文件: {min_time}")
             print(f"   最新文件: {max_time}")
             print(f"   有时间信息的文件: {time_count:,}")
-        
-        # API响应统计
+
+    def _print_database_api_response_stats(self) -> None:
         self.file_db.cursor.execute(database_stats_api_response_query())
         api_stats = self.file_db.cursor.fetchall()
-        
+
         if api_stats:
             print(f"\n📡 API响应统计:")
             for succeeded, count in api_stats:
                 status = "成功" if succeeded else "失败"
                 emoji = "✅" if succeeded else "❌"
                 print(f"   {emoji} {status}: {count:,}")
-        
+
+    def show_database_stats(self):
+        """显示完整数据库统计信息"""
+        print(f"\n📊 完整数据库统计信息:")
+        print("="*60)
+        print(f"📁 PostgreSQL schema: {CORE_SCHEMA}")
+
+        # 使用新数据库的统计方法
+        stats = self.file_db.get_database_stats()
+
+        # 主要数据统计
+        self._print_database_core_stats(stats)
+
+        # 文件大小统计
+        self._print_database_total_size()
+
+        # 详细表统计
+        self._print_database_table_stats(stats)
+
+        # 文件创建时间范围
+        self._print_database_time_range()
+
+        # API响应统计
+        self._print_database_api_response_stats()
+
         print("="*60)
     
     def adjust_settings(self):

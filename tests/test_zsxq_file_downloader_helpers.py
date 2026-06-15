@@ -273,6 +273,31 @@ class ShowDatabaseStatsFileDb:
         return [(1, 5), (0, 2)]
 
 
+class EmptyShowDatabaseStatsFileDb:
+    def __init__(self):
+        self.cursor = self
+        self.executed = []
+        self.fetchone_results = [(0,), (None, None, 0)]
+
+    def get_database_stats(self):
+        return {
+            "files": 0,
+            "topics": 0,
+            "users": 0,
+            "groups": 0,
+        }
+
+    def execute(self, query, params=()):
+        self.executed.append((query, tuple(params)))
+        return self
+
+    def fetchone(self):
+        return self.fetchone_results.pop(0)
+
+    def fetchall(self):
+        return []
+
+
 class TimeDedupeFileDb:
     def __init__(self, latest_time, initial_files=10, final_files=11):
         self.cursor = self
@@ -1668,6 +1693,24 @@ class FileDownloaderDatabaseStatsTests(unittest.TestCase):
         self.assertIn("   最早文件: 2026-05-01 09:00:00", printed)
         self.assertIn("   ✅ 成功: 5", printed)
         self.assertIn("   ❌ 失败: 2", printed)
+
+    def test_show_database_stats_omits_optional_sections_when_empty(self):
+        downloader = object.__new__(ZSXQFileDownloader)
+        downloader.group_id = "511"
+        downloader.file_db = EmptyShowDatabaseStatsFileDb()
+
+        with contextlib.redirect_stdout(io.StringIO()) as output:
+            ZSXQFileDownloader.show_database_stats(downloader)
+
+        self.assertEqual(3, len(downloader.file_db.executed))
+        printed = output.getvalue()
+        self.assertIn("   📄 文件数量: 0", printed)
+        self.assertIn("   🏠 群组数量: 0", printed)
+        self.assertIn("\n📋 详细表统计:", printed)
+        self.assertNotIn("💾 总文件大小:", printed)
+        self.assertNotIn("\n⏰ 文件时间范围:", printed)
+        self.assertNotIn("\n📡 API响应统计:", printed)
+        self.assertNotIn("   📄 files: 0", printed)
 
 
 class FileDownloaderTimeHelperTests(unittest.TestCase):

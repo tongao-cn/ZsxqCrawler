@@ -22222,6 +22222,56 @@ Result:
 - Full backend unittest discovery passed in the current worktree: 1150 tests, 15 skipped.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-15 - P9 database stats display helper extraction
+
+Changed:
+
+- Added characterization coverage for `show_database_stats(...)` when optional database-stat
+  sections are empty.
+- The new test locks query execution count, zero-value core stats, mandatory detailed-table header,
+  and omission of total-size, time-range, API-response, and zero-count table rows.
+- Extracted private display helpers from `show_database_stats(...)`:
+  `_print_database_core_stats(...)`, `_print_database_total_size(...)`,
+  `_print_database_table_stats(...)`, `_print_database_time_range(...)`, and
+  `_print_database_api_response_stats(...)`.
+- Kept the public method responsible for the outer title, schema line, stats fetch, helper call
+  order, and closing separator.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Database-stat query order remains total size, time range, API response stats.
+- Core stats, optional section omission, table emoji fallback, file-size formatting, time-range
+  formatting, and API success/failure text are unchanged.
+- Public API, fallback behavior, legacy behavior, error semantics, printed text, query parameters,
+  call order, returned value, config semantics, and task-level behavior are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderDatabaseStatsTests.test_show_database_stats_omits_optional_sections_when_empty tests.test_zsxq_file_downloader_helpers.FileDownloaderDatabaseStatsTests.test_show_database_stats_preserves_query_order_and_output_shape -v
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderDatabaseStatsTests.test_show_database_stats_omits_optional_sections_when_empty tests.test_zsxq_file_downloader_helpers.FileDownloaderDatabaseStatsTests.test_show_database_stats_preserves_query_order_and_output_shape -v
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run ruff check backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py --select F401,F841
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- Empty optional-section characterization baseline passed before production extraction: 2 focused
+  tests.
+- `py_compile` passed.
+- Focused database-stat display tests passed after extraction: 2 tests.
+- ZSXQ file downloader helper tests passed: 173 tests.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- Full backend unittest discovery passed in the current worktree: 1151 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:
