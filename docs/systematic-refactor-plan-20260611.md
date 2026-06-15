@@ -20394,6 +20394,52 @@ Result:
 - Full backend unittest discovery passed: 1129 tests, 15 skipped.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-15 - P2 row-exists helper reuse
+
+Changed:
+
+- Added characterization coverage for `_core_file_exists(...)` preserving group-scope params and
+  row-presence semantics.
+- Extracted `_fetch_row_exists(...)` for shared `execute + fetchone() is not None` existence reads.
+- Reused `_fetch_row_exists(...)` from `_topic_exists(...)` and `_core_file_exists(...)`.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- `_topic_exists(...)` and `_core_file_exists(...)` still use their existing query builders,
+  params, and cursor.
+- Existence semantics still depend on whether `fetchone()` returns any row, not on the truthiness
+  of the row value.
+- Topic import skip behavior, topic-existence failure rollback behavior, file backfill new-file
+  stats, SQL shape, public API, legacy paths, fallback behavior, error semantics, storage schema,
+  and config semantics are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_core_file_exists_preserves_group_scope_and_row_presence_semantics tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_import_topic_data_existing_topic_preserves_skip_and_file_sync tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_import_topic_data_preserves_topic_exists_failure_rollback tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_backfill_topic_files_to_core_tables_preserves_existing_file_stats -v
+uv run python -m py_compile backend\storage\zsxq_database.py tests\test_zsxq_database_helpers.py
+uv run python -m unittest tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_core_file_exists_preserves_group_scope_and_row_presence_semantics tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_import_topic_data_existing_topic_preserves_skip_and_file_sync tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_import_topic_data_preserves_topic_exists_failure_rollback tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_backfill_topic_files_to_core_tables_preserves_existing_file_stats -v
+uv run python -m unittest tests.test_zsxq_database_helpers -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run ruff check backend\storage\zsxq_database.py tests\test_zsxq_database_helpers.py --select F401,F841
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- New `_core_file_exists(...)` characterization coverage passed before production extraction: 4
+  focused existence/backfill tests.
+- `py_compile` passed.
+- Focused existence/backfill tests passed after extraction: 4 tests.
+- ZSXQ database helper tests passed: 95 tests.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- Full backend unittest discovery passed: 1130 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:

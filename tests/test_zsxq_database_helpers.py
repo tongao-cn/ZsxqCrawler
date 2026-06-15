@@ -1716,6 +1716,40 @@ class ZSXQDatabaseHelperTests(unittest.TestCase):
         self.assertEqual("SELECT create_time FROM topics WHERE topic_id = ?", create_time_sql)
         self.assertEqual((202,), create_time_params)
 
+    def test_core_file_exists_preserves_group_scope_and_row_presence_semantics(self):
+        from backend.storage.zsxq_database import ZSXQDatabase
+
+        existing_db = object.__new__(ZSXQDatabase)
+        existing_db.cursor = FakeCursor()
+        existing_db.cursor.row = (None,)
+        existing_db.group_id = "303"
+
+        self.assertTrue(ZSXQDatabase._core_file_exists(existing_db, 101))
+        self.assertEqual(
+            [
+                (
+                    "SELECT 1 FROM files WHERE file_id = ? AND (? IS NULL OR group_id = ?) LIMIT 1",
+                    (101, 303, 303),
+                )
+            ],
+            existing_db.cursor.calls,
+        )
+
+        missing_db = object.__new__(ZSXQDatabase)
+        missing_db.cursor = FakeCursor()
+        missing_db.group_id = None
+
+        self.assertFalse(ZSXQDatabase._core_file_exists(missing_db, 102))
+        self.assertEqual(
+            [
+                (
+                    "SELECT 1 FROM files WHERE file_id = ? AND (? IS NULL OR group_id = ?) LIMIT 1",
+                    (102, "", ""),
+                )
+            ],
+            missing_db.cursor.calls,
+        )
+
     def test_topic_timestamp_query_helpers_preserve_existing_scope_semantics(self):
         newest_sql, newest_params = _newest_topic_create_time_query(None, nullable_scope=True)
         self.assertIn("ORDER BY create_time DESC LIMIT 1", " ".join(newest_sql.split()))

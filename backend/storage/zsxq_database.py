@@ -463,8 +463,7 @@ class ZSXQDatabase:
 
     def _topic_exists(self, topic_id: int) -> bool:
         sql, params = _topic_exists_query(topic_id, self.group_id)
-        self.cursor.execute(sql, params)
-        return self.cursor.fetchone() is not None
+        return self._fetch_row_exists(sql, params)
     
     def _upsert_group(self, group_data: Dict[str, Any]):
         """插入或更新群组信息"""
@@ -585,6 +584,10 @@ class ZSXQDatabase:
 
     def _fetch_optional_first_column(self, sql: str, params: Any) -> Any:
         return self._fetch_first_column_or_default(sql, params, None)
+
+    def _fetch_row_exists(self, sql: str, params: Any) -> bool:
+        self.cursor.execute(sql, params)
+        return self.cursor.fetchone() is not None
 
     def get_database_stats(self) -> Dict[str, Any]:
         """获取数据库统计信息"""
@@ -953,8 +956,7 @@ class ZSXQDatabase:
 
     def _core_file_exists(self, file_id: int) -> bool:
         sql, params = _file_exists_query(file_id, self.group_id)
-        self.cursor.execute(sql, params)
-        return self.cursor.fetchone() is not None
+        return self._fetch_row_exists(sql, params)
 
     def backfill_topic_files_to_file_database(self) -> Dict[str, int]:
         """兼容旧调用名：PostgreSQL 模式下回填到同一核心表。"""
