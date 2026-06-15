@@ -198,33 +198,46 @@ class ZSXQColumnsDatabase:
     
     def _insert_image(self, topic_id: int, image_data: Dict[str, Any]):
         """插入图片信息"""
-        if not image_data or not image_data.get('image_id'):
-            return
-        
-        self.cursor.execute(
-            _topic_image_insert_statement(),
-            _topic_image_insert_params(topic_id, image_data),
+        self._insert_topic_child(
+            topic_id,
+            image_data,
+            'image_id',
+            _topic_image_insert_statement,
+            _topic_image_insert_params,
         )
     
     def _insert_file(self, topic_id: int, file_data: Dict[str, Any]):
         """插入文件信息"""
-        if not file_data or not file_data.get('file_id'):
-            return
-        
-        self.cursor.execute(
-            _topic_file_insert_statement(),
-            _topic_file_insert_params(topic_id, file_data),
+        self._insert_topic_child(
+            topic_id,
+            file_data,
+            'file_id',
+            _topic_file_insert_statement,
+            _topic_file_insert_params,
         )
     
     def _insert_video(self, topic_id: int, video_data: Dict[str, Any]):
         """插入视频信息"""
-        if not video_data or not video_data.get('video_id'):
-            return
-        
-        self.cursor.execute(
-            _topic_video_insert_statement(),
-            _topic_video_insert_params(topic_id, video_data),
+        self._insert_topic_child(
+            topic_id,
+            video_data,
+            'video_id',
+            _topic_video_insert_statement,
+            _topic_video_insert_params,
         )
+
+    def _insert_topic_child(
+        self,
+        topic_id: int,
+        payload: Dict[str, Any],
+        id_key: str,
+        statement_builder: Callable[[], str],
+        params_builder: Callable[[int, Dict[str, Any]], tuple[Any, ...]],
+    ):
+        if not payload or not payload.get(id_key):
+            return
+
+        self.cursor.execute(statement_builder(), params_builder(topic_id, payload))
     
     def _insert_comment(self, topic_id: int, comment_data: Dict[str, Any]):
         """插入评论信息"""

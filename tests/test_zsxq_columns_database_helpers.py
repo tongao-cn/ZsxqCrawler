@@ -1748,6 +1748,93 @@ class ZSXQColumnsDatabaseHelperTests(unittest.TestCase):
         self.assertIsNone(ZSXQColumnsDatabase._insert_comment(db, 202, {}))
         self.assertEqual([], db.cursor.calls)
 
+    def test_insert_media_helpers_preserve_statement_params(self):
+        from backend.storage.zsxq_columns_database import ZSXQColumnsDatabase
+
+        class FakeCursor:
+            def __init__(self):
+                self.calls = []
+
+            def execute(self, sql, params=()):
+                self.calls.append((" ".join(sql.split()), params))
+
+        db = object.__new__(ZSXQColumnsDatabase)
+        db.cursor = FakeCursor()
+
+        ZSXQColumnsDatabase._insert_image(
+            db,
+            202,
+            {
+                "image_id": 301,
+                "type": "png",
+                "thumbnail": {"url": "thumb-url", "width": 100, "height": 80},
+                "large": {"url": "large-url", "width": 1000, "height": 800},
+                "original": {
+                    "url": "original-url",
+                    "width": 1200,
+                    "height": 900,
+                    "size": 4567,
+                },
+            },
+        )
+        image_sql, image_params = db.cursor.calls[-1]
+        self.assertIn("INSERT INTO images", image_sql)
+        self.assertEqual(
+            (
+                301,
+                202,
+                "png",
+                "thumb-url",
+                100,
+                80,
+                "large-url",
+                1000,
+                800,
+                "original-url",
+                1200,
+                900,
+                4567,
+            ),
+            image_params,
+        )
+
+        ZSXQColumnsDatabase._insert_file(
+            db,
+            202,
+            {
+                "file_id": 401,
+                "name": "memo.pdf",
+                "hash": "abc",
+                "size": 2048,
+                "duration": 3,
+                "download_count": 4,
+                "create_time": "2026-06-10T12:00:00",
+            },
+        )
+        file_sql, file_params = db.cursor.calls[-1]
+        self.assertIn("INSERT INTO files", file_sql)
+        self.assertEqual(
+            (401, 202, "memo.pdf", "abc", 2048, 3, 4, "2026-06-10T12:00:00"),
+            file_params,
+        )
+
+        ZSXQColumnsDatabase._insert_video(
+            db,
+            202,
+            {
+                "video_id": 501,
+                "size": 4096,
+                "duration": 60,
+                "cover": {"url": "cover-url", "width": 640, "height": 360},
+            },
+        )
+        video_sql, video_params = db.cursor.calls[-1]
+        self.assertIn("INSERT INTO videos", video_sql)
+        self.assertEqual(
+            (501, 202, 4096, 60, "cover-url", 640, 360),
+            video_params,
+        )
+
     def test_column_topic_and_user_insert_methods_preserve_skip_params_and_commit(self):
         from backend.storage.zsxq_columns_database import ZSXQColumnsDatabase
 

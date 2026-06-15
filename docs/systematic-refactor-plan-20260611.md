@@ -19638,6 +19638,48 @@ Result:
 - Full backend unittest discovery passed: 1118 tests, 15 skipped.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-15 - P3 topic media child insert helper extraction
+
+Changed:
+
+- Added characterization coverage for positive `_insert_image(...)`, `_insert_file(...)`, and
+  `_insert_video(...)` SQL/params before production refactoring.
+- Extracted `_insert_topic_child(...)` for image/file/video child insert helpers.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Missing-ID skip behavior remains unchanged and still avoids SQL execution.
+- Image, file, and video insert statement builders and params builders are unchanged.
+- `insert_topic_detail(...)` related payload order, commit timing, comments, owner writes, schema,
+  public API, legacy paths, fallback behavior, error semantics, and config semantics are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_columns_database_helpers.ZSXQColumnsDatabaseHelperTests.test_insert_media_helpers_preserve_statement_params tests.test_zsxq_columns_database_helpers.ZSXQColumnsDatabaseHelperTests.test_insert_media_and_comment_helpers_preserve_missing_id_skip_behavior -v
+uv run python -m py_compile backend\storage\zsxq_columns_database.py tests\test_zsxq_columns_database_helpers.py
+uv run python -m unittest tests.test_zsxq_columns_database_helpers.ZSXQColumnsDatabaseHelperTests.test_insert_media_helpers_preserve_statement_params tests.test_zsxq_columns_database_helpers.ZSXQColumnsDatabaseHelperTests.test_insert_media_and_comment_helpers_preserve_missing_id_skip_behavior tests.test_zsxq_columns_database_helpers.ZSXQColumnsDatabaseHelperTests.test_topic_media_insert_params_preserve_column_order_and_defaults tests.test_zsxq_columns_database_helpers.ZSXQColumnsDatabaseHelperTests.test_topic_media_insert_statements_preserve_upsert_shape -v
+uv run python -m unittest tests.test_zsxq_columns_database_helpers -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run ruff check backend\storage\zsxq_columns_database.py tests\test_zsxq_columns_database_helpers.py --select F401,F841
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- New media insert characterization test and existing missing-ID test passed before production
+  refactoring: 2 focused tests.
+- `py_compile` passed.
+- Focused media insert helper tests passed after extraction: 4 tests.
+- ZSXQ columns database helper tests passed: 79 tests.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- Full backend unittest discovery passed: 1119 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:
