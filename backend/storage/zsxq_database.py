@@ -577,6 +577,14 @@ class ZSXQDatabase:
         for sql, params in statement_builder(*args, _beijing_now_timestamp()):
             self.cursor.execute(sql, params)
 
+    def _execute_statement(
+        self,
+        statement_builder: Callable[..., tuple[str, tuple[Any, ...]]],
+        *args: Any,
+    ) -> None:
+        sql, params = statement_builder(*args)
+        self.cursor.execute(sql, params)
+
     def _fetch_first_column_or_default(self, sql: str, params: Any, default: Any) -> Any:
         self.cursor.execute(sql, params)
         row = self.cursor.fetchone()
@@ -1032,8 +1040,7 @@ class ZSXQDatabase:
         if not hid:
             return
 
-        sql, params = _update_tag_hid_statement(tag_id, hid)
-        self.cursor.execute(sql, params)
+        self._execute_statement(_update_tag_hid_statement, tag_id, hid)
     
     def _link_topic_tag(self, topic_id: int, tag_id: int):
         """关联话题和标签"""
@@ -1047,8 +1054,7 @@ class ZSXQDatabase:
         self._execute_timestamped_statement(_insert_topic_tag_statement, topic_id, tag_id)
 
     def _refresh_tag_topic_count(self, tag_id: int):
-        sql, params = _refresh_tag_topic_count_statement(tag_id)
-        self.cursor.execute(sql, params)
+        self._execute_statement(_refresh_tag_topic_count_statement, tag_id)
 
     def _fetch_mapped_rows(
         self,

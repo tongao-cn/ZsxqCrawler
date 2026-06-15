@@ -20484,6 +20484,53 @@ Result:
 - Full backend unittest discovery passed: 1131 tests, 15 skipped.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-15 - P2 tag write helper reuse
+
+Changed:
+
+- Added characterization coverage for `_update_tag_hid_if_present(...)` preserving falsey-HID
+  skips and update SQL params.
+- Extracted `_execute_statement(...)` for non-timestamped statement builders that only execute SQL.
+- Reused `_execute_statement(...)` from `_update_tag_hid_if_present(...)` and
+  `_refresh_tag_topic_count(...)`.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- `_update_tag_hid_if_present(...)` still skips `None` and empty-string HID values before any DB
+  call.
+- Non-empty HID updates still use `_update_tag_hid_statement(tag_id, hid)` with the same params.
+- Tag topic-count refresh still uses `_refresh_tag_topic_count_statement(tag_id)`.
+- `_upsert_tag(...)` insert `RETURNING` behavior, topic-tag link error swallowing, public API,
+  legacy paths, fallback behavior, error semantics, storage schema, SQL shape, params, and config
+  semantics are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_upsert_tag_preserves_existing_update_insert_and_missing_return_branches tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_update_tag_hid_if_present_preserves_skip_and_execute_params tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_link_topic_tag_inserts_relation_refreshes_count_and_swallows_errors -v
+uv run python -m py_compile backend\storage\zsxq_database.py tests\test_zsxq_database_helpers.py
+uv run python -m unittest tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_upsert_tag_preserves_existing_update_insert_and_missing_return_branches tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_update_tag_hid_if_present_preserves_skip_and_execute_params tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_link_topic_tag_inserts_relation_refreshes_count_and_swallows_errors -v
+uv run python -m unittest tests.test_zsxq_database_helpers -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run ruff check backend\storage\zsxq_database.py tests\test_zsxq_database_helpers.py --select F401,F841
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- New `_update_tag_hid_if_present(...)` characterization coverage passed before production
+  extraction: 3 focused tag tests.
+- `py_compile` passed.
+- Focused tag tests passed after extraction: 3 tests.
+- ZSXQ database helper tests passed: 97 tests.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- Full backend unittest discovery passed: 1132 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:

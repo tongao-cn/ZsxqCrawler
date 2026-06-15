@@ -3292,6 +3292,22 @@ class ZSXQDatabaseHelperTests(unittest.TestCase):
             db.cursor.calls,
         )
 
+    def test_update_tag_hid_if_present_preserves_skip_and_execute_params(self):
+        from backend.storage.zsxq_database import ZSXQDatabase
+
+        db = object.__new__(ZSXQDatabase)
+        db.cursor = FakeCursor()
+
+        ZSXQDatabase._update_tag_hid_if_present(db, 7, None)
+        ZSXQDatabase._update_tag_hid_if_present(db, 7, "")
+        self.assertEqual([], db.cursor.calls)
+
+        ZSXQDatabase._update_tag_hid_if_present(db, 7, "hid-1")
+        self.assertEqual(
+            [("UPDATE tags SET hid = ? WHERE tag_id = ?", ("hid-1", 7))],
+            db.cursor.calls,
+        )
+
     def test_link_topic_tag_inserts_relation_refreshes_count_and_swallows_errors(self):
         from backend.storage.zsxq_database import ZSXQDatabase
 
