@@ -219,6 +219,14 @@ class TimeCollectionDatabaseState(NamedTuple):
     db_latest_time: Optional[Any]
 
 
+class DatabaseDownloadRow(NamedTuple):
+    file_id: Any
+    file_name: Any
+    file_size: Any
+    download_count: Any
+    create_time: Any
+
+
 def _query_group_id(group_id: str) -> Any:
     return download_query_group_id(group_id)
 
@@ -1813,16 +1821,23 @@ class ZSXQFileDownloader:
 
     def _download_database_file_row(
         self,
-        file_row: tuple[Any, Any, Any, Any, Any],
+        file_row: DatabaseDownloadRow,
         position: int,
         total_files: int,
         stats: Dict[str, int],
     ) -> None:
-        file_id, file_name, file_size, download_count, _create_time = file_row
-        self.log(f"【{position}/{total_files}】{file_name}")
-        self.log(f"   📊 文件ID: {file_id}, 大小: {file_size/1024:.1f}KB, 下载次数: {download_count}")
+        self.log(f"【{position}/{total_files}】{file_row.file_name}")
+        self.log(
+            f"   📊 文件ID: {file_row.file_id}, 大小: {file_row.file_size/1024:.1f}KB, "
+            f"下载次数: {file_row.download_count}"
+        )
 
-        file_info = database_download_file_info(file_id, file_name, file_size, download_count)
+        file_info = database_download_file_info(
+            file_row.file_id,
+            file_row.file_name,
+            file_row.file_size,
+            file_row.download_count,
+        )
 
         result = self.download_file(file_info)
 
@@ -1841,13 +1856,13 @@ class ZSXQFileDownloader:
     def _fetch_database_download_rows(
         self,
         query_plan: Dict[str, Any],
-    ) -> list[tuple[Any, ...]]:
+    ) -> list[DatabaseDownloadRow]:
         self.file_db.cursor.execute(query_plan["query"], query_plan["params"])
-        return self.file_db.cursor.fetchall()
+        return [DatabaseDownloadRow(*row) for row in self.file_db.cursor.fetchall()]
 
     def _download_database_file_rows(
         self,
-        files_to_download: list[tuple[Any, ...]],
+        files_to_download: list[DatabaseDownloadRow],
         stats: Dict[str, int],
     ) -> None:
         total_files = len(files_to_download)

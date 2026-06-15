@@ -23129,6 +23129,49 @@ Result:
 - Full backend unittest discovery passed in the current worktree: 1160 tests, 15 skipped.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-15 - P9 database download row result naming cleanup
+
+Changed:
+
+- Introduced internal `DatabaseDownloadRow` `NamedTuple` for rows returned by
+  `_fetch_database_download_rows(...)`.
+- Wrapped fetched database rows in tuple-compatible named rows.
+- Replaced positional row unpacking in `_download_database_file_row(...)` with named attribute
+  access for `file_id`, `file_name`, `file_size`, and `download_count`.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Database query shape/params, fetched row equality, time-range helper indexing, file-info payloads,
+  per-row logs, skip/download/fail stats, delay calls, stop/interrupt/exception handling, public API,
+  fallback/legacy behavior, error semantics, call order, config semantics, and task-level behavior
+  are unchanged.
+- Existing characterization tests already cover row fetching, payload/log/stats/delay paths, and row
+  exception/interrupt handling.
+
+Verification:
+
+```powershell
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderDatabaseDownloadTests.test_fetch_database_download_rows_preserves_execute_params_and_fetch_shape tests.test_zsxq_file_downloader_helpers.FileDownloaderDatabaseDownloadTests.test_download_files_from_database_preserves_result_stats_payloads_and_delays tests.test_zsxq_file_downloader_helpers.FileDownloaderDatabaseDownloadTests.test_download_files_from_database_preserves_row_exception_and_interrupt_handling -v
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run ruff check backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py --select F401,F841
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- `py_compile` passed.
+- Focused database download row tests passed: 3 tests.
+- ZSXQ file downloader helper tests passed: 182 tests.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- Full backend unittest discovery passed in the current worktree: 1160 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:
