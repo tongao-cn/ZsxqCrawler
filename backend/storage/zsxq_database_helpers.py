@@ -973,6 +973,27 @@ def topic_talk_files_from_data(topic_data: Dict[str, Any]) -> tuple[bool, Any]:
     return False, None
 
 
+def topic_article_payload_from_data(topic_id: int, topic_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    talk_data = topic_data.get("talk")
+    if talk_data and "article" in talk_data:
+        article_data = talk_data["article"]
+        if article_data:
+            return article_data
+
+    article_data = topic_data.get("article")
+    if article_data:
+        return article_data
+
+    if topic_data.get("type", "") == "article" and topic_data.get("title"):
+        return {
+            "title": topic_data.get("title", ""),
+            "article_id": str(topic_id),
+            "article_url": "",
+            "inline_article_url": "",
+        }
+    return None
+
+
 def topic_detail_image_payload(row, *, offset: int = 0) -> Dict[str, Any]:
     return {
         "image_id": row[offset],

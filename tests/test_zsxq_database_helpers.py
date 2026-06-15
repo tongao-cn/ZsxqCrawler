@@ -2692,6 +2692,54 @@ class ZSXQDatabaseHelperTests(unittest.TestCase):
         self.assertIn("INSERT INTO articles", fallback_sql)
         self.assertEqual((203, "", "402", "", "", ""), fallback_params)
 
+    def test_import_articles_preserves_payload_priority_and_fallback(self):
+        from backend.storage.zsxq_database import ZSXQDatabase
+
+        db = object.__new__(ZSXQDatabase)
+        calls = []
+        db._upsert_article = lambda topic_id, article_data: calls.append((topic_id, article_data))
+
+        ZSXQDatabase._import_articles(
+            db,
+            202,
+            {
+                "type": "article",
+                "title": "fallback title",
+                "article": {"title": "top article", "article_id": "top"},
+                "talk": {"article": {"title": "talk article", "article_id": "talk"}},
+            },
+        )
+        self.assertEqual([(202, {"title": "talk article", "article_id": "talk"})], calls)
+
+        calls.clear()
+        ZSXQDatabase._import_articles(
+            db,
+            203,
+            {
+                "type": "article",
+                "title": "fallback title",
+                "article": {"title": "top article", "article_id": "top"},
+            },
+        )
+        self.assertEqual([(203, {"title": "top article", "article_id": "top"})], calls)
+
+        calls.clear()
+        ZSXQDatabase._import_articles(db, 204, {"type": "article", "title": "fallback title"})
+        self.assertEqual(
+            [
+                (
+                    204,
+                    {
+                        "title": "fallback title",
+                        "article_id": "204",
+                        "article_url": "",
+                        "inline_article_url": "",
+                    },
+                )
+            ],
+            calls,
+        )
+
     def test_import_files_preserves_skip_defaults_and_timestamp(self):
         from backend.storage.zsxq_database import ZSXQDatabase
 

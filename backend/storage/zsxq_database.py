@@ -47,6 +47,7 @@ from backend.storage.zsxq_database_helpers import (
     tags_by_group_query,
     topic_create_time_by_id_query,
     topic_count_by_tag_query,
+    topic_article_payload_from_data,
     topic_detail_scope,
     topic_count_query,
     topic_exists_query,
@@ -399,6 +400,10 @@ def _topic_file_group_payload_from_row(row) -> Optional[Dict[str, Any]]:
 
 def _topic_talk_files_from_data(topic_data: Dict[str, Any]) -> tuple[bool, Any]:
     return topic_talk_files_from_data(topic_data)
+
+
+def _topic_article_payload_from_data(topic_id: int, topic_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    return topic_article_payload_from_data(topic_id, topic_data)
 
 
 class ZSXQDatabase:
@@ -822,30 +827,10 @@ class ZSXQDatabase:
     
     def _import_articles(self, topic_id: int, topic_data: Dict[str, Any]):
         """导入文章信息"""
-        # 检查talk类型话题中的article字段
-        if 'talk' in topic_data and topic_data['talk'] and 'article' in topic_data['talk']:
-            article_data = topic_data['talk']['article']
-            if article_data:
-                self._upsert_article(topic_id, article_data)
-                return
-        
-        # 检查顶层的article字段（如果存在）
-        if 'article' in topic_data and topic_data['article']:
-            article_data = topic_data['article']
+        article_data = _topic_article_payload_from_data(topic_id, topic_data)
+        if article_data:
             self._upsert_article(topic_id, article_data)
-            return
-        
-        # 如果话题类型是article但没有article字段，从title等信息构建
-        topic_type = topic_data.get('type', '')
-        if topic_type == 'article' and topic_data.get('title'):
-            article_data = {
-                'title': topic_data.get('title', ''),
-                'article_id': str(topic_id),  # 使用topic_id作为article_id
-                'article_url': '',  # 暂时为空
-                'inline_article_url': ''  # 暂时为空
-            }
-            self._upsert_article(topic_id, article_data)
-    
+
     def _upsert_article(self, topic_id: int, article_data: Dict[str, Any]):
         """插入或更新文章信息"""
         title = article_data.get('title', '')

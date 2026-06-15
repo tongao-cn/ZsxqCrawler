@@ -19144,6 +19144,53 @@ Result:
 - Full backend unittest discovery passed: 1112 tests, 15 skipped.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-15 - P2 topic article payload helper
+
+Changed:
+
+- Added characterization coverage for `_import_articles()` article payload priority:
+  `talk.article` first, top-level `article` second, and `type == "article"` title fallback last.
+- Added `topic_article_payload_from_data()` to `backend/storage/zsxq_database_helpers.py`, with a
+  compatibility wrapper in `backend/storage/zsxq_database.py`.
+- Reused the helper from `_import_articles()` so the method now delegates payload selection and only
+  performs the existing upsert call.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- `talk.article` still wins over top-level `article` and the title-derived fallback.
+- Top-level `article` still wins over the title-derived fallback.
+- Title-derived article fallback still uses the existing `title`, `article_id = str(topic_id)`,
+  empty `article_url`, and empty `inline_article_url` payload shape.
+- `_upsert_article()` skip/default behavior, topic create-time lookup, SQL statement, and conflict
+  semantics are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_import_articles_preserves_payload_priority_and_fallback -v
+uv run python -m py_compile backend\storage\zsxq_database.py backend\storage\zsxq_database_helpers.py tests\test_zsxq_database_helpers.py
+uv run python -m unittest tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_import_articles_preserves_payload_priority_and_fallback tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_upsert_article_uses_topic_create_time_and_preserves_empty_payload_skip tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_article_insert_statement_helper_preserves_sql_shape_and_params -v
+uv run python -m unittest tests.test_zsxq_database_helpers -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run ruff check backend\storage\zsxq_database.py backend\storage\zsxq_database_helpers.py tests\test_zsxq_database_helpers.py --select F401,F841
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- New article payload priority characterization test passed against the original inline
+  implementation: 1 focused test.
+- `py_compile` passed.
+- Focused article import/upsert/statement tests passed after extraction: 3 tests.
+- ZSXQ database helper tests passed: 84 tests.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- Full backend unittest discovery passed: 1113 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:
