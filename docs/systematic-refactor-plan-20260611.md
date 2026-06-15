@@ -22946,6 +22946,50 @@ Result:
 - Full backend unittest discovery passed in the current worktree: 1158 tests, 15 skipped.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-15 - P9 download filename override result naming cleanup
+
+Changed:
+
+- Introduced internal `DownloadFilenameOverride` `NamedTuple` for
+  `_apply_response_filename_override(...)`.
+- Kept the existing `response_filename_override(...)` helper contract and tuple-compatible equality
+  for direct helper tests.
+- Replaced the positional override unpack in `_handle_download_response(...)` with named attribute
+  access for `file_name`, `safe_filename`, and `file_path`.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Content-Disposition filename override detection, default-name no-op behavior, override log text,
+  safe filename/path derivation, HTTP failure behavior after override, success body handling, public
+  API, returned tuple-compatible shapes, fallback/legacy behavior, error semantics, call order,
+  config semantics, and task-level behavior are unchanged.
+- Existing characterization tests already cover the override/no-op helper paths and the caller paths
+  where override is applied before HTTP failure and normal successful downloads continue unchanged.
+
+Verification:
+
+```powershell
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_apply_response_filename_override_preserves_override_and_noop_paths tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_handle_download_response_preserves_override_http_failure_and_success_paths tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_download_file_applies_response_filename_override_before_http_failure -v
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run ruff check backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py --select F401,F841
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- `py_compile` passed.
+- Focused filename override/download response tests passed: 3 tests.
+- ZSXQ file downloader helper tests passed: 180 tests.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- Full backend unittest discovery passed in the current worktree: 1158 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:

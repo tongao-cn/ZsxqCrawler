@@ -178,6 +178,12 @@ class DownloadFileTarget(NamedTuple):
     file_path: str
 
 
+class DownloadFilenameOverride(NamedTuple):
+    file_name: str
+    safe_filename: str
+    file_path: str
+
+
 class DownloadBodyTarget(NamedTuple):
     total_size: int
     expected_size: int
@@ -974,7 +980,7 @@ class ZSXQFileDownloader:
         file_name: str,
         file_id: int,
         response_headers: Dict[str, Any],
-    ) -> Optional[tuple[str, str, str]]:
+    ) -> Optional[DownloadFilenameOverride]:
         filename_override = response_filename_override(
             file_name,
             file_id,
@@ -984,9 +990,9 @@ class ZSXQFileDownloader:
         if not filename_override:
             return None
 
-        real_filename, _safe_filename, _file_path = filename_override
+        real_filename, safe_filename, file_path = filename_override
         self.log(f"   📝 从响应头获取到真实文件名: {real_filename}")
-        return filename_override
+        return DownloadFilenameOverride(real_filename, safe_filename, file_path)
 
     def _record_download_http_failure(self, status_code: int) -> tuple[str, str]:
         error_code, error_message = download_http_failure_detail(status_code)
@@ -1030,7 +1036,9 @@ class ZSXQFileDownloader:
                 response.headers,
             )
             if filename_override:
-                file_name, safe_filename, file_path = filename_override
+                file_name = filename_override.file_name
+                safe_filename = filename_override.safe_filename
+                file_path = filename_override.file_path
 
             if response.status_code == 200:
                 body_result = self._handle_successful_download_response(
