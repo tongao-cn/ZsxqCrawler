@@ -155,6 +155,8 @@ from backend.storage.zsxq_file_database import ZSXQFileDatabase
 
 DOWNLOAD_URL_MAX_RETRIES = 10
 DOWNLOAD_URL_REQUEST_TIMEOUT_SECONDS = 30
+DOWNLOAD_FILE_MAX_RETRIES = 3
+DOWNLOAD_FILE_RESPONSE_TIMEOUT_SECONDS = 300
 
 
 class DownloadUrlResponseDecision(NamedTuple):
@@ -743,7 +745,7 @@ class ZSXQFileDownloader:
         if existing_file_result:
             return existing_file_result
 
-        download_retries = 3
+        download_retries = DOWNLOAD_FILE_MAX_RETRIES
         last_error = None
         last_error_code = None
 
@@ -970,7 +972,11 @@ class ZSXQFileDownloader:
 
     def _request_download_response(self, download_url: str) -> Any:
         self.log(f"   🚀 开始下载...")
-        return self.session.get(download_url, timeout=300, stream=True)
+        return self.session.get(
+            download_url,
+            timeout=DOWNLOAD_FILE_RESPONSE_TIMEOUT_SECONDS,
+            stream=True,
+        )
 
     def _handle_download_response(
         self,

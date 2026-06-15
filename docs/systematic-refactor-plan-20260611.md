@@ -22629,6 +22629,53 @@ Result:
 - Full backend unittest discovery passed in the current worktree: 1157 tests, 15 skipped.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-15 - P9 download file retry and timeout constants
+
+Changed:
+
+- Introduced `DOWNLOAD_FILE_MAX_RETRIES` for the existing `download_file(...)` retry count of 3.
+- Introduced `DOWNLOAD_FILE_RESPONSE_TIMEOUT_SECONDS` for the existing download body request
+  timeout of 300 seconds.
+- Replaced the local retry literal and `_request_download_response(...)` timeout literal with those
+  constants.
+- Reused existing characterization coverage for 3 retry attempts, retry wait/log text, final
+  failure status, response request timeout, and `stream=True` behavior.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- File downloads still retry exactly 3 times, still emit the same retry and final failure logs, and
+  still call the download response request with `timeout=300` and `stream=True`.
+- Public API, returned values, fallback/legacy behavior, error semantics, status updates, partial
+  file cleanup, printed/logged text, call order, config semantics, and task-level behavior are
+  unchanged.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_download_file_preserves_retry_wait_log_and_delay tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_download_file_marks_final_failure_after_http_retries tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_download_file_requests_response_with_stream_timeout_and_log -v
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_download_file_preserves_retry_wait_log_and_delay tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_download_file_marks_final_failure_after_http_retries tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_download_file_requests_response_with_stream_timeout_and_log tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_download_file_retries_body_download_once tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_download_file_retries_and_marks_final_failure_after_http_404 tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_download_file_retries_after_size_mismatch_before_success tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_download_file_retries_and_fails_on_size_mismatch -v
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run ruff check backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py --select F401,F841
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- Existing retry/timeout characterization baseline passed before production extraction: 3 focused
+  tests.
+- `py_compile` passed.
+- Focused download file retry/timeout tests passed after extraction: 7 tests.
+- ZSXQ file downloader helper tests passed: 179 tests.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- Full backend unittest discovery passed in the current worktree: 1157 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:
