@@ -20299,6 +20299,54 @@ Result:
 - Full backend unittest discovery passed: 1127 tests, 15 skipped.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-15 - P2 topic article create-time helper extraction
+
+Changed:
+
+- Added characterization coverage for `_upsert_article(...)` preserving create-time read failure
+  propagation.
+- Extracted `_fetch_topic_create_time_by_id(...)` for the topic create-time scalar read used by
+  article upsert.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- `_upsert_article(...)` still skips empty article payloads before any DB call.
+- Article upsert still reads topic create time with `_topic_create_time_by_id_query(topic_id)` and
+  still defaults missing rows to `''`.
+- Create-time read failures still propagate to the outer import transaction path; they are not
+  swallowed and do not continue into the article insert.
+- Article insert SQL, params, fallback created_at, public API, legacy paths, fallback behavior,
+  error semantics, storage schema, and config semantics are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_upsert_article_uses_topic_create_time_and_preserves_empty_payload_skip tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_import_articles_preserves_payload_priority_and_fallback tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_existence_query_helpers_preserve_group_id_param_semantics tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_article_insert_statement_helper_preserves_sql_shape_and_params -v
+uv run python -m unittest tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_upsert_article_uses_topic_create_time_and_preserves_empty_payload_skip tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_upsert_article_preserves_create_time_failure_propagation tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_import_articles_preserves_payload_priority_and_fallback tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_existence_query_helpers_preserve_group_id_param_semantics tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_article_insert_statement_helper_preserves_sql_shape_and_params -v
+uv run python -m py_compile backend\storage\zsxq_database.py tests\test_zsxq_database_helpers.py
+uv run python -m unittest tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_upsert_article_uses_topic_create_time_and_preserves_empty_payload_skip tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_upsert_article_preserves_create_time_failure_propagation tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_import_articles_preserves_payload_priority_and_fallback tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_existence_query_helpers_preserve_group_id_param_semantics tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_article_insert_statement_helper_preserves_sql_shape_and_params -v
+uv run python -m unittest tests.test_zsxq_database_helpers -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run ruff check backend\storage\zsxq_database.py tests\test_zsxq_database_helpers.py --select F401,F841
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- Existing article characterization tests passed before adding coverage: 4 focused tests.
+- New create-time failure propagation characterization test passed before production extraction: 5
+  focused tests.
+- `py_compile` passed.
+- Focused article tests passed after extraction: 5 tests.
+- ZSXQ database helper tests passed: 93 tests.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- Full backend unittest discovery passed: 1128 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:

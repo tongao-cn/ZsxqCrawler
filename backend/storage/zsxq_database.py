@@ -844,9 +844,7 @@ class ZSXQDatabase:
         if not title and not article_id:
             return
         
-        # 获取话题的创建时间作为文章创建时间
-        sql, params = _topic_create_time_by_id_query(topic_id)
-        created_at = self._fetch_first_column_or_default(sql, params, '')
+        created_at = self._fetch_topic_create_time_by_id(topic_id)
         
         sql, params = _article_insert_statement(
             topic_id,
@@ -856,6 +854,10 @@ class ZSXQDatabase:
             created_at,
         )
         self.cursor.execute(sql, params)
+
+    def _fetch_topic_create_time_by_id(self, topic_id: int) -> Any:
+        sql, params = _topic_create_time_by_id_query(topic_id)
+        return self._fetch_first_column_or_default(sql, params, '')
 
     def _import_files(self, topic_id: int, files_data: List[Dict[str, Any]]):
         """导入话题文件信息"""

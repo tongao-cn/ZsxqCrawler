@@ -102,6 +102,14 @@ class FakeTimestampFailureCursor(FakeTimestampCursor):
         raise RuntimeError("temporary timestamp failure")
 
 
+class FakeArticleCreateTimeFailureCursor(FakeCursor):
+    def execute(self, query, params=()):
+        super().execute(query, params)
+        if "SELECT create_time FROM topics" in " ".join(query.split()):
+            raise RuntimeError("temporary article create-time failure")
+        return self
+
+
 class FakeSequenceCursor(FakeTimestampCursor):
     pass
 
@@ -2971,6 +2979,20 @@ class ZSXQDatabaseHelperTests(unittest.TestCase):
         fallback_sql, fallback_params = fallback_db.cursor.calls[1]
         self.assertIn("INSERT INTO articles", fallback_sql)
         self.assertEqual((203, "", "402", "", "", ""), fallback_params)
+
+    def test_upsert_article_preserves_create_time_failure_propagation(self):
+        from backend.storage.zsxq_database import ZSXQDatabase
+
+        db = object.__new__(ZSXQDatabase)
+        db.cursor = FakeArticleCreateTimeFailureCursor()
+
+        with self.assertRaisesRegex(RuntimeError, "temporary article create-time failure"):
+            ZSXQDatabase._upsert_article(db, 202, {"article_id": "401"})
+
+        self.assertEqual(
+            [("SELECT create_time FROM topics WHERE topic_id = ?", (202,))],
+            db.cursor.calls,
+        )
 
     def test_import_articles_preserves_payload_priority_and_fallback(self):
         from backend.storage.zsxq_database import ZSXQDatabase
