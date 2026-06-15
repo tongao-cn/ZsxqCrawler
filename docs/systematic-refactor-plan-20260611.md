@@ -21141,6 +21141,52 @@ Result:
 - Full backend unittest discovery passed: 1134 tests, 15 skipped.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-15 - P3 group mapped rows helper extraction
+
+Changed:
+
+- Extracted `_fetch_group_mapped_rows(...)` in `ZSXQColumnsDatabase` for the shared
+  `query_builder(group_id)` plus mapped-row fetch flow used by pending and uncached queues.
+- Reused the helper from `get_pending_videos(...)`, `get_pending_files(...)`, and
+  `get_uncached_images(...)`.
+- Confirmed existing characterization coverage for grouped branches, unscoped branches, execute
+  arity, pending video row shape, pending file row shape, and uncached image row shape before
+  production extraction.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Each public method still calls the same query builder with the original `group_id`, preserving
+  the grouped vs unscoped SQL branches and falsey-params `execute(sql)` behavior.
+- Public API, fallback behavior, legacy behavior, error semantics, SQL shape, params, storage
+  schema, config semantics, and commit/rollback behavior are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_columns_database_helpers.ZSXQColumnsDatabaseHelperTests.test_pending_queue_queries_preserve_group_filter_branches tests.test_zsxq_columns_database_helpers.ZSXQColumnsDatabaseHelperTests.test_pending_queue_queries_preserve_unscoped_branches tests.test_zsxq_columns_database_helpers.ZSXQColumnsDatabaseHelperTests.test_pending_queue_methods_preserve_execute_arity_and_row_shapes -v
+uv run python -m py_compile backend\storage\zsxq_columns_database.py tests\test_zsxq_columns_database_helpers.py
+uv run python -m unittest tests.test_zsxq_columns_database_helpers.ZSXQColumnsDatabaseHelperTests.test_pending_queue_queries_preserve_group_filter_branches tests.test_zsxq_columns_database_helpers.ZSXQColumnsDatabaseHelperTests.test_pending_queue_queries_preserve_unscoped_branches tests.test_zsxq_columns_database_helpers.ZSXQColumnsDatabaseHelperTests.test_pending_queue_methods_preserve_execute_arity_and_row_shapes -v
+uv run python -m unittest tests.test_zsxq_columns_database_helpers -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run ruff check backend\storage\zsxq_columns_database.py tests\test_zsxq_columns_database_helpers.py --select F401,F841
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- Existing pending/uncached queue characterization coverage passed before production extraction: 3
+  focused tests.
+- `py_compile` passed.
+- Focused pending/uncached queue tests passed after extraction: 3 tests.
+- ZSXQ columns database helper tests passed: 79 tests.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- Full backend unittest discovery passed: 1134 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:

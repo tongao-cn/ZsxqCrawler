@@ -402,8 +402,11 @@ class ZSXQColumnsDatabase:
 
     def get_pending_videos(self, group_id: int = None) -> List[Dict[str, Any]]:
         """获取待下载的视频列表"""
-        sql, params = _pending_videos_query(group_id)
-        return self._fetch_mapped_rows(sql, params, _pending_video_row_to_dict)
+        return self._fetch_group_mapped_rows(
+            group_id,
+            _pending_videos_query,
+            _pending_video_row_to_dict,
+        )
 
     def _load_topic_comment_images(
         self,
@@ -438,8 +441,11 @@ class ZSXQColumnsDatabase:
     
     def get_pending_files(self, group_id: int = None) -> List[Dict[str, Any]]:
         """获取待下载的文件列表"""
-        sql, params = _pending_files_query(group_id)
-        return self._fetch_mapped_rows(sql, params, _pending_file_row_to_dict)
+        return self._fetch_group_mapped_rows(
+            group_id,
+            _pending_files_query,
+            _pending_file_row_to_dict,
+        )
     
     # ==================== 图片缓存 ====================
     
@@ -450,8 +456,20 @@ class ZSXQColumnsDatabase:
     
     def get_uncached_images(self, group_id: int = None) -> List[Dict[str, Any]]:
         """获取未缓存的图片列表"""
-        sql, params = _uncached_images_query(group_id)
-        return self._fetch_mapped_rows(sql, params, _uncached_image_row_to_dict)
+        return self._fetch_group_mapped_rows(
+            group_id,
+            _uncached_images_query,
+            _uncached_image_row_to_dict,
+        )
+
+    def _fetch_group_mapped_rows(
+        self,
+        group_id: Optional[Any],
+        query_builder: Callable[[Optional[Any]], tuple[str, Any]],
+        row_mapper: Callable[[Any], Dict[str, Any]],
+    ) -> List[Dict[str, Any]]:
+        sql, params = query_builder(group_id)
+        return self._fetch_mapped_rows(sql, params, row_mapper)
     
     # ==================== 统计信息 ====================
     
