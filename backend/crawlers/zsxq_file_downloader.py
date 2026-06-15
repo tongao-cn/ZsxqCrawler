@@ -808,20 +808,11 @@ class ZSXQFileDownloader:
             return DownloadAttemptResult(False, None, file_name, safe_filename, file_path)
 
         response = self._request_download_response(download_url)
-        success_result, failure_detail, file_name, safe_filename, file_path = (
-            self._handle_download_response(
-                response,
-                file_id,
-                file_name,
-                file_size,
-                safe_filename,
-                file_path,
-            )
-        )
-        return DownloadAttemptResult(
-            success_result,
-            failure_detail,
+        return self._handle_download_response(
+            response,
+            file_id,
             file_name,
+            file_size,
             safe_filename,
             file_path,
         )
@@ -1001,7 +992,7 @@ class ZSXQFileDownloader:
         file_size: int,
         safe_filename: str,
         file_path: str,
-    ) -> tuple[Optional[bool], Optional[tuple[str, str]], str, str, str]:
+    ) -> DownloadAttemptResult:
         try:
             filename_override = self._apply_response_filename_override(
                 file_name,
@@ -1019,12 +1010,18 @@ class ZSXQFileDownloader:
                     safe_filename,
                     file_path,
                 )
-                return success_result, failure_detail, file_name, safe_filename, file_path
+                return DownloadAttemptResult(
+                    success_result,
+                    failure_detail,
+                    file_name,
+                    safe_filename,
+                    file_path,
+                )
 
             failure_detail = self._record_download_http_failure(response.status_code)
         except Exception as exc:
             failure_detail = self._record_download_exception(exc, file_path)
-        return None, failure_detail, file_name, safe_filename, file_path
+        return DownloadAttemptResult(None, failure_detail, file_name, safe_filename, file_path)
 
     def _prepare_download_body_target(
         self,
