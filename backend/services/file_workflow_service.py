@@ -794,6 +794,15 @@ def _build_selected_download_file_records_query(
     )
 
 
+def _fetch_download_file_rows(
+    downloader: ZSXQFileDownloader,
+    query: str,
+    params: Sequence[Any],
+) -> Sequence[Sequence[Any]]:
+    downloader.file_db.cursor.execute(query, params)
+    return downloader.file_db.cursor.fetchall()
+
+
 def run_file_download_task(
     task_id: str,
     group_id: str,
@@ -882,8 +891,7 @@ def _load_download_file_records(
         group_id,
         ordered_ids,
     )
-    downloader.file_db.cursor.execute(query, params)
-    rows = downloader.file_db.cursor.fetchall()
+    rows = _fetch_download_file_rows(downloader, query, params)
     by_file_id = {int(row[0]): row for row in rows}
     records = [
         _normalize_download_file_record(row)
@@ -961,8 +969,7 @@ def _load_filtered_download_file_records(
         search,
         max_files,
     )
-    downloader.file_db.cursor.execute(query, params)
-    rows = downloader.file_db.cursor.fetchall()
+    rows = _fetch_download_file_rows(downloader, query, params)
     return [_normalize_download_file_record(row) for row in rows]
 
 

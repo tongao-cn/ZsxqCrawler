@@ -20811,6 +20811,56 @@ Result:
 - Full backend unittest discovery passed: 1132 tests, 15 skipped.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-15 - P1 download file rows fetch helper extraction
+
+Changed:
+
+- Extracted `_fetch_download_file_rows(...)` for shared downloader file-database `execute +
+  fetchall()` reads.
+- Reused the helper from `_load_download_file_records(...)` and
+  `_load_filtered_download_file_records(...)`.
+- Confirmed existing characterization coverage for selected-download dedupe/order/missing handling,
+  empty selection query shape, filtered default search/limit behavior, completed status filtering,
+  and `all`/zero-limit behavior before production extraction.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Selected download records still use `_build_selected_download_file_records_query(...)`, preserve
+  the existing `IN ()` empty-selection SQL shape, dedupe IDs before querying, restore requested
+  order after fetching, and report missing IDs the same way.
+- Filtered download records still use `_build_filtered_download_file_records_query(...)`, preserve
+  default exclusion of completed statuses, completed/all status handling, search params, optional
+  limit behavior, row order, and row normalization.
+- Public API, route wrappers, task status, fallback behavior, legacy behavior, error semantics, SQL
+  shape, params, storage schema, and config semantics are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_file_routes_helpers.FileRoutesHelperTests.test_load_download_file_records_dedupes_preserves_order_and_reports_missing tests.test_file_routes_helpers.FileRoutesHelperTests.test_load_download_file_records_keeps_empty_selection_query_shape tests.test_file_routes_helpers.FileRoutesHelperTests.test_load_filtered_download_file_records_keeps_default_search_and_limit_shape tests.test_file_routes_helpers.FileRoutesHelperTests.test_load_filtered_download_file_records_keeps_completed_status_shape tests.test_file_routes_helpers.FileRoutesHelperTests.test_load_filtered_download_file_records_keeps_all_status_and_zero_limit_shape -v
+uv run python -m py_compile backend\services\file_workflow_service.py tests\test_file_routes_helpers.py
+uv run python -m unittest tests.test_file_routes_helpers.FileRoutesHelperTests.test_load_download_file_records_dedupes_preserves_order_and_reports_missing tests.test_file_routes_helpers.FileRoutesHelperTests.test_load_download_file_records_keeps_empty_selection_query_shape tests.test_file_routes_helpers.FileRoutesHelperTests.test_load_filtered_download_file_records_keeps_default_search_and_limit_shape tests.test_file_routes_helpers.FileRoutesHelperTests.test_load_filtered_download_file_records_keeps_completed_status_shape tests.test_file_routes_helpers.FileRoutesHelperTests.test_load_filtered_download_file_records_keeps_all_status_and_zero_limit_shape -v
+uv run python -m unittest tests.test_file_routes_helpers -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run ruff check backend\services\file_workflow_service.py tests\test_file_routes_helpers.py --select F401,F841
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- Existing download-record characterization coverage passed before production extraction: 5 focused
+  tests.
+- `py_compile` passed.
+- Focused download-record tests passed after extraction: 5 tests.
+- File route helper tests passed: 91 tests.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- Full backend unittest discovery passed: 1132 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:
