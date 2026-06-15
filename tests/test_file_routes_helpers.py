@@ -1531,6 +1531,30 @@ class FileRoutesHelperTests(unittest.TestCase):
         update_task.assert_any_call("task-1", "completed", "文件列表收集完成", "incremental-result")
         safe_remove.assert_called_once_with("task-1")
 
+    def test_run_collect_files_task_stops_after_downloader_creation(self):
+        from backend.schemas.files import FileCollectRequest
+        from backend.services.file_workflow_service import run_collect_files_task
+
+        downloader = FakeFileDownloadTaskDownloader(existing_count=0)
+
+        with (
+            patch("backend.services.file_workflow_service._create_file_downloader", return_value=downloader) as create_downloader,
+            patch("backend.services.file_workflow_service.update_task") as update_task,
+            patch("backend.services.file_workflow_service.add_task_log") as add_task_log,
+            patch("backend.services.file_workflow_service.is_task_stopped", return_value=True),
+            patch("backend.services.file_workflow_service._safe_remove_file_downloader") as safe_remove,
+        ):
+            run_collect_files_task("task-1", "123", FileCollectRequest())
+
+        create_downloader.assert_called_once_with("task-1", "123")
+        self.assertEqual([], downloader.collect_calls)
+        self.assertEqual(
+            [("task-1", "running", "开始收集文件列表...")],
+            [call.args for call in update_task.call_args_list],
+        )
+        add_task_log.assert_called_once_with("task-1", "🛑 任务在初始化过程中被停止")
+        safe_remove.assert_called_once_with("task-1")
+
     def test_run_collect_files_task_logs_success_and_completed_payload(self):
         from backend.schemas.files import FileCollectRequest
         from backend.services.file_workflow_service import run_collect_files_task

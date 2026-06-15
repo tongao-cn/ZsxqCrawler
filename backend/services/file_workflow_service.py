@@ -576,13 +576,19 @@ def _complete_collect_files_task(task_id: str, result: Any) -> None:
     update_task(task_id, "completed", "文件列表收集完成", result)
 
 
+def _file_task_stopped_after_init(task_id: str) -> bool:
+    if is_task_stopped(task_id):
+        add_task_log(task_id, "🛑 任务在初始化过程中被停止")
+        return True
+    return False
+
+
 def run_collect_files_task(task_id: str, group_id: str, request: FileCollectRequest):
     try:
         update_task(task_id, "running", "开始收集文件列表...")
         downloader = _create_file_downloader(task_id, group_id)
 
-        if is_task_stopped(task_id):
-            add_task_log(task_id, "🛑 任务在初始化过程中被停止")
+        if _file_task_stopped_after_init(task_id):
             return
 
         add_task_log(task_id, "📡 连接到知识星球API...")
@@ -1124,22 +1130,8 @@ def _download_and_complete_single_file(
     _complete_single_file_download(task_id, downloader, file_id, file_info, result)
 
 
-def _single_file_download_stopped_after_init(task_id: str) -> bool:
-    if is_task_stopped(task_id):
-        add_task_log(task_id, "🛑 任务在初始化过程中被停止")
-        return True
-    return False
-
-
 def _complete_sync_files_from_topics_task(task_id: str, stats: Dict[str, Any]) -> None:
     update_task(task_id, "completed", "从话题同步文件记录完成", stats)
-
-
-def _sync_files_from_topics_stopped_after_init(task_id: str) -> bool:
-    if is_task_stopped(task_id):
-        add_task_log(task_id, "🛑 任务在初始化过程中被停止")
-        return True
-    return False
 
 
 def run_single_file_download_task_with_info(
@@ -1154,7 +1146,7 @@ def run_single_file_download_task_with_info(
         update_task(task_id, "running", f"开始下载文件 (ID: {file_id})...")
         downloader = _create_file_downloader(task_id, group_id)
 
-        if _single_file_download_stopped_after_init(task_id):
+        if _file_task_stopped_after_init(task_id):
             return
 
         file_info = _resolve_single_download_file_info(
@@ -1177,7 +1169,7 @@ def run_sync_files_from_topics_task(task_id: str, group_id: str):
     topics_db = None
     try:
         update_task(task_id, "running", "开始从话题同步文件记录...")
-        if _sync_files_from_topics_stopped_after_init(task_id):
+        if _file_task_stopped_after_init(task_id):
             return
 
         topics_db = ZSXQDatabase(group_id)
