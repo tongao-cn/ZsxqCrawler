@@ -557,9 +557,12 @@ class ZSXQDatabase:
             traceback.print_exc()
             return False
 
-    def _fetch_first_column(self, sql: str, params: Any) -> Any:
+    def _fetch_one_row(self, sql: str, params: Any):
         self.cursor.execute(sql, params)
-        return self.cursor.fetchone()[0]
+        return self.cursor.fetchone()
+
+    def _fetch_first_column(self, sql: str, params: Any) -> Any:
+        return self._fetch_one_row(sql, params)[0]
 
     def _execute_timestamped_statement(
         self,
@@ -586,16 +589,14 @@ class ZSXQDatabase:
         self.cursor.execute(sql, params)
 
     def _fetch_first_column_or_default(self, sql: str, params: Any, default: Any) -> Any:
-        self.cursor.execute(sql, params)
-        row = self.cursor.fetchone()
+        row = self._fetch_one_row(sql, params)
         return row[0] if row else default
 
     def _fetch_optional_first_column(self, sql: str, params: Any) -> Any:
         return self._fetch_first_column_or_default(sql, params, None)
 
     def _fetch_row_exists(self, sql: str, params: Any) -> bool:
-        self.cursor.execute(sql, params)
-        return self.cursor.fetchone() is not None
+        return self._fetch_one_row(sql, params) is not None
 
     def get_database_stats(self) -> Dict[str, Any]:
         """获取数据库统计信息"""

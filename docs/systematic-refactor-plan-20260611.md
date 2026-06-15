@@ -20669,6 +20669,53 @@ Result:
 - Full backend unittest discovery passed: 1132 tests, 15 skipped.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-15 - P2 fetch-one helper extraction
+
+Changed:
+
+- Extracted `_fetch_one_row(...)` for shared `execute + fetchone()` reads.
+- Reused `_fetch_one_row(...)` from `_fetch_first_column(...)`,
+  `_fetch_first_column_or_default(...)`, and `_fetch_row_exists(...)`.
+- Confirmed existing characterization coverage for first-column reads, missing-row TypeError
+  propagation, missing-row defaults, optional `None` semantics, and row-presence existence checks
+  before production extraction.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- `_fetch_first_column(...)` still raises the same missing-row error by indexing the returned row.
+- `_fetch_first_column_or_default(...)` still returns the default only when no row is returned; row
+  values such as `None` are still returned as-is.
+- `_fetch_optional_first_column(...)` still delegates to `_fetch_first_column_or_default(..., None)`.
+- `_fetch_row_exists(...)` still uses row presence, not row truthiness.
+- Public API, legacy paths, fallback behavior, error semantics, storage schema, SQL shape, params,
+  row handling, and config semantics are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_fetch_first_column_preserves_execute_params_and_missing_row_error tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_fetch_first_column_or_default_preserves_missing_row_only_default tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_fetch_optional_first_column_preserves_execute_params_and_none_semantics tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_core_file_exists_preserves_group_scope_and_row_presence_semantics -v
+uv run python -m py_compile backend\storage\zsxq_database.py tests\test_zsxq_database_helpers.py
+uv run python -m unittest tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_fetch_first_column_preserves_execute_params_and_missing_row_error tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_fetch_first_column_or_default_preserves_missing_row_only_default tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_fetch_optional_first_column_preserves_execute_params_and_none_semantics tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_core_file_exists_preserves_group_scope_and_row_presence_semantics -v
+uv run python -m unittest tests.test_zsxq_database_helpers -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run ruff check backend\storage\zsxq_database.py tests\test_zsxq_database_helpers.py --select F401,F841
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- Existing fetch-one characterization coverage passed before production extraction: 4 focused tests.
+- `py_compile` passed.
+- Focused fetch-one tests passed after extraction: 4 tests.
+- ZSXQ database helper tests passed: 97 tests.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- Full backend unittest discovery passed: 1132 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:
