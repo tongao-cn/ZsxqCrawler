@@ -88,6 +88,14 @@ class FakeTimestampCursor(FakeCursor):
         return None
 
 
+class FakeTimestampCountFailureCursor(FakeTimestampCursor):
+    def execute(self, query, params=()):
+        super().execute(query, params)
+        if "SELECT COUNT(*) FROM topics" in " ".join(query.split()):
+            raise RuntimeError("temporary timestamp count failure")
+        return self
+
+
 class FakeSequenceCursor(FakeTimestampCursor):
     pass
 
@@ -1831,6 +1839,46 @@ class ZSXQDatabaseHelperTests(unittest.TestCase):
             },
             ZSXQDatabase.get_timestamp_range_info(db),
         )
+        self.assertEqual(
+            [
+                (
+                    "SELECT create_time FROM topics WHERE (? IS NULL OR group_id = ?) "
+                    "AND create_time IS NOT NULL AND create_time != '' ORDER BY create_time DESC LIMIT 1",
+                    (None, None),
+                ),
+                (
+                    "SELECT create_time FROM topics WHERE (? IS NULL OR group_id = ?) "
+                    "AND create_time IS NOT NULL AND create_time != '' ORDER BY create_time ASC LIMIT 1",
+                    (None, None),
+                ),
+                ("SELECT COUNT(*) FROM topics WHERE (? IS NULL OR group_id = ?)", (None, None)),
+            ],
+            cursor.calls,
+        )
+
+    def test_timestamp_range_info_preserves_count_failure_fallback_shape(self):
+        from backend.storage.zsxq_database import ZSXQDatabase
+
+        cursor = FakeTimestampCountFailureCursor([("new-time",), ("old-time",)])
+        db = object.__new__(ZSXQDatabase)
+        db.cursor = cursor
+        db.group_id = None
+
+        with patch("builtins.print") as mocked_print:
+            result = ZSXQDatabase.get_timestamp_range_info(db)
+
+        self.assertEqual(
+            {
+                "newest_time": None,
+                "oldest_time": None,
+                "newest_timestamp": None,
+                "oldest_timestamp": None,
+                "total_topics": 0,
+                "has_data": False,
+            },
+            result,
+        )
+        mocked_print.assert_called_once()
         self.assertEqual(
             [
                 (

@@ -20050,6 +20050,59 @@ Result:
 - Full backend unittest discovery passed: 1122 tests, 15 skipped.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-15 - P2 timestamp range values helper extraction
+
+Changed:
+
+- Added characterization coverage for the `get_timestamp_range_info(...)` count-query failure
+  path, locking the existing behavior that a failure after newest/oldest timestamp reads falls
+  back to the all-empty timestamp range payload.
+- Extracted `_fetch_timestamp_range_values(...)` in `backend/storage/zsxq_database.py`.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- `get_timestamp_range_info(...)` still reads newest time, oldest time, then total topic count
+  in the same order.
+- Newest/oldest range reads still use nullable group scope, while legacy
+  `get_newest_topic_timestamp(...)` / `get_oldest_topic_timestamp(...)` empty-group behavior is
+  unchanged.
+- Success responses still include `newest_time`, `oldest_time`, `newest_timestamp`,
+  `oldest_timestamp`, `total_topics`, and `has_data` with the same values.
+- Count-query failures still print `获取时间戳范围信息失败: ...` and return the all-empty
+  fallback payload with `total_topics: 0` and `has_data: False`.
+- SQL shapes, query params, response shape, public API, legacy paths, fallback behavior, error
+  semantics, storage schema, and config semantics are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_timestamp_range_info_uses_nullable_scope_and_preserves_response_shape tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_topic_timestamp_query_helpers_preserve_existing_scope_semantics -v
+uv run python -m unittest tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_timestamp_range_info_uses_nullable_scope_and_preserves_response_shape tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_timestamp_range_info_preserves_count_failure_fallback_shape tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_topic_timestamp_query_helpers_preserve_existing_scope_semantics -v
+uv run python -m py_compile backend\storage\zsxq_database.py tests\test_zsxq_database_helpers.py
+uv run python -m unittest tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_timestamp_range_info_uses_nullable_scope_and_preserves_response_shape tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_timestamp_range_info_preserves_count_failure_fallback_shape tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_topic_timestamp_query_helpers_preserve_existing_scope_semantics tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_topic_timestamp_methods_keep_legacy_group_scope_for_empty_group -v
+uv run python -m unittest tests.test_zsxq_database_helpers -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run ruff check backend\storage\zsxq_database.py tests\test_zsxq_database_helpers.py --select F401,F841
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- Existing timestamp range success/query characterization tests passed before adding coverage:
+  2 focused tests.
+- New timestamp range count-failure characterization test passed before production extraction:
+  3 focused tests.
+- `py_compile` passed.
+- Focused timestamp range tests passed after extraction: 4 tests.
+- ZSXQ database helper tests passed: 88 tests.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- Full backend unittest discovery passed: 1123 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:

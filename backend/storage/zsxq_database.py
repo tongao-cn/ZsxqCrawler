@@ -588,19 +588,7 @@ class ZSXQDatabase:
     def get_timestamp_range_info(self) -> Dict[str, Any]:
         """获取话题时间戳范围信息"""
         try:
-            # 获取最新话题时间
-            sql, params = _newest_topic_create_time_query(self.group_id, nullable_scope=True)
-            newest_time = self._fetch_optional_first_column(sql, params)
-            
-            # 获取最老话题时间
-            sql, params = _oldest_topic_create_time_query(self.group_id, nullable_scope=True)
-            oldest_time = self._fetch_optional_first_column(sql, params)
-            
-            # 获取话题总数
-            sql, params = _topic_count_query(self.group_id)
-            total_topics = self._fetch_first_column(sql, params)
-            
-            # 判断是否有数据
+            newest_time, oldest_time, total_topics = self._fetch_timestamp_range_values()
             has_data = newest_time is not None and oldest_time is not None
             
             return {
@@ -622,6 +610,17 @@ class ZSXQDatabase:
                 'total_topics': 0,
                 'has_data': False
             }
+
+    def _fetch_timestamp_range_values(self) -> tuple[Any, Any, int]:
+        sql, params = _newest_topic_create_time_query(self.group_id, nullable_scope=True)
+        newest_time = self._fetch_optional_first_column(sql, params)
+
+        sql, params = _oldest_topic_create_time_query(self.group_id, nullable_scope=True)
+        oldest_time = self._fetch_optional_first_column(sql, params)
+
+        sql, params = _topic_count_query(self.group_id)
+        total_topics = self._fetch_first_column(sql, params)
+        return newest_time, oldest_time, total_topics
     
     def get_oldest_topic_timestamp(self) -> Optional[str]:
         """获取数据库中最老的话题时间戳"""
