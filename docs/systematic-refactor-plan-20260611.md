@@ -18922,6 +18922,50 @@ Result:
 - Full backend unittest discovery passed: 1107 tests, 15 skipped.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-15 - P1 selected download records query helper
+
+Changed:
+
+- Added characterization coverage for `_load_download_file_records()` with an empty selected-file
+  list.
+- Added `_build_selected_download_file_records_query()` and reused it from
+  `_load_download_file_records()`.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Selected-file downloads still dedupe and cast requested file IDs before querying, use the same
+  group filter and `IN (...)` placeholder shape, preserve query parameter order, restore requested
+  result order, report missing IDs the same way, and normalize rows through the existing mapper.
+- Empty selected-file lists still produce the existing `IN ()` query shape with only the group
+  parameter; this odd edge is documented and preserved rather than silently changed.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_file_routes_helpers.FileRoutesHelperTests.test_load_download_file_records_keeps_empty_selection_query_shape -v
+uv run python -m py_compile backend\services\file_workflow_service.py tests\test_file_routes_helpers.py
+uv run python -m unittest tests.test_file_routes_helpers.FileRoutesHelperTests.test_load_download_file_records_dedupes_preserves_order_and_reports_missing tests.test_file_routes_helpers.FileRoutesHelperTests.test_load_download_file_records_keeps_empty_selection_query_shape tests.test_file_routes_helpers.FileRoutesHelperTests.test_unique_int_file_ids_preserves_existing_selected_download_semantics -v
+uv run python -m unittest tests.test_file_routes_helpers -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run ruff check backend\services\file_workflow_service.py tests\test_file_routes_helpers.py --select F401,F841
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- New empty-selection characterization test passed against the original inline query implementation:
+  1 focused test.
+- `py_compile` passed.
+- Focused selected-query and ID-normalization tests passed after extraction: 3 tests.
+- File route/helper tests passed: 90 tests.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- Full backend unittest discovery passed: 1108 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:

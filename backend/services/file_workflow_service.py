@@ -777,6 +777,21 @@ def _unique_int_file_ids(file_ids: Sequence[int]) -> list[int]:
     return list(dict.fromkeys(int(file_id) for file_id in file_ids))
 
 
+def _build_selected_download_file_records_query(
+    group_id: str,
+    ordered_ids: Sequence[int],
+) -> tuple[str, tuple[Any, ...]]:
+    placeholders = ", ".join("?" for _ in ordered_ids)
+    return (
+        f"""
+        SELECT file_id, name, size, download_count
+        FROM files
+        WHERE group_id = ? AND file_id IN ({placeholders})
+        """,
+        (_query_group_id(group_id), *ordered_ids),
+    )
+
+
 def run_file_download_task(
     task_id: str,
     group_id: str,
@@ -861,15 +876,11 @@ def _load_download_file_records(
     file_ids: Sequence[int],
 ) -> tuple[list[tuple[int, str, int, int]], list[int]]:
     ordered_ids = _unique_int_file_ids(file_ids)
-    placeholders = ", ".join("?" for _ in ordered_ids)
-    downloader.file_db.cursor.execute(
-        f"""
-        SELECT file_id, name, size, download_count
-        FROM files
-        WHERE group_id = ? AND file_id IN ({placeholders})
-        """,
-        (_query_group_id(group_id), *ordered_ids),
+    query, params = _build_selected_download_file_records_query(
+        group_id,
+        ordered_ids,
     )
+    downloader.file_db.cursor.execute(query, params)
     rows = downloader.file_db.cursor.fetchall()
     by_file_id = {int(row[0]): row for row in rows}
     records = [

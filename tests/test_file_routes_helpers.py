@@ -2551,6 +2551,34 @@ class FileRoutesHelperTests(unittest.TestCase):
         )
         self.assertEqual([999], missing)
 
+    def test_load_download_file_records_keeps_empty_selection_query_shape(self):
+        class FakeCursor:
+            def __init__(self):
+                self.executed = []
+
+            def execute(self, sql, params=()):
+                self.executed.append((sql, params))
+
+            def fetchall(self):
+                return []
+
+        class FakeDownloader:
+            def __init__(self):
+                self.file_db = type("FakeFileDb", (), {"cursor": FakeCursor()})()
+
+        downloader = FakeDownloader()
+
+        records, missing = _load_download_file_records(downloader, "123", [])
+
+        query, params = downloader.file_db.cursor.executed[0]
+        self.assertIn(
+            "WHERE group_id = ? AND file_id IN ()",
+            " ".join(query.split()),
+        )
+        self.assertEqual((123,), params)
+        self.assertEqual([], records)
+        self.assertEqual([], missing)
+
     def test_unique_int_file_ids_preserves_existing_selected_download_semantics(self):
         self.assertEqual([101, 102, 999], _unique_int_file_ids(["101", 102, "101", 999]))
 
