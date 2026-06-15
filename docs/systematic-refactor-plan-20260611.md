@@ -22431,6 +22431,57 @@ Result:
 - Full backend unittest discovery passed in the current worktree: 1154 tests, 15 skipped.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-15 - P9 download URL request exception helper extraction
+
+Changed:
+
+- Added characterization coverage for `get_download_url(...)` when a request exception is followed
+  by a successful signed-URL response.
+- The new test locks request count, retry sleep, success return value, `last_download_url_error`,
+  request-exception output, retry-success output, risk-event phase/status/attempt/http sequence,
+  and UA classification log order.
+- Extended the fake download session test helper so queued `BaseException` instances are raised at
+  request time.
+- Extracted `_handle_download_url_request_exception(...)` from the exception branch of
+  `get_download_url(...)` in `ZSXQFileDownloader`.
+- Kept request-exception planning, message printing, retry decision, and caller continue/fallthrough
+  semantics in the same order.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Request exceptions still print the same exception/retry text, skip a response risk event, sleep
+  before the next attempt, and can return a later successful signed URL.
+- Non-retry request exceptions, retry-exhausted request exceptions, API failures, HTTP failures,
+  JSON decode retry, successful signed URL handling, missing URL handling, public API,
+  fallback/legacy behavior, error semantics, printed/logged text, call order, returned value,
+  config semantics, and task-level behavior are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_get_download_url_retries_request_exception_then_success_preserves_events tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_get_download_url_retries_http_failure_then_success_preserves_events tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_get_download_url_retries_api_failure_then_success_preserves_events -v
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_get_download_url_retries_request_exception_then_success_preserves_events tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_get_download_url_retries_http_failure_then_success_preserves_events tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_get_download_url_retries_api_failure_then_success_preserves_events tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_get_download_url_missing_url_field_exhausts_retries -v
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run ruff check backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py --select F401,F841
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- Request-exception characterization baseline passed before production extraction: 3 focused tests.
+- `py_compile` passed.
+- Focused download URL tests passed after extraction: 4 tests.
+- ZSXQ file downloader helper tests passed: 177 tests.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- Full backend unittest discovery passed in the current worktree: 1155 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:

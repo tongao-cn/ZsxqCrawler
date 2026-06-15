@@ -605,6 +605,17 @@ class ZSXQFileDownloader:
         for message in http_failure["messages"]:
             print(message)
         return http_failure["failure_class"]
+
+    def _handle_download_url_request_exception(
+        self,
+        exc: Exception,
+        attempt: int,
+        max_retries: int,
+    ) -> bool:
+        request_exception = request_exception_plan(exc, attempt, max_retries)
+        for message in request_exception["messages"]:
+            print(message)
+        return request_exception["should_retry"]
     
     def get_download_url(self, file_id: int) -> Optional[str]:
         """获取文件下载链接（带重试机制）
@@ -676,10 +687,7 @@ class ZSXQFileDownloader:
                         return None
                     
             except Exception as e:
-                request_exception = request_exception_plan(e, attempt, max_retries)
-                for message in request_exception["messages"]:
-                    print(message)
-                if request_exception["should_retry"]:
+                if self._handle_download_url_request_exception(e, attempt, max_retries):
                     continue
         
         print(retry_exhausted_message(max_retries))
