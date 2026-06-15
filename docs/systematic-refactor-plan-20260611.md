@@ -17925,6 +17925,49 @@ Result:
 - Full backend unittest discovery passed: 1080 tests, 15 skipped.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-15 - P1 file download config log helper
+
+Changed:
+
+- Added characterization coverage for `run_file_download_task()` download-configuration task logs
+  before work starts.
+- Locked the current log order and create-time `last_days` range log message.
+- Added `_log_file_download_config()` and reused it from `run_file_download_task()`.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Download task startup update, downloader creation arguments, task log order/content, range-log
+  conditions, stop handling after initialization, collection/download branch behavior, completion
+  payload, route behavior, fallback/legacy behavior, public APIs, and configuration semantics are
+  unchanged.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_file_routes_helpers.FileRoutesHelperTests.test_run_file_download_task_logs_download_config_before_work tests.test_file_routes_helpers.FileRoutesHelperTests.test_run_file_download_task_existing_files_uses_download_count_without_collect tests.test_file_routes_helpers.FileRoutesHelperTests.test_run_file_download_task_empty_create_time_collects_and_downloads_date_range -v
+uv run python -m py_compile backend\services\file_workflow_service.py tests\test_file_routes_helpers.py
+uv run python -m unittest tests.test_file_routes_helpers.FileRoutesHelperTests.test_run_file_download_task_logs_download_config_before_work tests.test_file_routes_helpers.FileRoutesHelperTests.test_run_file_download_task_existing_files_uses_download_count_without_collect tests.test_file_routes_helpers.FileRoutesHelperTests.test_run_file_download_task_empty_create_time_collects_and_downloads_date_range -v
+uv run python -m unittest tests.test_file_routes_helpers -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run ruff check backend\services\file_workflow_service.py tests\test_file_routes_helpers.py --select F401,F841
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- New download-config log characterization test and adjacent download-task tests passed against the
+  original inline implementation: 3 focused tests.
+- `py_compile` passed.
+- Focused download-task tests passed after extraction: 3 tests.
+- File route/helper tests passed: 63 tests.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- Full backend unittest discovery passed: 1081 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:

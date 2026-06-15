@@ -602,6 +602,25 @@ def _build_file_download_range_log(
     return None
 
 
+def _log_file_download_config(
+    task_id: str,
+    sort_by: str,
+    start_time: Optional[str],
+    end_time: Optional[str],
+    last_days: Optional[int],
+    download_interval: float,
+    long_sleep_interval: float,
+    files_per_batch: int,
+) -> None:
+    add_task_log(task_id, "⚙️ 下载配置:")
+    add_task_log(task_id, f"   ⏱️ 单次下载间隔: {download_interval}秒")
+    add_task_log(task_id, f"   😴 长休眠间隔: {long_sleep_interval}秒")
+    add_task_log(task_id, f"   📦 批次大小: {files_per_batch}个文件")
+    range_log = _build_file_download_range_log(sort_by, start_time, end_time, last_days)
+    if range_log:
+        add_task_log(task_id, range_log)
+
+
 def _collect_files_for_download(
     downloader: ZSXQFileDownloader,
     sort_by: str,
@@ -683,13 +702,16 @@ def run_file_download_task(
             long_sleep_interval_max=long_sleep_interval_max,
         )
 
-        add_task_log(task_id, "⚙️ 下载配置:")
-        add_task_log(task_id, f"   ⏱️ 单次下载间隔: {download_interval}秒")
-        add_task_log(task_id, f"   😴 长休眠间隔: {long_sleep_interval}秒")
-        add_task_log(task_id, f"   📦 批次大小: {files_per_batch}个文件")
-        range_log = _build_file_download_range_log(sort_by, start_time, end_time, last_days)
-        if range_log:
-            add_task_log(task_id, range_log)
+        _log_file_download_config(
+            task_id,
+            sort_by,
+            start_time,
+            end_time,
+            last_days,
+            download_interval,
+            long_sleep_interval,
+            files_per_batch,
+        )
 
         if is_task_stopped(task_id):
             add_task_log(task_id, "🛑 任务在初始化过程中被停止")
