@@ -650,23 +650,15 @@ class ZSXQFileDownloader:
 
         for attempt in range(download_retries):
             try:
-                if attempt > 0:
-                    self._wait_before_download_retry(attempt, download_retries)
-
-                download_url = self._get_download_url_or_mark_unavailable(file_id)
-                if not download_url:
-                    return False
-
-                response = self._request_download_response(download_url)
-
                 (
                     success_result,
                     failure_detail,
                     file_name,
                     safe_filename,
                     file_path,
-                ) = self._handle_download_response(
-                    response,
+                ) = self._run_download_attempt(
+                    attempt,
+                    download_retries,
                     file_id,
                     file_name,
                     file_size,
@@ -690,6 +682,33 @@ class ZSXQFileDownloader:
             last_error,
         )
         return False
+
+    def _run_download_attempt(
+        self,
+        attempt: int,
+        download_retries: int,
+        file_id: int,
+        file_name: str,
+        file_size: int,
+        safe_filename: str,
+        file_path: str,
+    ) -> tuple[Optional[bool], Optional[tuple[str, str]], str, str, str]:
+        if attempt > 0:
+            self._wait_before_download_retry(attempt, download_retries)
+
+        download_url = self._get_download_url_or_mark_unavailable(file_id)
+        if not download_url:
+            return False, None, file_name, safe_filename, file_path
+
+        response = self._request_download_response(download_url)
+        return self._handle_download_response(
+            response,
+            file_id,
+            file_name,
+            file_size,
+            safe_filename,
+            file_path,
+        )
 
     def _prepare_download_file_target(
         self,
