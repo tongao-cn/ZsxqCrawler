@@ -3045,6 +3045,50 @@ class ZSXQDatabaseHelperTests(unittest.TestCase):
         self.assertEqual((202, 501, "", "", 0, 0, 0, ""), topic_file_params[:8])
         self.assertRegex(topic_file_params[8], r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}\+0800$")
 
+    def test_sync_topic_files_to_core_tables_preserves_skip_order_and_print(self):
+        from backend.storage.zsxq_database import ZSXQDatabase
+
+        db = object.__new__(ZSXQDatabase)
+        db.cursor = FakeCursor()
+        topic_data = {"topic_id": 202, "group": {"group_id": 303}}
+        files = [{"file_id": 501, "name": "memo.pdf"}, {}, {"file_id": 502}]
+
+        with patch("builtins.print") as mocked_print:
+            ZSXQDatabase._sync_topic_files_to_core_tables(db, topic_data, files)
+
+        self.assertEqual(6, len(db.cursor.calls))
+        first_file_sql, first_file_params = db.cursor.calls[0]
+        self.assertIn("INSERT INTO files", first_file_sql)
+        self.assertEqual((501, 303, 202, "memo.pdf", None, None, None, None, None), first_file_params)
+        self.assertEqual(
+            ("DELETE FROM file_topic_relations WHERE file_id = ? AND topic_id = ?", (501, 202)),
+            db.cursor.calls[1],
+        )
+        self.assertEqual(
+            (
+                "INSERT INTO file_topic_relations (file_id, topic_id) VALUES (?, ?) "
+                "ON CONFLICT(file_id, topic_id) DO NOTHING",
+                (501, 202),
+            ),
+            db.cursor.calls[2],
+        )
+        second_file_sql, second_file_params = db.cursor.calls[3]
+        self.assertIn("INSERT INTO files", second_file_sql)
+        self.assertEqual((502, 303, 202, "", None, None, None, None, None), second_file_params)
+        self.assertEqual(
+            ("DELETE FROM file_topic_relations WHERE file_id = ? AND topic_id = ?", (502, 202)),
+            db.cursor.calls[4],
+        )
+        self.assertEqual(
+            (
+                "INSERT INTO file_topic_relations (file_id, topic_id) VALUES (?, ?) "
+                "ON CONFLICT(file_id, topic_id) DO NOTHING",
+                (502, 202),
+            ),
+            db.cursor.calls[5],
+        )
+        mocked_print.assert_called_once_with("同步话题文件到文件库: topic_id=202, files=2")
+
     def test_import_tags_preserves_text_sources_decode_dedupe_and_link_behavior(self):
         from backend.storage.zsxq_database import ZSXQDatabase
 

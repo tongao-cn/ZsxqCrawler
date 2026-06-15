@@ -881,23 +881,35 @@ class ZSXQDatabase:
 
             synced_files = 0
             for file_data in files_data:
-                file_id = _upsert_core_file(
-                    self.cursor,
-                    group_data.get('group_id') if group_data else None,
-                    topic_id,
-                    file_data,
-                )
+                file_id = self._sync_topic_file_to_core_table(group_data, topic_id, file_data)
                 if not file_id:
                     continue
 
                 synced_files += 1
-                _replace_file_topic_relation(self, file_id, topic_id)
 
             if synced_files:
                 print(f"同步话题文件到文件库: topic_id={topic_data.get('topic_id')}, files={synced_files}")
         except Exception as e:
             print(f"同步话题文件到文件库失败: {e}")
             raise
+
+    def _sync_topic_file_to_core_table(
+        self,
+        group_data: Dict[str, Any],
+        topic_id: Any,
+        file_data: Dict[str, Any],
+    ) -> Optional[int]:
+        file_id = _upsert_core_file(
+            self.cursor,
+            group_data.get('group_id') if group_data else None,
+            topic_id,
+            file_data,
+        )
+        if not file_id:
+            return None
+
+        _replace_file_topic_relation(self, file_id, topic_id)
+        return file_id
 
     def backfill_topic_files_to_core_tables(self, batch_size: int = 500) -> Dict[str, int]:
         """把当前 topic_files 回填到核心 files/file_topic_relations 表。"""

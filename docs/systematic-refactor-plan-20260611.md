@@ -20250,6 +20250,55 @@ Result:
 - Full backend unittest discovery passed: 1126 tests, 15 skipped.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-15 - P2 topic file core sync helper extraction
+
+Changed:
+
+- Added characterization coverage for `_sync_topic_files_to_core_tables(...)` preserving invalid
+  file skips, per-file write order, group/topic params, relation writes, and success print count.
+- Extracted `_sync_topic_file_to_core_table(...)` for the single-file core file upsert plus
+  file-topic relation write.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- `_sync_topic_files_to_core_tables(...)` still returns immediately for empty files or missing
+  topic ids.
+- Valid files still execute `_upsert_core_file(...)` before `_replace_file_topic_relation(...)`.
+- Invalid files still do not write anything and do not increment the success print count.
+- The success print still fires once only when at least one file is synced and still reports the
+  same `topic_id` and file count.
+- Exception handling still prints `同步话题文件到文件库失败: ...` and re-raises.
+- SQL shapes, query params, write order, public API, legacy paths, fallback behavior, error
+  semantics, storage schema, and config semantics are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_import_topic_data_existing_topic_preserves_skip_and_file_sync tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_import_topic_data_existing_topic_preserves_talk_files_key_semantics tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_import_topic_data_new_topic_preserves_talk_file_import_then_sync_order tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_upsert_core_file_uses_current_cursor tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_replace_file_topic_relation_deletes_then_inserts -v
+uv run python -m unittest tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_import_topic_data_existing_topic_preserves_skip_and_file_sync tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_import_topic_data_existing_topic_preserves_talk_files_key_semantics tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_import_topic_data_new_topic_preserves_talk_file_import_then_sync_order tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_import_files_preserves_skip_defaults_and_timestamp tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_sync_topic_files_to_core_tables_preserves_skip_order_and_print tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_upsert_core_file_uses_current_cursor tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_replace_file_topic_relation_deletes_then_inserts -v
+uv run python -m py_compile backend\storage\zsxq_database.py tests\test_zsxq_database_helpers.py
+uv run python -m unittest tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_import_topic_data_existing_topic_preserves_skip_and_file_sync tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_import_topic_data_existing_topic_preserves_talk_files_key_semantics tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_import_topic_data_new_topic_preserves_talk_file_import_then_sync_order tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_import_files_preserves_skip_defaults_and_timestamp tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_sync_topic_files_to_core_tables_preserves_skip_order_and_print tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_upsert_core_file_uses_current_cursor tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_replace_file_topic_relation_deletes_then_inserts -v
+uv run python -m unittest tests.test_zsxq_database_helpers -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run ruff check backend\storage\zsxq_database.py tests\test_zsxq_database_helpers.py --select F401,F841
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- Existing import/file-sync characterization tests passed before adding coverage: 5 focused tests.
+- New direct core-sync characterization test passed before production extraction: 7 focused tests.
+- `py_compile` passed.
+- Focused sync tests passed after extraction: 7 tests.
+- ZSXQ database helper tests passed: 92 tests.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- Full backend unittest discovery passed: 1127 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:
