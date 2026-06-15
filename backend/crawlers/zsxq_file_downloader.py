@@ -1344,6 +1344,15 @@ class ZSXQFileDownloader:
             return True
 
         return False
+
+    def _next_time_collection_index(self, next_index: Optional[Any]) -> Optional[Any]:
+        next_page = time_collection_next_page_plan(next_index)
+        self.log(next_page["message"])
+        if not next_page["has_next"]:
+            return None
+
+        time.sleep(random.uniform(2, 5))
+        return next_page["next_index"]
     
     def collect_files_by_time(
         self,
@@ -1433,12 +1442,8 @@ class ZSXQFileDownloader:
                 if self._crossed_time_collection_stop_before(files, stop_before_time):
                     break
                 
-                next_page = time_collection_next_page_plan(next_index)
-                self.log(next_page["message"])
-                if next_page["has_next"]:
-                    current_index = next_page["next_index"]
-                    time.sleep(random.uniform(2, 5))
-                else:
+                current_index = self._next_time_collection_index(next_index)
+                if current_index is None:
                     break
 
         except KeyboardInterrupt:

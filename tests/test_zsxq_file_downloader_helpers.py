@@ -850,7 +850,7 @@ class FileDownloaderPaginationTests(unittest.TestCase):
         downloader.fetch_file_list = fetch_file_list
 
         with (
-            patch("backend.crawlers.zsxq_file_downloader.random.uniform", return_value=2.5),
+            patch("backend.crawlers.zsxq_file_downloader.random.uniform", return_value=2.5) as uniform,
             patch("backend.crawlers.zsxq_file_downloader.time.sleep") as sleep,
         ):
             stats = ZSXQFileDownloader.collect_files_by_time(downloader)
@@ -862,6 +862,7 @@ class FileDownloaderPaginationTests(unittest.TestCase):
             ],
             downloader.fetch_calls,
         )
+        uniform.assert_called_once_with(2, 5)
         sleep.assert_called_once_with(2.5)
         self.assertIn("   ⏭️ 下一页时间戳: next-page", downloader.logs)
         self.assertIn("📭 已到达最后一页", downloader.logs)
