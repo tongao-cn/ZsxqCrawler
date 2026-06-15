@@ -18098,6 +18098,51 @@ Result:
 - Full backend unittest discovery passed: 1084 tests, 15 skipped.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-15 - P1 collect files request helper
+
+Changed:
+
+- Added characterization coverage for `run_collect_files_task()` date-range collection and default
+  incremental collection paths.
+- Locked the current task logs, collect method choice, collect call arguments, completed message,
+  completed payload, and downloader cleanup behavior.
+- Added `_collect_files_for_request()` and reused it from `run_collect_files_task()`.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- The startup update, downloader creation, initialization stop handling, connection log,
+  stage-one log, date-range/recent-days log text, date-range collect arguments, incremental collect
+  branch, post-collection stop check, final success log, completed payload, failure handling,
+  downloader cleanup, route behavior, fallback/legacy behavior, public APIs, and configuration
+  semantics are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_file_routes_helpers.FileRoutesHelperTests.test_run_collect_files_task_date_range_logs_and_completes tests.test_file_routes_helpers.FileRoutesHelperTests.test_run_collect_files_task_default_uses_incremental_collect -v
+uv run python -m py_compile backend\services\file_workflow_service.py tests\test_file_routes_helpers.py
+uv run python -m unittest tests.test_file_routes_helpers.FileRoutesHelperTests.test_run_collect_files_task_date_range_logs_and_completes tests.test_file_routes_helpers.FileRoutesHelperTests.test_run_collect_files_task_default_uses_incremental_collect -v
+uv run python -m unittest tests.test_file_routes_helpers -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run ruff check backend\services\file_workflow_service.py tests\test_file_routes_helpers.py --select F401,F841
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- New collect-task characterization tests passed against the original inline implementation:
+  2 focused tests.
+- `py_compile` passed.
+- Focused collect-task tests passed after extraction: 2 tests.
+- File route/helper tests passed: 68 tests.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- Full backend unittest discovery passed: 1086 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:
