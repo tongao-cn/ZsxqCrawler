@@ -616,6 +616,62 @@ class ZSXQFileDownloader:
         for message in request_exception["messages"]:
             print(message)
         return request_exception["should_retry"]
+
+    def _handle_download_url_response(
+        self,
+        response: Any,
+        file_id: int,
+        attempt: int,
+        max_retries: int,
+        headers: Dict[str, str],
+    ) -> tuple[Optional[str], bool, bool]:
+        print(f"   📊 响应状态: {response.status_code}")
+
+        if response.status_code == 200:
+            data, should_retry_json = self._parse_api_json_response(response, attempt, max_retries)
+            if should_retry_json:
+                return None, True, False
+            if not data:
+                return None, True, False
+
+            if data.get('succeeded'):
+                download_url = self._handle_download_url_success_response(
+                    data,
+                    file_id,
+                    attempt,
+                    headers,
+                    response.status_code,
+                )
+                return download_url, False, False
+
+            failure_class = self._handle_download_url_api_failure_response(
+                data,
+                file_id,
+                attempt,
+                max_retries,
+                headers,
+                response.status_code,
+            )
+
+            if failure_class == API_FAILURE_PERMISSION_DENIED_1030:
+                return None, False, True
+            if failure_class == API_FAILURE_RETRY:
+                return None, True, False
+            if failure_class == API_FAILURE_NON_RETRY:
+                return None, False, True
+            return None, False, False
+
+        http_failure_class = self._handle_download_url_http_failure_response(
+            response.status_code,
+            response.text,
+            attempt,
+            max_retries,
+        )
+        if http_failure_class == HTTP_FAILURE_RETRY:
+            return None, True, False
+        if http_failure_class == HTTP_FAILURE_NON_RETRY:
+            return None, False, True
+        return None, False, False
     
     def get_download_url(self, file_id: int) -> Optional[str]:
         """获取文件下载链接（带重试机制）
@@ -636,55 +692,19 @@ class ZSXQFileDownloader:
             
             try:
                 response = self.session.get(url, headers=headers, timeout=30)
-                
-                print(f"   📊 响应状态: {response.status_code}")
-                
-                if response.status_code == 200:
-                    data, should_retry_json = self._parse_api_json_response(response, attempt, max_retries)
-                    if should_retry_json:
-                        continue
-                    if not data:
-                        continue
-
-                    if data.get('succeeded'):
-                        download_url = self._handle_download_url_success_response(
-                            data,
-                            file_id,
-                            attempt,
-                            headers,
-                            response.status_code,
-                        )
-                        if download_url:
-                            return download_url
-                    else:
-                        failure_class = self._handle_download_url_api_failure_response(
-                            data,
-                            file_id,
-                            attempt,
-                            max_retries,
-                            headers,
-                            response.status_code,
-                        )
-
-                        if failure_class == API_FAILURE_PERMISSION_DENIED_1030:
-                            return None
-
-                        if failure_class == API_FAILURE_RETRY:
-                            continue
-                        if failure_class == API_FAILURE_NON_RETRY:
-                            return None
-                        
-                else:
-                    http_failure_class = self._handle_download_url_http_failure_response(
-                        response.status_code,
-                        response.text,
-                        attempt,
-                        max_retries,
-                    )
-                    if http_failure_class == HTTP_FAILURE_RETRY:
-                        continue
-                    if http_failure_class == HTTP_FAILURE_NON_RETRY:
-                        return None
+                download_url, should_retry, should_stop = self._handle_download_url_response(
+                    response,
+                    file_id,
+                    attempt,
+                    max_retries,
+                    headers,
+                )
+                if download_url:
+                    return download_url
+                if should_retry:
+                    continue
+                if should_stop:
+                    return None
                     
             except Exception as e:
                 if self._handle_download_url_request_exception(e, attempt, max_retries):

@@ -22482,6 +22482,58 @@ Result:
 - Full backend unittest discovery passed in the current worktree: 1155 tests, 15 skipped.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-15 - P9 download URL response dispatch helper extraction
+
+Changed:
+
+- Added characterization coverage for `get_download_url(...)` when a JSON decode failure is
+  followed by a successful signed-URL response.
+- The new test locks request count, retry sleep, success return value, `last_download_url_error`,
+  JSON decode output, retry-success output, risk-event phase/status/attempt/http sequence, and UA
+  classification log order.
+- Extracted `_handle_download_url_response(...)` from the response-dispatch body of
+  `get_download_url(...)`.
+- The new helper returns `(download_url, should_retry, should_stop)` so the public method keeps the
+  existing `return`, `continue`, and fallthrough semantics at the loop boundary.
+- Kept response-status output, JSON decode retry, empty-data retry, success URL handling, API
+  failure handling, HTTP failure handling, 1030 stop, retry-exhausted fallthrough, missing-URL
+  fallthrough, and terminal `None` behavior in the same order.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- JSON decode failures still print the same parse/raw-response/retry text, skip a response risk
+  event, sleep before the next attempt, and can return a later successful signed URL.
+- Successful signed URL, missing URL, retryable API failure, permission-denied 1030, retryable HTTP
+  failure, request exception, final retry-exhausted output, public API, fallback/legacy behavior,
+  error semantics, printed/logged text, call order, returned value, config semantics, and task-level
+  behavior are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_get_download_url_retries_json_decode_failure_then_success_preserves_events tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_get_download_url_retries_request_exception_then_success_preserves_events tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_get_download_url_retries_http_failure_then_success_preserves_events tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_get_download_url_retries_api_failure_then_success_preserves_events -v
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_get_download_url_retries_json_decode_failure_then_success_preserves_events tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_get_download_url_retries_request_exception_then_success_preserves_events tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_get_download_url_retries_http_failure_then_success_preserves_events tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_get_download_url_retries_api_failure_then_success_preserves_events tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_get_download_url_missing_url_field_exhausts_retries tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_get_download_url_1030_does_not_stop_whole_task tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_get_download_url_redacts_signed_url_in_stdout -v
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run ruff check backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py --select F401,F841
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- JSON decode characterization baseline passed before production extraction: 4 focused tests.
+- `py_compile` passed.
+- Focused download URL tests passed after extraction: 7 tests.
+- ZSXQ file downloader helper tests passed: 178 tests.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- Full backend unittest discovery passed in the current worktree: 1156 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:
