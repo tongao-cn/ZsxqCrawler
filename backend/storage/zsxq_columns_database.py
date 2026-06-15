@@ -142,7 +142,7 @@ class ZSXQColumnsDatabase:
         if not user_data or not user_data.get('user_id'):
             return None
         
-        self.cursor.execute(_user_insert_statement(), _user_insert_params(user_data))
+        self._execute_statement(_user_insert_statement(), _user_insert_params(user_data))
         return user_data.get('user_id')
     
     def insert_topic_detail(self, group_id: int, topic_data: Dict[str, Any], raw_json: str = None) -> Optional[int]:
@@ -154,7 +154,7 @@ class ZSXQColumnsDatabase:
         
         talk = topic_data.get('talk', {})
         
-        self.cursor.execute(
+        self._execute_statement(
             _topic_detail_insert_statement(),
             _topic_detail_insert_params(group_id, topic_data, raw_json),
         )
@@ -191,7 +191,7 @@ class ZSXQColumnsDatabase:
         owner = talk['owner']
         user_id = self.insert_user(owner)
         if user_id:
-            self.cursor.execute(
+            self._execute_statement(
                 _topic_owner_insert_statement(),
                 _topic_owner_insert_params(topic_id, user_id),
             )
@@ -237,7 +237,7 @@ class ZSXQColumnsDatabase:
         if not payload or not payload.get(id_key):
             return
 
-        self.cursor.execute(statement_builder(), params_builder(topic_id, payload))
+        self._execute_statement(statement_builder(), params_builder(topic_id, payload))
     
     def _insert_comment(self, topic_id: int, comment_data: Dict[str, Any]):
         """插入评论信息"""
@@ -265,7 +265,7 @@ class ZSXQColumnsDatabase:
         repliee_id: Any,
         comment_data: Dict[str, Any],
     ):
-        self.cursor.execute(
+        self._execute_statement(
             _topic_comment_insert_statement(),
             _topic_comment_insert_params(
                 topic_id,
@@ -356,8 +356,11 @@ class ZSXQColumnsDatabase:
             self.cursor.execute(sql)
         return self.cursor.fetchone()
 
-    def _execute_and_commit(self, sql: str, params: Any):
+    def _execute_statement(self, sql: str, params: Any):
         self.cursor.execute(sql, params)
+
+    def _execute_and_commit(self, sql: str, params: Any):
+        self._execute_statement(sql, params)
         self.conn.commit()
 
     def _fetch_mapped_rows(

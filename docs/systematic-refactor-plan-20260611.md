@@ -20954,6 +20954,54 @@ Result:
 - Full backend unittest discovery passed: 1134 tests, 15 skipped.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-15 - P3 no-commit statement execution helper
+
+Changed:
+
+- Extracted `_execute_statement(...)` in `ZSXQColumnsDatabase` for writes that execute a statement
+  without committing immediately.
+- Reused it from `insert_user(...)`, `insert_topic_detail(...)`, `_insert_topic_owner(...)`,
+  `_insert_topic_child(...)`, `_insert_comment_row(...)`, and `_execute_and_commit(...)`.
+- Confirmed existing characterization coverage for column/topic/user insert skip behavior, commit
+  counts, topic detail insert order, owner insert behavior, media insert params, comment user
+  upsert order, runtime group id propagation, and related payload order before production extraction.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- No-commit writes still call `cursor.execute(sql, params)` with the same SQL and params, and still
+  rely on their existing outer caller to commit.
+- `_execute_and_commit(...)` still performs the same execute followed by `conn.commit()`.
+- Topic detail child insertion order, owner/user insertion behavior, comment owner/repliee handling,
+  skip branches, public methods, fallback behavior, legacy behavior, error semantics, SQL shape,
+  params, storage schema, and config semantics are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_columns_database_helpers.ZSXQColumnsDatabaseHelperTests.test_column_topic_and_user_insert_methods_preserve_skip_params_and_commit tests.test_zsxq_columns_database_helpers.ZSXQColumnsDatabaseHelperTests.test_topic_detail_insert_method_preserves_skip_params_and_commit tests.test_zsxq_columns_database_helpers.ZSXQColumnsDatabaseHelperTests.test_insert_topic_owner_preserves_skip_and_insert_user_behavior tests.test_zsxq_columns_database_helpers.ZSXQColumnsDatabaseHelperTests.test_insert_media_helpers_preserve_statement_params tests.test_zsxq_columns_database_helpers.ZSXQColumnsDatabaseHelperTests.test_insert_comment_writes_group_id_from_runtime_scope tests.test_zsxq_columns_database_helpers.ZSXQColumnsDatabaseHelperTests.test_insert_comment_preserves_user_upsert_order_and_falsey_skip tests.test_zsxq_columns_database_helpers.ZSXQColumnsDatabaseHelperTests.test_insert_topic_detail_preserves_related_insert_order -v
+uv run python -m py_compile backend\storage\zsxq_columns_database.py tests\test_zsxq_columns_database_helpers.py
+uv run python -m unittest tests.test_zsxq_columns_database_helpers.ZSXQColumnsDatabaseHelperTests.test_column_topic_and_user_insert_methods_preserve_skip_params_and_commit tests.test_zsxq_columns_database_helpers.ZSXQColumnsDatabaseHelperTests.test_topic_detail_insert_method_preserves_skip_params_and_commit tests.test_zsxq_columns_database_helpers.ZSXQColumnsDatabaseHelperTests.test_insert_topic_owner_preserves_skip_and_insert_user_behavior tests.test_zsxq_columns_database_helpers.ZSXQColumnsDatabaseHelperTests.test_insert_media_helpers_preserve_statement_params tests.test_zsxq_columns_database_helpers.ZSXQColumnsDatabaseHelperTests.test_insert_comment_writes_group_id_from_runtime_scope tests.test_zsxq_columns_database_helpers.ZSXQColumnsDatabaseHelperTests.test_insert_comment_preserves_user_upsert_order_and_falsey_skip tests.test_zsxq_columns_database_helpers.ZSXQColumnsDatabaseHelperTests.test_insert_topic_detail_preserves_related_insert_order -v
+uv run python -m unittest tests.test_zsxq_columns_database_helpers -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run ruff check backend\storage\zsxq_columns_database.py tests\test_zsxq_columns_database_helpers.py --select F401,F841
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- Existing no-commit write characterization coverage passed before production extraction: 7 focused
+  tests.
+- `py_compile` passed.
+- Focused no-commit write tests passed after extraction: 7 tests.
+- ZSXQ columns database helper tests passed: 79 tests.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- Full backend unittest discovery passed: 1134 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:
