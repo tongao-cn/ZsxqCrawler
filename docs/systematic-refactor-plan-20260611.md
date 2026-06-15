@@ -20004,6 +20004,52 @@ Result:
 - Full backend unittest discovery passed: 1121 tests, 15 skipped.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-15 - P2 tags-by-group read helper extraction
+
+Changed:
+
+- Added characterization coverage for the `get_tags_by_group(...)` exception fallback path,
+  locking the existing behavior that read failures print once and return an empty list.
+- Extracted `_fetch_tags_by_group(...)` in `backend/storage/zsxq_database.py`.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- `get_tags_by_group(...)` still uses `_tags_by_group_query(...)` and `_format_tag_row`.
+- Successful responses still return the same tag payload list shape.
+- Read failures still print `获取标签列表失败: ...` and return `[]`.
+- SQL shape, query params, row mapping, public API, legacy paths, fallback behavior, error
+  semantics, storage schema, and config semantics are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_get_tags_by_group_uses_helper_query_and_preserves_response_shape tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_tag_read_query_helpers_preserve_sql_shape_and_params -v
+uv run python -m unittest tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_get_tags_by_group_uses_helper_query_and_preserves_response_shape tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_get_tags_by_group_preserves_exception_fallback_shape tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_tag_read_query_helpers_preserve_sql_shape_and_params -v
+uv run python -m py_compile backend\storage\zsxq_database.py tests\test_zsxq_database_helpers.py
+uv run python -m unittest tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_get_tags_by_group_uses_helper_query_and_preserves_response_shape tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_get_tags_by_group_preserves_exception_fallback_shape tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_tag_read_query_helpers_preserve_sql_shape_and_params -v
+uv run python -m unittest tests.test_zsxq_database_helpers -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run ruff check backend\storage\zsxq_database.py tests\test_zsxq_database_helpers.py --select F401,F841
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- Existing tags-by-group success/read-query characterization tests passed before adding coverage:
+  2 focused tests.
+- New tags-by-group exception fallback characterization test passed before production extraction:
+  3 focused tests.
+- `py_compile` passed.
+- Focused tags-by-group tests passed after extraction: 3 tests.
+- ZSXQ database helper tests passed: 87 tests.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- Full backend unittest discovery passed: 1122 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:

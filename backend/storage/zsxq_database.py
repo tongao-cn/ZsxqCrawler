@@ -1023,11 +1023,14 @@ class ZSXQDatabase:
     def get_tags_by_group(self, group_id: int) -> List[Dict[str, Any]]:
         """获取指定群组的所有标签"""
         try:
-            sql, params = _tags_by_group_query(group_id)
-            return self._fetch_mapped_rows(sql, params, _format_tag_row)
+            return self._fetch_tags_by_group(group_id)
         except Exception as e:
             print(f"获取标签列表失败: {e}")
             return []
+
+    def _fetch_tags_by_group(self, group_id: int) -> List[Dict[str, Any]]:
+        sql, params = _tags_by_group_query(group_id)
+        return self._fetch_mapped_rows(sql, params, _format_tag_row)
     
     def get_topics_by_tag(self, tag_id: int, page: int = 1, per_page: int = 20) -> Dict[str, Any]:
         """根据标签获取话题列表"""

@@ -3042,6 +3042,28 @@ class ZSXQDatabaseHelperTests(unittest.TestCase):
             db.cursor.calls,
         )
 
+    def test_get_tags_by_group_preserves_exception_fallback_shape(self):
+        from backend.storage.zsxq_database import ZSXQDatabase
+
+        db = object.__new__(ZSXQDatabase)
+        db.cursor = FakeTagReadCursor(raises=True)
+
+        with patch("builtins.print") as mocked_print:
+            result = ZSXQDatabase.get_tags_by_group(db, 303)
+
+        self.assertEqual([], result)
+        mocked_print.assert_called_once()
+        self.assertEqual(
+            [
+                (
+                    "SELECT tag_id, tag_name, hid, topic_count, created_at FROM tags "
+                    "WHERE group_id = ? ORDER BY topic_count DESC, tag_name ASC",
+                    (303,),
+                )
+            ],
+            db.cursor.calls,
+        )
+
     def test_get_topics_by_tag_uses_helper_queries_and_preserves_pagination(self):
         from backend.storage.zsxq_database import ZSXQDatabase
 
