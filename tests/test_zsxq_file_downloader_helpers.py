@@ -897,6 +897,9 @@ class FileDownloaderPaginationTests(unittest.TestCase):
         )
 
         self.assertEqual([{"count": 20, "index": None, "sort": "by_create_time"}], downloader.fetch_calls)
+        self.assertEqual(1, len(downloader.file_db.imported_responses))
+        imported_files = downloader.file_db.imported_responses[0]["resp_data"]["files"]
+        self.assertEqual([101], [item["file"]["file_id"] for item in imported_files])
         self.assertIn(
             "🛑 当前页最老文件时间 2026-05-01 09:00:00 早于目标起始时间 2026-05-02，停止继续收集更早文件",
             downloader.logs,

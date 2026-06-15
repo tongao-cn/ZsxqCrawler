@@ -1329,6 +1329,21 @@ class ZSXQFileDownloader:
         except Exception as e:
             self.log(time_collection_storage_failed_message(page_count, e))
             return False
+
+    def _crossed_time_collection_stop_before(
+        self,
+        files: list[Dict[str, Any]],
+        stop_before_time: Optional[datetime.datetime],
+    ) -> bool:
+        if not stop_before_time:
+            return False
+
+        crossed_stop_before, oldest_page_time = page_crosses_stop_before(files, stop_before_time)
+        if crossed_stop_before and oldest_page_time:
+            self.log(time_collection_stop_before_boundary_message(oldest_page_time, stop_before_time))
+            return True
+
+        return False
     
     def collect_files_by_time(
         self,
@@ -1415,11 +1430,8 @@ class ZSXQFileDownloader:
                 if should_stop_after_insert:
                     break
 
-                if stop_before_time:
-                    crossed_stop_before, oldest_page_time = page_crosses_stop_before(files, stop_before_time)
-                    if crossed_stop_before and oldest_page_time:
-                        self.log(time_collection_stop_before_boundary_message(oldest_page_time, stop_before_time))
-                        break
+                if self._crossed_time_collection_stop_before(files, stop_before_time):
+                    break
                 
                 next_page = time_collection_next_page_plan(next_index)
                 self.log(next_page["message"])
