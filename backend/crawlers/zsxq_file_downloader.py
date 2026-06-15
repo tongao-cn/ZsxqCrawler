@@ -237,8 +237,18 @@ class DatabaseStatsTimeRange(NamedTuple):
     time_count: Any
 
 
+class FileCollectionLogRow(NamedTuple):
+    log_id: Any
+
+
 def _query_group_id(group_id: str) -> Any:
     return download_query_group_id(group_id)
+
+
+def _file_collection_log_id(row: Any) -> Optional[Any]:
+    if not row:
+        return None
+    return FileCollectionLogRow(row[0]).log_id
 
 
 def _database_stats_total_size(result: Any) -> Any:
@@ -1436,7 +1446,7 @@ class ZSXQFileDownloader:
         )
         self.file_db.cursor.execute(insert_query, insert_params)
         row = self.file_db.cursor.fetchone()
-        log_id = row[0] if row else None
+        log_id = _file_collection_log_id(row)
         self.file_db.conn.commit()
 
         stats = file_collection_stats()

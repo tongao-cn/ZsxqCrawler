@@ -23215,6 +23215,49 @@ Result:
 - Full backend unittest discovery passed in the current worktree: 1163 tests, 15 skipped.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-15 - P9 file collection log row result naming cleanup
+
+Changed:
+
+- Added characterization coverage for collection-log id row conversion, locking empty-row handling,
+  zero id handling, truthy id handling, and extra-column tolerance.
+- Introduced internal `FileCollectionLogRow` `NamedTuple`.
+- Extracted `_file_collection_log_id(...)` and replaced direct positional row access in
+  `collect_all_files_to_database(...)`.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Collection-log insert/update query order, update params, commit order, empty row behavior,
+  zero-id behavior, file fetch/import flow, pagination delay behavior, printed summary, public API,
+  fallback/legacy behavior, error semantics, call order, config semantics, and task-level behavior
+  are unchanged.
+- New characterization coverage locks the row-conversion boundary that was previously only covered
+  through collection-record update params.
+
+Verification:
+
+```powershell
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderPaginationTests.test_file_collection_log_id_preserves_empty_and_truthy_row_semantics tests.test_zsxq_file_downloader_helpers.FileDownloaderPaginationTests.test_collect_all_files_preserves_fetch_failure_record_update_and_summary tests.test_zsxq_file_downloader_helpers.FileDownloaderPaginationTests.test_collect_all_files_preserves_success_import_log_and_collection_record tests.test_zsxq_file_downloader_helpers.FileDownloaderPaginationTests.test_collect_all_files_preserves_next_page_sleep_and_fetch_index -v
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run ruff check backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py --select F401,F841
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- `py_compile` passed.
+- Focused file collection log row tests passed: 4 tests.
+- ZSXQ file downloader helper tests passed: 186 tests.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- Full backend unittest discovery passed in the current worktree: 1164 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:

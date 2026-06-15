@@ -12,6 +12,7 @@ from backend.crawlers.zsxq_file_downloader import (
     ZSXQFileDownloader,
     _database_stats_time_range,
     _database_stats_total_size,
+    _file_collection_log_id,
 )
 from backend.crawlers.zsxq_file_downloader_helpers import (
     API_FAILURE_NON_RETRY,
@@ -535,6 +536,13 @@ class FileDownloaderPaginationTests(unittest.TestCase):
             ),
             file_collection_completion_messages({"total_files": 2, "new_files": 1}, 3),
         )
+
+    def test_file_collection_log_id_preserves_empty_and_truthy_row_semantics(self):
+        self.assertIsNone(_file_collection_log_id(None))
+        self.assertIsNone(_file_collection_log_id(()))
+        self.assertEqual(0, _file_collection_log_id((0,)))
+        self.assertEqual(99, _file_collection_log_id((99,)))
+        self.assertEqual(99, _file_collection_log_id((99, "ignored")))
 
     def test_collect_all_files_stops_when_page_import_fails(self):
         downloader = self._downloader_with_failing_import()
