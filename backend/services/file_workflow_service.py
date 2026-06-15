@@ -721,6 +721,11 @@ def _download_prepared_files(
     )
 
 
+def _complete_file_download_task(task_id: str, result: Any) -> None:
+    add_task_log(task_id, "✅ 文件下载完成！")
+    update_task(task_id, "completed", "文件下载完成", {"downloaded_files": result})
+
+
 def _unique_int_file_ids(file_ids: Sequence[int]) -> list[int]:
     return list(dict.fromkeys(int(file_id) for file_id in file_ids))
 
@@ -797,8 +802,7 @@ def run_file_download_task(
         if is_task_stopped(task_id):
             return
 
-        add_task_log(task_id, "✅ 文件下载完成！")
-        update_task(task_id, "completed", "文件下载完成", {"downloaded_files": result})
+        _complete_file_download_task(task_id, result)
     except Exception as e:
         _fail_file_task(task_id, f"文件下载失败: {e}", f"文件下载失败: {e}")
     finally:
