@@ -1518,6 +1518,26 @@ class FileRoutesHelperTests(unittest.TestCase):
         update_task.assert_any_call("task-1", "completed", "文件列表收集完成", "incremental-result")
         safe_remove.assert_called_once_with("task-1")
 
+    def test_run_collect_files_task_logs_success_and_completed_payload(self):
+        from backend.schemas.files import FileCollectRequest
+        from backend.services.file_workflow_service import run_collect_files_task
+
+        downloader = FakeFileDownloadTaskDownloader(existing_count=0)
+
+        with (
+            patch("backend.services.file_workflow_service._create_file_downloader", return_value=downloader),
+            patch("backend.services.file_workflow_service.update_task") as update_task,
+            patch("backend.services.file_workflow_service.add_task_log") as add_task_log,
+            patch("backend.services.file_workflow_service.is_task_stopped", return_value=False),
+            patch("backend.services.file_workflow_service._safe_remove_file_downloader") as safe_remove,
+        ):
+            run_collect_files_task("task-1", "123", FileCollectRequest(last_days=7))
+
+        log_calls = [call.args for call in add_task_log.call_args_list]
+        self.assertIn(("task-1", "✅ 文件列表收集完成！"), log_calls)
+        update_task.assert_any_call("task-1", "completed", "文件列表收集完成", "range-result")
+        safe_remove.assert_called_once_with("task-1")
+
     def test_run_file_download_task_existing_files_uses_download_count_without_collect(self):
         from backend.services.file_workflow_service import run_file_download_task
 

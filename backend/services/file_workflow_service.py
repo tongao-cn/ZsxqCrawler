@@ -571,6 +571,11 @@ def _collect_files_for_request(
     return downloader.collect_incremental_files()
 
 
+def _complete_collect_files_task(task_id: str, result: Any) -> None:
+    add_task_log(task_id, "✅ 文件列表收集完成！")
+    update_task(task_id, "completed", "文件列表收集完成", result)
+
+
 def run_collect_files_task(task_id: str, group_id: str, request: FileCollectRequest):
     try:
         update_task(task_id, "running", "开始收集文件列表...")
@@ -586,8 +591,7 @@ def run_collect_files_task(task_id: str, group_id: str, request: FileCollectRequ
         if is_task_stopped(task_id):
             return
 
-        add_task_log(task_id, "✅ 文件列表收集完成！")
-        update_task(task_id, "completed", "文件列表收集完成", result)
+        _complete_collect_files_task(task_id, result)
     except Exception as e:
         _fail_file_task(task_id, f"文件列表收集失败: {e}", f"文件列表收集失败: {e}")
     finally:
