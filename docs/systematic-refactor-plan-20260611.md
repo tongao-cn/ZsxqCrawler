@@ -19330,6 +19330,54 @@ Result:
 - Full backend unittest discovery passed: 1116 tests, 15 skipped.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-15 - P3 optional mapped row fetch helper
+
+Changed:
+
+- Added pre-change characterization coverage for `get_column()` positive-row scope parameters and
+  returned column shape.
+- Added `_fetch_optional_params_row(...)` and `_fetch_mapped_optional_row(...)` next to the existing
+  mapped-row fetch helper in `backend/storage/zsxq_columns_database.py`.
+- Reused the optional-row helper from `get_column()` and `get_topic_detail()`.
+- Added direct helper coverage for execute arity with and without params, mapper application, and
+  `None` row semantics.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- `get_column()` still resolves scope, executes the same column query with the same params, maps the
+  same row shape, and returns `None` for missing rows.
+- `get_topic_detail()` still executes the same detail query and returns before child loader calls
+  when the detail row is missing.
+- Existing child loader order, child loader params, SQL text, storage schema, commits, and
+  legacy/fallback paths are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_columns_database_helpers.ZSXQColumnsDatabaseHelperTests.test_get_column_preserves_positive_row_shape_and_scope_params -v
+uv run python -m py_compile backend\storage\zsxq_columns_database.py tests\test_zsxq_columns_database_helpers.py
+uv run python -m unittest tests.test_zsxq_columns_database_helpers.ZSXQColumnsDatabaseHelperTests.test_get_column_preserves_positive_row_shape_and_scope_params tests.test_zsxq_columns_database_helpers.ZSXQColumnsDatabaseHelperTests.test_column_queries_are_scoped_by_group tests.test_zsxq_columns_database_helpers.ZSXQColumnsDatabaseHelperTests.test_topic_detail_queries_are_scoped_by_group tests.test_zsxq_columns_database_helpers.ZSXQColumnsDatabaseHelperTests.test_get_topic_detail_preserves_child_loader_order_and_payload_shape tests.test_zsxq_columns_database_helpers.ZSXQColumnsDatabaseHelperTests.test_fetch_mapped_rows_preserves_optional_params_execute_arity tests.test_zsxq_columns_database_helpers.ZSXQColumnsDatabaseHelperTests.test_fetch_mapped_optional_row_preserves_execute_arity_and_none_shape -v
+uv run python -m unittest tests.test_zsxq_columns_database_helpers -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run ruff check backend\storage\zsxq_columns_database.py tests\test_zsxq_columns_database_helpers.py --select F401,F841
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- Existing `get_column()` positive-row characterization test passed before extraction: 1 focused
+  test.
+- `py_compile` passed.
+- Focused column/detail/fetch helper tests passed after extraction: 6 tests.
+- ZSXQ columns database helper tests passed: 78 tests.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- Full backend unittest discovery passed: 1118 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:

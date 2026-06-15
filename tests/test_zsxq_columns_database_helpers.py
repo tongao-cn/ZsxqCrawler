@@ -1196,6 +1196,46 @@ class ZSXQColumnsDatabaseHelperTests(unittest.TestCase):
         self.assertEqual(("SELECT first",), db.cursor.calls[0])
         self.assertEqual(("SELECT second WHERE id = ?", (202,)), db.cursor.calls[1])
 
+    def test_fetch_mapped_optional_row_preserves_execute_arity_and_none_shape(self):
+        from backend.storage.zsxq_columns_database import ZSXQColumnsDatabase
+
+        class FakeCursor:
+            def __init__(self):
+                self.calls = []
+                self.fetchone_results = [("first",), None, ("third",)]
+
+            def execute(self, *args):
+                self.calls.append(args)
+
+            def fetchone(self):
+                return self.fetchone_results.pop(0)
+
+        db = object.__new__(ZSXQColumnsDatabase)
+        db.cursor = FakeCursor()
+
+        mapper = lambda row: {"value": row[0]}
+
+        self.assertEqual(
+            {"value": "first"},
+            ZSXQColumnsDatabase._fetch_mapped_optional_row(db, "SELECT first", None, mapper),
+        )
+        self.assertIsNone(
+            ZSXQColumnsDatabase._fetch_mapped_optional_row(
+                db,
+                "SELECT missing WHERE id = ?",
+                (202,),
+                mapper,
+            )
+        )
+        self.assertEqual(
+            ("third",),
+            ZSXQColumnsDatabase._fetch_optional_params_row(db, "SELECT third", (303,)),
+        )
+
+        self.assertEqual(("SELECT first",), db.cursor.calls[0])
+        self.assertEqual(("SELECT missing WHERE id = ?", (202,)), db.cursor.calls[1])
+        self.assertEqual(("SELECT third", (303,)), db.cursor.calls[2])
+
     def test_column_queries_preserve_scope_params_and_order(self):
         columns_sql, columns_params = _columns_query(303)
         self.assertIn("SELECT column_id, group_id, name, cover_url, topics_count", self._sql(columns_sql))
@@ -2107,6 +2147,50 @@ class ZSXQColumnsDatabaseHelperTests(unittest.TestCase):
         self.assertIn("ct.group_id = td.group_id", topics_sql)
         self.assertIn("WHERE ct.column_id = ? AND (? IS NULL OR ct.group_id = ?)", topics_sql)
         self.assertEqual((101, 303, 303), topics_params)
+
+    def test_get_column_preserves_positive_row_shape_and_scope_params(self):
+        from backend.storage.zsxq_columns_database import ZSXQColumnsDatabase
+
+        class FakeCursor:
+            def __init__(self):
+                self.calls = []
+
+            def execute(self, sql, params=()):
+                self.calls.append((" ".join(sql.split()), params))
+                return self
+
+            def fetchone(self):
+                return (
+                    101,
+                    303,
+                    "column name",
+                    "cover-url",
+                    7,
+                    "2026-06-10T10:00:00",
+                    "2026-06-10T11:00:00",
+                    "2026-06-10 12:00:00",
+                )
+
+        db = object.__new__(ZSXQColumnsDatabase)
+        db.cursor = FakeCursor()
+        db.group_id = "303"
+
+        self.assertEqual(
+            {
+                "column_id": 101,
+                "group_id": 303,
+                "name": "column name",
+                "cover_url": "cover-url",
+                "topics_count": 7,
+                "create_time": "2026-06-10T10:00:00",
+                "last_topic_attach_time": "2026-06-10T11:00:00",
+                "imported_at": "2026-06-10 12:00:00",
+            },
+            ZSXQColumnsDatabase.get_column(db, 101),
+        )
+        column_sql, column_params = db.cursor.calls[-1]
+        self.assertIn("WHERE column_id = ? AND (? IS NULL OR group_id = ?)", column_sql)
+        self.assertEqual((101, 303, 303), column_params)
 
     def test_topic_detail_queries_are_scoped_by_group(self):
         from backend.storage.zsxq_columns_database import ZSXQColumnsDatabase

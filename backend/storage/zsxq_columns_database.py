@@ -112,10 +112,7 @@ class ZSXQColumnsDatabase:
         """获取单个专栏目录"""
         scope_group_id = self._scope_group_id_param(group_id)
         sql, params = _column_query(column_id, scope_group_id)
-        self.cursor.execute(sql, params)
-        
-        row = self.cursor.fetchone()
-        return _column_row_to_dict(row) if row else None
+        return self._fetch_mapped_optional_row(sql, params, _column_row_to_dict)
     
     # ==================== 专栏文章操作 ====================
     
@@ -277,9 +274,7 @@ class ZSXQColumnsDatabase:
         """获取文章详情"""
         scope_group_id = self._scope_group_id_param(group_id)
         sql, params = _topic_detail_query(topic_id, scope_group_id)
-        self.cursor.execute(sql, params)
-        
-        row = self.cursor.fetchone()
+        row = self._fetch_optional_params_row(sql, params)
         if not row:
             return None
         
@@ -327,6 +322,13 @@ class ZSXQColumnsDatabase:
             self.cursor.execute(sql)
         return self.cursor.fetchall()
 
+    def _fetch_optional_params_row(self, sql: str, params: Any):
+        if params:
+            self.cursor.execute(sql, params)
+        else:
+            self.cursor.execute(sql)
+        return self.cursor.fetchone()
+
     def _fetch_mapped_rows(
         self,
         sql: str,
@@ -334,6 +336,15 @@ class ZSXQColumnsDatabase:
         row_mapper: Callable[[Any], Dict[str, Any]],
     ) -> List[Dict[str, Any]]:
         return [row_mapper(row) for row in self._fetch_optional_params_rows(sql, params)]
+
+    def _fetch_mapped_optional_row(
+        self,
+        sql: str,
+        params: Any,
+        row_mapper: Callable[[Any], Dict[str, Any]],
+    ) -> Optional[Dict[str, Any]]:
+        row = self._fetch_optional_params_row(sql, params)
+        return row_mapper(row) if row else None
 
     def get_pending_videos(self, group_id: int = None) -> List[Dict[str, Any]]:
         """获取待下载的视频列表"""
