@@ -1272,6 +1272,19 @@ class ZSXQFileDownloader:
 
         return None
 
+    def _load_time_collection_database_state(
+        self,
+        enable_time_dedupe: bool,
+    ) -> tuple[Any, Optional[Any]]:
+        initial_stats = self.file_db.get_database_stats()
+        initial_files = initial_stats.get('files', 0)
+        self.log(time_collection_database_status_message(initial_files))
+        db_latest_time = self._load_time_collection_latest_file_time(
+            enable_time_dedupe,
+            initial_files,
+        )
+        return initial_files, db_latest_time
+
     def _apply_time_collection_dedupe_plan(
         self,
         data: Dict[str, Any],
@@ -1466,12 +1479,8 @@ class ZSXQFileDownloader:
             return {'total_files': 0, 'new_files': 0}
 
         # 使用完整数据库的统计信息
-        initial_stats = self.file_db.get_database_stats()
-        initial_files = initial_stats.get('files', 0)
-        self.log(time_collection_database_status_message(initial_files))
-        db_latest_time = self._load_time_collection_latest_file_time(
+        initial_files, db_latest_time = self._load_time_collection_database_state(
             enable_time_dedupe,
-            initial_files,
         )
         
         total_imported_stats = empty_import_stats()
