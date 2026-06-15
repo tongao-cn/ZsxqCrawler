@@ -637,6 +637,33 @@ def _collect_files_for_download(
     return downloader.collect_incremental_files()
 
 
+def _prepare_files_for_download(
+    task_id: str,
+    downloader: ZSXQFileDownloader,
+    group_id: str,
+    sort_by: str,
+    start_time: Optional[str],
+    end_time: Optional[str],
+    last_days: Optional[int],
+) -> Any:
+    add_task_log(task_id, "📡 连接到知识星球API...")
+    existing_files_count = _count_existing_file_records(downloader, group_id)
+
+    if existing_files_count == 0:
+        add_task_log(task_id, "📍 阶段一：收集文件列表")
+        add_task_log(task_id, "🔍 文件库为空，开始收集文件列表...")
+        return _collect_files_for_download(
+            downloader,
+            sort_by,
+            start_time,
+            end_time,
+            last_days,
+        )
+
+    add_task_log(task_id, f"📚 文件库已有 {existing_files_count} 条记录，跳过收集阶段，直接下载")
+    return None
+
+
 def _build_file_download_options(
     sort_by: str,
     max_files: Optional[int],
@@ -717,22 +744,15 @@ def run_file_download_task(
             add_task_log(task_id, "🛑 任务在初始化过程中被停止")
             return
 
-        add_task_log(task_id, "📡 连接到知识星球API...")
-        existing_files_count = _count_existing_file_records(downloader, group_id)
-
-        collect_result = None
-        if existing_files_count == 0:
-            add_task_log(task_id, "📍 阶段一：收集文件列表")
-            add_task_log(task_id, "🔍 文件库为空，开始收集文件列表...")
-            collect_result = _collect_files_for_download(
-                downloader,
-                sort_by,
-                start_time,
-                end_time,
-                last_days,
-            )
-        else:
-            add_task_log(task_id, f"📚 文件库已有 {existing_files_count} 条记录，跳过收集阶段，直接下载")
+        collect_result = _prepare_files_for_download(
+            task_id,
+            downloader,
+            group_id,
+            sort_by,
+            start_time,
+            end_time,
+            last_days,
+        )
 
         if is_task_stopped(task_id):
             return

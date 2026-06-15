@@ -17968,6 +17968,51 @@ Result:
 - Full backend unittest discovery passed: 1081 tests, 15 skipped.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-15 - P1 file download preparation helper
+
+Changed:
+
+- Added characterization coverage for `run_file_download_task()` when the task is stopped after
+  file-list collection and before the file-body download phase.
+- Locked the current behavior that the collect call runs, the download phase is skipped,
+  `📊 文件收集完成: ...` is not logged, and no final completed update is written after that stop
+  point.
+- Added `_prepare_files_for_download()` and reused it from `run_file_download_task()`.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- The connection log, existing-record count query, empty-file-library collection branch,
+  existing-record skip-collection branch, collect result value, post-collection stop check,
+  phase-two logs, download options, completion payload, downloader cleanup, route behavior,
+  fallback/legacy behavior, public APIs, and configuration semantics are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_file_routes_helpers.FileRoutesHelperTests.test_run_file_download_task_stops_after_collect_before_download_phase tests.test_file_routes_helpers.FileRoutesHelperTests.test_run_file_download_task_empty_create_time_collects_and_downloads_date_range tests.test_file_routes_helpers.FileRoutesHelperTests.test_run_file_download_task_existing_files_uses_download_count_without_collect tests.test_file_routes_helpers.FileRoutesHelperTests.test_run_file_download_task_logs_download_config_before_work -v
+uv run python -m py_compile backend\services\file_workflow_service.py tests\test_file_routes_helpers.py
+uv run python -m unittest tests.test_file_routes_helpers.FileRoutesHelperTests.test_run_file_download_task_stops_after_collect_before_download_phase tests.test_file_routes_helpers.FileRoutesHelperTests.test_run_file_download_task_empty_create_time_collects_and_downloads_date_range tests.test_file_routes_helpers.FileRoutesHelperTests.test_run_file_download_task_existing_files_uses_download_count_without_collect tests.test_file_routes_helpers.FileRoutesHelperTests.test_run_file_download_task_logs_download_config_before_work -v
+uv run python -m unittest tests.test_file_routes_helpers -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run ruff check backend\services\file_workflow_service.py tests\test_file_routes_helpers.py --select F401,F841
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- New stopped-after-collection characterization test and adjacent download-task tests passed
+  against the original inline implementation: 4 focused tests.
+- `py_compile` passed.
+- Focused download-task tests passed after extraction: 4 tests.
+- File route/helper tests passed: 64 tests.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- Full backend unittest discovery passed: 1082 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:
