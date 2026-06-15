@@ -18837,6 +18837,48 @@ Result:
 - Full backend unittest discovery passed: 1104 tests, 15 skipped.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-15 - P1 file search condition constant
+
+Changed:
+
+- Added direct characterization coverage for `_add_file_search_condition()` blank-search no-op
+  behavior and trimmed/lowercase eight-parameter search behavior.
+- Added `_FILE_SEARCH_CONDITION` and reused it from `_add_file_search_condition()`.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- File-list and filtered-download search paths still append the same search SQL condition, use the
+  same `LOWER(... LIKE ?)` checks across file/topic/talk/article sources, and extend the same eight
+  lowercase wildcard parameters.
+- Blank/whitespace-only search still leaves conditions and params unchanged.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_file_routes_helpers.FileRoutesHelperTests.test_add_file_search_condition_skips_blank_search_without_mutation tests.test_file_routes_helpers.FileRoutesHelperTests.test_add_file_search_condition_trims_lowercases_and_adds_eight_params -v
+uv run python -m py_compile backend\services\file_workflow_service.py tests\test_file_routes_helpers.py
+uv run python -m unittest tests.test_file_routes_helpers.FileRoutesHelperTests.test_add_file_search_condition_skips_blank_search_without_mutation tests.test_file_routes_helpers.FileRoutesHelperTests.test_add_file_search_condition_trims_lowercases_and_adds_eight_params tests.test_file_routes_helpers.FileRoutesHelperTests.test_get_files_response_keeps_completed_search_and_pagination_shape tests.test_file_routes_helpers.FileRoutesHelperTests.test_load_filtered_download_file_records_keeps_default_search_and_limit_shape tests.test_file_routes_helpers.FileRoutesHelperTests.test_load_filtered_download_file_records_keeps_completed_status_shape -v
+uv run python -m unittest tests.test_file_routes_helpers -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run ruff check backend\services\file_workflow_service.py tests\test_file_routes_helpers.py --select F401,F841
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- New `_add_file_search_condition()` characterization tests passed against the original inline
+  search SQL implementation: 2 focused tests.
+- `py_compile` passed.
+- Focused direct search-condition and query-shape tests passed after extraction: 5 tests.
+- File route/helper tests passed: 88 tests.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- Full backend unittest discovery passed: 1106 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:

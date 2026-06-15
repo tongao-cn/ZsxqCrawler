@@ -304,6 +304,36 @@ _FILES_FROM_CLAUSE = """
             LEFT JOIN file_ai_analyses faa ON faa.file_id = f.file_id
         """
 _COMPLETED_DOWNLOAD_STATUSES = ("completed", "downloaded", "skipped")
+_FILE_SEARCH_CONDITION = """
+        (
+            LOWER(COALESCE(f.name, '')) LIKE ?
+            OR EXISTS (
+                SELECT 1
+                FROM file_topic_relations fr
+                LEFT JOIN topics t ON t.topic_id = fr.topic_id
+                LEFT JOIN talks tk ON tk.topic_id = fr.topic_id
+                LEFT JOIN articles ar ON ar.topic_id = fr.topic_id
+                WHERE fr.file_id = f.file_id
+                  AND (
+                      LOWER(COALESCE(t.title, '')) LIKE ?
+                      OR LOWER(COALESCE(t.annotation, '')) LIKE ?
+                      OR LOWER(COALESCE(tk.text, '')) LIKE ?
+                      OR LOWER(COALESCE(ar.title, '')) LIKE ?
+                  )
+            )
+            OR EXISTS (
+                SELECT 1
+                FROM topic_files tf
+                LEFT JOIN topics t2 ON t2.topic_id = tf.topic_id
+                WHERE tf.file_id = f.file_id
+                  AND (
+                      LOWER(COALESCE(tf.name, '')) LIKE ?
+                      OR LOWER(COALESCE(t2.title, '')) LIKE ?
+                      OR LOWER(COALESCE(t2.annotation, '')) LIKE ?
+                  )
+            )
+        )
+        """
 
 
 def _add_file_download_status_condition(
@@ -866,38 +896,7 @@ def _add_file_search_condition(conditions: list[str], params: list[Any], search:
         return
 
     search_pattern = f"%{search_text.lower()}%"
-    conditions.append(
-        """
-        (
-            LOWER(COALESCE(f.name, '')) LIKE ?
-            OR EXISTS (
-                SELECT 1
-                FROM file_topic_relations fr
-                LEFT JOIN topics t ON t.topic_id = fr.topic_id
-                LEFT JOIN talks tk ON tk.topic_id = fr.topic_id
-                LEFT JOIN articles ar ON ar.topic_id = fr.topic_id
-                WHERE fr.file_id = f.file_id
-                  AND (
-                      LOWER(COALESCE(t.title, '')) LIKE ?
-                      OR LOWER(COALESCE(t.annotation, '')) LIKE ?
-                      OR LOWER(COALESCE(tk.text, '')) LIKE ?
-                      OR LOWER(COALESCE(ar.title, '')) LIKE ?
-                  )
-            )
-            OR EXISTS (
-                SELECT 1
-                FROM topic_files tf
-                LEFT JOIN topics t2 ON t2.topic_id = tf.topic_id
-                WHERE tf.file_id = f.file_id
-                  AND (
-                      LOWER(COALESCE(tf.name, '')) LIKE ?
-                      OR LOWER(COALESCE(t2.title, '')) LIKE ?
-                      OR LOWER(COALESCE(t2.annotation, '')) LIKE ?
-                  )
-            )
-        )
-        """
-    )
+    conditions.append(_FILE_SEARCH_CONDITION)
     params.extend([search_pattern] * 8)
 
 

@@ -3,6 +3,7 @@ from contextlib import ExitStack
 from unittest.mock import patch
 
 from backend.services.file_workflow_service import (
+    _add_file_search_condition,
     _build_check_local_file_status_response,
     _build_download_file_info,
     _build_download_task_stats,
@@ -2597,6 +2598,27 @@ class FileRoutesHelperTests(unittest.TestCase):
     def test_query_group_id_casts_numeric_ids_for_sql_filters(self):
         self.assertEqual(123, _query_group_id("123"))
         self.assertEqual("abc", _query_group_id("abc"))
+
+    def test_add_file_search_condition_skips_blank_search_without_mutation(self):
+        conditions = ["f.group_id = ?"]
+        params = [123]
+
+        _add_file_search_condition(conditions, params, "   ")
+
+        self.assertEqual(["f.group_id = ?"], conditions)
+        self.assertEqual([123], params)
+
+    def test_add_file_search_condition_trims_lowercases_and_adds_eight_params(self):
+        conditions = ["f.group_id = ?"]
+        params = [123]
+
+        _add_file_search_condition(conditions, params, " Foo ")
+
+        self.assertEqual(2, len(conditions))
+        self.assertIn("LOWER(COALESCE(f.name, '')) LIKE ?", conditions[1])
+        self.assertIn("FROM file_topic_relations fr", conditions[1])
+        self.assertIn("FROM topic_files tf", conditions[1])
+        self.assertEqual([123, *["%foo%"] * 8], params)
 
     def _run_async(self, coro):
         import asyncio
