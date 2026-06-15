@@ -695,6 +695,32 @@ def _count_existing_file_records(downloader: ZSXQFileDownloader, group_id: str) 
     return downloader.file_db.cursor.fetchone()[0] or 0
 
 
+def _download_prepared_files(
+    task_id: str,
+    downloader: ZSXQFileDownloader,
+    collect_result: Any,
+    sort_by: str,
+    max_files: Optional[int],
+    start_time: Optional[str],
+    end_time: Optional[str],
+    last_days: Optional[int],
+) -> Any:
+    if collect_result is not None:
+        add_task_log(task_id, f"📊 文件收集完成: {collect_result}")
+    add_task_log(task_id, "📍 阶段二：下载文件本体")
+    add_task_log(task_id, "🚀 开始下载文件...")
+
+    return downloader.download_files_from_database(
+        **_build_file_download_options(
+            sort_by,
+            max_files,
+            start_time,
+            end_time,
+            last_days,
+        )
+    )
+
+
 def _unique_int_file_ids(file_ids: Sequence[int]) -> list[int]:
     return list(dict.fromkeys(int(file_id) for file_id in file_ids))
 
@@ -757,19 +783,15 @@ def run_file_download_task(
         if is_task_stopped(task_id):
             return
 
-        if collect_result is not None:
-            add_task_log(task_id, f"📊 文件收集完成: {collect_result}")
-        add_task_log(task_id, "📍 阶段二：下载文件本体")
-        add_task_log(task_id, "🚀 开始下载文件...")
-
-        result = downloader.download_files_from_database(
-            **_build_file_download_options(
-                sort_by,
-                max_files,
-                start_time,
-                end_time,
-                last_days,
-            )
+        result = _download_prepared_files(
+            task_id,
+            downloader,
+            collect_result,
+            sort_by,
+            max_files,
+            start_time,
+            end_time,
+            last_days,
         )
 
         if is_task_stopped(task_id):
