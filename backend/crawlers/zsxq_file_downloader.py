@@ -153,6 +153,10 @@ from backend.storage.postgres_core_schema import CORE_SCHEMA
 from backend.storage.zsxq_file_database import ZSXQFileDatabase
 
 
+DOWNLOAD_URL_MAX_RETRIES = 10
+DOWNLOAD_URL_REQUEST_TIMEOUT_SECONDS = 30
+
+
 def _query_group_id(group_id: str) -> Any:
     return download_query_group_id(group_id)
 
@@ -672,6 +676,13 @@ class ZSXQFileDownloader:
         if http_failure_class == HTTP_FAILURE_NON_RETRY:
             return None, False, True
         return None, False, False
+
+    def _start_download_url_request(self, file_id: int) -> str:
+        url = f"{self.base_url}/v2/files/{file_id}/download_url"
+        self.last_download_url_error = None
+        self.log(f"   🔗 获取下载链接: ID={file_id}")
+        self.log(f"   🌐 请求URL: {url}")
+        return url
     
     def get_download_url(self, file_id: int) -> Optional[str]:
         """获取文件下载链接（带重试机制）
@@ -680,18 +691,18 @@ class ZSXQFileDownloader:
         - 边获取边下载时：传入的是真实的 file_id
         - 从数据库下载时：传入的是 topic_id
         """
-        url = f"{self.base_url}/v2/files/{file_id}/download_url"
-        max_retries = 10
-        self.last_download_url_error = None
-        
-        self.log(f"   🔗 获取下载链接: ID={file_id}")
-        self.log(f"   🌐 请求URL: {url}")
+        url = self._start_download_url_request(file_id)
+        max_retries = DOWNLOAD_URL_MAX_RETRIES
         
         for attempt in range(max_retries):
             headers = self._prepare_retry_api_request(attempt, file_id=file_id)
             
             try:
-                response = self.session.get(url, headers=headers, timeout=30)
+                response = self.session.get(
+                    url,
+                    headers=headers,
+                    timeout=DOWNLOAD_URL_REQUEST_TIMEOUT_SECONDS,
+                )
                 download_url, should_retry, should_stop = self._handle_download_url_response(
                     response,
                     file_id,

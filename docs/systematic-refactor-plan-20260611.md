@@ -22534,6 +22534,57 @@ Result:
 - Full backend unittest discovery passed in the current worktree: 1156 tests, 15 skipped.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-15 - P9 download URL request startup helper extraction
+
+Changed:
+
+- Added characterization coverage for `get_download_url(...)` request startup behavior.
+- The new test locks the generated download URL endpoint, `timeout=30`, `stream=False`, 10-attempt
+  retry limit, terminal retry-exhausted message, startup log order, and reset of a stale
+  `last_download_url_error`.
+- Introduced `DOWNLOAD_URL_MAX_RETRIES` and `DOWNLOAD_URL_REQUEST_TIMEOUT_SECONDS` module constants
+  for the existing literal values.
+- Extracted `_start_download_url_request(...)` to keep URL construction, stale-error reset, and the
+  two startup log lines in one explicitly side-effecting helper.
+- Kept the response dispatch, retry loop, exception handling, risk-event behavior, terminal
+  fallback, and returned value semantics unchanged.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Download URL calls still target `/v2/files/{file_id}/download_url`, still use a 30-second request
+  timeout, still retry at most 10 attempts, still clear stale `last_download_url_error` before a new
+  request, and still emit the same startup logs in the same order.
+- Successful signed URL, missing URL, JSON decode retry, retryable API failure, permission-denied
+  1030, retryable HTTP failure, request exception, final retry-exhausted output, public API,
+  fallback/legacy behavior, error semantics, printed/logged text, call order, config semantics, and
+  task-level behavior are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_get_download_url_initial_request_preserves_url_timeout_retry_limit_and_error_reset -v
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_get_download_url_initial_request_preserves_url_timeout_retry_limit_and_error_reset tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_get_download_url_retries_json_decode_failure_then_success_preserves_events tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_get_download_url_retries_request_exception_then_success_preserves_events tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_get_download_url_retries_http_failure_then_success_preserves_events tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_get_download_url_retries_api_failure_then_success_preserves_events tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_get_download_url_missing_url_field_exhausts_retries tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_get_download_url_1030_does_not_stop_whole_task tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_get_download_url_redacts_signed_url_in_stdout -v
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run ruff check backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py --select F401,F841
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- Request-startup characterization baseline passed before production extraction: 1 focused test.
+- `py_compile` passed.
+- Focused download URL tests passed after extraction: 8 tests.
+- ZSXQ file downloader helper tests passed: 179 tests.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- Full backend unittest discovery passed in the current worktree: 1157 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:

@@ -4563,6 +4563,44 @@ class FileDownloaderDownloadTests(unittest.TestCase):
             downloader.logs,
         )
 
+    def test_get_download_url_initial_request_preserves_url_timeout_retry_limit_and_error_reset(self):
+        session = FakeDownloadSession([FakeMissingDownloadUrlJsonResponse() for _ in range(10)])
+        downloader = object.__new__(ZSXQFileDownloader)
+        downloader.base_url = "https://api.example"
+        downloader.session = session
+        downloader.group_id = "group-1"
+        downloader.cookie = "cookie"
+        downloader.request_count = 0
+        downloader.last_download_url_error = {"code": 1030, "message": "previous"}
+        downloader.smart_delay = lambda: None
+        downloader.get_stealth_headers = lambda: {}
+        downloader.logs = []
+        downloader.log = downloader.logs.append
+
+        output = io.StringIO()
+        with (
+            contextlib.redirect_stdout(output),
+            patch("backend.crawlers.zsxq_file_downloader.random.uniform", return_value=15.0),
+            patch("backend.crawlers.zsxq_file_downloader.time.sleep"),
+        ):
+            result = ZSXQFileDownloader.get_download_url(downloader, 202)
+
+        self.assertIsNone(result)
+        self.assertIsNone(downloader.last_download_url_error)
+        self.assertEqual(10, downloader.request_count)
+        self.assertEqual(
+            [("https://api.example/v2/files/202/download_url", 30, False)] * 10,
+            session.get_calls,
+        )
+        self.assertIn("🚫 已重试10次，全部失败", output.getvalue())
+        self.assertEqual(
+            [
+                "   🔗 获取下载链接: ID=202",
+                "   🌐 请求URL: https://api.example/v2/files/202/download_url",
+            ],
+            downloader.logs,
+        )
+
     def test_get_download_url_missing_url_field_exhausts_retries(self):
         session = FakeDownloadSession([FakeMissingDownloadUrlJsonResponse() for _ in range(10)])
         downloader = object.__new__(ZSXQFileDownloader)
