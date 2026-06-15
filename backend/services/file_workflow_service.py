@@ -874,6 +874,19 @@ def _run_download_records(
     return stats
 
 
+def _complete_download_records_task(
+    task_id: str,
+    downloader: ZSXQFileDownloader,
+    records: Sequence[tuple[int, str, int, int]],
+    stats: Dict[str, int],
+    completed_message: str,
+) -> None:
+    _run_download_records(task_id, downloader, records, stats)
+    if is_task_stopped(task_id):
+        return
+    update_task(task_id, "completed", completed_message, {"downloaded_files": stats})
+
+
 def run_selected_file_download_task(task_id: str, group_id: str, file_ids: Sequence[int]):
     try:
         update_task(task_id, "running", f"开始下载选中的 {len(file_ids)} 个文件...")
@@ -895,11 +908,7 @@ def run_selected_file_download_task(task_id: str, group_id: str, file_ids: Seque
             update_task(task_id, "completed", "没有可下载的文件记录", {"downloaded_files": stats})
             return
 
-        _run_download_records(task_id, downloader, records, stats)
-        if is_task_stopped(task_id):
-            return
-
-        update_task(task_id, "completed", "选中文件下载完成", {"downloaded_files": stats})
+        _complete_download_records_task(task_id, downloader, records, stats, "选中文件下载完成")
     except Exception as e:
         _fail_file_task(task_id, f"选中文件下载失败: {e}", f"选中文件下载失败: {e}")
     finally:
@@ -933,10 +942,7 @@ def run_filtered_file_download_task(
             update_task(task_id, "completed", "当前筛选下没有可下载文件", {"downloaded_files": stats})
             return
 
-        _run_download_records(task_id, downloader, records, stats)
-        if is_task_stopped(task_id):
-            return
-        update_task(task_id, "completed", "筛选结果下载完成", {"downloaded_files": stats})
+        _complete_download_records_task(task_id, downloader, records, stats, "筛选结果下载完成")
     except Exception as e:
         _fail_file_task(task_id, f"筛选结果下载失败: {e}", f"筛选结果下载失败: {e}")
     finally:

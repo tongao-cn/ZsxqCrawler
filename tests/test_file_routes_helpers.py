@@ -1514,6 +1514,58 @@ class FileRoutesHelperTests(unittest.TestCase):
         update_task.assert_any_call("task-1", "completed", "文件下载完成", {"downloaded_files": "download-result"})
         safe_remove.assert_called_once_with("task-1")
 
+    def test_run_selected_file_download_task_skips_completion_when_stopped_after_records(self):
+        from backend.services.file_workflow_service import run_selected_file_download_task
+
+        downloader = object()
+        records = [(101, "Report.pdf", 123, 7)]
+
+        with (
+            patch("backend.services.file_workflow_service._create_file_downloader", return_value=downloader),
+            patch("backend.services.file_workflow_service._load_download_file_records", return_value=(records, [])),
+            patch("backend.services.file_workflow_service._run_download_records") as run_download_records,
+            patch("backend.services.file_workflow_service.update_task") as update_task,
+            patch("backend.services.file_workflow_service.add_task_log"),
+            patch("backend.services.file_workflow_service.is_task_stopped", side_effect=[False, True]),
+            patch("backend.services.file_workflow_service._safe_remove_file_downloader") as safe_remove,
+        ):
+            run_selected_file_download_task("task-1", "123", [101])
+
+        run_download_records.assert_called_once()
+        self.assertEqual(
+            [
+                ("task-1", "running", "开始下载选中的 1 个文件..."),
+            ],
+            [call.args for call in update_task.call_args_list],
+        )
+        safe_remove.assert_called_once_with("task-1")
+
+    def test_run_filtered_file_download_task_skips_completion_when_stopped_after_records(self):
+        from backend.services.file_workflow_service import run_filtered_file_download_task
+
+        downloader = object()
+        records = [(101, "Report.pdf", 123, 7)]
+
+        with (
+            patch("backend.services.file_workflow_service._create_file_downloader", return_value=downloader),
+            patch("backend.services.file_workflow_service._load_filtered_download_file_records", return_value=records),
+            patch("backend.services.file_workflow_service._run_download_records") as run_download_records,
+            patch("backend.services.file_workflow_service.update_task") as update_task,
+            patch("backend.services.file_workflow_service.add_task_log"),
+            patch("backend.services.file_workflow_service.is_task_stopped", side_effect=[False, True]),
+            patch("backend.services.file_workflow_service._safe_remove_file_downloader") as safe_remove,
+        ):
+            run_filtered_file_download_task("task-1", "123", status="pending", search="pdf", max_files=1)
+
+        run_download_records.assert_called_once()
+        self.assertEqual(
+            [
+                ("task-1", "running", "开始下载当前筛选结果..."),
+            ],
+            [call.args for call in update_task.call_args_list],
+        )
+        safe_remove.assert_called_once_with("task-1")
+
     def test_run_single_file_download_task_uses_database_file_info_and_marks_completed(self):
         downloader = FakeSingleFileDownloadTaskDownloader(
             row=(123, "Db File.pdf", 456, 7),

@@ -17785,6 +17785,54 @@ Result:
 - Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
   not available.
 
+### 2026-06-15 - P1 download records completion helper
+
+Changed:
+
+- Added characterization coverage for selected-file and filtered-file download tasks when they are
+  stopped after `_run_download_records()`.
+- Locked the current behavior that the post-record stop check prevents a final `completed`
+  `update_task()` call while still running cleanup.
+- Added `_complete_download_records_task()` and reused it from both selected-file and filtered-file
+  download tasks.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- `_run_download_records()` still runs with the same `task_id`, downloader, records, and stats
+  object.
+- The second `is_task_stopped(task_id)` check still runs after record downloads and before the
+  final `update_task(..., "completed", ...)` call.
+- Empty-record completion messages, missing selected-file log behavior, stats shape, task failure
+  handling, downloader cleanup, route behavior, fallback/legacy behavior, public APIs, and
+  configuration semantics are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_file_routes_helpers.FileRoutesHelperTests.test_run_selected_file_download_task_skips_completion_when_stopped_after_records tests.test_file_routes_helpers.FileRoutesHelperTests.test_run_filtered_file_download_task_skips_completion_when_stopped_after_records -v
+uv run python -m py_compile backend\services\file_workflow_service.py tests\test_file_routes_helpers.py
+uv run python -m unittest tests.test_file_routes_helpers.FileRoutesHelperTests.test_run_selected_file_download_task_skips_completion_when_stopped_after_records tests.test_file_routes_helpers.FileRoutesHelperTests.test_run_filtered_file_download_task_skips_completion_when_stopped_after_records tests.test_file_routes_helpers.FileRoutesHelperTests.test_load_download_file_records_dedupes_preserves_order_and_reports_missing tests.test_file_routes_helpers.FileRoutesHelperTests.test_load_filtered_download_file_records_keeps_default_search_and_limit_shape tests.test_file_routes_helpers.FileRoutesHelperTests.test_load_filtered_download_file_records_keeps_completed_status_shape -v
+uv run python -m unittest tests.test_file_routes_helpers -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run ruff check backend\services\file_workflow_service.py tests\test_file_routes_helpers.py --select F401,F841
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- New stopped-after-record characterization tests passed against the original inline implementation:
+  2 tests.
+- `py_compile` passed.
+- Focused selected/filtered download tests passed after extraction: 5 tests.
+- File route/helper tests passed: 60 tests.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- Full backend unittest discovery passed: 1078 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:
