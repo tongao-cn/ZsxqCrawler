@@ -21885,6 +21885,53 @@ Result:
 - Full backend unittest discovery passed in the current worktree: 1143 tests, 15 skipped.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-15 - P9 date-range collection helper extraction
+
+Changed:
+
+- Added characterization coverage for `collect_files_for_date_range(...)` with reversed date
+  inputs.
+- The new test locks the normalized log lines, returned result, delegated
+  `collect_files_by_time(...)` call shape, and `stop_before_time` boundary.
+- Extracted `_collect_files_for_normalized_date_range(...)` from
+  `collect_files_for_date_range(...)` in `ZSXQFileDownloader`.
+- Kept `normalize_date_range(...)`, `date_range_collection_start_messages(...)`,
+  `sort="by_create_time"`, `start_time=None`, and the stop-before boundary unchanged.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Reversed date inputs still normalize/swap before logging and collection.
+- Date-range collection still delegates to `collect_files_by_time(...)` with the same
+  sort/start/stop arguments.
+- Public API, fallback behavior, legacy behavior, error semantics, log text, call order, date
+  normalization, returned stats shape, config semantics, and task-level behavior are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderPaginationTests.test_collect_files_for_date_range_preserves_normalized_collection_call tests.test_zsxq_file_downloader_helpers.FileDownloaderTimeHelperTests.test_date_range_collection_start_messages_preserves_optional_range_line tests.test_zsxq_file_downloader_helpers.FileDownloaderTimeHelperTests.test_normalize_date_range_trims_and_swaps_reversed_range -v
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderPaginationTests.test_collect_files_for_date_range_preserves_normalized_collection_call tests.test_zsxq_file_downloader_helpers.FileDownloaderTimeHelperTests.test_date_range_collection_start_messages_preserves_optional_range_line tests.test_zsxq_file_downloader_helpers.FileDownloaderTimeHelperTests.test_normalize_date_range_trims_and_swaps_reversed_range -v
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run ruff check backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py --select F401,F841
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- Date-range characterization baseline passed before production extraction: 3 focused tests.
+- `py_compile` passed.
+- Focused date-range tests passed after extraction: 3 tests.
+- ZSXQ file downloader helper tests passed: 166 tests.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- Full backend unittest discovery passed in the current worktree: 1144 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:

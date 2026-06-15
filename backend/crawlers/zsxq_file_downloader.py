@@ -1429,6 +1429,20 @@ class ZSXQFileDownloader:
             return self.collect_files_by_time()
 
         return self._collect_incremental_from_oldest_time(oldest_time)
+
+    def _collect_files_for_normalized_date_range(
+        self,
+        normalized_start: Optional[str],
+        normalized_end: Optional[str],
+        stop_before_dt: Optional[datetime.datetime],
+    ) -> Dict[str, int]:
+        for message in date_range_collection_start_messages(normalized_start, normalized_end):
+            self.log(message)
+        return self.collect_files_by_time(
+            sort="by_create_time",
+            start_time=None,
+            stop_before_time=stop_before_dt,
+        )
     
     def collect_files_by_time(
         self,
@@ -1545,12 +1559,10 @@ class ZSXQFileDownloader:
             end_date=end_date,
             last_days=last_days,
         )
-        for message in date_range_collection_start_messages(normalized_start, normalized_end):
-            self.log(message)
-        return self.collect_files_by_time(
-            sort="by_create_time",
-            start_time=None,
-            stop_before_time=stop_before_dt,
+        return self._collect_files_for_normalized_date_range(
+            normalized_start,
+            normalized_end,
+            stop_before_dt,
         )
 
     def _download_database_file_row(

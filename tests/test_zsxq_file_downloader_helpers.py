@@ -741,6 +741,39 @@ class FileDownloaderPaginationTests(unittest.TestCase):
         self.assertEqual(8, len(downloader.logs))
         self.assertEqual([((), {})], downloader.collect_calls)
 
+    def test_collect_files_for_date_range_preserves_normalized_collection_call(self):
+        downloader = object.__new__(ZSXQFileDownloader)
+        downloader.logs = []
+        downloader.collect_calls = []
+        downloader.log = downloader.logs.append
+
+        def collect_files_by_time(*args, **kwargs):
+            downloader.collect_calls.append((args, kwargs))
+            return {"total_files": 9, "new_files": 4}
+
+        downloader.collect_files_by_time = collect_files_by_time
+
+        result = ZSXQFileDownloader.collect_files_for_date_range(
+            downloader,
+            start_date="2026-05-07",
+            end_date="2026-05-01",
+        )
+
+        self.assertEqual({"total_files": 9, "new_files": 4}, result)
+        self.assertEqual(
+            [
+                "📅 启动按时间范围收集文件列表...",
+                "   范围: 2026-05-01 ~ 2026-05-07",
+            ],
+            downloader.logs,
+        )
+        self.assertEqual(1, len(downloader.collect_calls))
+        args, kwargs = downloader.collect_calls[0]
+        self.assertEqual((), args)
+        self.assertEqual("by_create_time", kwargs["sort"])
+        self.assertIsNone(kwargs["start_time"])
+        self.assertEqual(datetime.datetime(2026, 5, 7), kwargs["stop_before_time"])
+
     def test_collect_files_by_time_stops_when_page_import_fails(self):
         downloader = self._downloader_with_failing_import()
 
