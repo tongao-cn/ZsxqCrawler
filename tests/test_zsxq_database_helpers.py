@@ -25,6 +25,7 @@ from backend.storage.zsxq_database import (
     _iter_valid_like_emoji_payloads,
     _iter_valid_user_liked_emoji_keys,
     _like_emoji_insert_statement,
+    _like_insert_statement_pair,
     _latest_like_insert_statement,
     _like_insert_statement,
     _newest_topic_create_time_query,
@@ -1080,6 +1081,30 @@ class ZSXQDatabaseHelperTests(unittest.TestCase):
             " ".join(latest_sql.split()),
         )
         self.assertEqual((202, 901, "", "2026-06-12T10:00:00.000+0800"), latest_params)
+
+        like_pair = _like_insert_statement_pair(
+            202,
+            901,
+            {"create_time": "2026-01-01T10:00:00.000+0800"},
+            "2026-06-12T10:00:00.000+0800",
+        )
+        self.assertEqual(
+            (
+                _like_insert_statement(
+                    202,
+                    901,
+                    {"create_time": "2026-01-01T10:00:00.000+0800"},
+                    "2026-06-12T10:00:00.000+0800",
+                ),
+                _latest_like_insert_statement(
+                    202,
+                    901,
+                    {"create_time": "2026-01-01T10:00:00.000+0800"},
+                    "2026-06-12T10:00:00.000+0800",
+                ),
+            ),
+            like_pair,
+        )
 
     def test_like_emoji_insert_statement_helper_preserves_sql_shape_and_defaults(self):
         sql, params = _like_emoji_insert_statement(

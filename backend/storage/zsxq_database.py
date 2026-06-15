@@ -30,6 +30,7 @@ from backend.storage.zsxq_database_helpers import (
     like_emoji_insert_statement,
     latest_like_insert_statement,
     like_insert_statement,
+    like_insert_statement_pair,
     load_topic_detail_base,
     load_topic_detail_comments,
     load_topic_detail_latest_likes,
@@ -223,10 +224,7 @@ def _like_insert_statement_pair(
     like_data: Dict[str, Any],
     timestamp: str,
 ) -> tuple[tuple[str, tuple[Any, ...]], tuple[str, tuple[Any, ...]]]:
-    return (
-        _like_insert_statement(topic_id, user_id, like_data, timestamp),
-        _latest_like_insert_statement(topic_id, user_id, like_data, timestamp),
-    )
+    return like_insert_statement_pair(topic_id, user_id, like_data, timestamp)
 
 
 def _like_emoji_insert_statement(

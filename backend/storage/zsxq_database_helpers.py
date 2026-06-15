@@ -494,6 +494,18 @@ def latest_like_insert_statement(
     )
 
 
+def like_insert_statement_pair(
+    topic_id: int,
+    user_id: Any,
+    like_data: Dict[str, Any],
+    timestamp: str,
+) -> tuple[tuple[str, tuple[Any, ...]], tuple[str, tuple[Any, ...]]]:
+    return (
+        like_insert_statement(topic_id, user_id, like_data, timestamp),
+        latest_like_insert_statement(topic_id, user_id, like_data, timestamp),
+    )
+
+
 def like_emoji_insert_statement(
     topic_id: int,
     emoji_data: Dict[str, Any],
