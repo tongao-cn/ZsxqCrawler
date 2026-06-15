@@ -884,6 +884,36 @@ class FileDownloaderPaginationTests(unittest.TestCase):
             downloader.logs,
         )
 
+    def test_load_time_collection_database_state_preserves_stats_latest_query_and_logs(self):
+        downloader = object.__new__(ZSXQFileDownloader)
+        downloader.group_id = "511"
+        downloader.file_db = TimeDedupeFileDb(
+            "2026-05-02T00:00:00",
+            initial_files=3,
+            final_files=9,
+        )
+        downloader.logs = []
+        downloader.log = downloader.logs.append
+
+        state = ZSXQFileDownloader._load_time_collection_database_state(
+            downloader,
+            True,
+        )
+
+        self.assertEqual((3, "2026-05-02T00:00:00"), state)
+        self.assertEqual(1, downloader.file_db.stats_calls)
+        self.assertEqual(1, len(downloader.file_db.executed))
+        latest_time_query, latest_time_params = downloader.file_db.executed[0]
+        self.assertIn("SELECT MAX(create_time) FROM files", latest_time_query)
+        self.assertEqual((511,), latest_time_params)
+        self.assertEqual(
+            [
+                "   📊 数据库初始状态: 3 个文件",
+                "   📅 数据库最新文件时间: 2026-05-02T00:00:00",
+            ],
+            downloader.logs,
+        )
+
     def test_collect_files_by_time_preserves_database_state_initialization(self):
         downloader = object.__new__(ZSXQFileDownloader)
         downloader.group_id = "511"

@@ -214,6 +214,11 @@ class TimeCollectionPage(NamedTuple):
     next_index: Optional[Any]
 
 
+class TimeCollectionDatabaseState(NamedTuple):
+    initial_files: Any
+    db_latest_time: Optional[Any]
+
+
 def _query_group_id(group_id: str) -> Any:
     return download_query_group_id(group_id)
 
@@ -1457,7 +1462,7 @@ class ZSXQFileDownloader:
     def _load_time_collection_database_state(
         self,
         enable_time_dedupe: bool,
-    ) -> tuple[Any, Optional[Any]]:
+    ) -> TimeCollectionDatabaseState:
         initial_stats = self.file_db.get_database_stats()
         initial_files = initial_stats.get('files', 0)
         self.log(time_collection_database_status_message(initial_files))
@@ -1465,7 +1470,7 @@ class ZSXQFileDownloader:
             enable_time_dedupe,
             initial_files,
         )
-        return initial_files, db_latest_time
+        return TimeCollectionDatabaseState(initial_files, db_latest_time)
 
     def _apply_time_collection_dedupe_plan(
         self,
@@ -1755,7 +1760,7 @@ class ZSXQFileDownloader:
             return {'total_files': 0, 'new_files': 0}
 
         # 使用完整数据库的统计信息
-        initial_files, db_latest_time = self._load_time_collection_database_state(
+        database_state = self._load_time_collection_database_state(
             enable_time_dedupe,
         )
         
@@ -1764,13 +1769,13 @@ class ZSXQFileDownloader:
             start_time,
             sort,
             enable_time_dedupe,
-            db_latest_time,
+            database_state.db_latest_time,
             total_imported_stats,
             stop_before_time,
         )
 
         return self._finalize_time_collection_result(
-            initial_files,
+            database_state.initial_files,
             total_imported_stats,
             page_count,
         )
