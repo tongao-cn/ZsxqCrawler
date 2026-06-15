@@ -20347,6 +20347,53 @@ Result:
 - Full backend unittest discovery passed: 1128 tests, 15 skipped.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-15 - P2 topic existence read helper extraction
+
+Changed:
+
+- Added characterization coverage for `import_topic_data(...)` preserving rollback, print, and
+  traceback behavior when the initial topic-existence query fails.
+- Extracted `_topic_exists(...)` for the topic-existence scalar read used before deciding whether
+  to skip an already imported topic.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- `import_topic_data(...)` still returns `False` immediately for missing topic ids.
+- Existing topics still sync talk files, print the existing-topic skip message, and return `True`
+  without committing or rolling back.
+- New topics still run the same import payload sequence after the existence check.
+- Topic-existence query failures still enter the outer import exception handler, call rollback,
+  print `导入话题数据失败: ...`, print a traceback, and return `False`.
+- SQL shape, params, public API, legacy paths, fallback behavior, error semantics, storage schema,
+  and config semantics are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_import_topic_data_existing_topic_preserves_skip_and_file_sync tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_import_topic_data_existing_topic_preserves_talk_files_key_semantics tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_import_topic_data_preserves_topic_exists_failure_rollback tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_import_topic_data_new_topic_preserves_talk_file_import_then_sync_order -v
+uv run python -m py_compile backend\storage\zsxq_database.py tests\test_zsxq_database_helpers.py
+uv run python -m unittest tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_import_topic_data_existing_topic_preserves_skip_and_file_sync tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_import_topic_data_existing_topic_preserves_talk_files_key_semantics tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_import_topic_data_preserves_topic_exists_failure_rollback tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_import_topic_data_new_topic_preserves_talk_file_import_then_sync_order -v
+uv run python -m unittest tests.test_zsxq_database_helpers -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run ruff check backend\storage\zsxq_database.py tests\test_zsxq_database_helpers.py --select F401,F841
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- New topic-existence failure characterization coverage passed before production extraction: 4
+  focused import-topic tests.
+- `py_compile` passed.
+- Focused import-topic tests passed after extraction: 4 tests.
+- ZSXQ database helper tests passed: 94 tests.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- Full backend unittest discovery passed: 1129 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:

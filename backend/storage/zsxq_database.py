@@ -444,9 +444,7 @@ class ZSXQDatabase:
                 return False
 
             # 如果话题已存在，直接跳过，避免重复写入或更新
-            sql, params = _topic_exists_query(topic_id, self.group_id)
-            self.cursor.execute(sql, params)
-            if self.cursor.fetchone():
+            if self._topic_exists(topic_id):
                 self._sync_existing_topic_talk_files(topic_data)
                 print(f"话题 {topic_id} 已存在，跳过导入")
                 return True
@@ -462,6 +460,11 @@ class ZSXQDatabase:
             import traceback
             traceback.print_exc()
             return False
+
+    def _topic_exists(self, topic_id: int) -> bool:
+        sql, params = _topic_exists_query(topic_id, self.group_id)
+        self.cursor.execute(sql, params)
+        return self.cursor.fetchone() is not None
     
     def _upsert_group(self, group_data: Dict[str, Any]):
         """插入或更新群组信息"""

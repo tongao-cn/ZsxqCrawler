@@ -110,6 +110,14 @@ class FakeArticleCreateTimeFailureCursor(FakeCursor):
         return self
 
 
+class FakeTopicExistsFailureCursor(FakeCursor):
+    def execute(self, query, params=()):
+        super().execute(query, params)
+        if "SELECT 1 FROM topics" in " ".join(query.split()):
+            raise RuntimeError("temporary topic exists failure")
+        return self
+
+
 class FakeSequenceCursor(FakeTimestampCursor):
     pass
 
@@ -2118,6 +2126,38 @@ class ZSXQDatabaseHelperTests(unittest.TestCase):
             self.assertTrue(ZSXQDatabase.import_topic_data(missing_db, missing_topic_data))
 
         self.assertEqual([], missing_synced)
+
+    def test_import_topic_data_preserves_topic_exists_failure_rollback(self):
+        from backend.storage.zsxq_database import ZSXQDatabase
+
+        db = object.__new__(ZSXQDatabase)
+        db.cursor = FakeTopicExistsFailureCursor()
+        db.conn = FakeConnection()
+        db.group_id = "303"
+
+        with (
+            patch("builtins.print") as mocked_print,
+            patch("traceback.print_exc") as mocked_traceback,
+        ):
+            self.assertFalse(ZSXQDatabase.import_topic_data(db, {"topic_id": 202}))
+
+        self.assertEqual(
+            [
+                (
+                    "SELECT 1 FROM topics WHERE topic_id = ? AND (? IS NULL OR group_id = ?) LIMIT 1",
+                    (202, 303, 303),
+                )
+            ],
+            db.cursor.calls,
+        )
+        self.assertEqual(1, db.conn.rollbacks)
+        self.assertEqual(0, db.conn.commits)
+        mocked_print.assert_called_once()
+        self.assertIn(
+            "导入话题数据失败: temporary topic exists failure",
+            mocked_print.call_args.args[0],
+        )
+        mocked_traceback.assert_called_once()
 
     def test_import_topic_data_new_topic_preserves_talk_file_import_then_sync_order(self):
         from backend.storage.zsxq_database import ZSXQDatabase
