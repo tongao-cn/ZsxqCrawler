@@ -10,6 +10,7 @@ from backend.services.file_workflow_service import (
     _build_sync_files_response,
     _close_crawler_file_databases,
     _complete_download_records_task,
+    _complete_successful_single_file_download,
     _download_result_stat_key,
     _enqueue_file_task,
     _fail_file_task,
@@ -2266,6 +2267,27 @@ class FileRoutesHelperTests(unittest.TestCase):
         )
         update_task.assert_any_call("task-1", "completed", "下载成功")
         safe_remove.assert_called_once_with("task-1")
+
+    def test_complete_successful_single_file_download_updates_status_with_safe_local_path(self):
+        downloader = FakeSingleFileDownloadTaskDownloader(row=None, download_result=True)
+        file_info = {
+            "file": {
+                "id": 123,
+                "name": "Report / 2026.pdf",
+                "size": 456,
+                "download_count": 7,
+            }
+        }
+
+        with (
+            patch("backend.services.file_workflow_service.add_task_log") as add_task_log,
+            patch("backend.services.file_workflow_service.update_task") as update_task,
+        ):
+            _complete_successful_single_file_download("task-1", downloader, 123, file_info)
+
+        add_task_log.assert_called_once_with("task-1", "✅ 文件下载成功")
+        self.assertEqual([(123, "completed", r"C:\downloads\Report2026.pdf")], downloader.file_db.status_updates)
+        update_task.assert_called_once_with("task-1", "completed", "下载成功")
 
     def test_run_single_file_download_task_uses_request_info_fallback_for_skipped_file(self):
         downloader = FakeSingleFileDownloadTaskDownloader(row=None, download_result="skipped")

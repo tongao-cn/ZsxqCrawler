@@ -1106,6 +1106,17 @@ def _resolve_single_download_file_info(
     return _build_single_download_fallback_info(task_id, file_id, file_name, file_size)
 
 
+def _single_file_download_local_path(
+    downloader: ZSXQFileDownloader,
+    file_id: int,
+    file_info: Dict[str, Dict[str, Any]],
+) -> str:
+    actual_file_info = file_info["file"]
+    actual_file_name = actual_file_info.get("name", f"file_{file_id}")
+    safe_filename = _safe_filename(actual_file_name, f"file_{file_id}")
+    return os.path.join(downloader.download_dir, safe_filename)
+
+
 def _complete_successful_single_file_download(
     task_id: str,
     downloader: ZSXQFileDownloader,
@@ -1113,10 +1124,7 @@ def _complete_successful_single_file_download(
     file_info: Dict[str, Dict[str, Any]],
 ) -> None:
     add_task_log(task_id, "✅ 文件下载成功")
-    actual_file_info = file_info["file"]
-    actual_file_name = actual_file_info.get("name", f"file_{file_id}")
-    safe_filename = _safe_filename(actual_file_name, f"file_{file_id}")
-    local_path = os.path.join(downloader.download_dir, safe_filename)
+    local_path = _single_file_download_local_path(downloader, file_id, file_info)
     downloader.file_db.update_file_download_status(file_id, "completed", local_path)
     update_task(task_id, "completed", "下载成功")
 
