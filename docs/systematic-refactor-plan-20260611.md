@@ -19284,6 +19284,52 @@ Result:
 - Full backend unittest discovery passed: 1114 tests, 15 skipped.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-15 - P3 topic detail related payload helper
+
+Changed:
+
+- Added pre-change characterization coverage for `get_topic_detail()` when a detail row exists.
+- Added `_topic_detail_row_with_related_payloads(...)` to
+  `backend/storage/zsxq_columns_database_helpers.py`.
+- Reused the helper from `get_topic_detail()` after loading images, files, videos, and comments.
+- Added direct helper coverage for child payload replacement, owner preservation, and current key
+  insertion order.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- The detail query, scope parameter resolution, child loader call order, child loader parameters,
+  owner shape, and child payload fields are unchanged.
+- The existing `images`, `files`, and `comments` base keys still come from
+  `_topic_detail_row_to_dict`; `videos` is still inserted during related payload assembly.
+- No SQL text, storage schema, commit behavior, legacy path, or fallback behavior was changed.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_columns_database_helpers.ZSXQColumnsDatabaseHelperTests.test_get_topic_detail_preserves_child_loader_order_and_payload_shape -v
+uv run python -m py_compile backend\storage\zsxq_columns_database.py backend\storage\zsxq_columns_database_helpers.py tests\test_zsxq_columns_database_helpers.py
+uv run python -m unittest tests.test_zsxq_columns_database_helpers.ZSXQColumnsDatabaseHelperTests.test_topic_detail_row_with_related_payloads_preserves_child_payload_shape tests.test_zsxq_columns_database_helpers.ZSXQColumnsDatabaseHelperTests.test_get_topic_detail_preserves_child_loader_order_and_payload_shape tests.test_zsxq_columns_database_helpers.ZSXQColumnsDatabaseHelperTests.test_topic_detail_row_to_dict_preserves_base_shape tests.test_zsxq_columns_database_helpers.ZSXQColumnsDatabaseHelperTests.test_topic_detail_queries_are_scoped_by_group -v
+uv run python -m unittest tests.test_zsxq_columns_database_helpers -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run ruff check backend\storage\zsxq_columns_database.py backend\storage\zsxq_columns_database_helpers.py tests\test_zsxq_columns_database_helpers.py --select F401,F841
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- Existing `get_topic_detail()` detail-row characterization test passed before extraction: 1
+  focused test.
+- `py_compile` passed.
+- Focused topic detail helper/query tests passed after extraction: 4 tests.
+- ZSXQ columns database helper tests passed: 76 tests.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- Full backend unittest discovery passed: 1116 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:

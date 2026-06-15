@@ -157,6 +157,21 @@ def _topic_detail_row_to_dict(row) -> Dict[str, Any]:
     return result
 
 
+def _topic_detail_row_with_related_payloads(
+    row,
+    images: list[Dict[str, Any]],
+    files: list[Dict[str, Any]],
+    videos: list[Dict[str, Any]],
+    comments: list[Dict[str, Any]],
+) -> Dict[str, Any]:
+    detail = _topic_detail_row_to_dict(row)
+    detail['images'] = images
+    detail['files'] = files
+    detail['videos'] = videos
+    detail['comments'] = comments
+    return detail
+
+
 def _topic_comment_row_to_dict(row) -> Dict[str, Any]:
     comment = {
         'comment_id': row[0],

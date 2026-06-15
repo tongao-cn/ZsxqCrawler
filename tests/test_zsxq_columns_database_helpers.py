@@ -41,6 +41,7 @@ from backend.storage.zsxq_columns_database import (
     _topic_detail_exists_query,
     _topic_detail_query,
     _topic_detail_row_to_dict,
+    _topic_detail_row_with_related_payloads,
     _topic_file_insert_params,
     _topic_file_insert_statement,
     _topic_files_query,
@@ -415,6 +416,44 @@ class ZSXQColumnsDatabaseHelperTests(unittest.TestCase):
                 "comments",
             ],
         )
+
+    def test_topic_detail_row_with_related_payloads_preserves_child_payload_shape(self):
+        row = (
+            202,
+            303,
+            "talk",
+            "topic title",
+            "full topic text",
+            11,
+            22,
+            33,
+            0,
+            1,
+            "2026-05-01T08:00:00+0800",
+            "2026-05-02T08:00:00+0800",
+            '{"topic_id":202}',
+            "2026-05-03 12:00:00",
+            "2026-05-04 12:00:00",
+            404,
+            "owner name",
+            "owner alias",
+            "avatar-url",
+            "owner description",
+            "owner location",
+        )
+        images = [{"image_id": 301}]
+        files = [{"file_id": 401}]
+        videos = [{"video_id": 501}]
+        comments = [{"comment_id": 701}]
+
+        result = _topic_detail_row_with_related_payloads(row, images, files, videos, comments)
+
+        self.assertEqual(images, result["images"])
+        self.assertEqual(files, result["files"])
+        self.assertEqual(videos, result["videos"])
+        self.assertEqual(comments, result["comments"])
+        self.assertEqual(404, result["owner"]["user_id"])
+        self.assertEqual(["images", "files", "comments", "videos"], list(result.keys())[-4:])
 
     def test_topic_comment_row_to_dict_preserves_owner_and_repliee_shape(self):
         row = (
@@ -2118,6 +2157,94 @@ class ZSXQColumnsDatabaseHelperTests(unittest.TestCase):
         comments_sql, comments_params = db.cursor.calls[-1]
         self.assertIn("WHERE c.topic_id = ? AND (? IS NULL OR c.group_id = ?)", comments_sql)
         self.assertEqual((202, 303, 303), comments_params)
+
+    def test_get_topic_detail_preserves_child_loader_order_and_payload_shape(self):
+        from backend.storage.zsxq_columns_database import ZSXQColumnsDatabase
+
+        class FakeCursor:
+            def __init__(self):
+                self.calls = []
+                self.fetchone_results = [
+                    (
+                        202,
+                        303,
+                        "talk",
+                        "topic title",
+                        "topic text",
+                        11,
+                        22,
+                        33,
+                        True,
+                        False,
+                        "2026-06-10T12:00:00",
+                        "2026-06-10T13:00:00",
+                        '{"topic_id":202}',
+                        "2026-06-10 14:00:00",
+                        "2026-06-10 15:00:00",
+                        801,
+                        "owner name",
+                        "owner alias",
+                        "owner-avatar",
+                        "owner desc",
+                        "owner location",
+                    )
+                ]
+
+            def execute(self, sql, params=()):
+                self.calls.append((" ".join(sql.split()), params))
+                return self
+
+            def fetchone(self):
+                return self.fetchone_results.pop(0)
+
+        db = object.__new__(ZSXQColumnsDatabase)
+        db.cursor = FakeCursor()
+        db.group_id = "303"
+        loader_calls = []
+
+        db.get_topic_images = lambda topic_id, group_id: loader_calls.append(
+            ("images", topic_id, group_id)
+        ) or [{"image_id": 301}]
+        db.get_topic_files = lambda topic_id, group_id: loader_calls.append(
+            ("files", topic_id, group_id)
+        ) or [{"file_id": 401}]
+        db.get_topic_videos = lambda topic_id, group_id: loader_calls.append(
+            ("videos", topic_id, group_id)
+        ) or [{"video_id": 501}]
+        db.get_topic_comments = lambda topic_id, group_id: loader_calls.append(
+            ("comments", topic_id, group_id)
+        ) or [{"comment_id": 701}]
+
+        detail = ZSXQColumnsDatabase.get_topic_detail(db, 202)
+
+        detail_sql, detail_params = db.cursor.calls[0]
+        self.assertIn("WHERE td.topic_id = ? AND (? IS NULL OR td.group_id = ?)", detail_sql)
+        self.assertEqual((202, 303, 303), detail_params)
+        self.assertEqual(
+            [
+                ("images", 202, 303),
+                ("files", 202, 303),
+                ("videos", 202, 303),
+                ("comments", 202, 303),
+            ],
+            loader_calls,
+        )
+        self.assertEqual([{"image_id": 301}], detail["images"])
+        self.assertEqual([{"file_id": 401}], detail["files"])
+        self.assertEqual([{"video_id": 501}], detail["videos"])
+        self.assertEqual([{"comment_id": 701}], detail["comments"])
+        self.assertEqual(
+            {
+                "user_id": 801,
+                "name": "owner name",
+                "alias": "owner alias",
+                "avatar_url": "owner-avatar",
+                "description": "owner desc",
+                "location": "owner location",
+            },
+            detail["owner"],
+        )
+        self.assertEqual(["images", "files", "comments", "videos"], list(detail.keys())[-4:])
 
     def test_column_and_attachment_read_methods_preserve_row_shapes(self):
         from backend.storage.zsxq_columns_database import ZSXQColumnsDatabase

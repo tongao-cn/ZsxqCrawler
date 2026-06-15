@@ -51,6 +51,7 @@ from backend.storage.zsxq_columns_database_helpers import (
     _topic_detail_exists_query,
     _topic_detail_query,
     _topic_detail_row_to_dict,
+    _topic_detail_row_with_related_payloads,
     _topic_file_insert_params,
     _topic_file_insert_statement,
     _topic_files_query,
@@ -282,21 +283,12 @@ class ZSXQColumnsDatabase:
         if not row:
             return None
         
-        result = _topic_detail_row_to_dict(row)
-        
-        # 获取图片
-        result['images'] = self.get_topic_images(topic_id, scope_group_id)
-        
-        # 获取文件
-        result['files'] = self.get_topic_files(topic_id, scope_group_id)
-        
-        # 获取视频
-        result['videos'] = self.get_topic_videos(topic_id, scope_group_id)
-        
-        # 获取评论
-        result['comments'] = self.get_topic_comments(topic_id, scope_group_id)
-        
-        return result
+        images = self.get_topic_images(topic_id, scope_group_id)
+        files = self.get_topic_files(topic_id, scope_group_id)
+        videos = self.get_topic_videos(topic_id, scope_group_id)
+        comments = self.get_topic_comments(topic_id, scope_group_id)
+
+        return _topic_detail_row_with_related_payloads(row, images, files, videos, comments)
     
     def get_topic_images(self, topic_id: int, group_id: Optional[Any] = None) -> List[Dict[str, Any]]:
         """获取文章的所有图片"""
