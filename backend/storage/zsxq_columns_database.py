@@ -435,8 +435,7 @@ class ZSXQColumnsDatabase:
         
         if updates:
             values.append(log_id)
-            self.cursor.execute(_crawl_log_update_statement(updates), values)
-            self.conn.commit()
+            self._execute_and_commit(_crawl_log_update_statement(updates), values)
     
     # ==================== 增量爬取支持 ====================
     

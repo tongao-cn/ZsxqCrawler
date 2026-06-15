@@ -19510,6 +19510,49 @@ Result:
 - Full backend unittest discovery passed: 1118 tests, 15 skipped.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-15 - P3 crawl-log update commit helper reuse
+
+Changed:
+
+- Re-ran existing characterization coverage for `update_crawl_log(...)` no-op and dynamic update
+  branches before production changes.
+- Reused `_execute_and_commit(...)` from the non-empty update branch of `update_crawl_log(...)`.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- The no-op branch still avoids SQL execution and commit when `_crawl_log_update_parts(...)`
+  produces no updates.
+- The dynamic branch still appends `log_id` after generated values, builds the same update
+  statement from the same updates list, and commits exactly once.
+- No storage schema, public API, legacy path, fallback behavior, error semantics, or config
+  semantics changed.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_columns_database_helpers.ZSXQColumnsDatabaseHelperTests.test_update_crawl_log_preserves_noop_when_no_update_parts tests.test_zsxq_columns_database_helpers.ZSXQColumnsDatabaseHelperTests.test_update_crawl_log_preserves_dynamic_sql_values_and_commit -v
+uv run python -m py_compile backend\storage\zsxq_columns_database.py tests\test_zsxq_columns_database_helpers.py
+uv run python -m unittest tests.test_zsxq_columns_database_helpers.ZSXQColumnsDatabaseHelperTests.test_update_crawl_log_preserves_noop_when_no_update_parts tests.test_zsxq_columns_database_helpers.ZSXQColumnsDatabaseHelperTests.test_update_crawl_log_preserves_dynamic_sql_values_and_commit -v
+uv run python -m unittest tests.test_zsxq_columns_database_helpers -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run ruff check backend\storage\zsxq_columns_database.py tests\test_zsxq_columns_database_helpers.py --select F401,F841
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- Existing crawl-log update characterization tests passed before extraction: 2 focused tests.
+- `py_compile` passed.
+- Focused crawl-log update tests passed after extraction: 2 tests.
+- ZSXQ columns database helper tests passed: 78 tests.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- Full backend unittest discovery passed: 1118 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:
