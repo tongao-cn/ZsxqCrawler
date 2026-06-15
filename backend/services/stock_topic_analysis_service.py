@@ -103,7 +103,7 @@ def parse_stock_names(values: Any, *, limit: int | None = None) -> List[str]:
     else:
         raw_values = []
     max_limit = MAX_BATCH_STOCKS if limit is None else max(1, int(limit))
-    return _ordered_unique((_normalize_company_name(value) for value in raw_values), limit=max_limit)
+    return _ordered_unique((_normalize_text(value) for value in raw_values), limit=max_limit)
 
 
 def _normalize_question_keywords(values: Any, *, limit: int = MAX_QUESTION_KEYWORDS) -> List[str]:
@@ -244,12 +244,12 @@ def _load_topic_summaries(conn: Any, group_id: str, topic_ids: List[str], stock_
         LEFT JOIN zsxq_a_share_topic_stock_extractions e
           ON e.group_id = t.group_id::text
          AND e.topic_id = t.topic_id::text
-         AND e.stock_name ILIKE ?
+         AND e.stock_name = ?
         WHERE t.group_id::text = ?
           AND t.topic_id::text IN ({placeholders})
         ORDER BY t.create_time DESC
         """,
-        [f"%{_normalize_company_name(stock_name)}%", group_id, *topic_ids],
+        [_normalize_text(stock_name), group_id, *topic_ids],
     ).fetchall()
     summaries: List[Dict[str, Any]] = []
     for row in rows:
@@ -400,7 +400,7 @@ def _insert_stock_topic_analysis_version(
 
 
 def get_latest_stock_topic_analysis(group_id: str, stock_name: str) -> Dict[str, Any] | None:
-    query = _normalize_company_name(stock_name)
+    query = _normalize_text(stock_name)
     if not query:
         raise ValueError("stock_name 不能为空")
 
@@ -413,11 +413,11 @@ def get_latest_stock_topic_analysis(group_id: str, stock_name: str) -> Dict[str,
                    model, status, error, created_at, updated_at
             FROM stock_topic_analyses
             WHERE group_id = ?
-              AND stock_name ILIKE ?
+              AND stock_name = ?
             ORDER BY updated_at DESC
             LIMIT 1
             """,
-            (_normalize_text(group_id), f"%{query}%"),
+            (_normalize_text(group_id), query),
         ).fetchone()
         if not row:
             return None
@@ -463,7 +463,7 @@ def get_latest_stock_topic_analyses(group_id: str, stock_names: Any) -> Dict[str
 
 
 def search_stock_topics(group_id: str, stock_name: str, *, limit: int | None = None) -> Dict[str, Any]:
-    query = _normalize_company_name(stock_name)
+    query = _normalize_text(stock_name)
     if not query:
         raise ValueError("stock_name 不能为空")
 
@@ -557,12 +557,11 @@ def search_stock_topics(group_id: str, stock_name: str, *, limit: int | None = N
             for topic in topics
             for concept in topic.get("concepts", [])
         )
-        stock_name_values = _ordered_unique(stock_names, limit=1)
         stock_code_values = _ordered_unique(stock_codes, limit=1)
         market_values = _ordered_unique(markets, limit=1)
         return {
             "group_id": group_id_text,
-            "stock_name": stock_name_values[0] if stock_name_values else query,
+            "stock_name": query,
             "stock_code": stock_code_values[0] if stock_code_values else "",
             "market": market_values[0] if market_values else "",
             "topics": topics,

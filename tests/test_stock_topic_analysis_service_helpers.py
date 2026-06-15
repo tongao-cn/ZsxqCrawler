@@ -33,6 +33,12 @@ class StockTopicAnalysisServiceHelperTests(unittest.TestCase):
         self.assertEqual(["宁德时代", "德龙激光", "贵州茅台", "中际旭创"], names)
         self.assertEqual(50, len(parse_stock_names([f"股票{i}" for i in range(55)])))
 
+    @unittest.skipUnless(HAS_SERVICE_DEPS, "stock topic analysis service dependencies are not installed")
+    def test_parse_stock_names_preserves_group_suffix(self):
+        from backend.services.stock_topic_analysis_service import parse_stock_names
+
+        self.assertEqual(["朗新集团", "君正集团"], parse_stock_names("朗新集团、君正集团"))
+
     def test_topic_id_helpers_dedupe_merge_exclude_and_limit(self):
         from backend.services.stock_topic_analysis_helpers import (
             _exclude_topic_ids,
@@ -378,6 +384,44 @@ class StockTopicAnalysisServiceHelperTests(unittest.TestCase):
         self.assertIn("宁德时代储能订单持续增长", topic["content_preview"])
 
     @unittest.skipUnless(HAS_SERVICE_DEPS, "stock topic analysis service dependencies are not installed")
+    def test_search_stock_topics_keeps_requested_stock_name_for_alias_hit(self):
+        from backend.services.stock_topic_analysis_service import search_stock_topics
+
+        conn = Mock()
+        state_cursor = Mock()
+        state_cursor.fetchall.return_value = []
+        latest_cursor = Mock()
+        latest_cursor.fetchone.return_value = None
+        search_cursor = Mock()
+        search_cursor.fetchall.return_value = [
+            {
+                "topic_id": "101",
+                "title": "泽璟制药交流",
+                "create_time": "2026-05-10T09:00:00",
+                "likes_count": 1,
+                "comments_count": 2,
+                "reading_count": 3,
+                "stock_name": "泽璟制药U",
+                "stock_code": "688266",
+                "market": "SH",
+                "concepts_json": "[]",
+                "excerpt": "泽璟制药管线进展。",
+                "reason": "",
+                "confidence": 0.8,
+            },
+        ]
+        counts_cursor = Mock()
+        counts_cursor.fetchall.return_value = []
+        conn.execute.side_effect = [state_cursor, latest_cursor, search_cursor, counts_cursor]
+
+        with patch("backend.services.stock_topic_analysis_service.connect", return_value=conn):
+            result = search_stock_topics("51111112855254", "泽璟制药")
+
+        self.assertEqual("泽璟制药", result["stock_name"])
+        self.assertEqual("688266", result["stock_code"])
+        self.assertEqual(1, result["topic_count"])
+
+    @unittest.skipUnless(HAS_SERVICE_DEPS, "stock topic analysis service dependencies are not installed")
     def test_load_processed_state_uses_only_completed_statuses(self):
         from backend.services.stock_topic_analysis_service import _load_stock_topic_processed_state_ids
 
@@ -390,7 +434,7 @@ class StockTopicAnalysisServiceHelperTests(unittest.TestCase):
 
         self.assertEqual(["101", "102"], result)
         self.assertIn("status IN", conn.execute.call_args.args[0])
-        self.assertEqual(["51111112855254", "%宁德时代%", "analyzed", "skipped"], conn.execute.call_args.args[1])
+        self.assertEqual(["51111112855254", "宁德时代", "analyzed", "skipped"], conn.execute.call_args.args[1])
 
     @unittest.skipUnless(HAS_SERVICE_DEPS, "stock topic analysis service dependencies are not installed")
     def test_upsert_stock_topic_analysis_records_processed_state(self):

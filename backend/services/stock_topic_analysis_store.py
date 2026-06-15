@@ -69,13 +69,13 @@ def load_stock_topic_processed_state_ids(
             SELECT topic_id
             FROM stock_topic_processed_states
             WHERE group_id = ?
-              AND stock_name ILIKE ?
+              AND stock_name = ?
               AND status IN ({placeholders})
             ORDER BY updated_at ASC
             """,
             [
                 _normalize_text(group_id),
-                f"%{_normalize_company_name(stock_name)}%",
+                _normalize_text(stock_name),
                 *sorted(processed_topic_statuses),
             ],
         ).fetchall()
@@ -93,7 +93,7 @@ def load_latest_processed_topic_ids(
     processed_topic_statuses: set[str],
     max_tracked_topic_ids: int,
 ) -> List[str]:
-    query = _normalize_company_name(stock_name)
+    query = _normalize_text(stock_name)
     if not query:
         return []
     state_ids = load_stock_topic_processed_state_ids(
@@ -111,11 +111,11 @@ def load_latest_processed_topic_ids(
             SELECT topic_ids_json
             FROM stock_topic_analyses
             WHERE group_id = ?
-              AND stock_name ILIKE ?
+              AND stock_name = ?
             ORDER BY updated_at DESC
             LIMIT 1
             """,
-            (_normalize_text(group_id), f"%{query}%"),
+            (_normalize_text(group_id), query),
         ).fetchone()
     except Exception:
         conn.rollback()
@@ -147,7 +147,7 @@ def upsert_stock_topic_processed_states(
     params = [
         (
             _normalize_text(group_id),
-            _normalize_company_name(stock_name),
+            _normalize_text(stock_name),
             topic_id,
             status,
             extract_mode,
