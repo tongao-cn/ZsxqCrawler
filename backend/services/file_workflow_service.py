@@ -1042,14 +1042,11 @@ def _build_single_download_fallback_info(
     return _build_download_file_info(file_id, f"file_{file_id}", 0)
 
 
-def _resolve_single_download_file_info(
-    task_id: str,
+def _fetch_single_download_file_row(
     downloader: ZSXQFileDownloader,
     group_id: str,
     file_id: int,
-    file_name: Optional[str],
-    file_size: Optional[int],
-) -> Dict[str, Dict[str, Any]]:
+) -> Any:
     downloader.file_db.cursor.execute(
         """
         SELECT file_id, name, size, download_count
@@ -1058,8 +1055,18 @@ def _resolve_single_download_file_info(
         """,
         (file_id, _query_group_id(group_id)),
     )
+    return downloader.file_db.cursor.fetchone()
 
-    result = downloader.file_db.cursor.fetchone()
+
+def _resolve_single_download_file_info(
+    task_id: str,
+    downloader: ZSXQFileDownloader,
+    group_id: str,
+    file_id: int,
+    file_name: Optional[str],
+    file_size: Optional[int],
+) -> Dict[str, Dict[str, Any]]:
+    result = _fetch_single_download_file_row(downloader, group_id, file_id)
     if result:
         _, db_file_name, db_file_size, download_count = result
         add_task_log(task_id, f"📄 从数据库获取文件信息: {db_file_name} ({db_file_size} bytes)")
