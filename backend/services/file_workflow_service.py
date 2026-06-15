@@ -245,6 +245,18 @@ def _check_local_file_status_response(group_id: str, file_name: str, file_size: 
     return _build_check_local_file_status_response(file_name, file_size, local_status)
 
 
+def _build_file_stats_response(stats: Dict[str, Any], download_stats: Optional[Sequence[Any]]) -> Dict[str, Any]:
+    return {
+        "database_stats": stats,
+        "download_stats": {
+            "total_files": download_stats[0] if download_stats else 0,
+            "downloaded": download_stats[1] if download_stats else 0,
+            "pending": download_stats[2] if download_stats else 0,
+            "failed": download_stats[3] if download_stats else 0,
+        },
+    }
+
+
 def _get_file_stats_response(group_id: str) -> dict:
     with _file_db(group_id) as file_db:
         stats = file_db.get_database_stats()
@@ -263,15 +275,7 @@ def _get_file_stats_response(group_id: str) -> dict:
         )
         download_stats = file_db.cursor.fetchone()
 
-        return {
-            "database_stats": stats,
-            "download_stats": {
-                "total_files": download_stats[0] if download_stats else 0,
-                "downloaded": download_stats[1] if download_stats else 0,
-                "pending": download_stats[2] if download_stats else 0,
-                "failed": download_stats[3] if download_stats else 0,
-            },
-        }
+        return _build_file_stats_response(stats, download_stats)
 
 
 def _clear_file_database_response(group_id: str) -> dict:

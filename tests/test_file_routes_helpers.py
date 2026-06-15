@@ -951,6 +951,96 @@ class FileRoutesHelperTests(unittest.TestCase):
         self.assertEqual("failed", _download_result_stat_key(False))
         self.assertEqual("failed", _download_result_stat_key(None))
 
+    def test_get_file_stats_response_keeps_download_stats_shape_and_query(self):
+        from backend.services import file_workflow_service
+
+        class FakeCursor:
+            def __init__(self):
+                self.executed = []
+
+            def execute(self, sql, params=()):
+                self.executed.append((sql, params))
+
+            def fetchone(self):
+                return (9, 4, 3, 2)
+
+        class FakeFileDb:
+            def __init__(self):
+                self.cursor = FakeCursor()
+
+            def get_database_stats(self):
+                return {"files": 9, "topics": 5}
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+        fake_db = FakeFileDb()
+        with patch("backend.services.file_workflow_service._file_db", return_value=fake_db):
+            response = file_workflow_service._get_file_stats_response("123")
+
+        query, params = fake_db.cursor.executed[0]
+        self.assertIn("COUNT(CASE WHEN download_status IN ('completed', 'downloaded', 'skipped') THEN 1 END)", query)
+        self.assertEqual((123,), params)
+        self.assertEqual(
+            {
+                "database_stats": {"files": 9, "topics": 5},
+                "download_stats": {
+                    "total_files": 9,
+                    "downloaded": 4,
+                    "pending": 3,
+                    "failed": 2,
+                },
+            },
+            response,
+        )
+
+    def test_get_file_stats_response_defaults_missing_download_stats_to_zero(self):
+        from backend.services import file_workflow_service
+
+        class FakeCursor:
+            def __init__(self):
+                self.executed = []
+
+            def execute(self, sql, params=()):
+                self.executed.append((sql, params))
+
+            def fetchone(self):
+                return None
+
+        class FakeFileDb:
+            def __init__(self):
+                self.cursor = FakeCursor()
+
+            def get_database_stats(self):
+                return {"files": 0}
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+        fake_db = FakeFileDb()
+        with patch("backend.services.file_workflow_service._file_db", return_value=fake_db):
+            response = file_workflow_service._get_file_stats_response("group-1")
+
+        self.assertEqual(("group-1",), fake_db.cursor.executed[0][1])
+        self.assertEqual(
+            {
+                "database_stats": {"files": 0},
+                "download_stats": {
+                    "total_files": 0,
+                    "downloaded": 0,
+                    "pending": 0,
+                    "failed": 0,
+                },
+            },
+            response,
+        )
+
     def test_file_status_routes_offload_sync_work_to_thread(self):
         from backend.routes import file_routes
 

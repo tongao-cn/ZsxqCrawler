@@ -17692,6 +17692,51 @@ Result:
 - Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
   not available.
 
+### 2026-06-15 - P1 file stats response builder
+
+Changed:
+
+- Added characterization coverage for `_get_file_stats_response()` before extraction.
+- Locked the current file-statistics SQL parameter behavior, response field shape, and missing
+  `download_stats` default-to-zero behavior.
+- Added `_build_file_stats_response()` and reused it from `_get_file_stats_response()`.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- The aggregate SQL text, `_query_group_id()` parameter conversion, `get_database_stats()` call,
+  `fetchone()` handling, `database_stats` passthrough, `download_stats` keys, and missing-row zero
+  defaults are unchanged.
+- File listing, filtered download, selected download, single-file fallback behavior, AI analysis,
+  route behavior, storage schema, fallback/legacy behavior, public APIs, and configuration semantics
+  are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_file_routes_helpers.FileRoutesHelperTests.test_get_file_stats_response_keeps_download_stats_shape_and_query tests.test_file_routes_helpers.FileRoutesHelperTests.test_get_file_stats_response_defaults_missing_download_stats_to_zero -v
+uv run python -m py_compile backend\services\file_workflow_service.py tests\test_file_routes_helpers.py
+uv run python -m unittest tests.test_file_routes_helpers.FileRoutesHelperTests.test_get_file_stats_response_keeps_download_stats_shape_and_query tests.test_file_routes_helpers.FileRoutesHelperTests.test_get_file_stats_response_defaults_missing_download_stats_to_zero -v
+uv run python -m unittest tests.test_file_routes_helpers -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+uv run ruff check backend\services\file_workflow_service.py tests\test_file_routes_helpers.py --select F401,F841
+```
+
+Result:
+
+- New file-statistics characterization tests passed against the original inline implementation:
+  2 tests.
+- `py_compile` passed.
+- Focused file-statistics tests passed after extraction: 2 tests.
+- File route/helper tests passed: 55 tests.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Full backend unittest discovery passed: 1073 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+
 ## Stop Conditions
 
 Pause before editing if:
