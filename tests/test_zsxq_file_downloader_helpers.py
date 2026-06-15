@@ -2219,11 +2219,31 @@ class FileDownloaderTimeHelperTests(unittest.TestCase):
             {
                 "has_data": True,
                 "total_files": 5,
+                "oldest_time": None,
+                "newest_time": None,
+                "time_based_count": 0,
+            },
+            database_time_range_result(5, ()),
+        )
+        self.assertEqual(
+            {
+                "has_data": True,
+                "total_files": 5,
                 "oldest_time": "old",
                 "newest_time": "new",
                 "time_based_count": 2,
             },
             database_time_range_result(5, ("old", "new", 2)),
+        )
+        self.assertEqual(
+            {
+                "has_data": True,
+                "total_files": 5,
+                "oldest_time": "old",
+                "newest_time": "new",
+                "time_based_count": 2,
+            },
+            database_time_range_result(5, ("old", "new", 2, "ignored")),
         )
 
     def test_time_collection_mode_preserves_dedupe_and_force_refresh_rules(self):

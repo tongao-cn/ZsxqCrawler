@@ -5,7 +5,7 @@ from __future__ import annotations
 import datetime
 import os
 import re
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, NamedTuple, Optional, Tuple
 
 from backend.core.log_redaction import redact_response_text
 
@@ -51,6 +51,14 @@ DATABASE_STATS_TABLE_EMOJI = {
     "file_topic_relations": "🔗",
     "api_responses": "📡",
 }
+
+
+class DatabaseTimeRangeRow(NamedTuple):
+    oldest_time: Any
+    newest_time: Any
+    time_based_count: Any
+
+
 STEALTH_USER_AGENTS = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
@@ -766,12 +774,17 @@ def database_time_range_query(query_group_id: Any) -> tuple[str, tuple[Any, ...]
 def database_time_range_result(total_files: Any, result: Any) -> Dict[str, Any]:
     if total_files == 0:
         return {"has_data": False, "total_files": 0}
+    time_range = (
+        DatabaseTimeRangeRow(result[0], result[1], result[2])
+        if result
+        else DatabaseTimeRangeRow(None, None, 0)
+    )
     return {
         "has_data": True,
         "total_files": total_files,
-        "oldest_time": result[0] if result else None,
-        "newest_time": result[1] if result else None,
-        "time_based_count": result[2] if result else 0,
+        "oldest_time": time_range.oldest_time,
+        "newest_time": time_range.newest_time,
+        "time_based_count": time_range.time_based_count,
     }
 
 
