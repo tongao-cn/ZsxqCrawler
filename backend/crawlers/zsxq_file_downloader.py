@@ -241,6 +241,10 @@ class FileCollectionLogRow(NamedTuple):
     log_id: Any
 
 
+class LatestFileCreateTimeRow(NamedTuple):
+    create_time: Any
+
+
 def _query_group_id(group_id: str) -> Any:
     return download_query_group_id(group_id)
 
@@ -249,6 +253,12 @@ def _file_collection_log_id(row: Any) -> Optional[Any]:
     if not row:
         return None
     return FileCollectionLogRow(row[0]).log_id
+
+
+def _latest_file_create_time(row: Any) -> Optional[Any]:
+    if not row or not row[0]:
+        return None
+    return LatestFileCreateTimeRow(row[0]).create_time
 
 
 def _database_stats_total_size(result: Any) -> Any:
@@ -1494,8 +1504,8 @@ class ZSXQFileDownloader:
         query, params = latest_file_create_time_query(_query_group_id(self.group_id))
         self.file_db.cursor.execute(query, params)
         result = self.file_db.cursor.fetchone()
-        if result and result[0]:
-            db_latest_time = result[0]
+        db_latest_time = _latest_file_create_time(result)
+        if db_latest_time:
             self.log(time_collection_latest_file_time_message(db_latest_time))
             return db_latest_time
 

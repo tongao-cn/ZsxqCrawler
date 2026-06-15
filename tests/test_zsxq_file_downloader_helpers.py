@@ -13,6 +13,7 @@ from backend.crawlers.zsxq_file_downloader import (
     _database_stats_time_range,
     _database_stats_total_size,
     _file_collection_log_id,
+    _latest_file_create_time,
 )
 from backend.crawlers.zsxq_file_downloader_helpers import (
     API_FAILURE_NON_RETRY,
@@ -2179,6 +2180,17 @@ class FileDownloaderTimeHelperTests(unittest.TestCase):
         self.assertIn("group_id = ?", query)
         self.assertIn("create_time IS NOT NULL AND create_time != ''", query)
         self.assertEqual((511,), params)
+
+    def test_latest_file_create_time_preserves_empty_falsy_and_truthy_rows(self):
+        self.assertIsNone(_latest_file_create_time(None))
+        self.assertIsNone(_latest_file_create_time(()))
+        self.assertIsNone(_latest_file_create_time((None,)))
+        self.assertIsNone(_latest_file_create_time(("",)))
+        self.assertEqual("2026-05-02T00:00:00", _latest_file_create_time(("2026-05-02T00:00:00",)))
+        self.assertEqual(
+            "2026-05-02T00:00:00",
+            _latest_file_create_time(("2026-05-02T00:00:00", "ignored")),
+        )
 
     def test_database_time_range_helpers_preserve_query_and_result_defaults(self):
         query, params = database_time_range_query(511)

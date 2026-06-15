@@ -23258,6 +23258,48 @@ Result:
 - Full backend unittest discovery passed in the current worktree: 1164 tests, 15 skipped.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-15 - P9 latest file time row result naming cleanup
+
+Changed:
+
+- Added characterization coverage for latest-file-time row conversion, locking empty row, falsy
+  value, truthy value, and extra-column tolerance.
+- Introduced internal `LatestFileCreateTimeRow` `NamedTuple`.
+- Extracted `_latest_file_create_time(...)` and replaced direct positional row access in
+  `_load_time_collection_latest_file_time(...)`.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Latest-file-time query shape/params, time-dedupe enable/disable behavior, missing/latest-time
+  behavior, latest-time logging, database state result shape, public API, fallback/legacy behavior,
+  error semantics, call order, config semantics, and task-level behavior are unchanged.
+- New characterization coverage locks the row-conversion boundary that was previously only covered
+  through time-collection database-state tests.
+
+Verification:
+
+```powershell
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderTimeHelperTests.test_latest_file_create_time_preserves_empty_falsy_and_truthy_rows tests.test_zsxq_file_downloader_helpers.FileDownloaderPaginationTests.test_load_time_collection_database_state_preserves_stats_latest_query_and_logs tests.test_zsxq_file_downloader_helpers.FileDownloaderPaginationTests.test_collect_files_by_time_preserves_database_state_initialization tests.test_zsxq_file_downloader_helpers.FileDownloaderPaginationTests.test_collect_files_by_time_preserves_force_refresh_start_mode -v
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run ruff check backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py --select F401,F841
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- `py_compile` passed.
+- Focused latest-file-time row tests passed: 4 tests.
+- ZSXQ file downloader helper tests passed: 187 tests.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- Full backend unittest discovery passed in the current worktree: 1165 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:
