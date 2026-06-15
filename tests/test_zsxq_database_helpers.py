@@ -99,12 +99,13 @@ class FakeFailingExecuteCursor(FakeCursor):
 
 
 class FakeTagReadCursor(FakeCursor):
-    def __init__(self, tag_rows=None, topic_rows=None, total=0, raises=False):
+    def __init__(self, tag_rows=None, topic_rows=None, total=0, raises=False, raises_on_count=False):
         super().__init__()
         self.tag_rows = list(tag_rows or [])
         self.topic_rows = list(topic_rows or [])
         self.total = total
         self.raises = raises
+        self.raises_on_count = raises_on_count
         self.last_query = ""
 
     def execute(self, query, params=()):
@@ -112,6 +113,8 @@ class FakeTagReadCursor(FakeCursor):
         super().execute(query, params)
         if self.raises:
             raise RuntimeError("temporary tag read failure")
+        if self.raises_on_count and "SELECT COUNT(*) FROM topic_tags" in self.last_query:
+            raise RuntimeError("temporary tag count failure")
         return self
 
     def fetchall(self):
@@ -3103,6 +3106,46 @@ class ZSXQDatabaseHelperTests(unittest.TestCase):
         self.assertEqual({"topics": [], "pagination": {"page": 2, "per_page": 5, "total": 0, "pages": 0}}, result)
         mocked_print.assert_called_once()
         self.assertEqual(1, len(db.cursor.calls))
+
+    def test_get_topics_by_tag_preserves_count_failure_fallback_shape(self):
+        from backend.storage.zsxq_database import ZSXQDatabase
+
+        db = object.__new__(ZSXQDatabase)
+        db.cursor = FakeTagReadCursor(
+            topic_rows=[
+                (
+                    202,
+                    "title",
+                    "2026-05-07",
+                    1,
+                    2,
+                    3,
+                    "talk",
+                    0,
+                    1,
+                    None,
+                    None,
+                    "body",
+                    901,
+                    "Alice",
+                    "a.png",
+                )
+            ],
+            total=12,
+            raises_on_count=True,
+        )
+
+        with patch("builtins.print") as mocked_print:
+            result = ZSXQDatabase.get_topics_by_tag(db, 7, page=2, per_page=5)
+
+        self.assertEqual(
+            {"topics": [], "pagination": {"page": 2, "per_page": 5, "total": 0, "pages": 0}},
+            result,
+        )
+        mocked_print.assert_called_once()
+        self.assertEqual(2, len(db.cursor.calls))
+        self.assertIn("FROM topics t INNER JOIN topic_tags tt", db.cursor.calls[0][0])
+        self.assertEqual(("SELECT COUNT(*) FROM topic_tags WHERE tag_id = ?", (7,)), db.cursor.calls[1])
 
     def test_content_child_writes_use_explicit_unique_semantics(self):
         from backend.storage.zsxq_database import ZSXQDatabase

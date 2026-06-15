@@ -1033,14 +1033,8 @@ class ZSXQDatabase:
         """根据标签获取话题列表"""
         try:
             offset = (page - 1) * per_page
-            
-            # 获取话题列表 - 包含所有详细信息，与get_group_topics保持一致
-            sql, params = _topics_by_tag_query(tag_id, per_page, offset)
-            topics = self._fetch_mapped_rows(sql, params, _format_tag_topic_row)
-            
-            # 获取总数
-            sql, params = _topic_count_by_tag_query(tag_id)
-            total = self._fetch_first_column(sql, params)
+            topics = self._fetch_topics_by_tag(tag_id, per_page, offset)
+            total = self._fetch_topic_count_by_tag(tag_id)
             
             return {
                 'topics': topics,
@@ -1049,6 +1043,14 @@ class ZSXQDatabase:
         except Exception as e:
             print(f"根据标签获取话题失败: {e}")
             return {'topics': [], 'pagination': _build_pagination(page, per_page, 0)}
+
+    def _fetch_topics_by_tag(self, tag_id: int, per_page: int, offset: int) -> List[Dict[str, Any]]:
+        sql, params = _topics_by_tag_query(tag_id, per_page, offset)
+        return self._fetch_mapped_rows(sql, params, _format_tag_topic_row)
+
+    def _fetch_topic_count_by_tag(self, tag_id: int) -> int:
+        sql, params = _topic_count_by_tag_query(tag_id)
+        return self._fetch_first_column(sql, params)
 
     def close(self):
         """关闭数据库连接"""

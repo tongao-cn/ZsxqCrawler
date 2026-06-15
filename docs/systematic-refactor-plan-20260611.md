@@ -19957,6 +19957,53 @@ Result:
 - Full backend unittest discovery passed: 1120 tests, 15 skipped.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-15 - P2 topics-by-tag read helper extraction
+
+Changed:
+
+- Added characterization coverage for the `get_topics_by_tag(...)` count-query failure path,
+  locking the existing behavior that a count failure after the topic-list query falls back to
+  empty topics and zero-total pagination.
+- Extracted `_fetch_topics_by_tag(...)` and `_fetch_topic_count_by_tag(...)` in
+  `backend/storage/zsxq_database.py`.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- `get_topics_by_tag(...)` still computes `offset = (page - 1) * per_page`.
+- It still fetches topic rows before fetching the total count.
+- Success responses still return `{"topics": ..., "pagination": ...}` with `_build_pagination(...)`.
+- Topic-query failures and count-query failures still print `根据标签获取话题失败: ...` and return
+  empty topics with zero-total pagination.
+- SQL shapes, query params, row mapping, pagination shape, public API, legacy paths, fallback
+  behavior, error semantics, storage schema, and config semantics are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_get_topics_by_tag_uses_helper_queries_and_preserves_pagination tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_get_topics_by_tag_preserves_exception_fallback_shape tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_get_topics_by_tag_preserves_count_failure_fallback_shape tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_tag_read_query_helpers_preserve_sql_shape_and_params -v
+uv run python -m py_compile backend\storage\zsxq_database.py tests\test_zsxq_database_helpers.py
+uv run python -m unittest tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_get_topics_by_tag_uses_helper_queries_and_preserves_pagination tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_get_topics_by_tag_preserves_exception_fallback_shape tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_get_topics_by_tag_preserves_count_failure_fallback_shape tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_tag_read_query_helpers_preserve_sql_shape_and_params -v
+uv run python -m unittest tests.test_zsxq_database_helpers -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run ruff check backend\storage\zsxq_database.py tests\test_zsxq_database_helpers.py --select F401,F841
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- Existing and new topics-by-tag characterization tests passed before production extraction: 4
+  focused tests.
+- `py_compile` passed.
+- Focused topics-by-tag tests passed after extraction: 4 tests.
+- ZSXQ database helper tests passed: 86 tests.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- Full backend unittest discovery passed: 1121 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:
