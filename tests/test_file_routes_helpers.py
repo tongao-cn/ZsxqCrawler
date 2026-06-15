@@ -9,6 +9,7 @@ from backend.services.file_workflow_service import (
     _build_file_status_response,
     _build_sync_files_response,
     _close_crawler_file_databases,
+    _complete_download_records_task,
     _download_result_stat_key,
     _enqueue_file_task,
     _fail_file_task,
@@ -1967,6 +1968,36 @@ class FileRoutesHelperTests(unittest.TestCase):
             [call.args for call in update_task.call_args_list],
         )
         safe_remove.assert_called_once_with("task-1")
+
+    def test_complete_download_records_task_updates_completion_when_running(self):
+        downloader = object()
+        records = [(101, "Report.pdf", 123, 7)]
+        stats = _build_download_task_stats(total_files=1, found=1)
+
+        with (
+            patch("backend.services.file_workflow_service._run_download_records") as run_download_records,
+            patch("backend.services.file_workflow_service.is_task_stopped", return_value=False),
+            patch("backend.services.file_workflow_service.update_task") as update_task,
+        ):
+            _complete_download_records_task("task-1", downloader, records, stats, "下载完成")
+
+        run_download_records.assert_called_once_with("task-1", downloader, records, stats)
+        update_task.assert_called_once_with("task-1", "completed", "下载完成", {"downloaded_files": stats})
+
+    def test_complete_download_records_task_skips_completion_when_stopped_after_records(self):
+        downloader = object()
+        records = [(101, "Report.pdf", 123, 7)]
+        stats = _build_download_task_stats(total_files=1, found=1)
+
+        with (
+            patch("backend.services.file_workflow_service._run_download_records") as run_download_records,
+            patch("backend.services.file_workflow_service.is_task_stopped", return_value=True),
+            patch("backend.services.file_workflow_service.update_task") as update_task,
+        ):
+            _complete_download_records_task("task-1", downloader, records, stats, "下载完成")
+
+        run_download_records.assert_called_once_with("task-1", downloader, records, stats)
+        update_task.assert_not_called()
 
     def test_run_sync_files_from_topics_task_completes_with_backfill_stats(self):
         from backend.services.file_workflow_service import run_sync_files_from_topics_task

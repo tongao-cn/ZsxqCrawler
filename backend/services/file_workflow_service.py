@@ -958,6 +958,16 @@ def _run_download_records(
     return stats
 
 
+def _complete_download_records_if_running(
+    task_id: str,
+    stats: Dict[str, int],
+    completed_message: str,
+) -> None:
+    if is_task_stopped(task_id):
+        return
+    update_task(task_id, "completed", completed_message, {"downloaded_files": stats})
+
+
 def _complete_download_records_task(
     task_id: str,
     downloader: ZSXQFileDownloader,
@@ -966,9 +976,7 @@ def _complete_download_records_task(
     completed_message: str,
 ) -> None:
     _run_download_records(task_id, downloader, records, stats)
-    if is_task_stopped(task_id):
-        return
-    update_task(task_id, "completed", completed_message, {"downloaded_files": stats})
+    _complete_download_records_if_running(task_id, stats, completed_message)
 
 
 def run_selected_file_download_task(task_id: str, group_id: str, file_ids: Sequence[int]):
