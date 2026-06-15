@@ -561,6 +561,10 @@ class ZSXQDatabase:
         self.cursor.execute(sql, params)
         return self.cursor.fetchone()
 
+    def _fetch_all_rows(self, sql: str, params: Any):
+        self.cursor.execute(sql, params)
+        return self.cursor.fetchall()
+
     def _fetch_first_column(self, sql: str, params: Any) -> Any:
         return self._fetch_one_row(sql, params)[0]
 
@@ -933,8 +937,7 @@ class ZSXQDatabase:
 
         try:
             sql, params = _topic_files_backfill_query(self.group_id)
-            self.cursor.execute(sql, params)
-            for row in self.cursor.fetchall():
+            for row in self._fetch_all_rows(sql, params):
                 stats['scanned'] += 1
                 topic_id, file_id, group_id = _topic_file_backfill_ids_from_row(row)
 
@@ -1061,8 +1064,7 @@ class ZSXQDatabase:
         params: Any,
         row_mapper: Callable[[Any], Dict[str, Any]],
     ) -> List[Dict[str, Any]]:
-        self.cursor.execute(sql, params)
-        return [row_mapper(row) for row in self.cursor.fetchall()]
+        return [row_mapper(row) for row in self._fetch_all_rows(sql, params)]
     
     def get_tags_by_group(self, group_id: int) -> List[Dict[str, Any]]:
         """获取指定群组的所有标签"""

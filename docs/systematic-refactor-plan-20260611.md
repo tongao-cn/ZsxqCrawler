@@ -20716,6 +20716,53 @@ Result:
 - Full backend unittest discovery passed: 1132 tests, 15 skipped.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-15 - P2 fetch-all helper extraction
+
+Changed:
+
+- Extracted `_fetch_all_rows(...)` for shared `execute + fetchall()` reads.
+- Reused `_fetch_all_rows(...)` from `backfill_topic_files_to_core_tables(...)` and
+  `_fetch_mapped_rows(...)`.
+- Confirmed existing characterization coverage for backfill query params/order, row id usage,
+  existing-file stats, group payload shape, and mapped-row query/mapper behavior before production
+  extraction.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Backfill still uses `_topic_files_backfill_query(self.group_id)` and iterates the same fetched
+  rows in cursor order.
+- Backfill stats, group upsert, core-file upsert, relation replacement, batch commits, final commit,
+  rollback-on-exception behavior, SQL shape, and params are unchanged.
+- `_fetch_mapped_rows(...)` still applies the caller-provided mapper to every fetched row in order.
+- Public API, legacy paths, fallback behavior, error semantics, storage schema, row mapping, and
+  config semantics are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_backfill_topic_files_to_core_tables_uses_current_database_cursor tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_backfill_topic_files_to_core_tables_preserves_existing_file_stats tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_backfill_topic_files_to_core_tables_preserves_group_payload_shape tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_backfill_topic_files_to_core_tables_preserves_backfill_row_id_usage tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_fetch_mapped_rows_preserves_execute_params_and_mapping -v
+uv run python -m py_compile backend\storage\zsxq_database.py tests\test_zsxq_database_helpers.py
+uv run python -m unittest tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_backfill_topic_files_to_core_tables_uses_current_database_cursor tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_backfill_topic_files_to_core_tables_preserves_existing_file_stats tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_backfill_topic_files_to_core_tables_preserves_group_payload_shape tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_backfill_topic_files_to_core_tables_preserves_backfill_row_id_usage tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_fetch_mapped_rows_preserves_execute_params_and_mapping -v
+uv run python -m unittest tests.test_zsxq_database_helpers -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run ruff check backend\storage\zsxq_database.py tests\test_zsxq_database_helpers.py --select F401,F841
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- Existing fetch-all characterization coverage passed before production extraction: 5 focused tests.
+- `py_compile` passed.
+- Focused fetch-all tests passed after extraction: 5 tests.
+- ZSXQ database helper tests passed: 97 tests.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- Full backend unittest discovery passed: 1132 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:
