@@ -343,18 +343,18 @@ class ZSXQColumnsDatabase:
         self._execute_and_commit(sql, params)
 
     def _fetch_optional_params_rows(self, sql: str, params: Any):
-        if params:
-            self.cursor.execute(sql, params)
-        else:
-            self.cursor.execute(sql)
+        self._execute_optional_params_query(sql, params)
         return self.cursor.fetchall()
 
     def _fetch_optional_params_row(self, sql: str, params: Any):
+        self._execute_optional_params_query(sql, params)
+        return self.cursor.fetchone()
+
+    def _execute_optional_params_query(self, sql: str, params: Any):
         if params:
             self.cursor.execute(sql, params)
         else:
             self.cursor.execute(sql)
-        return self.cursor.fetchone()
 
     def _execute_statement(self, sql: str, params: Any):
         self.cursor.execute(sql, params)
