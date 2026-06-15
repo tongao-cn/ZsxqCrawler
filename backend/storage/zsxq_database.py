@@ -431,9 +431,7 @@ class ZSXQDatabase:
             sql, params = _topic_exists_query(topic_id, self.group_id)
             self.cursor.execute(sql, params)
             if self.cursor.fetchone():
-                has_talk_files, talk_files = _topic_talk_files_from_data(topic_data)
-                if has_talk_files:
-                    self._sync_topic_files_to_core_tables(topic_data, talk_files)
+                self._sync_existing_topic_talk_files(topic_data)
                 print(f"话题 {topic_id} 已存在，跳过导入")
                 return True
             
@@ -484,10 +482,7 @@ class ZSXQDatabase:
             self._import_tags(topic_id, topic_data)
 
             # 导入文件信息
-            has_talk_files, talk_files = _topic_talk_files_from_data(topic_data)
-            if has_talk_files:
-                self._import_files(topic_id, talk_files)
-                self._sync_topic_files_to_core_tables(topic_data, talk_files)
+            self._import_new_topic_talk_files(topic_id, topic_data)
 
             return True
             
@@ -521,6 +516,17 @@ class ZSXQDatabase:
             return
 
         self._execute_timestamped_statement(_topic_insert_statement, topic_data)
+
+    def _sync_existing_topic_talk_files(self, topic_data: Dict[str, Any]):
+        has_talk_files, talk_files = _topic_talk_files_from_data(topic_data)
+        if has_talk_files:
+            self._sync_topic_files_to_core_tables(topic_data, talk_files)
+
+    def _import_new_topic_talk_files(self, topic_id: int, topic_data: Dict[str, Any]):
+        has_talk_files, talk_files = _topic_talk_files_from_data(topic_data)
+        if has_talk_files:
+            self._import_files(topic_id, talk_files)
+            self._sync_topic_files_to_core_tables(topic_data, talk_files)
     
     def update_topic_stats(self, topic_data: Dict[str, Any]) -> bool:
         """仅更新话题的统计信息，不导入其他相关数据"""

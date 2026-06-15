@@ -1926,6 +1926,72 @@ class ZSXQDatabaseHelperTests(unittest.TestCase):
 
         self.assertEqual([], missing_synced)
 
+    def test_import_topic_data_new_topic_preserves_talk_file_import_then_sync_order(self):
+        from backend.storage.zsxq_database import ZSXQDatabase
+
+        db = object.__new__(ZSXQDatabase)
+        db.cursor = FakeCursor()
+        db.conn = FakeConnection()
+        db.group_id = "303"
+        events = []
+
+        db._import_all_users = lambda topic: events.append(("users", topic))
+        db._upsert_topic = lambda topic: events.append(("topic", topic.get("topic_id")))
+        db._upsert_talk = lambda topic_id, talk: events.append(("talk", topic_id, talk))
+        db._import_articles = lambda topic_id, topic: events.append(("articles", topic_id))
+        db._import_images = lambda topic_id, topic: events.append(("images", topic_id))
+        db._import_likes = lambda topic_id, topic: events.append(("likes", topic_id))
+        db._import_like_emojis = lambda topic_id, topic: events.append(("like_emojis", topic_id))
+        db._import_user_liked_emojis = lambda topic_id, topic: events.append(("user_liked_emojis", topic_id))
+        db._import_comments = lambda topic_id, comments: events.append(("comments", topic_id, comments))
+        db._upsert_question = lambda topic_id, question: events.append(("question", topic_id, question))
+        db._upsert_answer = lambda topic_id, answer: events.append(("answer", topic_id, answer))
+        db._import_tags = lambda topic_id, topic: events.append(("tags", topic_id))
+        db._import_files = lambda topic_id, files: events.append(("files", topic_id, files))
+        db._sync_topic_files_to_core_tables = lambda topic, files: events.append(("sync", topic, files))
+
+        files = [{"file_id": 501}]
+        comments = [{"comment_id": 301}]
+        topic_data = {
+            "topic_id": 202,
+            "talk": {"owner": {"user_id": 901}, "files": files},
+            "show_comments": comments,
+            "question": {"text": "question"},
+            "answer": {"owner": {"user_id": 902}},
+        }
+
+        self.assertTrue(ZSXQDatabase.import_topic_data(db, topic_data))
+
+        self.assertEqual(
+            [
+                ("users", topic_data),
+                ("topic", 202),
+                ("talk", 202, topic_data["talk"]),
+                ("articles", 202),
+                ("images", 202),
+                ("likes", 202),
+                ("like_emojis", 202),
+                ("user_liked_emojis", 202),
+                ("comments", 202, comments),
+                ("question", 202, topic_data["question"]),
+                ("answer", 202, topic_data["answer"]),
+                ("tags", 202),
+                ("files", 202, files),
+                ("sync", topic_data, files),
+            ],
+            events,
+        )
+        self.assertEqual(
+            [
+                (
+                    "SELECT 1 FROM topics WHERE topic_id = ? AND (? IS NULL OR group_id = ?) LIMIT 1",
+                    (202, 303, 303),
+                )
+            ],
+            db.cursor.calls,
+        )
+        self.assertEqual(0, db.conn.rollbacks)
+
     def test_upsert_group_and_user_preserve_skip_and_insert_params(self):
         from backend.storage.zsxq_database import ZSXQDatabase
 
