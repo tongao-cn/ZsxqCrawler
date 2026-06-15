@@ -1074,6 +1074,21 @@ def _resolve_single_download_file_info(
     return _build_single_download_fallback_info(task_id, file_id, file_name, file_size)
 
 
+def _complete_successful_single_file_download(
+    task_id: str,
+    downloader: ZSXQFileDownloader,
+    file_id: int,
+    file_info: Dict[str, Dict[str, Any]],
+) -> None:
+    add_task_log(task_id, "✅ 文件下载成功")
+    actual_file_info = file_info["file"]
+    actual_file_name = actual_file_info.get("name", f"file_{file_id}")
+    safe_filename = _safe_filename(actual_file_name, f"file_{file_id}")
+    local_path = os.path.join(downloader.download_dir, safe_filename)
+    downloader.file_db.update_file_download_status(file_id, "completed", local_path)
+    update_task(task_id, "completed", "下载成功")
+
+
 def _complete_single_file_download(
     task_id: str,
     downloader: ZSXQFileDownloader,
@@ -1085,13 +1100,7 @@ def _complete_single_file_download(
         add_task_log(task_id, "✅ 文件已存在，跳过下载")
         update_task(task_id, "completed", "文件已存在")
     elif result:
-        add_task_log(task_id, "✅ 文件下载成功")
-        actual_file_info = file_info["file"]
-        actual_file_name = actual_file_info.get("name", f"file_{file_id}")
-        safe_filename = _safe_filename(actual_file_name, f"file_{file_id}")
-        local_path = os.path.join(downloader.download_dir, safe_filename)
-        downloader.file_db.update_file_download_status(file_id, "completed", local_path)
-        update_task(task_id, "completed", "下载成功")
+        _complete_successful_single_file_download(task_id, downloader, file_id, file_info)
     else:
         add_task_log(task_id, "❌ 文件下载失败")
         update_task(task_id, "failed", "下载失败")
