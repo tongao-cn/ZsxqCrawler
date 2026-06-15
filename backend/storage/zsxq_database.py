@@ -711,8 +711,7 @@ class ZSXQDatabase:
         if 'latest_likes' not in topic_data:
             return
 
-        sql, params = _delete_latest_likes_statement(topic_id)
-        self.cursor.execute(sql, params)
+        self._execute_statement(_delete_latest_likes_statement, topic_id)
 
         for like, user_id in _iter_valid_latest_like_payloads(topic_data['latest_likes']):
             self._execute_timestamped_statements(

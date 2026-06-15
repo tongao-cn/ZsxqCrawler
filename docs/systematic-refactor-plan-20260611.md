@@ -20578,6 +20578,52 @@ Result:
 - Full backend unittest discovery passed: 1132 tests, 15 skipped.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-15 - P2 latest-likes delete helper reuse
+
+Changed:
+
+- Reused `_execute_statement(...)` from `_import_likes(...)` for
+  `_delete_latest_likes_statement(topic_id)`.
+- Confirmed existing characterization coverage for missing `latest_likes`, empty list delete,
+  falsey owner-user skips, delete-before-insert order, and shared timestamp behavior before
+  production extraction.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- `_import_likes(...)` still returns before any DB call when `latest_likes` is missing.
+- Empty `latest_likes` still deletes existing `latest_likes` rows for the topic.
+- Valid latest-like payloads still execute the same delete statement before the same two insert
+  statements from `_like_insert_statement_pair(...)`.
+- Public API, legacy paths, fallback behavior, error semantics, storage schema, SQL shape, params,
+  timestamp generation, and config semantics are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_import_likes_preserves_delete_skip_and_insert_order tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_like_statement_helpers_preserve_sql_shape_and_params tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_execute_timestamped_statement_preserves_builder_args_and_execute_params -v
+uv run python -m py_compile backend\storage\zsxq_database.py tests\test_zsxq_database_helpers.py
+uv run python -m unittest tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_import_likes_preserves_delete_skip_and_insert_order tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_like_statement_helpers_preserve_sql_shape_and_params tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_execute_timestamped_statement_preserves_builder_args_and_execute_params -v
+uv run python -m unittest tests.test_zsxq_database_helpers -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run ruff check backend\storage\zsxq_database.py tests\test_zsxq_database_helpers.py --select F401,F841
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- Existing latest-like characterization coverage passed before production extraction: 3 focused
+  tests.
+- `py_compile` passed.
+- Focused latest-like tests passed after extraction: 3 tests.
+- ZSXQ database helper tests passed: 97 tests.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- Full backend unittest discovery passed: 1132 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:
