@@ -20531,6 +20531,53 @@ Result:
 - Full backend unittest discovery passed: 1132 tests, 15 skipped.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-15 - P2 user-liked emoji write helper reuse
+
+Changed:
+
+- Reused `_execute_statement(...)` from `_import_user_liked_emojis(...)` for
+  `_user_liked_emoji_insert_statement(...)`.
+- Confirmed existing characterization coverage for missing `user_specific`, missing
+  `liked_emojis`, empty lists, falsey emoji-key skips, and insert SQL params before production
+  extraction.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- `_import_user_liked_emojis(...)` still returns before any DB call when `user_specific` or
+  `liked_emojis` is missing.
+- Falsey emoji keys are still skipped by `_iter_valid_user_liked_emoji_keys(...)`.
+- Valid emoji keys still execute `_user_liked_emoji_insert_statement(topic_id, emoji_key)` in the
+  same order with the same SQL and params.
+- Public API, legacy paths, fallback behavior, error semantics, storage schema, SQL shape, params,
+  and config semantics are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_import_user_liked_emojis_preserves_skip_and_insert_params tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_user_liked_emoji_insert_statement_helper_preserves_sql_shape_and_params tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_iter_valid_user_liked_emoji_keys_filters_falsey_keys -v
+uv run python -m py_compile backend\storage\zsxq_database.py tests\test_zsxq_database_helpers.py
+uv run python -m unittest tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_import_user_liked_emojis_preserves_skip_and_insert_params tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_user_liked_emoji_insert_statement_helper_preserves_sql_shape_and_params tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_iter_valid_user_liked_emoji_keys_filters_falsey_keys -v
+uv run python -m unittest tests.test_zsxq_database_helpers -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run ruff check backend\storage\zsxq_database.py tests\test_zsxq_database_helpers.py --select F401,F841
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- Existing user-liked emoji characterization coverage passed before production extraction: 3
+  focused tests.
+- `py_compile` passed.
+- Focused user-liked emoji tests passed after extraction: 3 tests.
+- ZSXQ database helper tests passed: 97 tests.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- Full backend unittest discovery passed: 1132 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:

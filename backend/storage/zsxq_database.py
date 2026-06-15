@@ -736,8 +736,7 @@ class ZSXQDatabase:
             return
 
         for emoji_key in _iter_valid_user_liked_emoji_keys(topic_data['user_specific']['liked_emojis']):
-            sql, params = _user_liked_emoji_insert_statement(topic_id, emoji_key)
-            self.cursor.execute(sql, params)
+            self._execute_statement(_user_liked_emoji_insert_statement, topic_id, emoji_key)
 
     def _import_comments(self, topic_id: int, comments: List[Dict[str, Any]]):
         """导入评论信息"""
