@@ -173,6 +173,12 @@ class DownloadFileTarget(NamedTuple):
     file_path: str
 
 
+class DownloadBodyTarget(NamedTuple):
+    total_size: int
+    expected_size: int
+    temp_path: str
+
+
 class DownloadAttemptResult(NamedTuple):
     success_result: Optional[bool]
     failure_detail: Optional[tuple[str, str]]
@@ -1040,12 +1046,12 @@ class ZSXQFileDownloader:
         response_headers: Dict[str, Any],
         file_size: int,
         file_path: str,
-    ) -> tuple[int, int, str]:
+    ) -> DownloadBodyTarget:
         total_size = download_total_size(response_headers)
         expected_size = download_expected_size(file_size, total_size)
         temp_path = partial_download_path(file_path)
         remove_partial_download(temp_path)
-        return total_size, expected_size, temp_path
+        return DownloadBodyTarget(total_size, expected_size, temp_path)
 
     def _handle_successful_download_response(
         self,
@@ -1055,7 +1061,7 @@ class ZSXQFileDownloader:
         safe_filename: str,
         file_path: str,
     ) -> tuple[Optional[bool], Optional[tuple[str, str]]]:
-        total_size, expected_size, temp_path = self._prepare_download_body_target(
+        body_target = self._prepare_download_body_target(
             response.headers,
             file_size,
             file_path,
@@ -1063,14 +1069,14 @@ class ZSXQFileDownloader:
 
         downloaded_size = self._write_download_response_body(
             response,
-            temp_path,
-            total_size,
+            body_target.temp_path,
+            body_target.total_size,
             file_id,
         )
         return self._finalize_download_body_result(
             downloaded_size,
-            expected_size,
-            temp_path,
+            body_target.expected_size,
+            body_target.temp_path,
             file_id,
             safe_filename,
             file_path,
