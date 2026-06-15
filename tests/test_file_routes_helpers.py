@@ -761,6 +761,28 @@ class FileRoutesHelperTests(unittest.TestCase):
             [call.args for call in add_task_log.call_args_list],
         )
 
+    def test_run_file_analysis_task_preserves_pre_cast_deduplication_for_mixed_id_types(self):
+        from backend.services import file_workflow_service
+
+        with (
+            patch("backend.services.file_workflow_service.update_task") as update_task,
+            patch("backend.services.file_workflow_service.add_task_log"),
+            patch("backend.services.file_workflow_service.is_task_stopped", return_value=False),
+            patch("backend.services.file_workflow_service.analyze_group_file", return_value={"cached": False}) as analyze,
+        ):
+            file_workflow_service.run_file_analysis_task("task-1", "group-1", [1, "1"], force=False)
+
+        self.assertEqual(
+            [("group-1", 1), ("group-1", 1)],
+            [call.args[:2] for call in analyze.call_args_list],
+        )
+        update_task.assert_any_call(
+            "task-1",
+            "completed",
+            "文件分析完成",
+            {"analysis": {"total_files": 2, "completed": 2, "cached": 0, "failed": 0}},
+        )
+
     def test_run_file_analysis_task_marks_task_failed_when_all_files_fail(self):
         from backend.services import file_workflow_service
 

@@ -1081,19 +1081,27 @@ def _finish_file_analysis_task(task_id: str, stats: Dict[str, int]) -> None:
         update_task(task_id, "completed", "文件分析完成", {"analysis": stats})
 
 
+def _unique_file_analysis_ids(file_ids: Sequence[Any]) -> list[int]:
+    return [int(file_id) for file_id in dict.fromkeys(file_ids)]
+
+
+def _build_file_analysis_stats(total_files: int) -> Dict[str, int]:
+    return {
+        "total_files": total_files,
+        "completed": 0,
+        "cached": 0,
+        "failed": 0,
+    }
+
+
 def run_file_analysis_task(
     task_id: str,
     group_id: str,
     file_ids: Sequence[int],
     force: bool = False,
 ):
-    unique_file_ids = [int(file_id) for file_id in dict.fromkeys(file_ids)]
-    stats = {
-        "total_files": len(unique_file_ids),
-        "completed": 0,
-        "cached": 0,
-        "failed": 0,
-    }
+    unique_file_ids = _unique_file_analysis_ids(file_ids)
+    stats = _build_file_analysis_stats(len(unique_file_ids))
     try:
         update_task(task_id, "running", f"开始分析 {len(unique_file_ids)} 个文件...")
         for index, file_id in enumerate(unique_file_ids, 1):
