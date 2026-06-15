@@ -251,8 +251,7 @@ class ZSXQColumnsDatabase:
             return _nullable_group_id_param(self.group_id)
         try:
             sql, params = _topic_group_id_query(topic_id)
-            self.cursor.execute(sql, params)
-            row = self.cursor.fetchone()
+            row = self._fetch_optional_params_row(sql, params)
             return row[0] if row and row[0] is not None else None
         except Exception:
             return None
@@ -418,8 +417,7 @@ class ZSXQColumnsDatabase:
     
     def start_crawl_log(self, group_id: int, crawl_type: str) -> int:
         """开始采集日志"""
-        self.cursor.execute(_crawl_log_insert_statement(), (group_id, crawl_type))
-        row = self.cursor.fetchone()
+        row = self._fetch_optional_params_row(_crawl_log_insert_statement(), (group_id, crawl_type))
         self.conn.commit()
         return row[0] if row else None
     
@@ -446,8 +444,7 @@ class ZSXQColumnsDatabase:
     def topic_detail_exists(self, topic_id: int) -> bool:
         """检查文章详情是否已存在"""
         sql, params = _topic_detail_exists_query(topic_id)
-        self.cursor.execute(sql, params)
-        return self.cursor.fetchone() is not None
+        return self._fetch_optional_params_row(sql, params) is not None
     
     def get_existing_topic_ids(self, group_id: int) -> set:
         """获取已存在的文章ID集合"""
@@ -455,8 +452,7 @@ class ZSXQColumnsDatabase:
 
     def _fetch_group_topic_ids(self, group_id: int) -> List[Any]:
         sql, params = _group_topic_ids_query(group_id)
-        self.cursor.execute(sql, params)
-        return [row[0] for row in self.cursor.fetchall()]
+        return [row[0] for row in self._fetch_optional_params_rows(sql, params)]
     
     # ==================== 数据清理 ====================
     

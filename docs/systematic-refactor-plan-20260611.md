@@ -19378,6 +19378,53 @@ Result:
 - Full backend unittest discovery passed: 1118 tests, 15 skipped.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-15 - P3 optional row fetch helper reuse
+
+Changed:
+
+- Re-ran existing characterization coverage for incremental existence reads, topic-group lookup
+  fallback, crawl-log returning ID behavior, and group topic ID loading before production changes.
+- Reused `_fetch_optional_params_row(...)` from `_resolve_topic_group_id(...)`,
+  `start_crawl_log(...)`, and `topic_detail_exists(...)`.
+- Reused `_fetch_optional_params_rows(...)` from `_fetch_group_topic_ids(...)`.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- `_resolve_topic_group_id(...)` still returns the runtime scope without querying when available,
+  still reads the same fallback query when unscoped, and still swallows lookup exceptions by
+  returning `None`.
+- `start_crawl_log(...)` still executes the same insert statement, fetches the returning row before
+  committing, commits exactly once, and returns `None` when no row is returned.
+- `topic_detail_exists(...)` and `_fetch_group_topic_ids(...)` still execute the same SQL with the
+  same parameters and preserve their boolean/list return shapes.
+- No SQL text, commit order, storage schema, public API, legacy path, or fallback behavior changed.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_columns_database_helpers.ZSXQColumnsDatabaseHelperTests.test_incremental_select_methods_preserve_execute_params_and_fetch_shape tests.test_zsxq_columns_database_helpers.ZSXQColumnsDatabaseHelperTests.test_fetch_group_topic_ids_preserves_query_params_order_and_empty_shape tests.test_zsxq_columns_database_helpers.ZSXQColumnsDatabaseHelperTests.test_resolve_topic_group_id_preserves_scope_lookup_and_exception_fallback tests.test_zsxq_columns_database_helpers.ZSXQColumnsDatabaseHelperTests.test_start_crawl_log_preserves_insert_params_commit_and_none_row -v
+uv run python -m py_compile backend\storage\zsxq_columns_database.py tests\test_zsxq_columns_database_helpers.py
+uv run python -m unittest tests.test_zsxq_columns_database_helpers.ZSXQColumnsDatabaseHelperTests.test_incremental_select_methods_preserve_execute_params_and_fetch_shape tests.test_zsxq_columns_database_helpers.ZSXQColumnsDatabaseHelperTests.test_fetch_group_topic_ids_preserves_query_params_order_and_empty_shape tests.test_zsxq_columns_database_helpers.ZSXQColumnsDatabaseHelperTests.test_resolve_topic_group_id_preserves_scope_lookup_and_exception_fallback tests.test_zsxq_columns_database_helpers.ZSXQColumnsDatabaseHelperTests.test_start_crawl_log_preserves_insert_params_commit_and_none_row tests.test_zsxq_columns_database_helpers.ZSXQColumnsDatabaseHelperTests.test_fetch_mapped_optional_row_preserves_execute_arity_and_none_shape -v
+uv run python -m unittest tests.test_zsxq_columns_database_helpers -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run ruff check backend\storage\zsxq_columns_database.py tests\test_zsxq_columns_database_helpers.py --select F401,F841
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- Existing optional-row reuse characterization tests passed before extraction: 4 focused tests.
+- `py_compile` passed.
+- Focused optional-row reuse tests passed after extraction: 5 tests.
+- ZSXQ columns database helper tests passed: 78 tests.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- Full backend unittest discovery passed: 1118 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:
