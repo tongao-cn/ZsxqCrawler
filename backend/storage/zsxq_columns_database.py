@@ -316,21 +316,41 @@ class ZSXQColumnsDatabase:
     
     def get_topic_images(self, topic_id: int, group_id: Optional[Any] = None) -> List[Dict[str, Any]]:
         """获取文章的所有图片"""
-        scope_group_id = self._scope_group_id_param(group_id)
-        sql, params = _topic_images_query(topic_id, scope_group_id)
-        return self._fetch_mapped_rows(sql, params, _topic_image_row_to_dict)
+        return self._fetch_topic_child_payloads(
+            topic_id,
+            group_id,
+            _topic_images_query,
+            _topic_image_row_to_dict,
+        )
     
     def get_topic_files(self, topic_id: int, group_id: Optional[Any] = None) -> List[Dict[str, Any]]:
         """获取文章的所有文件"""
-        scope_group_id = self._scope_group_id_param(group_id)
-        sql, params = _topic_files_query(topic_id, scope_group_id)
-        return self._fetch_mapped_rows(sql, params, _topic_file_row_to_dict)
+        return self._fetch_topic_child_payloads(
+            topic_id,
+            group_id,
+            _topic_files_query,
+            _topic_file_row_to_dict,
+        )
     
     def get_topic_videos(self, topic_id: int, group_id: Optional[Any] = None) -> List[Dict[str, Any]]:
         """获取文章的所有视频"""
+        return self._fetch_topic_child_payloads(
+            topic_id,
+            group_id,
+            _topic_videos_query,
+            _topic_video_row_to_dict,
+        )
+
+    def _fetch_topic_child_payloads(
+        self,
+        topic_id: int,
+        group_id: Optional[Any],
+        query_builder: Callable[[int, Any], tuple[str, Any]],
+        row_mapper: Callable[[Any], Dict[str, Any]],
+    ) -> List[Dict[str, Any]]:
         scope_group_id = self._scope_group_id_param(group_id)
-        sql, params = _topic_videos_query(topic_id, scope_group_id)
-        return self._fetch_mapped_rows(sql, params, _topic_video_row_to_dict)
+        sql, params = query_builder(topic_id, scope_group_id)
+        return self._fetch_mapped_rows(sql, params, row_mapper)
     
     def update_video_cover_path(self, video_id: int, local_path: str):
         """更新视频封面本地缓存路径"""
