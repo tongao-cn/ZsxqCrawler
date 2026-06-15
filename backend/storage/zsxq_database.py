@@ -576,6 +576,15 @@ class ZSXQDatabase:
         sql, params = statement_builder(*args, _beijing_now_timestamp())
         self.cursor.execute(sql, params)
 
+    def _execute_timestamped_statement_returning_first_column_or_none(
+        self,
+        statement_builder: Callable[..., tuple[str, tuple[Any, ...]]],
+        *args: Any,
+    ) -> Any:
+        self._execute_timestamped_statement(statement_builder, *args)
+        row = self.cursor.fetchone()
+        return row[0] if row else None
+
     def _execute_timestamped_statements(
         self,
         statement_builder: Callable[..., tuple[tuple[str, tuple[Any, ...]], ...]],
@@ -1027,9 +1036,12 @@ class ZSXQDatabase:
                 self._update_tag_hid_if_present(tag_id, hid)
                 return tag_id
 
-            self._execute_timestamped_statement(_insert_tag_statement, group_id, tag_name, hid)
-            row = self.cursor.fetchone()
-            return row[0] if row else None
+            return self._execute_timestamped_statement_returning_first_column_or_none(
+                _insert_tag_statement,
+                group_id,
+                tag_name,
+                hid,
+            )
         except Exception as e:
             print(f"插入标签失败: {e}")
             return None
