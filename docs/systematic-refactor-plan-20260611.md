@@ -18879,6 +18879,49 @@ Result:
 - Full backend unittest discovery passed: 1106 tests, 15 skipped.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-15 - P1 filtered download records query helper
+
+Changed:
+
+- Added characterization coverage for `_load_filtered_download_file_records()` with
+  whitespace-padded `all` status and `max_files=0`.
+- Added `_build_filtered_download_file_records_query()` and reused it from
+  `_load_filtered_download_file_records()`.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Filtered file downloads still apply the same group filter, completed-status exclusion by default,
+  search condition, ordering, optional `LIMIT ?`, parameter order, and row normalization.
+- `status=" all "` still resolves to the default pending-download filter, and `max_files=0` still
+  omits `LIMIT ?` because the existing truthiness behavior is preserved.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_file_routes_helpers.FileRoutesHelperTests.test_load_filtered_download_file_records_keeps_all_status_and_zero_limit_shape -v
+uv run python -m py_compile backend\services\file_workflow_service.py tests\test_file_routes_helpers.py
+uv run python -m unittest tests.test_file_routes_helpers.FileRoutesHelperTests.test_load_filtered_download_file_records_keeps_default_search_and_limit_shape tests.test_file_routes_helpers.FileRoutesHelperTests.test_load_filtered_download_file_records_keeps_completed_status_shape tests.test_file_routes_helpers.FileRoutesHelperTests.test_load_filtered_download_file_records_keeps_all_status_and_zero_limit_shape tests.test_file_routes_helpers.FileRoutesHelperTests.test_add_file_search_condition_skips_blank_search_without_mutation tests.test_file_routes_helpers.FileRoutesHelperTests.test_add_file_search_condition_trims_lowercases_and_adds_eight_params -v
+uv run python -m unittest tests.test_file_routes_helpers -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run ruff check backend\services\file_workflow_service.py tests\test_file_routes_helpers.py --select F401,F841
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- New all-status / zero-limit characterization test passed against the original inline query
+  implementation: 1 focused test.
+- `py_compile` passed.
+- Focused filtered-query and shared search-condition tests passed after extraction: 5 tests.
+- File route/helper tests passed: 89 tests.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- Full backend unittest discovery passed: 1107 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:

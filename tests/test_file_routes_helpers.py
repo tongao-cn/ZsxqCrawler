@@ -2486,6 +2486,37 @@ class FileRoutesHelperTests(unittest.TestCase):
         self.assertEqual((123, "completed", "downloaded", "skipped"), params)
         self.assertEqual([(101, "Report.PDF", 123, 7)], records)
 
+    def test_load_filtered_download_file_records_keeps_all_status_and_zero_limit_shape(self):
+        class FakeCursor:
+            def __init__(self):
+                self.executed = []
+
+            def execute(self, sql, params=()):
+                self.executed.append((sql, params))
+
+            def fetchall(self):
+                return []
+
+        class FakeDownloader:
+            def __init__(self):
+                self.file_db = type("FakeFileDb", (), {"cursor": FakeCursor()})()
+
+        downloader = FakeDownloader()
+
+        records = _load_filtered_download_file_records(
+            downloader,
+            "123",
+            status=" all ",
+            max_files=0,
+        )
+
+        query, params = downloader.file_db.cursor.executed[0]
+        self.assertIn("(f.download_status IS NULL OR f.download_status NOT IN (?, ?, ?))", query)
+        self.assertNotIn("f.download_status IN (?, ?, ?)", query)
+        self.assertNotIn("LIMIT ?", query)
+        self.assertEqual((123, "completed", "downloaded", "skipped"), params)
+        self.assertEqual([], records)
+
     def test_load_download_file_records_dedupes_preserves_order_and_reports_missing(self):
         class FakeCursor:
             def __init__(self):

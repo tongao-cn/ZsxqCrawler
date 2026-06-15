@@ -900,14 +900,12 @@ def _add_file_search_condition(conditions: list[str], params: list[Any], search:
     params.extend([search_pattern] * 8)
 
 
-def _load_filtered_download_file_records(
-    downloader: ZSXQFileDownloader,
+def _build_filtered_download_file_records_query(
     group_id: str,
-    *,
-    status: Optional[str] = None,
-    search: Optional[str] = None,
-    max_files: Optional[int] = None,
-) -> list[tuple[int, str, int, int]]:
+    status: Optional[str],
+    search: Optional[str],
+    max_files: Optional[int],
+) -> tuple[str, tuple[Any, ...]]:
     conditions = ["f.group_id = ?"]
     params: list[Any] = [_query_group_id(group_id)]
     _add_file_download_status_condition(
@@ -924,7 +922,7 @@ def _load_filtered_download_file_records(
     if max_files:
         params.append(int(max_files))
 
-    downloader.file_db.cursor.execute(
+    return (
         f"""
         SELECT f.file_id, f.name, f.size, f.download_count
         FROM files f
@@ -934,6 +932,23 @@ def _load_filtered_download_file_records(
         """,
         tuple(params),
     )
+
+
+def _load_filtered_download_file_records(
+    downloader: ZSXQFileDownloader,
+    group_id: str,
+    *,
+    status: Optional[str] = None,
+    search: Optional[str] = None,
+    max_files: Optional[int] = None,
+) -> list[tuple[int, str, int, int]]:
+    query, params = _build_filtered_download_file_records_query(
+        group_id,
+        status,
+        search,
+        max_files,
+    )
+    downloader.file_db.cursor.execute(query, params)
     rows = downloader.file_db.cursor.fetchall()
     return [_normalize_download_file_record(row) for row in rows]
 
