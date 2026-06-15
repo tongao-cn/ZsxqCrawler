@@ -20151,6 +20151,56 @@ Result:
 - Full backend unittest discovery passed: 1124 tests, 15 skipped.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-15 - P2 topic timestamp create-time helper extraction
+
+Changed:
+
+- Added characterization coverage for `get_newest_topic_timestamp(...)` and
+  `get_oldest_topic_timestamp(...)` exception fallback behavior.
+- Extracted `_fetch_topic_create_time(...)` to share the query-builder plus optional scalar read
+  path used by the newest/oldest timestamp methods.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- `get_newest_topic_timestamp(...)` and `get_oldest_topic_timestamp(...)` still use their existing
+  query helpers and `_fetch_optional_first_column(...)`.
+- The legacy empty-group behavior is unchanged: `group_id=None` still produces the same SQL shape
+  and `("", "")` params for these two methods.
+- Exceptions still print the method-specific messages `获取最新话题时间戳失败: ...` and
+  `获取最老话题时间戳失败: ...`, then return `None`.
+- SQL shapes, query params, return values, public API, legacy paths, fallback behavior, error
+  semantics, storage schema, and config semantics are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_topic_timestamp_methods_keep_legacy_group_scope_for_empty_group tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_topic_timestamp_query_helpers_preserve_existing_scope_semantics -v
+uv run python -m unittest tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_topic_timestamp_methods_keep_legacy_group_scope_for_empty_group tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_topic_timestamp_methods_preserve_exception_fallbacks tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_topic_timestamp_query_helpers_preserve_existing_scope_semantics -v
+uv run python -m py_compile backend\storage\zsxq_database.py tests\test_zsxq_database_helpers.py
+uv run python -m unittest tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_topic_timestamp_methods_keep_legacy_group_scope_for_empty_group tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_topic_timestamp_methods_preserve_exception_fallbacks tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_topic_timestamp_query_helpers_preserve_existing_scope_semantics tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_timestamp_range_info_uses_nullable_scope_and_preserves_response_shape -v
+uv run python -m unittest tests.test_zsxq_database_helpers -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run ruff check backend\storage\zsxq_database.py tests\test_zsxq_database_helpers.py --select F401,F841
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- Existing timestamp method characterization tests passed before adding fallback coverage: 2 focused
+  tests.
+- New timestamp exception fallback characterization test passed before production extraction:
+  3 focused tests.
+- `py_compile` passed.
+- Focused timestamp tests passed after extraction: 4 tests.
+- ZSXQ database helper tests passed: 90 tests.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- Full backend unittest discovery passed: 1125 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:

@@ -640,8 +640,7 @@ class ZSXQDatabase:
     def get_oldest_topic_timestamp(self) -> Optional[str]:
         """获取数据库中最老的话题时间戳"""
         try:
-            sql, params = _oldest_topic_create_time_query(self.group_id)
-            return self._fetch_optional_first_column(sql, params)
+            return self._fetch_topic_create_time(_oldest_topic_create_time_query)
         except Exception as e:
             print(f"获取最老话题时间戳失败: {e}")
             return None
@@ -649,11 +648,17 @@ class ZSXQDatabase:
     def get_newest_topic_timestamp(self) -> Optional[str]:
         """获取数据库中最新的话题时间戳"""
         try:
-            sql, params = _newest_topic_create_time_query(self.group_id)
-            return self._fetch_optional_first_column(sql, params)
+            return self._fetch_topic_create_time(_newest_topic_create_time_query)
         except Exception as e:
             print(f"获取最新话题时间戳失败: {e}")
             return None
+
+    def _fetch_topic_create_time(
+        self,
+        query_builder: Callable[[Any], tuple[str, tuple[Any, ...]]],
+    ) -> Optional[str]:
+        sql, params = query_builder(self.group_id)
+        return self._fetch_optional_first_column(sql, params)
     
     def _import_all_users(self, topic_data: Dict[str, Any]):
         """导入话题相关的所有用户信息"""

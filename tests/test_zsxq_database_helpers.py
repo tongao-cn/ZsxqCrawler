@@ -96,6 +96,12 @@ class FakeTimestampCountFailureCursor(FakeTimestampCursor):
         return self
 
 
+class FakeTimestampFailureCursor(FakeTimestampCursor):
+    def execute(self, query, params=()):
+        super().execute(query, params)
+        raise RuntimeError("temporary timestamp failure")
+
+
 class FakeSequenceCursor(FakeTimestampCursor):
     pass
 
@@ -1954,6 +1960,45 @@ class ZSXQDatabaseHelperTests(unittest.TestCase):
         oldest_db.group_id = None
         self.assertEqual("old-time", ZSXQDatabase.get_oldest_topic_timestamp(oldest_db))
         self.assertEqual(("", ""), oldest_db.cursor.calls[0][1])
+
+    def test_topic_timestamp_methods_preserve_exception_fallbacks(self):
+        from backend.storage.zsxq_database import ZSXQDatabase
+
+        newest_db = object.__new__(ZSXQDatabase)
+        newest_db.cursor = FakeTimestampFailureCursor([])
+        newest_db.group_id = None
+
+        oldest_db = object.__new__(ZSXQDatabase)
+        oldest_db.cursor = FakeTimestampFailureCursor([])
+        oldest_db.group_id = None
+
+        with patch("builtins.print") as mocked_print:
+            self.assertIsNone(ZSXQDatabase.get_newest_topic_timestamp(newest_db))
+            self.assertIsNone(ZSXQDatabase.get_oldest_topic_timestamp(oldest_db))
+
+        self.assertEqual(
+            [
+                (
+                    "SELECT create_time FROM topics WHERE (? IS NULL OR group_id = ?) "
+                    "AND create_time IS NOT NULL AND create_time != '' ORDER BY create_time DESC LIMIT 1",
+                    ("", ""),
+                )
+            ],
+            newest_db.cursor.calls,
+        )
+        self.assertEqual(
+            [
+                (
+                    "SELECT create_time FROM topics WHERE (? IS NULL OR group_id = ?) "
+                    "AND create_time IS NOT NULL AND create_time != '' ORDER BY create_time ASC LIMIT 1",
+                    ("", ""),
+                )
+            ],
+            oldest_db.cursor.calls,
+        )
+        self.assertEqual(2, mocked_print.call_count)
+        self.assertIn("获取最新话题时间戳失败", mocked_print.call_args_list[0].args[0])
+        self.assertIn("获取最老话题时间戳失败", mocked_print.call_args_list[1].args[0])
 
     def test_import_topic_data_existing_topic_preserves_skip_and_file_sync(self):
         from backend.storage.zsxq_database import ZSXQDatabase
