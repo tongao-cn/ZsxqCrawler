@@ -1970,6 +1970,88 @@ class FileRoutesHelperTests(unittest.TestCase):
         )
         safe_remove.assert_called_once_with("task-1")
 
+    def test_run_selected_file_download_task_completes_empty_records_with_missing_stats(self):
+        from backend.services.file_workflow_service import run_selected_file_download_task
+
+        downloader = object()
+
+        with (
+            patch("backend.services.file_workflow_service._create_file_downloader", return_value=downloader),
+            patch("backend.services.file_workflow_service._load_download_file_records", return_value=([], [101, 102])),
+            patch("backend.services.file_workflow_service._run_download_records") as run_download_records,
+            patch("backend.services.file_workflow_service.update_task") as update_task,
+            patch("backend.services.file_workflow_service.add_task_log") as add_task_log,
+            patch("backend.services.file_workflow_service.is_task_stopped", return_value=False),
+            patch("backend.services.file_workflow_service._safe_remove_file_downloader") as safe_remove,
+        ):
+            run_selected_file_download_task("task-1", "123", [101, 102, 101])
+
+        run_download_records.assert_not_called()
+        self.assertEqual(
+            [
+                ("task-1", "running", "开始下载选中的 3 个文件..."),
+                (
+                    "task-1",
+                    "completed",
+                    "没有可下载的文件记录",
+                    {
+                        "downloaded_files": {
+                            "total_files": 2,
+                            "found": 0,
+                            "missing": 2,
+                            "downloaded": 0,
+                            "skipped": 0,
+                            "failed": 0,
+                        }
+                    },
+                ),
+            ],
+            [call.args for call in update_task.call_args_list],
+        )
+        add_task_log.assert_called_once_with("task-1", "⚠️ 2 个文件未在文件库中找到，已跳过")
+        safe_remove.assert_called_once_with("task-1")
+
+    def test_run_filtered_file_download_task_completes_empty_records_with_stats_payload(self):
+        from backend.services.file_workflow_service import run_filtered_file_download_task
+
+        downloader = object()
+
+        with (
+            patch("backend.services.file_workflow_service._create_file_downloader", return_value=downloader),
+            patch("backend.services.file_workflow_service._load_filtered_download_file_records", return_value=[]),
+            patch("backend.services.file_workflow_service._run_download_records") as run_download_records,
+            patch("backend.services.file_workflow_service.update_task") as update_task,
+            patch("backend.services.file_workflow_service.add_task_log") as add_task_log,
+            patch("backend.services.file_workflow_service.is_task_stopped", return_value=False),
+            patch("backend.services.file_workflow_service._safe_remove_file_downloader") as safe_remove,
+        ):
+            run_filtered_file_download_task("task-1", "123", status="pending", search="pdf", max_files=1)
+
+        run_download_records.assert_not_called()
+        self.assertEqual(
+            [
+                ("task-1", "running", "开始下载当前筛选结果..."),
+                (
+                    "task-1",
+                    "completed",
+                    "当前筛选下没有可下载文件",
+                    {
+                        "downloaded_files": {
+                            "total_files": 0,
+                            "found": 0,
+                            "missing": 0,
+                            "downloaded": 0,
+                            "skipped": 0,
+                            "failed": 0,
+                        }
+                    },
+                ),
+            ],
+            [call.args for call in update_task.call_args_list],
+        )
+        add_task_log.assert_not_called()
+        safe_remove.assert_called_once_with("task-1")
+
     def test_complete_download_records_task_updates_completion_when_running(self):
         downloader = object()
         records = [(101, "Report.pdf", 123, 7)]

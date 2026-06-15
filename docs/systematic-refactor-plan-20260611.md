@@ -18706,6 +18706,52 @@ Result:
 - Full backend unittest discovery passed: 1099 tests, 15 skipped.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-15 - P1 empty download records completion helper
+
+Changed:
+
+- Added characterization coverage for selected-download empty-record completion with missing file
+  stats and filtered-download empty-record completion.
+- Added `_complete_empty_download_records_task()` and reused it from selected / filtered download
+  task paths.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Empty selected / filtered download tasks still emit the same completed task status, messages, and
+  `{"downloaded_files": stats}` payload shape.
+- The selected-download missing-file warning remains in the route-specific path before completion.
+- The empty-record completion helper intentionally does not add an extra stopped-task check,
+  preserving the existing behavior where an empty result set completes immediately after records are
+  loaded.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_file_routes_helpers.FileRoutesHelperTests.test_run_selected_file_download_task_completes_empty_records_with_missing_stats tests.test_file_routes_helpers.FileRoutesHelperTests.test_run_filtered_file_download_task_completes_empty_records_with_stats_payload -v
+uv run python -m py_compile backend\services\file_workflow_service.py tests\test_file_routes_helpers.py
+uv run python -m unittest tests.test_file_routes_helpers.FileRoutesHelperTests.test_run_selected_file_download_task_completes_empty_records_with_missing_stats tests.test_file_routes_helpers.FileRoutesHelperTests.test_run_filtered_file_download_task_completes_empty_records_with_stats_payload tests.test_file_routes_helpers.FileRoutesHelperTests.test_run_selected_file_download_task_skips_completion_when_stopped_after_records tests.test_file_routes_helpers.FileRoutesHelperTests.test_run_filtered_file_download_task_skips_completion_when_stopped_after_records tests.test_file_routes_helpers.FileRoutesHelperTests.test_complete_download_records_task_updates_completion_when_running tests.test_file_routes_helpers.FileRoutesHelperTests.test_complete_download_records_task_skips_completion_when_stopped_after_records -v
+uv run python -m unittest tests.test_file_routes_helpers -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run ruff check backend\services\file_workflow_service.py tests\test_file_routes_helpers.py --select F401,F841
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- New empty-record characterization tests passed against the original inline completion
+  implementation: 2 focused tests.
+- `py_compile` passed.
+- Focused empty-record, stopped-after-records, and completion-guard tests passed after extraction:
+  6 tests.
+- File route/helper tests passed: 83 tests.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- Full backend unittest discovery passed: 1101 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:

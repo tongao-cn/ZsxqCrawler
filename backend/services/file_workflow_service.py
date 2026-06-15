@@ -992,6 +992,14 @@ def _complete_download_records_task(
     _complete_download_records_if_running(task_id, stats, completed_message)
 
 
+def _complete_empty_download_records_task(
+    task_id: str,
+    stats: Dict[str, int],
+    completed_message: str,
+) -> None:
+    update_task(task_id, "completed", completed_message, {"downloaded_files": stats})
+
+
 def run_selected_file_download_task(task_id: str, group_id: str, file_ids: Sequence[int]):
     try:
         update_task(task_id, "running", f"开始下载选中的 {len(file_ids)} 个文件...")
@@ -1009,7 +1017,7 @@ def run_selected_file_download_task(task_id: str, group_id: str, file_ids: Seque
         if missing:
             add_task_log(task_id, f"⚠️ {len(missing)} 个文件未在文件库中找到，已跳过")
         if not records:
-            update_task(task_id, "completed", "没有可下载的文件记录", {"downloaded_files": stats})
+            _complete_empty_download_records_task(task_id, stats, "没有可下载的文件记录")
             return
 
         _complete_download_records_task(task_id, downloader, records, stats, "选中文件下载完成")
@@ -1042,7 +1050,7 @@ def run_filtered_file_download_task(
         )
         stats = _build_download_task_stats(total_files=len(records), found=len(records))
         if not records:
-            update_task(task_id, "completed", "当前筛选下没有可下载文件", {"downloaded_files": stats})
+            _complete_empty_download_records_task(task_id, stats, "当前筛选下没有可下载文件")
             return
 
         _complete_download_records_task(task_id, downloader, records, stats, "筛选结果下载完成")
