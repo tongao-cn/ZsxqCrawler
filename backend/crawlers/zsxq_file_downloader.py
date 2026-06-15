@@ -1271,6 +1271,41 @@ class ZSXQFileDownloader:
             return db_latest_time
 
         return None
+
+    def _apply_time_collection_dedupe_plan(
+        self,
+        data: Dict[str, Any],
+        files: list[Dict[str, Any]],
+        enable_time_dedupe: bool,
+        db_latest_time: Optional[Any],
+    ) -> Dict[str, bool]:
+        if not enable_time_dedupe or not db_latest_time:
+            return {
+                "should_stop_before_insert": False,
+                "should_stop_after_insert": False,
+            }
+
+        dedupe_plan = time_dedupe_page_plan(files, db_latest_time)
+        for message in time_dedupe_page_messages(dedupe_plan):
+            self.log(message)
+
+        if dedupe_plan["should_stop_before_insert"]:
+            return {
+                "should_stop_before_insert": True,
+                "should_stop_after_insert": False,
+            }
+
+        if dedupe_plan["should_filter_before_insert"]:
+            data['resp_data']['files'] = dedupe_plan["newer_files"]
+            return {
+                "should_stop_before_insert": False,
+                "should_stop_after_insert": dedupe_plan["should_stop_after_insert"],
+            }
+
+        return {
+            "should_stop_before_insert": False,
+            "should_stop_after_insert": False,
+        }
     
     def collect_files_by_time(
         self,
@@ -1335,18 +1370,15 @@ class ZSXQFileDownloader:
                 if time_range_message:
                     self.log(time_range_message)
 
-                should_stop_after_insert = False
-                if enable_time_dedupe and db_latest_time:
-                    dedupe_plan = time_dedupe_page_plan(files, db_latest_time)
-                    for message in time_dedupe_page_messages(dedupe_plan):
-                        self.log(message)
-                    
-                    if dedupe_plan["should_stop_before_insert"]:
-                        break
-                    
-                    if dedupe_plan["should_filter_before_insert"]:
-                        data['resp_data']['files'] = dedupe_plan["newer_files"]
-                        should_stop_after_insert = dedupe_plan["should_stop_after_insert"]
+                dedupe_result = self._apply_time_collection_dedupe_plan(
+                    data,
+                    files,
+                    enable_time_dedupe,
+                    db_latest_time,
+                )
+                if dedupe_result["should_stop_before_insert"]:
+                    break
+                should_stop_after_insert = dedupe_result["should_stop_after_insert"]
 
                 # 使用完整数据库导入整个API响应
                 try:

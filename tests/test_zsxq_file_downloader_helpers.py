@@ -781,6 +781,41 @@ class FileDownloaderPaginationTests(unittest.TestCase):
         self.assertIn("   ✅ 已插入本页新数据，后续页面均为旧数据，停止收集", downloader.logs)
         self.assertNotIn("   ⏭️ 下一页时间戳: next-page", downloader.logs)
 
+    def test_collect_files_by_time_skips_import_when_dedupe_page_is_all_old(self):
+        files = [
+            {"file": {"file_id": 101, "create_time": "2026-05-01T10:00:00"}},
+            {"file": {"file_id": 102, "create_time": "2026-05-01T09:00:00"}},
+        ]
+        downloader = object.__new__(ZSXQFileDownloader)
+        downloader.group_id = "511"
+        downloader.file_db = TimeDedupeFileDb("2026-05-02T00:00:00", initial_files=10, final_files=10)
+        downloader.logs = []
+        downloader.fetch_calls = []
+        downloader.log = downloader.logs.append
+        downloader.check_stop = lambda: False
+
+        def fetch_file_list(**kwargs):
+            downloader.fetch_calls.append(kwargs)
+            return {"resp_data": {"index": "next-page", "files": list(files)}}
+
+        downloader.fetch_file_list = fetch_file_list
+
+        stats = ZSXQFileDownloader.collect_files_by_time(downloader)
+
+        self.assertEqual([], downloader.file_db.imported_responses)
+        self.assertEqual([{"count": 20, "index": None, "sort": "by_create_time"}], downloader.fetch_calls)
+        self.assertEqual(1, len(downloader.file_db.executed))
+        self.assertEqual(2, downloader.file_db.stats_calls)
+        self.assertEqual(10, stats["total_files"])
+        self.assertEqual(0, stats["new_files"])
+        self.assertEqual(1, stats["pages"])
+        self.assertEqual(0, stats["files"])
+        self.assertIn("   📊 时间分析: 新于数据库0个, 旧于或等于数据库2个", downloader.logs)
+        self.assertIn("   ✅ 本页全部文件均已存在于数据库（时间不晚于数据库最新），停止收集", downloader.logs)
+        self.assertIn("   💡 提示: 如需强制重新收集，请传入 force_refresh=True 参数", downloader.logs)
+        self.assertNotIn("   ✅ 第1页存储完成: 文件+0, 话题+0", downloader.logs)
+        self.assertNotIn("   ⏭️ 下一页时间戳: next-page", downloader.logs)
+
     def test_collect_files_by_time_preserves_next_index_sleep_and_last_page_log(self):
         pages = [
             {
