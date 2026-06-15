@@ -1073,20 +1073,15 @@ class ZSXQFileDownloader:
         time.sleep(next_page["delay"])  # 页面间短暂延迟
         return next_page["next_index"]
 
-    def download_files_batch(self, max_files: Optional[int] = None, start_index: Optional[str] = None) -> Dict[str, int]:
-        """批量下载文件"""
-        for message in batch_download_start_messages(max_files):
-            self.log(message)
-
-        # 检查是否需要停止
-        if self.check_stop():
-            self.log(batch_download_initial_stop_message())
-            return download_result_stats()
-
-        stats = download_result_stats()
+    def _run_batch_download_loop(
+        self,
+        stats: Dict[str, int],
+        max_files: Optional[int],
+        start_index: Optional[str],
+    ) -> None:
         current_index = start_index
         downloaded_in_batch = 0
-        
+
         while max_files is None or downloaded_in_batch < max_files:
             # 检查是否需要停止
             if self.check_stop():
@@ -1106,7 +1101,7 @@ class ZSXQFileDownloader:
                 break
 
             self.log(batch_download_page_files_message(len(files)))
-            
+
             for i, file_info in enumerate(files):
                 # 检查是否需要停止
                 if self.check_stop():
@@ -1124,7 +1119,7 @@ class ZSXQFileDownloader:
                     downloaded_in_batch,
                     stats,
                 )
-            
+
             # 准备下一页
             current_index = self._next_batch_download_index(
                 next_index,
@@ -1133,6 +1128,19 @@ class ZSXQFileDownloader:
             )
             if current_index is None:
                 break
+
+    def download_files_batch(self, max_files: Optional[int] = None, start_index: Optional[str] = None) -> Dict[str, int]:
+        """批量下载文件"""
+        for message in batch_download_start_messages(max_files):
+            self.log(message)
+
+        # 检查是否需要停止
+        if self.check_stop():
+            self.log(batch_download_initial_stop_message())
+            return download_result_stats()
+
+        stats = download_result_stats()
+        self._run_batch_download_loop(stats, max_files, start_index)
 
         for message in batch_download_completion_messages(stats):
             self.log(message)

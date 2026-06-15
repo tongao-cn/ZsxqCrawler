@@ -1365,6 +1365,28 @@ class FileDownloaderBatchDownloadTests(unittest.TestCase):
             downloader.logs,
         )
 
+    def test_download_files_batch_loop_stop_returns_empty_stats_with_completion(self):
+        downloader = self._downloader_for_batch([{"file": {"id": 101, "name": "unused.pdf"}}])
+        stop_checks = [False, True]
+        downloader.check_stop = lambda: stop_checks.pop(0)
+
+        stats = ZSXQFileDownloader.download_files_batch(downloader, max_files=2, start_index="start")
+
+        self.assertEqual({"total_files": 0, "downloaded": 0, "skipped": 0, "failed": 0}, stats)
+        self.assertEqual([], downloader.fetch_calls)
+        self.assertEqual(
+            [
+                "📥 开始批量下载文件 (最多2个)",
+                "🛑 批量下载任务被停止",
+                "🎉 批量下载完成:",
+                "   📊 总文件数: 0",
+                "   ✅ 下载成功: 0",
+                "   ⚠️ 跳过: 0",
+                "   ❌ 失败: 0",
+            ],
+            downloader.logs,
+        )
+
     def test_download_files_batch_preserves_next_page_sleep_and_fetch_index(self):
         downloader = object.__new__(ZSXQFileDownloader)
         downloader.logs = []
