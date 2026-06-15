@@ -18573,6 +18573,51 @@ Result:
 - Full backend unittest discovery passed: 1092 tests, 15 skipped.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-15 - P1 remaining download init stop helper reuse
+
+Changed:
+
+- Added characterization coverage for initialization-stop behavior in full file download, selected
+  file download, and filtered file download task paths.
+- Reused `_file_task_stopped_after_init()` from those three remaining download task paths.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- The stop checks remain at the same points in each task, with the same stopped-task log text,
+  early return behavior, downloader cleanup behavior, route behavior, fallback/legacy behavior,
+  public APIs, and configuration semantics unchanged.
+- Full file download still logs the download configuration before the initialization stop check,
+  preserving the existing log order.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_file_routes_helpers.FileRoutesHelperTests.test_run_file_download_task_stops_after_initialization tests.test_file_routes_helpers.FileRoutesHelperTests.test_run_selected_file_download_task_stops_after_downloader_creation tests.test_file_routes_helpers.FileRoutesHelperTests.test_run_filtered_file_download_task_stops_after_downloader_creation -v
+uv run python -m py_compile backend\services\file_workflow_service.py tests\test_file_routes_helpers.py
+uv run python -m unittest tests.test_file_routes_helpers.FileRoutesHelperTests.test_run_collect_files_task_stops_after_downloader_creation tests.test_file_routes_helpers.FileRoutesHelperTests.test_run_file_download_task_stops_after_initialization tests.test_file_routes_helpers.FileRoutesHelperTests.test_run_selected_file_download_task_stops_after_downloader_creation tests.test_file_routes_helpers.FileRoutesHelperTests.test_run_filtered_file_download_task_stops_after_downloader_creation tests.test_file_routes_helpers.FileRoutesHelperTests.test_run_single_file_download_task_stops_after_downloader_creation tests.test_file_routes_helpers.FileRoutesHelperTests.test_run_sync_files_from_topics_task_stops_before_database_open -v
+uv run python -m unittest tests.test_file_routes_helpers.FileRoutesHelperTests.test_run_file_download_task_existing_files_uses_download_count_without_collect tests.test_file_routes_helpers.FileRoutesHelperTests.test_run_file_download_task_empty_create_time_collects_and_downloads_date_range tests.test_file_routes_helpers.FileRoutesHelperTests.test_run_file_download_task_logs_download_config_before_work tests.test_file_routes_helpers.FileRoutesHelperTests.test_run_file_download_task_stops_after_initialization tests.test_file_routes_helpers.FileRoutesHelperTests.test_run_file_download_task_stops_after_collect_before_download_phase tests.test_file_routes_helpers.FileRoutesHelperTests.test_run_file_download_task_stops_after_download_before_completion tests.test_file_routes_helpers.FileRoutesHelperTests.test_run_file_download_task_logs_success_and_completed_payload tests.test_file_routes_helpers.FileRoutesHelperTests.test_run_selected_file_download_task_stops_after_downloader_creation tests.test_file_routes_helpers.FileRoutesHelperTests.test_run_selected_file_download_task_skips_completion_when_stopped_after_records tests.test_file_routes_helpers.FileRoutesHelperTests.test_run_filtered_file_download_task_stops_after_downloader_creation tests.test_file_routes_helpers.FileRoutesHelperTests.test_run_filtered_file_download_task_skips_completion_when_stopped_after_records -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run ruff check backend\services\file_workflow_service.py tests\test_file_routes_helpers.py --select F401,F841
+uv run python -m unittest tests.test_file_routes_helpers -v
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- New full/selected/filtered initialization-stop characterization tests passed against the original
+  inline stop-check implementation: 3 focused tests.
+- `py_compile` passed.
+- All initialization stop tests passed after extraction: 6 tests.
+- Focused file/selected/filtered download task tests passed after extraction: 11 tests.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- File route/helper tests passed: 77 tests.
+- Full backend unittest discovery passed: 1095 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:

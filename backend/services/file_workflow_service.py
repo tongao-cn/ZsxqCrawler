@@ -788,8 +788,7 @@ def run_file_download_task(
             files_per_batch,
         )
 
-        if is_task_stopped(task_id):
-            add_task_log(task_id, "🛑 任务在初始化过程中被停止")
+        if _file_task_stopped_after_init(task_id):
             return
 
         collect_result = _prepare_files_for_download(
@@ -977,8 +976,7 @@ def run_selected_file_download_task(task_id: str, group_id: str, file_ids: Seque
         update_task(task_id, "running", f"开始下载选中的 {len(file_ids)} 个文件...")
         downloader = _create_file_downloader(task_id, group_id)
 
-        if is_task_stopped(task_id):
-            add_task_log(task_id, "🛑 任务在初始化过程中被停止")
+        if _file_task_stopped_after_init(task_id):
             return
 
         records, missing = _load_download_file_records(downloader, group_id, file_ids)
@@ -1011,8 +1009,7 @@ def run_filtered_file_download_task(
         update_task(task_id, "running", "开始下载当前筛选结果...")
         downloader = _create_file_downloader(task_id, group_id)
 
-        if is_task_stopped(task_id):
-            add_task_log(task_id, "🛑 任务在初始化过程中被停止")
+        if _file_task_stopped_after_init(task_id):
             return
 
         records = _load_filtered_download_file_records(
