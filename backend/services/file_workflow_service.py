@@ -1114,6 +1114,16 @@ def _complete_single_file_download(
         _complete_failed_single_file_download(task_id)
 
 
+def _download_and_complete_single_file(
+    task_id: str,
+    downloader: ZSXQFileDownloader,
+    file_id: int,
+    file_info: Dict[str, Dict[str, Any]],
+) -> None:
+    result = downloader.download_file(file_info)
+    _complete_single_file_download(task_id, downloader, file_id, file_info, result)
+
+
 def _complete_sync_files_from_topics_task(task_id: str, stats: Dict[str, Any]) -> None:
     update_task(task_id, "completed", "从话题同步文件记录完成", stats)
 
@@ -1142,8 +1152,7 @@ def run_single_file_download_task_with_info(
             file_name,
             file_size,
         )
-        result = downloader.download_file(file_info)
-        _complete_single_file_download(task_id, downloader, file_id, file_info, result)
+        _download_and_complete_single_file(task_id, downloader, file_id, file_info)
     except Exception as e:
         _rollback_downloader_file_db(downloader)
         _fail_file_task(task_id, f"任务执行失败: {e}", f"任务失败: {e}")
