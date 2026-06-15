@@ -593,6 +593,18 @@ class ZSXQFileDownloader:
         if failure_class == API_FAILURE_PERMISSION_DENIED_1030:
             self.last_download_url_error = api_failure["last_download_url_error"]
         return failure_class
+
+    def _handle_download_url_http_failure_response(
+        self,
+        http_status: int,
+        response_text: str,
+        attempt: int,
+        max_retries: int,
+    ) -> str:
+        http_failure = http_failure_plan(http_status, response_text, attempt, max_retries)
+        for message in http_failure["messages"]:
+            print(message)
+        return http_failure["failure_class"]
     
     def get_download_url(self, file_id: int) -> Optional[str]:
         """获取文件下载链接（带重试机制）
@@ -652,10 +664,12 @@ class ZSXQFileDownloader:
                             return None
                         
                 else:
-                    http_failure = http_failure_plan(response.status_code, response.text, attempt, max_retries)
-                    for message in http_failure["messages"]:
-                        print(message)
-                    http_failure_class = http_failure["failure_class"]
+                    http_failure_class = self._handle_download_url_http_failure_response(
+                        response.status_code,
+                        response.text,
+                        attempt,
+                        max_retries,
+                    )
                     if http_failure_class == HTTP_FAILURE_RETRY:
                         continue
                     if http_failure_class == HTTP_FAILURE_NON_RETRY:

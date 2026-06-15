@@ -397,6 +397,12 @@ class FakeFailedJsonResponse:
         }
 
 
+class FakeHttpDownloadUrlResponse:
+    def __init__(self, status_code, text):
+        self.status_code = status_code
+        self.text = text
+
+
 class FakeInvalidJsonResponse:
     status_code = 200
     text = "{not json"
@@ -4358,6 +4364,70 @@ class FileDownloaderDownloadTests(unittest.TestCase):
                 "   🧭 UA分类: Chrome Windows",
                 "   ❌ API返回失败: slow down (代码: 1059)",
                 "   🔄 检测到可重试错误，准备重试...",
+                "   🧭 UA分类: Chrome Windows",
+            ],
+            downloader.logs,
+        )
+
+    def test_get_download_url_retries_http_failure_then_success_preserves_events(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            session = FakeDownloadSession([
+                FakeHttpDownloadUrlResponse(500, "temporary outage"),
+                FakeJsonResponse(),
+            ])
+            risk_log = Path(temp_dir) / "risk.csv"
+            downloader = object.__new__(ZSXQFileDownloader)
+            downloader.base_url = "https://api.example"
+            downloader.session = session
+            downloader.group_id = "group-1"
+            downloader.cookie = "cookie"
+            downloader.risk_event_log_path = str(risk_log)
+            downloader.request_count = 0
+            downloader.smart_delay = lambda: None
+            downloader.get_stealth_headers = lambda: {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/131.0.0.0",
+                "Referer": "https://wx.zsxq.com/dweb2/index/group/group-1",
+            }
+            downloader.logs = []
+            downloader.log = downloader.logs.append
+
+            output = io.StringIO()
+            with (
+                contextlib.redirect_stdout(output),
+                patch("backend.crawlers.zsxq_file_downloader.random.uniform", return_value=15.0),
+                patch("backend.crawlers.zsxq_file_downloader.time.sleep") as sleep,
+            ):
+                result = ZSXQFileDownloader.get_download_url(downloader, 101)
+
+            with risk_log.open("r", encoding="utf-8-sig", newline="") as file_obj:
+                rows = list(csv.DictReader(file_obj))
+
+        printed = output.getvalue()
+        self.assertEqual("https://files.example/signed-token", result)
+        self.assertIsNone(downloader.last_download_url_error)
+        self.assertEqual(2, downloader.request_count)
+        self.assertEqual(2, len(session.get_calls))
+        sleep.assert_called_once_with(15.0)
+        self.assertIn("   ❌ HTTP错误: 500", printed)
+        self.assertIn("   📄 响应内容: temporary outage", printed)
+        self.assertIn("   🔄 服务器错误，准备重试...", printed)
+        self.assertIn("   ✅ 重试成功！第1次重试获取到下载链接", printed)
+        self.assertEqual(
+            [
+                "download_url_request",
+                "download_url_request",
+                "download_url_retry_response",
+            ],
+            [row["phase"] for row in rows],
+        )
+        self.assertEqual(["observed", "observed", "api_success"], [row["status"] for row in rows])
+        self.assertEqual(["0", "1", "1"], [row["attempt"] for row in rows])
+        self.assertEqual(["", "", "200"], [row["http_status"] for row in rows])
+        self.assertEqual(
+            [
+                "   🔗 获取下载链接: ID=101",
+                "   🌐 请求URL: https://api.example/v2/files/101/download_url",
+                "   🧭 UA分类: Chrome Windows",
                 "   🧭 UA分类: Chrome Windows",
             ],
             downloader.logs,
