@@ -20103,6 +20103,54 @@ Result:
 - Full backend unittest discovery passed: 1123 tests, 15 skipped.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-15 - P2 database stats table/helper extraction
+
+Changed:
+
+- Added characterization coverage for `get_database_stats(...)` preserving the exact response
+  table order and per-table count values.
+- Extracted the fixed database stats table order into `_DATABASE_STATS_TABLES`.
+- Extracted `_fetch_database_stat(...)` for a single table count lookup.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- `get_database_stats(...)` still queries tables in the same order: `groups`, `users`, `topics`,
+  `talks`, `articles`, `images`, `likes`, `like_emojis`, `user_liked_emojis`, `comments`,
+  `questions`, and `answers`.
+- Each table still uses `_database_stats_count_query(table, self.group_id)` and
+  `_fetch_first_column(...)`.
+- Per-table failures still print `获取表 {table} 统计信息失败: ...`, set only that table to `0`,
+  and continue querying later tables.
+- SQL shapes, query params, response shape/order, public API, legacy paths, fallback behavior,
+  error semantics, storage schema, and config semantics are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_get_database_stats_preserves_unscoped_and_scoped_queries tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_get_database_stats_preserves_per_table_exception_fallback tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_database_stats_count_query_preserves_branch_shapes -v
+uv run python -m unittest tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_get_database_stats_preserves_unscoped_and_scoped_queries tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_get_database_stats_preserves_per_table_exception_fallback tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_get_database_stats_preserves_table_order_and_count_values tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_database_stats_count_query_preserves_branch_shapes -v
+uv run python -m py_compile backend\storage\zsxq_database.py tests\test_zsxq_database_helpers.py
+uv run python -m unittest tests.test_zsxq_database_helpers -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run ruff check backend\storage\zsxq_database.py tests\test_zsxq_database_helpers.py --select F401,F841
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- Existing database stats characterization tests passed before adding coverage: 3 focused tests.
+- New table-order/value characterization test passed before production extraction: 4 focused tests.
+- `py_compile` passed.
+- Focused database stats tests passed after extraction: 4 tests.
+- ZSXQ database helper tests passed: 89 tests.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- Full backend unittest discovery passed: 1124 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:

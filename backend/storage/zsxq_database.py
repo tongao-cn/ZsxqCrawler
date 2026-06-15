@@ -71,6 +71,22 @@ from backend.storage.zsxq_database_helpers import (
 )
 
 
+_DATABASE_STATS_TABLES = (
+    'groups',
+    'users',
+    'topics',
+    'talks',
+    'articles',
+    'images',
+    'likes',
+    'like_emojis',
+    'user_liked_emojis',
+    'comments',
+    'questions',
+    'answers',
+)
+
+
 def _beijing_now_timestamp() -> str:
     return beijing_now_timestamp()
 
@@ -571,19 +587,18 @@ class ZSXQDatabase:
         """获取数据库统计信息"""
         stats = {}
 
-        tables = ['groups', 'users', 'topics', 'talks', 'articles', 'images',
-                 'likes', 'like_emojis', 'user_liked_emojis', 'comments',
-                 'questions', 'answers']
-
-        for table in tables:
+        for table in _DATABASE_STATS_TABLES:
             try:
-                sql, params = _database_stats_count_query(table, self.group_id)
-                stats[table] = self._fetch_first_column(sql, params)
+                stats[table] = self._fetch_database_stat(table)
             except Exception as e:
                 print(f"获取表 {table} 统计信息失败: {e}")
                 stats[table] = 0
 
         return stats
+
+    def _fetch_database_stat(self, table: str) -> Any:
+        sql, params = _database_stats_count_query(table, self.group_id)
+        return self._fetch_first_column(sql, params)
     
     def get_timestamp_range_info(self) -> Dict[str, Any]:
         """获取话题时间戳范围信息"""

@@ -1820,6 +1820,50 @@ class ZSXQDatabaseHelperTests(unittest.TestCase):
         self.assertEqual(3, stats["topics"])
         self.assertEqual(12, len(stats))
 
+    def test_get_database_stats_preserves_table_order_and_count_values(self):
+        from backend.storage.zsxq_database import ZSXQDatabase
+
+        db = object.__new__(ZSXQDatabase)
+        db.cursor = FakeDatabaseStatsCursor()
+        db.group_id = None
+
+        stats = ZSXQDatabase.get_database_stats(db)
+
+        self.assertEqual(
+            [
+                "groups",
+                "users",
+                "topics",
+                "talks",
+                "articles",
+                "images",
+                "likes",
+                "like_emojis",
+                "user_liked_emojis",
+                "comments",
+                "questions",
+                "answers",
+            ],
+            list(stats),
+        )
+        self.assertEqual(
+            {
+                "groups": 1,
+                "users": 2,
+                "topics": 3,
+                "talks": 4,
+                "articles": 5,
+                "images": 6,
+                "likes": 7,
+                "like_emojis": 8,
+                "user_liked_emojis": 9,
+                "comments": 10,
+                "questions": 11,
+                "answers": 12,
+            },
+            stats,
+        )
+
     def test_timestamp_range_info_uses_nullable_scope_and_preserves_response_shape(self):
         from backend.storage.zsxq_database import ZSXQDatabase
 
