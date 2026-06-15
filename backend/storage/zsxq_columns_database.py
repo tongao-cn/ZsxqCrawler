@@ -254,10 +254,26 @@ class ZSXQColumnsDatabase:
                 repliee_id = user_id
 
         group_id = self._resolve_topic_group_id(topic_id)
-        
+
+        self._insert_comment_row(topic_id, group_id, owner_id, repliee_id, comment_data)
+
+    def _insert_comment_row(
+        self,
+        topic_id: int,
+        group_id: Any,
+        owner_id: Any,
+        repliee_id: Any,
+        comment_data: Dict[str, Any],
+    ):
         self.cursor.execute(
             _topic_comment_insert_statement(),
-            _topic_comment_insert_params(topic_id, group_id, owner_id, repliee_id, comment_data),
+            _topic_comment_insert_params(
+                topic_id,
+                group_id,
+                owner_id,
+                repliee_id,
+                comment_data,
+            ),
         )
 
     def _resolve_topic_group_id(self, topic_id: int):

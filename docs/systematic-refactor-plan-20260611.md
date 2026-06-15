@@ -19680,6 +19680,49 @@ Result:
 - Full backend unittest discovery passed: 1119 tests, 15 skipped.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-15 - P3 topic comment row insert helper extraction
+
+Changed:
+
+- Re-ran existing characterization coverage for `_insert_comment(...)` runtime group scope, user
+  upsert ordering, falsey owner/repliee handling, comment insert params/statement shape, and
+  import commit behavior before production changes.
+- Extracted `_insert_comment_row(...)` for the final topic comment row write.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- `_insert_comment(...)` still skips missing comment IDs before user/group work.
+- Owner/repliee user upsert order, group fallback resolution timing, comment insert SQL/params,
+  import comment iteration, and commit timing are unchanged.
+- No storage schema, public API, legacy path, fallback behavior, error semantics, or config
+  semantics changed.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_columns_database_helpers.ZSXQColumnsDatabaseHelperTests.test_insert_comment_writes_group_id_from_runtime_scope tests.test_zsxq_columns_database_helpers.ZSXQColumnsDatabaseHelperTests.test_insert_comment_preserves_user_upsert_order_and_falsey_skip tests.test_zsxq_columns_database_helpers.ZSXQColumnsDatabaseHelperTests.test_topic_comment_insert_params_preserve_column_order_and_defaults tests.test_zsxq_columns_database_helpers.ZSXQColumnsDatabaseHelperTests.test_topic_comment_insert_statement_preserves_upsert_shape tests.test_zsxq_columns_database_helpers.ZSXQColumnsDatabaseHelperTests.test_import_comments_preserves_order_parent_mutation_and_commit -v
+uv run python -m py_compile backend\storage\zsxq_columns_database.py tests\test_zsxq_columns_database_helpers.py
+uv run python -m unittest tests.test_zsxq_columns_database_helpers.ZSXQColumnsDatabaseHelperTests.test_insert_comment_writes_group_id_from_runtime_scope tests.test_zsxq_columns_database_helpers.ZSXQColumnsDatabaseHelperTests.test_insert_comment_preserves_user_upsert_order_and_falsey_skip tests.test_zsxq_columns_database_helpers.ZSXQColumnsDatabaseHelperTests.test_topic_comment_insert_params_preserve_column_order_and_defaults tests.test_zsxq_columns_database_helpers.ZSXQColumnsDatabaseHelperTests.test_topic_comment_insert_statement_preserves_upsert_shape tests.test_zsxq_columns_database_helpers.ZSXQColumnsDatabaseHelperTests.test_import_comments_preserves_order_parent_mutation_and_commit -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run python -m unittest tests.test_zsxq_columns_database_helpers -v
+uv run ruff check backend\storage\zsxq_columns_database.py tests\test_zsxq_columns_database_helpers.py --select F401,F841
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- Existing comment insert characterization tests passed before extraction: 5 focused tests.
+- `py_compile` passed.
+- Focused comment insert tests passed after extraction: 5 tests.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- ZSXQ columns database helper tests passed: 79 tests.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- Full backend unittest discovery passed: 1119 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:
