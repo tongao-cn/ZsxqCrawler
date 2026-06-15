@@ -51,6 +51,7 @@ from backend.storage.zsxq_database_helpers import (
     topic_count_query,
     topic_exists_query,
     topic_files_backfill_query,
+    topic_file_group_payload_from_row,
     topic_file_payload_from_row,
     topic_file_insert_statement,
     topic_group_id_query,
@@ -384,6 +385,10 @@ def _topic_files_backfill_query(group_id: Optional[str]) -> tuple[str, tuple[Any
 
 def _topic_file_payload_from_row(row) -> Dict[str, Any]:
     return topic_file_payload_from_row(row)
+
+
+def _topic_file_group_payload_from_row(row) -> Optional[Dict[str, Any]]:
+    return topic_file_group_payload_from_row(row)
 
 
 class ZSXQDatabase:
@@ -907,20 +912,16 @@ class ZSXQDatabase:
                     group_id, topic_type, title, annotation, topic_create_time,
                     likes_count, tourist_likes_count, rewards_count, comments_count,
                     reading_count, readers_count, digested, sticky, user_liked, user_subscribed,
-                    group_name, group_type, background_url,
+                    _group_name, _group_type, _background_url,
                 ) = row
 
                 sql, params = _file_exists_query(file_id, self.group_id)
                 self.cursor.execute(sql, params)
                 is_new_file = self.cursor.fetchone() is None
 
-                if group_id and group_name:
-                    self._upsert_group({
-                        'group_id': group_id,
-                        'name': group_name or '',
-                        'type': group_type,
-                        'background_url': background_url,
-                    })
+                group_payload = _topic_file_group_payload_from_row(row)
+                if group_payload:
+                    self._upsert_group(group_payload)
 
                 file_data = _topic_file_payload_from_row(row)
                 if _upsert_core_file(self.cursor, group_id, topic_id, file_data):

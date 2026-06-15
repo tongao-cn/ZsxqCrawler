@@ -949,6 +949,19 @@ def topic_file_payload_from_row(row) -> Dict[str, Any]:
     }
 
 
+def topic_file_group_payload_from_row(row) -> Optional[Dict[str, Any]]:
+    group_id = row[8]
+    group_name = row[23]
+    if not group_id or not group_name:
+        return None
+    return {
+        "group_id": group_id,
+        "name": group_name or "",
+        "type": row[24],
+        "background_url": row[25],
+    }
+
+
 def topic_detail_image_payload(row, *, offset: int = 0) -> Dict[str, Any]:
     return {
         "image_id": row[offset],

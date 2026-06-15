@@ -19008,6 +19008,50 @@ Result:
 - Full backend unittest discovery passed: 1109 tests, 15 skipped.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-15 - P2 topic file group payload helper
+
+Changed:
+
+- Added characterization coverage for `backfill_topic_files_to_core_tables()` group upsert payload
+  shape.
+- Added `topic_file_group_payload_from_row()` to `backend/storage/zsxq_database_helpers.py`, with a
+  compatibility wrapper in `backend/storage/zsxq_database.py`.
+- Reused the helper from `backfill_topic_files_to_core_tables()`.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Topic-file backfill still scans the same rows, preserves the same file payload and relation logic,
+  only upserts a group when both group ID and group name are truthy, and passes the same
+  `group_id` / `name` / `type` / `background_url` payload shape to `_upsert_group()`.
+- SQL text, transaction boundaries, commit cadence, stats keys, and rollback behavior are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_backfill_topic_files_to_core_tables_preserves_group_payload_shape -v
+uv run python -m py_compile backend\storage\zsxq_database.py backend\storage\zsxq_database_helpers.py tests\test_zsxq_database_helpers.py
+uv run python -m unittest tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_backfill_topic_files_to_core_tables_preserves_group_payload_shape tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_backfill_topic_files_to_core_tables_uses_current_database_cursor tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_topic_file_payload_from_row_maps_backfill_columns tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_topic_files_backfill_query_preserves_scope_params_and_order -v
+uv run python -m unittest tests.test_zsxq_database_helpers -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run ruff check backend\storage\zsxq_database.py backend\storage\zsxq_database_helpers.py tests\test_zsxq_database_helpers.py --select F401,F841
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- New group-payload characterization test passed against the original inline payload implementation:
+  1 focused test.
+- `py_compile` passed.
+- Focused backfill query / payload tests passed after extraction: 4 tests.
+- ZSXQ database helper tests passed: 81 tests.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- Full backend unittest discovery passed: 1110 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:
