@@ -22029,6 +22029,55 @@ Result:
 - Full backend unittest discovery passed in the current worktree: 1146 tests, 15 skipped.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-15 - P9 time collection mode initialization helper extraction
+
+Changed:
+
+- Added characterization coverage for `collect_files_by_time(...)` with `force_refresh=True` and
+  an explicit `start_time`.
+- The new test locks start-time logging, force-refresh mode logging, fetch cursor propagation,
+  latest-file-time query suppression, and returned stats.
+- Extracted `_initialize_time_collection_mode(...)` from `collect_files_by_time(...)` in
+  `ZSXQFileDownloader`.
+- Kept `time_collection_start_messages(...)`, `time_collection_mode(...)`, mode log emission, and
+  `enable_time_dedupe` behavior in the same order.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Default create-time collection still enables smart dedupe.
+- `force_refresh=True`, bounded date-range collection, and non-create-time sorting still suppress
+  latest-file-time dedupe queries.
+- Explicit `start_time` values still flow through as the first file-list fetch cursor.
+- Public API, fallback behavior, legacy behavior, error semantics, log text, call order, query
+  suppression, returned stats shape, config semantics, and task-level behavior are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderPaginationTests.test_collect_files_by_time_preserves_force_refresh_start_mode tests.test_zsxq_file_downloader_helpers.FileDownloaderPaginationTests.test_collect_files_by_time_preserves_database_state_initialization tests.test_zsxq_file_downloader_helpers.FileDownloaderTimeHelperTests.test_time_collection_mode_preserves_dedupe_and_force_refresh_rules -v
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderPaginationTests.test_collect_files_by_time_preserves_force_refresh_start_mode tests.test_zsxq_file_downloader_helpers.FileDownloaderPaginationTests.test_collect_files_by_time_preserves_database_state_initialization tests.test_zsxq_file_downloader_helpers.FileDownloaderPaginationTests.test_collect_files_by_time_preserves_loop_stop_after_next_page tests.test_zsxq_file_downloader_helpers.FileDownloaderTimeHelperTests.test_time_collection_mode_preserves_dedupe_and_force_refresh_rules tests.test_zsxq_file_downloader_helpers.FileDownloaderTimeHelperTests.test_time_collection_start_messages_preserve_optional_lines -v
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run ruff check backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py --select F401,F841
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- Force-refresh/start-time characterization baseline passed before production extraction: 3
+  focused tests.
+- `py_compile` passed.
+- Focused mode initialization tests passed after extraction: 5 tests.
+- ZSXQ file downloader helper tests passed: 169 tests.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- Full backend unittest discovery passed in the current worktree: 1147 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:

@@ -817,6 +817,51 @@ class FileDownloaderPaginationTests(unittest.TestCase):
         self.assertEqual(0, stats["new_files"])
         self.assertEqual(1, stats["pages"])
 
+    def test_collect_files_by_time_preserves_force_refresh_start_mode(self):
+        downloader = object.__new__(ZSXQFileDownloader)
+        downloader.group_id = "511"
+        downloader.file_db = TimeDedupeFileDb(
+            "2026-05-02T00:00:00",
+            initial_files=5,
+            final_files=5,
+        )
+        downloader.logs = []
+        downloader.fetch_calls = []
+        downloader.log = downloader.logs.append
+        downloader.check_stop = lambda: False
+
+        def fetch_file_list(**kwargs):
+            downloader.fetch_calls.append(kwargs)
+            return {"resp_data": {"index": None, "files": []}}
+
+        downloader.fetch_file_list = fetch_file_list
+
+        stats = ZSXQFileDownloader.collect_files_by_time(
+            downloader,
+            start_time="start-cursor",
+            force_refresh=True,
+        )
+
+        self.assertEqual([{"count": 20, "index": "start-cursor", "sort": "by_create_time"}], downloader.fetch_calls)
+        self.assertEqual([], downloader.file_db.executed)
+        self.assertEqual(
+            [
+                "📊 开始按时间顺序收集文件列表到完整数据库...",
+                "   📅 排序方式: by_create_time",
+                "   ⏰ 起始时间: start-cursor",
+                "   🔄 强制刷新模式: 将收集所有文件（包括已存在的）",
+                "   📊 数据库初始状态: 5 个文件",
+                "📄 收集第1页文件列表...",
+                "📭 没有更多文件",
+            ],
+            downloader.logs[:7],
+        )
+        self.assertNotIn("   ✅ 智能去重模式: 遇到已存在的文件将停止收集", downloader.logs)
+        self.assertNotIn("   📅 数据库最新文件时间: 2026-05-02T00:00:00", downloader.logs)
+        self.assertEqual(5, stats["total_files"])
+        self.assertEqual(0, stats["new_files"])
+        self.assertEqual(1, stats["pages"])
+
     def test_collect_files_by_time_stops_when_page_import_fails(self):
         downloader = self._downloader_with_failing_import()
 

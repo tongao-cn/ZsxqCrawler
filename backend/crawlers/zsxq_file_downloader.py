@@ -1500,6 +1500,21 @@ class ZSXQFileDownloader:
             start_time=None,
             stop_before_time=stop_before_dt,
         )
+
+    def _initialize_time_collection_mode(
+        self,
+        sort: str,
+        start_time: Optional[str],
+        stop_before_time: Optional[datetime.datetime],
+        force_refresh: bool,
+    ) -> bool:
+        for message in time_collection_start_messages(sort, start_time, stop_before_time):
+            self.log(message)
+
+        mode = time_collection_mode(sort, force_refresh, stop_before_time)
+        if mode["mode_message"]:
+            self.log(mode["mode_message"])
+        return mode["enable_time_dedupe"]
     
     def collect_files_by_time(
         self,
@@ -1509,13 +1524,12 @@ class ZSXQFileDownloader:
         **kwargs,
     ) -> Dict[str, int]:
         """按时间顺序收集文件列表到数据库（使用完整的数据库结构）"""
-        for message in time_collection_start_messages(sort, start_time, stop_before_time):
-            self.log(message)
-
-        mode = time_collection_mode(sort, kwargs.get('force_refresh', False), stop_before_time)
-        enable_time_dedupe = mode["enable_time_dedupe"]
-        if mode["mode_message"]:
-            self.log(mode["mode_message"])
+        enable_time_dedupe = self._initialize_time_collection_mode(
+            sort,
+            start_time,
+            stop_before_time,
+            kwargs.get('force_refresh', False),
+        )
 
         # 检查是否需要停止
         if self.check_stop():
