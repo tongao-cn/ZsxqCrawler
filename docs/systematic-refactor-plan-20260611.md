@@ -20861,6 +20861,52 @@ Result:
 - Full backend unittest discovery passed: 1132 tests, 15 skipped.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-15 - P1 file list page fetch helper extraction
+
+Changed:
+
+- Extracted `_fetch_file_list_page(...)` for file list rows/count reads.
+- Reused the helper from `_get_files_response(...)` after filter and offset calculation.
+- Confirmed existing characterization coverage for analysis-status filters, unfiltered download
+  status behavior, completed/search params, count query shape, pagination math, and normalized row
+  response before production extraction.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- File list queries still use `_build_file_list_query(...)` and `_build_file_count_query(...)` with
+  the same `where_clause`, query order, params, `LIMIT/OFFSET`, and count params.
+- `_get_files_response(...)` still computes offset from `(page - 1) * per_page`, then builds the
+  same response through `_build_file_list_response(...)`.
+- Public API, route wrappers, pagination schema, filtering semantics, fallback behavior, legacy
+  behavior, error semantics, SQL shape, params, storage schema, and config semantics are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_file_routes_helpers.FileRoutesHelperTests.test_get_files_response_filters_analysis_status_in_database_query tests.test_file_routes_helpers.FileRoutesHelperTests.test_get_files_response_without_status_keeps_download_status_unfiltered tests.test_file_routes_helpers.FileRoutesHelperTests.test_get_files_response_keeps_completed_search_and_pagination_shape -v
+uv run python -m py_compile backend\services\file_workflow_service.py tests\test_file_routes_helpers.py
+uv run python -m unittest tests.test_file_routes_helpers.FileRoutesHelperTests.test_get_files_response_filters_analysis_status_in_database_query tests.test_file_routes_helpers.FileRoutesHelperTests.test_get_files_response_without_status_keeps_download_status_unfiltered tests.test_file_routes_helpers.FileRoutesHelperTests.test_get_files_response_keeps_completed_search_and_pagination_shape -v
+uv run python -m unittest tests.test_file_routes_helpers -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run ruff check backend\services\file_workflow_service.py tests\test_file_routes_helpers.py --select F401,F841
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- Existing file-list characterization coverage passed before production extraction: 3 focused
+  tests.
+- `py_compile` passed.
+- Focused file-list tests passed after extraction: 3 tests.
+- File route helper tests passed: 91 tests.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- Full backend unittest discovery passed: 1132 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:

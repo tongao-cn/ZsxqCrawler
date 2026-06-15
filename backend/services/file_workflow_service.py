@@ -462,6 +462,25 @@ def _build_file_list_response(
     }
 
 
+def _fetch_file_list_page(
+    file_db: ZSXQFileDatabase,
+    where_clause: str,
+    params_prefix: Sequence[Any],
+    per_page: int,
+    offset: int,
+) -> tuple[Sequence[Sequence[Any]], int]:
+    query = _build_file_list_query(where_clause)
+    params = (*params_prefix, per_page, offset)
+
+    file_db.cursor.execute(query, params)
+    files = file_db.cursor.fetchall()
+
+    count_query = _build_file_count_query(where_clause)
+    file_db.cursor.execute(count_query, tuple(params_prefix))
+    total = file_db.cursor.fetchone()[0]
+    return files, total
+
+
 def _get_files_response(
     group_id: str,
     page: int = 1,
@@ -473,16 +492,7 @@ def _get_files_response(
     with _file_db(group_id) as file_db:
         offset = (page - 1) * per_page
         where_clause, params_prefix = _build_file_list_filters(group_id, status, search, analysis_status)
-        query = _build_file_list_query(where_clause)
-        params = (*params_prefix, per_page, offset)
-
-        file_db.cursor.execute(query, params)
-        files = file_db.cursor.fetchall()
-
-        count_query = _build_file_count_query(where_clause)
-        file_db.cursor.execute(count_query, tuple(params_prefix))
-        total = file_db.cursor.fetchone()[0]
-
+        files, total = _fetch_file_list_page(file_db, where_clause, params_prefix, per_page, offset)
         return _build_file_list_response(group_id, files, total, page, per_page)
 
 
