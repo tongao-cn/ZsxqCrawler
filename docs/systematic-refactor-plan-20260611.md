@@ -20440,6 +20440,50 @@ Result:
 - Full backend unittest discovery passed: 1130 tests, 15 skipped.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-15 - P2 tag-id read helper reuse
+
+Changed:
+
+- Added characterization coverage for `_fetch_tag_id_by_name(...)` preserving optional scalar
+  semantics, including `0` as a returned tag id and `None` for a missing row.
+- Reused `_fetch_optional_first_column(...)` from `_fetch_tag_id_by_name(...)`.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- `_fetch_tag_id_by_name(...)` still uses `_tag_id_by_name_query(group_id, tag_name)` and the
+  current cursor.
+- Missing tag rows still return `None`; row values such as `0` are still returned as-is.
+- `_upsert_tag(...)` existing-tag update, new-tag insert, missing `RETURNING` row handling,
+  public API, legacy paths, fallback behavior, error semantics, storage schema, SQL shape, params,
+  and config semantics are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_upsert_tag_preserves_existing_update_insert_and_missing_return_branches tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_fetch_tag_id_by_name_preserves_optional_scalar_semantics tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_link_topic_tag_inserts_relation_refreshes_count_and_swallows_errors -v
+uv run python -m py_compile backend\storage\zsxq_database.py tests\test_zsxq_database_helpers.py
+uv run python -m unittest tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_upsert_tag_preserves_existing_update_insert_and_missing_return_branches tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_fetch_tag_id_by_name_preserves_optional_scalar_semantics tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_link_topic_tag_inserts_relation_refreshes_count_and_swallows_errors -v
+uv run python -m unittest tests.test_zsxq_database_helpers -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run ruff check backend\storage\zsxq_database.py tests\test_zsxq_database_helpers.py --select F401,F841
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- New `_fetch_tag_id_by_name(...)` characterization coverage passed before production extraction:
+  3 focused tag tests.
+- `py_compile` passed.
+- Focused tag tests passed after extraction: 3 tests.
+- ZSXQ database helper tests passed: 96 tests.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- Full backend unittest discovery passed: 1131 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:

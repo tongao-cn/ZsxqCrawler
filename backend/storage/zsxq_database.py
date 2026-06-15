@@ -1026,9 +1026,7 @@ class ZSXQDatabase:
 
     def _fetch_tag_id_by_name(self, group_id: int, tag_name: str) -> Optional[int]:
         sql, params = _tag_id_by_name_query(group_id, tag_name)
-        self.cursor.execute(sql, params)
-        row = self.cursor.fetchone()
-        return row[0] if row else None
+        return self._fetch_optional_first_column(sql, params)
 
     def _update_tag_hid_if_present(self, tag_id: int, hid: str = None):
         if not hid:

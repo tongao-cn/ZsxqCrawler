@@ -3276,6 +3276,22 @@ class ZSXQDatabaseHelperTests(unittest.TestCase):
         missing_return_db.cursor = FakeSequenceCursor([None, None])
         self.assertIsNone(ZSXQDatabase._upsert_tag(missing_return_db, 303, "AI", "hid-3"))
 
+    def test_fetch_tag_id_by_name_preserves_optional_scalar_semantics(self):
+        from backend.storage.zsxq_database import ZSXQDatabase
+
+        db = object.__new__(ZSXQDatabase)
+        db.cursor = FakeSequenceCursor([(0,), None])
+
+        self.assertEqual(0, ZSXQDatabase._fetch_tag_id_by_name(db, 303, "Zero"))
+        self.assertIsNone(ZSXQDatabase._fetch_tag_id_by_name(db, 303, "Missing"))
+        self.assertEqual(
+            [
+                ("SELECT tag_id FROM tags WHERE group_id = ? AND tag_name = ?", (303, "Zero")),
+                ("SELECT tag_id FROM tags WHERE group_id = ? AND tag_name = ?", (303, "Missing")),
+            ],
+            db.cursor.calls,
+        )
+
     def test_link_topic_tag_inserts_relation_refreshes_count_and_swallows_errors(self):
         from backend.storage.zsxq_database import ZSXQDatabase
 
