@@ -18966,6 +18966,48 @@ Result:
 - Full backend unittest discovery passed: 1108 tests, 15 skipped.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-15 - P1 file download stats query helper
+
+Changed:
+
+- Added characterization coverage for `_get_file_stats_response()` database-stat / download-stat
+  read order.
+- Added `_FILE_DOWNLOAD_STATS_QUERY` and `_fetch_file_download_stats()` and reused them from
+  `_get_file_stats_response()`.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- File stats still call `get_database_stats()` before executing the download-stat aggregate query.
+- Download stats still use the same completed-status set, pending/failed checks, group-id casting,
+  missing-row defaults, and response payload shape.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_file_routes_helpers.FileRoutesHelperTests.test_get_file_stats_response_reads_database_stats_before_download_stats -v
+uv run python -m py_compile backend\services\file_workflow_service.py tests\test_file_routes_helpers.py
+uv run python -m unittest tests.test_file_routes_helpers.FileRoutesHelperTests.test_get_file_stats_response_keeps_download_stats_shape_and_query tests.test_file_routes_helpers.FileRoutesHelperTests.test_get_file_stats_response_defaults_missing_download_stats_to_zero tests.test_file_routes_helpers.FileRoutesHelperTests.test_get_file_stats_response_reads_database_stats_before_download_stats -v
+uv run python -m unittest tests.test_file_routes_helpers -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run ruff check backend\services\file_workflow_service.py tests\test_file_routes_helpers.py --select F401,F841
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- New read-order characterization test passed against the original inline download-stat query
+  implementation: 1 focused test.
+- `py_compile` passed.
+- Focused file-stat query and response tests passed after extraction: 3 tests.
+- File route/helper tests passed: 91 tests.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- Full backend unittest discovery passed: 1109 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:

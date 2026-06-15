@@ -257,12 +257,7 @@ def _build_file_stats_response(stats: Dict[str, Any], download_stats: Optional[S
     }
 
 
-def _get_file_stats_response(group_id: str) -> dict:
-    with _file_db(group_id) as file_db:
-        stats = file_db.get_database_stats()
-
-        file_db.cursor.execute(
-            """
+_FILE_DOWNLOAD_STATS_QUERY = """
             SELECT
                 COUNT(*) as total_files,
                 COUNT(CASE WHEN download_status IN ('completed', 'downloaded', 'skipped') THEN 1 END) as downloaded,
@@ -270,11 +265,18 @@ def _get_file_stats_response(group_id: str) -> dict:
                 COUNT(CASE WHEN download_status = 'failed' THEN 1 END) as failed
             FROM files
             WHERE group_id = ?
-            """,
-            (_query_group_id(group_id),),
-        )
-        download_stats = file_db.cursor.fetchone()
+            """
 
+
+def _fetch_file_download_stats(file_db: ZSXQFileDatabase, group_id: str) -> Optional[Sequence[Any]]:
+    file_db.cursor.execute(_FILE_DOWNLOAD_STATS_QUERY, (_query_group_id(group_id),))
+    return file_db.cursor.fetchone()
+
+
+def _get_file_stats_response(group_id: str) -> dict:
+    with _file_db(group_id) as file_db:
+        stats = file_db.get_database_stats()
+        download_stats = _fetch_file_download_stats(file_db, group_id)
         return _build_file_stats_response(stats, download_stats)
 
 

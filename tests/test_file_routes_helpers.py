@@ -1176,6 +1176,47 @@ class FileRoutesHelperTests(unittest.TestCase):
             response,
         )
 
+    def test_get_file_stats_response_reads_database_stats_before_download_stats(self):
+        from backend.services import file_workflow_service
+
+        events = []
+
+        class FakeCursor:
+            def __init__(self):
+                self.executed = []
+
+            def execute(self, sql, params=()):
+                events.append("download_stats_execute")
+                self.executed.append((sql, params))
+
+            def fetchone(self):
+                events.append("download_stats_fetch")
+                return (1, 1, 0, 0)
+
+        class FakeFileDb:
+            def __init__(self):
+                self.cursor = FakeCursor()
+
+            def get_database_stats(self):
+                events.append("database_stats")
+                return {"files": 1}
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+        fake_db = FakeFileDb()
+        with patch("backend.services.file_workflow_service._file_db", return_value=fake_db):
+            response = file_workflow_service._get_file_stats_response("123")
+
+        self.assertEqual(
+            ["database_stats", "download_stats_execute", "download_stats_fetch"],
+            events,
+        )
+        self.assertEqual(1, response["download_stats"]["downloaded"])
+
     def test_file_status_routes_offload_sync_work_to_thread(self):
         from backend.routes import file_routes
 
