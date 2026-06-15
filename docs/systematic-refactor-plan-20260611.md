@@ -17737,6 +17737,54 @@ Result:
 - Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
   not available.
 
+### 2026-06-15 - P1 clear file image cache helper
+
+Changed:
+
+- Added characterization coverage for `_clear_file_database_response()` image-cache side effects
+  before extraction.
+- Locked the current successful image-cache clear log, failed clear log, exception-swallowing log,
+  `clear_group_cache_manager()` call, and response shape.
+- Added `_clear_group_image_cache()` and reused it from `_clear_file_database_response()`.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- `_clear_group_file_data()` still runs before image-cache cleanup, and the returned `deleted`
+  counts and response message are unchanged.
+- The image-cache cleanup still imports `get_image_cache_manager()` and
+  `clear_group_cache_manager()` inside the cleanup path, calls `cache_manager.clear_cache()`, logs
+  the same `INFO`/`WARN` messages, calls `clear_group_cache_manager(group_id)` after
+  `clear_cache()` returns, and swallows/logs cache cleanup exceptions.
+- File listing, download tasks, single-file fallback behavior, AI analysis, route behavior, storage
+  schema, fallback/legacy behavior, public APIs, and configuration semantics are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_file_routes_helpers.FileRoutesHelperTests.test_clear_file_database_clears_image_cache_and_logs_success tests.test_file_routes_helpers.FileRoutesHelperTests.test_clear_file_database_logs_image_cache_clear_failure_but_keeps_response tests.test_file_routes_helpers.FileRoutesHelperTests.test_clear_file_database_logs_image_cache_exception_but_keeps_response tests.test_file_routes_helpers.FileRoutesHelperTests.test_clear_file_database_does_not_construct_legacy_crawler -v
+uv run python -m py_compile backend\services\file_workflow_service.py tests\test_file_routes_helpers.py
+uv run python -m unittest tests.test_file_routes_helpers.FileRoutesHelperTests.test_clear_file_database_clears_image_cache_and_logs_success tests.test_file_routes_helpers.FileRoutesHelperTests.test_clear_file_database_logs_image_cache_clear_failure_but_keeps_response tests.test_file_routes_helpers.FileRoutesHelperTests.test_clear_file_database_logs_image_cache_exception_but_keeps_response tests.test_file_routes_helpers.FileRoutesHelperTests.test_clear_file_database_does_not_construct_legacy_crawler -v
+uv run python -m unittest tests.test_file_routes_helpers -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+uv run ruff check backend\services\file_workflow_service.py tests\test_file_routes_helpers.py --select F401,F841
+```
+
+Result:
+
+- New image-cache clear characterization tests passed against the original inline implementation:
+  4 tests.
+- `py_compile` passed.
+- Focused image-cache clear tests passed after extraction: 4 tests.
+- File route/helper tests passed: 58 tests.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Full backend unittest discovery passed: 1076 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+
 ## Stop Conditions
 
 Pause before editing if:

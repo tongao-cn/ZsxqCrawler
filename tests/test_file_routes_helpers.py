@@ -119,6 +119,16 @@ class FakeSingleFileDownloadTaskDownloader:
         return self.download_result
 
 
+class FakeImageCacheManager:
+    def __init__(self, result):
+        self.result = result
+        self.clear_calls = 0
+
+    def clear_cache(self):
+        self.clear_calls += 1
+        return self.result
+
+
 class FileRoutesHelperTests(unittest.TestCase):
     def test_enqueue_file_task_creates_task_and_schedules_callback(self):
         background_tasks = FakeBackgroundTasks()
@@ -1689,6 +1699,58 @@ class FileRoutesHelperTests(unittest.TestCase):
 
         clear_data.assert_called_once_with("group-1")
         self.assertEqual({"message": "群组 group-1 的文件数据和图片缓存已删除", "deleted": {"files": 0}}, response)
+
+    def test_clear_file_database_clears_image_cache_and_logs_success(self):
+        from backend.services.file_workflow_service import _clear_file_database_response
+
+        cache_manager = FakeImageCacheManager((True, "已删除 2 个缓存文件"))
+
+        with (
+            patch("backend.services.file_workflow_service._clear_group_file_data", return_value={"files": 1}),
+            patch("backend.core.image_cache_manager.get_image_cache_manager", return_value=cache_manager) as get_cache,
+            patch("backend.core.image_cache_manager.clear_group_cache_manager") as clear_group_cache,
+            patch("backend.services.file_workflow_service._log_file_route_event") as log_file_route_event,
+        ):
+            response = _clear_file_database_response("group-1")
+
+        get_cache.assert_called_once_with("group-1")
+        self.assertEqual(1, cache_manager.clear_calls)
+        clear_group_cache.assert_called_once_with("group-1")
+        log_file_route_event.assert_called_once_with("INFO", "图片缓存已清空: 已删除 2 个缓存文件")
+        self.assertEqual({"message": "群组 group-1 的文件数据和图片缓存已删除", "deleted": {"files": 1}}, response)
+
+    def test_clear_file_database_logs_image_cache_clear_failure_but_keeps_response(self):
+        from backend.services.file_workflow_service import _clear_file_database_response
+
+        cache_manager = FakeImageCacheManager((False, "permission denied"))
+
+        with (
+            patch("backend.services.file_workflow_service._clear_group_file_data", return_value={"files": 1}),
+            patch("backend.core.image_cache_manager.get_image_cache_manager", return_value=cache_manager),
+            patch("backend.core.image_cache_manager.clear_group_cache_manager") as clear_group_cache,
+            patch("backend.services.file_workflow_service._log_file_route_event") as log_file_route_event,
+        ):
+            response = _clear_file_database_response("group-1")
+
+        self.assertEqual(1, cache_manager.clear_calls)
+        clear_group_cache.assert_called_once_with("group-1")
+        log_file_route_event.assert_called_once_with("WARN", "清空图片缓存失败: permission denied")
+        self.assertEqual({"message": "群组 group-1 的文件数据和图片缓存已删除", "deleted": {"files": 1}}, response)
+
+    def test_clear_file_database_logs_image_cache_exception_but_keeps_response(self):
+        from backend.services.file_workflow_service import _clear_file_database_response
+
+        with (
+            patch("backend.services.file_workflow_service._clear_group_file_data", return_value={"files": 1}),
+            patch("backend.core.image_cache_manager.get_image_cache_manager", side_effect=RuntimeError("cache boom")),
+            patch("backend.core.image_cache_manager.clear_group_cache_manager") as clear_group_cache,
+            patch("backend.services.file_workflow_service._log_file_route_event") as log_file_route_event,
+        ):
+            response = _clear_file_database_response("group-1")
+
+        clear_group_cache.assert_not_called()
+        log_file_route_event.assert_called_once_with("WARN", "清空图片缓存时出错: cache boom")
+        self.assertEqual({"message": "群组 group-1 的文件数据和图片缓存已删除", "deleted": {"files": 1}}, response)
 
     def test_query_group_id_casts_numeric_ids_for_sql_filters(self):
         self.assertEqual(123, _query_group_id("123"))

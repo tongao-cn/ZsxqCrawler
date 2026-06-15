@@ -278,9 +278,7 @@ def _get_file_stats_response(group_id: str) -> dict:
         return _build_file_stats_response(stats, download_stats)
 
 
-def _clear_file_database_response(group_id: str) -> dict:
-    deleted_counts = _clear_group_file_data(group_id)
-
+def _clear_group_image_cache(group_id: str) -> None:
     try:
         from backend.core.image_cache_manager import clear_group_cache_manager, get_image_cache_manager
 
@@ -294,6 +292,10 @@ def _clear_file_database_response(group_id: str) -> dict:
     except Exception as cache_error:
         _log_file_route_event("WARN", f"清空图片缓存时出错: {cache_error}")
 
+
+def _clear_file_database_response(group_id: str) -> dict:
+    deleted_counts = _clear_group_file_data(group_id)
+    _clear_group_image_cache(group_id)
     return {"message": f"群组 {group_id} 的文件数据和图片缓存已删除", "deleted": deleted_counts}
 
 
