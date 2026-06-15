@@ -783,6 +783,29 @@ class FileRoutesHelperTests(unittest.TestCase):
             {"analysis": {"total_files": 2, "completed": 2, "cached": 0, "failed": 0}},
         )
 
+    def test_run_file_analysis_task_stops_between_files_without_final_update(self):
+        from backend.services import file_workflow_service
+
+        with (
+            patch("backend.services.file_workflow_service.update_task") as update_task,
+            patch("backend.services.file_workflow_service.add_task_log") as add_task_log,
+            patch("backend.services.file_workflow_service.is_task_stopped", side_effect=[False, True]),
+            patch("backend.services.file_workflow_service.analyze_group_file", return_value={"cached": False}) as analyze,
+        ):
+            file_workflow_service.run_file_analysis_task("task-1", "group-1", [1, 2], force=False)
+
+        self.assertEqual([("group-1", 1)], [call.args[:2] for call in analyze.call_args_list])
+        self.assertEqual(
+            [
+                ("task-1", "running", "开始分析 2 个文件..."),
+            ],
+            [call.args for call in update_task.call_args_list],
+        )
+        self.assertIn(
+            ("task-1", "🛑 文件分析任务被停止"),
+            [call.args for call in add_task_log.call_args_list],
+        )
+
     def test_run_file_analysis_task_marks_task_failed_when_all_files_fail(self):
         from backend.services import file_workflow_service
 

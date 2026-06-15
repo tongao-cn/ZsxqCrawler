@@ -17881,6 +17881,50 @@ Result:
 - Full backend unittest discovery passed: 1079 tests, 15 skipped.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-15 - P1 file analysis loop helper
+
+Changed:
+
+- Added characterization coverage for `run_file_analysis_task()` when the task is stopped between
+  file analyses.
+- Locked the current behavior that a mid-loop stop logs `🛑 文件分析任务被停止`, skips remaining
+  files, and does not write a final completed/failed task update.
+- Added `_run_file_analysis_items()` and reused it from `run_file_analysis_task()`.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- File analysis startup update, per-file log messages, analysis order, `force` propagation,
+  cached/completed/failed counters, per-file exception swallowing, final success/failure semantics,
+  stop handling, public route behavior, AI service defaults, fallback/legacy behavior, public APIs,
+  and configuration semantics are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_file_routes_helpers.FileRoutesHelperTests.test_run_file_analysis_task_stops_between_files_without_final_update tests.test_file_routes_helpers.FileRoutesHelperTests.test_run_file_analysis_task_dedupes_ids_and_preserves_mixed_stats tests.test_file_routes_helpers.FileRoutesHelperTests.test_run_file_analysis_task_preserves_pre_cast_deduplication_for_mixed_id_types tests.test_file_routes_helpers.FileRoutesHelperTests.test_run_file_analysis_task_marks_task_failed_when_all_files_fail -v
+uv run python -m py_compile backend\services\file_workflow_service.py tests\test_file_routes_helpers.py
+uv run python -m unittest tests.test_file_routes_helpers.FileRoutesHelperTests.test_run_file_analysis_task_stops_between_files_without_final_update tests.test_file_routes_helpers.FileRoutesHelperTests.test_run_file_analysis_task_dedupes_ids_and_preserves_mixed_stats tests.test_file_routes_helpers.FileRoutesHelperTests.test_run_file_analysis_task_preserves_pre_cast_deduplication_for_mixed_id_types tests.test_file_routes_helpers.FileRoutesHelperTests.test_run_file_analysis_task_marks_task_failed_when_all_files_fail -v
+uv run python -m unittest tests.test_file_routes_helpers -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run ruff check backend\services\file_workflow_service.py tests\test_file_routes_helpers.py --select F401,F841
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- New mid-loop stop characterization test and adjacent file-analysis tests passed against the
+  original inline implementation: 4 focused tests.
+- `py_compile` passed.
+- Focused file-analysis tests passed after extraction: 4 tests.
+- File route/helper tests passed: 62 tests.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- Full backend unittest discovery passed: 1080 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:

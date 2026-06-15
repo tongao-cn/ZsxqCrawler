@@ -1094,6 +1094,30 @@ def _build_file_analysis_stats(total_files: int) -> Dict[str, int]:
     }
 
 
+def _run_file_analysis_items(
+    task_id: str,
+    group_id: str,
+    file_ids: Sequence[int],
+    stats: Dict[str, int],
+    force: bool,
+) -> bool:
+    for index, file_id in enumerate(file_ids, 1):
+        if is_task_stopped(task_id):
+            add_task_log(task_id, "🛑 文件分析任务被停止")
+            return False
+
+        try:
+            add_task_log(task_id, f"【{index}/{len(file_ids)}】分析文件 ID: {file_id}")
+            result = _analyze_group_file_with_defaults(group_id, file_id, force)
+            _record_file_analysis_result(stats, result)
+            add_task_log(task_id, f"✅ 文件分析完成: {file_id}")
+        except Exception as exc:
+            stats["failed"] += 1
+            add_task_log(task_id, f"❌ 文件分析失败: {file_id}, {exc}")
+
+    return True
+
+
 def run_file_analysis_task(
     task_id: str,
     group_id: str,
@@ -1104,19 +1128,8 @@ def run_file_analysis_task(
     stats = _build_file_analysis_stats(len(unique_file_ids))
     try:
         update_task(task_id, "running", f"开始分析 {len(unique_file_ids)} 个文件...")
-        for index, file_id in enumerate(unique_file_ids, 1):
-            if is_task_stopped(task_id):
-                add_task_log(task_id, "🛑 文件分析任务被停止")
-                return
-
-            try:
-                add_task_log(task_id, f"【{index}/{len(unique_file_ids)}】分析文件 ID: {file_id}")
-                result = _analyze_group_file_with_defaults(group_id, file_id, force)
-                _record_file_analysis_result(stats, result)
-                add_task_log(task_id, f"✅ 文件分析完成: {file_id}")
-            except Exception as exc:
-                stats["failed"] += 1
-                add_task_log(task_id, f"❌ 文件分析失败: {file_id}, {exc}")
+        if not _run_file_analysis_items(task_id, group_id, unique_file_ids, stats, force):
+            return
 
         _finish_file_analysis_task(task_id, stats)
     except Exception as e:
