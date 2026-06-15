@@ -159,6 +159,11 @@ DOWNLOAD_FILE_MAX_RETRIES = 3
 DOWNLOAD_FILE_RESPONSE_TIMEOUT_SECONDS = 300
 
 
+class ApiJsonParseResult(NamedTuple):
+    data: Optional[Dict[str, Any]]
+    should_retry: bool
+
+
 class DownloadUrlResponseDecision(NamedTuple):
     download_url: Optional[str]
     should_retry: bool
@@ -504,18 +509,18 @@ class ZSXQFileDownloader:
         response: requests.Response,
         attempt: int,
         max_retries: int,
-    ) -> tuple[Optional[Dict[str, Any]], bool]:
+    ) -> ApiJsonParseResult:
         try:
             data = response.json()
         except json.JSONDecodeError as e:
             decode_failure = json_decode_failure_plan(e, response.text, attempt, max_retries)
             for message in decode_failure["messages"]:
                 print(message)
-            return None, decode_failure["should_retry"]
+            return ApiJsonParseResult(None, decode_failure["should_retry"])
 
         if should_log_full_response(attempt, max_retries, data.get('succeeded')):
             print(f"   📋 响应内容: {json.dumps(redact_json_like(data), ensure_ascii=False, indent=2)}")
-        return data, False
+        return ApiJsonParseResult(data, False)
 
     def fetch_file_list(self, count: int = 20, index: Optional[str] = None, sort: str = "by_download_count") -> Optional[Dict[str, Any]]:
         """获取文件列表（带重试机制）"""
@@ -535,9 +540,10 @@ class ZSXQFileDownloader:
                 print(f"   📊 响应状态: {response.status_code}")
                 
                 if response.status_code == 200:
-                    data, should_retry_json = self._parse_api_json_response(response, attempt, max_retries)
-                    if should_retry_json:
+                    json_parse = self._parse_api_json_response(response, attempt, max_retries)
+                    if json_parse.should_retry:
                         continue
+                    data = json_parse.data
                     if not data:
                         continue
 
@@ -667,9 +673,10 @@ class ZSXQFileDownloader:
         print(f"   📊 响应状态: {response.status_code}")
 
         if response.status_code == 200:
-            data, should_retry_json = self._parse_api_json_response(response, attempt, max_retries)
-            if should_retry_json:
+            json_parse = self._parse_api_json_response(response, attempt, max_retries)
+            if json_parse.should_retry:
                 return DownloadUrlResponseDecision(None, True, False)
+            data = json_parse.data
             if not data:
                 return DownloadUrlResponseDecision(None, True, False)
 

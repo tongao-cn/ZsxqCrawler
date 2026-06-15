@@ -3030,6 +3030,54 @@ class FileDownloaderRetryHelperTests(unittest.TestCase):
         self.assertIn("JSON解析失败", output.getvalue())
         self.assertIn("准备重试", output.getvalue())
 
+    def test_fetch_file_list_retries_json_decode_failure_then_success(self):
+        class FakeFileListJsonResponse:
+            status_code = 200
+            text = ""
+
+            def json(self):
+                return {
+                    "succeeded": True,
+                    "resp_data": {"files": [{"file": {"id": 101}}], "index": "next"},
+                }
+
+        session = FakeDownloadSession([FakeInvalidJsonResponse(), FakeFileListJsonResponse()])
+        downloader = object.__new__(ZSXQFileDownloader)
+        downloader.base_url = "https://api.example"
+        downloader.group_id = "group-1"
+        downloader.session = session
+        downloader.request_count = 0
+        downloader.smart_delay = lambda: None
+        downloader.get_stealth_headers = lambda: {"User-Agent": "unit-test-agent"}
+        downloader.logs = []
+        downloader.log = downloader.logs.append
+
+        output = io.StringIO()
+        with (
+            contextlib.redirect_stdout(output),
+            patch("backend.crawlers.zsxq_file_downloader.random.uniform", return_value=15.0),
+            patch("backend.crawlers.zsxq_file_downloader.time.sleep") as sleep,
+        ):
+            result = ZSXQFileDownloader.fetch_file_list(downloader, count=20)
+
+        self.assertEqual(
+            {"succeeded": True, "resp_data": {"files": [{"file": {"id": 101}}], "index": "next"}},
+            result,
+        )
+        self.assertEqual(2, downloader.request_count)
+        self.assertEqual(
+            [
+                ("https://api.example/v2/groups/group-1/files", 30, False),
+                ("https://api.example/v2/groups/group-1/files", 30, False),
+            ],
+            session.get_calls,
+        )
+        sleep.assert_called_once_with(15.0)
+        printed = output.getvalue()
+        self.assertIn("   ❌ JSON解析失败: bad json", printed)
+        self.assertIn("   🔄 JSON解析失败，准备重试...", printed)
+        self.assertIn("   ✅ 重试成功！第1次重试获取到文件列表", printed)
+
 
 class FileDownloaderDownloadTests(unittest.TestCase):
     def _downloader_for_download(self, temp_dir, session):
