@@ -826,6 +826,8 @@ class FileDownloaderPaginationTests(unittest.TestCase):
         sleep.assert_called_once_with(2.5)
         self.assertIn("   ⏭️ 下一页时间戳: next-page", downloader.logs)
         self.assertIn("📭 已到达最后一页", downloader.logs)
+        self.assertEqual([], downloader.file_db.executed)
+        self.assertNotIn("   📅 数据库最新文件时间: None", downloader.logs)
         self.assertEqual(2, stats["total_files"])
         self.assertEqual(2, stats["new_files"])
         self.assertEqual(2, stats["pages"])

@@ -1253,6 +1253,24 @@ class ZSXQFileDownloader:
         result = self.file_db.cursor.fetchone()
         
         return database_time_range_result(total_files, result)
+
+    def _load_time_collection_latest_file_time(
+        self,
+        enable_time_dedupe: bool,
+        initial_files: int,
+    ) -> Optional[Any]:
+        if not enable_time_dedupe or initial_files <= 0:
+            return None
+
+        query, params = latest_file_create_time_query(_query_group_id(self.group_id))
+        self.file_db.cursor.execute(query, params)
+        result = self.file_db.cursor.fetchone()
+        if result and result[0]:
+            db_latest_time = result[0]
+            self.log(time_collection_latest_file_time_message(db_latest_time))
+            return db_latest_time
+
+        return None
     
     def collect_files_by_time(
         self,
@@ -1279,15 +1297,10 @@ class ZSXQFileDownloader:
         initial_stats = self.file_db.get_database_stats()
         initial_files = initial_stats.get('files', 0)
         self.log(time_collection_database_status_message(initial_files))
-        
-        db_latest_time = None
-        if enable_time_dedupe and initial_files > 0:
-            query, params = latest_file_create_time_query(_query_group_id(self.group_id))
-            self.file_db.cursor.execute(query, params)
-            result = self.file_db.cursor.fetchone()
-            if result and result[0]:
-                db_latest_time = result[0]
-                self.log(time_collection_latest_file_time_message(db_latest_time))
+        db_latest_time = self._load_time_collection_latest_file_time(
+            enable_time_dedupe,
+            initial_files,
+        )
         
         total_imported_stats = empty_import_stats()
         current_index = start_time  # 使用时间戳作为index
