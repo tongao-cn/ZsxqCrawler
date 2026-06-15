@@ -847,6 +847,43 @@ class FileDownloaderPaginationTests(unittest.TestCase):
         self.assertIsNone(kwargs["start_time"])
         self.assertEqual(datetime.datetime(2026, 5, 7), kwargs["stop_before_time"])
 
+    def test_fetch_time_collection_page_preserves_fetch_shape_result_and_logs(self):
+        files = [
+            {"file": {"id": 101, "create_time": "2026-05-02 10:00:00"}},
+            {"file": {"id": 102, "create_time": "2026-05-01 09:30:00"}},
+        ]
+        data = {"resp_data": {"index": "next-cursor", "files": files}}
+        downloader = object.__new__(ZSXQFileDownloader)
+        downloader.logs = []
+        downloader.fetch_calls = []
+        downloader.log = downloader.logs.append
+
+        def fetch_file_list(**kwargs):
+            downloader.fetch_calls.append(kwargs)
+            return data
+
+        downloader.fetch_file_list = fetch_file_list
+
+        page = ZSXQFileDownloader._fetch_time_collection_page(
+            downloader,
+            2,
+            "cursor-1",
+            "by_create_time",
+        )
+
+        self.assertEqual((data, files, "next-cursor"), page)
+        self.assertEqual(
+            [{"count": 20, "index": "cursor-1", "sort": "by_create_time"}],
+            downloader.fetch_calls,
+        )
+        self.assertEqual(
+            [
+                "   📋 当前页面: 2 个文件",
+                "   🗓️ 当前页文件时间范围: 2026-05-02 10:00:00 ~ 2026-05-01 09:30:00",
+            ],
+            downloader.logs,
+        )
+
     def test_collect_files_by_time_preserves_database_state_initialization(self):
         downloader = object.__new__(ZSXQFileDownloader)
         downloader.group_id = "511"

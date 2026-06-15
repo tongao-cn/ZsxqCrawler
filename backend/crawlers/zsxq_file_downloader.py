@@ -208,6 +208,12 @@ class DownloadAttemptResult(NamedTuple):
     file_path: str
 
 
+class TimeCollectionPage(NamedTuple):
+    data: Dict[str, Any]
+    files: list[Dict[str, Any]]
+    next_index: Optional[Any]
+
+
 def _query_group_id(group_id: str) -> Any:
     return download_query_group_id(group_id)
 
@@ -1548,7 +1554,7 @@ class ZSXQFileDownloader:
         page_count: int,
         current_index: Optional[Any],
         sort: str,
-    ) -> Optional[tuple[Dict[str, Any], list[Dict[str, Any]], Optional[Any]]]:
+    ) -> Optional[TimeCollectionPage]:
         data = self.fetch_file_list(count=20, index=current_index, sort=sort)
         if not data:
             for message in time_collection_fetch_failed_messages(page_count):
@@ -1566,7 +1572,7 @@ class ZSXQFileDownloader:
         if time_range_message:
             self.log(time_range_message)
 
-        return data, files, next_index
+        return TimeCollectionPage(data, files, next_index)
 
     def _collect_time_collection_page(
         self,
@@ -1584,11 +1590,9 @@ class ZSXQFileDownloader:
         if page is None:
             return None
 
-        data, files, next_index = page
-
         dedupe_result = self._apply_time_collection_dedupe_plan(
-            data,
-            files,
+            page.data,
+            page.files,
             enable_time_dedupe,
             db_latest_time,
         )
@@ -1597,7 +1601,7 @@ class ZSXQFileDownloader:
         should_stop_after_insert = dedupe_result["should_stop_after_insert"]
 
         if not self._import_time_collection_page(
-            data,
+            page.data,
             page_count,
             should_stop_after_insert,
             total_imported_stats,
@@ -1607,10 +1611,10 @@ class ZSXQFileDownloader:
         if should_stop_after_insert:
             return None
 
-        if self._crossed_time_collection_stop_before(files, stop_before_time):
+        if self._crossed_time_collection_stop_before(page.files, stop_before_time):
             return None
 
-        return self._next_time_collection_index(next_index)
+        return self._next_time_collection_index(page.next_index)
 
     def _run_time_collection_loop(
         self,
