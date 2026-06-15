@@ -22272,6 +22272,56 @@ Result:
 - Full backend unittest discovery passed in the current worktree: 1151 tests, 15 skipped.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-15 - P9 download URL success response helper extraction
+
+Changed:
+
+- Added characterization coverage for `get_download_url(...)` when the API response succeeds but
+  `resp_data.download_url` is missing.
+- The new test locks ten retry attempts, nine retry sleeps, no `last_download_url_error`, existing
+  missing-field text, existing retry-exhausted text, and returned `None`.
+- Extracted `_handle_download_url_success_response(...)` from the success branch of
+  `get_download_url(...)` in `ZSXQFileDownloader`.
+- Kept URL extraction, success message selection, success risk-event recording, missing-field
+  output, and retry-loop continuation semantics in the same order.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Successful responses with a URL still print the same success message, record the same success risk
+  event, and return the signed URL.
+- Successful responses without a URL still print `❌ 响应中无下载链接字段`, continue retrying, and
+  eventually print `🚫 已重试10次，全部失败`.
+- 1030 permission-denied, API failure, HTTP failure, JSON decode retry, request exception retry,
+  `last_download_url_error`, risk logging, retry sleep, user-agent rotation, public API,
+  fallback/legacy behavior, error semantics, printed/logged text, call order, returned value,
+  config semantics, and task-level behavior are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_get_download_url_missing_url_field_exhausts_retries tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_get_download_url_redacts_signed_url_in_stdout tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_get_download_url_1030_does_not_stop_whole_task -v
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_get_download_url_missing_url_field_exhausts_retries tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_get_download_url_redacts_signed_url_in_stdout tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_get_download_url_writes_opt_in_risk_log_events tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_get_download_url_1030_does_not_stop_whole_task -v
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run ruff check backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py --select F401,F841
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- Missing-url characterization baseline passed before production extraction: 3 focused tests.
+- `py_compile` passed.
+- Focused download URL tests passed after extraction: 4 tests.
+- ZSXQ file downloader helper tests passed: 174 tests.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- Full backend unittest discovery passed in the current worktree: 1152 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:

@@ -539,6 +539,31 @@ class ZSXQFileDownloader:
         
         print(retry_exhausted_message(max_retries))
         return None
+
+    def _handle_download_url_success_response(
+        self,
+        data: Dict[str, Any],
+        file_id: int,
+        attempt: int,
+        headers: Dict[str, str],
+        http_status: int,
+    ) -> Optional[str]:
+        download_url = data.get('resp_data', {}).get('download_url')
+        if download_url:
+            success_message, success_phase = download_url_success_plan(attempt)
+            print(success_message)
+            self._record_risk_event(
+                file_id=file_id,
+                phase=success_phase,
+                attempt=attempt,
+                headers=headers,
+                http_status=http_status,
+                status="api_success",
+            )
+            return download_url
+
+        print(f"   ❌ 响应中无下载链接字段")
+        return None
     
     def get_download_url(self, file_id: int) -> Optional[str]:
         """获取文件下载链接（带重试机制）
@@ -570,20 +595,15 @@ class ZSXQFileDownloader:
                         continue
 
                     if data.get('succeeded'):
-                        download_url = data.get('resp_data', {}).get('download_url')
+                        download_url = self._handle_download_url_success_response(
+                            data,
+                            file_id,
+                            attempt,
+                            headers,
+                            response.status_code,
+                        )
                         if download_url:
-                            success_message, success_phase = download_url_success_plan(attempt)
-                            print(success_message)
-                            self._record_risk_event(
-                                file_id=file_id,
-                                phase=success_phase,
-                                attempt=attempt,
-                                headers=headers,
-                                http_status=response.status_code,
-                                status="api_success",
-                            )
                             return download_url
-                        print(f"   ❌ 响应中无下载链接字段")
                     else:
                         api_failure = download_url_api_failure_plan(data, attempt, max_retries)
                         self.log(api_failure["messages"][0])
