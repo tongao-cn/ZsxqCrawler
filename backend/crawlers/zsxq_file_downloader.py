@@ -1411,6 +1411,24 @@ class ZSXQFileDownloader:
             for message in incremental_collection_timestamp_failure_messages(e):
                 self.log(message)
             return self.collect_files_by_time()
+
+    def _collect_incremental_from_time_info(self, time_info: Dict[str, Any]) -> Dict[str, int]:
+        if not time_info['has_data']:
+            self.log(incremental_collection_empty_database_message())
+            return self.collect_files_by_time()
+
+        oldest_time = time_info['oldest_time']
+        # Preserve historical key validation before emitting status logs.
+        _ = (time_info['newest_time'], time_info['total_files'])
+
+        for message in incremental_collection_status_messages(time_info):
+            self.log(message)
+
+        if not oldest_time:
+            self.log(incremental_collection_missing_time_message())
+            return self.collect_files_by_time()
+
+        return self._collect_incremental_from_oldest_time(oldest_time)
     
     def collect_files_by_time(
         self,
@@ -1514,22 +1532,7 @@ class ZSXQFileDownloader:
         # 获取数据库时间范围
         time_info = self.get_database_time_range()
 
-        if not time_info['has_data']:
-            self.log(incremental_collection_empty_database_message())
-            return self.collect_files_by_time()
-        
-        oldest_time = time_info['oldest_time']
-        newest_time = time_info['newest_time']
-        total_files = time_info['total_files']
-        
-        for message in incremental_collection_status_messages(time_info):
-            self.log(message)
-
-        if not oldest_time:
-            self.log(incremental_collection_missing_time_message())
-            return self.collect_files_by_time()
-
-        return self._collect_incremental_from_oldest_time(oldest_time)
+        return self._collect_incremental_from_time_info(time_info)
     
     def collect_files_for_date_range(
         self,
