@@ -564,6 +564,35 @@ class ZSXQFileDownloader:
 
         print(f"   ❌ 响应中无下载链接字段")
         return None
+
+    def _handle_download_url_api_failure_response(
+        self,
+        data: Dict[str, Any],
+        file_id: int,
+        attempt: int,
+        max_retries: int,
+        headers: Dict[str, str],
+        http_status: int,
+    ) -> str:
+        api_failure = download_url_api_failure_plan(data, attempt, max_retries)
+        self.log(api_failure["messages"][0])
+        self._record_risk_event(
+            file_id=file_id,
+            phase="download_url_response",
+            attempt=attempt,
+            headers=headers,
+            http_status=http_status,
+            api_code=api_failure["error_code"],
+            api_message=api_failure["error_msg"],
+            status="api_failed",
+        )
+        for message in api_failure["messages"][1:]:
+            self.log(message)
+
+        failure_class = api_failure["failure_class"]
+        if failure_class == API_FAILURE_PERMISSION_DENIED_1030:
+            self.last_download_url_error = api_failure["last_download_url_error"]
+        return failure_class
     
     def get_download_url(self, file_id: int) -> Optional[str]:
         """获取文件下载链接（带重试机制）
@@ -605,25 +634,16 @@ class ZSXQFileDownloader:
                         if download_url:
                             return download_url
                     else:
-                        api_failure = download_url_api_failure_plan(data, attempt, max_retries)
-                        self.log(api_failure["messages"][0])
-                        self._record_risk_event(
-                            file_id=file_id,
-                            phase="download_url_response",
-                            attempt=attempt,
-                            headers=headers,
-                            http_status=response.status_code,
-                            api_code=api_failure["error_code"],
-                            api_message=api_failure["error_msg"],
-                            status="api_failed",
+                        failure_class = self._handle_download_url_api_failure_response(
+                            data,
+                            file_id,
+                            attempt,
+                            max_retries,
+                            headers,
+                            response.status_code,
                         )
-                        for message in api_failure["messages"][1:]:
-                            self.log(message)
-
-                        failure_class = api_failure["failure_class"]
 
                         if failure_class == API_FAILURE_PERMISSION_DENIED_1030:
-                            self.last_download_url_error = api_failure["last_download_url_error"]
                             return None
 
                         if failure_class == API_FAILURE_RETRY:
