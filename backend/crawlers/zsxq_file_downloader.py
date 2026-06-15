@@ -1378,6 +1378,25 @@ class ZSXQFileDownloader:
             self.log(time_range_message)
 
         return data, files, next_index
+
+    def _finalize_time_collection_result(
+        self,
+        initial_files: int,
+        total_imported_stats: Dict[str, int],
+        page_count: int,
+    ) -> Dict[str, int]:
+        final_stats = self.file_db.get_database_stats()
+        summary = time_collection_final_summary(
+            final_stats,
+            initial_files,
+            total_imported_stats,
+            page_count,
+        )
+
+        for message in time_collection_summary_messages(summary, page_count):
+            self.log(message)
+
+        return summary["result"]
     
     def collect_files_by_time(
         self,
@@ -1463,19 +1482,11 @@ class ZSXQFileDownloader:
         except Exception as e:
             self.log(time_collection_exception_message(e))
 
-        # 最终统计
-        final_stats = self.file_db.get_database_stats()
-        summary = time_collection_final_summary(
-            final_stats,
+        return self._finalize_time_collection_result(
             initial_files,
             total_imported_stats,
             page_count,
         )
-
-        for message in time_collection_summary_messages(summary, page_count):
-            self.log(message)
-
-        return summary["result"]
     
     def collect_incremental_files(self) -> Dict[str, int]:
         """增量收集：从数据库最老时间戳开始继续收集"""
