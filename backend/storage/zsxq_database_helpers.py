@@ -949,6 +949,10 @@ def topic_file_payload_from_row(row) -> Dict[str, Any]:
     }
 
 
+def topic_file_backfill_ids_from_row(row) -> tuple[Any, Any, Any]:
+    return row[0], row[1], row[8]
+
+
 def topic_file_group_payload_from_row(row) -> Optional[Dict[str, Any]]:
     group_id = row[8]
     group_name = row[23]

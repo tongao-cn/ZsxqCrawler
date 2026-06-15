@@ -1500,6 +1500,69 @@ class ZSXQDatabaseHelperTests(unittest.TestCase):
             group_payloads,
         )
 
+    def test_backfill_topic_files_to_core_tables_preserves_backfill_row_id_usage(self):
+        from backend.storage.zsxq_database import ZSXQDatabase
+
+        row = (
+            202,
+            101,
+            "memo.pdf",
+            "abc",
+            12,
+            0,
+            3,
+            "2026-05-07T12:00:00.000+0800",
+            303,
+            "talk",
+            "title",
+            "",
+            "2026-05-07T10:00:00.000+0800",
+            1,
+            0,
+            0,
+            2,
+            3,
+            4,
+            False,
+            False,
+            False,
+            False,
+            "group",
+            "paid",
+            "bg",
+        )
+        db = object.__new__(ZSXQDatabase)
+        db.cursor = FakeBackfillCursor([row])
+        db.conn = FakeConnection()
+        db.group_id = "303"
+        db._upsert_group = lambda _payload: None
+        core_calls = []
+        relation_calls = []
+
+        def capture_core_file(cursor, group_id, topic_id, file_data):
+            core_calls.append((cursor, group_id, topic_id, file_data["file_id"]))
+            return file_data["file_id"]
+
+        def capture_relation(file_db, file_id, topic_id):
+            relation_calls.append((file_db, file_id, topic_id))
+            return 1
+
+        with (
+            patch(
+                "backend.storage.zsxq_database._upsert_core_file",
+                side_effect=capture_core_file,
+            ),
+            patch(
+                "backend.storage.zsxq_database._replace_file_topic_relation",
+                side_effect=capture_relation,
+            ),
+        ):
+            stats = ZSXQDatabase.backfill_topic_files_to_core_tables(db, batch_size=1)
+
+        self.assertEqual({"scanned": 1, "new_files": 1, "relations": 1, "topic_files": 1}, stats)
+        self.assertEqual([(db.cursor, 303, 202, 101)], core_calls)
+        self.assertEqual([(db, 101, 202)], relation_calls)
+
     def test_group_id_param_casts_numeric_ids_for_scoped_queries(self):
         self.assertEqual(155, _group_id_param("155"))
         self.assertEqual("group-x", _group_id_param("group-x"))

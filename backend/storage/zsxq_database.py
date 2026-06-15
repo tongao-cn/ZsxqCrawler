@@ -51,6 +51,7 @@ from backend.storage.zsxq_database_helpers import (
     topic_count_query,
     topic_exists_query,
     topic_files_backfill_query,
+    topic_file_backfill_ids_from_row,
     topic_file_group_payload_from_row,
     topic_file_payload_from_row,
     topic_file_insert_statement,
@@ -385,6 +386,10 @@ def _topic_files_backfill_query(group_id: Optional[str]) -> tuple[str, tuple[Any
 
 def _topic_file_payload_from_row(row) -> Dict[str, Any]:
     return topic_file_payload_from_row(row)
+
+
+def _topic_file_backfill_ids_from_row(row) -> tuple[Any, Any, Any]:
+    return topic_file_backfill_ids_from_row(row)
 
 
 def _topic_file_group_payload_from_row(row) -> Optional[Dict[str, Any]]:
@@ -907,13 +912,7 @@ class ZSXQDatabase:
             self.cursor.execute(sql, params)
             for row in self.cursor.fetchall():
                 stats['scanned'] += 1
-                (
-                    topic_id, file_id, name, file_hash, size, duration, download_count, file_create_time,
-                    group_id, topic_type, title, annotation, topic_create_time,
-                    likes_count, tourist_likes_count, rewards_count, comments_count,
-                    reading_count, readers_count, digested, sticky, user_liked, user_subscribed,
-                    _group_name, _group_type, _background_url,
-                ) = row
+                topic_id, file_id, group_id = _topic_file_backfill_ids_from_row(row)
 
                 sql, params = _file_exists_query(file_id, self.group_id)
                 self.cursor.execute(sql, params)

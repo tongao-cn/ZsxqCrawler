@@ -19052,6 +19052,52 @@ Result:
 - Full backend unittest discovery passed: 1110 tests, 15 skipped.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-15 - P2 topic file backfill row ID helper
+
+Changed:
+
+- Added characterization coverage for the `backfill_topic_files_to_core_tables()` row ID mapping:
+  `row[0]` as `topic_id`, `row[1]` as `file_id`, and `row[8]` as `group_id`.
+- Added `topic_file_backfill_ids_from_row()` to `backend/storage/zsxq_database_helpers.py`, with a
+  compatibility wrapper in `backend/storage/zsxq_database.py`.
+- Replaced the large 26-column tuple unpack in `backfill_topic_files_to_core_tables()` with the
+  focused ID helper.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Topic-file backfill still executes the same query, checks file existence with the same
+  `file_id` / runtime `group_id`, upserts the same group and file payloads, writes the same relation,
+  keeps the same stats keys, commit cadence, and rollback behavior.
+- The previous unused local bindings for non-ID row columns were removed from the main control flow
+  only after the existing ID usage was locked by characterization coverage.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_backfill_topic_files_to_core_tables_preserves_backfill_row_id_usage -v
+uv run python -m py_compile backend\storage\zsxq_database.py backend\storage\zsxq_database_helpers.py tests\test_zsxq_database_helpers.py
+uv run python -m unittest tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_backfill_topic_files_to_core_tables_preserves_backfill_row_id_usage tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_backfill_topic_files_to_core_tables_preserves_group_payload_shape tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_backfill_topic_files_to_core_tables_uses_current_database_cursor tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_topic_file_payload_from_row_maps_backfill_columns tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_topic_files_backfill_query_preserves_scope_params_and_order -v
+uv run python -m unittest tests.test_zsxq_database_helpers -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run ruff check backend\storage\zsxq_database.py backend\storage\zsxq_database_helpers.py tests\test_zsxq_database_helpers.py --select F401,F841
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- New row-ID characterization test passed against the original inline tuple-unpack implementation:
+  1 focused test.
+- `py_compile` passed.
+- Focused backfill ID / group payload / query tests passed after extraction: 5 tests.
+- ZSXQ database helper tests passed: 82 tests.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- Full backend unittest discovery passed: 1111 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:
