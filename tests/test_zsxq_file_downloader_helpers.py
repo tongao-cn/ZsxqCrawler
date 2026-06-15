@@ -496,6 +496,34 @@ class FileDownloaderPaginationTests(unittest.TestCase):
         self.assertEqual(1, downloader.file_db.import_calls)
         self.assertEqual({"total_files": 0, "new_files": 0, "skipped_files": 0}, stats)
 
+    def test_collect_all_files_preserves_fetch_failure_record_update_and_summary(self):
+        downloader = object.__new__(ZSXQFileDownloader)
+        downloader.file_db = CollectAllFileDb()
+        downloader.fetch_calls = []
+
+        def fetch_file_list(**kwargs):
+            downloader.fetch_calls.append(kwargs)
+            return None
+
+        downloader.fetch_file_list = fetch_file_list
+
+        with contextlib.redirect_stdout(io.StringIO()) as output:
+            stats = ZSXQFileDownloader.collect_all_files_to_database(downloader)
+
+        self.assertEqual({"total_files": 0, "new_files": 0, "skipped_files": 0}, stats)
+        self.assertEqual([{"count": 20, "index": None}], downloader.fetch_calls)
+        self.assertEqual([], downloader.file_db.imported_responses)
+        self.assertEqual(2, downloader.file_db.commits)
+        update_query, update_params = downloader.file_db.executed[-1]
+        self.assertIn("UPDATE collection_log SET", update_query)
+        self.assertEqual(0, update_params[1])
+        self.assertEqual(0, update_params[2])
+        self.assertEqual(99, update_params[3])
+        printed = output.getvalue()
+        self.assertIn("❌ 第1页获取失败，收集过程中断", printed)
+        self.assertIn("💾 已成功收集前0页的数据", printed)
+        self.assertIn("   📄 收集页数: 1", printed)
+
     def test_collect_all_files_preserves_success_import_log_and_collection_record(self):
         page = {
             "resp_data": {

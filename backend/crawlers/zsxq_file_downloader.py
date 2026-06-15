@@ -1165,11 +1165,65 @@ class ZSXQFileDownloader:
         print(file_list_next_index_message(next_index))
         
         return next_index
-    
+
+    def _run_file_collection_loop(self, stats: Dict[str, int]) -> int:
+        current_index = None
+        page_count = 0
+
+        try:
+            while True:
+                page_count += 1
+                print(file_collection_page_message(page_count))
+
+                # 获取文件列表
+                data = self.fetch_file_list(count=20, index=current_index)
+                if not data:
+                    for message in file_collection_fetch_failed_messages(page_count):
+                        print(message)
+                    break
+
+                files, next_index = file_list_response_page(data)
+
+                if not files:
+                    print(file_collection_empty_page_message())
+                    break
+
+                print(file_collection_page_files_message(len(files)))
+
+                # 使用完整数据库导入整个API响应
+                try:
+                    page_stats = self.file_db.import_file_response(data)
+
+                    add_file_collection_page_stats(stats, len(files), page_stats)
+
+                    for message in file_collection_page_import_messages(page_stats):
+                        print(message)
+
+                except Exception as e:
+                    print(file_collection_storage_failed_message(page_count, e))
+                    break
+
+                print(file_collection_page_stored_message(page_count))
+
+                next_page = file_collection_next_page_plan(next_index)
+                if next_page["has_next"]:
+                    current_index = next_page["next_index"]
+                    # 页面间短暂延迟
+                    time.sleep(random.uniform(next_page["delay_min"], next_page["delay_max"]))
+                else:
+                    break
+
+        except KeyboardInterrupt:
+            print(file_collection_interrupted_message())
+        except Exception as e:
+            print(file_collection_exception_message(e))
+
+        return page_count
+
     def collect_all_files_to_database(self) -> Dict[str, int]:
         """收集所有文件信息到数据库"""
         print(file_collection_start_message())
-        
+
         # 创建收集记录
         insert_query, insert_params = file_collection_log_insert_query(
             datetime.datetime.now().isoformat()
@@ -1178,59 +1232,10 @@ class ZSXQFileDownloader:
         row = self.file_db.cursor.fetchone()
         log_id = row[0] if row else None
         self.file_db.conn.commit()
-        
+
         stats = file_collection_stats()
-        current_index = None
-        page_count = 0
-        
-        try:
-            while True:
-                page_count += 1
-                print(file_collection_page_message(page_count))
-                
-                # 获取文件列表
-                data = self.fetch_file_list(count=20, index=current_index)
-                if not data:
-                    for message in file_collection_fetch_failed_messages(page_count):
-                        print(message)
-                    break
-                
-                files, next_index = file_list_response_page(data)
-                
-                if not files:
-                    print(file_collection_empty_page_message())
-                    break
-                
-                print(file_collection_page_files_message(len(files)))
-                
-                # 使用完整数据库导入整个API响应
-                try:
-                    page_stats = self.file_db.import_file_response(data)
-                    
-                    add_file_collection_page_stats(stats, len(files), page_stats)
-                    
-                    for message in file_collection_page_import_messages(page_stats):
-                        print(message)
-                    
-                except Exception as e:
-                    print(file_collection_storage_failed_message(page_count, e))
-                    break
-                
-                print(file_collection_page_stored_message(page_count))
-                
-                next_page = file_collection_next_page_plan(next_index)
-                if next_page["has_next"]:
-                    current_index = next_page["next_index"]
-                    # 页面间短暂延迟
-                    time.sleep(random.uniform(next_page["delay_min"], next_page["delay_max"]))
-                else:
-                    break
-                    
-        except KeyboardInterrupt:
-            print(file_collection_interrupted_message())
-        except Exception as e:
-            print(file_collection_exception_message(e))
-        
+        page_count = self._run_file_collection_loop(stats)
+
         # 更新收集记录
         update_query, update_params = file_collection_log_update_query(
             datetime.datetime.now().isoformat(),
