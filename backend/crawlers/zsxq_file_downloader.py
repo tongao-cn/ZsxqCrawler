@@ -184,6 +184,11 @@ class DownloadFilenameOverride(NamedTuple):
     file_path: str
 
 
+class DownloadFailureDetail(NamedTuple):
+    error_code: str
+    error_message: str
+
+
 class DownloadBodyTarget(NamedTuple):
     total_size: int
     expected_size: int
@@ -192,12 +197,12 @@ class DownloadBodyTarget(NamedTuple):
 
 class DownloadBodyResult(NamedTuple):
     success_result: Optional[bool]
-    failure_detail: Optional[tuple[str, str]]
+    failure_detail: Optional[DownloadFailureDetail]
 
 
 class DownloadAttemptResult(NamedTuple):
     success_result: Optional[bool]
-    failure_detail: Optional[tuple[str, str]]
+    failure_detail: Optional[DownloadFailureDetail]
     file_name: str
     safe_filename: str
     file_path: str
@@ -811,12 +816,15 @@ class ZSXQFileDownloader:
                 if attempt_result.success_result is False:
                     return False
                 if attempt_result.failure_detail:
-                    last_error_code, last_error = attempt_result.failure_detail
+                    last_error_code = attempt_result.failure_detail.error_code
+                    last_error = attempt_result.failure_detail.error_message
                     continue
                 return True
 
             except Exception as e:
-                last_error_code, last_error = self._record_download_exception(e, file_path)
+                failure_detail = self._record_download_exception(e, file_path)
+                last_error_code = failure_detail.error_code
+                last_error = failure_detail.error_message
 
         self._mark_download_failed_after_retries(
             file_id,
@@ -994,18 +1002,18 @@ class ZSXQFileDownloader:
         self.log(f"   📝 从响应头获取到真实文件名: {real_filename}")
         return DownloadFilenameOverride(real_filename, safe_filename, file_path)
 
-    def _record_download_http_failure(self, status_code: int) -> tuple[str, str]:
+    def _record_download_http_failure(self, status_code: int) -> DownloadFailureDetail:
         error_code, error_message = download_http_failure_detail(status_code)
         self.log(f"   ❌ 下载失败: {error_message}")
-        return error_code, error_message
+        return DownloadFailureDetail(error_code, error_message)
 
-    def _record_download_exception(self, exc: Exception, file_path: str) -> tuple[str, str]:
+    def _record_download_exception(self, exc: Exception, file_path: str) -> DownloadFailureDetail:
         error_code, error_message = download_exception_detail(exc)
         self.log(f"   ❌ 下载异常: {exc}")
         temp_path = partial_download_path(file_path)
         if remove_partial_download(temp_path):
             self.log(f"   🗑️ 删除不完整文件")
-        return error_code, error_message
+        return DownloadFailureDetail(error_code, error_message)
 
     def _wait_before_download_retry(self, attempt: int, download_retries: int) -> None:
         retry_delay, retry_message = download_retry_wait(attempt, download_retries)
@@ -1125,14 +1133,14 @@ class ZSXQFileDownloader:
         self,
         expected_size: int,
         temp_path: str,
-    ) -> Optional[tuple[str, str]]:
+    ) -> Optional[DownloadFailureDetail]:
         final_size = os.path.getsize(temp_path)
-        mismatch_detail = download_size_mismatch_detail(expected_size, final_size)
-        if not mismatch_detail:
+        raw_mismatch_detail = download_size_mismatch_detail(expected_size, final_size)
+        if not raw_mismatch_detail:
             return None
 
-        _error_code, error_message = mismatch_detail
-        self.log(f"   ⚠️ {error_message}")
+        mismatch_detail = DownloadFailureDetail(*raw_mismatch_detail)
+        self.log(f"   ⚠️ {mismatch_detail.error_message}")
         os.remove(temp_path)
         return mismatch_detail
 
