@@ -20907,6 +20907,53 @@ Result:
 - Full backend unittest discovery passed: 1132 tests, 15 skipped.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-15 - P1 file status row helper extraction
+
+Changed:
+
+- Added characterization tests for `_get_file_status_response(...)` database-hit and missing-row
+  branches.
+- The new tests lock the file status SQL, numeric/non-numeric group-id params, local status lookup
+  call shape, successful response shape, and missing-row fallback response.
+- Extracted `_fetch_file_status_row(...)` and `_FILE_STATUS_QUERY` for the file status row lookup.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- `_get_file_status_response(...)` still opens `_file_db(group_id)`, queries by `file_id` and
+  normalized group id, skips local status checks when the row is missing, and returns the same
+  not-collected fallback payload.
+- For found rows, it still calls `_get_download_file_status(group_id, file_name, file_size,
+  f"file_{file_id}")` before building the same response payload.
+- Public API, route wrappers, fallback behavior, legacy behavior, error semantics, SQL shape,
+  params, response fields, storage schema, and config semantics are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m py_compile tests\test_file_routes_helpers.py
+uv run python -m unittest tests.test_file_routes_helpers.FileRoutesHelperTests.test_get_file_status_response_queries_database_and_local_status tests.test_file_routes_helpers.FileRoutesHelperTests.test_get_file_status_response_skips_local_status_for_missing_row -v
+uv run python -m py_compile backend\services\file_workflow_service.py tests\test_file_routes_helpers.py
+uv run python -m unittest tests.test_file_routes_helpers.FileRoutesHelperTests.test_build_file_status_response_handles_missing_file tests.test_file_routes_helpers.FileRoutesHelperTests.test_build_file_status_response_defaults_pending_status tests.test_file_routes_helpers.FileRoutesHelperTests.test_get_file_status_response_queries_database_and_local_status tests.test_file_routes_helpers.FileRoutesHelperTests.test_get_file_status_response_skips_local_status_for_missing_row -v
+uv run python -m unittest tests.test_file_routes_helpers -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run ruff check backend\services\file_workflow_service.py tests\test_file_routes_helpers.py --select F401,F841
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- New file-status characterization tests passed before production extraction: 2 tests.
+- `py_compile` passed.
+- Focused file-status tests passed after extraction: 4 tests.
+- File route helper tests passed: 93 tests.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- Full backend unittest discovery passed: 1134 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:

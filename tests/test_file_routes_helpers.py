@@ -17,6 +17,7 @@ from backend.services.file_workflow_service import (
     _enqueue_file_task,
     _fail_file_task,
     _get_download_file_status,
+    _get_file_status_response,
     _load_download_file_records,
     _load_filtered_download_file_records,
     _query_group_id,
@@ -1012,6 +1013,110 @@ class FileRoutesHelperTests(unittest.TestCase):
                 "local_size": 456,
                 "local_path": r"C:\tmp\group-1\downloads\file.pdf",
                 "is_complete": True,
+            },
+            response,
+        )
+
+    def test_get_file_status_response_queries_database_and_local_status(self):
+        class FakeCursor:
+            def __init__(self):
+                self.executed = []
+
+            def execute(self, sql, params=()):
+                self.executed.append((sql, params))
+
+            def fetchone(self):
+                return ("file.pdf", 456, "downloaded")
+
+        class FakeFileDb:
+            def __init__(self):
+                self.cursor = FakeCursor()
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+        local_status = {
+            "local_exists": True,
+            "local_size": 456,
+            "local_path": r"C:\tmp\group-1\downloads\file.pdf",
+            "is_complete": True,
+        }
+        fake_db = FakeFileDb()
+
+        with (
+            patch("backend.services.file_workflow_service._file_db", return_value=fake_db),
+            patch(
+                "backend.services.file_workflow_service._get_download_file_status",
+                return_value=local_status,
+            ) as get_download_file_status,
+        ):
+            response = _get_file_status_response("123", 456)
+
+        query, params = fake_db.cursor.executed[0]
+        self.assertEqual(
+            "SELECT name, size, download_status FROM files WHERE file_id = ? AND group_id = ?",
+            " ".join(query.split()),
+        )
+        self.assertEqual((456, 123), params)
+        get_download_file_status.assert_called_once_with("123", "file.pdf", 456, "file_456")
+        self.assertEqual(
+            {
+                "file_id": 456,
+                "name": "file.pdf",
+                "size": 456,
+                "download_status": "downloaded",
+                "local_exists": True,
+                "local_size": 456,
+                "local_path": r"C:\tmp\group-1\downloads\file.pdf",
+                "is_complete": True,
+            },
+            response,
+        )
+
+    def test_get_file_status_response_skips_local_status_for_missing_row(self):
+        class FakeCursor:
+            def __init__(self):
+                self.executed = []
+
+            def execute(self, sql, params=()):
+                self.executed.append((sql, params))
+
+            def fetchone(self):
+                return None
+
+        class FakeFileDb:
+            def __init__(self):
+                self.cursor = FakeCursor()
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+        fake_db = FakeFileDb()
+        with (
+            patch("backend.services.file_workflow_service._file_db", return_value=fake_db),
+            patch("backend.services.file_workflow_service._get_download_file_status") as get_download_file_status,
+        ):
+            response = _get_file_status_response("group-1", 123)
+
+        self.assertEqual((123, "group-1"), fake_db.cursor.executed[0][1])
+        get_download_file_status.assert_not_called()
+        self.assertEqual(
+            {
+                "file_id": 123,
+                "name": "file_123",
+                "size": 0,
+                "download_status": "not_collected",
+                "local_exists": False,
+                "local_size": 0,
+                "local_path": None,
+                "is_complete": False,
+                "message": "文件信息未收集，请先运行文件收集任务",
             },
             response,
         )

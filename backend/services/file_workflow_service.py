@@ -219,18 +219,25 @@ def _download_result_stat_key(result: Any) -> str:
     return "failed"
 
 
-def _get_file_status_response(group_id: str, file_id: int) -> dict:
-    with _file_db(group_id) as file_db:
-        file_db.cursor.execute(
-            """
+_FILE_STATUS_QUERY = """
             SELECT name, size, download_status
             FROM files
             WHERE file_id = ? AND group_id = ?
-        """,
-            (file_id, _query_group_id(group_id)),
-        )
+        """
 
-        result = file_db.cursor.fetchone()
+
+def _fetch_file_status_row(
+    file_db: ZSXQFileDatabase,
+    group_id: str,
+    file_id: int,
+) -> Optional[tuple]:
+    file_db.cursor.execute(_FILE_STATUS_QUERY, (file_id, _query_group_id(group_id)))
+    return file_db.cursor.fetchone()
+
+
+def _get_file_status_response(group_id: str, file_id: int) -> dict:
+    with _file_db(group_id) as file_db:
+        result = _fetch_file_status_row(file_db, group_id, file_id)
 
         if not result:
             return _build_file_status_response(file_id, result)
