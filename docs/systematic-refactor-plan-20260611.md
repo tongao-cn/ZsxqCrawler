@@ -18441,6 +18441,48 @@ Result:
 - Full backend unittest discovery passed: 1089 tests, 15 skipped.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-15 - P1 single file download initialization stop helper
+
+Changed:
+
+- Added characterization coverage for the single-file download path stopped immediately after
+  downloader creation.
+- Added `_single_file_download_stopped_after_init()` and reused it from
+  `run_single_file_download_task_with_info()`.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- The initial running task update, downloader creation timing, stopped-task log text, early return,
+  absence of database lookup/download/status update after the stop check, cleanup behavior, route
+  behavior, fallback/legacy behavior, public APIs, and configuration semantics are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_file_routes_helpers.FileRoutesHelperTests.test_run_single_file_download_task_stops_after_downloader_creation -v
+uv run python -m py_compile backend\services\file_workflow_service.py tests\test_file_routes_helpers.py
+uv run python -m unittest tests.test_file_routes_helpers.FileRoutesHelperTests.test_run_single_file_download_task_stops_after_downloader_creation tests.test_file_routes_helpers.FileRoutesHelperTests.test_run_single_file_download_task_uses_database_file_info_and_marks_completed tests.test_file_routes_helpers.FileRoutesHelperTests.test_run_single_file_download_task_uses_request_info_fallback_for_skipped_file tests.test_file_routes_helpers.FileRoutesHelperTests.test_run_single_file_download_task_uses_file_id_fallback_for_failed_file -v
+uv run python -m unittest tests.test_file_routes_helpers -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run ruff check backend\services\file_workflow_service.py tests\test_file_routes_helpers.py --select F401,F841
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- New stopped-after-init characterization test passed against the original inline stop-check
+  implementation: 1 focused test.
+- `py_compile` passed.
+- Focused single-file download tests passed after extraction: 4 tests.
+- File route/helper tests passed: 72 tests.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- Full backend unittest discovery passed: 1090 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:

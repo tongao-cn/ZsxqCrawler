@@ -1124,6 +1124,13 @@ def _download_and_complete_single_file(
     _complete_single_file_download(task_id, downloader, file_id, file_info, result)
 
 
+def _single_file_download_stopped_after_init(task_id: str) -> bool:
+    if is_task_stopped(task_id):
+        add_task_log(task_id, "🛑 任务在初始化过程中被停止")
+        return True
+    return False
+
+
 def _complete_sync_files_from_topics_task(task_id: str, stats: Dict[str, Any]) -> None:
     update_task(task_id, "completed", "从话题同步文件记录完成", stats)
 
@@ -1140,8 +1147,7 @@ def run_single_file_download_task_with_info(
         update_task(task_id, "running", f"开始下载文件 (ID: {file_id})...")
         downloader = _create_file_downloader(task_id, group_id)
 
-        if is_task_stopped(task_id):
-            add_task_log(task_id, "🛑 任务在初始化过程中被停止")
+        if _single_file_download_stopped_after_init(task_id):
             return
 
         file_info = _resolve_single_download_file_info(

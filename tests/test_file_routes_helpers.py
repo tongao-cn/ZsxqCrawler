@@ -1947,6 +1947,34 @@ class FileRoutesHelperTests(unittest.TestCase):
         update_task.assert_any_call("task-1", "failed", "下载失败")
         safe_remove.assert_called_once_with("task-1")
 
+    def test_run_single_file_download_task_stops_after_downloader_creation(self):
+        from backend.services.file_workflow_service import run_single_file_download_task_with_info
+
+        downloader = FakeSingleFileDownloadTaskDownloader(
+            row=(123, "Db File.pdf", 456, 7),
+            download_result=True,
+        )
+
+        with (
+            patch("backend.services.file_workflow_service._create_file_downloader", return_value=downloader) as create_downloader,
+            patch("backend.services.file_workflow_service.update_task") as update_task,
+            patch("backend.services.file_workflow_service.add_task_log") as add_task_log,
+            patch("backend.services.file_workflow_service.is_task_stopped", return_value=True),
+            patch("backend.services.file_workflow_service._safe_remove_file_downloader") as safe_remove,
+        ):
+            run_single_file_download_task_with_info("task-1", "123", 123)
+
+        create_downloader.assert_called_once_with("task-1", "123")
+        self.assertEqual([], downloader.file_db.cursor.executed)
+        self.assertEqual([], downloader.download_calls)
+        self.assertEqual([], downloader.file_db.status_updates)
+        self.assertEqual(
+            [("task-1", "running", "开始下载文件 (ID: 123)...")],
+            [call.args for call in update_task.call_args_list],
+        )
+        add_task_log.assert_called_once_with("task-1", "🛑 任务在初始化过程中被停止")
+        safe_remove.assert_called_once_with("task-1")
+
     def test_load_filtered_download_file_records_keeps_default_search_and_limit_shape(self):
         class FakeCursor:
             def __init__(self):
