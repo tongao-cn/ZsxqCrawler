@@ -1028,6 +1028,20 @@ def run_filtered_file_download_task(
         _safe_remove_file_downloader(task_id)
 
 
+def _build_single_download_fallback_info(
+    task_id: str,
+    file_id: int,
+    file_name: Optional[str],
+    file_size: Optional[int],
+) -> Dict[str, Dict[str, Any]]:
+    if file_name and file_size is not None:
+        add_task_log(task_id, f"📄 文件库未命中，使用请求中的文件信息: {file_name} ({file_size} bytes)")
+        return _build_download_file_info(file_id, file_name, file_size)
+
+    add_task_log(task_id, f"📄 直接下载文件 ID: {file_id}")
+    return _build_download_file_info(file_id, f"file_{file_id}", 0)
+
+
 def _resolve_single_download_file_info(
     task_id: str,
     downloader: ZSXQFileDownloader,
@@ -1050,12 +1064,7 @@ def _resolve_single_download_file_info(
         _, db_file_name, db_file_size, download_count = result
         add_task_log(task_id, f"📄 从数据库获取文件信息: {db_file_name} ({db_file_size} bytes)")
         return _build_download_file_info(file_id, db_file_name, db_file_size, download_count)
-    if file_name and file_size is not None:
-        add_task_log(task_id, f"📄 文件库未命中，使用请求中的文件信息: {file_name} ({file_size} bytes)")
-        return _build_download_file_info(file_id, file_name, file_size)
-
-    add_task_log(task_id, f"📄 直接下载文件 ID: {file_id}")
-    return _build_download_file_info(file_id, f"file_{file_id}", 0)
+    return _build_single_download_fallback_info(task_id, file_id, file_name, file_size)
 
 
 def _complete_single_file_download(
