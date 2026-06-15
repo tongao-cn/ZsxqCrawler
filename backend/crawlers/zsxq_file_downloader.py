@@ -12,7 +12,7 @@ import json
 import os
 import random
 import time
-from typing import Dict, Optional, Any
+from typing import Dict, NamedTuple, Optional, Any
 
 import requests
 
@@ -155,6 +155,12 @@ from backend.storage.zsxq_file_database import ZSXQFileDatabase
 
 DOWNLOAD_URL_MAX_RETRIES = 10
 DOWNLOAD_URL_REQUEST_TIMEOUT_SECONDS = 30
+
+
+class DownloadUrlResponseDecision(NamedTuple):
+    download_url: Optional[str]
+    should_retry: bool
+    should_stop: bool
 
 
 def _query_group_id(group_id: str) -> Any:
@@ -628,15 +634,15 @@ class ZSXQFileDownloader:
         attempt: int,
         max_retries: int,
         headers: Dict[str, str],
-    ) -> tuple[Optional[str], bool, bool]:
+    ) -> DownloadUrlResponseDecision:
         print(f"   📊 响应状态: {response.status_code}")
 
         if response.status_code == 200:
             data, should_retry_json = self._parse_api_json_response(response, attempt, max_retries)
             if should_retry_json:
-                return None, True, False
+                return DownloadUrlResponseDecision(None, True, False)
             if not data:
-                return None, True, False
+                return DownloadUrlResponseDecision(None, True, False)
 
             if data.get('succeeded'):
                 download_url = self._handle_download_url_success_response(
@@ -646,7 +652,7 @@ class ZSXQFileDownloader:
                     headers,
                     response.status_code,
                 )
-                return download_url, False, False
+                return DownloadUrlResponseDecision(download_url, False, False)
 
             failure_class = self._handle_download_url_api_failure_response(
                 data,
@@ -658,12 +664,12 @@ class ZSXQFileDownloader:
             )
 
             if failure_class == API_FAILURE_PERMISSION_DENIED_1030:
-                return None, False, True
+                return DownloadUrlResponseDecision(None, False, True)
             if failure_class == API_FAILURE_RETRY:
-                return None, True, False
+                return DownloadUrlResponseDecision(None, True, False)
             if failure_class == API_FAILURE_NON_RETRY:
-                return None, False, True
-            return None, False, False
+                return DownloadUrlResponseDecision(None, False, True)
+            return DownloadUrlResponseDecision(None, False, False)
 
         http_failure_class = self._handle_download_url_http_failure_response(
             response.status_code,
@@ -672,10 +678,10 @@ class ZSXQFileDownloader:
             max_retries,
         )
         if http_failure_class == HTTP_FAILURE_RETRY:
-            return None, True, False
+            return DownloadUrlResponseDecision(None, True, False)
         if http_failure_class == HTTP_FAILURE_NON_RETRY:
-            return None, False, True
-        return None, False, False
+            return DownloadUrlResponseDecision(None, False, True)
+        return DownloadUrlResponseDecision(None, False, False)
 
     def _start_download_url_request(self, file_id: int) -> str:
         url = f"{self.base_url}/v2/files/{file_id}/download_url"
@@ -703,18 +709,18 @@ class ZSXQFileDownloader:
                     headers=headers,
                     timeout=DOWNLOAD_URL_REQUEST_TIMEOUT_SECONDS,
                 )
-                download_url, should_retry, should_stop = self._handle_download_url_response(
+                decision = self._handle_download_url_response(
                     response,
                     file_id,
                     attempt,
                     max_retries,
                     headers,
                 )
-                if download_url:
-                    return download_url
-                if should_retry:
+                if decision.download_url:
+                    return decision.download_url
+                if decision.should_retry:
                     continue
-                if should_stop:
+                if decision.should_stop:
                     return None
                     
             except Exception as e:
