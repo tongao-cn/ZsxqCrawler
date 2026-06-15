@@ -165,6 +165,14 @@ class DownloadUrlResponseDecision(NamedTuple):
     should_stop: bool
 
 
+class DownloadAttemptResult(NamedTuple):
+    success_result: Optional[bool]
+    failure_detail: Optional[tuple[str, str]]
+    file_name: str
+    safe_filename: str
+    file_path: str
+
+
 def _query_group_id(group_id: str) -> Any:
     return download_query_group_id(group_id)
 
@@ -751,13 +759,7 @@ class ZSXQFileDownloader:
 
         for attempt in range(download_retries):
             try:
-                (
-                    success_result,
-                    failure_detail,
-                    file_name,
-                    safe_filename,
-                    file_path,
-                ) = self._run_download_attempt(
+                attempt_result = self._run_download_attempt(
                     attempt,
                     download_retries,
                     file_id,
@@ -766,10 +768,14 @@ class ZSXQFileDownloader:
                     safe_filename,
                     file_path,
                 )
-                if success_result is False:
+                file_name = attempt_result.file_name
+                safe_filename = attempt_result.safe_filename
+                file_path = attempt_result.file_path
+
+                if attempt_result.success_result is False:
                     return False
-                if failure_detail:
-                    last_error_code, last_error = failure_detail
+                if attempt_result.failure_detail:
+                    last_error_code, last_error = attempt_result.failure_detail
                     continue
                 return True
 
@@ -793,20 +799,29 @@ class ZSXQFileDownloader:
         file_size: int,
         safe_filename: str,
         file_path: str,
-    ) -> tuple[Optional[bool], Optional[tuple[str, str]], str, str, str]:
+    ) -> DownloadAttemptResult:
         if attempt > 0:
             self._wait_before_download_retry(attempt, download_retries)
 
         download_url = self._get_download_url_or_mark_unavailable(file_id)
         if not download_url:
-            return False, None, file_name, safe_filename, file_path
+            return DownloadAttemptResult(False, None, file_name, safe_filename, file_path)
 
         response = self._request_download_response(download_url)
-        return self._handle_download_response(
-            response,
-            file_id,
+        success_result, failure_detail, file_name, safe_filename, file_path = (
+            self._handle_download_response(
+                response,
+                file_id,
+                file_name,
+                file_size,
+                safe_filename,
+                file_path,
+            )
+        )
+        return DownloadAttemptResult(
+            success_result,
+            failure_detail,
             file_name,
-            file_size,
             safe_filename,
             file_path,
         )
