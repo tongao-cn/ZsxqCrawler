@@ -1865,6 +1865,24 @@ class FileRoutesHelperTests(unittest.TestCase):
             [call.args for call in update_task.call_args_list],
         )
 
+    def test_run_sync_files_from_topics_task_stops_before_database_open(self):
+        from backend.services.file_workflow_service import run_sync_files_from_topics_task
+
+        with (
+            patch("backend.services.file_workflow_service.ZSXQDatabase") as create_db,
+            patch("backend.services.file_workflow_service.update_task") as update_task,
+            patch("backend.services.file_workflow_service.add_task_log") as add_task_log,
+            patch("backend.services.file_workflow_service.is_task_stopped", return_value=True),
+        ):
+            run_sync_files_from_topics_task("task-1", "123")
+
+        create_db.assert_not_called()
+        self.assertEqual(
+            [("task-1", "running", "开始从话题同步文件记录...")],
+            [call.args for call in update_task.call_args_list],
+        )
+        add_task_log.assert_called_once_with("task-1", "🛑 任务在初始化过程中被停止")
+
     def test_run_sync_files_from_topics_task_stops_after_backfill_without_completion(self):
         from backend.services.file_workflow_service import run_sync_files_from_topics_task
 

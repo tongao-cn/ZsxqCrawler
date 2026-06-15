@@ -18483,6 +18483,48 @@ Result:
 - Full backend unittest discovery passed: 1090 tests, 15 skipped.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-15 - P1 sync files from topics initialization stop helper
+
+Changed:
+
+- Added characterization coverage for the sync-files-from-topics task stopped before opening
+  `ZSXQDatabase`.
+- Added `_sync_files_from_topics_stopped_after_init()` and reused it from
+  `run_sync_files_from_topics_task()`.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- The initial running task update, stopped-task log text, early return, database construction
+  avoidance, backfill avoidance, completion avoidance, database cleanup behavior, route behavior,
+  fallback/legacy behavior, public APIs, and configuration semantics are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_file_routes_helpers.FileRoutesHelperTests.test_run_sync_files_from_topics_task_stops_before_database_open -v
+uv run python -m py_compile backend\services\file_workflow_service.py tests\test_file_routes_helpers.py
+uv run python -m unittest tests.test_file_routes_helpers.FileRoutesHelperTests.test_run_sync_files_from_topics_task_stops_before_database_open tests.test_file_routes_helpers.FileRoutesHelperTests.test_run_sync_files_from_topics_task_completes_with_backfill_stats tests.test_file_routes_helpers.FileRoutesHelperTests.test_run_sync_files_from_topics_task_stops_after_backfill_without_completion -v
+uv run python -m unittest tests.test_file_routes_helpers -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run ruff check backend\services\file_workflow_service.py tests\test_file_routes_helpers.py --select F401,F841
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- New stopped-before-database-open characterization test passed against the original inline
+  stop-check implementation: 1 focused test.
+- `py_compile` passed.
+- Focused sync-files-from-topics tests passed after extraction: 3 tests.
+- File route/helper tests passed: 73 tests.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- Full backend unittest discovery passed: 1091 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:

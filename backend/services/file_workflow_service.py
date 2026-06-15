@@ -1135,6 +1135,13 @@ def _complete_sync_files_from_topics_task(task_id: str, stats: Dict[str, Any]) -
     update_task(task_id, "completed", "从话题同步文件记录完成", stats)
 
 
+def _sync_files_from_topics_stopped_after_init(task_id: str) -> bool:
+    if is_task_stopped(task_id):
+        add_task_log(task_id, "🛑 任务在初始化过程中被停止")
+        return True
+    return False
+
+
 def run_single_file_download_task_with_info(
     task_id: str,
     group_id: str,
@@ -1170,8 +1177,7 @@ def run_sync_files_from_topics_task(task_id: str, group_id: str):
     topics_db = None
     try:
         update_task(task_id, "running", "开始从话题同步文件记录...")
-        if is_task_stopped(task_id):
-            add_task_log(task_id, "🛑 任务在初始化过程中被停止")
+        if _sync_files_from_topics_stopped_after_init(task_id):
             return
 
         topics_db = ZSXQDatabase(group_id)
