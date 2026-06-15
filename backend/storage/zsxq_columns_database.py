@@ -99,8 +99,10 @@ class ZSXQColumnsDatabase:
         if not column_data or not column_data.get('column_id'):
             return None
         
-        self.cursor.execute(_column_insert_statement(), _column_insert_params(group_id, column_data))
-        self.conn.commit()
+        self._execute_and_commit(
+            _column_insert_statement(),
+            _column_insert_params(group_id, column_data),
+        )
         return column_data.get('column_id')
     
     def get_columns(self, group_id: int) -> List[Dict[str, Any]]:
@@ -121,11 +123,10 @@ class ZSXQColumnsDatabase:
         if not topic_data or not topic_data.get('topic_id'):
             return None
         
-        self.cursor.execute(
+        self._execute_and_commit(
             _column_topic_insert_statement(),
             _column_topic_insert_params(column_id, group_id, topic_data),
         )
-        self.conn.commit()
         return topic_data.get('topic_id')
     
     def get_column_topics(self, column_id: int, group_id: Optional[Any] = None) -> List[Dict[str, Any]]:

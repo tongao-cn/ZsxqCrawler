@@ -19553,6 +19553,49 @@ Result:
 - Full backend unittest discovery passed: 1118 tests, 15 skipped.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-15 - P3 column insert commit helper reuse
+
+Changed:
+
+- Re-ran existing characterization coverage for `insert_column(...)`,
+  `insert_column_topic(...)`, and `insert_user(...)` skip/execute/commit behavior before
+  production changes.
+- Reused `_execute_and_commit(...)` from `insert_column(...)` and `insert_column_topic(...)`.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Empty/missing-ID skip branches still return `None` without SQL execution or commit.
+- Insert statement builders, parameter builders, return IDs, and commit counts are unchanged.
+- `insert_user(...)` remains intentionally uncommitted in this helper test slice.
+- No storage schema, public API, legacy path, fallback behavior, error semantics, or config
+  semantics changed.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_columns_database_helpers.ZSXQColumnsDatabaseHelperTests.test_column_topic_and_user_insert_methods_preserve_skip_params_and_commit -v
+uv run python -m py_compile backend\storage\zsxq_columns_database.py tests\test_zsxq_columns_database_helpers.py
+uv run python -m unittest tests.test_zsxq_columns_database_helpers.ZSXQColumnsDatabaseHelperTests.test_column_topic_and_user_insert_methods_preserve_skip_params_and_commit -v
+uv run python -m unittest tests.test_zsxq_columns_database_helpers -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run ruff check backend\storage\zsxq_columns_database.py tests\test_zsxq_columns_database_helpers.py --select F401,F841
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- Existing column insert characterization test passed before extraction: 1 focused test.
+- `py_compile` passed.
+- Focused column insert test passed after extraction: 1 test.
+- ZSXQ columns database helper tests passed: 78 tests.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- Full backend unittest discovery passed: 1118 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:
