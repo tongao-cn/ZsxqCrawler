@@ -23172,6 +23172,49 @@ Result:
 - Full backend unittest discovery passed in the current worktree: 1160 tests, 15 skipped.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-15 - P9 database stats row result naming cleanup
+
+Changed:
+
+- Added characterization coverage for database stats row conversion, locking total-size empty/zero
+  handling, time-range positive-only handling, tuple-compatible named result shape, and malformed
+  row error behavior.
+- Introduced internal `DatabaseStatsTotalSize` and `DatabaseStatsTimeRange` `NamedTuple` results.
+- Extracted `_database_stats_total_size(...)` and `_database_stats_time_range(...)` helpers.
+- Replaced direct positional result usage in database stats printing with named result fields.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Database stats query order/params, optional total-size/time-range output visibility, printed text,
+  zero/empty-row suppression, malformed-row exception behavior, public API, fallback/legacy
+  behavior, error semantics, call order, config semantics, and task-level behavior are unchanged.
+- New characterization tests cover row conversion boundaries that were previously only partially
+  covered through `show_database_stats(...)` output assertions.
+
+Verification:
+
+```powershell
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderDatabaseStatsTests.test_database_stats_total_size_preserves_empty_zero_and_truthy_values tests.test_zsxq_file_downloader_helpers.FileDownloaderDatabaseStatsTests.test_database_stats_time_range_preserves_positive_only_named_shape tests.test_zsxq_file_downloader_helpers.FileDownloaderDatabaseStatsTests.test_database_stats_time_range_preserves_malformed_row_errors tests.test_zsxq_file_downloader_helpers.FileDownloaderDatabaseStatsTests.test_show_database_stats_preserves_query_order_and_output_shape tests.test_zsxq_file_downloader_helpers.FileDownloaderDatabaseStatsTests.test_show_database_stats_omits_optional_sections_when_empty -v
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run ruff check backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py --select F401,F841
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- `py_compile` passed.
+- Focused database stats row tests passed: 5 tests.
+- ZSXQ file downloader helper tests passed: 185 tests.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- Full backend unittest discovery passed in the current worktree: 1163 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:

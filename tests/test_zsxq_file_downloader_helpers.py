@@ -8,7 +8,11 @@ import json
 from pathlib import Path
 from unittest.mock import patch
 
-from backend.crawlers.zsxq_file_downloader import ZSXQFileDownloader
+from backend.crawlers.zsxq_file_downloader import (
+    ZSXQFileDownloader,
+    _database_stats_time_range,
+    _database_stats_total_size,
+)
 from backend.crawlers.zsxq_file_downloader_helpers import (
     API_FAILURE_NON_RETRY,
     API_FAILURE_PERMISSION_DENIED_1030,
@@ -1746,6 +1750,37 @@ class FileDownloaderDatabaseDownloadTests(unittest.TestCase):
 
 
 class FileDownloaderDatabaseStatsTests(unittest.TestCase):
+    def test_database_stats_total_size_preserves_empty_zero_and_truthy_values(self):
+        self.assertEqual(0, _database_stats_total_size(None))
+        self.assertEqual(0, _database_stats_total_size(()))
+        self.assertEqual(0, _database_stats_total_size((0,)))
+        self.assertEqual(0, _database_stats_total_size((None,)))
+        self.assertEqual(2048, _database_stats_total_size((2048,)))
+        self.assertEqual(2048, _database_stats_total_size((2048, "ignored")))
+
+    def test_database_stats_time_range_preserves_positive_only_named_shape(self):
+        self.assertIsNone(_database_stats_time_range(None))
+        self.assertIsNone(_database_stats_time_range(()))
+        self.assertIsNone(_database_stats_time_range((None, None, 0)))
+
+        time_range = _database_stats_time_range(
+            ("2026-05-01 09:00:00", "2026-05-07 10:00:00", 2)
+        )
+
+        self.assertEqual(("2026-05-01 09:00:00", "2026-05-07 10:00:00", 2), time_range)
+        self.assertEqual("2026-05-01 09:00:00", time_range.min_time)
+        self.assertEqual("2026-05-07 10:00:00", time_range.max_time)
+        self.assertEqual(2, time_range.time_count)
+
+    def test_database_stats_time_range_preserves_malformed_row_errors(self):
+        with self.assertRaises(IndexError):
+            _database_stats_time_range(("2026-05-01 09:00:00", "2026-05-07 10:00:00"))
+
+        with self.assertRaises(ValueError):
+            _database_stats_time_range(
+                ("2026-05-01 09:00:00", "2026-05-07 10:00:00", 2, "extra")
+            )
+
     def test_show_database_stats_preserves_query_order_and_output_shape(self):
         downloader = object.__new__(ZSXQFileDownloader)
         downloader.group_id = "511"

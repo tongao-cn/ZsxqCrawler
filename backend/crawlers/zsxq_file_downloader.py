@@ -227,8 +227,32 @@ class DatabaseDownloadRow(NamedTuple):
     create_time: Any
 
 
+class DatabaseStatsTotalSize(NamedTuple):
+    total_size: Any
+
+
+class DatabaseStatsTimeRange(NamedTuple):
+    min_time: Any
+    max_time: Any
+    time_count: Any
+
+
 def _query_group_id(group_id: str) -> Any:
     return download_query_group_id(group_id)
+
+
+def _database_stats_total_size(result: Any) -> Any:
+    if not result or not result[0]:
+        return 0
+    return DatabaseStatsTotalSize(result[0]).total_size
+
+
+def _database_stats_time_range(result: Any) -> Optional[DatabaseStatsTimeRange]:
+    if not result or result[2] <= 0:
+        return None
+
+    min_time, max_time, time_count = result
+    return DatabaseStatsTimeRange(min_time, max_time, time_count)
 
 
 class ZSXQFileDownloader:
@@ -1954,7 +1978,7 @@ class ZSXQFileDownloader:
         query, params = database_stats_total_size_query(_query_group_id(self.group_id))
         self.file_db.cursor.execute(query, params)
         result = self.file_db.cursor.fetchone()
-        total_size = result[0] if result and result[0] else 0
+        total_size = _database_stats_total_size(result)
 
         if total_size > 0:
             print(f"💾 总文件大小: {total_size/1024/1024:.2f} MB")
@@ -1970,13 +1994,13 @@ class ZSXQFileDownloader:
         query, params = database_stats_time_range_query(_query_group_id(self.group_id))
         self.file_db.cursor.execute(query, params)
         time_result = self.file_db.cursor.fetchone()
+        time_range = _database_stats_time_range(time_result)
 
-        if time_result and time_result[2] > 0:
-            min_time, max_time, time_count = time_result
+        if time_range:
             print(f"\n⏰ 文件时间范围:")
-            print(f"   最早文件: {min_time}")
-            print(f"   最新文件: {max_time}")
-            print(f"   有时间信息的文件: {time_count:,}")
+            print(f"   最早文件: {time_range.min_time}")
+            print(f"   最新文件: {time_range.max_time}")
+            print(f"   有时间信息的文件: {time_range.time_count:,}")
 
     def _print_database_api_response_stats(self) -> None:
         self.file_db.cursor.execute(database_stats_api_response_query())
