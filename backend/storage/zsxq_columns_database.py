@@ -305,14 +305,12 @@ class ZSXQColumnsDatabase:
     def update_video_cover_path(self, video_id: int, local_path: str):
         """更新视频封面本地缓存路径"""
         sql, params = _video_cover_path_update(video_id, local_path)
-        self.cursor.execute(sql, params)
-        self.conn.commit()
+        self._execute_and_commit(sql, params)
     
     def update_video_download_status(self, video_id: int, status: str, video_url: str = None, local_path: str = None):
         """更新视频下载状态"""
         sql, params = _video_download_status_update(video_id, status, video_url, local_path)
-        self.cursor.execute(sql, params)
-        self.conn.commit()
+        self._execute_and_commit(sql, params)
 
     def _fetch_optional_params_rows(self, sql: str, params: Any):
         if params:
@@ -327,6 +325,10 @@ class ZSXQColumnsDatabase:
         else:
             self.cursor.execute(sql)
         return self.cursor.fetchone()
+
+    def _execute_and_commit(self, sql: str, params: Any):
+        self.cursor.execute(sql, params)
+        self.conn.commit()
 
     def _fetch_mapped_rows(
         self,
@@ -380,8 +382,7 @@ class ZSXQColumnsDatabase:
         """更新文件下载状态"""
         group_id = _group_id_param(self.group_id)
         sql, params = _file_download_status_update(file_id, status, group_id, local_path)
-        self.cursor.execute(sql, params)
-        self.conn.commit()
+        self._execute_and_commit(sql, params)
     
     def get_pending_files(self, group_id: int = None) -> List[Dict[str, Any]]:
         """获取待下载的文件列表"""
@@ -393,8 +394,7 @@ class ZSXQColumnsDatabase:
     def update_image_local_path(self, image_id: int, local_path: str):
         """更新图片本地缓存路径"""
         sql, params = _image_local_path_update(image_id, local_path)
-        self.cursor.execute(sql, params)
-        self.conn.commit()
+        self._execute_and_commit(sql, params)
     
     def get_uncached_images(self, group_id: int = None) -> List[Dict[str, Any]]:
         """获取未缓存的图片列表"""
