@@ -18662,6 +18662,50 @@ Result:
 - Full backend unittest discovery passed: 1097 tests, 15 skipped.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-15 - P1 download records item helper
+
+Changed:
+
+- Added direct characterization coverage for `_run_download_records()` per-record logging,
+  downloader payload shape, result-to-stat mapping, in-place stats mutation, and stop-before-next
+  record behavior.
+- Added `_download_record_for_task()` and reused it from `_run_download_records()`.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- `_run_download_records()` still checks the stopped state before each record, emits the same stop
+  log text, logs the same per-record progress messages, passes the same downloader payload shape,
+  mutates the same stats dictionary, returns the same stats object, and preserves selected /
+  filtered download route behavior, fallback/legacy behavior, public APIs, and configuration
+  semantics.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_file_routes_helpers.FileRoutesHelperTests.test_run_download_records_updates_stats_logs_and_payloads tests.test_file_routes_helpers.FileRoutesHelperTests.test_run_download_records_stops_before_next_record -v
+uv run python -m py_compile backend\services\file_workflow_service.py tests\test_file_routes_helpers.py
+uv run python -m unittest tests.test_file_routes_helpers.FileRoutesHelperTests.test_run_download_records_updates_stats_logs_and_payloads tests.test_file_routes_helpers.FileRoutesHelperTests.test_run_download_records_stops_before_next_record tests.test_file_routes_helpers.FileRoutesHelperTests.test_complete_download_records_task_updates_completion_when_running tests.test_file_routes_helpers.FileRoutesHelperTests.test_complete_download_records_task_skips_completion_when_stopped_after_records -v
+uv run python -m unittest tests.test_file_routes_helpers -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run ruff check backend\services\file_workflow_service.py tests\test_file_routes_helpers.py --select F401,F841
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- New `_run_download_records()` characterization tests passed against the original inline
+  per-record implementation: 2 focused tests.
+- `py_compile` passed.
+- Focused download-record and completion-guard tests passed after extraction: 4 tests.
+- File route/helper tests passed: 81 tests.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- Full backend unittest discovery passed: 1099 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:

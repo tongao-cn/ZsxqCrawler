@@ -18,6 +18,7 @@ from backend.services.file_workflow_service import (
     _load_filtered_download_file_records,
     _query_group_id,
     _resolve_download_record_status,
+    _run_download_records,
     _unique_int_file_ids,
 )
 
@@ -1998,6 +1999,105 @@ class FileRoutesHelperTests(unittest.TestCase):
 
         run_download_records.assert_called_once_with("task-1", downloader, records, stats)
         update_task.assert_not_called()
+
+    def test_run_download_records_updates_stats_logs_and_payloads(self):
+        class FakeDownloader:
+            def __init__(self):
+                self.results = [True, "skipped", False]
+                self.download_calls = []
+
+            def download_file(self, file_info):
+                self.download_calls.append(file_info)
+                return self.results.pop(0)
+
+        downloader = FakeDownloader()
+        records = [
+            (101, "First.pdf", 123, 7),
+            (102, "Second.pdf", 456, 0),
+            (103, "Third.pdf", 789, 2),
+        ]
+        stats = _build_download_task_stats(total_files=3, found=3)
+
+        with (
+            patch("backend.services.file_workflow_service.is_task_stopped", return_value=False),
+            patch("backend.services.file_workflow_service.add_task_log") as add_task_log,
+        ):
+            result = _run_download_records("task-1", downloader, records, stats)
+
+        self.assertIs(result, stats)
+        self.assertEqual(
+            [
+                {"file": {"id": 101, "name": "First.pdf", "size": 123, "download_count": 7}},
+                {"file": {"id": 102, "name": "Second.pdf", "size": 456, "download_count": 0}},
+                {"file": {"id": 103, "name": "Third.pdf", "size": 789, "download_count": 2}},
+            ],
+            downloader.download_calls,
+        )
+        self.assertEqual(
+            {
+                "total_files": 3,
+                "found": 3,
+                "missing": 0,
+                "downloaded": 1,
+                "skipped": 1,
+                "failed": 1,
+            },
+            stats,
+        )
+        self.assertEqual(
+            [
+                ("task-1", "【1/3】First.pdf"),
+                ("task-1", "【2/3】Second.pdf"),
+                ("task-1", "【3/3】Third.pdf"),
+            ],
+            [call.args for call in add_task_log.call_args_list],
+        )
+
+    def test_run_download_records_stops_before_next_record(self):
+        class FakeDownloader:
+            def __init__(self):
+                self.download_calls = []
+
+            def download_file(self, file_info):
+                self.download_calls.append(file_info)
+                return True
+
+        downloader = FakeDownloader()
+        records = [
+            (101, "First.pdf", 123, 7),
+            (102, "Second.pdf", 456, 0),
+        ]
+        stats = _build_download_task_stats(total_files=2, found=2)
+
+        with (
+            patch("backend.services.file_workflow_service.is_task_stopped", side_effect=[False, True]),
+            patch("backend.services.file_workflow_service.add_task_log") as add_task_log,
+        ):
+            result = _run_download_records("task-1", downloader, records, stats)
+
+        self.assertIs(result, stats)
+        self.assertEqual(
+            [{"file": {"id": 101, "name": "First.pdf", "size": 123, "download_count": 7}}],
+            downloader.download_calls,
+        )
+        self.assertEqual(
+            {
+                "total_files": 2,
+                "found": 2,
+                "missing": 0,
+                "downloaded": 1,
+                "skipped": 0,
+                "failed": 0,
+            },
+            stats,
+        )
+        self.assertEqual(
+            [
+                ("task-1", "【1/2】First.pdf"),
+                ("task-1", "🛑 下载任务被停止"),
+            ],
+            [call.args for call in add_task_log.call_args_list],
+        )
 
     def test_run_sync_files_from_topics_task_completes_with_backfill_stats(self):
         from backend.services.file_workflow_service import run_sync_files_from_topics_task

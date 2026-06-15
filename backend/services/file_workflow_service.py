@@ -945,17 +945,30 @@ def _run_download_records(
     records: Sequence[tuple[int, str, int, int]],
     stats: Dict[str, int],
 ) -> Dict[str, int]:
-    for index, (file_id, file_name, file_size, download_count) in enumerate(records, 1):
+    total_records = len(records)
+    for index, record in enumerate(records, 1):
         if is_task_stopped(task_id):
             add_task_log(task_id, "🛑 下载任务被停止")
             return stats
 
-        add_task_log(task_id, f"【{index}/{len(records)}】{file_name}")
-        result = downloader.download_file(
-            _build_download_file_info(file_id, file_name, file_size, download_count)
-        )
-        stats[_download_result_stat_key(result)] += 1
+        _download_record_for_task(task_id, downloader, record, index, total_records, stats)
     return stats
+
+
+def _download_record_for_task(
+    task_id: str,
+    downloader: ZSXQFileDownloader,
+    record: tuple[int, str, int, int],
+    index: int,
+    total_records: int,
+    stats: Dict[str, int],
+) -> None:
+    file_id, file_name, file_size, download_count = record
+    add_task_log(task_id, f"【{index}/{total_records}】{file_name}")
+    result = downloader.download_file(
+        _build_download_file_info(file_id, file_name, file_size, download_count)
+    )
+    stats[_download_result_stat_key(result)] += 1
 
 
 def _complete_download_records_if_running(
