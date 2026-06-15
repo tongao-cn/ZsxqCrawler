@@ -1392,6 +1392,50 @@ class ZSXQFileDownloader:
 
         return data, files, next_index
 
+    def _collect_time_collection_page(
+        self,
+        page_count: int,
+        current_index: Optional[Any],
+        sort: str,
+        enable_time_dedupe: bool,
+        db_latest_time: Optional[Any],
+        total_imported_stats: Dict[str, int],
+        stop_before_time: Optional[datetime.datetime],
+    ) -> Optional[Any]:
+        self.log(time_collection_page_message(page_count))
+
+        page = self._fetch_time_collection_page(page_count, current_index, sort)
+        if page is None:
+            return None
+
+        data, files, next_index = page
+
+        dedupe_result = self._apply_time_collection_dedupe_plan(
+            data,
+            files,
+            enable_time_dedupe,
+            db_latest_time,
+        )
+        if dedupe_result["should_stop_before_insert"]:
+            return None
+        should_stop_after_insert = dedupe_result["should_stop_after_insert"]
+
+        if not self._import_time_collection_page(
+            data,
+            page_count,
+            should_stop_after_insert,
+            total_imported_stats,
+        ):
+            return None
+
+        if should_stop_after_insert:
+            return None
+
+        if self._crossed_time_collection_stop_before(files, stop_before_time):
+            return None
+
+        return self._next_time_collection_index(next_index)
+
     def _finalize_time_collection_result(
         self,
         initial_files: int,
@@ -1495,40 +1539,15 @@ class ZSXQFileDownloader:
                     break
 
                 page_count += 1
-                self.log(time_collection_page_message(page_count))
-
-                page = self._fetch_time_collection_page(page_count, current_index, sort)
-                if page is None:
-                    break
-
-                data, files, next_index = page
-
-                dedupe_result = self._apply_time_collection_dedupe_plan(
-                    data,
-                    files,
+                current_index = self._collect_time_collection_page(
+                    page_count,
+                    current_index,
+                    sort,
                     enable_time_dedupe,
                     db_latest_time,
-                )
-                if dedupe_result["should_stop_before_insert"]:
-                    break
-                should_stop_after_insert = dedupe_result["should_stop_after_insert"]
-
-                if not self._import_time_collection_page(
-                    data,
-                    page_count,
-                    should_stop_after_insert,
                     total_imported_stats,
-                ):
-                    break
-
-                # 如果本页有旧数据，插入新数据后停止
-                if should_stop_after_insert:
-                    break
-
-                if self._crossed_time_collection_stop_before(files, stop_before_time):
-                    break
-                
-                current_index = self._next_time_collection_index(next_index)
+                    stop_before_time,
+                )
                 if current_index is None:
                     break
 

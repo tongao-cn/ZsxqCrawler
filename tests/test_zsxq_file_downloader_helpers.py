@@ -994,6 +994,51 @@ class FileDownloaderPaginationTests(unittest.TestCase):
         self.assertEqual(2, stats["new_files"])
         self.assertEqual(2, stats["pages"])
 
+    def test_collect_files_by_time_preserves_loop_stop_after_next_page(self):
+        downloader = object.__new__(ZSXQFileDownloader)
+        downloader.group_id = "511"
+        downloader.file_db = TimeDedupeFileDb(None, initial_files=0, final_files=1)
+        downloader.logs = []
+        downloader.fetch_calls = []
+        downloader.stop_checks = 0
+        downloader.log = downloader.logs.append
+
+        def check_stop():
+            downloader.stop_checks += 1
+            return downloader.stop_checks >= 3
+
+        def fetch_file_list(**kwargs):
+            downloader.fetch_calls.append(kwargs)
+            return {
+                "resp_data": {
+                    "index": "next-page",
+                    "files": [{"file": {"file_id": 101, "create_time": "2026-05-03T10:00:00"}}],
+                }
+            }
+
+        downloader.check_stop = check_stop
+        downloader.fetch_file_list = fetch_file_list
+
+        with (
+            patch("backend.crawlers.zsxq_file_downloader.random.uniform", return_value=2.5) as uniform,
+            patch("backend.crawlers.zsxq_file_downloader.time.sleep") as sleep,
+        ):
+            stats = ZSXQFileDownloader.collect_files_by_time(downloader)
+
+        self.assertEqual(3, downloader.stop_checks)
+        self.assertEqual([{"count": 20, "index": None, "sort": "by_create_time"}], downloader.fetch_calls)
+        uniform.assert_called_once_with(2, 5)
+        sleep.assert_called_once_with(2.5)
+        self.assertIn("   ⏭️ 下一页时间戳: next-page", downloader.logs)
+        self.assertIn("🛑 文件收集任务被停止", downloader.logs)
+        self.assertLess(
+            downloader.logs.index("   ⏭️ 下一页时间戳: next-page"),
+            downloader.logs.index("🛑 文件收集任务被停止"),
+        )
+        self.assertEqual(1, stats["total_files"])
+        self.assertEqual(1, stats["new_files"])
+        self.assertEqual(1, stats["pages"])
+
     def test_collect_files_by_time_preserves_stop_before_boundary_log_and_break(self):
         downloader = object.__new__(ZSXQFileDownloader)
         downloader.group_id = "511"
