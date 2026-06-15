@@ -1485,6 +1485,28 @@ class ZSXQFileDownloader:
         self.file_db.cursor.execute(query_plan["query"], query_plan["params"])
         return self.file_db.cursor.fetchall()
 
+    def _download_database_file_rows(
+        self,
+        files_to_download: list[tuple[Any, ...]],
+        stats: Dict[str, int],
+    ) -> None:
+        total_files = len(files_to_download)
+        for i, file_row in enumerate(files_to_download, 1):
+            # 检查是否需要停止
+            if self.check_stop():
+                self.log("🛑 下载任务被停止")
+                break
+
+            try:
+                self._download_database_file_row(file_row, i, total_files, stats)
+            except KeyboardInterrupt:
+                self.log(f"⏹️ 用户中断下载")
+                break
+            except Exception as e:
+                self.log(f"   ❌ 处理文件异常: {e}")
+                stats['failed'] += 1
+                continue
+
     def download_files_from_database(
         self,
         max_files: Optional[int] = None,
@@ -1534,21 +1556,7 @@ class ZSXQFileDownloader:
 
         stats = download_result_stats(len(files_to_download))
 
-        for i, file_row in enumerate(files_to_download, 1):
-            # 检查是否需要停止
-            if self.check_stop():
-                self.log("🛑 下载任务被停止")
-                break
-
-            try:
-                self._download_database_file_row(file_row, i, len(files_to_download), stats)
-            except KeyboardInterrupt:
-                self.log(f"⏹️ 用户中断下载")
-                break
-            except Exception as e:
-                self.log(f"   ❌ 处理文件异常: {e}")
-                stats['failed'] += 1
-                continue
+        self._download_database_file_rows(files_to_download, stats)
 
         for message in database_download_completion_messages(stats):
             self.log(message)

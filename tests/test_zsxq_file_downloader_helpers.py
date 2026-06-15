@@ -1244,6 +1244,54 @@ class FileDownloaderDatabaseDownloadTests(unittest.TestCase):
         self.assertIn("   ❌ 下载失败", downloader.logs)
         self.assertEqual("   ❌ 失败: 1", downloader.logs[-1])
 
+    def test_download_files_from_database_preserves_stop_before_row_loop(self):
+        downloader = self._downloader_for_query_capture(
+            rows=[
+                (101, "first.pdf", 2048, 7, "2026-05-03 10:00:00"),
+                (102, "second.pdf", 1024, 9, "2026-05-02 10:00:00"),
+            ],
+        )
+        stop_checks = iter([False, True])
+        processed_rows = []
+        downloader.check_stop = lambda: next(stop_checks)
+        downloader._download_database_file_row = lambda *args: processed_rows.append(args)
+
+        stats = ZSXQFileDownloader.download_files_from_database(downloader)
+
+        self.assertEqual({"total_files": 2, "downloaded": 0, "skipped": 0, "failed": 0}, stats)
+        self.assertEqual([], processed_rows)
+        self.assertIn("📋 找到 2 个待下载文件", downloader.logs)
+        self.assertIn("🛑 下载任务被停止", downloader.logs)
+        self.assertEqual("   ❌ 失败: 0", downloader.logs[-1])
+
+    def test_download_files_from_database_preserves_row_exception_and_interrupt_handling(self):
+        downloader = self._downloader_for_query_capture(
+            rows=[
+                (101, "boom.pdf", 2048, 7, "2026-05-03 10:00:00"),
+                (102, "stop.pdf", 1024, 9, "2026-05-02 10:00:00"),
+                (103, "unused.pdf", 512, 1, "2026-05-01 10:00:00"),
+            ],
+        )
+        handled_rows = []
+
+        def handle_row(file_row, position, total_files, stats):
+            handled_rows.append((position, total_files, file_row[0]))
+            if position == 1:
+                raise RuntimeError("stable row failure")
+            if position == 2:
+                raise KeyboardInterrupt()
+            stats["downloaded"] += 1
+
+        downloader._download_database_file_row = handle_row
+
+        stats = ZSXQFileDownloader.download_files_from_database(downloader)
+
+        self.assertEqual({"total_files": 3, "downloaded": 0, "skipped": 0, "failed": 1}, stats)
+        self.assertEqual([(1, 3, 101), (2, 3, 102)], handled_rows)
+        self.assertIn("   ❌ 处理文件异常: stable row failure", downloader.logs)
+        self.assertIn("⏹️ 用户中断下载", downloader.logs)
+        self.assertEqual("   ❌ 失败: 1", downloader.logs[-1])
+
 
 class FileDownloaderDatabaseStatsTests(unittest.TestCase):
     def test_show_database_stats_preserves_query_order_and_output_shape(self):
