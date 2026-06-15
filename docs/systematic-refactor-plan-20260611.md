@@ -20624,6 +20624,51 @@ Result:
 - Full backend unittest discovery passed: 1132 tests, 15 skipped.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-15 - P2 article write helper reuse
+
+Changed:
+
+- Reused `_execute_statement(...)` from `_upsert_article(...)` for
+  `_article_insert_statement(...)`.
+- Confirmed existing characterization coverage for empty article payload skips, topic create-time
+  lookup order, missing create-time fallback, create-time failure propagation, and article SQL params
+  before production extraction.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- `_upsert_article(...)` still returns before DB calls when both title and article id are missing.
+- Article writes still read topic create time before building the article insert statement.
+- Missing topic create-time rows still pass an empty string as `created_at`.
+- Topic create-time read failures still propagate before any article write.
+- Public API, legacy paths, fallback behavior, error semantics, storage schema, SQL shape, params,
+  write order, and config semantics are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_upsert_article_uses_topic_create_time_and_preserves_empty_payload_skip tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_upsert_article_preserves_create_time_failure_propagation tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_import_articles_preserves_payload_priority_and_fallback tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_article_insert_statement_helper_preserves_sql_shape_and_params -v
+uv run python -m py_compile backend\storage\zsxq_database.py tests\test_zsxq_database_helpers.py
+uv run python -m unittest tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_upsert_article_uses_topic_create_time_and_preserves_empty_payload_skip tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_upsert_article_preserves_create_time_failure_propagation tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_import_articles_preserves_payload_priority_and_fallback tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_article_insert_statement_helper_preserves_sql_shape_and_params -v
+uv run python -m unittest tests.test_zsxq_database_helpers -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run ruff check backend\storage\zsxq_database.py tests\test_zsxq_database_helpers.py --select F401,F841
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- Existing article characterization coverage passed before production extraction: 4 focused tests.
+- `py_compile` passed.
+- Focused article tests passed after extraction: 4 tests.
+- ZSXQ database helper tests passed: 97 tests.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- Full backend unittest discovery passed: 1132 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:

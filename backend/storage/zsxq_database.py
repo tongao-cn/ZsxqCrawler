@@ -858,14 +858,14 @@ class ZSXQDatabase:
         
         created_at = self._fetch_topic_create_time_by_id(topic_id)
         
-        sql, params = _article_insert_statement(
+        self._execute_statement(
+            _article_insert_statement,
             topic_id,
             title,
             article_id,
             article_data,
             created_at,
         )
-        self.cursor.execute(sql, params)
 
     def _fetch_topic_create_time_by_id(self, topic_id: int) -> Any:
         sql, params = _topic_create_time_by_id_query(topic_id)
