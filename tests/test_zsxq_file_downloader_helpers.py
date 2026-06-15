@@ -742,6 +742,35 @@ class FileDownloaderPaginationTests(unittest.TestCase):
         self.assertEqual(1, stats["pages"])
         self.assertEqual(0, stats["files"])
 
+    def test_collect_files_by_time_stops_when_fetch_returns_empty_response(self):
+        downloader = object.__new__(ZSXQFileDownloader)
+        downloader.group_id = "511"
+        downloader.file_db = TimeDedupeFileDb(None, initial_files=0, final_files=0)
+        downloader.logs = []
+        downloader.fetch_calls = []
+        downloader.log = downloader.logs.append
+        downloader.check_stop = lambda: False
+
+        def fetch_file_list(**kwargs):
+            downloader.fetch_calls.append(kwargs)
+            return None
+
+        downloader.fetch_file_list = fetch_file_list
+
+        stats = ZSXQFileDownloader.collect_files_by_time(downloader)
+
+        self.assertEqual([{"count": 20, "index": None, "sort": "by_create_time"}], downloader.fetch_calls)
+        self.assertEqual([], downloader.file_db.imported_responses)
+        self.assertEqual(2, downloader.file_db.stats_calls)
+        self.assertIn("❌ 第1页获取失败，收集过程中断", downloader.logs)
+        self.assertIn("💾 已成功收集前0页的数据", downloader.logs)
+        self.assertNotIn("📭 没有更多文件", downloader.logs)
+        self.assertNotIn("   ⏭️ 下一页时间戳:", "\n".join(downloader.logs))
+        self.assertEqual(0, stats["total_files"])
+        self.assertEqual(0, stats["new_files"])
+        self.assertEqual(1, stats["pages"])
+        self.assertEqual(0, stats["files"])
+
     def test_collect_files_by_time_filters_old_files_and_stops_after_mixed_page(self):
         files = [
             {"file": {"file_id": 101, "create_time": "2026-05-03T10:00:00"}},

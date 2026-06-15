@@ -1353,6 +1353,31 @@ class ZSXQFileDownloader:
 
         time.sleep(random.uniform(2, 5))
         return next_page["next_index"]
+
+    def _fetch_time_collection_page(
+        self,
+        page_count: int,
+        current_index: Optional[Any],
+        sort: str,
+    ) -> Optional[tuple[Dict[str, Any], list[Dict[str, Any]], Optional[Any]]]:
+        data = self.fetch_file_list(count=20, index=current_index, sort=sort)
+        if not data:
+            for message in time_collection_fetch_failed_messages(page_count):
+                self.log(message)
+            return None
+
+        files, next_index = file_list_response_page(data)
+        if not files:
+            self.log(time_collection_empty_page_message())
+            return None
+
+        self.log(time_collection_page_files_message(len(files)))
+        page_oldest, page_newest = summarize_page_time_range(files)
+        time_range_message = time_collection_page_time_range_message(page_oldest, page_newest)
+        if time_range_message:
+            self.log(time_range_message)
+
+        return data, files, next_index
     
     def collect_files_by_time(
         self,
@@ -1398,24 +1423,11 @@ class ZSXQFileDownloader:
                 page_count += 1
                 self.log(time_collection_page_message(page_count))
 
-                # 获取文件列表（按时间排序）
-                data = self.fetch_file_list(count=20, index=current_index, sort=sort)
-                if not data:
-                    for message in time_collection_fetch_failed_messages(page_count):
-                        self.log(message)
-                    break
-                
-                files, next_index = file_list_response_page(data)
-                
-                if not files:
-                    self.log(time_collection_empty_page_message())
+                page = self._fetch_time_collection_page(page_count, current_index, sort)
+                if page is None:
                     break
 
-                self.log(time_collection_page_files_message(len(files)))
-                page_oldest, page_newest = summarize_page_time_range(files)
-                time_range_message = time_collection_page_time_range_message(page_oldest, page_newest)
-                if time_range_message:
-                    self.log(time_range_message)
+                data, files, next_index = page
 
                 dedupe_result = self._apply_time_collection_dedupe_plan(
                     data,

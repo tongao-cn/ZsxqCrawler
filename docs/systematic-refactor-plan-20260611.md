@@ -21682,6 +21682,56 @@ Result:
 - Full backend unittest discovery passed in the current worktree: 1142 tests, 15 skipped.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-15 - P9 time collection fetch-page helper extraction
+
+Changed:
+
+- Added characterization coverage for `collect_files_by_time(...)` when the time-page fetch returns
+  an empty response.
+- The new test locks fetch call parameters, fetch-failure log text, no-import behavior,
+  no-next-page behavior, final stats lookup, page count, and zero imported file stats.
+- Extracted `_fetch_time_collection_page(...)` from `collect_files_by_time(...)` in
+  `ZSXQFileDownloader`.
+- Kept the existing `fetch_file_list(count=20, index=current_index, sort=sort)` call,
+  `file_list_response_page(...)` parsing, fetch-failure logs, empty-page log, page file-count log,
+  page time-range log, and loop break behavior.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Fetch failures still log both existing failure messages, count the attempted page, skip import,
+  skip next-page handling, and still run final database stats/summary generation.
+- Empty pages still log the same empty-page message and stop before import.
+- Successful pages still log file count and optional time range before dedupe/import processing.
+- Public API, fallback behavior, legacy behavior, error semantics, log text, import order, paging
+  order, response mutation semantics, sleep behavior, stats shape, config semantics, and task-level
+  behavior are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderPaginationTests.test_collect_files_by_time_stops_when_fetch_returns_empty_response tests.test_zsxq_file_downloader_helpers.FileDownloaderPaginationTests.test_collect_files_by_time_preserves_next_index_sleep_and_last_page_log -v
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderPaginationTests.test_collect_files_by_time_stops_when_fetch_returns_empty_response tests.test_zsxq_file_downloader_helpers.FileDownloaderPaginationTests.test_collect_files_by_time_preserves_next_index_sleep_and_last_page_log tests.test_zsxq_file_downloader_helpers.FileDownloaderPaginationTests.test_collect_files_by_time_preserves_stop_before_boundary_log_and_break tests.test_zsxq_file_downloader_helpers.FileDownloaderPaginationTests.test_collect_files_by_time_filters_old_files_and_stops_after_mixed_page -v
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run ruff check backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py --select F401,F841
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- New fetch-failure characterization coverage passed before production extraction: 2 focused tests.
+- `py_compile` passed.
+- Focused time-collection fetch-page tests passed after extraction: 4 tests.
+- ZSXQ file downloader helper tests passed: 165 tests.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- Full backend unittest discovery passed in the current worktree: 1143 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:
