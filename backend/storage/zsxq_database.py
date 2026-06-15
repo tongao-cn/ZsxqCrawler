@@ -999,14 +999,17 @@ class ZSXQDatabase:
     def _link_topic_tag(self, topic_id: int, tag_id: int):
         """关联话题和标签"""
         try:
-            self._execute_timestamped_statement(_insert_topic_tag_statement, topic_id, tag_id)
-            
-            # 更新标签的话题计数
-            sql, params = _refresh_tag_topic_count_statement(tag_id)
-            self.cursor.execute(sql, params)
-            
+            self._insert_topic_tag_relation(topic_id, tag_id)
+            self._refresh_tag_topic_count(tag_id)
         except Exception as e:
             print(f"关联话题标签失败: {e}")
+
+    def _insert_topic_tag_relation(self, topic_id: int, tag_id: int):
+        self._execute_timestamped_statement(_insert_topic_tag_statement, topic_id, tag_id)
+
+    def _refresh_tag_topic_count(self, tag_id: int):
+        sql, params = _refresh_tag_topic_count_statement(tag_id)
+        self.cursor.execute(sql, params)
 
     def _fetch_mapped_rows(
         self,

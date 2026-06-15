@@ -19909,6 +19909,54 @@ Result:
 - Full backend unittest discovery passed: 1120 tests, 15 skipped.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-15 - P2 topic tag link helper extraction
+
+Changed:
+
+- Re-ran existing characterization coverage for `_link_topic_tag(...)` relation insert,
+  timestamp shape, tag topic-count refresh, and swallowed exception fallback before production
+  changes.
+- Extracted `_insert_topic_tag_relation(...)` and `_refresh_tag_topic_count(...)` in
+  `backend/storage/zsxq_database.py`.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- `_link_topic_tag(...)` still inserts the topic/tag relation before refreshing the tag's
+  `topic_count`.
+- Relation insert still uses `_insert_topic_tag_statement(...)` through the Beijing timestamp
+  helper.
+- Count refresh still uses `_refresh_tag_topic_count_statement(...)`.
+- The same outer `try/except` still prints `关联话题标签失败: ...` and swallows exceptions from
+  either write.
+- SQL shapes, timestamp generation, tag import linking, storage schema, public API, legacy paths,
+  fallback behavior, error semantics, and config semantics are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_link_topic_tag_inserts_relation_refreshes_count_and_swallows_errors tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_tag_statement_helpers_preserve_sql_shape_and_params -v
+uv run python -m py_compile backend\storage\zsxq_database.py tests\test_zsxq_database_helpers.py
+uv run python -m unittest tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_link_topic_tag_inserts_relation_refreshes_count_and_swallows_errors tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_tag_statement_helpers_preserve_sql_shape_and_params tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_import_tags_preserves_text_sources_decode_dedupe_and_link_behavior -v
+uv run python -m unittest tests.test_zsxq_database_helpers -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run ruff check backend\storage\zsxq_database.py tests\test_zsxq_database_helpers.py --select F401,F841
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- Existing topic tag link characterization tests passed before extraction: 2 focused tests.
+- `py_compile` passed.
+- Focused topic tag link/import tests passed after extraction: 3 tests.
+- ZSXQ database helper tests passed: 85 tests.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- Full backend unittest discovery passed: 1120 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:
