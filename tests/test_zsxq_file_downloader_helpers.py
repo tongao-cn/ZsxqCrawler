@@ -3110,6 +3110,72 @@ class FileDownloaderDownloadTests(unittest.TestCase):
                 downloader.file_db.status_updates[-1],
             )
 
+    def test_finalize_download_body_result_preserves_stop_mismatch_and_success_paths(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            downloader = object.__new__(ZSXQFileDownloader)
+            downloader.file_db = FakeDownloadFileDb()
+            downloader.logs = []
+            downloader.log = downloader.logs.append
+            downloader.download_count = 0
+            downloader.current_batch_count = 0
+            interval_snapshots = []
+            downloader._apply_download_intervals = lambda: interval_snapshots.append(
+                (downloader.download_count, downloader.current_batch_count)
+            )
+
+            stopped_part = Path(temp_dir) / "stopped.pdf.part"
+            stopped_part.write_bytes(b"stop")
+            stopped = ZSXQFileDownloader._finalize_download_body_result(
+                downloader,
+                None,
+                4,
+                str(stopped_part),
+                101,
+                "stopped.pdf",
+                str(Path(temp_dir) / "stopped.pdf"),
+            )
+
+            self.assertEqual((False, None), stopped)
+            self.assertTrue(stopped_part.exists())
+            self.assertEqual([], downloader.file_db.status_updates)
+
+            mismatch_part = Path(temp_dir) / "mismatch.pdf.part"
+            mismatch_part.write_bytes(b"bad")
+            mismatch = ZSXQFileDownloader._finalize_download_body_result(
+                downloader,
+                3,
+                4,
+                str(mismatch_part),
+                102,
+                "mismatch.pdf",
+                str(Path(temp_dir) / "mismatch.pdf"),
+            )
+
+            self.assertEqual((None, ("size_mismatch", "文件大小不匹配: 预期4, 实际3")), mismatch)
+            self.assertFalse(mismatch_part.exists())
+            self.assertEqual(["   ⚠️ 文件大小不匹配: 预期4, 实际3"], downloader.logs)
+            self.assertEqual([], downloader.file_db.status_updates)
+
+            success_part = Path(temp_dir) / "memo.pdf.part"
+            success_path = Path(temp_dir) / "memo.pdf"
+            success_part.write_bytes(b"memo")
+            success = ZSXQFileDownloader._finalize_download_body_result(
+                downloader,
+                4,
+                4,
+                str(success_part),
+                103,
+                "memo.pdf",
+                str(success_path),
+            )
+
+            self.assertEqual((True, None), success)
+            self.assertEqual(b"memo", success_path.read_bytes())
+            self.assertFalse(success_part.exists())
+            self.assertEqual((103, "completed", str(success_path)), downloader.file_db.status_updates[-1][:3])
+            self.assertEqual((1, 1), (downloader.download_count, downloader.current_batch_count))
+            self.assertEqual([(1, 1)], interval_snapshots)
+
     def test_write_download_response_body_preserves_progress_stop_and_empty_chunks(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir) / "memo.pdf.part"

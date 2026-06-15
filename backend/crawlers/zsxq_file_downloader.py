@@ -938,6 +938,24 @@ class ZSXQFileDownloader:
             total_size,
             file_id,
         )
+        return self._finalize_download_body_result(
+            downloaded_size,
+            expected_size,
+            temp_path,
+            file_id,
+            safe_filename,
+            file_path,
+        )
+
+    def _finalize_download_body_result(
+        self,
+        downloaded_size: Optional[int],
+        expected_size: int,
+        temp_path: str,
+        file_id: int,
+        safe_filename: str,
+        file_path: str,
+    ) -> tuple[Optional[bool], Optional[tuple[str, str]]]:
         if downloaded_size is None:
             return False, None
 
