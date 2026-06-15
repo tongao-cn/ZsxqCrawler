@@ -165,6 +165,14 @@ class DownloadUrlResponseDecision(NamedTuple):
     should_stop: bool
 
 
+class DownloadFileTarget(NamedTuple):
+    file_id: int
+    file_name: str
+    file_size: int
+    safe_filename: str
+    file_path: str
+
+
 class DownloadAttemptResult(NamedTuple):
     success_result: Optional[bool]
     failure_detail: Optional[tuple[str, str]]
@@ -746,7 +754,11 @@ class ZSXQFileDownloader:
         if not prepared_file:
             return False
 
-        file_id, file_name, file_size, safe_filename, file_path = prepared_file
+        file_id = prepared_file.file_id
+        file_name = prepared_file.file_name
+        file_size = prepared_file.file_size
+        safe_filename = prepared_file.safe_filename
+        file_path = prepared_file.file_path
 
         # 🚀 优化：先检查本地文件，避免无意义的API请求
         existing_file_result = self._skip_existing_download_if_complete(file_id, file_path, file_size)
@@ -820,7 +832,7 @@ class ZSXQFileDownloader:
     def _prepare_download_file_target(
         self,
         file_info: Dict[str, Any],
-    ) -> Optional[tuple[int, str, int, str, str]]:
+    ) -> Optional[DownloadFileTarget]:
         file_data = download_file_data(file_info)
         file_id = file_data["file_id"]
         file_name = file_data["file_name"]
@@ -841,7 +853,7 @@ class ZSXQFileDownloader:
             return None
 
         safe_filename, file_path = download_target_path(self.download_dir, file_name, file_id)
-        return file_id, file_name, file_size, safe_filename, file_path
+        return DownloadFileTarget(file_id, file_name, file_size, safe_filename, file_path)
 
     def _skip_existing_download_if_complete(
         self,

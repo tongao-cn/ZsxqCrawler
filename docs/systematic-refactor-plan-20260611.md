@@ -22765,6 +22765,51 @@ Result:
 - Full backend unittest discovery passed in the current worktree: 1157 tests, 15 skipped.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-15 - P9 download file target naming cleanup
+
+Changed:
+
+- Introduced internal `DownloadFileTarget` `NamedTuple` for the result returned by
+  `_prepare_download_file_target(...)`.
+- Replaced positional five-tuple unpacking in `download_file(...)` with named attribute access for
+  `file_id`, `file_name`, `file_size`, `safe_filename`, and `file_path`.
+- Kept tuple-compatible return equality for direct helper tests while making production call sites
+  use named fields.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- File-info extraction, missing-file-ID early return, stop handling, target path generation,
+  existing-file skip behavior, retry/download call chain, status updates, public API, returned
+  values, fallback/legacy behavior, error semantics, printed/logged text, call order, config
+  semantics, and task-level behavior are unchanged.
+- No new characterization test was added in this slice because the existing direct helper test
+  compares `_prepare_download_file_target(...)` against the legacy tuple shape and the focused
+  download-file path tests cover the production call chain.
+
+Verification:
+
+```powershell
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_prepare_download_file_target_preserves_logs_target_and_early_returns tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_download_file_accepts_raw_file_id_payload tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_download_file_without_file_id_logs_and_returns_before_request tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_download_file_uses_safe_filename_for_local_target tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_download_file_skips_existing_matching_file_without_request -v
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run ruff check backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py --select F401,F841
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- `py_compile` passed.
+- Focused download target tests passed after cleanup: 5 tests.
+- ZSXQ file downloader helper tests passed: 179 tests.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- Full backend unittest discovery passed in the current worktree: 1157 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:
