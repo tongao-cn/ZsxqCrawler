@@ -21331,6 +21331,55 @@ Result:
 - Full backend unittest discovery passed in the current worktree: 1137 tests, 15 skipped.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-15 - P9 database download row fetch helper extraction
+
+Changed:
+
+- Extracted `_fetch_database_download_rows(...)` from `download_files_from_database(...)` in
+  `ZSXQFileDownloader`.
+- Added direct characterization coverage for the helper's `execute(query, params)` call and
+  `fetchall()` return shape.
+- Kept `database_download_query_plan(...)`, legacy `recent_days` fallback, filter logging, stop
+  check, empty-result handling, per-row download loop, and completion logging in the original
+  order.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Database download still builds the same SQL query plan, executes with the same params, fetches all
+  rows once, returns the same empty stats payload for no matches, and processes matching rows in the
+  same order.
+- Public API, fallback behavior, legacy behavior, error semantics, SQL shape, params, row tuple
+  shape, delay behavior, file download order, stats shape, config semantics, and task-level behavior
+  are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderDatabaseDownloadTests.test_download_files_from_database_preserves_filtered_query_shape_and_legacy_order_by tests.test_zsxq_file_downloader_helpers.FileDownloaderDatabaseDownloadTests.test_download_files_from_database_preserves_unfiltered_heat_sort_query_shape tests.test_zsxq_file_downloader_helpers.FileDownloaderDatabaseDownloadTests.test_download_files_from_database_preserves_legacy_recent_days_fallback_for_query_plan tests.test_zsxq_file_downloader_helpers.FileDownloaderDatabaseDownloadTests.test_download_files_from_database_preserves_result_stats_payloads_and_delays -v
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderDatabaseDownloadTests.test_fetch_database_download_rows_preserves_execute_params_and_fetch_shape tests.test_zsxq_file_downloader_helpers.FileDownloaderDatabaseDownloadTests.test_download_files_from_database_preserves_filtered_query_shape_and_legacy_order_by tests.test_zsxq_file_downloader_helpers.FileDownloaderDatabaseDownloadTests.test_download_files_from_database_preserves_unfiltered_heat_sort_query_shape tests.test_zsxq_file_downloader_helpers.FileDownloaderDatabaseDownloadTests.test_download_files_from_database_preserves_legacy_recent_days_fallback_for_query_plan tests.test_zsxq_file_downloader_helpers.FileDownloaderDatabaseDownloadTests.test_download_files_from_database_preserves_result_stats_payloads_and_delays -v
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run ruff check backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py --select F401,F841
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- Existing database-download characterization coverage passed before production extraction: 4
+  focused tests.
+- Focused database-download tests passed after extraction: 5 tests, including the new direct helper
+  characterization.
+- `py_compile` passed.
+- ZSXQ file downloader helper tests passed: 161 tests.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- Full backend unittest discovery passed in the current worktree: 1138 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:

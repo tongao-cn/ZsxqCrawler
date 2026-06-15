@@ -1478,6 +1478,13 @@ class ZSXQFileDownloader:
             stats['failed'] += 1
             self.log(f"   ❌ 下载失败")
 
+    def _fetch_database_download_rows(
+        self,
+        query_plan: Dict[str, Any],
+    ) -> list[tuple[Any, ...]]:
+        self.file_db.cursor.execute(query_plan["query"], query_plan["params"])
+        return self.file_db.cursor.fetchall()
+
     def download_files_from_database(
         self,
         max_files: Optional[int] = None,
@@ -1514,8 +1521,7 @@ class ZSXQFileDownloader:
         if self.check_stop():
             self.log("🛑 任务被停止")
             return download_result_stats()
-        self.file_db.cursor.execute(query_plan["query"], query_plan["params"])
-        files_to_download = self.file_db.cursor.fetchall()
+        files_to_download = self._fetch_database_download_rows(query_plan)
         
         if not files_to_download:
             self.log(f"📭 数据库中没有符合条件的文件可下载")

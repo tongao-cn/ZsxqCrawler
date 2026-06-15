@@ -1121,6 +1121,25 @@ class FileDownloaderDatabaseDownloadTests(unittest.TestCase):
     def _compact_sql(self, sql):
         return " ".join(sql.split())
 
+    def test_fetch_database_download_rows_preserves_execute_params_and_fetch_shape(self):
+        rows = [(101, "memo.pdf", 2048, 7, "2026-05-03 10:00:00")]
+        downloader = self._downloader_for_query_capture(rows=rows)
+        query_plan = {
+            "query": "SELECT id, name FROM files WHERE group_id = ?",
+            "params": (511,),
+        }
+
+        fetched_rows = ZSXQFileDownloader._fetch_database_download_rows(
+            downloader,
+            query_plan,
+        )
+
+        self.assertEqual(rows, fetched_rows)
+        self.assertEqual(
+            [("SELECT id, name FROM files WHERE group_id = ?", (511,))],
+            downloader.file_db.executed,
+        )
+
     def test_download_files_from_database_preserves_filtered_query_shape_and_legacy_order_by(self):
         downloader = self._downloader_for_query_capture()
 
