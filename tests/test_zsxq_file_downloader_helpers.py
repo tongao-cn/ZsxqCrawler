@@ -736,6 +736,10 @@ class FileDownloaderPaginationTests(unittest.TestCase):
 
         self.assertEqual(1, len(downloader.fetch_calls))
         self.assertEqual(1, downloader.file_db.import_calls)
+        self.assertEqual(2, downloader.file_db.stats_calls)
+        self.assertIn("   ❌ 第1页存储失败: stable import failure", downloader.logs)
+        self.assertNotIn("   ⏭️ 下一页时间戳: next-index", downloader.logs)
+        self.assertEqual(1, stats["pages"])
         self.assertEqual(0, stats["files"])
 
     def test_collect_files_by_time_filters_old_files_and_stops_after_mixed_page(self):

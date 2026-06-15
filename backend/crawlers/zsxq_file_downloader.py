@@ -1306,6 +1306,29 @@ class ZSXQFileDownloader:
             "should_stop_before_insert": False,
             "should_stop_after_insert": False,
         }
+
+    def _import_time_collection_page(
+        self,
+        data: Dict[str, Any],
+        page_count: int,
+        should_stop_after_insert: bool,
+        total_imported_stats: Dict[str, int],
+    ) -> bool:
+        try:
+            page_stats = self.file_db.import_file_response(data)
+            add_import_stats(total_imported_stats, page_stats)
+
+            for message in time_collection_page_import_messages(
+                page_count,
+                page_stats,
+                should_stop_after_insert,
+            ):
+                self.log(message)
+            return True
+
+        except Exception as e:
+            self.log(time_collection_storage_failed_message(page_count, e))
+            return False
     
     def collect_files_by_time(
         self,
@@ -1380,26 +1403,16 @@ class ZSXQFileDownloader:
                     break
                 should_stop_after_insert = dedupe_result["should_stop_after_insert"]
 
-                # 使用完整数据库导入整个API响应
-                try:
-                    page_stats = self.file_db.import_file_response(data)
+                if not self._import_time_collection_page(
+                    data,
+                    page_count,
+                    should_stop_after_insert,
+                    total_imported_stats,
+                ):
+                    break
 
-                    # 累计统计
-                    add_import_stats(total_imported_stats, page_stats)
-
-                    for message in time_collection_page_import_messages(
-                        page_count,
-                        page_stats,
-                        should_stop_after_insert,
-                    ):
-                        self.log(message)
-                    
-                    # 如果本页有旧数据，插入新数据后停止
-                    if should_stop_after_insert:
-                        break
-
-                except Exception as e:
-                    self.log(time_collection_storage_failed_message(page_count, e))
+                # 如果本页有旧数据，插入新数据后停止
+                if should_stop_after_insert:
                     break
 
                 if stop_before_time:
