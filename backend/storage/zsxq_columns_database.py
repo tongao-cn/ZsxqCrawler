@@ -408,8 +408,7 @@ class ZSXQColumnsDatabase:
         stats = _empty_stats()
 
         for key, sql, params in _stats_count_queries(group_id):
-            self.cursor.execute(sql, params)
-            stats[key] = self.cursor.fetchone()[0]
+            stats[key] = self._fetch_optional_params_row(sql, params)[0]
         
         return stats
     

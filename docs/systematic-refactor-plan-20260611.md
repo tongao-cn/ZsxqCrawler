@@ -19425,6 +19425,49 @@ Result:
 - Full backend unittest discovery passed: 1118 tests, 15 skipped.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-15 - P3 stats count row fetch helper reuse
+
+Changed:
+
+- Re-ran existing characterization coverage for `get_stats(...)` count result shape and
+  `_stats_count_queries(...)` order/group filters before production changes.
+- Reused `_fetch_optional_params_row(...)` inside `get_stats(...)` for each count query.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- `get_stats(...)` still iterates `_stats_count_queries(...)` in the same order, executes the same
+  SQL with the same group parameter tuple, and writes the same stat keys.
+- Missing count-row behavior remains equivalent: the count result is still indexed with `[0]`, so an
+  unexpected missing row is not silently swallowed.
+- No SQL text, storage schema, public API, legacy path, fallback behavior, or commit behavior
+  changed.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_columns_database_helpers.ZSXQColumnsDatabaseHelperTests.test_get_stats_preserves_count_result_shape tests.test_zsxq_columns_database_helpers.ZSXQColumnsDatabaseHelperTests.test_stats_count_queries_preserve_order_and_group_filter -v
+uv run python -m py_compile backend\storage\zsxq_columns_database.py tests\test_zsxq_columns_database_helpers.py
+uv run python -m unittest tests.test_zsxq_columns_database_helpers.ZSXQColumnsDatabaseHelperTests.test_get_stats_preserves_count_result_shape tests.test_zsxq_columns_database_helpers.ZSXQColumnsDatabaseHelperTests.test_stats_count_queries_preserve_order_and_group_filter tests.test_zsxq_columns_database_helpers.ZSXQColumnsDatabaseHelperTests.test_fetch_mapped_optional_row_preserves_execute_arity_and_none_shape -v
+uv run python -m unittest tests.test_zsxq_columns_database_helpers -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run ruff check backend\storage\zsxq_columns_database.py tests\test_zsxq_columns_database_helpers.py --select F401,F841
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- Existing stats characterization tests passed before extraction: 2 focused tests.
+- `py_compile` passed.
+- Focused stats/fetch helper tests passed after extraction: 3 tests.
+- ZSXQ columns database helper tests passed: 78 tests.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- Full backend unittest discovery passed: 1118 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:
