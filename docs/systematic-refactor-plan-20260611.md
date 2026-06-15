@@ -18184,6 +18184,51 @@ Result:
 - Full backend unittest discovery passed: 1087 tests, 15 skipped.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-15 - P1 sync files from topics completion helper
+
+Changed:
+
+- Added characterization coverage for `run_sync_files_from_topics_task()` successful completion and
+  the post-backfill stopped path.
+- Locked the current `ZSXQDatabase` construction, backfill call count, resource close behavior,
+  running update, completed update payload, and stopped-after-backfill behavior.
+- Added `_complete_sync_files_from_topics_task()` and reused it from
+  `run_sync_files_from_topics_task()`.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- The startup update, initialization stop handling, topics database construction, backfill call,
+  post-backfill stop check, completed task message, completed payload, failure handling, resource
+  cleanup, route behavior, fallback/legacy behavior, public APIs, and configuration semantics are
+  unchanged.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_file_routes_helpers.FileRoutesHelperTests.test_run_sync_files_from_topics_task_completes_with_backfill_stats tests.test_file_routes_helpers.FileRoutesHelperTests.test_run_sync_files_from_topics_task_stops_after_backfill_without_completion -v
+uv run python -m py_compile backend\services\file_workflow_service.py tests\test_file_routes_helpers.py
+uv run python -m unittest tests.test_file_routes_helpers.FileRoutesHelperTests.test_run_sync_files_from_topics_task_completes_with_backfill_stats tests.test_file_routes_helpers.FileRoutesHelperTests.test_run_sync_files_from_topics_task_stops_after_backfill_without_completion -v
+uv run python -m unittest tests.test_file_routes_helpers -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run ruff check backend\services\file_workflow_service.py tests\test_file_routes_helpers.py --select F401,F841
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- New sync-from-topics characterization tests passed against the original inline implementation:
+  2 focused tests.
+- `py_compile` passed.
+- Focused sync-from-topics tests passed after extraction: 2 tests.
+- File route/helper tests passed: 71 tests.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- Full backend unittest discovery passed: 1089 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:

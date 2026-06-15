@@ -1081,6 +1081,10 @@ def _complete_single_file_download(
         update_task(task_id, "failed", "下载失败")
 
 
+def _complete_sync_files_from_topics_task(task_id: str, stats: Dict[str, Any]) -> None:
+    update_task(task_id, "completed", "从话题同步文件记录完成", stats)
+
+
 def run_single_file_download_task_with_info(
     task_id: str,
     group_id: str,
@@ -1127,7 +1131,7 @@ def run_sync_files_from_topics_task(task_id: str, group_id: str):
         if is_task_stopped(task_id):
             return
 
-        update_task(task_id, "completed", "从话题同步文件记录完成", stats)
+        _complete_sync_files_from_topics_task(task_id, stats)
     except Exception as e:
         _fail_file_task(task_id, f"从话题同步文件记录失败: {e}", f"从话题同步文件记录失败: {e}")
     finally:

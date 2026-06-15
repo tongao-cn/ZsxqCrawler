@@ -119,6 +119,19 @@ class FakeSingleFileDownloadTaskDownloader:
         return self.download_result
 
 
+class FakeSyncFilesTopicsDb:
+    def __init__(self):
+        self.backfill_calls = 0
+        self.closed = False
+
+    def backfill_topic_files_to_file_database(self):
+        self.backfill_calls += 1
+        return {"files": 2, "topics": 3}
+
+    def close(self):
+        self.closed = True
+
+
 class FakeImageCacheManager:
     def __init__(self, result):
         self.result = result
@@ -1827,6 +1840,50 @@ class FileRoutesHelperTests(unittest.TestCase):
             [call.args for call in update_task.call_args_list],
         )
         safe_remove.assert_called_once_with("task-1")
+
+    def test_run_sync_files_from_topics_task_completes_with_backfill_stats(self):
+        from backend.services.file_workflow_service import run_sync_files_from_topics_task
+
+        topics_db = FakeSyncFilesTopicsDb()
+
+        with (
+            patch("backend.services.file_workflow_service.ZSXQDatabase", return_value=topics_db) as create_db,
+            patch("backend.services.file_workflow_service.update_task") as update_task,
+            patch("backend.services.file_workflow_service.add_task_log"),
+            patch("backend.services.file_workflow_service.is_task_stopped", return_value=False),
+        ):
+            run_sync_files_from_topics_task("task-1", "123")
+
+        create_db.assert_called_once_with("123")
+        self.assertEqual(1, topics_db.backfill_calls)
+        self.assertTrue(topics_db.closed)
+        self.assertEqual(
+            [
+                ("task-1", "running", "开始从话题同步文件记录..."),
+                ("task-1", "completed", "从话题同步文件记录完成", {"files": 2, "topics": 3}),
+            ],
+            [call.args for call in update_task.call_args_list],
+        )
+
+    def test_run_sync_files_from_topics_task_stops_after_backfill_without_completion(self):
+        from backend.services.file_workflow_service import run_sync_files_from_topics_task
+
+        topics_db = FakeSyncFilesTopicsDb()
+
+        with (
+            patch("backend.services.file_workflow_service.ZSXQDatabase", return_value=topics_db),
+            patch("backend.services.file_workflow_service.update_task") as update_task,
+            patch("backend.services.file_workflow_service.add_task_log"),
+            patch("backend.services.file_workflow_service.is_task_stopped", side_effect=[False, True]),
+        ):
+            run_sync_files_from_topics_task("task-1", "123")
+
+        self.assertEqual(1, topics_db.backfill_calls)
+        self.assertTrue(topics_db.closed)
+        self.assertEqual(
+            [("task-1", "running", "开始从话题同步文件记录...")],
+            [call.args for call in update_task.call_args_list],
+        )
 
     def test_run_single_file_download_task_uses_database_file_info_and_marks_completed(self):
         downloader = FakeSingleFileDownloadTaskDownloader(
