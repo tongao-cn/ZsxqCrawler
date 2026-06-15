@@ -1059,6 +1059,20 @@ class ZSXQFileDownloader:
         stats['total_files'] += 1
         return downloaded_in_batch
 
+    def _next_batch_download_index(
+        self,
+        next_index: Optional[str],
+        downloaded_in_batch: int,
+        max_files: Optional[int],
+    ) -> Optional[str]:
+        next_page = batch_download_next_page_plan(next_index, downloaded_in_batch, max_files)
+        if not next_page["should_continue"]:
+            return None
+
+        self.log(next_page["message"])
+        time.sleep(next_page["delay"])  # 页面间短暂延迟
+        return next_page["next_index"]
+
     def download_files_batch(self, max_files: Optional[int] = None, start_index: Optional[str] = None) -> Dict[str, int]:
         """批量下载文件"""
         for message in batch_download_start_messages(max_files):
@@ -1112,12 +1126,12 @@ class ZSXQFileDownloader:
                 )
             
             # 准备下一页
-            next_page = batch_download_next_page_plan(next_index, downloaded_in_batch, max_files)
-            if next_page["should_continue"]:
-                current_index = next_page["next_index"]
-                self.log(next_page["message"])
-                time.sleep(next_page["delay"])  # 页面间短暂延迟
-            else:
+            current_index = self._next_batch_download_index(
+                next_index,
+                downloaded_in_batch,
+                max_files,
+            )
+            if current_index is None:
                 break
 
         for message in batch_download_completion_messages(stats):
