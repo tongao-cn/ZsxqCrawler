@@ -1436,6 +1436,44 @@ class ZSXQFileDownloader:
 
         return self._next_time_collection_index(next_index)
 
+    def _run_time_collection_loop(
+        self,
+        start_time: Optional[str],
+        sort: str,
+        enable_time_dedupe: bool,
+        db_latest_time: Optional[Any],
+        total_imported_stats: Dict[str, int],
+        stop_before_time: Optional[datetime.datetime],
+    ) -> int:
+        current_index = start_time
+        page_count = 0
+
+        try:
+            while True:
+                if self.check_stop():
+                    self.log(time_collection_loop_stop_message())
+                    break
+
+                page_count += 1
+                current_index = self._collect_time_collection_page(
+                    page_count,
+                    current_index,
+                    sort,
+                    enable_time_dedupe,
+                    db_latest_time,
+                    total_imported_stats,
+                    stop_before_time,
+                )
+                if current_index is None:
+                    break
+
+        except KeyboardInterrupt:
+            self.log(time_collection_interrupted_message())
+        except Exception as e:
+            self.log(time_collection_exception_message(e))
+
+        return page_count
+
     def _finalize_time_collection_result(
         self,
         initial_files: int,
@@ -1542,33 +1580,14 @@ class ZSXQFileDownloader:
         )
         
         total_imported_stats = empty_import_stats()
-        current_index = start_time  # 使用时间戳作为index
-        page_count = 0
-        
-        try:
-            while True:
-                # 检查是否需要停止
-                if self.check_stop():
-                    self.log(time_collection_loop_stop_message())
-                    break
-
-                page_count += 1
-                current_index = self._collect_time_collection_page(
-                    page_count,
-                    current_index,
-                    sort,
-                    enable_time_dedupe,
-                    db_latest_time,
-                    total_imported_stats,
-                    stop_before_time,
-                )
-                if current_index is None:
-                    break
-
-        except KeyboardInterrupt:
-            self.log(time_collection_interrupted_message())
-        except Exception as e:
-            self.log(time_collection_exception_message(e))
+        page_count = self._run_time_collection_loop(
+            start_time,
+            sort,
+            enable_time_dedupe,
+            db_latest_time,
+            total_imported_stats,
+            stop_before_time,
+        )
 
         return self._finalize_time_collection_result(
             initial_files,

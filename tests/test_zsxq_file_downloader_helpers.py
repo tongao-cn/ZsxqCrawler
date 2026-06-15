@@ -909,6 +909,39 @@ class FileDownloaderPaginationTests(unittest.TestCase):
         self.assertEqual(1, stats["pages"])
         self.assertEqual(0, stats["files"])
 
+    def test_collect_files_by_time_preserves_loop_exception_summary(self):
+        downloader = object.__new__(ZSXQFileDownloader)
+        downloader.group_id = "511"
+        downloader.file_db = TimeDedupeFileDb(None, initial_files=0, final_files=0)
+        downloader.logs = []
+        downloader.fetch_calls = []
+        downloader.log = downloader.logs.append
+        downloader.check_stop = lambda: False
+
+        def fetch_file_list(**kwargs):
+            downloader.fetch_calls.append(kwargs)
+            raise RuntimeError("page boom")
+
+        downloader.fetch_file_list = fetch_file_list
+
+        stats = ZSXQFileDownloader.collect_files_by_time(downloader)
+
+        self.assertEqual([{"count": 20, "index": None, "sort": "by_create_time"}], downloader.fetch_calls)
+        self.assertEqual([], downloader.file_db.imported_responses)
+        self.assertEqual(2, downloader.file_db.stats_calls)
+        self.assertIn("📄 收集第1页文件列表...", downloader.logs)
+        self.assertIn("❌ 收集过程异常: page boom", downloader.logs)
+        self.assertLess(
+            downloader.logs.index("📄 收集第1页文件列表..."),
+            downloader.logs.index("❌ 收集过程异常: page boom"),
+        )
+        self.assertIn("🎉 完整文件列表收集完成:", downloader.logs)
+        self.assertIn("   📊 处理页数: 1", downloader.logs)
+        self.assertEqual(0, stats["total_files"])
+        self.assertEqual(0, stats["new_files"])
+        self.assertEqual(1, stats["pages"])
+        self.assertEqual(0, stats["files"])
+
     def test_collect_files_by_time_filters_old_files_and_stops_after_mixed_page(self):
         files = [
             {"file": {"file_id": 101, "create_time": "2026-05-03T10:00:00"}},
