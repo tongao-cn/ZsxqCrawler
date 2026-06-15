@@ -163,9 +163,10 @@ class FakeConnection:
 
 
 class FakeBackfillCursor(FakeCursor):
-    def __init__(self, rows):
+    def __init__(self, rows, existing_file=False):
         super().__init__()
         self.rows = rows
+        self.existing_file = existing_file
         self.last_query = ""
 
     def execute(self, query, params=()):
@@ -179,7 +180,7 @@ class FakeBackfillCursor(FakeCursor):
 
     def fetchone(self):
         if "SELECT 1 FROM files" in self.last_query:
-            return None
+            return (1,) if self.existing_file else None
         return self.row
 
 
@@ -1486,6 +1487,50 @@ class ZSXQDatabaseHelperTests(unittest.TestCase):
         self.assertEqual((303, 303), db.cursor.calls[0][1])
         calls = "\n".join(sql for sql, _params in db.cursor.calls)
         self.assertIn("INSERT INTO groups", calls)
+        self.assertIn("INSERT INTO files", calls)
+        self.assertIn("INSERT INTO file_topic_relations", calls)
+
+    def test_backfill_topic_files_to_core_tables_preserves_existing_file_stats(self):
+        from backend.storage.zsxq_database import ZSXQDatabase
+
+        row = (
+            202,
+            101,
+            "memo.pdf",
+            "abc",
+            12,
+            0,
+            3,
+            "2026-05-07T12:00:00.000+0800",
+            303,
+            "talk",
+            "title",
+            "",
+            "2026-05-07T10:00:00.000+0800",
+            1,
+            0,
+            0,
+            2,
+            3,
+            4,
+            False,
+            False,
+            False,
+            False,
+            "group",
+            "paid",
+            "bg",
+        )
+        db = object.__new__(ZSXQDatabase)
+        db.cursor = FakeBackfillCursor([row], existing_file=True)
+        db.conn = FakeConnection()
+        db.group_id = "303"
+
+        stats = ZSXQDatabase.backfill_topic_files_to_core_tables(db, batch_size=1)
+
+        self.assertEqual({"scanned": 1, "new_files": 0, "relations": 1, "topic_files": 1}, stats)
+        calls = "\n".join(sql for sql, _params in db.cursor.calls)
+        self.assertIn("SELECT 1 FROM files", calls)
         self.assertIn("INSERT INTO files", calls)
         self.assertIn("INSERT INTO file_topic_relations", calls)
 

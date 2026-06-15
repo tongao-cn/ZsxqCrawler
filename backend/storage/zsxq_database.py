@@ -911,9 +911,7 @@ class ZSXQDatabase:
                 stats['scanned'] += 1
                 topic_id, file_id, group_id = _topic_file_backfill_ids_from_row(row)
 
-                sql, params = _file_exists_query(file_id, self.group_id)
-                self.cursor.execute(sql, params)
-                is_new_file = self.cursor.fetchone() is None
+                is_new_file = not self._core_file_exists(file_id)
 
                 group_payload = _topic_file_group_payload_from_row(row)
                 if group_payload:
@@ -935,6 +933,11 @@ class ZSXQDatabase:
         except Exception:
             self.conn.rollback()
             raise
+
+    def _core_file_exists(self, file_id: int) -> bool:
+        sql, params = _file_exists_query(file_id, self.group_id)
+        self.cursor.execute(sql, params)
+        return self.cursor.fetchone() is not None
 
     def backfill_topic_files_to_file_database(self) -> Dict[str, int]:
         """兼容旧调用名：PostgreSQL 模式下回填到同一核心表。"""

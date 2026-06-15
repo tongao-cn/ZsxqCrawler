@@ -20201,6 +20201,55 @@ Result:
 - Full backend unittest discovery passed: 1125 tests, 15 skipped.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-15 - P2 topic file backfill existence helper extraction
+
+Changed:
+
+- Added characterization coverage for `backfill_topic_files_to_core_tables(...)` when the core
+  `files` row already exists, locking the current stats behavior.
+- Extracted `_core_file_exists(...)` to isolate the `_file_exists_query(...)` plus `fetchone()`
+  existence read used by topic-file backfill.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Backfill still scans rows from `_topic_files_backfill_query(self.group_id)` in the same order.
+- Existing core files still do not increment `new_files`, while `_upsert_core_file(...)` and
+  `_replace_file_topic_relation(...)` still run for valid topic/file ids.
+- New core files still increment `new_files` only when `_upsert_core_file(...)` returns a truthy
+  file id.
+- Group upsert, file upsert, relation write, per-batch commit, final commit, rollback-on-exception,
+  stats keys, SQL shapes, query params, public API, legacy paths, fallback behavior, error
+  semantics, storage schema, and config semantics are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_backfill_topic_files_to_core_tables_uses_current_database_cursor tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_backfill_topic_files_to_core_tables_preserves_group_payload_shape tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_backfill_topic_files_to_core_tables_preserves_backfill_row_id_usage tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_topic_files_backfill_query_preserves_scope_params_and_order -v
+uv run python -m unittest tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_backfill_topic_files_to_core_tables_uses_current_database_cursor tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_backfill_topic_files_to_core_tables_preserves_existing_file_stats tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_backfill_topic_files_to_core_tables_preserves_group_payload_shape tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_backfill_topic_files_to_core_tables_preserves_backfill_row_id_usage tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_topic_files_backfill_query_preserves_scope_params_and_order -v
+uv run python -m py_compile backend\storage\zsxq_database.py tests\test_zsxq_database_helpers.py
+uv run python -m unittest tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_backfill_topic_files_to_core_tables_uses_current_database_cursor tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_backfill_topic_files_to_core_tables_preserves_existing_file_stats tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_backfill_topic_files_to_core_tables_preserves_group_payload_shape tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_backfill_topic_files_to_core_tables_preserves_backfill_row_id_usage tests.test_zsxq_database_helpers.ZSXQDatabaseHelperTests.test_topic_files_backfill_query_preserves_scope_params_and_order -v
+uv run python -m unittest tests.test_zsxq_database_helpers -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run ruff check backend\storage\zsxq_database.py tests\test_zsxq_database_helpers.py --select F401,F841
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- Existing backfill characterization tests passed before adding coverage: 4 focused tests.
+- New existing-file stats characterization test passed before production extraction: 5 focused
+  tests.
+- `py_compile` passed.
+- Focused backfill tests passed after extraction: 5 tests.
+- ZSXQ database helper tests passed: 91 tests.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- Full backend unittest discovery passed: 1126 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:
