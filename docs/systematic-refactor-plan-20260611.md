@@ -18357,6 +18357,48 @@ Result:
 - Full backend unittest discovery passed: 1089 tests, 15 skipped.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-15 - P1 single file download terminal completion helpers
+
+Changed:
+
+- Reused existing characterization coverage for single-file download success, skipped, and failed
+  result handling.
+- Added `_complete_skipped_single_file_download()` and `_complete_failed_single_file_download()`,
+  then reused them from `_complete_single_file_download()`.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- The skipped-file log text, skipped-file completed task message, failed-file log text, failed-file
+  task message, successful-file behavior, file database status update behavior, cleanup behavior,
+  route behavior, fallback/legacy behavior, public APIs, and configuration semantics are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_file_routes_helpers.FileRoutesHelperTests.test_run_single_file_download_task_uses_database_file_info_and_marks_completed tests.test_file_routes_helpers.FileRoutesHelperTests.test_run_single_file_download_task_uses_request_info_fallback_for_skipped_file tests.test_file_routes_helpers.FileRoutesHelperTests.test_run_single_file_download_task_uses_file_id_fallback_for_failed_file -v
+uv run python -m py_compile backend\services\file_workflow_service.py tests\test_file_routes_helpers.py
+uv run python -m unittest tests.test_file_routes_helpers.FileRoutesHelperTests.test_run_single_file_download_task_uses_database_file_info_and_marks_completed tests.test_file_routes_helpers.FileRoutesHelperTests.test_run_single_file_download_task_uses_request_info_fallback_for_skipped_file tests.test_file_routes_helpers.FileRoutesHelperTests.test_run_single_file_download_task_uses_file_id_fallback_for_failed_file -v
+uv run python -m unittest tests.test_file_routes_helpers -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run ruff check backend\services\file_workflow_service.py tests\test_file_routes_helpers.py --select F401,F841
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- Existing single-file download characterization tests passed against the original inline skipped
+  and failed completion implementation: 3 focused tests.
+- `py_compile` passed.
+- Focused single-file download tests passed after extraction: 3 tests.
+- File route/helper tests passed: 71 tests.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- Full backend unittest discovery passed: 1089 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:

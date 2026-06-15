@@ -1089,6 +1089,16 @@ def _complete_successful_single_file_download(
     update_task(task_id, "completed", "下载成功")
 
 
+def _complete_skipped_single_file_download(task_id: str) -> None:
+    add_task_log(task_id, "✅ 文件已存在，跳过下载")
+    update_task(task_id, "completed", "文件已存在")
+
+
+def _complete_failed_single_file_download(task_id: str) -> None:
+    add_task_log(task_id, "❌ 文件下载失败")
+    update_task(task_id, "failed", "下载失败")
+
+
 def _complete_single_file_download(
     task_id: str,
     downloader: ZSXQFileDownloader,
@@ -1097,13 +1107,11 @@ def _complete_single_file_download(
     result: Any,
 ) -> None:
     if result == "skipped":
-        add_task_log(task_id, "✅ 文件已存在，跳过下载")
-        update_task(task_id, "completed", "文件已存在")
+        _complete_skipped_single_file_download(task_id)
     elif result:
         _complete_successful_single_file_download(task_id, downloader, file_id, file_info)
     else:
-        add_task_log(task_id, "❌ 文件下载失败")
-        update_task(task_id, "failed", "下载失败")
+        _complete_failed_single_file_download(task_id)
 
 
 def _complete_sync_files_from_topics_task(task_id: str, stats: Dict[str, Any]) -> None:
