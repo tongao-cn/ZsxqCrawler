@@ -25454,6 +25454,54 @@ Result:
 - Full backend unittest discovery passed in the current worktree: 1192 tests, 15 skipped.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-16 - P25 batch download page step helper extraction
+
+Changed:
+
+- Confirmed existing characterization coverage for batch download start/completion logs, per-item
+  numbering, skip logs, fetch failure, empty page, initial/loop stop behavior, next-page delay and
+  cursor propagation, success limit handling, and result stats payloads.
+- Added internal `BatchDownloadLoopStep` and extracted
+  `ZSXQFileDownloader._run_batch_download_page(...)` from `_run_batch_download_loop(...)`.
+- Kept the outer loop stop check in `_run_batch_download_loop(...)`, and kept per-page fetch,
+  per-file processing, stats mutation, next-page delay, cursor truthiness, and break conditions
+  unchanged.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Batch download public behavior, logs, delay calls, pagination, limit semantics, stats payloads,
+  and stop behavior are unchanged.
+- The new helper is internal and does not create a new public API surface.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderBatchDownloadTests -v
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderBatchDownloadTests -v
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run ruff check backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py --select F401,F841
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers -v
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- Existing characterization coverage passed before helper extraction: 15 focused batch download
+  tests.
+- `py_compile` passed.
+- Focused batch download tests passed after helper extraction: 15 tests.
+- File downloader download tests passed: 54 tests.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- ZSXQ file downloader helper tests passed: 214 tests.
+- Full backend unittest discovery passed in the current worktree: 1192 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:

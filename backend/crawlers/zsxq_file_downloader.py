@@ -262,6 +262,11 @@ class BatchDownloadPage(NamedTuple):
     next_index: Optional[Any]
 
 
+class BatchDownloadLoopStep(NamedTuple):
+    downloaded_in_batch: int
+    next_index: Optional[str]
+
+
 class TimeCollectionDatabaseState(NamedTuple):
     initial_files: Any
     db_latest_time: Optional[Any]
@@ -1694,6 +1699,31 @@ class ZSXQFileDownloader:
         self.log(batch_download_page_files_message(len(files)))
         return BatchDownloadPage(files, next_index)
 
+    def _run_batch_download_page(
+        self,
+        current_index: Optional[str],
+        downloaded_in_batch: int,
+        max_files: Optional[int],
+        stats: Dict[str, int],
+    ) -> Optional[BatchDownloadLoopStep]:
+        page = self._fetch_batch_download_page(current_index)
+        if page is None:
+            return None
+
+        downloaded_in_batch = self._download_batch_page_files(
+            page.files,
+            downloaded_in_batch,
+            max_files,
+            stats,
+        )
+
+        next_index = self._next_batch_download_index(
+            page.next_index,
+            downloaded_in_batch,
+            max_files,
+        )
+        return BatchDownloadLoopStep(downloaded_in_batch, next_index)
+
     def _run_batch_download_loop(
         self,
         stats: Dict[str, int],
@@ -1709,24 +1739,17 @@ class ZSXQFileDownloader:
                 self.log(batch_download_loop_stop_message())
                 break
 
-            # 获取文件列表
-            page = self._fetch_batch_download_page(current_index)
-            if page is None:
-                break
-
-            downloaded_in_batch = self._download_batch_page_files(
-                page.files,
+            step = self._run_batch_download_page(
+                current_index,
                 downloaded_in_batch,
                 max_files,
                 stats,
             )
+            if step is None:
+                break
 
-            # 准备下一页
-            current_index = self._next_batch_download_index(
-                page.next_index,
-                downloaded_in_batch,
-                max_files,
-            )
+            downloaded_in_batch = step.downloaded_in_batch
+            current_index = step.next_index
             if current_index is None:
                 break
 
