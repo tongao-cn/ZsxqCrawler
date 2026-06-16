@@ -1412,48 +1412,42 @@ class ZSXQFileDownloader:
     def _successful_download_attempt_result(
         self,
         response: Any,
-        file_id: int,
-        file_name: str,
-        file_size: int,
-        safe_filename: str,
-        file_path: str,
+        target: DownloadFileTarget,
     ) -> DownloadAttemptResult:
         body_result = self._handle_successful_download_response(
             response,
-            file_id,
-            file_size,
-            safe_filename,
-            file_path,
+            target.file_id,
+            target.file_size,
+            target.safe_filename,
+            target.file_path,
         )
         return DownloadAttemptResult(
             body_result.success_result,
             body_result.failure_detail,
-            file_name,
-            safe_filename,
-            file_path,
+            target.file_name,
+            target.safe_filename,
+            target.file_path,
         )
 
     def _download_attempt_result_for_response_status(
         self,
         response: Any,
-        file_id: int,
-        file_name: str,
-        file_size: int,
-        safe_filename: str,
-        file_path: str,
+        target: DownloadFileTarget,
     ) -> DownloadAttemptResult:
         if response.status_code == 200:
             return self._successful_download_attempt_result(
                 response,
-                file_id,
-                file_name,
-                file_size,
-                safe_filename,
-                file_path,
+                target,
             )
 
         failure_detail = self._record_download_http_failure(response.status_code)
-        return DownloadAttemptResult(None, failure_detail, file_name, safe_filename, file_path)
+        return DownloadAttemptResult(
+            None,
+            failure_detail,
+            target.file_name,
+            target.safe_filename,
+            target.file_path,
+        )
 
     def _handle_download_response(
         self,
@@ -1475,14 +1469,17 @@ class ZSXQFileDownloader:
             file_name = response_target.file_name
             safe_filename = response_target.safe_filename
             file_path = response_target.file_path
-
-            return self._download_attempt_result_for_response_status(
-                response,
+            response_download_target = DownloadFileTarget(
                 file_id,
                 file_name,
                 file_size,
                 safe_filename,
                 file_path,
+            )
+
+            return self._download_attempt_result_for_response_status(
+                response,
+                response_download_target,
             )
         except Exception as exc:
             failure_detail = self._record_download_exception(exc, file_path)

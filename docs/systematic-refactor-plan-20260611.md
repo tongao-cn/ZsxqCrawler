@@ -25985,6 +25985,54 @@ Result:
 - Full backend unittest discovery passed in the current worktree: 1192 tests, 15 skipped.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-16 - P36 download response target handoff
+
+Changed:
+
+- Confirmed existing characterization coverage for response-header filename override, HTTP
+  failure result details, successful body write, partial-file cleanup, size mismatch paths, body
+  exceptions, stop-during-body behavior, and download retry propagation.
+- Passed `DownloadFileTarget` through `_download_attempt_result_for_response_status(...)` and
+  `_successful_download_attempt_result(...)` instead of re-passing file id, size, filename, safe
+  filename, and path as separate scalar parameters.
+- Kept `_handle_download_response(...)` signature unchanged because tests call it directly to lock
+  response-target and HTTP/success behavior.
+- Built the response-level `DownloadFileTarget` only after content-disposition filename override
+  resolution, preserving the existing retry-state propagation of overridden filename/path values.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Public `download_file(...)` behavior, direct `_handle_download_response(...)` test surface,
+  response filename override, HTTP failure detail, successful body write, partial-file cleanup,
+  size mismatch handling, and logs are unchanged.
+- The signature changes are limited to private response-status helpers.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests -v
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run ruff check backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py --select F401,F841
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers -v
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- Existing download characterization coverage passed before response-target handoff: 54 tests.
+- `py_compile` passed.
+- Download tests passed after response-target handoff: 54 tests.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- ZSXQ file downloader helper tests passed: 214 tests.
+- Full backend unittest discovery passed in the current worktree: 1192 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:
