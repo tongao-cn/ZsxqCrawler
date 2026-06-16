@@ -1769,6 +1769,69 @@ class FileDownloaderBatchDownloadTests(unittest.TestCase):
         self.assertEqual({"total_files": 1, "downloaded": 0, "skipped": 1, "failed": 0}, stats)
         self.assertEqual(["【第3个文件】Unknown", "   ⚠️ 文件已跳过，继续下一个"], downloader.logs)
 
+    def test_download_batch_page_files_preserves_item_targets_stop_and_limit(self):
+        files = [
+            {"file": {"id": 101, "name": "first.pdf"}},
+            {"file": {"id": 102, "name": "second.pdf"}},
+        ]
+        stats = {"total_files": 0, "downloaded": 0, "skipped": 0, "failed": 0}
+        limit_downloader = object.__new__(ZSXQFileDownloader)
+        limit_downloader.logs = []
+        limit_downloader.log = limit_downloader.logs.append
+        limit_downloader.check_stop = lambda: False
+        limit_targets = []
+
+        def limit_file_item(target):
+            limit_targets.append(target)
+            return target.downloaded_in_batch + 1
+
+        limit_downloader._download_batch_file_item_target = limit_file_item
+
+        limited = ZSXQFileDownloader._download_batch_page_files(
+            limit_downloader,
+            files,
+            downloaded_in_batch=1,
+            max_files=2,
+            stats=stats,
+        )
+
+        self.assertEqual(2, limited)
+        self.assertEqual([], limit_downloader.logs)
+        self.assertEqual(1, len(limit_targets))
+        self.assertEqual(files[0], limit_targets[0].file_info)
+        self.assertEqual(2, limit_targets[0].item_number)
+        self.assertEqual(2, limit_targets[0].max_files)
+        self.assertTrue(limit_targets[0].has_more_in_batch)
+        self.assertEqual(1, limit_targets[0].downloaded_in_batch)
+        self.assertIs(stats, limit_targets[0].stats)
+
+        stop_downloader = object.__new__(ZSXQFileDownloader)
+        stop_downloader.logs = []
+        stop_downloader.log = stop_downloader.logs.append
+        stop_checks = iter([False, True])
+        stop_downloader.check_stop = lambda: next(stop_checks)
+        stop_targets = []
+
+        def stop_file_item(target):
+            stop_targets.append(target)
+            return target.downloaded_in_batch + 1
+
+        stop_downloader._download_batch_file_item_target = stop_file_item
+
+        stopped = ZSXQFileDownloader._download_batch_page_files(
+            stop_downloader,
+            files,
+            downloaded_in_batch=0,
+            max_files=None,
+            stats=stats,
+        )
+
+        self.assertEqual(1, stopped)
+        self.assertEqual(1, len(stop_targets))
+        self.assertEqual(files[0], stop_targets[0].file_info)
+        self.assertIsNone(stop_targets[0].max_files)
+        self.assertEqual(["🛑 文件下载过程中被停止"], stop_downloader.logs)
+
     def test_download_files_batch_stops_page_after_success_limit(self):
         files = [
             {"file": {"id": 101, "name": "first.pdf"}},

@@ -497,6 +497,13 @@ class BatchDownloadNextIndexTarget(NamedTuple):
     max_files: Optional[int]
 
 
+class BatchDownloadPageFilesTarget(NamedTuple):
+    files: list[Dict[str, Any]]
+    downloaded_in_batch: int
+    max_files: Optional[int]
+    stats: Dict[str, int]
+
+
 class BatchDownloadFileItemTarget(NamedTuple):
     file_info: Dict[str, Any]
     item_number: int
@@ -2529,23 +2536,33 @@ class ZSXQFileDownloader:
         max_files: Optional[int],
         stats: Dict[str, int],
     ) -> int:
-        for i, file_info in enumerate(files):
+        return self._download_batch_page_files_target(
+            BatchDownloadPageFilesTarget(files, downloaded_in_batch, max_files, stats),
+        )
+
+    def _download_batch_page_files_target(
+        self,
+        target: BatchDownloadPageFilesTarget,
+    ) -> int:
+        downloaded_in_batch = target.downloaded_in_batch
+
+        for i, file_info in enumerate(target.files):
             # 检查是否需要停止
             if self.check_stop():
                 self.log(batch_download_file_stop_message())
                 break
 
-            if max_files is not None and downloaded_in_batch >= max_files:
+            if target.max_files is not None and downloaded_in_batch >= target.max_files:
                 break
 
             downloaded_in_batch = self._download_batch_file_item_target(
                 BatchDownloadFileItemTarget(
                     file_info,
                     downloaded_in_batch + 1,
-                    max_files,
-                    (i + 1) < len(files),
+                    target.max_files,
+                    (i + 1) < len(target.files),
                     downloaded_in_batch,
-                    stats,
+                    target.stats,
                 ),
             )
 
@@ -2576,11 +2593,13 @@ class ZSXQFileDownloader:
         if page is None:
             return None
 
-        downloaded_in_batch = self._download_batch_page_files(
-            page.files,
-            step.downloaded_in_batch,
-            max_files,
-            stats,
+        downloaded_in_batch = self._download_batch_page_files_target(
+            BatchDownloadPageFilesTarget(
+                page.files,
+                step.downloaded_in_batch,
+                max_files,
+                stats,
+            ),
         )
 
         next_index = self._next_batch_download_index_target(
