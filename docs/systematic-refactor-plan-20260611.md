@@ -28914,6 +28914,52 @@ Result:
 - Full backend unittest discovery passed in the current worktree: 1210 tests, 15 skipped.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-16 - P99 download file entry target handoff
+
+Changed:
+
+- Added direct characterization coverage for `download_file(...)` before changing production code,
+  locking raw `file_info` handoff into preparation, prepared-file early return, existing-file skip
+  target creation, legacy `"skipped"` return propagation, retry-loop handoff, and retry result
+  propagation.
+- Added private `DownloadFileEntryTarget` to carry the public single-file download input together.
+- Added private `_download_file_target(...)` and delegated the public `download_file(...)` method to
+  it.
+- Kept public `download_file(file_info)` signature and behavior unchanged.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- File payload parsing, missing-file early return, local existing-file skip behavior, legacy
+  `"skipped"` return, retry-loop entry, download side effects, fallback/legacy behavior, error
+  semantics, and configuration semantics are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_download_file_preserves_entry_prepare_skip_and_retry_handoff tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_download_file_accepts_raw_file_id_payload tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_download_file_without_file_id_logs_and_returns_before_request tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_download_file_skips_existing_matching_file_without_request -v
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_download_file_preserves_entry_prepare_skip_and_retry_handoff tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_download_file_accepts_raw_file_id_payload tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_download_file_without_file_id_logs_and_returns_before_request tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_download_file_skips_existing_matching_file_without_request tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_download_file_finalizes_success_with_status_counters_logs_and_interval -v
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py
+uv run python scripts\scan_postgres_compat_debt.py
+uv run ruff check backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py --select F401,F841
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- New direct download-file entry characterization test plus existing focused download-file tests
+  passed before production helper handoff: 4 tests.
+- Focused download-file entry tests passed after helper handoff: 5 tests.
+- `py_compile` passed.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- ZSXQ file downloader helper tests passed: 233 tests.
+- Full backend unittest discovery passed in the current worktree: 1211 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:

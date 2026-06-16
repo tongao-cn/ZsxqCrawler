@@ -4782,6 +4782,65 @@ class FileDownloaderDownloadTests(unittest.TestCase):
         downloader.long_sleep_interval = 0
         return downloader
 
+    def test_download_file_preserves_entry_prepare_skip_and_retry_handoff(self):
+        file_info = {"file": {"id": 101, "name": "memo.pdf", "size": 4}}
+        prepared = SimpleNamespace(file_id=101, file_path="memo.pdf", file_size=4)
+
+        skipped_downloader = object.__new__(ZSXQFileDownloader)
+        skipped_calls = []
+        skipped_downloader._prepare_download_file_target = (
+            lambda value: skipped_calls.append(("prepare", value)) or prepared
+        )
+        skipped_downloader._skip_existing_download_target = (
+            lambda target: skipped_calls.append(("skip", target)) or "skipped"
+        )
+        skipped_downloader._run_download_retry_loop = lambda value: self.fail(
+            "existing file skip should not run retry loop"
+        )
+
+        skipped_result = ZSXQFileDownloader.download_file(skipped_downloader, file_info)
+
+        self.assertEqual("skipped", skipped_result)
+        self.assertEqual("prepare", skipped_calls[0][0])
+        self.assertIs(file_info, skipped_calls[0][1])
+        self.assertEqual("skip", skipped_calls[1][0])
+        self.assertEqual((101, "memo.pdf", 4), skipped_calls[1][1])
+
+        downloaded_downloader = object.__new__(ZSXQFileDownloader)
+        downloaded_calls = []
+        downloaded_downloader._prepare_download_file_target = (
+            lambda value: downloaded_calls.append(("prepare", value)) or prepared
+        )
+        downloaded_downloader._skip_existing_download_target = (
+            lambda target: downloaded_calls.append(("skip", target)) or None
+        )
+        downloaded_downloader._run_download_retry_loop = (
+            lambda value: downloaded_calls.append(("retry", value)) or True
+        )
+
+        downloaded_result = ZSXQFileDownloader.download_file(downloaded_downloader, file_info)
+
+        self.assertTrue(downloaded_result)
+        self.assertEqual(["prepare", "skip", "retry"], [name for name, *_ in downloaded_calls])
+        self.assertIs(prepared, downloaded_calls[2][1])
+
+        missing_downloader = object.__new__(ZSXQFileDownloader)
+        missing_calls = []
+        missing_downloader._prepare_download_file_target = (
+            lambda value: missing_calls.append(("prepare", value)) or None
+        )
+        missing_downloader._skip_existing_download_target = lambda value: self.fail(
+            "missing prepared file should not check existing file"
+        )
+        missing_downloader._run_download_retry_loop = lambda value: self.fail(
+            "missing prepared file should not run retry loop"
+        )
+
+        missing_result = ZSXQFileDownloader.download_file(missing_downloader, file_info)
+
+        self.assertFalse(missing_result)
+        self.assertEqual([("prepare", file_info)], missing_calls)
+
     def test_download_file_accepts_raw_file_id_payload(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             session = FakeDownloadSession([FakeDownloadResponse(200, b"memo")])

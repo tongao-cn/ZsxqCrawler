@@ -297,6 +297,10 @@ class DownloadRetryWaitTarget(NamedTuple):
     download_retries: int
 
 
+class DownloadFileEntryTarget(NamedTuple):
+    file_info: Dict[str, Any]
+
+
 class DownloadFileTarget(NamedTuple):
     file_id: int
     file_name: str
@@ -1622,7 +1626,10 @@ class ZSXQFileDownloader:
 
     def download_file(self, file_info: Dict[str, Any]) -> bool:
         """下载单个文件"""
-        prepared_file = self._prepare_download_file_target(file_info)
+        return self._download_file_target(DownloadFileEntryTarget(file_info))
+
+    def _download_file_target(self, target: DownloadFileEntryTarget) -> bool:
+        prepared_file = self._prepare_download_file_target(target.file_info)
         if not prepared_file:
             return False
 
