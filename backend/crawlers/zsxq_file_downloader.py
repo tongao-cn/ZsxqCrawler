@@ -927,13 +927,31 @@ class ZSXQFileDownloader:
         if not data:
             return DownloadUrlResponseDecision(None, True, False)
 
+        return self._download_url_data_decision(
+            data,
+            file_id,
+            attempt,
+            max_retries,
+            headers,
+            response.status_code,
+        )
+
+    def _download_url_data_decision(
+        self,
+        data: Dict[str, Any],
+        file_id: int,
+        attempt: int,
+        max_retries: int,
+        headers: Dict[str, str],
+        http_status: int,
+    ) -> DownloadUrlResponseDecision:
         if data.get('succeeded'):
             download_url = self._handle_download_url_success_response(
                 data,
                 file_id,
                 attempt,
                 headers,
-                response.status_code,
+                http_status,
             )
             return DownloadUrlResponseDecision(download_url, False, False)
 
@@ -943,7 +961,7 @@ class ZSXQFileDownloader:
             attempt,
             max_retries,
             headers,
-            response.status_code,
+            http_status,
         )
 
         return self._download_url_api_failure_decision(failure_class)
