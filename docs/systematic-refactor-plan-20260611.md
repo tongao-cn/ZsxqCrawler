@@ -23738,6 +23738,49 @@ Result:
 - Full backend unittest discovery passed in the current worktree: 1167 tests, 15 skipped.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-16 - P9 batch download file-name helper extraction
+
+Changed:
+
+- Added characterization coverage for a batch download item with missing `file`/`name`, preserving
+  the existing `Unknown` log fallback and original payload passed to `download_file(...)`.
+- Extracted internal `_batch_download_file_name(...)` from `_download_batch_file_item(...)`.
+- Kept batch item logging, `download_file(...)` call, result stats, delay handling, and
+  total-files accounting unchanged.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Missing file/name fallback, log text, original payload forwarding, skipped branch stats/logging,
+  downloaded count, delay conditions, total-files accounting, public API, fallback/legacy
+  behavior, error semantics, config semantics, and task-level behavior are unchanged.
+- The new helper is internal and does not create a new public API surface.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderBatchDownloadTests.test_download_batch_file_item_preserves_missing_file_name_fallback -v
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderBatchDownloadTests -v
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run ruff check backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py --select F401,F841
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- Characterization test passed against the pre-refactor behavior before helper extraction: 1 test.
+- `py_compile` passed.
+- Focused batch download tests passed: 12 tests.
+- ZSXQ file downloader helper tests passed: 190 tests.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- Full backend unittest discovery passed in the current worktree: 1168 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:

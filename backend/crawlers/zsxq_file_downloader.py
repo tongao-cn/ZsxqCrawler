@@ -315,6 +315,11 @@ def _record_file_download_result(result: Any, stats: Dict[str, int]) -> str:
     return "failed"
 
 
+def _batch_download_file_name(file_info: Dict[str, Any]) -> Any:
+    file_data = file_info.get('file', {})
+    return file_data.get('name', 'Unknown')
+
+
 class ZSXQFileDownloader:
     """知识星球文件下载器"""
     
@@ -1301,8 +1306,7 @@ class ZSXQFileDownloader:
         downloaded_in_batch: int,
         stats: Dict[str, int],
     ) -> int:
-        file_data = file_info.get('file', {})
-        file_name = file_data.get('name', 'Unknown')
+        file_name = _batch_download_file_name(file_info)
 
         self.log(batch_download_item_message(item_number, max_files, file_name))
 
