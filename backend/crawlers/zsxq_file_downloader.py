@@ -652,6 +652,14 @@ class ZSXQFileDownloader:
             print(f"   📋 响应内容: {json.dumps(redact_json_like(data), ensure_ascii=False, indent=2)}")
         return ApiJsonParseResult(data, False)
 
+    def _handle_file_list_success_response(self, data: Dict[str, Any], attempt: int) -> Dict[str, Any]:
+        files, _ = file_list_response_page(data)
+        if attempt > 0:
+            print(f"   ✅ 重试成功！第{attempt}次重试获取到文件列表")
+        else:
+            print(f"   ✅ 获取成功: {len(files)}个文件")
+        return data
+
     def fetch_file_list(self, count: int = 20, index: Optional[str] = None, sort: str = "by_download_count") -> Optional[Dict[str, Any]]:
         """获取文件列表（带重试机制）"""
         url = f"{self.base_url}/v2/groups/{self.group_id}/files"
@@ -678,12 +686,7 @@ class ZSXQFileDownloader:
                         continue
 
                     if data.get('succeeded'):
-                        files, _ = file_list_response_page(data)
-                        if attempt > 0:
-                            print(f"   ✅ 重试成功！第{attempt}次重试获取到文件列表")
-                        else:
-                            print(f"   ✅ 获取成功: {len(files)}个文件")
-                        return data
+                        return self._handle_file_list_success_response(data, attempt)
 
                     error_msg, error_code = api_failure_detail(data)
                     print(f"   ❌ API返回失败: {error_msg} (代码: {error_code})")
