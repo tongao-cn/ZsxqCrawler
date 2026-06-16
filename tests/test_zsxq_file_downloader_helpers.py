@@ -1615,6 +1615,66 @@ class FileDownloaderBatchDownloadTests(unittest.TestCase):
             downloader.logs,
         )
 
+    def test_download_files_batch_fetch_failure_preserves_log_and_completion(self):
+        downloader = object.__new__(ZSXQFileDownloader)
+        downloader.logs = []
+        downloader.log = downloader.logs.append
+        downloader.check_stop = lambda: False
+        downloader.fetch_calls = []
+
+        def fetch_file_list(**kwargs):
+            downloader.fetch_calls.append(kwargs)
+            return None
+
+        downloader.fetch_file_list = fetch_file_list
+
+        stats = ZSXQFileDownloader.download_files_batch(downloader, max_files=2, start_index="start")
+
+        self.assertEqual({"total_files": 0, "downloaded": 0, "skipped": 0, "failed": 0}, stats)
+        self.assertEqual([{"count": 20, "index": "start"}], downloader.fetch_calls)
+        self.assertEqual(
+            [
+                "📥 开始批量下载文件 (最多2个)",
+                "❌ 获取文件列表失败",
+                "🎉 批量下载完成:",
+                "   📊 总文件数: 0",
+                "   ✅ 下载成功: 0",
+                "   ⚠️ 跳过: 0",
+                "   ❌ 失败: 0",
+            ],
+            downloader.logs,
+        )
+
+    def test_download_files_batch_empty_page_preserves_log_and_completion(self):
+        downloader = object.__new__(ZSXQFileDownloader)
+        downloader.logs = []
+        downloader.log = downloader.logs.append
+        downloader.check_stop = lambda: False
+        downloader.fetch_calls = []
+
+        def fetch_file_list(**kwargs):
+            downloader.fetch_calls.append(kwargs)
+            return {"resp_data": {"files": [], "index": "ignored-next"}}
+
+        downloader.fetch_file_list = fetch_file_list
+
+        stats = ZSXQFileDownloader.download_files_batch(downloader, max_files=2, start_index="start")
+
+        self.assertEqual({"total_files": 0, "downloaded": 0, "skipped": 0, "failed": 0}, stats)
+        self.assertEqual([{"count": 20, "index": "start"}], downloader.fetch_calls)
+        self.assertEqual(
+            [
+                "📥 开始批量下载文件 (最多2个)",
+                "📭 没有更多文件",
+                "🎉 批量下载完成:",
+                "   📊 总文件数: 0",
+                "   ✅ 下载成功: 0",
+                "   ⚠️ 跳过: 0",
+                "   ❌ 失败: 0",
+            ],
+            downloader.logs,
+        )
+
     def test_download_files_batch_preserves_next_page_sleep_and_fetch_index(self):
         downloader = object.__new__(ZSXQFileDownloader)
         downloader.logs = []

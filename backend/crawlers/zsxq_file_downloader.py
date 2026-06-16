@@ -214,6 +214,11 @@ class TimeCollectionPage(NamedTuple):
     next_index: Optional[Any]
 
 
+class BatchDownloadPage(NamedTuple):
+    files: list[Dict[str, Any]]
+    next_index: Optional[Any]
+
+
 class TimeCollectionDatabaseState(NamedTuple):
     initial_files: Any
     db_latest_time: Optional[Any]
@@ -1384,6 +1389,21 @@ class ZSXQFileDownloader:
 
         return downloaded_in_batch
 
+    def _fetch_batch_download_page(self, current_index: Optional[str]) -> Optional[BatchDownloadPage]:
+        data = self.fetch_file_list(count=20, index=current_index)
+        if not data:
+            self.log(batch_download_fetch_failed_message())
+            return None
+
+        files, next_index = file_list_response_page(data)
+
+        if not files:
+            self.log(batch_download_empty_page_message())
+            return None
+
+        self.log(batch_download_page_files_message(len(files)))
+        return BatchDownloadPage(files, next_index)
+
     def _run_batch_download_loop(
         self,
         stats: Dict[str, int],
@@ -1400,21 +1420,12 @@ class ZSXQFileDownloader:
                 break
 
             # 获取文件列表
-            data = self.fetch_file_list(count=20, index=current_index)
-            if not data:
-                self.log(batch_download_fetch_failed_message())
+            page = self._fetch_batch_download_page(current_index)
+            if page is None:
                 break
-
-            files, next_index = file_list_response_page(data)
-
-            if not files:
-                self.log(batch_download_empty_page_message())
-                break
-
-            self.log(batch_download_page_files_message(len(files)))
 
             downloaded_in_batch = self._download_batch_page_files(
-                files,
+                page.files,
                 downloaded_in_batch,
                 max_files,
                 stats,
@@ -1422,7 +1433,7 @@ class ZSXQFileDownloader:
 
             # 准备下一页
             current_index = self._next_batch_download_index(
-                next_index,
+                page.next_index,
                 downloaded_in_batch,
                 max_files,
             )
