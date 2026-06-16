@@ -652,6 +652,31 @@ class FileDownloaderPaginationTests(unittest.TestCase):
         self.assertIn("   ✅ 第1页存储完成", printed)
         self.assertIn("🎉 文件列表收集完成", printed)
 
+    def test_collect_all_files_finishes_without_sleep_when_no_next_page(self):
+        page = {"resp_data": {"index": None, "files": [{"file": {"file_id": 101}}]}}
+        downloader = object.__new__(ZSXQFileDownloader)
+        downloader.file_db = CollectAllFileDb()
+        downloader.fetch_calls = []
+
+        def fetch_file_list(**kwargs):
+            downloader.fetch_calls.append(kwargs)
+            return page
+
+        downloader.fetch_file_list = fetch_file_list
+
+        with (
+            contextlib.redirect_stdout(io.StringIO()),
+            patch("backend.crawlers.zsxq_file_downloader.random.uniform") as uniform,
+            patch("backend.crawlers.zsxq_file_downloader.time.sleep") as sleep,
+        ):
+            stats = ZSXQFileDownloader.collect_all_files_to_database(downloader)
+
+        self.assertEqual([{"count": 20, "index": None}], downloader.fetch_calls)
+        self.assertEqual([page], downloader.file_db.imported_responses)
+        uniform.assert_not_called()
+        sleep.assert_not_called()
+        self.assertEqual({"total_files": 1, "new_files": 2, "skipped_files": 0}, stats)
+
     def test_collect_all_files_preserves_next_page_sleep_and_fetch_index(self):
         pages = [
             {"resp_data": {"index": "next-page", "files": [{"file": {"file_id": 101}}]}},

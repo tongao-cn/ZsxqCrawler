@@ -1505,6 +1505,14 @@ class ZSXQFileDownloader:
         print(file_collection_page_stored_message(page_count))
         return True
 
+    def _next_file_collection_index(self, next_index: Any) -> Optional[Any]:
+        next_page = file_collection_next_page_plan(next_index)
+        if not next_page["has_next"]:
+            return None
+
+        time.sleep(random.uniform(next_page["delay_min"], next_page["delay_max"]))
+        return next_page["next_index"]
+
     def _run_file_collection_loop(self, stats: Dict[str, int]) -> int:
         current_index = None
         page_count = 0
@@ -1533,12 +1541,8 @@ class ZSXQFileDownloader:
                 if not self._import_file_collection_page(data, len(files), page_count, stats):
                     break
 
-                next_page = file_collection_next_page_plan(next_index)
-                if next_page["has_next"]:
-                    current_index = next_page["next_index"]
-                    # 页面间短暂延迟
-                    time.sleep(random.uniform(next_page["delay_min"], next_page["delay_max"]))
-                else:
+                current_index = self._next_file_collection_index(next_index)
+                if current_index is None:
                     break
 
         except KeyboardInterrupt:
