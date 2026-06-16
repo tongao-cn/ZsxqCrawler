@@ -6,6 +6,7 @@ import datetime
 import io
 import json
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from backend.crawlers.zsxq_file_downloader import (
@@ -1831,6 +1832,64 @@ class FileDownloaderBatchDownloadTests(unittest.TestCase):
         self.assertEqual(files[0], stop_targets[0].file_info)
         self.assertIsNone(stop_targets[0].max_files)
         self.assertEqual(["🛑 文件下载过程中被停止"], stop_downloader.logs)
+
+    def test_run_batch_download_page_preserves_fetch_terminal_and_step_handoff(self):
+        stats = {"total_files": 0, "downloaded": 0, "skipped": 0, "failed": 0}
+        terminal_downloader = object.__new__(ZSXQFileDownloader)
+        terminal_fetch_calls = []
+        terminal_downloader._fetch_batch_download_page = (
+            lambda current_index: terminal_fetch_calls.append(current_index) or None
+        )
+
+        terminal = ZSXQFileDownloader._run_batch_download_page(
+            terminal_downloader,
+            SimpleNamespace(downloaded_in_batch=7, next_index="cursor"),
+            max_files=8,
+            stats=stats,
+        )
+
+        self.assertIsNone(terminal)
+        self.assertEqual(["cursor"], terminal_fetch_calls)
+
+        files = [{"file": {"id": 101, "name": "first.pdf"}}]
+        downloader = object.__new__(ZSXQFileDownloader)
+        fetch_calls = []
+        page_targets = []
+        next_targets = []
+
+        def fetch_page(current_index):
+            fetch_calls.append(current_index)
+            return SimpleNamespace(files=files, next_index="next-page")
+
+        def page_files(target):
+            page_targets.append(target)
+            return 3
+
+        def next_index(target):
+            next_targets.append(target)
+            return "after-page"
+
+        downloader._fetch_batch_download_page = fetch_page
+        downloader._download_batch_page_files_target = page_files
+        downloader._next_batch_download_index_target = next_index
+
+        step = ZSXQFileDownloader._run_batch_download_page(
+            downloader,
+            SimpleNamespace(downloaded_in_batch=1, next_index="start"),
+            max_files=4,
+            stats=stats,
+        )
+
+        self.assertEqual(["start"], fetch_calls)
+        self.assertEqual(3, step.downloaded_in_batch)
+        self.assertEqual("after-page", step.next_index)
+        self.assertEqual(files, page_targets[0].files)
+        self.assertEqual(1, page_targets[0].downloaded_in_batch)
+        self.assertEqual(4, page_targets[0].max_files)
+        self.assertIs(stats, page_targets[0].stats)
+        self.assertEqual("next-page", next_targets[0].next_index)
+        self.assertEqual(3, next_targets[0].downloaded_in_batch)
+        self.assertEqual(4, next_targets[0].max_files)
 
     def test_download_files_batch_stops_page_after_success_limit(self):
         files = [

@@ -491,6 +491,12 @@ class BatchDownloadLoopStep(NamedTuple):
     next_index: Optional[str]
 
 
+class BatchDownloadPageRunTarget(NamedTuple):
+    step: BatchDownloadLoopStep
+    max_files: Optional[int]
+    stats: Dict[str, int]
+
+
 class BatchDownloadNextIndexTarget(NamedTuple):
     next_index: Optional[str]
     downloaded_in_batch: int
@@ -2589,16 +2595,24 @@ class ZSXQFileDownloader:
         max_files: Optional[int],
         stats: Dict[str, int],
     ) -> Optional[BatchDownloadLoopStep]:
-        page = self._fetch_batch_download_page(step.next_index)
+        return self._run_batch_download_page_target(
+            BatchDownloadPageRunTarget(step, max_files, stats),
+        )
+
+    def _run_batch_download_page_target(
+        self,
+        target: BatchDownloadPageRunTarget,
+    ) -> Optional[BatchDownloadLoopStep]:
+        page = self._fetch_batch_download_page(target.step.next_index)
         if page is None:
             return None
 
         downloaded_in_batch = self._download_batch_page_files_target(
             BatchDownloadPageFilesTarget(
                 page.files,
-                step.downloaded_in_batch,
-                max_files,
-                stats,
+                target.step.downloaded_in_batch,
+                target.max_files,
+                target.stats,
             ),
         )
 
@@ -2606,7 +2620,7 @@ class ZSXQFileDownloader:
             BatchDownloadNextIndexTarget(
                 page.next_index,
                 downloaded_in_batch,
-                max_files,
+                target.max_files,
             ),
         )
         return BatchDownloadLoopStep(downloaded_in_batch, next_index)
@@ -2625,10 +2639,12 @@ class ZSXQFileDownloader:
                 self.log(batch_download_loop_stop_message())
                 break
 
-            next_step = self._run_batch_download_page(
-                step,
-                max_files,
-                stats,
+            next_step = self._run_batch_download_page_target(
+                BatchDownloadPageRunTarget(
+                    step,
+                    max_files,
+                    stats,
+                ),
             )
             if next_step is None:
                 break
