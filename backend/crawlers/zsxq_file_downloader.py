@@ -2142,6 +2142,10 @@ class ZSXQFileDownloader:
         for message in database_download_completion_messages(stats):
             self.log(message)
 
+    def _log_database_download_start(self, max_files: Optional[int], status_filter: str) -> None:
+        for message in database_download_start_messages(max_files, status_filter):
+            self.log(message)
+
     def download_files_from_database(
         self,
         max_files: Optional[int] = None,
@@ -2153,8 +2157,7 @@ class ZSXQFileDownloader:
         **kwargs,
     ) -> Dict[str, int]:
         """从完整数据库下载文件（使用file_id字段）"""
-        for message in database_download_start_messages(max_files, status_filter):
-            self.log(message)
+        self._log_database_download_start(max_files, status_filter)
 
         query_plan = self._prepare_database_download_query_plan(
             max_files,
