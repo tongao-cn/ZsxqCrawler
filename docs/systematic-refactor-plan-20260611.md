@@ -25843,6 +25843,52 @@ Result:
 - Full backend unittest discovery passed in the current worktree: 1192 tests, 15 skipped.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-16 - P33 time collection loop context extraction
+
+Changed:
+
+- Confirmed existing characterization coverage for collect-by-time database-state loading, force
+  refresh mode, initial stop, fetch/import failures, loop exception summary, mixed/all-old dedupe
+  stop paths, next-index sleep/last-page logging, loop stop, and stop-before boundary behavior.
+- Added internal `TimeCollectionLoopContext` to carry the stable time-collection loop inputs.
+- Passed that context through `_run_time_collection_loop(...)` and
+  `_collect_time_collection_page(...)`, while keeping public `collect_files_by_time(...)`
+  arguments and result shape unchanged.
+- Kept time-collection logs, database-state timing, dedupe/fallback decisions, stop handling,
+  import stats mutation, pagination, and final summary behavior unchanged.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Collect-by-time public behavior, fallback/dedupe semantics, stop-before handling, log text,
+  page fetch order, and returned summary stats are unchanged.
+- The new `TimeCollectionLoopContext` is internal and does not create a new public API surface.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderPaginationTests tests.test_zsxq_file_downloader_helpers.FileDownloaderTimeHelperTests -v
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderPaginationTests tests.test_zsxq_file_downloader_helpers.FileDownloaderTimeHelperTests -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run ruff check backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py --select F401,F841
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers -v
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- Existing pagination/time characterization coverage passed before context extraction: 61 tests.
+- `py_compile` passed.
+- Pagination/time tests passed after context extraction: 61 tests.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- ZSXQ file downloader helper tests passed: 214 tests.
+- Full backend unittest discovery passed in the current worktree: 1192 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:

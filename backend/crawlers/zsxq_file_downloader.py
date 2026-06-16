@@ -261,6 +261,14 @@ class TimeCollectionPageImportResult(NamedTuple):
     should_stop_after_insert: bool
 
 
+class TimeCollectionLoopContext(NamedTuple):
+    sort: str
+    enable_time_dedupe: bool
+    db_latest_time: Optional[Any]
+    total_imported_stats: Dict[str, int]
+    stop_before_time: Optional[datetime.datetime]
+
+
 class BatchDownloadPage(NamedTuple):
     files: list[Dict[str, Any]]
     next_index: Optional[Any]
@@ -2118,24 +2126,20 @@ class ZSXQFileDownloader:
         self,
         page_count: int,
         current_index: Optional[Any],
-        sort: str,
-        enable_time_dedupe: bool,
-        db_latest_time: Optional[Any],
-        total_imported_stats: Dict[str, int],
-        stop_before_time: Optional[datetime.datetime],
+        context: TimeCollectionLoopContext,
     ) -> Optional[Any]:
         self.log(time_collection_page_message(page_count))
 
-        page = self._fetch_time_collection_page(page_count, current_index, sort)
+        page = self._fetch_time_collection_page(page_count, current_index, context.sort)
         if page is None:
             return None
 
         import_result = self._dedupe_and_import_time_collection_page(
             page,
             page_count,
-            enable_time_dedupe,
-            db_latest_time,
-            total_imported_stats,
+            context.enable_time_dedupe,
+            context.db_latest_time,
+            context.total_imported_stats,
         )
         if import_result is None:
             return None
@@ -2143,7 +2147,7 @@ class ZSXQFileDownloader:
         return self._next_time_collection_page_after_import(
             page,
             import_result.should_stop_after_insert,
-            stop_before_time,
+            context.stop_before_time,
         )
 
     def _dedupe_and_import_time_collection_page(
@@ -2177,11 +2181,7 @@ class ZSXQFileDownloader:
     def _run_time_collection_loop(
         self,
         start_time: Optional[str],
-        sort: str,
-        enable_time_dedupe: bool,
-        db_latest_time: Optional[Any],
-        total_imported_stats: Dict[str, int],
-        stop_before_time: Optional[datetime.datetime],
+        context: TimeCollectionLoopContext,
     ) -> int:
         current_index = start_time
         page_count = 0
@@ -2196,11 +2196,7 @@ class ZSXQFileDownloader:
                 current_index = self._collect_time_collection_page(
                     page_count,
                     current_index,
-                    sort,
-                    enable_time_dedupe,
-                    db_latest_time,
-                    total_imported_stats,
-                    stop_before_time,
+                    context,
                 )
                 if current_index is None:
                     break
@@ -2311,13 +2307,16 @@ class ZSXQFileDownloader:
         )
 
         total_imported_stats = empty_import_stats()
-        page_count = self._run_time_collection_loop(
-            start_time,
+        loop_context = TimeCollectionLoopContext(
             sort,
             enable_time_dedupe,
             database_state.db_latest_time,
             total_imported_stats,
             stop_before_time,
+        )
+        page_count = self._run_time_collection_loop(
+            start_time,
+            loop_context,
         )
 
         return self._finalize_time_collection_result(
