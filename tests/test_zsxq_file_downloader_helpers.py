@@ -1635,6 +1635,56 @@ class FileDownloaderBatchDownloadTests(unittest.TestCase):
         sleep.assert_called_once_with(2)
         self.assertEqual(["📄 准备获取下一页: next-page"], downloader.logs)
 
+    def test_apply_batch_download_result_preserves_stats_logs_and_delays(self):
+        downloader = object.__new__(ZSXQFileDownloader)
+        downloader.logs = []
+        downloader.log = downloader.logs.append
+        interval_events = []
+        downloader.check_long_delay = lambda: interval_events.append("long")
+        downloader.download_delay = lambda: interval_events.append("delay")
+        stats = {"total_files": 0, "downloaded": 0, "skipped": 0, "failed": 0}
+
+        skipped = ZSXQFileDownloader._apply_batch_download_result(
+            downloader,
+            "skipped",
+            has_more_in_batch=True,
+            downloaded_in_batch=4,
+            max_files=None,
+            stats=stats,
+        )
+        downloaded_with_delay = ZSXQFileDownloader._apply_batch_download_result(
+            downloader,
+            True,
+            has_more_in_batch=True,
+            downloaded_in_batch=4,
+            max_files=6,
+            stats=stats,
+        )
+        downloaded_at_limit = ZSXQFileDownloader._apply_batch_download_result(
+            downloader,
+            True,
+            has_more_in_batch=True,
+            downloaded_in_batch=5,
+            max_files=6,
+            stats=stats,
+        )
+        failed = ZSXQFileDownloader._apply_batch_download_result(
+            downloader,
+            False,
+            has_more_in_batch=True,
+            downloaded_in_batch=6,
+            max_files=None,
+            stats=stats,
+        )
+
+        self.assertEqual(4, skipped)
+        self.assertEqual(5, downloaded_with_delay)
+        self.assertEqual(6, downloaded_at_limit)
+        self.assertEqual(6, failed)
+        self.assertEqual({"total_files": 0, "downloaded": 2, "skipped": 1, "failed": 1}, stats)
+        self.assertEqual(["   ⚠️ 文件已跳过，继续下一个"], downloader.logs)
+        self.assertEqual(["long", "delay", "long"], interval_events)
+
     def test_download_files_batch_preserves_result_stats_payloads_and_delays(self):
         files = [
             {"file": {"id": 101, "name": "skip.pdf"}},

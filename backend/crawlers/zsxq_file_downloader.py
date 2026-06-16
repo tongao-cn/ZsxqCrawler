@@ -500,6 +500,14 @@ class BatchDownloadFileItemTarget(NamedTuple):
     stats: Dict[str, int]
 
 
+class BatchDownloadResultTarget(NamedTuple):
+    result: Any
+    has_more_in_batch: bool
+    downloaded_in_batch: int
+    max_files: Optional[int]
+    stats: Dict[str, int]
+
+
 class TimeCollectionDatabaseState(NamedTuple):
     initial_files: Any
     db_latest_time: Optional[Any]
@@ -2434,12 +2442,14 @@ class ZSXQFileDownloader:
 
         result = self.download_file(file_info)
 
-        downloaded_in_batch = self._apply_batch_download_result(
-            result,
-            target.has_more_in_batch,
-            target.downloaded_in_batch,
-            target.max_files,
-            target.stats,
+        downloaded_in_batch = self._apply_batch_download_result_target(
+            BatchDownloadResultTarget(
+                result,
+                target.has_more_in_batch,
+                target.downloaded_in_batch,
+                target.max_files,
+                target.stats,
+            ),
         )
         target.stats['total_files'] += 1
         return downloaded_in_batch
@@ -2452,15 +2462,30 @@ class ZSXQFileDownloader:
         max_files: Optional[int],
         stats: Dict[str, int],
     ) -> int:
-        result_status = _record_file_download_result(result, stats)
+        return self._apply_batch_download_result_target(
+            BatchDownloadResultTarget(
+                result,
+                has_more_in_batch,
+                downloaded_in_batch,
+                max_files,
+                stats,
+            ),
+        )
+
+    def _apply_batch_download_result_target(
+        self,
+        target: BatchDownloadResultTarget,
+    ) -> int:
+        downloaded_in_batch = target.downloaded_in_batch
+        result_status = _record_file_download_result(target.result, target.stats)
         if result_status == "skipped":
             self.log(batch_download_skipped_message())
         elif result_status == "downloaded":
             downloaded_in_batch += 1
             self.check_long_delay()
 
-            not_reached_limit = max_files is None or downloaded_in_batch < max_files
-            if has_more_in_batch and not_reached_limit:
+            not_reached_limit = target.max_files is None or downloaded_in_batch < target.max_files
+            if target.has_more_in_batch and not_reached_limit:
                 self.download_delay()
 
         return downloaded_in_batch

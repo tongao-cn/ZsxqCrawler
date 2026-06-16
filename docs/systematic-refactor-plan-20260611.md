@@ -28309,6 +28309,58 @@ Result:
 - Full backend unittest discovery passed in the current worktree: 1198 tests, 15 skipped.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-16 - P86 batch download result target handoff
+
+Changed:
+
+- Confirmed existing batch characterization coverage for direct batch file item handling, missing
+  filename fallback, result stats payload propagation, delay/long-delay behavior, and max-file stop
+  behavior.
+- Added direct characterization coverage for `_apply_batch_download_result(...)` skipped,
+  downloaded-with-delay, downloaded-at-limit, and failed paths before changing production code.
+- Added private `BatchDownloadResultTarget` to carry result status input, pagination state, current
+  downloaded count, limit state, and shared stats together.
+- Added private `_apply_batch_download_result_target(...)` and reused it from
+  `_download_batch_file_item_target(...)`.
+- Kept `_apply_batch_download_result(...)` with its existing private signature as a compatibility
+  wrapper for any internal direct callers.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Public `download_files_batch(...)`, batch result stats mutation, skipped logging, successful
+  download count increments, long-delay checks, inter-file delay behavior, max-file limit behavior,
+  fallback/legacy behavior, error semantics, and configuration semantics are unchanged.
+- The old `_apply_batch_download_result(...)` private helper signature remains available.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderBatchDownloadTests.test_download_batch_file_item_preserves_limit_reached_delay_skip tests.test_zsxq_file_downloader_helpers.FileDownloaderBatchDownloadTests.test_download_batch_file_item_preserves_missing_file_name_fallback tests.test_zsxq_file_downloader_helpers.FileDownloaderBatchDownloadTests.test_download_files_batch_preserves_result_stats_payloads_and_delays tests.test_zsxq_file_downloader_helpers.FileDownloaderBatchDownloadTests.test_download_files_batch_stops_page_after_success_limit -v
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderBatchDownloadTests.test_apply_batch_download_result_preserves_stats_logs_and_delays tests.test_zsxq_file_downloader_helpers.FileDownloaderBatchDownloadTests.test_download_batch_file_item_preserves_limit_reached_delay_skip tests.test_zsxq_file_downloader_helpers.FileDownloaderBatchDownloadTests.test_download_batch_file_item_preserves_missing_file_name_fallback tests.test_zsxq_file_downloader_helpers.FileDownloaderBatchDownloadTests.test_download_files_batch_preserves_result_stats_payloads_and_delays tests.test_zsxq_file_downloader_helpers.FileDownloaderBatchDownloadTests.test_download_files_batch_stops_page_after_success_limit -v
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py
+uv run python scripts\scan_postgres_compat_debt.py
+uv run ruff check backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py --select F401,F841
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- Existing focused batch result coverage passed before adding the direct characterization test:
+  4 tests.
+- The new direct characterization test plus existing focused batch tests passed before production
+  helper handoff: 5 tests.
+- Focused batch result tests passed after helper handoff: 5 tests.
+- `py_compile` passed.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- ZSXQ file downloader helper tests passed: 221 tests.
+- Full backend unittest discovery passed in the current worktree: 1199 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:
