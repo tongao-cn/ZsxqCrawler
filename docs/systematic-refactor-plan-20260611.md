@@ -23608,6 +23608,48 @@ Result:
 - Full backend unittest discovery passed in the current worktree: 1166 tests, 15 skipped.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-16 - P9 database download result helper extraction
+
+Changed:
+
+- Extracted internal `_apply_database_download_result(...)` from `_download_database_file_row(...)`.
+- Kept the existing single-row database download method responsible for row logging, payload
+  construction, and the `download_file(...)` call.
+- Isolated the skipped/success/failure stats and delay handling into the new internal helper.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Database download row log text, payload shape, `download_file(...)` call order, skipped branch
+  stats/logging, success branch stats, long-delay call, next-row delay condition, failure branch
+  stats/logging, row-loop exception handling, public API, fallback/legacy behavior, error
+  semantics, config semantics, and task-level behavior are unchanged.
+- The new helper is internal and does not create a new public API surface.
+
+Verification:
+
+```powershell
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderDatabaseDownloadTests -v
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run ruff check backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py --select F401,F841
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- Existing database download characterization coverage was reused for this internal extraction.
+- `py_compile` passed.
+- Focused database download tests passed: 8 tests.
+- ZSXQ file downloader helper tests passed: 188 tests.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- Full backend unittest discovery passed in the current worktree: 1166 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:

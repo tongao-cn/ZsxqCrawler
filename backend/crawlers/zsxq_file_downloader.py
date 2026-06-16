@@ -1913,7 +1913,15 @@ class ZSXQFileDownloader:
         )
 
         result = self.download_file(file_info)
+        self._apply_database_download_result(result, position, total_files, stats)
 
+    def _apply_database_download_result(
+        self,
+        result: Any,
+        position: int,
+        total_files: int,
+        stats: Dict[str, int],
+    ) -> None:
         if result == "skipped":
             stats['skipped'] += 1
             self.log(f"   ⚠️ 文件已跳过")
