@@ -1768,6 +1768,20 @@ class ZSXQFileDownloader:
 
         return TimeCollectionPage(data, files, next_index)
 
+    def _next_time_collection_page_after_import(
+        self,
+        page: TimeCollectionPage,
+        should_stop_after_insert: bool,
+        stop_before_time: Optional[datetime.datetime],
+    ) -> Optional[Any]:
+        if should_stop_after_insert:
+            return None
+
+        if self._crossed_time_collection_stop_before(page.files, stop_before_time):
+            return None
+
+        return self._next_time_collection_index(page.next_index)
+
     def _collect_time_collection_page(
         self,
         page_count: int,
@@ -1802,13 +1816,11 @@ class ZSXQFileDownloader:
         ):
             return None
 
-        if should_stop_after_insert:
-            return None
-
-        if self._crossed_time_collection_stop_before(page.files, stop_before_time):
-            return None
-
-        return self._next_time_collection_index(page.next_index)
+        return self._next_time_collection_page_after_import(
+            page,
+            should_stop_after_insert,
+            stop_before_time,
+        )
 
     def _run_time_collection_loop(
         self,

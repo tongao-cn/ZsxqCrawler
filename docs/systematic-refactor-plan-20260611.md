@@ -24090,6 +24090,49 @@ Result:
 - Full backend unittest discovery passed in the current worktree: 1176 tests, 15 skipped.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-16 - P9 time collection post-import next-page helper extraction
+
+Changed:
+
+- Confirmed existing characterization coverage for dedupe stop-after-insert, ordinary next-page
+  sleep/logging, loop stop after a next-page delay, and stop-before boundary handling.
+- Extracted internal `ZSXQFileDownloader._next_time_collection_page_after_import(...)` from
+  `_collect_time_collection_page(...)`.
+- Kept import success handling, `should_stop_after_insert` termination, stop-before boundary
+  logging, next-page logging/sleep, and returned next index unchanged.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Time collection pagination, dedupe stop-after-insert behavior, stop-before behavior, logs,
+  sleep calls, public API, fallback/legacy behavior, error semantics, config semantics, and task
+  behavior are unchanged.
+- The new helper is internal and does not create a new public API surface.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderPaginationTests.test_collect_files_by_time_filters_old_files_and_stops_after_mixed_page tests.test_zsxq_file_downloader_helpers.FileDownloaderPaginationTests.test_collect_files_by_time_preserves_next_index_sleep_and_last_page_log tests.test_zsxq_file_downloader_helpers.FileDownloaderPaginationTests.test_collect_files_by_time_preserves_loop_stop_after_next_page tests.test_zsxq_file_downloader_helpers.FileDownloaderPaginationTests.test_collect_files_by_time_preserves_stop_before_boundary_log_and_break -v
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run ruff check backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py --select F401,F841
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- Existing characterization coverage passed before helper extraction: 4 focused tests.
+- `py_compile` passed.
+- Focused time collection tests passed after helper extraction: 4 tests.
+- ZSXQ file downloader helper tests passed: 198 tests.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- Full backend unittest discovery passed in the current worktree: 1176 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:
