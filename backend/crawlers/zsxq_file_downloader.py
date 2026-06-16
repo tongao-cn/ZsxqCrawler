@@ -1116,8 +1116,7 @@ class ZSXQFileDownloader:
             retry_decision = self._run_download_retry_loop_attempt(
                 attempt,
                 download_retries,
-                prepared_file.file_id,
-                prepared_file.file_size,
+                prepared_file,
                 retry_state,
             )
             retry_state = retry_decision.state
@@ -1137,19 +1136,19 @@ class ZSXQFileDownloader:
         self,
         attempt: int,
         download_retries: int,
-        file_id: int,
-        file_size: int,
+        prepared_file: DownloadFileTarget,
         retry_state: DownloadRetryState,
     ) -> DownloadRetryDecision:
         try:
+            attempt_target = prepared_file._replace(
+                file_name=retry_state.file_name,
+                safe_filename=retry_state.safe_filename,
+                file_path=retry_state.file_path,
+            )
             attempt_result = self._run_download_attempt(
                 attempt,
                 download_retries,
-                file_id,
-                retry_state.file_name,
-                file_size,
-                retry_state.safe_filename,
-                retry_state.file_path,
+                attempt_target,
             )
             return self._apply_download_attempt_result(attempt_result, retry_state)
         except Exception as e:
@@ -1197,27 +1196,29 @@ class ZSXQFileDownloader:
         self,
         attempt: int,
         download_retries: int,
-        file_id: int,
-        file_name: str,
-        file_size: int,
-        safe_filename: str,
-        file_path: str,
+        target: DownloadFileTarget,
     ) -> DownloadAttemptResult:
         if attempt > 0:
             self._wait_before_download_retry(attempt, download_retries)
 
-        download_url = self._get_download_url_or_mark_unavailable(file_id)
+        download_url = self._get_download_url_or_mark_unavailable(target.file_id)
         if not download_url:
-            return DownloadAttemptResult(False, None, file_name, safe_filename, file_path)
+            return DownloadAttemptResult(
+                False,
+                None,
+                target.file_name,
+                target.safe_filename,
+                target.file_path,
+            )
 
         response = self._request_download_response(download_url)
         return self._handle_download_response(
             response,
-            file_id,
-            file_name,
-            file_size,
-            safe_filename,
-            file_path,
+            target.file_id,
+            target.file_name,
+            target.file_size,
+            target.safe_filename,
+            target.file_path,
         )
 
     def _prepare_download_file_target(
