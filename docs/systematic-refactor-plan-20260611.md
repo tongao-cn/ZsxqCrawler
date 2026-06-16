@@ -25657,6 +25657,54 @@ Result:
 - Full backend unittest discovery passed in the current worktree: 1192 tests, 15 skipped.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-16 - P29 database download post-stop helper extraction
+
+Changed:
+
+- Confirmed existing characterization coverage for database download query shape, legacy
+  `recent_days` fallback, initial stop behavior, empty result log order, create-time summary,
+  result stats/delays, row-loop stop behavior, and row exception/KeyboardInterrupt handling.
+- Added internal `ZSXQFileDownloader._run_database_download_after_initial_stop(...)` and moved the
+  post-initial-stop fetch, row summary, empty-result default stats, and row-loop handoff into it.
+- Kept `download_files_from_database(...)` responsible for public arguments, start log, query-plan
+  construction, filter logs, and the initial stop check.
+- Kept the SQL fetch after the initial stop check, preserving the existing no-fetch behavior when a
+  task is already stopped.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Database-download public behavior, logs, legacy `recent_days` fallback semantics, query timing,
+  empty-result stats, row-loop stop handling, exception handling, and returned stats are unchanged.
+- The new helper is internal and does not create a new public API surface.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderDatabaseDownloadTests -v
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderDatabaseDownloadTests -v
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderTimeHelperTests -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run ruff check backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py --select F401,F841
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers -v
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- Existing database-download characterization coverage passed before helper extraction: 11 tests.
+- `py_compile` passed.
+- Database download tests passed after helper extraction: 11 tests.
+- Time helper tests passed after helper extraction: 27 tests.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- ZSXQ file downloader helper tests passed: 214 tests.
+- Full backend unittest discovery passed in the current worktree: 1192 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:

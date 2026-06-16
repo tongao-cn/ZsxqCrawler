@@ -2504,6 +2504,19 @@ class ZSXQFileDownloader:
 
         return stats
 
+    def _run_database_download_after_initial_stop(
+        self,
+        query_plan: Dict[str, Any],
+        sort_by: str,
+    ) -> Dict[str, int]:
+        files_to_download = self._fetch_database_download_rows(query_plan)
+
+        self._log_database_download_rows_summary(files_to_download, sort_by)
+        if not files_to_download:
+            return download_result_stats()
+
+        return self._run_database_download_rows(files_to_download)
+
     def download_files_from_database(
         self,
         max_files: Optional[int] = None,
@@ -2531,13 +2544,8 @@ class ZSXQFileDownloader:
         # 检查是否需要停止
         if self._should_stop_database_download_initially():
             return download_result_stats()
-        files_to_download = self._fetch_database_download_rows(query_plan)
 
-        self._log_database_download_rows_summary(files_to_download, sort_by)
-        if not files_to_download:
-            return download_result_stats()
-
-        return self._run_database_download_rows(files_to_download)
+        return self._run_database_download_after_initial_stop(query_plan, sort_by)
 
     def _print_database_core_stats(self, stats: Dict[str, Any]) -> None:
         total_files = stats.get('files', 0)
