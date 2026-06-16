@@ -1764,6 +1764,7 @@ class FileDownloaderDatabaseStatsTests(unittest.TestCase):
         self.assertEqual(0, _database_stats_total_size(()))
         self.assertEqual(0, _database_stats_total_size((0,)))
         self.assertEqual(0, _database_stats_total_size((None,)))
+        self.assertEqual(-1, _database_stats_total_size((-1,)))
         self.assertEqual(2048, _database_stats_total_size((2048,)))
         self.assertEqual(2048, _database_stats_total_size((2048, "ignored")))
 

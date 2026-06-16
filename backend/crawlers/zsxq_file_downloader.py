@@ -261,10 +261,17 @@ def _latest_file_create_time(row: Any) -> Optional[Any]:
     return LatestFileCreateTimeRow(row[0]).create_time
 
 
-def _database_stats_total_size(result: Any) -> Any:
+def _database_stats_total_size_row(result: Any) -> Optional[DatabaseStatsTotalSize]:
     if not result or not result[0]:
+        return None
+    return DatabaseStatsTotalSize(result[0])
+
+
+def _database_stats_total_size(result: Any) -> Any:
+    total_size = _database_stats_total_size_row(result)
+    if not total_size:
         return 0
-    return DatabaseStatsTotalSize(result[0]).total_size
+    return total_size.total_size
 
 
 def _database_stats_time_range_row(result: Any) -> Optional[DatabaseStatsTimeRange]:
