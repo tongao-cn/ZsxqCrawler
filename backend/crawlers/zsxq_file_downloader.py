@@ -221,6 +221,15 @@ class DownloadUrlSuccessResponseTarget(NamedTuple):
     http_status: int
 
 
+class DownloadUrlApiFailureResponseTarget(NamedTuple):
+    data: Dict[str, Any]
+    file_id: int
+    attempt: int
+    max_retries: int
+    headers: Dict[str, str]
+    http_status: int
+
+
 class DownloadRetryWaitTarget(NamedTuple):
     attempt: int
     download_retries: int
@@ -1018,14 +1027,33 @@ class ZSXQFileDownloader:
         headers: Dict[str, str],
         http_status: int,
     ) -> str:
-        api_failure = download_url_api_failure_plan(data, attempt, max_retries)
+        return self._handle_download_url_api_failure_response_target(
+            DownloadUrlApiFailureResponseTarget(
+                data,
+                file_id,
+                attempt,
+                max_retries,
+                headers,
+                http_status,
+            ),
+        )
+
+    def _handle_download_url_api_failure_response_target(
+        self,
+        target: DownloadUrlApiFailureResponseTarget,
+    ) -> str:
+        api_failure = download_url_api_failure_plan(
+            target.data,
+            target.attempt,
+            target.max_retries,
+        )
         self.log(api_failure["messages"][0])
         self._record_risk_event(
-            file_id=file_id,
+            file_id=target.file_id,
             phase="download_url_response",
-            attempt=attempt,
-            headers=headers,
-            http_status=http_status,
+            attempt=target.attempt,
+            headers=target.headers,
+            http_status=target.http_status,
             api_code=api_failure["error_code"],
             api_message=api_failure["error_msg"],
             status="api_failed",
@@ -1163,13 +1191,15 @@ class ZSXQFileDownloader:
             )
             return DownloadUrlResponseDecision(download_url, False, False)
 
-        failure_class = self._handle_download_url_api_failure_response(
-            target.data,
-            target.file_id,
-            target.attempt,
-            target.max_retries,
-            target.headers,
-            target.http_status,
+        failure_class = self._handle_download_url_api_failure_response_target(
+            DownloadUrlApiFailureResponseTarget(
+                target.data,
+                target.file_id,
+                target.attempt,
+                target.max_retries,
+                target.headers,
+                target.http_status,
+            ),
         )
 
         return self._download_url_api_failure_decision(failure_class)
