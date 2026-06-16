@@ -26716,6 +26716,51 @@ Result:
 - Full backend unittest discovery passed in the current worktree: 1196 tests, 15 skipped.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-16 - P52 download stop target handoff
+
+Changed:
+
+- Confirmed existing characterization coverage for direct download-stop handling, body-write
+  stop handling, successful-response stop propagation, and public `download_file(...)`
+  stop-during-body behavior.
+- Added private `DownloadStopTarget` to carry stop side-effect fields together.
+- Added private `_handle_download_stop_target(...)` and reused it from
+  `_write_download_response_body_target(...)`.
+- Kept `_handle_download_stop(...)` with its existing private signature as a compatibility wrapper
+  for tests and any internal direct callers.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Public `download_file(...)` inputs/outputs, stop log text, failed status update with
+  `stopped` / `下载过程中被停止`, partial-file cleanup, returned `False` stop semantics,
+  fallback/legacy behavior, error semantics, and configuration semantics are unchanged.
+- The old `_handle_download_stop(...)` private helper signature remains available.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_handle_download_stop_preserves_status_log_and_cleanup tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_write_download_response_body_preserves_progress_stop_and_empty_chunks tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_handle_successful_download_response_preserves_completion_retry_and_stop_paths tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_download_file_stops_during_body_download -v
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py
+uv run python scripts\scan_postgres_compat_debt.py
+uv run ruff check backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py --select F401,F841
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- Existing focused stop-path coverage passed before helper handoff: 4 tests.
+- Focused stop-path tests passed after the helper handoff: 4 tests.
+- `py_compile` passed.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- ZSXQ file downloader helper tests passed: 218 tests.
+- Full backend unittest discovery passed in the current worktree: 1196 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:

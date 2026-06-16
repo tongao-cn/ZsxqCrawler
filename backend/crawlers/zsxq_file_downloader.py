@@ -233,6 +233,11 @@ class DownloadBodyWriteTarget(NamedTuple):
     file_id: int
 
 
+class DownloadStopTarget(NamedTuple):
+    file_id: int
+    temp_path: str
+
+
 class DownloadCompletionTarget(NamedTuple):
     file_id: int
     safe_filename: str
@@ -1454,7 +1459,12 @@ class ZSXQFileDownloader:
 
                     # 检查是否需要停止
                     if self.check_stop():
-                        self._handle_download_stop(target.file_id, target.temp_path)
+                        self._handle_download_stop_target(
+                            DownloadStopTarget(
+                                target.file_id,
+                                target.temp_path,
+                            ),
+                        )
                         return None
 
         return downloaded_size
@@ -1742,14 +1752,20 @@ class ZSXQFileDownloader:
         return mismatch_detail
 
     def _handle_download_stop(self, file_id: int, temp_path: str) -> None:
+        self._handle_download_stop_target(DownloadStopTarget(file_id, temp_path))
+
+    def _handle_download_stop_target(
+        self,
+        target: DownloadStopTarget,
+    ) -> None:
         self.log("🛑 下载过程中被停止")
         self.file_db.update_file_download_status(
-            file_id,
+            target.file_id,
             'failed',
             error_code='stopped',
             error_message='下载过程中被停止',
         )
-        remove_partial_download(temp_path)
+        remove_partial_download(target.temp_path)
 
     def _download_interval_values(self) -> DownloadIntervalValues:
         download_interval = self.download_interval
