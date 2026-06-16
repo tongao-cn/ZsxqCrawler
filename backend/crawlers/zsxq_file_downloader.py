@@ -208,6 +208,11 @@ class DownloadFailureDetail(NamedTuple):
     error_message: str
 
 
+class DownloadUrlUnavailableTarget(NamedTuple):
+    file_id: int
+    last_download_url_error: Optional[Dict[str, Any]]
+
+
 class DownloadExceptionTarget(NamedTuple):
     exc: Exception
     file_path: str
@@ -1352,14 +1357,30 @@ class ZSXQFileDownloader:
         if download_url:
             return download_url
 
-        self._mark_download_url_unavailable(file_id)
+        self._mark_download_url_unavailable_target(
+            DownloadUrlUnavailableTarget(
+                file_id,
+                self.last_download_url_error,
+            ),
+        )
         return None
 
     def _mark_download_url_unavailable(self, file_id: int) -> None:
+        self._mark_download_url_unavailable_target(
+            DownloadUrlUnavailableTarget(
+                file_id,
+                self.last_download_url_error,
+            ),
+        )
+
+    def _mark_download_url_unavailable_target(
+        self,
+        target: DownloadUrlUnavailableTarget,
+    ) -> None:
         self.log(f"   ❌ 无法获取下载链接")
-        error_code, error_message = download_url_failure_detail(self.last_download_url_error)
+        error_code, error_message = download_url_failure_detail(target.last_download_url_error)
         self.file_db.update_file_download_status(
-            file_id,
+            target.file_id,
             'failed',
             error_code=error_code,
             error_message=error_message,
