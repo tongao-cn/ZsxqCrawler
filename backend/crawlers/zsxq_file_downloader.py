@@ -469,6 +469,11 @@ class TimeCollectionPage(NamedTuple):
     next_index: Optional[Any]
 
 
+class ShowFileListTarget(NamedTuple):
+    count: int
+    index: Optional[str]
+
+
 class TimeCollectionPageImportResult(NamedTuple):
     should_stop_after_insert: bool
 
@@ -2749,7 +2754,10 @@ class ZSXQFileDownloader:
 
     def show_file_list(self, count: int = 20, index: Optional[str] = None) -> Optional[str]:
         """显示文件列表"""
-        data = self.fetch_file_list(count=count, index=index)
+        return self._show_file_list_target(ShowFileListTarget(count, index))
+
+    def _show_file_list_target(self, target: ShowFileListTarget) -> Optional[str]:
+        data = self.fetch_file_list(count=target.count, index=target.index)
         if not data:
             return None
         

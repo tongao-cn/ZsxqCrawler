@@ -1490,6 +1490,31 @@ class FileDownloaderPaginationTests(unittest.TestCase):
         self.assertIn("demo.pdf", printed)
         self.assertIn("📑 下一页索引: next-page", printed)
 
+    def test_show_file_list_preserves_entry_fetch_page_handoff_and_return(self):
+        downloader = object.__new__(ZSXQFileDownloader)
+        calls = []
+        files = [{"file": {"name": "demo.pdf"}}]
+        data = {"resp_data": {"index": "next-page", "files": files}}
+
+        def fetch_file_list(**kwargs):
+            calls.append(("fetch", kwargs))
+            return data
+
+        def print_file_list_page(page_files, next_index):
+            calls.append(("print", page_files, next_index))
+
+        downloader.fetch_file_list = fetch_file_list
+        downloader._print_file_list_page = print_file_list_page
+
+        next_index = ZSXQFileDownloader.show_file_list(downloader, count=7, index="cursor")
+
+        self.assertEqual("next-page", next_index)
+        self.assertEqual("fetch", calls[0][0])
+        self.assertEqual({"count": 7, "index": "cursor"}, calls[0][1])
+        self.assertEqual("print", calls[1][0])
+        self.assertIs(files, calls[1][1])
+        self.assertEqual("next-page", calls[1][2])
+
     def test_show_file_list_fetch_failure_returns_none_without_output(self):
         downloader = object.__new__(ZSXQFileDownloader)
         downloader.fetch_calls = []
