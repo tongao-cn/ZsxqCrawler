@@ -300,6 +300,10 @@ def _database_stats_time_range(result: Any) -> Optional[DatabaseStatsTimeRange]:
     return _database_stats_time_range_row(result)
 
 
+def _database_download_row(row: Any) -> DatabaseDownloadRow:
+    return DatabaseDownloadRow(*row)
+
+
 class ZSXQFileDownloader:
     """知识星球文件下载器"""
     
@@ -1927,7 +1931,7 @@ class ZSXQFileDownloader:
         query_plan: Dict[str, Any],
     ) -> list[DatabaseDownloadRow]:
         self.file_db.cursor.execute(query_plan["query"], query_plan["params"])
-        return [DatabaseDownloadRow(*row) for row in self.file_db.cursor.fetchall()]
+        return [_database_download_row(row) for row in self.file_db.cursor.fetchall()]
 
     def _download_database_file_rows(
         self,

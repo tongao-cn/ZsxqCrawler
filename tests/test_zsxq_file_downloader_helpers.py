@@ -1602,10 +1602,26 @@ class FileDownloaderDatabaseDownloadTests(unittest.TestCase):
         )
 
         self.assertEqual(rows, fetched_rows)
+        self.assertEqual(101, fetched_rows[0].file_id)
+        self.assertEqual("memo.pdf", fetched_rows[0].file_name)
+        self.assertEqual(2048, fetched_rows[0].file_size)
+        self.assertEqual(7, fetched_rows[0].download_count)
+        self.assertEqual("2026-05-03 10:00:00", fetched_rows[0].create_time)
         self.assertEqual(
             [("SELECT id, name FROM files WHERE group_id = ?", (511,))],
             downloader.file_db.executed,
         )
+
+    def test_fetch_database_download_rows_preserves_malformed_row_errors(self):
+        downloader = self._downloader_for_query_capture(
+            rows=[(101, "memo.pdf", 2048, 7)]
+        )
+
+        with self.assertRaises(TypeError):
+            ZSXQFileDownloader._fetch_database_download_rows(
+                downloader,
+                {"query": "SELECT partial", "params": ()},
+            )
 
     def test_download_files_from_database_preserves_filtered_query_shape_and_legacy_order_by(self):
         downloader = self._downloader_for_query_capture()

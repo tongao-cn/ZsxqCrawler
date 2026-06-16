@@ -23564,6 +23564,50 @@ Result:
 - Full backend unittest discovery passed in the current worktree: 1165 tests, 15 skipped.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-16 - P9 database download row helper extraction
+
+Changed:
+
+- Added characterization coverage for database-download row named-field access, preserving the
+  tuple-compatible returned row shape.
+- Added characterization coverage for malformed database-download rows raising `TypeError`.
+- Extracted internal `_database_download_row(...)` in the downloader module and routed fetched
+  database rows through it.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Database download SQL execution, params, fetch order, returned tuple-compatible row shape,
+  named-field access, malformed-row exception behavior, download loop ordering, stop handling,
+  interrupt handling, row-exception accounting, public API, fallback/legacy behavior, error
+  semantics, call order, config semantics, and task-level behavior are unchanged.
+- The new helper is internal and does not create a new public API surface.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderDatabaseDownloadTests.test_fetch_database_download_rows_preserves_execute_params_and_fetch_shape tests.test_zsxq_file_downloader_helpers.FileDownloaderDatabaseDownloadTests.test_fetch_database_download_rows_preserves_malformed_row_errors -v
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderDatabaseDownloadTests -v
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run ruff check backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py --select F401,F841
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- Characterization tests passed against the pre-refactor behavior before helper extraction: 2 tests.
+- `py_compile` passed.
+- Focused database download tests passed: 8 tests.
+- ZSXQ file downloader helper tests passed: 188 tests.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- Full backend unittest discovery passed in the current worktree: 1166 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:
