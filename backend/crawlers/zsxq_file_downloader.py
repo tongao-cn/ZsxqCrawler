@@ -208,6 +208,13 @@ class DownloadFailureDetail(NamedTuple):
     error_message: str
 
 
+class DownloadFinalFailureTarget(NamedTuple):
+    file_id: int
+    download_retries: int
+    last_error_code: Optional[str]
+    last_error: Optional[str]
+
+
 class DownloadBodyPreparationTarget(NamedTuple):
     response_headers: Dict[str, Any]
     file_size: int
@@ -1170,11 +1177,13 @@ class ZSXQFileDownloader:
                 continue
             return retry_decision.result
 
-        self._mark_download_failed_after_retries(
-            prepared_file.file_id,
-            download_retries,
-            retry_state.last_error_code,
-            retry_state.last_error,
+        self._mark_download_failed_after_retries_target(
+            DownloadFinalFailureTarget(
+                prepared_file.file_id,
+                download_retries,
+                retry_state.last_error_code,
+                retry_state.last_error,
+            ),
         )
         return False
 
@@ -1351,10 +1360,26 @@ class ZSXQFileDownloader:
         last_error_code: Optional[str],
         last_error: Optional[str],
     ) -> None:
-        self.log(f"   🚫 文件下载重试{download_retries}次仍失败: {last_error}")
-        error_code, error_message = download_final_failure_detail(last_error_code, last_error)
+        self._mark_download_failed_after_retries_target(
+            DownloadFinalFailureTarget(
+                file_id,
+                download_retries,
+                last_error_code,
+                last_error,
+            ),
+        )
+
+    def _mark_download_failed_after_retries_target(
+        self,
+        target: DownloadFinalFailureTarget,
+    ) -> None:
+        self.log(f"   🚫 文件下载重试{target.download_retries}次仍失败: {target.last_error}")
+        error_code, error_message = download_final_failure_detail(
+            target.last_error_code,
+            target.last_error,
+        )
         self.file_db.update_file_download_status(
-            file_id,
+            target.file_id,
             'failed',
             error_code=error_code,
             error_message=error_message,

@@ -26672,6 +26672,50 @@ Result:
 - Full backend unittest discovery passed in the current worktree: 1196 tests, 15 skipped.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-16 - P51 final download failure target handoff
+
+Changed:
+
+- Confirmed existing characterization coverage for final failure default details, HTTP final
+  failures, non-retry HTTP final failures, and size-mismatch final failures.
+- Added private `DownloadFinalFailureTarget` to carry final failure fields together.
+- Added private `_mark_download_failed_after_retries_target(...)` and reused it from the retry
+  loop after all attempts are exhausted.
+- Kept `_mark_download_failed_after_retries(...)` with its existing private signature as a
+  compatibility wrapper for tests and any internal direct callers.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Public `download_file(...)` inputs/outputs, exactly-3 download attempts, final failure log text,
+  default `download_failed` fallback detail, HTTP/size-mismatch final status updates,
+  fallback/legacy behavior, error semantics, and configuration semantics are unchanged.
+- The old `_mark_download_failed_after_retries(...)` private helper signature remains available.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_mark_download_failed_after_retries_preserves_error_detail_defaults tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_download_file_marks_final_failure_after_http_retries tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_download_file_retries_and_marks_final_failure_after_http_404 tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_download_file_retries_and_fails_on_size_mismatch -v
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py
+uv run python scripts\scan_postgres_compat_debt.py
+uv run ruff check backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py --select F401,F841
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- Existing focused final-failure coverage passed before helper handoff: 4 tests.
+- Focused final-failure tests passed after the helper handoff: 4 tests.
+- `py_compile` passed.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- ZSXQ file downloader helper tests passed: 218 tests.
+- Full backend unittest discovery passed in the current worktree: 1196 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:
