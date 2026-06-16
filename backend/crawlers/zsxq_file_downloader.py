@@ -213,6 +213,14 @@ class DownloadUrlDataDecisionTarget(NamedTuple):
     http_status: int
 
 
+class DownloadUrlSuccessResponseTarget(NamedTuple):
+    data: Dict[str, Any]
+    file_id: int
+    attempt: int
+    headers: Dict[str, str]
+    http_status: int
+
+
 class DownloadRetryWaitTarget(NamedTuple):
     attempt: int
     download_retries: int
@@ -970,16 +978,30 @@ class ZSXQFileDownloader:
         headers: Dict[str, str],
         http_status: int,
     ) -> Optional[str]:
-        download_url = data.get('resp_data', {}).get('download_url')
+        return self._handle_download_url_success_response_target(
+            DownloadUrlSuccessResponseTarget(
+                data,
+                file_id,
+                attempt,
+                headers,
+                http_status,
+            ),
+        )
+
+    def _handle_download_url_success_response_target(
+        self,
+        target: DownloadUrlSuccessResponseTarget,
+    ) -> Optional[str]:
+        download_url = target.data.get('resp_data', {}).get('download_url')
         if download_url:
-            success_message, success_phase = download_url_success_plan(attempt)
+            success_message, success_phase = download_url_success_plan(target.attempt)
             print(success_message)
             self._record_risk_event(
-                file_id=file_id,
+                file_id=target.file_id,
                 phase=success_phase,
-                attempt=attempt,
-                headers=headers,
-                http_status=http_status,
+                attempt=target.attempt,
+                headers=target.headers,
+                http_status=target.http_status,
                 status="api_success",
             )
             return download_url
@@ -1130,12 +1152,14 @@ class ZSXQFileDownloader:
         target: DownloadUrlDataDecisionTarget,
     ) -> DownloadUrlResponseDecision:
         if target.data.get('succeeded'):
-            download_url = self._handle_download_url_success_response(
-                target.data,
-                target.file_id,
-                target.attempt,
-                target.headers,
-                target.http_status,
+            download_url = self._handle_download_url_success_response_target(
+                DownloadUrlSuccessResponseTarget(
+                    target.data,
+                    target.file_id,
+                    target.attempt,
+                    target.headers,
+                    target.http_status,
+                ),
             )
             return DownloadUrlResponseDecision(download_url, False, False)
 
