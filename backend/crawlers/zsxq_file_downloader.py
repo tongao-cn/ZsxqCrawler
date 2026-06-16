@@ -208,6 +208,14 @@ class DownloadBodyTarget(NamedTuple):
     temp_path: str
 
 
+class DownloadBodyFinalizationTarget(NamedTuple):
+    expected_size: int
+    temp_path: str
+    file_id: int
+    safe_filename: str
+    file_path: str
+
+
 class DownloadBodyResult(NamedTuple):
     success_result: Optional[bool]
     failure_detail: Optional[DownloadFailureDetail]
@@ -1545,13 +1553,15 @@ class ZSXQFileDownloader:
             body_target.total_size,
             target.file_id,
         )
-        return self._finalize_download_body_result(
+        return self._finalize_download_body_result_target(
             downloaded_size,
-            body_target.expected_size,
-            body_target.temp_path,
-            target.file_id,
-            target.safe_filename,
-            target.file_path,
+            DownloadBodyFinalizationTarget(
+                body_target.expected_size,
+                body_target.temp_path,
+                target.file_id,
+                target.safe_filename,
+                target.file_path,
+            ),
         )
 
     def _finalize_download_body_result(
@@ -1563,14 +1573,38 @@ class ZSXQFileDownloader:
         safe_filename: str,
         file_path: str,
     ) -> DownloadBodyResult:
+        return self._finalize_download_body_result_target(
+            downloaded_size,
+            DownloadBodyFinalizationTarget(
+                expected_size,
+                temp_path,
+                file_id,
+                safe_filename,
+                file_path,
+            ),
+        )
+
+    def _finalize_download_body_result_target(
+        self,
+        downloaded_size: Optional[int],
+        target: DownloadBodyFinalizationTarget,
+    ) -> DownloadBodyResult:
         if downloaded_size is None:
             return DownloadBodyResult(False, None)
 
-        mismatch_detail = self._handle_download_size_mismatch(expected_size, temp_path)
+        mismatch_detail = self._handle_download_size_mismatch(
+            target.expected_size,
+            target.temp_path,
+        )
         if mismatch_detail:
             return DownloadBodyResult(None, mismatch_detail)
 
-        self._complete_successful_download(file_id, safe_filename, file_path, temp_path)
+        self._complete_successful_download(
+            target.file_id,
+            target.safe_filename,
+            target.file_path,
+            target.temp_path,
+        )
         return DownloadBodyResult(True, None)
 
     def _handle_download_size_mismatch(

@@ -26448,6 +26448,51 @@ Result:
 - Full backend unittest discovery passed in the current worktree: 1196 tests, 15 skipped.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-16 - P46 download body finalization target handoff
+
+Changed:
+
+- Confirmed existing characterization coverage for body finalization stop, size mismatch, success,
+  successful response handling, final success side effects, and mismatch cleanup paths.
+- Added private `DownloadBodyFinalizationTarget` to carry finalization fields together.
+- Added private `_finalize_download_body_result_target(...)` and reused it from
+  `_handle_successful_download_response_target(...)`.
+- Kept `_finalize_download_body_result(...)` with its existing private signature as a compatibility
+  wrapper for tests and any internal direct callers.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Public `download_file(...)` inputs/outputs, stop result, size-mismatch error code/message,
+  partial-file deletion, successful `os.replace(...)`, completed status update, counters, interval
+  side effects, fallback/legacy behavior, error semantics, and configuration semantics are
+  unchanged.
+- The old `_finalize_download_body_result(...)` private helper signature remains available.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_finalize_download_body_result_preserves_stop_mismatch_and_success_paths tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_handle_successful_download_response_preserves_completion_retry_and_stop_paths tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_complete_successful_download_preserves_side_effect_order tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_handle_download_size_mismatch_preserves_cleanup_and_noop_paths -v
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py
+uv run python scripts\scan_postgres_compat_debt.py
+uv run ruff check backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py --select F401,F841
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- Existing focused body-finalization coverage passed before helper handoff: 4 tests.
+- Focused body-finalization tests passed after the helper handoff: 4 tests.
+- `py_compile` passed.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- ZSXQ file downloader helper tests passed: 218 tests.
+- Full backend unittest discovery passed in the current worktree: 1196 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:
