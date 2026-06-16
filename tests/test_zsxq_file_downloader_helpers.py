@@ -556,6 +556,22 @@ class FileDownloaderPaginationTests(unittest.TestCase):
         self.assertEqual(1, downloader.file_db.import_calls)
         self.assertEqual({"total_files": 0, "new_files": 0, "skipped_files": 0}, stats)
 
+    def test_collect_all_files_import_failure_preserves_log_and_summary(self):
+        downloader = self._downloader_with_failing_import()
+
+        with contextlib.redirect_stdout(io.StringIO()) as output:
+            stats = ZSXQFileDownloader.collect_all_files_to_database(downloader)
+
+        self.assertEqual({"total_files": 0, "new_files": 0, "skipped_files": 0}, stats)
+        self.assertEqual([{"count": 20, "index": None}], downloader.fetch_calls)
+        self.assertEqual(1, downloader.file_db.import_calls)
+        printed = output.getvalue()
+        self.assertIn("📄 收集第1页文件列表", printed)
+        self.assertIn("   📋 当前页面: 1 个文件", printed)
+        self.assertIn("   ❌ 第1页存储失败: stable import failure", printed)
+        self.assertNotIn("   ✅ 第1页存储完成", printed)
+        self.assertIn("   📄 收集页数: 1", printed)
+
     def test_collect_all_files_preserves_fetch_failure_record_update_and_summary(self):
         downloader = object.__new__(ZSXQFileDownloader)
         downloader.file_db = CollectAllFileDb()

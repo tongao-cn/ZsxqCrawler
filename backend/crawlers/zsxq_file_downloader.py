@@ -1483,6 +1483,28 @@ class ZSXQFileDownloader:
 
         return next_index
 
+    def _import_file_collection_page(
+        self,
+        data: Dict[str, Any],
+        file_count: int,
+        page_count: int,
+        stats: Dict[str, int],
+    ) -> bool:
+        try:
+            page_stats = self.file_db.import_file_response(data)
+
+            add_file_collection_page_stats(stats, file_count, page_stats)
+
+            for message in file_collection_page_import_messages(page_stats):
+                print(message)
+
+        except Exception as e:
+            print(file_collection_storage_failed_message(page_count, e))
+            return False
+
+        print(file_collection_page_stored_message(page_count))
+        return True
+
     def _run_file_collection_loop(self, stats: Dict[str, int]) -> int:
         current_index = None
         page_count = 0
@@ -1508,19 +1530,8 @@ class ZSXQFileDownloader:
                 print(file_collection_page_files_message(len(files)))
 
                 # 使用完整数据库导入整个API响应
-                try:
-                    page_stats = self.file_db.import_file_response(data)
-
-                    add_file_collection_page_stats(stats, len(files), page_stats)
-
-                    for message in file_collection_page_import_messages(page_stats):
-                        print(message)
-
-                except Exception as e:
-                    print(file_collection_storage_failed_message(page_count, e))
+                if not self._import_file_collection_page(data, len(files), page_count, stats):
                     break
-
-                print(file_collection_page_stored_message(page_count))
 
                 next_page = file_collection_next_page_plan(next_index)
                 if next_page["has_next"]:
