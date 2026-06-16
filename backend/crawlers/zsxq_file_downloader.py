@@ -559,6 +559,11 @@ class DatabaseDownloadRowsTarget(NamedTuple):
     files_to_download: list[DatabaseDownloadRow]
 
 
+class DatabaseDownloadAfterInitialStopTarget(NamedTuple):
+    query_plan: Dict[str, Any]
+    sort_by: str
+
+
 class DatabaseStatsTotalSize(NamedTuple):
     total_size: Any
 
@@ -3457,9 +3462,17 @@ class ZSXQFileDownloader:
         query_plan: Dict[str, Any],
         sort_by: str,
     ) -> Dict[str, int]:
-        files_to_download = self._fetch_database_download_rows(query_plan)
+        return self._run_database_download_after_initial_stop_target(
+            DatabaseDownloadAfterInitialStopTarget(query_plan, sort_by),
+        )
 
-        self._log_database_download_rows_summary(files_to_download, sort_by)
+    def _run_database_download_after_initial_stop_target(
+        self,
+        target: DatabaseDownloadAfterInitialStopTarget,
+    ) -> Dict[str, int]:
+        files_to_download = self._fetch_database_download_rows(target.query_plan)
+
+        self._log_database_download_rows_summary(files_to_download, target.sort_by)
         if not files_to_download:
             return download_result_stats()
 

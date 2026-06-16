@@ -2272,6 +2272,57 @@ class FileDownloaderDatabaseDownloadTests(unittest.TestCase):
             downloader.logs,
         )
 
+    def test_run_database_download_after_initial_stop_preserves_empty_and_nonempty_handoff(self):
+        query_plan = {"query": "SELECT files", "params": (511,), "sort_by": "create_time"}
+
+        empty_downloader = object.__new__(ZSXQFileDownloader)
+        empty_fetch_calls = []
+        empty_summary_calls = []
+        empty_downloader._fetch_database_download_rows = lambda plan: empty_fetch_calls.append(plan) or []
+        empty_downloader._log_database_download_rows_summary = (
+            lambda files, sort_by: empty_summary_calls.append((files, sort_by))
+        )
+        empty_downloader._run_database_download_rows = lambda files: self.fail(
+            "empty database download should not enter row runner"
+        )
+
+        empty_stats = ZSXQFileDownloader._run_database_download_after_initial_stop(
+            empty_downloader,
+            query_plan,
+            "create_time",
+        )
+
+        self.assertEqual({"total_files": 0, "downloaded": 0, "skipped": 0, "failed": 0}, empty_stats)
+        self.assertEqual([query_plan], empty_fetch_calls)
+        self.assertEqual([([], "create_time")], empty_summary_calls)
+
+        rows = [SimpleNamespace(file_id=101, file_name="memo.pdf")]
+        nonempty_downloader = object.__new__(ZSXQFileDownloader)
+        nonempty_fetch_calls = []
+        nonempty_summary_calls = []
+        nonempty_run_calls = []
+        expected_stats = {"total_files": 1, "downloaded": 1, "skipped": 0, "failed": 0}
+        nonempty_downloader._fetch_database_download_rows = (
+            lambda plan: nonempty_fetch_calls.append(plan) or rows
+        )
+        nonempty_downloader._log_database_download_rows_summary = (
+            lambda files, sort_by: nonempty_summary_calls.append((files, sort_by))
+        )
+        nonempty_downloader._run_database_download_rows = (
+            lambda files: nonempty_run_calls.append(files) or expected_stats
+        )
+
+        stats = ZSXQFileDownloader._run_database_download_after_initial_stop(
+            nonempty_downloader,
+            query_plan,
+            "download_count",
+        )
+
+        self.assertIs(expected_stats, stats)
+        self.assertEqual([query_plan], nonempty_fetch_calls)
+        self.assertEqual([(rows, "download_count")], nonempty_summary_calls)
+        self.assertEqual([rows], nonempty_run_calls)
+
     def test_download_files_from_database_preserves_filtered_query_shape_and_legacy_order_by(self):
         downloader = self._downloader_for_query_capture()
 
