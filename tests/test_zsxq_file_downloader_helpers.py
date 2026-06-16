@@ -2780,6 +2780,52 @@ class FileDownloaderFileDataHelperTests(unittest.TestCase):
             download_settings_display_lines(60, 120, 5, 300, 600, "output/downloads"),
         )
 
+    def test_adjust_settings_preserves_successful_update_and_directory_creation(self):
+        downloader = object.__new__(ZSXQFileDownloader)
+        downloader.download_interval_min = 60
+        downloader.download_interval_max = 120
+        downloader.long_delay_interval = 5
+        downloader.long_delay_min = 300
+        downloader.long_delay_max = 600
+        downloader.download_dir = "old-downloads"
+        new_dir = str(Path("output") / "downloads")
+
+        with (
+            patch("builtins.input", side_effect=["0", new_dir]),
+            patch("backend.crawlers.zsxq_file_downloader.os.makedirs") as makedirs,
+            contextlib.redirect_stdout(io.StringIO()) as output,
+        ):
+            ZSXQFileDownloader.adjust_settings(downloader)
+
+        self.assertEqual(1, downloader.long_delay_interval)
+        self.assertEqual(new_dir, downloader.download_dir)
+        makedirs.assert_called_once_with(new_dir, exist_ok=True)
+        printed = output.getvalue()
+        self.assertIn("   下载目录: old-downloads", printed)
+        self.assertIn(f"📁 下载目录已更新: {Path(new_dir).absolute()}", printed)
+        self.assertIn("✅ 设置已更新", printed)
+
+    def test_adjust_settings_preserves_invalid_input_without_changes(self):
+        downloader = object.__new__(ZSXQFileDownloader)
+        downloader.download_interval_min = 60
+        downloader.download_interval_max = 120
+        downloader.long_delay_interval = 5
+        downloader.long_delay_min = 300
+        downloader.long_delay_max = 600
+        downloader.download_dir = "old-downloads"
+
+        with (
+            patch("builtins.input", side_effect=["invalid"]),
+            patch("backend.crawlers.zsxq_file_downloader.os.makedirs") as makedirs,
+            contextlib.redirect_stdout(io.StringIO()) as output,
+        ):
+            ZSXQFileDownloader.adjust_settings(downloader)
+
+        self.assertEqual(5, downloader.long_delay_interval)
+        self.assertEqual("old-downloads", downloader.download_dir)
+        makedirs.assert_not_called()
+        self.assertIn("❌ 输入无效，保持原设置", output.getvalue())
+
     def test_download_query_group_id_preserves_cast_and_blank_semantics(self):
         self.assertEqual(123, download_query_group_id("123"))
         self.assertEqual(123, download_query_group_id(" 123 "))

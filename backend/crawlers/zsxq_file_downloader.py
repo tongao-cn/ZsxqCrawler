@@ -2627,8 +2627,7 @@ class ZSXQFileDownloader:
 
         print("="*60)
     
-    def adjust_settings(self):
-        """调整下载设置"""
+    def _print_download_settings(self) -> None:
         for line in download_settings_display_lines(
             self.download_interval_min,
             self.download_interval_max,
@@ -2638,19 +2637,25 @@ class ZSXQFileDownloader:
             self.download_dir,
         ):
             print(line)
-        
+
+    def _apply_adjusted_settings(self, new_interval: int, new_dir: str) -> None:
+        self.long_delay_interval = max(new_interval, 1)
+
+        if new_dir != self.download_dir:
+            self.download_dir = new_dir
+            os.makedirs(new_dir, exist_ok=True)
+            print(f"📁 下载目录已更新: {os.path.abspath(new_dir)}")
+
+        print(f"✅ 设置已更新")
+
+    def adjust_settings(self):
+        """调整下载设置"""
+        self._print_download_settings()
+
         try:
             new_interval = int(input(f"长休眠间隔 (当前每{self.long_delay_interval}个文件): ") or self.long_delay_interval)
             new_dir = input(f"下载目录 (当前: {self.download_dir}): ").strip() or self.download_dir
-            
-            self.long_delay_interval = max(new_interval, 1)
-            
-            if new_dir != self.download_dir:
-                self.download_dir = new_dir
-                os.makedirs(new_dir, exist_ok=True)
-                print(f"📁 下载目录已更新: {os.path.abspath(new_dir)}")
-            
-            print(f"✅ 设置已更新")
+            self._apply_adjusted_settings(new_interval, new_dir)
             
         except ValueError:
             print("❌ 输入无效，保持原设置")

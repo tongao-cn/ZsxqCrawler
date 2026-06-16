@@ -26262,6 +26262,52 @@ Result:
 - Full backend unittest discovery passed in the current worktree: 1192 tests, 15 skipped.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-16 - P42 adjust-settings characterization and helper extraction
+
+Changed:
+
+- Added characterization coverage for `ZSXQFileDownloader.adjust_settings(...)` successful input
+  handling, `0` interval clamping to `1`, directory update/creation side effect, success message,
+  and invalid-input no-change behavior.
+- Extracted private `_print_download_settings(...)` and `_apply_adjusted_settings(...)` from the
+  interactive `adjust_settings(...)` method.
+- Kept `adjust_settings(...)` responsible for the existing input prompts, input order, and
+  `ValueError` handling path.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Current-settings display text, prompt order, default-input fallback, invalid-input error message,
+  interval clamping, directory assignment before `os.makedirs(...)`, directory creation arguments,
+  absolute-path success message, public `adjust_settings()` behavior, fallback/legacy behavior,
+  error semantics, and configuration semantics are unchanged.
+- The new helpers are private and do not create a public API surface.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderFileDataHelperTests.test_adjust_settings_preserves_successful_update_and_directory_creation tests.test_zsxq_file_downloader_helpers.FileDownloaderFileDataHelperTests.test_adjust_settings_preserves_invalid_input_without_changes -v
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderFileDataHelperTests.test_adjust_settings_preserves_successful_update_and_directory_creation tests.test_zsxq_file_downloader_helpers.FileDownloaderFileDataHelperTests.test_adjust_settings_preserves_invalid_input_without_changes tests.test_zsxq_file_downloader_helpers.FileDownloaderFileDataHelperTests.test_download_settings_display_lines_preserve_existing_text -v
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py
+uv run python scripts\scan_postgres_compat_debt.py
+uv run ruff check backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py --select F401,F841
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers -v
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- New adjust-settings characterization tests passed against the pre-refactor behavior: 2 tests.
+- Focused adjust-settings and display tests passed after helper extraction: 3 tests.
+- `py_compile` passed.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- ZSXQ file downloader helper tests passed: 216 tests.
+- Full backend unittest discovery passed in the current worktree: 1194 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:
