@@ -24267,6 +24267,51 @@ Result:
 - Full backend unittest discovery passed in the current worktree: 1178 tests, 15 skipped.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-16 - P9 database download query-plan helper extraction
+
+Changed:
+
+- Confirmed existing characterization coverage for database download query-plan creation,
+  legacy `recent_days`, legacy `order_by`, normalized filter logging, initial-stop ordering,
+  result stats, row-loop stop, and row exception handling.
+- Extracted internal `ZSXQFileDownloader._prepare_database_download_query_plan(...)` from
+  `download_files_from_database(...)`.
+- Kept start logging, effective `last_days` calculation, query parameters, legacy order fallback,
+  normalized filter logging, initial-stop ordering, and normalized `sort_by` use unchanged.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Database download query selection, filter logs, legacy `recent_days`/`order_by` compatibility,
+  SQL side effects, initial-stop behavior, public API, fallback/legacy behavior, error semantics,
+  config semantics, and task behavior are unchanged.
+- The new helper is internal and does not create a new public API surface.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderDatabaseDownloadTests.test_download_files_from_database_preserves_filtered_query_shape_and_legacy_order_by tests.test_zsxq_file_downloader_helpers.FileDownloaderDatabaseDownloadTests.test_download_files_from_database_preserves_unfiltered_heat_sort_query_shape tests.test_zsxq_file_downloader_helpers.FileDownloaderDatabaseDownloadTests.test_download_files_from_database_preserves_legacy_recent_days_fallback_for_query_plan tests.test_zsxq_file_downloader_helpers.FileDownloaderDatabaseDownloadTests.test_download_files_from_database_initial_stop_skips_query_and_download -v
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderDatabaseDownloadTests.test_download_files_from_database_preserves_filtered_query_shape_and_legacy_order_by tests.test_zsxq_file_downloader_helpers.FileDownloaderDatabaseDownloadTests.test_download_files_from_database_preserves_unfiltered_heat_sort_query_shape tests.test_zsxq_file_downloader_helpers.FileDownloaderDatabaseDownloadTests.test_download_files_from_database_preserves_legacy_recent_days_fallback_for_query_plan tests.test_zsxq_file_downloader_helpers.FileDownloaderDatabaseDownloadTests.test_download_files_from_database_initial_stop_skips_query_and_download tests.test_zsxq_file_downloader_helpers.FileDownloaderDatabaseDownloadTests.test_download_files_from_database_preserves_result_stats_payloads_and_delays tests.test_zsxq_file_downloader_helpers.FileDownloaderDatabaseDownloadTests.test_download_files_from_database_preserves_stop_before_row_loop tests.test_zsxq_file_downloader_helpers.FileDownloaderDatabaseDownloadTests.test_download_files_from_database_preserves_row_exception_and_interrupt_handling -v
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run ruff check backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py --select F401,F841
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- Existing characterization coverage passed before helper extraction: 4 focused tests.
+- `py_compile` passed.
+- Focused database download tests passed after helper extraction: 7 tests.
+- ZSXQ file downloader helper tests passed: 200 tests.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- Full backend unittest discovery passed in the current worktree: 1178 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:

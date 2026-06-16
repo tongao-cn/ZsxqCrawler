@@ -2093,19 +2093,16 @@ class ZSXQFileDownloader:
 
         return False
 
-    def download_files_from_database(
+    def _prepare_database_download_query_plan(
         self,
-        max_files: Optional[int] = None,
-        status_filter: str = 'pending',
-        sort_by: str = 'download_count',
-        start_date: Optional[str] = None,
-        end_date: Optional[str] = None,
-        last_days: Optional[int] = None,
-        **kwargs,
-    ) -> Dict[str, int]:
-        """从完整数据库下载文件（使用file_id字段）"""
-        for message in database_download_start_messages(max_files, status_filter):
-            self.log(message)
+        max_files: Optional[int],
+        status_filter: str,
+        sort_by: str,
+        start_date: Optional[str],
+        end_date: Optional[str],
+        last_days: Optional[int],
+        kwargs: Dict[str, Any],
+    ) -> Dict[str, Any]:
         last_days = database_download_effective_last_days(last_days, kwargs.get('recent_days'))
 
         query_plan = database_download_query_plan(
@@ -2124,6 +2121,33 @@ class ZSXQFileDownloader:
 
         for message in database_download_filter_messages(normalized_start, normalized_end, last_days, sort_by):
             self.log(message)
+
+        return query_plan
+
+    def download_files_from_database(
+        self,
+        max_files: Optional[int] = None,
+        status_filter: str = 'pending',
+        sort_by: str = 'download_count',
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        last_days: Optional[int] = None,
+        **kwargs,
+    ) -> Dict[str, int]:
+        """从完整数据库下载文件（使用file_id字段）"""
+        for message in database_download_start_messages(max_files, status_filter):
+            self.log(message)
+
+        query_plan = self._prepare_database_download_query_plan(
+            max_files,
+            status_filter,
+            sort_by,
+            start_date,
+            end_date,
+            last_days,
+            kwargs,
+        )
+        sort_by = query_plan["sort_by"]
 
         # 检查是否需要停止
         if self._should_stop_database_download_initially():
