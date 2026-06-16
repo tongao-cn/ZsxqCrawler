@@ -1400,12 +1400,9 @@ class ZSXQFileDownloader:
         response: Any,
         target: DownloadFileTarget,
     ) -> DownloadAttemptResult:
-        body_result = self._handle_successful_download_response(
+        body_result = self._handle_successful_download_response_target(
             response,
-            target.file_id,
-            target.file_size,
-            target.safe_filename,
-            target.file_path,
+            target,
         )
         return DownloadAttemptResult(
             body_result.success_result,
@@ -1520,25 +1517,41 @@ class ZSXQFileDownloader:
         safe_filename: str,
         file_path: str,
     ) -> DownloadBodyResult:
+        return self._handle_successful_download_response_target(
+            response,
+            DownloadFileTarget(
+                file_id,
+                safe_filename,
+                file_size,
+                safe_filename,
+                file_path,
+            ),
+        )
+
+    def _handle_successful_download_response_target(
+        self,
+        response: Any,
+        target: DownloadFileTarget,
+    ) -> DownloadBodyResult:
         body_target = self._prepare_download_body_target(
             response.headers,
-            file_size,
-            file_path,
+            target.file_size,
+            target.file_path,
         )
 
         downloaded_size = self._write_download_response_body(
             response,
             body_target.temp_path,
             body_target.total_size,
-            file_id,
+            target.file_id,
         )
         return self._finalize_download_body_result(
             downloaded_size,
             body_target.expected_size,
             body_target.temp_path,
-            file_id,
-            safe_filename,
-            file_path,
+            target.file_id,
+            target.safe_filename,
+            target.file_path,
         )
 
     def _finalize_download_body_result(
