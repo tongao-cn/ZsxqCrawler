@@ -24133,6 +24133,51 @@ Result:
 - Full backend unittest discovery passed in the current worktree: 1176 tests, 15 skipped.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-16 - P9 time collection initial stop helper extraction
+
+Changed:
+
+- Added characterization coverage for `collect_files_by_time(...)` when the initial stop check is
+  already true.
+- Extracted internal `ZSXQFileDownloader._should_stop_time_collection_initially(...)` from
+  `collect_files_by_time(...)`.
+- Kept start/mode logging before the stop check, initial stop logging, early return shape, and the
+  skip of database stats, latest-time query, page fetch, and import unchanged.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Time collection initial-stop behavior, returned stats, log order, database side effects, fetch
+  side effects, import side effects, public API, fallback/legacy behavior, error semantics, config
+  semantics, and task behavior are unchanged.
+- The new helper is internal and does not create a new public API surface.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderPaginationTests.test_collect_files_by_time_initial_stop_skips_database_fetch_and_import -v
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderPaginationTests.test_collect_files_by_time_preserves_database_state_initialization tests.test_zsxq_file_downloader_helpers.FileDownloaderPaginationTests.test_collect_files_by_time_preserves_force_refresh_start_mode tests.test_zsxq_file_downloader_helpers.FileDownloaderPaginationTests.test_collect_files_by_time_initial_stop_skips_database_fetch_and_import tests.test_zsxq_file_downloader_helpers.FileDownloaderPaginationTests.test_collect_files_by_time_stops_when_page_import_fails tests.test_zsxq_file_downloader_helpers.FileDownloaderPaginationTests.test_collect_files_by_time_stops_when_fetch_returns_empty_response -v
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run ruff check backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py --select F401,F841
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- New characterization test passed against the pre-refactor behavior before helper extraction: 1
+  test.
+- `py_compile` passed.
+- Focused time collection entry tests passed after helper extraction: 5 tests.
+- ZSXQ file downloader helper tests passed: 199 tests.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- Full backend unittest discovery passed in the current worktree: 1177 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:

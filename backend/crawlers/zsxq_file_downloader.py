@@ -1939,7 +1939,14 @@ class ZSXQFileDownloader:
         if mode["mode_message"]:
             self.log(mode["mode_message"])
         return mode["enable_time_dedupe"]
-    
+
+    def _should_stop_time_collection_initially(self) -> bool:
+        if self.check_stop():
+            self.log(time_collection_initial_stop_message())
+            return True
+
+        return False
+
     def collect_files_by_time(
         self,
         sort: str = "by_create_time",
@@ -1956,8 +1963,7 @@ class ZSXQFileDownloader:
         )
 
         # 检查是否需要停止
-        if self.check_stop():
-            self.log(time_collection_initial_stop_message())
+        if self._should_stop_time_collection_initially():
             return {'total_files': 0, 'new_files': 0}
 
         # 使用完整数据库的统计信息

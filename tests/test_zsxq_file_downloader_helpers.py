@@ -1115,6 +1115,42 @@ class FileDownloaderPaginationTests(unittest.TestCase):
         self.assertEqual(0, stats["new_files"])
         self.assertEqual(1, stats["pages"])
 
+    def test_collect_files_by_time_initial_stop_skips_database_fetch_and_import(self):
+        downloader = object.__new__(ZSXQFileDownloader)
+        downloader.group_id = "511"
+        downloader.file_db = TimeDedupeFileDb(
+            "2026-05-02T00:00:00",
+            initial_files=5,
+            final_files=5,
+        )
+        downloader.logs = []
+        downloader.fetch_calls = []
+        downloader.log = downloader.logs.append
+        downloader.check_stop = lambda: True
+
+        def fetch_file_list(**kwargs):
+            downloader.fetch_calls.append(kwargs)
+            raise AssertionError("initial stop should not fetch file pages")
+
+        downloader.fetch_file_list = fetch_file_list
+
+        stats = ZSXQFileDownloader.collect_files_by_time(downloader)
+
+        self.assertEqual({"total_files": 0, "new_files": 0}, stats)
+        self.assertEqual([], downloader.fetch_calls)
+        self.assertEqual(0, downloader.file_db.stats_calls)
+        self.assertEqual([], downloader.file_db.executed)
+        self.assertEqual([], downloader.file_db.imported_responses)
+        self.assertEqual(
+            [
+                "📊 开始按时间顺序收集文件列表到完整数据库...",
+                "   📅 排序方式: by_create_time",
+                "   ✅ 智能去重模式: 遇到已存在的文件将停止收集",
+                "🛑 任务被停止",
+            ],
+            downloader.logs,
+        )
+
     def test_collect_files_by_time_stops_when_page_import_fails(self):
         downloader = self._downloader_with_failing_import()
 
