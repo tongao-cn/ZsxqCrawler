@@ -992,6 +992,29 @@ class ZSXQFileDownloader:
             headers=headers,
             timeout=DOWNLOAD_URL_REQUEST_TIMEOUT_SECONDS,
         )
+
+    def _run_download_url_attempt(
+        self,
+        url: str,
+        file_id: int,
+        attempt: int,
+        max_retries: int,
+    ) -> DownloadUrlResponseDecision:
+        headers = self._prepare_retry_api_request(attempt, file_id=file_id)
+
+        try:
+            response = self._request_download_url_response(url, headers)
+            return self._handle_download_url_response(
+                response,
+                file_id,
+                attempt,
+                max_retries,
+                headers,
+            )
+        except Exception as e:
+            if self._handle_download_url_request_exception(e, attempt, max_retries):
+                return DownloadUrlResponseDecision(None, True, False)
+            return DownloadUrlResponseDecision(None, False, False)
     
     def get_download_url(self, file_id: int) -> Optional[str]:
         """获取文件下载链接（带重试机制）
@@ -1004,27 +1027,13 @@ class ZSXQFileDownloader:
         max_retries = DOWNLOAD_URL_MAX_RETRIES
         
         for attempt in range(max_retries):
-            headers = self._prepare_retry_api_request(attempt, file_id=file_id)
-            
-            try:
-                response = self._request_download_url_response(url, headers)
-                decision = self._handle_download_url_response(
-                    response,
-                    file_id,
-                    attempt,
-                    max_retries,
-                    headers,
-                )
-                if decision.download_url:
-                    return decision.download_url
-                if decision.should_retry:
-                    continue
-                if decision.should_stop:
-                    return None
-                    
-            except Exception as e:
-                if self._handle_download_url_request_exception(e, attempt, max_retries):
-                    continue
+            decision = self._run_download_url_attempt(url, file_id, attempt, max_retries)
+            if decision.download_url:
+                return decision.download_url
+            if decision.should_retry:
+                continue
+            if decision.should_stop:
+                return None
         
         print(retry_exhausted_message(max_retries))
         return None
