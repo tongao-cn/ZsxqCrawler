@@ -28260,6 +28260,55 @@ Result:
 - Full backend unittest discovery passed in the current worktree: 1198 tests, 15 skipped.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-16 - P85 batch download file item target handoff
+
+Changed:
+
+- Confirmed existing characterization coverage for direct batch file item handling, missing filename
+  fallback, result stats payload propagation, delay/long-delay behavior, and max-file stop behavior.
+- Added private `BatchDownloadFileItemTarget` to carry a batch file payload, item display state,
+  limit state, pagination state, current downloaded count, and shared stats together.
+- Added private `_download_batch_file_item_target(...)` and reused it from
+  `_download_batch_page_files(...)`.
+- Kept `_download_batch_file_item(...)` with its existing private signature as a compatibility
+  wrapper for any internal direct callers.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Public `download_files_batch(...)`, `download_file(...)` calls from batch mode, batch item logging,
+  missing filename fallback, stats mutation, skip logging, max-file limit handling, long-delay checks,
+  inter-file delay behavior, fallback/legacy behavior, error semantics, and configuration semantics
+  are unchanged.
+- The old `_download_batch_file_item(...)` private helper signature remains available.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderBatchDownloadTests.test_download_batch_file_item_preserves_limit_reached_delay_skip tests.test_zsxq_file_downloader_helpers.FileDownloaderBatchDownloadTests.test_download_batch_file_item_preserves_missing_file_name_fallback tests.test_zsxq_file_downloader_helpers.FileDownloaderBatchDownloadTests.test_download_files_batch_preserves_result_stats_payloads_and_delays tests.test_zsxq_file_downloader_helpers.FileDownloaderBatchDownloadTests.test_download_files_batch_stops_page_after_success_limit -v
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py
+uv run python scripts\scan_postgres_compat_debt.py
+uv run ruff check backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py --select F401,F841
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- First focused pre-change command used the wrong unittest class path and failed to resolve the four
+  batch tests; this was a test selection error, not a product behavior failure.
+- Focused batch file item coverage passed before helper handoff with the corrected test class:
+  4 tests.
+- Focused batch file item tests passed after helper handoff: 4 tests.
+- `py_compile` passed.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- ZSXQ file downloader helper tests passed: 220 tests.
+- Full backend unittest discovery passed in the current worktree: 1198 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:

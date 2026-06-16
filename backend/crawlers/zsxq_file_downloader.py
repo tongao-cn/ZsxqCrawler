@@ -491,6 +491,15 @@ class BatchDownloadLoopStep(NamedTuple):
     next_index: Optional[str]
 
 
+class BatchDownloadFileItemTarget(NamedTuple):
+    file_info: Dict[str, Any]
+    item_number: int
+    max_files: Optional[int]
+    has_more_in_batch: bool
+    downloaded_in_batch: int
+    stats: Dict[str, int]
+
+
 class TimeCollectionDatabaseState(NamedTuple):
     initial_files: Any
     db_latest_time: Optional[Any]
@@ -2403,20 +2412,36 @@ class ZSXQFileDownloader:
         downloaded_in_batch: int,
         stats: Dict[str, int],
     ) -> int:
+        return self._download_batch_file_item_target(
+            BatchDownloadFileItemTarget(
+                file_info,
+                item_number,
+                max_files,
+                has_more_in_batch,
+                downloaded_in_batch,
+                stats,
+            ),
+        )
+
+    def _download_batch_file_item_target(
+        self,
+        target: BatchDownloadFileItemTarget,
+    ) -> int:
+        file_info = target.file_info
         file_name = _batch_download_file_name(file_info)
 
-        self.log(batch_download_item_message(item_number, max_files, file_name))
+        self.log(batch_download_item_message(target.item_number, target.max_files, file_name))
 
         result = self.download_file(file_info)
 
         downloaded_in_batch = self._apply_batch_download_result(
             result,
-            has_more_in_batch,
-            downloaded_in_batch,
-            max_files,
-            stats,
+            target.has_more_in_batch,
+            target.downloaded_in_batch,
+            target.max_files,
+            target.stats,
         )
-        stats['total_files'] += 1
+        target.stats['total_files'] += 1
         return downloaded_in_batch
 
     def _apply_batch_download_result(
@@ -2470,13 +2495,15 @@ class ZSXQFileDownloader:
             if max_files is not None and downloaded_in_batch >= max_files:
                 break
 
-            downloaded_in_batch = self._download_batch_file_item(
-                file_info,
-                downloaded_in_batch + 1,
-                max_files,
-                (i + 1) < len(files),
-                downloaded_in_batch,
-                stats,
+            downloaded_in_batch = self._download_batch_file_item_target(
+                BatchDownloadFileItemTarget(
+                    file_info,
+                    downloaded_in_batch + 1,
+                    max_files,
+                    (i + 1) < len(files),
+                    downloaded_in_batch,
+                    stats,
+                ),
             )
 
         return downloaded_in_batch
