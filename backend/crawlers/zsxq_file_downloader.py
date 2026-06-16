@@ -1297,6 +1297,24 @@ class ZSXQFileDownloader:
 
         result = self.download_file(file_info)
 
+        downloaded_in_batch = self._apply_batch_download_result(
+            result,
+            has_more_in_batch,
+            downloaded_in_batch,
+            max_files,
+            stats,
+        )
+        stats['total_files'] += 1
+        return downloaded_in_batch
+
+    def _apply_batch_download_result(
+        self,
+        result: Any,
+        has_more_in_batch: bool,
+        downloaded_in_batch: int,
+        max_files: Optional[int],
+        stats: Dict[str, int],
+    ) -> int:
         if result == "skipped":
             stats['skipped'] += 1
             self.log(batch_download_skipped_message())
@@ -1311,7 +1329,6 @@ class ZSXQFileDownloader:
         else:
             stats['failed'] += 1
 
-        stats['total_files'] += 1
         return downloaded_in_batch
 
     def _next_batch_download_index(

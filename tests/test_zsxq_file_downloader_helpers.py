@@ -1507,6 +1507,31 @@ class FileDownloaderBatchDownloadTests(unittest.TestCase):
         self.assertIn("   ⚠️ 文件已跳过，继续下一个", downloader.logs)
         self.assertEqual("   ❌ 失败: 1", downloader.logs[-1])
 
+    def test_download_batch_file_item_preserves_limit_reached_delay_skip(self):
+        downloader = object.__new__(ZSXQFileDownloader)
+        downloader.logs = []
+        downloader.log = downloader.logs.append
+        downloader.download_file = lambda file_info: True
+        interval_events = []
+        downloader.check_long_delay = lambda: interval_events.append("long")
+        downloader.download_delay = lambda: interval_events.append("delay")
+        stats = {"total_files": 0, "downloaded": 0, "skipped": 0, "failed": 0}
+
+        downloaded = ZSXQFileDownloader._download_batch_file_item(
+            downloader,
+            {"file": {"id": 102, "name": "ok.pdf"}},
+            item_number=2,
+            max_files=2,
+            has_more_in_batch=True,
+            downloaded_in_batch=1,
+            stats=stats,
+        )
+
+        self.assertEqual(2, downloaded)
+        self.assertEqual({"total_files": 1, "downloaded": 1, "skipped": 0, "failed": 0}, stats)
+        self.assertEqual(["long"], interval_events)
+        self.assertEqual(["【2/2】ok.pdf"], downloader.logs)
+
     def test_download_files_batch_initial_stop_returns_empty_stats_without_fetch_or_completion(self):
         downloader = self._downloader_for_batch([{"file": {"id": 101, "name": "unused.pdf"}}])
         downloader.check_stop = lambda: True
