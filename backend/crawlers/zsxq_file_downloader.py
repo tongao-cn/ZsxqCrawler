@@ -197,6 +197,12 @@ class DownloadFilenameOverride(NamedTuple):
     file_path: str
 
 
+class DownloadResponseTarget(NamedTuple):
+    file_name: str
+    safe_filename: str
+    file_path: str
+
+
 class DownloadFailureDetail(NamedTuple):
     error_code: str
     error_message: str
@@ -1213,6 +1219,27 @@ class ZSXQFileDownloader:
         self.log(f"   📝 从响应头获取到真实文件名: {real_filename}")
         return DownloadFilenameOverride(real_filename, safe_filename, file_path)
 
+    def _resolve_download_response_target(
+        self,
+        file_name: str,
+        file_id: int,
+        response_headers: Dict[str, Any],
+        safe_filename: str,
+        file_path: str,
+    ) -> DownloadResponseTarget:
+        filename_override = self._apply_response_filename_override(
+            file_name,
+            file_id,
+            response_headers,
+        )
+        if not filename_override:
+            return DownloadResponseTarget(file_name, safe_filename, file_path)
+        return DownloadResponseTarget(
+            filename_override.file_name,
+            filename_override.safe_filename,
+            filename_override.file_path,
+        )
+
     def _record_download_http_failure(self, status_code: int) -> DownloadFailureDetail:
         error_code, error_message = download_http_failure_detail(status_code)
         self.log(f"   ❌ 下载失败: {error_message}")
@@ -1249,15 +1276,16 @@ class ZSXQFileDownloader:
         file_path: str,
     ) -> DownloadAttemptResult:
         try:
-            filename_override = self._apply_response_filename_override(
+            response_target = self._resolve_download_response_target(
                 file_name,
                 file_id,
                 response.headers,
+                safe_filename,
+                file_path,
             )
-            if filename_override:
-                file_name = filename_override.file_name
-                safe_filename = filename_override.safe_filename
-                file_path = filename_override.file_path
+            file_name = response_target.file_name
+            safe_filename = response_target.safe_filename
+            file_path = response_target.file_path
 
             if response.status_code == 200:
                 body_result = self._handle_successful_download_response(

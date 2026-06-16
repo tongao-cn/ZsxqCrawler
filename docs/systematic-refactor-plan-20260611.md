@@ -24880,6 +24880,56 @@ Result:
 - Full backend unittest discovery passed in the current worktree: 1191 tests, 15 skipped.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-16 - P13 download response target helper extraction
+
+Changed:
+
+- Confirmed existing characterization coverage for download response filename override, no-op
+  filename paths, override-before-HTTP-failure, overridden partial-file cleanup after body exception,
+  default-name Content-Disposition handling, and named-file Content-Disposition no-op handling.
+- Added internal `DownloadResponseTarget` to name the effective local target after response-header
+  filename handling.
+- Extracted internal `ZSXQFileDownloader._resolve_download_response_target(...)` from
+  `_handle_download_response(...)`.
+- Kept response-header filename override behavior, log ordering, HTTP failure recording, success body
+  handling, exception cleanup path selection, retry result payload, and returned boolean/error detail
+  semantics unchanged.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- `_handle_download_response(...)` remains internal, and `download_file(...)` public behavior,
+  returned status, filename/path retry state, logs, partial-file cleanup, fallback/legacy behavior,
+  error semantics, config semantics, and task behavior are unchanged.
+- The new tuple and helper are internal and do not create a new public API surface.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_handle_download_response_preserves_override_http_failure_and_success_paths tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_apply_response_filename_override_preserves_override_and_noop_paths tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_download_file_applies_response_filename_override_before_http_failure tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_download_file_cleans_overridden_partial_file_after_body_exception tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_download_file_uses_content_disposition_for_default_filename tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_download_file_keeps_named_file_despite_content_disposition -v
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_handle_download_response_preserves_override_http_failure_and_success_paths tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_apply_response_filename_override_preserves_override_and_noop_paths tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_download_file_applies_response_filename_override_before_http_failure tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_download_file_cleans_overridden_partial_file_after_body_exception tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_download_file_uses_content_disposition_for_default_filename tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_download_file_keeps_named_file_despite_content_disposition -v
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run ruff check backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py --select F401,F841
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers -v
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- Existing characterization coverage passed before helper extraction: 6 focused tests.
+- `py_compile` passed.
+- Focused download response target tests passed after helper extraction: 6 tests.
+- File downloader download tests passed: 53 tests.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- ZSXQ file downloader helper tests passed: 213 tests.
+- Full backend unittest discovery passed in the current worktree: 1191 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:
