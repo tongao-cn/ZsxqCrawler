@@ -2146,6 +2146,17 @@ class ZSXQFileDownloader:
         for message in database_download_start_messages(max_files, status_filter):
             self.log(message)
 
+    def _run_database_download_rows(
+        self,
+        files_to_download: list[DatabaseDownloadRow],
+    ) -> Dict[str, int]:
+        stats = download_result_stats(len(files_to_download))
+
+        self._download_database_file_rows(files_to_download, stats)
+        self._log_database_download_completion(stats)
+
+        return stats
+
     def download_files_from_database(
         self,
         max_files: Optional[int] = None,
@@ -2179,13 +2190,7 @@ class ZSXQFileDownloader:
         if not files_to_download:
             return download_result_stats()
 
-        stats = download_result_stats(len(files_to_download))
-
-        self._download_database_file_rows(files_to_download, stats)
-
-        self._log_database_download_completion(stats)
-
-        return stats
+        return self._run_database_download_rows(files_to_download)
 
     def _print_database_core_stats(self, stats: Dict[str, Any]) -> None:
         total_files = stats.get('files', 0)

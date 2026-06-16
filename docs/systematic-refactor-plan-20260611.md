@@ -24450,6 +24450,53 @@ Result:
 - Full backend unittest discovery passed in the current worktree: 1180 tests, 15 skipped.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-16 - P9 database download row run helper extraction
+
+Changed:
+
+- Confirmed existing characterization coverage for database download result stats, per-row delay
+  side effects, stop-before-row-loop behavior, row exception/interrupt handling, and completion
+  message order.
+- Extracted internal `ZSXQFileDownloader._run_database_download_rows(...)` from
+  `download_files_from_database(...)`.
+- Kept stats initialization, row-download loop side effects, stop handling, exception handling,
+  completion logs, returned stats, query behavior, and empty-result behavior unchanged.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Database download returned stats, delay side effects, row-download side effects, completion logs,
+  public API, fallback/legacy behavior, error semantics, config semantics, and task behavior are
+  unchanged.
+- The new helper is internal and does not create a new public API surface.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderDatabaseDownloadTests.test_download_files_from_database_preserves_result_stats_payloads_and_delays tests.test_zsxq_file_downloader_helpers.FileDownloaderDatabaseDownloadTests.test_download_files_from_database_preserves_stop_before_row_loop tests.test_zsxq_file_downloader_helpers.FileDownloaderDatabaseDownloadTests.test_download_files_from_database_preserves_row_exception_and_interrupt_handling tests.test_zsxq_file_downloader_helpers.FileDownloaderTimeHelperTests.test_database_download_completion_messages_preserves_summary_order -v
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderDatabaseDownloadTests.test_download_files_from_database_preserves_result_stats_payloads_and_delays tests.test_zsxq_file_downloader_helpers.FileDownloaderDatabaseDownloadTests.test_download_files_from_database_preserves_stop_before_row_loop tests.test_zsxq_file_downloader_helpers.FileDownloaderDatabaseDownloadTests.test_download_files_from_database_preserves_row_exception_and_interrupt_handling tests.test_zsxq_file_downloader_helpers.FileDownloaderTimeHelperTests.test_database_download_completion_messages_preserves_summary_order -v
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderDatabaseDownloadTests -v
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run ruff check backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py --select F401,F841
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- Existing characterization coverage passed before helper extraction: 4 focused tests.
+- `py_compile` passed.
+- Focused stats/run tests passed after helper extraction: 4 tests.
+- Database download tests passed after helper extraction: 11 tests.
+- ZSXQ file downloader helper tests passed: 202 tests.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- Full backend unittest discovery passed in the current worktree: 1180 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:
