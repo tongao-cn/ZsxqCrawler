@@ -967,6 +967,16 @@ class ZSXQFileDownloader:
         if existing_file_result:
             return existing_file_result
 
+        return self._run_download_retry_loop(file_id, file_name, file_size, safe_filename, file_path)
+
+    def _run_download_retry_loop(
+        self,
+        file_id: int,
+        file_name: str,
+        file_size: int,
+        safe_filename: str,
+        file_path: str,
+    ) -> bool:
         download_retries = DOWNLOAD_FILE_MAX_RETRIES
         last_error = None
         last_error_code = None
