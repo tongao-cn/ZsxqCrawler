@@ -200,6 +200,12 @@ class FileListRequestExceptionTarget(NamedTuple):
     max_retries: int
 
 
+class FetchFileListTarget(NamedTuple):
+    count: int
+    index: Optional[str]
+    sort: str
+
+
 class StealthHeaderSelection(NamedTuple):
     user_agent: str
     sec_ch_ua: str
@@ -1191,11 +1197,14 @@ class ZSXQFileDownloader:
 
     def fetch_file_list(self, count: int = 20, index: Optional[str] = None, sort: str = "by_download_count") -> Optional[Dict[str, Any]]:
         """获取文件列表（带重试机制）"""
+        return self._fetch_file_list_target(FetchFileListTarget(count, index, sort))
+
+    def _fetch_file_list_target(self, target: FetchFileListTarget) -> Optional[Dict[str, Any]]:
         url = f"{self.base_url}/v2/groups/{self.group_id}/files"
         max_retries = 10
 
-        params = file_list_request_params(count, sort, index)
-        for message in file_list_start_messages(count, sort, index, url):
+        params = file_list_request_params(target.count, target.sort, target.index)
+        for message in file_list_start_messages(target.count, target.sort, target.index, url):
             self.log(message)
         
         for attempt in range(max_retries):
