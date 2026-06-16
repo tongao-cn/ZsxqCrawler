@@ -1996,9 +1996,8 @@ class ZSXQFileDownloader:
         target: DownloadResponseTarget,
     ) -> DownloadAttemptResult:
         file_target = target.file_target
-        body_result = self._handle_successful_download_response_target(
-            target.response,
-            file_target,
+        body_result = self._handle_successful_download_response_result_target(
+            target,
         )
         return DownloadAttemptResult(
             body_result.success_result,
@@ -2173,11 +2172,21 @@ class ZSXQFileDownloader:
         response: Any,
         target: DownloadFileTarget,
     ) -> DownloadBodyResult:
+        return self._handle_successful_download_response_result_target(
+            DownloadResponseTarget(response, target),
+        )
+
+    def _handle_successful_download_response_result_target(
+        self,
+        target: DownloadResponseTarget,
+    ) -> DownloadBodyResult:
+        response = target.response
+        file_target = target.file_target
         body_target = self._prepare_download_body_target_from_target(
             DownloadBodyPreparationTarget(
                 response.headers,
-                target.file_size,
-                target.file_path,
+                file_target.file_size,
+                file_target.file_path,
             ),
         )
 
@@ -2186,7 +2195,7 @@ class ZSXQFileDownloader:
             DownloadBodyWriteTarget(
                 body_target.temp_path,
                 body_target.total_size,
-                target.file_id,
+                file_target.file_id,
             ),
         )
         return self._finalize_download_body_result_target(
@@ -2194,9 +2203,9 @@ class ZSXQFileDownloader:
             DownloadBodyFinalizationTarget(
                 body_target.expected_size,
                 body_target.temp_path,
-                target.file_id,
-                target.safe_filename,
-                target.file_path,
+                file_target.file_id,
+                file_target.safe_filename,
+                file_target.file_path,
             ),
         )
 
