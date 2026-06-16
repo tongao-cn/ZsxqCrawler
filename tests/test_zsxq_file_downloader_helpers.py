@@ -1345,6 +1345,23 @@ class FileDownloaderPaginationTests(unittest.TestCase):
         self.assertIn("demo.pdf", printed)
         self.assertIn("📑 下一页索引: next-page", printed)
 
+    def test_show_file_list_fetch_failure_returns_none_without_output(self):
+        downloader = object.__new__(ZSXQFileDownloader)
+        downloader.fetch_calls = []
+
+        def fetch_file_list(**kwargs):
+            downloader.fetch_calls.append(kwargs)
+            return None
+
+        downloader.fetch_file_list = fetch_file_list
+
+        with contextlib.redirect_stdout(io.StringIO()) as output:
+            next_index = ZSXQFileDownloader.show_file_list(downloader, count=3, index="cursor")
+
+        self.assertIsNone(next_index)
+        self.assertEqual([{"count": 3, "index": "cursor"}], downloader.fetch_calls)
+        self.assertEqual("", output.getvalue())
+
 
 class FileDownloaderBatchDownloadTests(unittest.TestCase):
     def _downloader_for_batch(self, files):

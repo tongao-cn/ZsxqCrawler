@@ -1457,7 +1457,21 @@ class ZSXQFileDownloader:
             self.log(message)
         
         return stats
-    
+
+    def _print_file_list_page(
+        self,
+        files: list[Dict[str, Any]],
+        next_index: Any,
+    ) -> None:
+        print(f"\n📋 文件列表 ({len(files)} 个文件):")
+        print("="*80)
+
+        for i, file_info in enumerate(files, 1):
+            for line in file_list_item_display_lines(i, file_info):
+                print(line)
+
+        print(file_list_next_index_message(next_index))
+
     def show_file_list(self, count: int = 20, index: Optional[str] = None) -> Optional[str]:
         """显示文件列表"""
         data = self.fetch_file_list(count=count, index=index)
@@ -1465,16 +1479,8 @@ class ZSXQFileDownloader:
             return None
         
         files, next_index = file_list_response_page(data)
-        
-        print(f"\n📋 文件列表 ({len(files)} 个文件):")
-        print("="*80)
-        
-        for i, file_info in enumerate(files, 1):
-            for line in file_list_item_display_lines(i, file_info):
-                print(line)
-        
-        print(file_list_next_index_message(next_index))
-        
+        self._print_file_list_page(files, next_index)
+
         return next_index
 
     def _run_file_collection_loop(self, stats: Dict[str, int]) -> int:
