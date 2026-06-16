@@ -27375,6 +27375,55 @@ Result:
 - Full backend unittest discovery passed in the current worktree: 1197 tests, 15 skipped.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-16 - P66 download URL request exception target handoff
+
+Changed:
+
+- Added a characterization test for `get_download_url(...)` request-exception retry exhaustion,
+  locking the current behavior: retry 10 attempts, clear prior `last_download_url_error`, preserve
+  repeated request-exception output, do not print a separate request-exception stop message, print
+  the existing retry-exhausted message, and do not report retry success.
+- Confirmed existing characterization coverage for request exception followed by success.
+- Added private `DownloadUrlRequestExceptionTarget` to carry request-exception fields together.
+- Added private `_handle_download_url_request_exception_target(...)` and reused it from
+  `_run_download_url_attempt(...)`.
+- Kept `_handle_download_url_request_exception(...)` with its existing private signature as a
+  compatibility wrapper for any internal direct callers.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Public `get_download_url(...)` and `download_file(...)` inputs/outputs, retry count/order,
+  retry delay/log output, request count, prior-error clearing, retry-exhaustion behavior,
+  risk-event request rows, fallback/legacy behavior, error semantics, and configuration semantics
+  are unchanged.
+- The old `_handle_download_url_request_exception(...)` private helper signature remains available.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_get_download_url_retries_request_exception_then_success_preserves_events tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_get_download_url_request_exception_exhausts_retries -v
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py
+uv run python scripts\scan_postgres_compat_debt.py
+uv run ruff check backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py --select F401,F841
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- Focused download URL request-exception characterization coverage passed before helper handoff: 2
+  tests.
+- Focused download URL request-exception tests passed after helper handoff: 2 tests.
+- `py_compile` passed.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- ZSXQ file downloader helper tests passed: 220 tests.
+- Full backend unittest discovery passed in the current worktree: 1198 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:

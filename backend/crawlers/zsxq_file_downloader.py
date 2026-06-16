@@ -237,6 +237,12 @@ class DownloadUrlHttpFailureResponseTarget(NamedTuple):
     max_retries: int
 
 
+class DownloadUrlRequestExceptionTarget(NamedTuple):
+    exc: Exception
+    attempt: int
+    max_retries: int
+
+
 class DownloadRetryWaitTarget(NamedTuple):
     attempt: int
     download_retries: int
@@ -1119,7 +1125,19 @@ class ZSXQFileDownloader:
         attempt: int,
         max_retries: int,
     ) -> bool:
-        request_exception = request_exception_plan(exc, attempt, max_retries)
+        return self._handle_download_url_request_exception_target(
+            DownloadUrlRequestExceptionTarget(exc, attempt, max_retries),
+        )
+
+    def _handle_download_url_request_exception_target(
+        self,
+        target: DownloadUrlRequestExceptionTarget,
+    ) -> bool:
+        request_exception = request_exception_plan(
+            target.exc,
+            target.attempt,
+            target.max_retries,
+        )
         for message in request_exception["messages"]:
             print(message)
         return request_exception["should_retry"]
@@ -1319,7 +1337,9 @@ class ZSXQFileDownloader:
                 ),
             )
         except Exception as e:
-            if self._handle_download_url_request_exception(e, attempt, max_retries):
+            if self._handle_download_url_request_exception_target(
+                DownloadUrlRequestExceptionTarget(e, attempt, max_retries),
+            ):
                 return DownloadUrlResponseDecision(None, True, False)
             return DownloadUrlResponseDecision(None, False, False)
     

@@ -5709,6 +5709,50 @@ class FileDownloaderDownloadTests(unittest.TestCase):
             downloader.logs,
         )
 
+    def test_get_download_url_request_exception_exhausts_retries(self):
+        session = FakeDownloadSession([RuntimeError("socket reset") for _ in range(10)])
+        downloader = object.__new__(ZSXQFileDownloader)
+        downloader.base_url = "https://api.example"
+        downloader.session = session
+        downloader.group_id = "group-1"
+        downloader.cookie = "cookie"
+        downloader.risk_event_log_path = None
+        downloader.last_download_url_error = {"code": 1030, "message": "previous"}
+        downloader.request_count = 0
+        downloader.smart_delay = lambda: None
+        downloader.get_stealth_headers = lambda: {}
+        downloader.logs = []
+        downloader.log = downloader.logs.append
+
+        output = io.StringIO()
+        with (
+            contextlib.redirect_stdout(output),
+            patch("backend.crawlers.zsxq_file_downloader.random.uniform", return_value=15.0),
+            patch("backend.crawlers.zsxq_file_downloader.time.sleep") as sleep,
+        ):
+            result = ZSXQFileDownloader.get_download_url(downloader, 303)
+
+        printed = output.getvalue()
+        self.assertIsNone(result)
+        self.assertIsNone(downloader.last_download_url_error)
+        self.assertEqual(10, downloader.request_count)
+        self.assertEqual(
+            [("https://api.example/v2/files/303/download_url", 30, False)] * 10,
+            session.get_calls,
+        )
+        self.assertEqual(9, sleep.call_count)
+        self.assertEqual(10, printed.count("   ❌ 请求异常: socket reset"))
+        self.assertNotIn("请求异常，停止重试", printed)
+        self.assertIn("🚫 已重试10次，全部失败", printed)
+        self.assertNotIn("重试成功", printed)
+        self.assertEqual(
+            [
+                "   🔗 获取下载链接: ID=303",
+                "   🌐 请求URL: https://api.example/v2/files/303/download_url",
+            ],
+            downloader.logs,
+        )
+
     def test_get_download_url_retries_json_decode_failure_then_success_preserves_events(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             session = FakeDownloadSession([
