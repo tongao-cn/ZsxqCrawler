@@ -503,6 +503,12 @@ class TimeCollectionTarget(NamedTuple):
     force_refresh: bool
 
 
+class DateRangeCollectionTarget(NamedTuple):
+    start_date: Optional[str]
+    end_date: Optional[str]
+    last_days: Optional[int]
+
+
 class BatchDownloadPage(NamedTuple):
     files: list[Dict[str, Any]]
     next_index: Optional[Any]
@@ -3350,21 +3356,33 @@ class ZSXQFileDownloader:
 
         return self._collect_incremental_from_time_info(time_info)
     
+    def _collect_files_for_date_range_target(
+        self,
+        target: DateRangeCollectionTarget,
+    ) -> Dict[str, int]:
+        normalized_start, normalized_end, stop_before_dt = normalize_date_range(
+            start_date=target.start_date,
+            end_date=target.end_date,
+            last_days=target.last_days,
+        )
+        return self._collect_files_for_normalized_date_range(
+            normalized_start,
+            normalized_end,
+            stop_before_dt,
+        )
+
     def collect_files_for_date_range(
         self,
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
         last_days: Optional[int] = None,
     ) -> Dict[str, int]:
-        normalized_start, normalized_end, stop_before_dt = normalize_date_range(
-            start_date=start_date,
-            end_date=end_date,
-            last_days=last_days,
-        )
-        return self._collect_files_for_normalized_date_range(
-            normalized_start,
-            normalized_end,
-            stop_before_dt,
+        return self._collect_files_for_date_range_target(
+            DateRangeCollectionTarget(
+                start_date,
+                end_date,
+                last_days,
+            )
         )
 
     def _download_database_file_row(

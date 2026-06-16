@@ -29010,6 +29010,55 @@ Result:
 - Full backend unittest discovery passed in the current worktree: 1212 tests, 15 skipped.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-16 - P101 date range collection entry target handoff
+
+Changed:
+
+- Added direct characterization coverage for `collect_files_for_date_range(...)` before changing
+  production code, locking public date-range input handoff into `normalize_date_range(...)`,
+  normalized date-range helper dispatch, and returned stats identity.
+- Added private `DateRangeCollectionTarget` to carry the public date-range collection input
+  together.
+- Added private `_collect_files_for_date_range_target(...)` and delegated the public
+  `collect_files_for_date_range(...)` method to it.
+- Kept public `collect_files_for_date_range(start_date, end_date, last_days)` signature and
+  behavior unchanged.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Date normalization, `last_days` handling, normalized collection start messages, downstream
+  `collect_files_by_time(...)` call, stop-before boundary behavior, return values, fallback/legacy
+  behavior, error semantics, and configuration semantics are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderPaginationTests.test_collect_files_for_date_range_preserves_entry_normalize_and_collection_handoff -v
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderPaginationTests.test_collect_files_for_date_range_preserves_entry_normalize_and_collection_handoff tests.test_zsxq_file_downloader_helpers.FileDownloaderPaginationTests.test_collect_files_for_date_range_preserves_normalized_collection_call -v
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py
+uv run python scripts\scan_postgres_compat_debt.py
+uv run ruff check backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py --select F401,F841
+git diff --check
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- New direct date-range entry characterization test passed before production helper handoff:
+  1 test.
+- Focused date-range entry and normalized collection tests passed after helper handoff: 2 tests.
+- `py_compile` passed.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- `git diff --check` passed; Git only reported existing LF-to-CRLF working-copy warnings.
+- ZSXQ file downloader helper tests passed: 235 tests.
+- Full backend unittest discovery passed in the current worktree: 1213 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:

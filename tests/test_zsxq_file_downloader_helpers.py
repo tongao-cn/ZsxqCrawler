@@ -938,6 +938,72 @@ class FileDownloaderPaginationTests(unittest.TestCase):
         self.assertEqual(8, len(downloader.logs))
         self.assertEqual([((), {})], downloader.collect_calls)
 
+    def test_collect_files_for_date_range_preserves_entry_normalize_and_collection_handoff(self):
+        downloader = object.__new__(ZSXQFileDownloader)
+        stop_before_time = datetime.datetime(2026, 5, 7)
+        expected_stats = {"total_files": 11, "new_files": 6}
+        calls = []
+
+        def normalize_date_range_target(**kwargs):
+            calls.append(("normalize", kwargs))
+            return "2026-05-01", "2026-05-07", stop_before_time
+
+        def collect_files_for_normalized_date_range(
+            downloader_self,
+            normalized_start,
+            normalized_end,
+            stop_before_arg,
+        ):
+            self.assertIs(downloader, downloader_self)
+            calls.append(
+                (
+                    "collect",
+                    normalized_start,
+                    normalized_end,
+                    stop_before_arg,
+                )
+            )
+            return expected_stats
+
+        with (
+            patch(
+                "backend.crawlers.zsxq_file_downloader.normalize_date_range",
+                normalize_date_range_target,
+            ),
+            patch.object(
+                ZSXQFileDownloader,
+                "_collect_files_for_normalized_date_range",
+                collect_files_for_normalized_date_range,
+            ),
+        ):
+            stats = ZSXQFileDownloader.collect_files_for_date_range(
+                downloader,
+                start_date="raw-start",
+                end_date="raw-end",
+                last_days=7,
+            )
+
+        self.assertIs(expected_stats, stats)
+        self.assertEqual(
+            [
+                (
+                    "normalize",
+                    {
+                        "start_date": "raw-start",
+                        "end_date": "raw-end",
+                        "last_days": 7,
+                    },
+                ),
+                (
+                    "collect",
+                    "2026-05-01",
+                    "2026-05-07",
+                    stop_before_time,
+                ),
+            ],
+            calls,
+        )
+
     def test_collect_files_for_date_range_preserves_normalized_collection_call(self):
         downloader = object.__new__(ZSXQFileDownloader)
         downloader.logs = []
