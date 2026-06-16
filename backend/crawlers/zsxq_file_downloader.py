@@ -496,6 +496,13 @@ class TimeCollectionLoopContext(NamedTuple):
     stop_before_time: Optional[datetime.datetime]
 
 
+class TimeCollectionTarget(NamedTuple):
+    sort: str
+    start_time: Optional[str]
+    stop_before_time: Optional[datetime.datetime]
+    force_refresh: bool
+
+
 class BatchDownloadPage(NamedTuple):
     files: list[Dict[str, Any]]
     next_index: Optional[Any]
@@ -3290,19 +3297,15 @@ class ZSXQFileDownloader:
             page_count,
         )
 
-    def collect_files_by_time(
+    def _collect_files_by_time_target(
         self,
-        sort: str = "by_create_time",
-        start_time: Optional[str] = None,
-        stop_before_time: Optional[datetime.datetime] = None,
-        **kwargs,
+        target: TimeCollectionTarget,
     ) -> Dict[str, int]:
-        """按时间顺序收集文件列表到数据库（使用完整的数据库结构）"""
         enable_time_dedupe = self._initialize_time_collection_mode(
-            sort,
-            start_time,
-            stop_before_time,
-            kwargs.get('force_refresh', False),
+            target.sort,
+            target.start_time,
+            target.stop_before_time,
+            target.force_refresh,
         )
 
         # 检查是否需要停止
@@ -3311,10 +3314,27 @@ class ZSXQFileDownloader:
 
         # 使用完整数据库的统计信息
         return self._run_time_collection_after_initial_stop(
-            start_time,
-            sort,
+            target.start_time,
+            target.sort,
             enable_time_dedupe,
-            stop_before_time,
+            target.stop_before_time,
+        )
+
+    def collect_files_by_time(
+        self,
+        sort: str = "by_create_time",
+        start_time: Optional[str] = None,
+        stop_before_time: Optional[datetime.datetime] = None,
+        **kwargs,
+    ) -> Dict[str, int]:
+        """按时间顺序收集文件列表到数据库（使用完整的数据库结构）"""
+        return self._collect_files_by_time_target(
+            TimeCollectionTarget(
+                sort,
+                start_time,
+                stop_before_time,
+                kwargs.get('force_refresh', False),
+            )
         )
     
     def collect_incremental_files(self) -> Dict[str, int]:

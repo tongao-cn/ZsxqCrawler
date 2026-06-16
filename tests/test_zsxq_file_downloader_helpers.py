@@ -1038,6 +1038,103 @@ class FileDownloaderPaginationTests(unittest.TestCase):
             downloader.logs,
         )
 
+    def test_collect_files_by_time_preserves_entry_mode_stop_and_run_handoff(self):
+        downloader = object.__new__(ZSXQFileDownloader)
+        stop_before_time = datetime.datetime(2026, 5, 3, 12, 30)
+        expected_stats = {"total_files": 9, "new_files": 2, "pages": 1}
+        calls = []
+
+        def initialize_time_collection_mode(
+            downloader_self,
+            sort,
+            start_time,
+            stop_before_arg,
+            force_refresh,
+        ):
+            self.assertIs(downloader, downloader_self)
+            calls.append(
+                (
+                    "initialize",
+                    sort,
+                    start_time,
+                    stop_before_arg,
+                    force_refresh,
+                )
+            )
+            return False
+
+        def should_stop_time_collection_initially(downloader_self):
+            self.assertIs(downloader, downloader_self)
+            calls.append(("should_stop",))
+            return False
+
+        def run_time_collection_after_initial_stop(
+            downloader_self,
+            start_time,
+            sort,
+            enable_time_dedupe,
+            stop_before_arg,
+        ):
+            self.assertIs(downloader, downloader_self)
+            calls.append(
+                (
+                    "run",
+                    start_time,
+                    sort,
+                    enable_time_dedupe,
+                    stop_before_arg,
+                )
+            )
+            return expected_stats
+
+        with (
+            patch.object(
+                ZSXQFileDownloader,
+                "_initialize_time_collection_mode",
+                initialize_time_collection_mode,
+            ),
+            patch.object(
+                ZSXQFileDownloader,
+                "_should_stop_time_collection_initially",
+                should_stop_time_collection_initially,
+            ),
+            patch.object(
+                ZSXQFileDownloader,
+                "_run_time_collection_after_initial_stop",
+                run_time_collection_after_initial_stop,
+            ),
+        ):
+            stats = ZSXQFileDownloader.collect_files_by_time(
+                downloader,
+                sort="by_download_count",
+                start_time="cursor-1",
+                stop_before_time=stop_before_time,
+                force_refresh=True,
+                ignored_legacy_kwarg="still-accepted",
+            )
+
+        self.assertIs(expected_stats, stats)
+        self.assertEqual(
+            [
+                (
+                    "initialize",
+                    "by_download_count",
+                    "cursor-1",
+                    stop_before_time,
+                    True,
+                ),
+                ("should_stop",),
+                (
+                    "run",
+                    "cursor-1",
+                    "by_download_count",
+                    False,
+                    stop_before_time,
+                ),
+            ],
+            calls,
+        )
+
     def test_collect_files_by_time_preserves_database_state_initialization(self):
         downloader = object.__new__(ZSXQFileDownloader)
         downloader.group_id = "511"

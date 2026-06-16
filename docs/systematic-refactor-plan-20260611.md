@@ -28960,6 +28960,56 @@ Result:
 - Full backend unittest discovery passed in the current worktree: 1211 tests, 15 skipped.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-16 - P100 collect files by time entry target handoff
+
+Changed:
+
+- Added direct characterization coverage for `collect_files_by_time(...)` before changing
+  production code, locking public entry input handoff into time-collection mode initialization,
+  initial stop checking, post-stop collection helper dispatch, legacy `force_refresh` kwarg
+  handling, ignored extra kwargs compatibility, and returned stats identity.
+- Added private `TimeCollectionTarget` to carry the public time-collection input together.
+- Added private `_collect_files_by_time_target(...)` and delegated the public
+  `collect_files_by_time(...)` method to it.
+- Kept public `collect_files_by_time(sort, start_time, stop_before_time, **kwargs)` signature and
+  behavior unchanged.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Time-collection mode selection, `force_refresh` compatibility, initial stop fallback,
+  pagination entry, dedupe behavior, stop-before boundary behavior, fallback/legacy behavior,
+  error semantics, return values, and configuration semantics are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderPaginationTests.test_collect_files_by_time_preserves_entry_mode_stop_and_run_handoff -v
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderPaginationTests.test_collect_files_by_time_preserves_entry_mode_stop_and_run_handoff tests.test_zsxq_file_downloader_helpers.FileDownloaderPaginationTests.test_collect_files_by_time_preserves_database_state_initialization tests.test_zsxq_file_downloader_helpers.FileDownloaderPaginationTests.test_collect_files_by_time_preserves_force_refresh_start_mode tests.test_zsxq_file_downloader_helpers.FileDownloaderPaginationTests.test_collect_files_by_time_initial_stop_skips_database_fetch_and_import tests.test_zsxq_file_downloader_helpers.FileDownloaderPaginationTests.test_collect_files_by_time_preserves_stop_before_boundary_log_and_break -v
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py
+uv run python scripts\scan_postgres_compat_debt.py
+uv run ruff check backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py --select F401,F841
+git diff --check
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- New direct collect-files-by-time entry characterization test passed before production helper
+  handoff: 1 test.
+- Focused collect-files-by-time entry and fallback/boundary tests passed after helper handoff:
+  5 tests.
+- `py_compile` passed.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- `git diff --check` passed; Git only reported existing LF-to-CRLF working-copy warnings.
+- ZSXQ file downloader helper tests passed: 234 tests.
+- Full backend unittest discovery passed in the current worktree: 1212 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:
