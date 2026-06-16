@@ -2086,6 +2086,13 @@ class ZSXQFileDownloader:
                 stats['failed'] += 1
                 continue
 
+    def _should_stop_database_download_initially(self) -> bool:
+        if self.check_stop():
+            self.log("🛑 任务被停止")
+            return True
+
+        return False
+
     def download_files_from_database(
         self,
         max_files: Optional[int] = None,
@@ -2119,8 +2126,7 @@ class ZSXQFileDownloader:
             self.log(message)
 
         # 检查是否需要停止
-        if self.check_stop():
-            self.log("🛑 任务被停止")
+        if self._should_stop_database_download_initially():
             return download_result_stats()
         files_to_download = self._fetch_database_download_rows(query_plan)
         

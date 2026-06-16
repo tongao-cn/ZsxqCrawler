@@ -1972,6 +1972,27 @@ class FileDownloaderDatabaseDownloadTests(unittest.TestCase):
         self.assertEqual((511, "pending", "2026-05-01", "2026-05-07"), params)
         self.assertIn("   📅 下载区间: 2026-05-01 ~ 2026-05-07", downloader.logs)
 
+    def test_download_files_from_database_initial_stop_skips_query_and_download(self):
+        downloader = self._downloader_for_query_capture()
+        downloader.check_stop = lambda: True
+        downloader._download_database_file_rows = lambda *args: self.fail(
+            "initial stop should not enter database download row loop"
+        )
+
+        stats = ZSXQFileDownloader.download_files_from_database(downloader)
+
+        self.assertEqual({"total_files": 0, "downloaded": 0, "skipped": 0, "failed": 0}, stats)
+        self.assertEqual([], downloader.file_db.executed)
+        self.assertEqual(
+            [
+                "📥 开始从完整数据库下载文件...",
+                "   🔍 状态筛选: pending",
+                "   📌 下载排序: 按热度倒序",
+                "🛑 任务被停止",
+            ],
+            downloader.logs,
+        )
+
     def test_download_files_from_database_preserves_result_stats_payloads_and_delays(self):
         downloader = self._downloader_for_query_capture(
             rows=[
