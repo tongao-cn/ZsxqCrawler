@@ -2188,6 +2188,7 @@ class FileDownloaderTimeHelperTests(unittest.TestCase):
         self.assertIsNone(_latest_file_create_time(()))
         self.assertIsNone(_latest_file_create_time((None,)))
         self.assertIsNone(_latest_file_create_time(("",)))
+        self.assertIsNone(_latest_file_create_time((0,)))
         self.assertEqual("2026-05-02T00:00:00", _latest_file_create_time(("2026-05-02T00:00:00",)))
         self.assertEqual(
             "2026-05-02T00:00:00",

@@ -255,10 +255,17 @@ def _file_collection_log_id(row: Any) -> Optional[Any]:
     return FileCollectionLogRow(row[0]).log_id
 
 
-def _latest_file_create_time(row: Any) -> Optional[Any]:
+def _latest_file_create_time_row(row: Any) -> Optional[LatestFileCreateTimeRow]:
     if not row or not row[0]:
         return None
-    return LatestFileCreateTimeRow(row[0]).create_time
+    return LatestFileCreateTimeRow(row[0])
+
+
+def _latest_file_create_time(row: Any) -> Optional[Any]:
+    latest_file = _latest_file_create_time_row(row)
+    if not latest_file:
+        return None
+    return latest_file.create_time
 
 
 def _database_stats_total_size_row(result: Any) -> Optional[DatabaseStatsTotalSize]:
