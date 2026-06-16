@@ -300,6 +300,13 @@ class DownloadRetryState(NamedTuple):
     last_error: Optional[str]
 
 
+class DownloadRetryLoopAttemptTarget(NamedTuple):
+    attempt: int
+    download_retries: int
+    prepared_file: DownloadFileTarget
+    retry_state: DownloadRetryState
+
+
 class DownloadRetryDecision(NamedTuple):
     state: DownloadRetryState
     result: Optional[bool]
@@ -1197,11 +1204,13 @@ class ZSXQFileDownloader:
         )
 
         for attempt in range(download_retries):
-            retry_decision = self._run_download_retry_loop_attempt(
-                attempt,
-                download_retries,
-                prepared_file,
-                retry_state,
+            retry_decision = self._run_download_retry_loop_attempt_target(
+                DownloadRetryLoopAttemptTarget(
+                    attempt,
+                    download_retries,
+                    prepared_file,
+                    retry_state,
+                ),
             )
             retry_state = retry_decision.state
             if retry_decision.result is None:
@@ -1225,21 +1234,34 @@ class ZSXQFileDownloader:
         prepared_file: DownloadFileTarget,
         retry_state: DownloadRetryState,
     ) -> DownloadRetryDecision:
-        try:
-            attempt_target = prepared_file._replace(
-                file_name=retry_state.file_name,
-                safe_filename=retry_state.safe_filename,
-                file_path=retry_state.file_path,
-            )
-            attempt_result = self._run_download_attempt(
+        return self._run_download_retry_loop_attempt_target(
+            DownloadRetryLoopAttemptTarget(
                 attempt,
                 download_retries,
+                prepared_file,
+                retry_state,
+            ),
+        )
+
+    def _run_download_retry_loop_attempt_target(
+        self,
+        target: DownloadRetryLoopAttemptTarget,
+    ) -> DownloadRetryDecision:
+        try:
+            attempt_target = target.prepared_file._replace(
+                file_name=target.retry_state.file_name,
+                safe_filename=target.retry_state.safe_filename,
+                file_path=target.retry_state.file_path,
+            )
+            attempt_result = self._run_download_attempt(
+                target.attempt,
+                target.download_retries,
                 attempt_target,
             )
-            return self._apply_download_attempt_result(attempt_result, retry_state)
+            return self._apply_download_attempt_result(attempt_result, target.retry_state)
         except Exception as e:
             return DownloadRetryDecision(
-                self._record_download_retry_exception(e, retry_state),
+                self._record_download_retry_exception(e, target.retry_state),
                 None,
             )
 

@@ -26991,6 +26991,54 @@ Result:
 - Full backend unittest discovery passed in the current worktree: 1196 tests, 15 skipped.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-16 - P58 download retry-loop attempt target handoff
+
+Changed:
+
+- Confirmed existing characterization coverage for public `download_file(...)` content-disposition
+  success, missing download URL failure, download URL API-error failure, HTTP retry wait,
+  response filename override before repeated HTTP failure, request-exception retry cleanup,
+  retry-after-size-mismatch success, final failure after repeated size mismatches, and stop during
+  body download.
+- Added private `DownloadRetryLoopAttemptTarget` to carry one retry-loop attempt's fields together.
+- Added private `_run_download_retry_loop_attempt_target(...)` and reused it from
+  `_run_download_retry_loop(...)`.
+- Kept `_run_download_retry_loop_attempt(...)` with its existing private signature as a
+  compatibility wrapper for any internal direct callers.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Public `download_file(...)` inputs/outputs, retry count/order, retry-state propagation across
+  filename overrides and failures, missing-URL early failure, request-exception cleanup,
+  size-mismatch retry/final failure, stop handling, fallback/legacy behavior, error semantics, and
+  configuration semantics are unchanged.
+- The old `_run_download_retry_loop_attempt(...)` private helper signature remains available.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_download_file_uses_content_disposition_for_default_filename tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_download_file_marks_failed_when_download_url_missing tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_download_file_marks_failed_with_download_url_api_error_detail tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_download_file_preserves_retry_wait_log_and_delay tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_download_file_applies_response_filename_override_before_http_failure tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_download_file_retries_request_exception_and_removes_partial_file tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_download_file_retries_after_size_mismatch_before_success tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_download_file_retries_and_fails_on_size_mismatch tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_download_file_stops_during_body_download -v
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py
+uv run python scripts\scan_postgres_compat_debt.py
+uv run ruff check backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py --select F401,F841
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- Existing focused retry-loop attempt coverage passed before helper handoff: 9 tests.
+- Focused retry-loop attempt tests passed after the helper handoff: 9 tests.
+- `py_compile` passed.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- ZSXQ file downloader helper tests passed: 218 tests.
+- Full backend unittest discovery passed in the current worktree: 1196 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:
