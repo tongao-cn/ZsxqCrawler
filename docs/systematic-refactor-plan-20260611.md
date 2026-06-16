@@ -26081,6 +26081,54 @@ Result:
 - Full backend unittest discovery passed in the current worktree: 1192 tests, 15 skipped.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-16 - P38 download response target intermediate removal
+
+Changed:
+
+- Confirmed `DownloadResponseTarget` and `_resolve_download_response_target(...)` had no
+  references outside `backend/crawlers/zsxq_file_downloader.py`.
+- Removed the redundant `DownloadResponseTarget` NamedTuple and private response-target resolver
+  now that `_download_target_for_response(...)` owns response-level target construction.
+- Kept `_apply_response_filename_override(...)` as the single filename-override path, preserving
+  its existing response-header parsing and real-filename log side effect.
+- Kept `_handle_download_response(...)` signature unchanged because tests call it directly to lock
+  response-target and HTTP/success behavior.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Public `download_file(...)` behavior, direct `_handle_download_response(...)` test surface,
+  response filename override, HTTP failure detail, successful body write, partial-file cleanup,
+  size mismatch handling, retry-state propagation, and logs are unchanged.
+- Deleted code was an internal intermediate structure with no remaining external references.
+
+Verification:
+
+```powershell
+rg -n "DownloadResponseTarget|_resolve_download_response_target" backend tests
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests -v
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py
+uv run python scripts\scan_postgres_compat_debt.py
+uv run ruff check backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py --select F401,F841
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers -v
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- Reference check found no remaining `DownloadResponseTarget` or
+  `_resolve_download_response_target` references.
+- Existing download characterization coverage passed before intermediate removal: 54 tests.
+- `py_compile` passed.
+- Download tests passed after intermediate removal: 54 tests.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- ZSXQ file downloader helper tests passed: 214 tests.
+- Full backend unittest discovery passed in the current worktree: 1192 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:
