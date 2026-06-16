@@ -5554,6 +5554,44 @@ class FileDownloaderDownloadTests(unittest.TestCase):
         self.assertEqual(10, printed.count("❌ 响应中无下载链接字段"))
         self.assertIn("🚫 已重试10次，全部失败", printed)
 
+    def test_get_download_url_empty_json_response_exhausts_retries(self):
+        class FakeEmptyJsonResponse:
+            status_code = 200
+            text = "{}"
+
+            def json(self):
+                return {}
+
+        session = FakeDownloadSession([FakeEmptyJsonResponse() for _ in range(10)])
+        downloader = object.__new__(ZSXQFileDownloader)
+        downloader.base_url = "https://api.example"
+        downloader.session = session
+        downloader.group_id = "group-1"
+        downloader.cookie = "cookie"
+        downloader.request_count = 0
+        downloader.last_download_url_error = {"code": 1030, "message": "previous"}
+        downloader.smart_delay = lambda: None
+        downloader.get_stealth_headers = lambda: {}
+        downloader.logs = []
+        downloader.log = downloader.logs.append
+
+        output = io.StringIO()
+        with (
+            contextlib.redirect_stdout(output),
+            patch("backend.crawlers.zsxq_file_downloader.random.uniform", return_value=15.0),
+            patch("backend.crawlers.zsxq_file_downloader.time.sleep") as sleep,
+        ):
+            result = ZSXQFileDownloader.get_download_url(downloader, 101)
+
+        printed = output.getvalue()
+        self.assertIsNone(result)
+        self.assertIsNone(downloader.last_download_url_error)
+        self.assertEqual(10, downloader.request_count)
+        self.assertEqual(10, len(session.get_calls))
+        self.assertEqual(9, sleep.call_count)
+        self.assertIn("🚫 已重试10次，全部失败", printed)
+        self.assertNotIn("❌ 响应中无下载链接字段", printed)
+
     def test_get_download_url_1030_does_not_stop_whole_task(self):
         session = FakeDownloadSession([FakeFailedJsonResponse(1030, "mobile only")])
         downloader = object.__new__(ZSXQFileDownloader)

@@ -24686,6 +24686,54 @@ Result:
 - Full backend unittest discovery passed in the current worktree: 1189 tests, 15 skipped.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-16 - P9 download URL OK response helper extraction
+
+Changed:
+
+- Added characterization coverage for `get_download_url(...)` empty JSON responses, locking the
+  existing retry-until-exhausted behavior and `last_download_url_error` reset.
+- Extracted internal `ZSXQFileDownloader._handle_download_url_ok_response(...)` from the
+  `response.status_code == 200` branch in `_handle_download_url_response(...)`.
+- Kept JSON decode retry behavior, empty-response retry behavior, missing download URL handling,
+  success URL return, API failure classification, `1030` terminal decision, risk-event side
+  effects, retry decisions, and terminal decisions unchanged.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- `get_download_url(...)` public API, return values, printed/logged messages, retry timing,
+  risk-event rows, `last_download_url_error`, fallback/legacy behavior, error semantics, config
+  semantics, and task behavior are unchanged.
+- The new helper is internal and does not create a new public API surface.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_get_download_url_empty_json_response_exhausts_retries tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_get_download_url_redacts_signed_url_in_stdout tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_get_download_url_retries_api_failure_then_success_preserves_events tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_get_download_url_retries_json_decode_failure_then_success_preserves_events tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_get_download_url_missing_url_field_exhausts_retries tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_get_download_url_1030_does_not_stop_whole_task -v
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_get_download_url_empty_json_response_exhausts_retries tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_get_download_url_redacts_signed_url_in_stdout tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_get_download_url_retries_api_failure_then_success_preserves_events tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_get_download_url_retries_http_failure_then_success_preserves_events tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_get_download_url_retries_request_exception_then_success_preserves_events tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_get_download_url_retries_json_decode_failure_then_success_preserves_events tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_get_download_url_missing_url_field_exhausts_retries tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_get_download_url_1030_does_not_stop_whole_task tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_get_download_url_writes_opt_in_risk_log_events -v
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run ruff check backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py --select F401,F841
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers -v
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- New empty JSON response characterization coverage passed before helper extraction: 6 focused
+  download URL tests.
+- `py_compile` passed.
+- Focused download URL response tests passed after helper extraction: 9 tests.
+- File downloader download tests passed: 53 tests.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- ZSXQ file downloader helper tests passed: 212 tests.
+- Full backend unittest discovery passed in the current worktree: 1190 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:

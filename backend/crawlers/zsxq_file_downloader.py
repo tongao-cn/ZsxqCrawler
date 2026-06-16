@@ -830,6 +830,48 @@ class ZSXQFileDownloader:
             print(message)
         return request_exception["should_retry"]
 
+    def _handle_download_url_ok_response(
+        self,
+        response: Any,
+        file_id: int,
+        attempt: int,
+        max_retries: int,
+        headers: Dict[str, str],
+    ) -> DownloadUrlResponseDecision:
+        json_parse = self._parse_api_json_response(response, attempt, max_retries)
+        if json_parse.should_retry:
+            return DownloadUrlResponseDecision(None, True, False)
+        data = json_parse.data
+        if not data:
+            return DownloadUrlResponseDecision(None, True, False)
+
+        if data.get('succeeded'):
+            download_url = self._handle_download_url_success_response(
+                data,
+                file_id,
+                attempt,
+                headers,
+                response.status_code,
+            )
+            return DownloadUrlResponseDecision(download_url, False, False)
+
+        failure_class = self._handle_download_url_api_failure_response(
+            data,
+            file_id,
+            attempt,
+            max_retries,
+            headers,
+            response.status_code,
+        )
+
+        if failure_class == API_FAILURE_PERMISSION_DENIED_1030:
+            return DownloadUrlResponseDecision(None, False, True)
+        if failure_class == API_FAILURE_RETRY:
+            return DownloadUrlResponseDecision(None, True, False)
+        if failure_class == API_FAILURE_NON_RETRY:
+            return DownloadUrlResponseDecision(None, False, True)
+        return DownloadUrlResponseDecision(None, False, False)
+
     def _handle_download_url_response(
         self,
         response: Any,
@@ -841,39 +883,13 @@ class ZSXQFileDownloader:
         print(f"   📊 响应状态: {response.status_code}")
 
         if response.status_code == 200:
-            json_parse = self._parse_api_json_response(response, attempt, max_retries)
-            if json_parse.should_retry:
-                return DownloadUrlResponseDecision(None, True, False)
-            data = json_parse.data
-            if not data:
-                return DownloadUrlResponseDecision(None, True, False)
-
-            if data.get('succeeded'):
-                download_url = self._handle_download_url_success_response(
-                    data,
-                    file_id,
-                    attempt,
-                    headers,
-                    response.status_code,
-                )
-                return DownloadUrlResponseDecision(download_url, False, False)
-
-            failure_class = self._handle_download_url_api_failure_response(
-                data,
+            return self._handle_download_url_ok_response(
+                response,
                 file_id,
                 attempt,
                 max_retries,
                 headers,
-                response.status_code,
             )
-
-            if failure_class == API_FAILURE_PERMISSION_DENIED_1030:
-                return DownloadUrlResponseDecision(None, False, True)
-            if failure_class == API_FAILURE_RETRY:
-                return DownloadUrlResponseDecision(None, True, False)
-            if failure_class == API_FAILURE_NON_RETRY:
-                return DownloadUrlResponseDecision(None, False, True)
-            return DownloadUrlResponseDecision(None, False, False)
 
         http_failure_class = self._handle_download_url_http_failure_response(
             response.status_code,
