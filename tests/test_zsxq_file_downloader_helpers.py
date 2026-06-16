@@ -5606,6 +5606,46 @@ class FileDownloaderDownloadTests(unittest.TestCase):
             downloader.logs,
         )
 
+    def test_get_download_url_stops_on_non_retry_http_failure(self):
+        session = FakeDownloadSession([FakeHttpDownloadUrlResponse(403, "forbidden")])
+        downloader = object.__new__(ZSXQFileDownloader)
+        downloader.base_url = "https://api.example"
+        downloader.session = session
+        downloader.group_id = "group-1"
+        downloader.cookie = "cookie"
+        downloader.risk_event_log_path = None
+        downloader.last_download_url_error = {"code": 1030, "message": "previous"}
+        downloader.request_count = 0
+        downloader.smart_delay = lambda: None
+        downloader.get_stealth_headers = lambda: {"User-Agent": "unit-test-agent"}
+        downloader.logs = []
+        downloader.log = downloader.logs.append
+
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            result = ZSXQFileDownloader.get_download_url(downloader, 202)
+
+        printed = output.getvalue()
+        self.assertIsNone(result)
+        self.assertIsNone(downloader.last_download_url_error)
+        self.assertEqual(1, downloader.request_count)
+        self.assertEqual(
+            [("https://api.example/v2/files/202/download_url", 30, False)],
+            session.get_calls,
+        )
+        self.assertIn("   📊 响应状态: 403", printed)
+        self.assertIn("   ❌ HTTP错误: 403", printed)
+        self.assertIn("   📄 响应内容: forbidden", printed)
+        self.assertIn("   🚫 非可重试HTTP错误，停止重试", printed)
+        self.assertNotIn("全部失败", printed)
+        self.assertEqual(
+            [
+                "   🔗 获取下载链接: ID=202",
+                "   🌐 请求URL: https://api.example/v2/files/202/download_url",
+            ],
+            downloader.logs,
+        )
+
     def test_get_download_url_retries_request_exception_then_success_preserves_events(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             session = FakeDownloadSession([

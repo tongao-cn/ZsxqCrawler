@@ -230,6 +230,13 @@ class DownloadUrlApiFailureResponseTarget(NamedTuple):
     http_status: int
 
 
+class DownloadUrlHttpFailureResponseTarget(NamedTuple):
+    http_status: int
+    response_text: str
+    attempt: int
+    max_retries: int
+
+
 class DownloadRetryWaitTarget(NamedTuple):
     attempt: int
     download_retries: int
@@ -1073,7 +1080,25 @@ class ZSXQFileDownloader:
         attempt: int,
         max_retries: int,
     ) -> str:
-        http_failure = http_failure_plan(http_status, response_text, attempt, max_retries)
+        return self._handle_download_url_http_failure_response_target(
+            DownloadUrlHttpFailureResponseTarget(
+                http_status,
+                response_text,
+                attempt,
+                max_retries,
+            ),
+        )
+
+    def _handle_download_url_http_failure_response_target(
+        self,
+        target: DownloadUrlHttpFailureResponseTarget,
+    ) -> str:
+        http_failure = http_failure_plan(
+            target.http_status,
+            target.response_text,
+            target.attempt,
+            target.max_retries,
+        )
         for message in http_failure["messages"]:
             print(message)
         return http_failure["failure_class"]
@@ -1239,11 +1264,13 @@ class ZSXQFileDownloader:
                 ),
             )
 
-        http_failure_class = self._handle_download_url_http_failure_response(
-            target.response.status_code,
-            target.response.text,
-            target.attempt,
-            target.max_retries,
+        http_failure_class = self._handle_download_url_http_failure_response_target(
+            DownloadUrlHttpFailureResponseTarget(
+                target.response.status_code,
+                target.response.text,
+                target.attempt,
+                target.max_retries,
+            ),
         )
         return self._download_url_http_failure_decision(http_failure_class)
 
