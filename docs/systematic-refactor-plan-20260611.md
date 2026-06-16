@@ -26173,6 +26173,52 @@ Result:
 - Full backend unittest discovery passed in the current worktree: 1192 tests, 15 skipped.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-16 - P40 batch download loop state handoff
+
+Changed:
+
+- Confirmed `_run_batch_download_page(...)` has no direct test or cross-module callers; it is only
+  invoked by `_run_batch_download_loop(...)`.
+- Reused the existing `BatchDownloadLoopStep` to carry current page cursor and downloaded count
+  into `_run_batch_download_page(...)`.
+- Removed duplicated loop-local scalar state synchronization for `current_index` and
+  `downloaded_in_batch` inside `_run_batch_download_loop(...)`.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Public `download_files_batch(...)` behavior, max-file limit handling, next-page cursor
+  propagation, stop handling, fetch failure handling, empty-page handling, delay calls, stats, and
+  logs are unchanged.
+- The signature change is limited to a private helper with no direct external references.
+
+Verification:
+
+```powershell
+rg -n "_run_batch_download_page\(" backend tests
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderBatchDownloadTests -v
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py
+uv run python scripts\scan_postgres_compat_debt.py
+uv run ruff check backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py --select F401,F841
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers -v
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- Reference check found `_run_batch_download_page(...)` only at its definition and internal
+  `_run_batch_download_loop(...)` call site.
+- Existing batch download characterization coverage passed before loop-state handoff: 15 tests.
+- `py_compile` passed.
+- Batch download tests passed after loop-state handoff: 15 tests.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- ZSXQ file downloader helper tests passed: 214 tests.
+- Full backend unittest discovery passed in the current worktree: 1192 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:

@@ -1703,18 +1703,17 @@ class ZSXQFileDownloader:
 
     def _run_batch_download_page(
         self,
-        current_index: Optional[str],
-        downloaded_in_batch: int,
+        step: BatchDownloadLoopStep,
         max_files: Optional[int],
         stats: Dict[str, int],
     ) -> Optional[BatchDownloadLoopStep]:
-        page = self._fetch_batch_download_page(current_index)
+        page = self._fetch_batch_download_page(step.next_index)
         if page is None:
             return None
 
         downloaded_in_batch = self._download_batch_page_files(
             page.files,
-            downloaded_in_batch,
+            step.downloaded_in_batch,
             max_files,
             stats,
         )
@@ -1732,27 +1731,24 @@ class ZSXQFileDownloader:
         max_files: Optional[int],
         start_index: Optional[str],
     ) -> None:
-        current_index = start_index
-        downloaded_in_batch = 0
+        step = BatchDownloadLoopStep(0, start_index)
 
-        while max_files is None or downloaded_in_batch < max_files:
+        while max_files is None or step.downloaded_in_batch < max_files:
             # 检查是否需要停止
             if self.check_stop():
                 self.log(batch_download_loop_stop_message())
                 break
 
-            step = self._run_batch_download_page(
-                current_index,
-                downloaded_in_batch,
+            next_step = self._run_batch_download_page(
+                step,
                 max_files,
                 stats,
             )
-            if step is None:
+            if next_step is None:
                 break
 
-            downloaded_in_batch = step.downloaded_in_batch
-            current_index = step.next_index
-            if current_index is None:
+            step = next_step
+            if step.next_index is None:
                 break
 
     def download_files_batch(self, max_files: Optional[int] = None, start_index: Optional[str] = None) -> Dict[str, int]:
