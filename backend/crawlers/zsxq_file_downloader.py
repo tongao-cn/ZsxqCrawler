@@ -164,6 +164,12 @@ class ApiJsonParseResult(NamedTuple):
     should_retry: bool
 
 
+class FileListResponseDecision(NamedTuple):
+    result: Optional[Dict[str, Any]]
+    should_retry: bool
+    should_stop: bool
+
+
 class DownloadUrlResponseDecision(NamedTuple):
     download_url: Optional[str]
     should_retry: bool
@@ -697,6 +703,37 @@ class ZSXQFileDownloader:
             print(message)
         return request_exception["should_retry"]
 
+    def _handle_file_list_ok_response(
+        self,
+        response: requests.Response,
+        attempt: int,
+        max_retries: int,
+    ) -> FileListResponseDecision:
+        json_parse = self._parse_api_json_response(response, attempt, max_retries)
+        if json_parse.should_retry:
+            return FileListResponseDecision(None, True, False)
+        data = json_parse.data
+        if not data:
+            return FileListResponseDecision(None, True, False)
+
+        if data.get('succeeded'):
+            return FileListResponseDecision(
+                self._handle_file_list_success_response(data, attempt),
+                False,
+                False,
+            )
+
+        failure_class = self._handle_file_list_api_failure_response(
+            data,
+            attempt,
+            max_retries,
+        )
+        if failure_class == API_FAILURE_RETRY:
+            return FileListResponseDecision(None, True, False)
+        if failure_class in {API_FAILURE_NON_RETRY, API_FAILURE_PERMISSION_DENIED_1030}:
+            return FileListResponseDecision(None, False, True)
+        return FileListResponseDecision(None, False, False)
+
     def fetch_file_list(self, count: int = 20, index: Optional[str] = None, sort: str = "by_download_count") -> Optional[Dict[str, Any]]:
         """获取文件列表（带重试机制）"""
         url = f"{self.base_url}/v2/groups/{self.group_id}/files"
@@ -715,24 +752,12 @@ class ZSXQFileDownloader:
                 print(f"   📊 响应状态: {response.status_code}")
                 
                 if response.status_code == 200:
-                    json_parse = self._parse_api_json_response(response, attempt, max_retries)
-                    if json_parse.should_retry:
+                    decision = self._handle_file_list_ok_response(response, attempt, max_retries)
+                    if decision.result is not None:
+                        return decision.result
+                    if decision.should_retry:
                         continue
-                    data = json_parse.data
-                    if not data:
-                        continue
-
-                    if data.get('succeeded'):
-                        return self._handle_file_list_success_response(data, attempt)
-
-                    failure_class = self._handle_file_list_api_failure_response(
-                        data,
-                        attempt,
-                        max_retries,
-                    )
-                    if failure_class == API_FAILURE_RETRY:
-                        continue
-                    if failure_class in {API_FAILURE_NON_RETRY, API_FAILURE_PERMISSION_DENIED_1030}:
+                    if decision.should_stop:
                         return None
                         
                 else:

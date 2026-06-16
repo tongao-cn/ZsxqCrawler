@@ -24782,6 +24782,54 @@ Result:
 - Full backend unittest discovery passed in the current worktree: 1190 tests, 15 skipped.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-16 - P11 file list OK response helper extraction
+
+Changed:
+
+- Confirmed existing characterization coverage for `fetch_file_list(...)` request exceptions, HTTP
+  retry/final failure, retryable API failures, non-retry API failures, first-attempt success output,
+  and JSON decode retry paths.
+- Added internal `FileListResponseDecision` to make file-list response outcomes explicit.
+- Extracted internal `ZSXQFileDownloader._handle_file_list_ok_response(...)` from the
+  `response.status_code == 200` branch in `fetch_file_list(...)`.
+- Kept request URL/params, retry count, header rotation, response status output, JSON decode retry,
+  empty-data retry, success return payload, API failure classification, terminal `1030` handling,
+  HTTP failure handling, request exception handling, and exhausted-retry output unchanged.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- `fetch_file_list(...)` public API, return values, printed/logged messages, retry timing,
+  fallback/legacy behavior, error semantics, config semantics, and task behavior are unchanged.
+- The new decision tuple and helper are internal and do not create a new public API surface.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderRetryHelperTests.test_fetch_file_list_retries_request_exception_then_success tests.test_zsxq_file_downloader_helpers.FileDownloaderRetryHelperTests.test_fetch_file_list_request_exception_exhausts_retries tests.test_zsxq_file_downloader_helpers.FileDownloaderRetryHelperTests.test_fetch_file_list_retries_http_failure_then_success tests.test_zsxq_file_downloader_helpers.FileDownloaderRetryHelperTests.test_fetch_file_list_stops_on_non_retry_http_failure tests.test_zsxq_file_downloader_helpers.FileDownloaderRetryHelperTests.test_fetch_file_list_retryable_http_failure_exhausts_retries tests.test_zsxq_file_downloader_helpers.FileDownloaderRetryHelperTests.test_fetch_file_list_retries_api_failure_then_success tests.test_zsxq_file_downloader_helpers.FileDownloaderRetryHelperTests.test_fetch_file_list_stops_on_non_retry_api_failure tests.test_zsxq_file_downloader_helpers.FileDownloaderRetryHelperTests.test_fetch_file_list_retryable_api_failure_exhausts_retries tests.test_zsxq_file_downloader_helpers.FileDownloaderRetryHelperTests.test_fetch_file_list_preserves_first_attempt_success_output_and_logs tests.test_zsxq_file_downloader_helpers.FileDownloaderRetryHelperTests.test_fetch_file_list_retries_json_decode_failure_then_success -v
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderRetryHelperTests.test_fetch_file_list_retries_request_exception_then_success tests.test_zsxq_file_downloader_helpers.FileDownloaderRetryHelperTests.test_fetch_file_list_request_exception_exhausts_retries tests.test_zsxq_file_downloader_helpers.FileDownloaderRetryHelperTests.test_fetch_file_list_retries_http_failure_then_success tests.test_zsxq_file_downloader_helpers.FileDownloaderRetryHelperTests.test_fetch_file_list_stops_on_non_retry_http_failure tests.test_zsxq_file_downloader_helpers.FileDownloaderRetryHelperTests.test_fetch_file_list_retryable_http_failure_exhausts_retries tests.test_zsxq_file_downloader_helpers.FileDownloaderRetryHelperTests.test_fetch_file_list_retries_api_failure_then_success tests.test_zsxq_file_downloader_helpers.FileDownloaderRetryHelperTests.test_fetch_file_list_stops_on_non_retry_api_failure tests.test_zsxq_file_downloader_helpers.FileDownloaderRetryHelperTests.test_fetch_file_list_retryable_api_failure_exhausts_retries tests.test_zsxq_file_downloader_helpers.FileDownloaderRetryHelperTests.test_fetch_file_list_preserves_first_attempt_success_output_and_logs tests.test_zsxq_file_downloader_helpers.FileDownloaderRetryHelperTests.test_fetch_file_list_retries_json_decode_failure_then_success -v
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderRetryHelperTests -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run ruff check backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py --select F401,F841
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers -v
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- Existing characterization coverage passed before helper extraction: 10 focused tests.
+- `py_compile` passed.
+- Focused fetch-file-list OK-response tests passed after helper extraction: 10 tests.
+- File downloader retry helper tests passed: 40 tests.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- ZSXQ file downloader helper tests passed: 212 tests.
+- Full backend unittest discovery passed in the current worktree: 1190 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:
