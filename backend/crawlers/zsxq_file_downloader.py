@@ -188,6 +188,12 @@ class FileListApiFailureResponseTarget(NamedTuple):
     max_retries: int
 
 
+class FileListHttpFailureResponseTarget(NamedTuple):
+    response: requests.Response
+    attempt: int
+    max_retries: int
+
+
 class StealthHeaderSelection(NamedTuple):
     user_agent: str
     sec_ch_ua: str
@@ -934,7 +940,20 @@ class ZSXQFileDownloader:
         attempt: int,
         max_retries: int,
     ) -> str:
-        http_failure = http_failure_plan(response.status_code, response.text, attempt, max_retries)
+        return self._handle_file_list_http_failure_response_target(
+            FileListHttpFailureResponseTarget(response, attempt, max_retries),
+        )
+
+    def _handle_file_list_http_failure_response_target(
+        self,
+        target: FileListHttpFailureResponseTarget,
+    ) -> str:
+        http_failure = http_failure_plan(
+            target.response.status_code,
+            target.response.text,
+            target.attempt,
+            target.max_retries,
+        )
         for message in http_failure["messages"]:
             print(message)
         return http_failure["failure_class"]
@@ -1023,10 +1042,12 @@ class ZSXQFileDownloader:
                 ),
             )
 
-        http_failure_class = self._handle_file_list_http_failure_response(
-            target.response,
-            target.attempt,
-            target.max_retries,
+        http_failure_class = self._handle_file_list_http_failure_response_target(
+            FileListHttpFailureResponseTarget(
+                target.response,
+                target.attempt,
+                target.max_retries,
+            ),
         )
         if http_failure_class == HTTP_FAILURE_RETRY:
             return FileListResponseDecision(None, True, False)
