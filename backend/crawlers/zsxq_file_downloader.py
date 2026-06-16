@@ -170,6 +170,13 @@ class FileListResponseDecision(NamedTuple):
     should_stop: bool
 
 
+class StealthHeaderSelection(NamedTuple):
+    user_agent: str
+    sec_ch_ua: str
+    accept_language: str
+    platform: str
+
+
 class DownloadUrlResponseDecision(NamedTuple):
     download_url: Optional[str]
     should_retry: bool
@@ -465,53 +472,49 @@ class ZSXQFileDownloader:
             print(f"Cookie清理失败: {error}")
         return cookie
     
-    def get_stealth_headers(self) -> Dict[str, str]:
-        """获取反检测请求头（每次调用随机化）"""
-        # 更丰富的User-Agent池
+    def _select_stealth_header_values(self) -> StealthHeaderSelection:
         user_agents = stealth_user_agents()
-        
-        # 随机选择User-Agent
         selected_ua = random.choice(user_agents)
-        
-        # 根据User-Agent生成对应的Sec-Ch-Ua
         sec_ch_ua = sec_ch_ua_for_user_agent(selected_ua)
-        
-        # 随机化其他头部
+
         accept_languages = stealth_accept_languages()
-        
         platforms = stealth_platforms()
         accept_language = random.choice(accept_languages)
         platform = random.choice(platforms)
-        
-        # 基础头部
-        headers = stealth_base_headers(
-            self.cookie,
-            self.group_id,
-            selected_ua,
-            sec_ch_ua,
-            accept_language,
-            platform,
-        )
-        
-        # 随机添加可选头部
+
+        return StealthHeaderSelection(selected_ua, sec_ch_ua, accept_language, platform)
+
+    def _apply_optional_stealth_headers(self, headers: Dict[str, str]) -> None:
         optional_headers = stealth_optional_headers()
-        
         for key, value in optional_headers.items():
             if random.random() > 0.5:  # 50%概率添加
                 headers[key] = value
-        
-        # 随机调整时间戳相关头部
+
+    def _apply_dynamic_stealth_headers(self, headers: Dict[str, str]) -> None:
         if random.random() > 0.7:  # 30%概率添加
             headers['X-Timestamp'] = stealth_timestamp_header_value(
                 int(time.time()),
                 random.randint(-30, 30),
             )
-        
+
         if random.random() > 0.6:  # 40%概率添加
             headers['X-Request-Id'] = stealth_request_id_header_value(
                 random.randint(100000000000, 999999999999),
             )
-        
+
+    def get_stealth_headers(self) -> Dict[str, str]:
+        """获取反检测请求头（每次调用随机化）"""
+        selection = self._select_stealth_header_values()
+        headers = stealth_base_headers(
+            self.cookie,
+            self.group_id,
+            selection.user_agent,
+            selection.sec_ch_ua,
+            selection.accept_language,
+            selection.platform,
+        )
+        self._apply_optional_stealth_headers(headers)
+        self._apply_dynamic_stealth_headers(headers)
         return headers
     
     def smart_delay(self):

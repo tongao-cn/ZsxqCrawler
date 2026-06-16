@@ -3462,6 +3462,65 @@ class FileDownloaderRetryHelperTests(unittest.TestCase):
         self.assertEqual("req-100000000000", stealth_request_id_header_value(100000000000))
         self.assertEqual("req-999999999999", stealth_request_id_header_value(999999999999))
 
+    def test_get_stealth_headers_preserves_random_order_and_dynamic_headers(self):
+        downloader = object.__new__(ZSXQFileDownloader)
+        downloader.cookie = "cookie-value"
+        downloader.group_id = "group-1"
+
+        selected_ua = stealth_user_agents()[0]
+        selected_language = stealth_accept_languages()[2]
+        selected_platform = stealth_platforms()[1]
+
+        with (
+            patch(
+                "backend.crawlers.zsxq_file_downloader.random.choice",
+                side_effect=[selected_ua, selected_language, selected_platform],
+            ) as random_choice,
+            patch(
+                "backend.crawlers.zsxq_file_downloader.random.random",
+                side_effect=[0.6, 0.4, 0.8, 0.51, 0.8, 0.7],
+            ) as random_value,
+            patch(
+                "backend.crawlers.zsxq_file_downloader.random.randint",
+                side_effect=[5, 123456789012],
+            ) as random_int,
+            patch("backend.crawlers.zsxq_file_downloader.time.time", return_value=1700000000),
+        ):
+            headers = ZSXQFileDownloader.get_stealth_headers(downloader)
+
+        self.assertEqual(
+            [stealth_user_agents(), stealth_accept_languages(), stealth_platforms()],
+            [call.args[0] for call in random_choice.call_args_list],
+        )
+        self.assertEqual(6, random_value.call_count)
+        self.assertEqual(
+            [(-30, 30), (100000000000, 999999999999)],
+            [call.args for call in random_int.call_args_list],
+        )
+        self.assertEqual(
+            list(
+                stealth_base_headers(
+                    "cookie-value",
+                    "group-1",
+                    selected_ua,
+                    sec_ch_ua_for_user_agent(selected_ua),
+                    selected_language,
+                    selected_platform,
+                ).keys()
+            )
+            + ["DNT", "Upgrade-Insecure-Requests", "X-Requested-With", "X-Timestamp", "X-Request-Id"],
+            list(headers.keys()),
+        )
+        self.assertEqual(selected_ua, headers["User-Agent"])
+        self.assertEqual(selected_language, headers["Accept-Language"])
+        self.assertEqual(selected_platform, headers["Sec-Ch-Ua-Platform"])
+        self.assertEqual("1", headers["DNT"])
+        self.assertNotIn("Sec-GPC", headers)
+        self.assertEqual("1", headers["Upgrade-Insecure-Requests"])
+        self.assertEqual("XMLHttpRequest", headers["X-Requested-With"])
+        self.assertEqual("1700000005", headers["X-Timestamp"])
+        self.assertEqual("req-123456789012", headers["X-Request-Id"])
+
     def test_prepare_retry_api_request_sleeps_counts_and_rotates_headers(self):
         downloader = object.__new__(ZSXQFileDownloader)
         downloader.request_count = 0

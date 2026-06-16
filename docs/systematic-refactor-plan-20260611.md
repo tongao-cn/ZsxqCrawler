@@ -24830,6 +24830,56 @@ Result:
 - Full backend unittest discovery passed in the current worktree: 1190 tests, 15 skipped.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-16 - P12 stealth header helper extraction
+
+Changed:
+
+- Added characterization coverage for `get_stealth_headers(...)`, locking the current random
+  selection order, optional-header probability checks, dynamic timestamp/request-id generation, header
+  key order, and selected header values.
+- Added internal `StealthHeaderSelection` to name the selected user agent, sec-ch-ua,
+  accept-language, and platform values.
+- Extracted internal `ZSXQFileDownloader._select_stealth_header_values(...)`,
+  `_apply_optional_stealth_headers(...)`, and `_apply_dynamic_stealth_headers(...)` from
+  `get_stealth_headers(...)`.
+- Kept user-agent/language/platform pools, random choice order, optional-header iteration order,
+  probability thresholds, `time.time()` and `random.randint(...)` usage, returned header keys/values,
+  and retry/risk-log callers unchanged.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- `get_stealth_headers(...)` public API, returned header shape/order, randomization sequence,
+  fallback/legacy behavior, error semantics, config semantics, and task behavior are unchanged.
+- The new tuple and helpers are internal and do not create a new public API surface.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderRetryHelperTests.test_get_stealth_headers_preserves_random_order_and_dynamic_headers -v
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderRetryHelperTests.test_get_stealth_headers_preserves_random_order_and_dynamic_headers tests.test_zsxq_file_downloader_helpers.FileDownloaderRetryHelperTests.test_stealth_header_option_pools_preserve_existing_order tests.test_zsxq_file_downloader_helpers.FileDownloaderRetryHelperTests.test_stealth_base_headers_preserve_existing_values_and_order tests.test_zsxq_file_downloader_helpers.FileDownloaderRetryHelperTests.test_stealth_optional_headers_preserve_existing_values_and_order tests.test_zsxq_file_downloader_helpers.FileDownloaderRetryHelperTests.test_stealth_dynamic_header_values_preserve_existing_format tests.test_zsxq_file_downloader_helpers.FileDownloaderRetryHelperTests.test_sec_ch_ua_for_user_agent_preserves_existing_mapping tests.test_zsxq_file_downloader_helpers.FileDownloaderRetryHelperTests.test_prepare_retry_api_request_sleeps_counts_and_rotates_headers tests.test_zsxq_file_downloader_helpers.FileDownloaderRetryHelperTests.test_prepare_retry_api_request_without_risk_log_preserves_no_ua_log tests.test_zsxq_file_downloader_helpers.FileDownloaderRetryHelperTests.test_prepare_retry_api_request_with_risk_log_records_request_event -v
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderRetryHelperTests -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run ruff check backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py --select F401,F841
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers -v
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- New characterization coverage passed before helper extraction: 1 focused test.
+- `py_compile` passed.
+- Focused stealth header tests passed after helper extraction: 9 tests.
+- File downloader retry helper tests passed: 41 tests.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- ZSXQ file downloader helper tests passed: 213 tests.
+- Full backend unittest discovery passed in the current worktree: 1191 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:
