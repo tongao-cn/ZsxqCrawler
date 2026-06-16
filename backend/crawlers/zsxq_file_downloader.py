@@ -183,6 +183,11 @@ class DownloadUrlResponseDecision(NamedTuple):
     should_stop: bool
 
 
+class DownloadUrlRequestTarget(NamedTuple):
+    url: str
+    headers: Dict[str, str]
+
+
 class DownloadRetryWaitTarget(NamedTuple):
     attempt: int
     download_retries: int
@@ -1120,9 +1125,17 @@ class ZSXQFileDownloader:
         return url
 
     def _request_download_url_response(self, url: str, headers: Dict[str, str]) -> Any:
+        return self._request_download_url_response_target(
+            DownloadUrlRequestTarget(url, headers),
+        )
+
+    def _request_download_url_response_target(
+        self,
+        target: DownloadUrlRequestTarget,
+    ) -> Any:
         return self.session.get(
-            url,
-            headers=headers,
+            target.url,
+            headers=target.headers,
             timeout=DOWNLOAD_URL_REQUEST_TIMEOUT_SECONDS,
         )
 
@@ -1136,7 +1149,9 @@ class ZSXQFileDownloader:
         headers = self._prepare_retry_api_request(attempt, file_id=file_id)
 
         try:
-            response = self._request_download_url_response(url, headers)
+            response = self._request_download_url_response_target(
+                DownloadUrlRequestTarget(url, headers),
+            )
             return self._handle_download_url_response(
                 response,
                 file_id,
