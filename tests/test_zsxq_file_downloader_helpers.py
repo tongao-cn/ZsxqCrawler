@@ -5012,6 +5012,35 @@ class FileDownloaderDownloadTests(unittest.TestCase):
             self.assertFalse((Path(temp_dir) / "file_101.part").exists())
             self.assertFalse((Path(temp_dir) / "real.pdf.part").exists())
 
+    def test_download_file_retries_request_exception_and_removes_partial_file(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            partial_path = Path(temp_dir) / "memo.pdf.part"
+            partial_path.write_bytes(b"stale")
+            session = FakeDownloadSession([
+                RuntimeError("socket down"),
+                RuntimeError("socket down"),
+                RuntimeError("socket down"),
+            ])
+            downloader = self._downloader_for_download(temp_dir, session)
+
+            with patch("backend.crawlers.zsxq_file_downloader.time.sleep") as sleep:
+                result = ZSXQFileDownloader.download_file(
+                    downloader,
+                    {"file": {"id": 101, "name": "memo.pdf", "size": 4, "download_count": 0}},
+                )
+
+            self.assertFalse(result)
+            self.assertEqual(3, len(session.get_calls))
+            self.assertEqual(2, sleep.call_count)
+            self.assertFalse(partial_path.exists())
+            self.assertEqual(
+                (101, "failed", None, "download_exception", "socket down"),
+                downloader.file_db.status_updates[-1],
+            )
+            self.assertIn("   ❌ 下载异常: socket down", downloader.logs)
+            self.assertIn("   🗑️ 删除不完整文件", downloader.logs)
+            self.assertIn("   🚫 文件下载重试3次仍失败: socket down", downloader.logs)
+
     def test_mark_download_url_unavailable_preserves_default_and_api_error_details(self):
         downloader = object.__new__(ZSXQFileDownloader)
         downloader.file_db = FakeDownloadFileDb()
