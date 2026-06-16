@@ -2554,11 +2554,24 @@ class ZSXQFileDownloader:
         print(f"   👥 用户数量: {total_users:,}")
         print(f"   🏠 群组数量: {total_groups:,}")
 
-    def _print_database_total_size(self) -> None:
+    def _fetch_database_total_size(self) -> Any:
         query, params = database_stats_total_size_query(_query_group_id(self.group_id))
         self.file_db.cursor.execute(query, params)
         result = self.file_db.cursor.fetchone()
-        total_size = _database_stats_total_size(result)
+        return _database_stats_total_size(result)
+
+    def _fetch_database_time_range(self) -> Optional[DatabaseStatsTimeRange]:
+        query, params = database_stats_time_range_query(_query_group_id(self.group_id))
+        self.file_db.cursor.execute(query, params)
+        time_result = self.file_db.cursor.fetchone()
+        return _database_stats_time_range(time_result)
+
+    def _fetch_database_api_response_stats(self) -> Any:
+        self.file_db.cursor.execute(database_stats_api_response_query())
+        return self.file_db.cursor.fetchall()
+
+    def _print_database_total_size(self) -> None:
+        total_size = self._fetch_database_total_size()
 
         if total_size > 0:
             print(f"💾 总文件大小: {total_size/1024/1024:.2f} MB")
@@ -2571,11 +2584,7 @@ class ZSXQFileDownloader:
                 print(f"   {emoji} {table_name}: {count:,}")
 
     def _print_database_time_range(self) -> None:
-        query, params = database_stats_time_range_query(_query_group_id(self.group_id))
-        self.file_db.cursor.execute(query, params)
-        time_result = self.file_db.cursor.fetchone()
-        time_range = _database_stats_time_range(time_result)
-
+        time_range = self._fetch_database_time_range()
         if time_range:
             print(f"\n⏰ 文件时间范围:")
             print(f"   最早文件: {time_range.min_time}")
@@ -2583,8 +2592,7 @@ class ZSXQFileDownloader:
             print(f"   有时间信息的文件: {time_range.time_count:,}")
 
     def _print_database_api_response_stats(self) -> None:
-        self.file_db.cursor.execute(database_stats_api_response_query())
-        api_stats = self.file_db.cursor.fetchall()
+        api_stats = self._fetch_database_api_response_stats()
 
         if api_stats:
             print(f"\n📡 API响应统计:")

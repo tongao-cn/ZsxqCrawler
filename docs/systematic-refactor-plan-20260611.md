@@ -26219,6 +26219,49 @@ Result:
 - Full backend unittest discovery passed in the current worktree: 1192 tests, 15 skipped.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-16 - P41 database stats fetch helper extraction
+
+Changed:
+
+- Confirmed existing characterization coverage for `show_database_stats(...)` query order, output
+  shape, optional-section omission, database stats row parsing, and stats query helper text.
+- Extracted private `_fetch_database_total_size(...)`, `_fetch_database_time_range(...)`, and
+  `_fetch_database_api_response_stats(...)` helpers from the corresponding print methods.
+- Kept `show_database_stats(...)` and the `_print_database_*` methods responsible for the existing
+  output order and presentation text.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Database stats query text, query parameter shape, cursor execution order, optional output
+  sections, printed text, public `show_database_stats()` behavior, fallback/legacy behavior, error
+  semantics, and configuration semantics are unchanged.
+- The new helpers are private and do not create a public API surface.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderDatabaseStatsTests tests.test_zsxq_file_downloader_helpers.FileDownloaderFileDataHelperTests.test_database_stats_queries_preserve_shape_and_params -v
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py
+uv run python scripts\scan_postgres_compat_debt.py
+uv run ruff check backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py --select F401,F841
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers -v
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- Existing database stats characterization coverage passed before helper extraction: 6 tests.
+- `py_compile` passed.
+- Database stats tests passed after helper extraction: 6 tests.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- ZSXQ file downloader helper tests passed: 214 tests.
+- Full backend unittest discovery passed in the current worktree: 1192 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:
