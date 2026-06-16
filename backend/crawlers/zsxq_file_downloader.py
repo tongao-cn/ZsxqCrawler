@@ -267,12 +267,16 @@ def _database_stats_total_size(result: Any) -> Any:
     return DatabaseStatsTotalSize(result[0]).total_size
 
 
-def _database_stats_time_range(result: Any) -> Optional[DatabaseStatsTimeRange]:
+def _database_stats_time_range_row(result: Any) -> Optional[DatabaseStatsTimeRange]:
     if not result or result[2] <= 0:
         return None
 
     min_time, max_time, time_count = result
     return DatabaseStatsTimeRange(min_time, max_time, time_count)
+
+
+def _database_stats_time_range(result: Any) -> Optional[DatabaseStatsTimeRange]:
+    return _database_stats_time_range_row(result)
 
 
 class ZSXQFileDownloader:

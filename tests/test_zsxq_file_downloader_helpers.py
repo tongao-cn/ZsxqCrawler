@@ -1771,6 +1771,7 @@ class FileDownloaderDatabaseStatsTests(unittest.TestCase):
         self.assertIsNone(_database_stats_time_range(None))
         self.assertIsNone(_database_stats_time_range(()))
         self.assertIsNone(_database_stats_time_range((None, None, 0)))
+        self.assertIsNone(_database_stats_time_range((None, None, -1)))
 
         time_range = _database_stats_time_range(
             ("2026-05-01 09:00:00", "2026-05-07 10:00:00", 2)
