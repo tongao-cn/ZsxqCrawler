@@ -382,6 +382,11 @@ class DownloadBodyFinalizationTarget(NamedTuple):
     file_path: str
 
 
+class DownloadBodyFinalizationDecisionTarget(NamedTuple):
+    downloaded_size: Optional[int]
+    finalization_target: DownloadBodyFinalizationTarget
+
+
 class DownloadSizeMismatchTarget(NamedTuple):
     expected_size: int
     temp_path: str
@@ -2214,14 +2219,16 @@ class ZSXQFileDownloader:
                 ),
             ),
         )
-        return self._finalize_download_body_result_target(
-            downloaded_size,
-            DownloadBodyFinalizationTarget(
-                body_target.expected_size,
-                body_target.temp_path,
-                file_target.file_id,
-                file_target.safe_filename,
-                file_target.file_path,
+        return self._finalize_download_body_result_decision_target(
+            DownloadBodyFinalizationDecisionTarget(
+                downloaded_size,
+                DownloadBodyFinalizationTarget(
+                    body_target.expected_size,
+                    body_target.temp_path,
+                    file_target.file_id,
+                    file_target.safe_filename,
+                    file_target.file_path,
+                ),
             ),
         )
 
@@ -2250,13 +2257,23 @@ class ZSXQFileDownloader:
         downloaded_size: Optional[int],
         target: DownloadBodyFinalizationTarget,
     ) -> DownloadBodyResult:
+        return self._finalize_download_body_result_decision_target(
+            DownloadBodyFinalizationDecisionTarget(downloaded_size, target),
+        )
+
+    def _finalize_download_body_result_decision_target(
+        self,
+        target: DownloadBodyFinalizationDecisionTarget,
+    ) -> DownloadBodyResult:
+        downloaded_size = target.downloaded_size
+        finalization_target = target.finalization_target
         if downloaded_size is None:
             return DownloadBodyResult(False, None)
 
         mismatch_detail = self._handle_download_size_mismatch_target(
             DownloadSizeMismatchTarget(
-                target.expected_size,
-                target.temp_path,
+                finalization_target.expected_size,
+                finalization_target.temp_path,
             ),
         )
         if mismatch_detail:
@@ -2264,10 +2281,10 @@ class ZSXQFileDownloader:
 
         self._complete_successful_download_target(
             DownloadCompletionTarget(
-                target.file_id,
-                target.safe_filename,
-                target.file_path,
-                target.temp_path,
+                finalization_target.file_id,
+                finalization_target.safe_filename,
+                finalization_target.file_path,
+                finalization_target.temp_path,
             ),
         )
         return DownloadBodyResult(True, None)
