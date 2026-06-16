@@ -1992,8 +1992,7 @@ class ZSXQFileDownloader:
         self.log(incremental_collection_start_message())
 
         # 检查是否需要停止
-        if self.check_stop():
-            self.log("🛑 任务被停止")
+        if self._should_stop_time_collection_initially():
             return {'total_files': 0, 'new_files': 0}
 
         # 获取数据库时间范围
