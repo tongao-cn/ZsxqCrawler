@@ -220,6 +220,13 @@ class DownloadBodyWriteTarget(NamedTuple):
     file_id: int
 
 
+class DownloadCompletionTarget(NamedTuple):
+    file_id: int
+    safe_filename: str
+    file_path: str
+    temp_path: str
+
+
 class DownloadBodyFinalizationTarget(NamedTuple):
     expected_size: int
     temp_path: str
@@ -1333,11 +1340,28 @@ class ZSXQFileDownloader:
         file_path: str,
         temp_path: str,
     ) -> None:
-        os.replace(temp_path, file_path)
+        self._complete_successful_download_target(
+            DownloadCompletionTarget(
+                file_id,
+                safe_filename,
+                file_path,
+                temp_path,
+            ),
+        )
 
-        self.log(f"   ✅ 下载完成: {safe_filename}")
-        self.log(f"   💾 保存路径: {file_path}")
-        self.file_db.update_file_download_status(file_id, 'completed', file_path)
+    def _complete_successful_download_target(
+        self,
+        target: DownloadCompletionTarget,
+    ) -> None:
+        os.replace(target.temp_path, target.file_path)
+
+        self.log(f"   ✅ 下载完成: {target.safe_filename}")
+        self.log(f"   💾 保存路径: {target.file_path}")
+        self.file_db.update_file_download_status(
+            target.file_id,
+            'completed',
+            target.file_path,
+        )
 
         self.download_count += 1
         self.current_batch_count += 1
@@ -1640,11 +1664,13 @@ class ZSXQFileDownloader:
         if mismatch_detail:
             return DownloadBodyResult(None, mismatch_detail)
 
-        self._complete_successful_download(
-            target.file_id,
-            target.safe_filename,
-            target.file_path,
-            target.temp_path,
+        self._complete_successful_download_target(
+            DownloadCompletionTarget(
+                target.file_id,
+                target.safe_filename,
+                target.file_path,
+                target.temp_path,
+            ),
         )
         return DownloadBodyResult(True, None)
 
