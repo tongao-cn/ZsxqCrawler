@@ -3650,6 +3650,115 @@ class FileDownloaderRetryHelperTests(unittest.TestCase):
         self.assertIn("   📊 响应状态: 200", printed)
         self.assertIn("   ✅ 获取成功: 2个文件", printed)
 
+    def test_fetch_file_list_retries_api_failure_then_success(self):
+        class FakeFileListJsonResponse:
+            status_code = 200
+            text = ""
+
+            def json(self):
+                return {
+                    "succeeded": True,
+                    "resp_data": {"files": [{"file": {"id": 101}}], "index": "next"},
+                }
+
+        session = FakeDownloadSession([
+            FakeFailedJsonResponse(1059, "slow down"),
+            FakeFileListJsonResponse(),
+        ])
+        downloader = object.__new__(ZSXQFileDownloader)
+        downloader.base_url = "https://api.example"
+        downloader.group_id = "group-1"
+        downloader.session = session
+        downloader.request_count = 0
+        downloader.smart_delay = lambda: None
+        downloader.get_stealth_headers = lambda: {"User-Agent": "unit-test-agent"}
+        downloader.logs = []
+        downloader.log = downloader.logs.append
+
+        output = io.StringIO()
+        with (
+            contextlib.redirect_stdout(output),
+            patch("backend.crawlers.zsxq_file_downloader.random.uniform", return_value=15.0),
+            patch("backend.crawlers.zsxq_file_downloader.time.sleep") as sleep,
+        ):
+            result = ZSXQFileDownloader.fetch_file_list(downloader, count=20)
+
+        self.assertEqual(
+            {"succeeded": True, "resp_data": {"files": [{"file": {"id": 101}}], "index": "next"}},
+            result,
+        )
+        self.assertEqual(2, downloader.request_count)
+        self.assertEqual(
+            [
+                ("https://api.example/v2/groups/group-1/files", 30, False),
+                ("https://api.example/v2/groups/group-1/files", 30, False),
+            ],
+            session.get_calls,
+        )
+        sleep.assert_called_once_with(15.0)
+        printed = output.getvalue()
+        self.assertIn("   ❌ API返回失败: slow down (代码: 1059)", printed)
+        self.assertIn("   🔄 检测到可重试错误，准备重试...", printed)
+        self.assertIn("   ✅ 重试成功！第1次重试获取到文件列表", printed)
+
+    def test_fetch_file_list_stops_on_non_retry_api_failure(self):
+        session = FakeDownloadSession([FakeFailedJsonResponse("4001", "final failure")])
+        downloader = object.__new__(ZSXQFileDownloader)
+        downloader.base_url = "https://api.example"
+        downloader.group_id = "group-1"
+        downloader.session = session
+        downloader.request_count = 0
+        downloader.smart_delay = lambda: None
+        downloader.get_stealth_headers = lambda: {"User-Agent": "unit-test-agent"}
+        downloader.logs = []
+        downloader.log = downloader.logs.append
+
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            result = ZSXQFileDownloader.fetch_file_list(downloader, count=20)
+
+        self.assertIsNone(result)
+        self.assertEqual(1, downloader.request_count)
+        self.assertEqual(
+            [("https://api.example/v2/groups/group-1/files", 30, False)],
+            session.get_calls,
+        )
+        printed = output.getvalue()
+        self.assertIn("   ❌ API返回失败: final failure (代码: 4001)", printed)
+        self.assertIn("   🚫 非可重试错误，停止重试", printed)
+
+    def test_fetch_file_list_retryable_api_failure_exhausts_retries(self):
+        session = FakeDownloadSession([
+            FakeFailedJsonResponse(1059, "slow down")
+            for _ in range(10)
+        ])
+        downloader = object.__new__(ZSXQFileDownloader)
+        downloader.base_url = "https://api.example"
+        downloader.group_id = "group-1"
+        downloader.session = session
+        downloader.request_count = 0
+        downloader.smart_delay = lambda: None
+        downloader.get_stealth_headers = lambda: {"User-Agent": "unit-test-agent"}
+        downloader.logs = []
+        downloader.log = downloader.logs.append
+
+        output = io.StringIO()
+        with (
+            contextlib.redirect_stdout(output),
+            patch("backend.crawlers.zsxq_file_downloader.random.uniform", return_value=15.0),
+            patch("backend.crawlers.zsxq_file_downloader.time.sleep") as sleep,
+        ):
+            result = ZSXQFileDownloader.fetch_file_list(downloader, count=20)
+
+        self.assertIsNone(result)
+        self.assertEqual(10, downloader.request_count)
+        self.assertEqual(10, len(session.get_calls))
+        self.assertEqual(9, sleep.call_count)
+        printed = output.getvalue()
+        self.assertIn("   ❌ API返回失败: slow down (代码: 1059)", printed)
+        self.assertIn("   🔄 检测到可重试错误，准备重试...", printed)
+        self.assertIn("   🚫 已重试10次，全部失败", printed)
+
 
 class FileDownloaderDownloadTests(unittest.TestCase):
     def _downloader_for_download(self, temp_dir, session):

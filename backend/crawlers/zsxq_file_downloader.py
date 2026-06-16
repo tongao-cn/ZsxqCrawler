@@ -660,6 +660,21 @@ class ZSXQFileDownloader:
             print(f"   ✅ 获取成功: {len(files)}个文件")
         return data
 
+    def _handle_file_list_api_failure_response(
+        self,
+        data: Dict[str, Any],
+        attempt: int,
+        max_retries: int,
+    ) -> str:
+        error_msg, error_code = api_failure_detail(data)
+        print(f"   ❌ API返回失败: {error_msg} (代码: {error_code})")
+        failure_class = classify_api_failure(error_code, attempt, max_retries)
+        if failure_class == API_FAILURE_RETRY:
+            print(f"   🔄 检测到可重试错误，准备重试...")
+        elif failure_class in {API_FAILURE_NON_RETRY, API_FAILURE_PERMISSION_DENIED_1030}:
+            print(f"   🚫 非可重试错误，停止重试")
+        return failure_class
+
     def fetch_file_list(self, count: int = 20, index: Optional[str] = None, sort: str = "by_download_count") -> Optional[Dict[str, Any]]:
         """获取文件列表（带重试机制）"""
         url = f"{self.base_url}/v2/groups/{self.group_id}/files"
@@ -688,14 +703,14 @@ class ZSXQFileDownloader:
                     if data.get('succeeded'):
                         return self._handle_file_list_success_response(data, attempt)
 
-                    error_msg, error_code = api_failure_detail(data)
-                    print(f"   ❌ API返回失败: {error_msg} (代码: {error_code})")
-                    failure_class = classify_api_failure(error_code, attempt, max_retries)
+                    failure_class = self._handle_file_list_api_failure_response(
+                        data,
+                        attempt,
+                        max_retries,
+                    )
                     if failure_class == API_FAILURE_RETRY:
-                        print(f"   🔄 检测到可重试错误，准备重试...")
                         continue
                     if failure_class in {API_FAILURE_NON_RETRY, API_FAILURE_PERMISSION_DENIED_1030}:
-                        print(f"   🚫 非可重试错误，停止重试")
                         return None
                         
                 else:
