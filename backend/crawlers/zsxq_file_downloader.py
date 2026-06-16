@@ -269,6 +269,11 @@ class DownloadBodyFinalizationTarget(NamedTuple):
     file_path: str
 
 
+class DownloadSizeMismatchTarget(NamedTuple):
+    expected_size: int
+    temp_path: str
+
+
 class DownloadBodyResult(NamedTuple):
     success_result: Optional[bool]
     failure_detail: Optional[DownloadFailureDetail]
@@ -1774,9 +1779,11 @@ class ZSXQFileDownloader:
         if downloaded_size is None:
             return DownloadBodyResult(False, None)
 
-        mismatch_detail = self._handle_download_size_mismatch(
-            target.expected_size,
-            target.temp_path,
+        mismatch_detail = self._handle_download_size_mismatch_target(
+            DownloadSizeMismatchTarget(
+                target.expected_size,
+                target.temp_path,
+            ),
         )
         if mismatch_detail:
             return DownloadBodyResult(None, mismatch_detail)
@@ -1796,14 +1803,22 @@ class ZSXQFileDownloader:
         expected_size: int,
         temp_path: str,
     ) -> Optional[DownloadFailureDetail]:
-        final_size = os.path.getsize(temp_path)
-        raw_mismatch_detail = download_size_mismatch_detail(expected_size, final_size)
+        return self._handle_download_size_mismatch_target(
+            DownloadSizeMismatchTarget(expected_size, temp_path),
+        )
+
+    def _handle_download_size_mismatch_target(
+        self,
+        target: DownloadSizeMismatchTarget,
+    ) -> Optional[DownloadFailureDetail]:
+        final_size = os.path.getsize(target.temp_path)
+        raw_mismatch_detail = download_size_mismatch_detail(target.expected_size, final_size)
         if not raw_mismatch_detail:
             return None
 
         mismatch_detail = DownloadFailureDetail(*raw_mismatch_detail)
         self.log(f"   ⚠️ {mismatch_detail.error_message}")
-        os.remove(temp_path)
+        os.remove(target.temp_path)
         return mismatch_detail
 
     def _handle_download_stop(self, file_id: int, temp_path: str) -> None:
