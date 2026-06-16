@@ -196,6 +196,14 @@ class DownloadUrlResponseTarget(NamedTuple):
     headers: Dict[str, str]
 
 
+class DownloadUrlOkResponseTarget(NamedTuple):
+    response: Any
+    file_id: int
+    attempt: int
+    max_retries: int
+    headers: Dict[str, str]
+
+
 class DownloadRetryWaitTarget(NamedTuple):
     attempt: int
     download_retries: int
@@ -1052,7 +1060,25 @@ class ZSXQFileDownloader:
         max_retries: int,
         headers: Dict[str, str],
     ) -> DownloadUrlResponseDecision:
-        json_parse = self._parse_api_json_response(response, attempt, max_retries)
+        return self._handle_download_url_ok_response_target(
+            DownloadUrlOkResponseTarget(
+                response,
+                file_id,
+                attempt,
+                max_retries,
+                headers,
+            ),
+        )
+
+    def _handle_download_url_ok_response_target(
+        self,
+        target: DownloadUrlOkResponseTarget,
+    ) -> DownloadUrlResponseDecision:
+        json_parse = self._parse_api_json_response(
+            target.response,
+            target.attempt,
+            target.max_retries,
+        )
         if json_parse.should_retry:
             return DownloadUrlResponseDecision(None, True, False)
         data = json_parse.data
@@ -1061,11 +1087,11 @@ class ZSXQFileDownloader:
 
         return self._download_url_data_decision(
             data,
-            file_id,
-            attempt,
-            max_retries,
-            headers,
-            response.status_code,
+            target.file_id,
+            target.attempt,
+            target.max_retries,
+            target.headers,
+            target.response.status_code,
         )
 
     def _download_url_data_decision(
@@ -1123,12 +1149,14 @@ class ZSXQFileDownloader:
         print(f"   📊 响应状态: {target.response.status_code}")
 
         if target.response.status_code == 200:
-            return self._handle_download_url_ok_response(
-                target.response,
-                target.file_id,
-                target.attempt,
-                target.max_retries,
-                target.headers,
+            return self._handle_download_url_ok_response_target(
+                DownloadUrlOkResponseTarget(
+                    target.response,
+                    target.file_id,
+                    target.attempt,
+                    target.max_retries,
+                    target.headers,
+                ),
             )
 
         http_failure_class = self._handle_download_url_http_failure_response(
