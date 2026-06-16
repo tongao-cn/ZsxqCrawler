@@ -750,6 +750,13 @@ class ZSXQFileDownloader:
             print(message)
         return request_exception["should_retry"]
 
+    def _file_list_api_failure_decision(self, failure_class: str) -> FileListResponseDecision:
+        if failure_class == API_FAILURE_RETRY:
+            return FileListResponseDecision(None, True, False)
+        if failure_class in {API_FAILURE_NON_RETRY, API_FAILURE_PERMISSION_DENIED_1030}:
+            return FileListResponseDecision(None, False, True)
+        return FileListResponseDecision(None, False, False)
+
     def _handle_file_list_ok_response(
         self,
         response: requests.Response,
@@ -775,11 +782,7 @@ class ZSXQFileDownloader:
             attempt,
             max_retries,
         )
-        if failure_class == API_FAILURE_RETRY:
-            return FileListResponseDecision(None, True, False)
-        if failure_class in {API_FAILURE_NON_RETRY, API_FAILURE_PERMISSION_DENIED_1030}:
-            return FileListResponseDecision(None, False, True)
-        return FileListResponseDecision(None, False, False)
+        return self._file_list_api_failure_decision(failure_class)
 
     def _handle_file_list_response(
         self,

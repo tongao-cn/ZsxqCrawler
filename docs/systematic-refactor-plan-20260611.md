@@ -25753,6 +25753,51 @@ Result:
 - Full backend unittest discovery passed in the current worktree: 1192 tests, 15 skipped.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-16 - P31 file-list API failure decision helper extraction
+
+Changed:
+
+- Confirmed existing characterization coverage for file-list API failure retry, terminal
+  non-retry, permission-denied `1030`, HTTP retry/non-retry, JSON decode retry, request exception,
+  and retry exhaustion paths.
+- Added internal `ZSXQFileDownloader._file_list_api_failure_decision(...)` and moved the
+  API-failure-class to `FileListResponseDecision` mapping out of
+  `_handle_file_list_ok_response(...)`.
+- Kept API failure classification, printed messages, retry/stop decisions, request counts, retry
+  waits, and success-after-retry behavior unchanged.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- File-list fetch public behavior, fallback/retry semantics, permission-denied handling, log text,
+  and returned data/`None` outcomes are unchanged.
+- The new helper is internal and does not create a new public API surface.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderRetryHelperTests -v
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderRetryHelperTests -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run ruff check backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py --select F401,F841
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers -v
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- Existing retry/file-list characterization coverage passed before helper extraction: 41 tests.
+- `py_compile` passed.
+- Retry/file-list tests passed after helper extraction: 41 tests.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- ZSXQ file downloader helper tests passed: 214 tests.
+- Full backend unittest discovery passed in the current worktree: 1192 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:
