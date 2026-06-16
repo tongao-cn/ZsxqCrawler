@@ -2005,19 +2005,29 @@ class ZSXQFileDownloader:
         response: Any,
         target: DownloadFileTarget,
     ) -> DownloadAttemptResult:
+        return self._download_attempt_result_for_response_status_target(
+            DownloadResponseTarget(response, target),
+        )
+
+    def _download_attempt_result_for_response_status_target(
+        self,
+        target: DownloadResponseTarget,
+    ) -> DownloadAttemptResult:
+        response = target.response
+        file_target = target.file_target
         if response.status_code == 200:
             return self._successful_download_attempt_result(
                 response,
-                target,
+                file_target,
             )
 
         failure_detail = self._record_download_http_failure(response.status_code)
         return DownloadAttemptResult(
             None,
             failure_detail,
-            target.file_name,
-            target.safe_filename,
-            target.file_path,
+            file_target.file_name,
+            file_target.safe_filename,
+            file_target.file_path,
         )
 
     def _download_target_for_response(
@@ -2081,9 +2091,8 @@ class ZSXQFileDownloader:
                 DownloadResponseTarget(response, target),
             )
 
-            return self._download_attempt_result_for_response_status(
-                response,
-                response_download_target,
+            return self._download_attempt_result_for_response_status_target(
+                DownloadResponseTarget(response, response_download_target),
             )
         except Exception as exc:
             failure_detail = self._record_download_exception_target(
