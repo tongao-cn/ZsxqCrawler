@@ -243,6 +243,13 @@ class DownloadUrlRequestExceptionTarget(NamedTuple):
     max_retries: int
 
 
+class DownloadUrlAttemptTarget(NamedTuple):
+    url: str
+    file_id: int
+    attempt: int
+    max_retries: int
+
+
 class DownloadRetryWaitTarget(NamedTuple):
     attempt: int
     download_retries: int
@@ -1321,24 +1328,32 @@ class ZSXQFileDownloader:
         attempt: int,
         max_retries: int,
     ) -> DownloadUrlResponseDecision:
-        headers = self._prepare_retry_api_request(attempt, file_id=file_id)
+        return self._run_download_url_attempt_target(
+            DownloadUrlAttemptTarget(url, file_id, attempt, max_retries),
+        )
+
+    def _run_download_url_attempt_target(
+        self,
+        target: DownloadUrlAttemptTarget,
+    ) -> DownloadUrlResponseDecision:
+        headers = self._prepare_retry_api_request(target.attempt, file_id=target.file_id)
 
         try:
             response = self._request_download_url_response_target(
-                DownloadUrlRequestTarget(url, headers),
+                DownloadUrlRequestTarget(target.url, headers),
             )
             return self._handle_download_url_response_target(
                 DownloadUrlResponseTarget(
                     response,
-                    file_id,
-                    attempt,
-                    max_retries,
+                    target.file_id,
+                    target.attempt,
+                    target.max_retries,
                     headers,
                 ),
             )
         except Exception as e:
             if self._handle_download_url_request_exception_target(
-                DownloadUrlRequestExceptionTarget(e, attempt, max_retries),
+                DownloadUrlRequestExceptionTarget(e, target.attempt, target.max_retries),
             ):
                 return DownloadUrlResponseDecision(None, True, False)
             return DownloadUrlResponseDecision(None, False, False)
@@ -1354,7 +1369,9 @@ class ZSXQFileDownloader:
         max_retries = DOWNLOAD_URL_MAX_RETRIES
         
         for attempt in range(max_retries):
-            decision = self._run_download_url_attempt(url, file_id, attempt, max_retries)
+            decision = self._run_download_url_attempt_target(
+                DownloadUrlAttemptTarget(url, file_id, attempt, max_retries),
+            )
             if decision.download_url:
                 return decision.download_url
             if decision.should_retry:
