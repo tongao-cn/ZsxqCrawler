@@ -24312,6 +24312,52 @@ Result:
 - Full backend unittest discovery passed in the current worktree: 1178 tests, 15 skipped.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-16 - P9 database download rows summary helper extraction
+
+Changed:
+
+- Added characterization coverage for empty database-download result log order and `create_time`
+  sorted download-row time range summary logging.
+- Extracted internal `ZSXQFileDownloader._log_database_download_rows_summary(...)` from
+  `download_files_from_database(...)`.
+- Kept no-row return stats, found-row count logging, time range logging, stats initialization,
+  download loop entry, completion logs, query behavior, and stop behavior unchanged.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Database download logs, empty-result handling, time-range summary behavior, returned stats, SQL
+  side effects, row-download side effects, public API, fallback/legacy behavior, error semantics,
+  config semantics, and task behavior are unchanged.
+- The new helper is internal and does not create a new public API surface.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderDatabaseDownloadTests.test_download_files_from_database_preserves_empty_result_log_order tests.test_zsxq_file_downloader_helpers.FileDownloaderDatabaseDownloadTests.test_download_files_from_database_preserves_create_time_range_summary -v
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderDatabaseDownloadTests.test_download_files_from_database_preserves_empty_result_log_order tests.test_zsxq_file_downloader_helpers.FileDownloaderDatabaseDownloadTests.test_download_files_from_database_preserves_create_time_range_summary -v
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderDatabaseDownloadTests -v
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run ruff check backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py --select F401,F841
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- New characterization coverage passed before helper extraction: 2 focused tests.
+- `py_compile` passed.
+- New characterization coverage passed after helper extraction: 2 focused tests.
+- Database download tests passed after helper extraction: 11 tests.
+- ZSXQ file downloader helper tests passed: 202 tests.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- Full backend unittest discovery passed in the current worktree: 1180 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:

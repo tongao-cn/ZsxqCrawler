@@ -1993,6 +1993,44 @@ class FileDownloaderDatabaseDownloadTests(unittest.TestCase):
             downloader.logs,
         )
 
+    def test_download_files_from_database_preserves_empty_result_log_order(self):
+        downloader = self._downloader_for_query_capture()
+
+        stats = ZSXQFileDownloader.download_files_from_database(downloader)
+
+        self.assertEqual({"total_files": 0, "downloaded": 0, "skipped": 0, "failed": 0}, stats)
+        self.assertEqual(
+            [
+                "📥 开始从完整数据库下载文件...",
+                "   🔍 状态筛选: pending",
+                "   📌 下载排序: 按热度倒序",
+                "📭 数据库中没有符合条件的文件可下载",
+            ],
+            downloader.logs,
+        )
+
+    def test_download_files_from_database_preserves_create_time_range_summary(self):
+        downloader = self._downloader_for_query_capture(
+            rows=[
+                (101, "new.pdf", 2048, 7, "2026-05-03 10:00:00"),
+                (102, "old.pdf", 1024, 9, "2026-05-01 09:00:00"),
+            ],
+        )
+        loop_calls = []
+        downloader._download_database_file_rows = lambda files, stats: loop_calls.append(
+            (files, stats.copy())
+        )
+
+        stats = ZSXQFileDownloader.download_files_from_database(downloader, sort_by="create_time")
+
+        self.assertEqual({"total_files": 2, "downloaded": 0, "skipped": 0, "failed": 0}, stats)
+        self.assertEqual(1, len(loop_calls))
+        self.assertEqual(
+            "   🗓️ 本次待下载文件时间范围: 2026-05-03 10:00:00 ~ 2026-05-01 09:00:00",
+            downloader.logs[4],
+        )
+        self.assertEqual("🎉 数据库下载完成:", downloader.logs[-5])
+
     def test_download_files_from_database_preserves_result_stats_payloads_and_delays(self):
         downloader = self._downloader_for_query_capture(
             rows=[

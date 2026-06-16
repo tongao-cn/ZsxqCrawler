@@ -2124,6 +2124,20 @@ class ZSXQFileDownloader:
 
         return query_plan
 
+    def _log_database_download_rows_summary(
+        self,
+        files_to_download: list[DatabaseDownloadRow],
+        sort_by: str,
+    ) -> None:
+        if not files_to_download:
+            self.log(f"📭 数据库中没有符合条件的文件可下载")
+            return
+
+        self.log(f"📋 找到 {len(files_to_download)} 个待下载文件")
+        time_range_message = database_download_time_range_message(files_to_download, sort_by)
+        if time_range_message:
+            self.log(time_range_message)
+
     def download_files_from_database(
         self,
         max_files: Optional[int] = None,
@@ -2153,15 +2167,10 @@ class ZSXQFileDownloader:
         if self._should_stop_database_download_initially():
             return download_result_stats()
         files_to_download = self._fetch_database_download_rows(query_plan)
-        
-        if not files_to_download:
-            self.log(f"📭 数据库中没有符合条件的文件可下载")
-            return download_result_stats()
 
-        self.log(f"📋 找到 {len(files_to_download)} 个待下载文件")
-        time_range_message = database_download_time_range_message(files_to_download, sort_by)
-        if time_range_message:
-            self.log(time_range_message)
+        self._log_database_download_rows_summary(files_to_download, sort_by)
+        if not files_to_download:
+            return download_result_stats()
 
         stats = download_result_stats(len(files_to_download))
 
