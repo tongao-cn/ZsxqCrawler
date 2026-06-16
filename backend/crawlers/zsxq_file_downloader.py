@@ -257,6 +257,10 @@ class TimeCollectionPage(NamedTuple):
     next_index: Optional[Any]
 
 
+class TimeCollectionPageImportResult(NamedTuple):
+    should_stop_after_insert: bool
+
+
 class BatchDownloadPage(NamedTuple):
     files: list[Dict[str, Any]]
     next_index: Optional[Any]
@@ -2105,6 +2109,30 @@ class ZSXQFileDownloader:
         if page is None:
             return None
 
+        import_result = self._dedupe_and_import_time_collection_page(
+            page,
+            page_count,
+            enable_time_dedupe,
+            db_latest_time,
+            total_imported_stats,
+        )
+        if import_result is None:
+            return None
+
+        return self._next_time_collection_page_after_import(
+            page,
+            import_result.should_stop_after_insert,
+            stop_before_time,
+        )
+
+    def _dedupe_and_import_time_collection_page(
+        self,
+        page: TimeCollectionPage,
+        page_count: int,
+        enable_time_dedupe: bool,
+        db_latest_time: Optional[Any],
+        total_imported_stats: Dict[str, int],
+    ) -> Optional[TimeCollectionPageImportResult]:
         dedupe_result = self._apply_time_collection_dedupe_plan(
             page.data,
             page.files,
@@ -2123,11 +2151,7 @@ class ZSXQFileDownloader:
         ):
             return None
 
-        return self._next_time_collection_page_after_import(
-            page,
-            should_stop_after_insert,
-            stop_before_time,
-        )
+        return TimeCollectionPageImportResult(should_stop_after_insert)
 
     def _run_time_collection_loop(
         self,
