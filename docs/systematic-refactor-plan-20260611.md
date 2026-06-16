@@ -25554,6 +25554,55 @@ Result:
 - Full backend unittest discovery passed in the current worktree: 1192 tests, 15 skipped.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-16 - P27 time collection dedupe result helper extraction
+
+Changed:
+
+- Confirmed existing characterization coverage for time-dedupe mixed-page filtering, all-old page
+  stop-before-insert behavior, no-dedupe next-page handling, and dedupe helper message/flag
+  contracts.
+- Added internal `ZSXQFileDownloader._time_collection_dedupe_result(...)` and replaced repeated
+  dedupe result dict construction inside `_apply_time_collection_dedupe_plan(...)`.
+- Kept `_apply_time_collection_dedupe_plan(...)` return shape unchanged, including the
+  `should_stop_before_insert` and `should_stop_after_insert` keys.
+- Kept the existing `data['resp_data']['files']` mutation in the same branch and order as before.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Time-dedupe fallback behavior, filtering side effect, stop-before/stop-after flags, logs, and
+  caller-visible dict contract are unchanged.
+- The new helper is internal and does not create a new public API surface.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderPaginationTests.test_collect_files_by_time_filters_old_files_and_stops_after_mixed_page tests.test_zsxq_file_downloader_helpers.FileDownloaderPaginationTests.test_collect_files_by_time_skips_import_when_dedupe_page_is_all_old tests.test_zsxq_file_downloader_helpers.FileDownloaderPaginationTests.test_collect_files_by_time_preserves_next_index_sleep_and_last_page_log tests.test_zsxq_file_downloader_helpers.FileDownloaderTimeHelperTests.test_time_dedupe_page_plan_flags_mixed_and_all_old_pages tests.test_zsxq_file_downloader_helpers.FileDownloaderTimeHelperTests.test_time_dedupe_page_messages_preserve_analysis_stop_and_filter_logs -v
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderPaginationTests.test_collect_files_by_time_filters_old_files_and_stops_after_mixed_page tests.test_zsxq_file_downloader_helpers.FileDownloaderPaginationTests.test_collect_files_by_time_skips_import_when_dedupe_page_is_all_old tests.test_zsxq_file_downloader_helpers.FileDownloaderPaginationTests.test_collect_files_by_time_preserves_next_index_sleep_and_last_page_log tests.test_zsxq_file_downloader_helpers.FileDownloaderTimeHelperTests.test_time_dedupe_page_plan_flags_mixed_and_all_old_pages tests.test_zsxq_file_downloader_helpers.FileDownloaderTimeHelperTests.test_time_dedupe_page_messages_preserve_analysis_stop_and_filter_logs -v
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderPaginationTests -v
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderTimeHelperTests -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run ruff check backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py --select F401,F841
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers -v
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- Existing characterization coverage passed before helper extraction: 5 focused tests.
+- `py_compile` passed.
+- Focused time-dedupe tests passed after helper extraction: 5 tests.
+- Pagination tests passed: 34 tests.
+- Time helper tests passed: 27 tests.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- ZSXQ file downloader helper tests passed: 214 tests.
+- Full backend unittest discovery passed in the current worktree: 1192 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:

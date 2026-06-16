@@ -1972,6 +1972,16 @@ class ZSXQFileDownloader:
         )
         return TimeCollectionDatabaseState(initial_files, db_latest_time)
 
+    def _time_collection_dedupe_result(
+        self,
+        should_stop_before_insert: bool = False,
+        should_stop_after_insert: bool = False,
+    ) -> Dict[str, bool]:
+        return {
+            "should_stop_before_insert": should_stop_before_insert,
+            "should_stop_after_insert": should_stop_after_insert,
+        }
+
     def _apply_time_collection_dedupe_plan(
         self,
         data: Dict[str, Any],
@@ -1980,32 +1990,24 @@ class ZSXQFileDownloader:
         db_latest_time: Optional[Any],
     ) -> Dict[str, bool]:
         if not enable_time_dedupe or not db_latest_time:
-            return {
-                "should_stop_before_insert": False,
-                "should_stop_after_insert": False,
-            }
+            return self._time_collection_dedupe_result()
 
         dedupe_plan = time_dedupe_page_plan(files, db_latest_time)
         for message in time_dedupe_page_messages(dedupe_plan):
             self.log(message)
 
         if dedupe_plan["should_stop_before_insert"]:
-            return {
-                "should_stop_before_insert": True,
-                "should_stop_after_insert": False,
-            }
+            return self._time_collection_dedupe_result(
+                should_stop_before_insert=True,
+            )
 
         if dedupe_plan["should_filter_before_insert"]:
             data['resp_data']['files'] = dedupe_plan["newer_files"]
-            return {
-                "should_stop_before_insert": False,
-                "should_stop_after_insert": dedupe_plan["should_stop_after_insert"],
-            }
+            return self._time_collection_dedupe_result(
+                should_stop_after_insert=dedupe_plan["should_stop_after_insert"],
+            )
 
-        return {
-            "should_stop_before_insert": False,
-            "should_stop_after_insert": False,
-        }
+        return self._time_collection_dedupe_result()
 
     def _import_time_collection_page(
         self,
