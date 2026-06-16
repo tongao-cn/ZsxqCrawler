@@ -675,6 +675,17 @@ class ZSXQFileDownloader:
             print(f"   🚫 非可重试错误，停止重试")
         return failure_class
 
+    def _handle_file_list_http_failure_response(
+        self,
+        response: requests.Response,
+        attempt: int,
+        max_retries: int,
+    ) -> str:
+        http_failure = http_failure_plan(response.status_code, response.text, attempt, max_retries)
+        for message in http_failure["messages"]:
+            print(message)
+        return http_failure["failure_class"]
+
     def fetch_file_list(self, count: int = 20, index: Optional[str] = None, sort: str = "by_download_count") -> Optional[Dict[str, Any]]:
         """获取文件列表（带重试机制）"""
         url = f"{self.base_url}/v2/groups/{self.group_id}/files"
@@ -714,10 +725,11 @@ class ZSXQFileDownloader:
                         return None
                         
                 else:
-                    http_failure = http_failure_plan(response.status_code, response.text, attempt, max_retries)
-                    for message in http_failure["messages"]:
-                        print(message)
-                    http_failure_class = http_failure["failure_class"]
+                    http_failure_class = self._handle_file_list_http_failure_response(
+                        response,
+                        attempt,
+                        max_retries,
+                    )
                     if http_failure_class == HTTP_FAILURE_RETRY:
                         continue
                     if http_failure_class == HTTP_FAILURE_NON_RETRY:
