@@ -551,6 +551,27 @@ class ZSXQFileDownloader:
     def _header_profile_label(headers: Dict[str, str]) -> str:
         return risk_event_header_profile_label(headers)
 
+    def _prepare_risk_event_log_path(self) -> Optional[Any]:
+        if not getattr(self, "risk_event_log_path", None):
+            return None
+
+        from pathlib import Path
+
+        path = Path(self.risk_event_log_path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        return path
+
+    def _write_risk_event_row(self, path: Any, row: Dict[str, Any]) -> None:
+        import csv
+
+        fieldnames = tuple(row.keys())
+        write_header = not path.exists()
+        with path.open("a", encoding="utf-8-sig", newline="") as file_obj:
+            writer = csv.DictWriter(file_obj, fieldnames=fieldnames)
+            if write_header:
+                writer.writeheader()
+            writer.writerow(row)
+
     def _record_risk_event(
         self,
         *,
@@ -563,14 +584,10 @@ class ZSXQFileDownloader:
         api_message: Optional[str] = None,
         status: str = "observed",
     ) -> None:
-        if not getattr(self, "risk_event_log_path", None):
+        path = self._prepare_risk_event_log_path()
+        if path is None:
             return
 
-        import csv
-        from pathlib import Path
-
-        path = Path(self.risk_event_log_path)
-        path.parent.mkdir(parents=True, exist_ok=True)
         row = risk_event_row(
             datetime.datetime.now().isoformat(timespec="seconds"),
             self.group_id,
@@ -583,13 +600,7 @@ class ZSXQFileDownloader:
             api_message,
             status,
         )
-        fieldnames = tuple(row.keys())
-        write_header = not path.exists()
-        with path.open("a", encoding="utf-8-sig", newline="") as file_obj:
-            writer = csv.DictWriter(file_obj, fieldnames=fieldnames)
-            if write_header:
-                writer.writeheader()
-            writer.writerow(row)
+        self._write_risk_event_row(path, row)
 
     def download_delay(self):
         """下载间隔延迟"""

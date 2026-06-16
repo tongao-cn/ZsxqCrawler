@@ -25216,6 +25216,52 @@ Result:
 - Full backend unittest discovery passed in the current worktree: 1192 tests, 15 skipped.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-16 - P20 risk event log write helper extraction
+
+Changed:
+
+- Confirmed existing characterization coverage for risk-event row field order and empty values,
+  risk-log disabled behavior, risk-log request event writing, download URL success event writing,
+  API failure retry event writing, and HTTP failure retry event writing.
+- Extracted internal `ZSXQFileDownloader._prepare_risk_event_log_path(...)` and
+  `ZSXQFileDownloader._write_risk_event_row(...)` from `_record_risk_event(...)`.
+- Kept risk-log opt-in behavior, directory creation, timestamp generation point, CSV field order,
+  UTF-8-SIG encoding, header-on-first-write behavior, and row values unchanged.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Risk-event/fallback behavior, CSV schema, logging side effects, and download URL retry
+  instrumentation are unchanged.
+- The new helpers are internal and do not create a new public API surface.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderRetryHelperTests.test_risk_event_row_preserves_field_order_labels_and_empty_values tests.test_zsxq_file_downloader_helpers.FileDownloaderRetryHelperTests.test_prepare_retry_api_request_without_risk_log_preserves_no_ua_log tests.test_zsxq_file_downloader_helpers.FileDownloaderRetryHelperTests.test_prepare_retry_api_request_with_risk_log_records_request_event tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_get_download_url_writes_opt_in_risk_log_events tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_get_download_url_retries_api_failure_then_success_preserves_events tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_get_download_url_retries_http_failure_then_success_preserves_events -v
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderRetryHelperTests.test_risk_event_row_preserves_field_order_labels_and_empty_values tests.test_zsxq_file_downloader_helpers.FileDownloaderRetryHelperTests.test_prepare_retry_api_request_without_risk_log_preserves_no_ua_log tests.test_zsxq_file_downloader_helpers.FileDownloaderRetryHelperTests.test_prepare_retry_api_request_with_risk_log_records_request_event tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_get_download_url_writes_opt_in_risk_log_events tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_get_download_url_retries_api_failure_then_success_preserves_events tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_get_download_url_retries_http_failure_then_success_preserves_events -v
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderRetryHelperTests tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run ruff check backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py --select F401,F841
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers -v
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- Existing characterization coverage passed before helper extraction: 6 focused tests.
+- `py_compile` passed.
+- Focused risk-event tests passed after helper extraction: 6 tests.
+- File downloader retry/download tests passed: 95 tests.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- ZSXQ file downloader helper tests passed: 214 tests.
+- Full backend unittest discovery passed in the current worktree: 1192 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:
