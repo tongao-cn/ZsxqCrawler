@@ -25798,6 +25798,51 @@ Result:
 - Full backend unittest discovery passed in the current worktree: 1192 tests, 15 skipped.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-16 - P32 download-url HTTP failure decision helper extraction
+
+Changed:
+
+- Confirmed existing characterization coverage for download-url HTTP retry, HTTP terminal failure,
+  API failure/retry, permission-denied `1030`, JSON decode retry, request exception retry, retry
+  exhaustion, and signed-URL redaction paths.
+- Added internal `ZSXQFileDownloader._download_url_http_failure_decision(...)` and moved the
+  HTTP-failure-class to `DownloadUrlResponseDecision` mapping out of
+  `_handle_download_url_response(...)`.
+- Kept HTTP failure classification, printed messages, redaction, retry/stop decisions, request
+  counts, retry waits, risk-event behavior, and success-after-retry behavior unchanged.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Download-url public behavior, fallback/retry semantics, HTTP terminal handling, log text,
+  redaction, and returned URL/`None` outcomes are unchanged.
+- The new helper is internal and does not create a new public API surface.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderRetryHelperTests tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests -v
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderRetryHelperTests tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run ruff check backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py --select F401,F841
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers -v
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- Existing retry/download-url characterization coverage passed before helper extraction: 95 tests.
+- `py_compile` passed.
+- Retry/download-url tests passed after helper extraction: 95 tests.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- ZSXQ file downloader helper tests passed: 214 tests.
+- Full backend unittest discovery passed in the current worktree: 1192 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:

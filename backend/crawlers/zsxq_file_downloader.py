@@ -901,6 +901,16 @@ class ZSXQFileDownloader:
             print(message)
         return http_failure["failure_class"]
 
+    def _download_url_http_failure_decision(
+        self,
+        failure_class: str,
+    ) -> DownloadUrlResponseDecision:
+        if failure_class == HTTP_FAILURE_RETRY:
+            return DownloadUrlResponseDecision(None, True, False)
+        if failure_class == HTTP_FAILURE_NON_RETRY:
+            return DownloadUrlResponseDecision(None, False, True)
+        return DownloadUrlResponseDecision(None, False, False)
+
     def _handle_download_url_request_exception(
         self,
         exc: Exception,
@@ -1003,11 +1013,7 @@ class ZSXQFileDownloader:
             attempt,
             max_retries,
         )
-        if http_failure_class == HTTP_FAILURE_RETRY:
-            return DownloadUrlResponseDecision(None, True, False)
-        if http_failure_class == HTTP_FAILURE_NON_RETRY:
-            return DownloadUrlResponseDecision(None, False, True)
-        return DownloadUrlResponseDecision(None, False, False)
+        return self._download_url_http_failure_decision(http_failure_class)
 
     def _start_download_url_request(self, file_id: int) -> str:
         url = f"{self.base_url}/v2/files/{file_id}/download_url"
