@@ -170,6 +170,12 @@ class FileListResponseDecision(NamedTuple):
     should_stop: bool
 
 
+class FileListResponseTarget(NamedTuple):
+    response: requests.Response
+    attempt: int
+    max_retries: int
+
+
 class StealthHeaderSelection(NamedTuple):
     user_agent: str
     sec_ch_ua: str
@@ -960,15 +966,27 @@ class ZSXQFileDownloader:
         attempt: int,
         max_retries: int,
     ) -> FileListResponseDecision:
-        print(f"   📊 响应状态: {response.status_code}")
+        return self._handle_file_list_response_target(
+            FileListResponseTarget(response, attempt, max_retries),
+        )
 
-        if response.status_code == 200:
-            return self._handle_file_list_ok_response(response, attempt, max_retries)
+    def _handle_file_list_response_target(
+        self,
+        target: FileListResponseTarget,
+    ) -> FileListResponseDecision:
+        print(f"   📊 响应状态: {target.response.status_code}")
+
+        if target.response.status_code == 200:
+            return self._handle_file_list_ok_response(
+                target.response,
+                target.attempt,
+                target.max_retries,
+            )
 
         http_failure_class = self._handle_file_list_http_failure_response(
-            response,
-            attempt,
-            max_retries,
+            target.response,
+            target.attempt,
+            target.max_retries,
         )
         if http_failure_class == HTTP_FAILURE_RETRY:
             return FileListResponseDecision(None, True, False)
@@ -990,7 +1008,9 @@ class ZSXQFileDownloader:
             
             try:
                 response = self.session.get(url, headers=headers, params=params, timeout=30)
-                decision = self._handle_file_list_response(response, attempt, max_retries)
+                decision = self._handle_file_list_response_target(
+                    FileListResponseTarget(response, attempt, max_retries),
+                )
                 if decision.result is not None:
                     return decision.result
                 if decision.should_retry:
