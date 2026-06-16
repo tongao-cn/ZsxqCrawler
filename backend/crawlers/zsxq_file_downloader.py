@@ -1357,6 +1357,33 @@ class ZSXQFileDownloader:
         time.sleep(next_page["delay"])  # 页面间短暂延迟
         return next_page["next_index"]
 
+    def _download_batch_page_files(
+        self,
+        files: list[Dict[str, Any]],
+        downloaded_in_batch: int,
+        max_files: Optional[int],
+        stats: Dict[str, int],
+    ) -> int:
+        for i, file_info in enumerate(files):
+            # 检查是否需要停止
+            if self.check_stop():
+                self.log(batch_download_file_stop_message())
+                break
+
+            if max_files is not None and downloaded_in_batch >= max_files:
+                break
+
+            downloaded_in_batch = self._download_batch_file_item(
+                file_info,
+                downloaded_in_batch + 1,
+                max_files,
+                (i + 1) < len(files),
+                downloaded_in_batch,
+                stats,
+            )
+
+        return downloaded_in_batch
+
     def _run_batch_download_loop(
         self,
         stats: Dict[str, int],
@@ -1386,23 +1413,12 @@ class ZSXQFileDownloader:
 
             self.log(batch_download_page_files_message(len(files)))
 
-            for i, file_info in enumerate(files):
-                # 检查是否需要停止
-                if self.check_stop():
-                    self.log(batch_download_file_stop_message())
-                    break
-
-                if max_files is not None and downloaded_in_batch >= max_files:
-                    break
-
-                downloaded_in_batch = self._download_batch_file_item(
-                    file_info,
-                    downloaded_in_batch + 1,
-                    max_files,
-                    (i + 1) < len(files),
-                    downloaded_in_batch,
-                    stats,
-                )
+            downloaded_in_batch = self._download_batch_page_files(
+                files,
+                downloaded_in_batch,
+                max_files,
+                stats,
+            )
 
             # 准备下一页
             current_index = self._next_batch_download_index(

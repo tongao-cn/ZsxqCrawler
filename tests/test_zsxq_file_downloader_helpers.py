@@ -1558,6 +1558,28 @@ class FileDownloaderBatchDownloadTests(unittest.TestCase):
         self.assertEqual({"total_files": 1, "downloaded": 0, "skipped": 1, "failed": 0}, stats)
         self.assertEqual(["【第3个文件】Unknown", "   ⚠️ 文件已跳过，继续下一个"], downloader.logs)
 
+    def test_download_files_batch_stops_page_after_success_limit(self):
+        files = [
+            {"file": {"id": 101, "name": "first.pdf"}},
+            {"file": {"id": 102, "name": "second.pdf"}},
+        ]
+        downloader = self._downloader_for_batch(files)
+        payloads = []
+        interval_events = []
+        downloader.download_file = lambda file_info: payloads.append(file_info) or True
+        downloader.check_long_delay = lambda: interval_events.append("long")
+        downloader.download_delay = lambda: interval_events.append("delay")
+
+        stats = ZSXQFileDownloader.download_files_batch(downloader, max_files=1, start_index="start")
+
+        self.assertEqual({"total_files": 1, "downloaded": 1, "skipped": 0, "failed": 0}, stats)
+        self.assertEqual([{"count": 20, "index": "start"}], downloader.fetch_calls)
+        self.assertEqual([files[0]], payloads)
+        self.assertEqual(["long"], interval_events)
+        self.assertIn("📋 当前批次: 2 个文件", downloader.logs)
+        self.assertIn("【1/1】first.pdf", downloader.logs)
+        self.assertNotIn("【2/1】second.pdf", downloader.logs)
+
     def test_download_files_batch_initial_stop_returns_empty_stats_without_fetch_or_completion(self):
         downloader = self._downloader_for_batch([{"file": {"id": 101, "name": "unused.pdf"}}])
         downloader.check_stop = lambda: True
