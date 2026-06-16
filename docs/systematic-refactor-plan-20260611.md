@@ -28641,6 +28641,53 @@ Result:
 - Full backend unittest discovery passed in the current worktree: 1204 tests, 15 skipped.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-16 - P93 database download rows target handoff
+
+Changed:
+
+- Added direct characterization coverage for `_run_database_download_rows(...)` before changing
+  production code, locking initial total-file stats, row-loop handoff, shared stats mutation,
+  returned stats, and completion logging.
+- Added private `DatabaseDownloadRowsTarget` to carry the database rows to download together.
+- Added private `_run_database_download_rows_target(...)` and delegated the existing
+  `_run_database_download_rows(files_to_download)` method to it.
+- Kept public `download_files_from_database(...)` signature and behavior unchanged.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Public database download inputs, SQL query planning, status filters, legacy `recent_days` /
+  `order_by` compatibility behavior, row loop behavior, stats mutation, completion logs,
+  fallback/legacy behavior, error semantics, and configuration semantics are unchanged.
+- The old `_run_database_download_rows(files_to_download)` private helper signature remains
+  available.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderDatabaseDownloadTests.test_run_database_download_rows_preserves_stats_handoff_and_completion tests.test_zsxq_file_downloader_helpers.FileDownloaderDatabaseDownloadTests.test_download_files_from_database_preserves_create_time_range_summary tests.test_zsxq_file_downloader_helpers.FileDownloaderDatabaseDownloadTests.test_download_files_from_database_preserves_result_stats_payloads_and_delays tests.test_zsxq_file_downloader_helpers.FileDownloaderDatabaseDownloadTests.test_download_files_from_database_preserves_stop_before_row_loop -v
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderDatabaseDownloadTests.test_run_database_download_rows_preserves_stats_handoff_and_completion tests.test_zsxq_file_downloader_helpers.FileDownloaderDatabaseDownloadTests.test_download_files_from_database_preserves_create_time_range_summary tests.test_zsxq_file_downloader_helpers.FileDownloaderDatabaseDownloadTests.test_download_files_from_database_preserves_result_stats_payloads_and_delays tests.test_zsxq_file_downloader_helpers.FileDownloaderDatabaseDownloadTests.test_download_files_from_database_preserves_stop_before_row_loop tests.test_zsxq_file_downloader_helpers.FileDownloaderDatabaseDownloadTests.test_download_files_from_database_preserves_row_exception_and_interrupt_handling -v
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py
+uv run python scripts\scan_postgres_compat_debt.py
+uv run ruff check backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py --select F401,F841
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- New direct database rows characterization test plus existing focused database download tests
+  passed before production helper handoff: 4 tests.
+- Focused database rows tests passed after helper handoff: 5 tests.
+- `py_compile` passed.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- ZSXQ file downloader helper tests passed: 227 tests.
+- Full backend unittest discovery passed in the current worktree: 1205 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:

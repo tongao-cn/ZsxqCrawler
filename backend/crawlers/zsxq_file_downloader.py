@@ -555,6 +555,10 @@ class DatabaseDownloadRow(NamedTuple):
     create_time: Any
 
 
+class DatabaseDownloadRowsTarget(NamedTuple):
+    files_to_download: list[DatabaseDownloadRow]
+
+
 class DatabaseStatsTotalSize(NamedTuple):
     total_size: Any
 
@@ -3433,9 +3437,17 @@ class ZSXQFileDownloader:
         self,
         files_to_download: list[DatabaseDownloadRow],
     ) -> Dict[str, int]:
-        stats = download_result_stats(len(files_to_download))
+        return self._run_database_download_rows_target(
+            DatabaseDownloadRowsTarget(files_to_download),
+        )
 
-        self._download_database_file_rows(files_to_download, stats)
+    def _run_database_download_rows_target(
+        self,
+        target: DatabaseDownloadRowsTarget,
+    ) -> Dict[str, int]:
+        stats = download_result_stats(len(target.files_to_download))
+
+        self._download_database_file_rows(target.files_to_download, stats)
         self._log_database_download_completion(stats)
 
         return stats

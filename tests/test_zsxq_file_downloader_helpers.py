@@ -2239,6 +2239,39 @@ class FileDownloaderDatabaseDownloadTests(unittest.TestCase):
                 {"query": "SELECT partial", "params": ()},
             )
 
+    def test_run_database_download_rows_preserves_stats_handoff_and_completion(self):
+        downloader = object.__new__(ZSXQFileDownloader)
+        downloader.logs = []
+        downloader.log = downloader.logs.append
+        files_to_download = [
+            SimpleNamespace(file_id=101, file_name="first.pdf"),
+            SimpleNamespace(file_id=102, file_name="second.pdf"),
+        ]
+        loop_calls = []
+
+        def download_rows(files, stats):
+            loop_calls.append((files, stats))
+            stats.update({"downloaded": 1, "skipped": 1, "failed": 0})
+
+        downloader._download_database_file_rows = download_rows
+
+        stats = ZSXQFileDownloader._run_database_download_rows(downloader, files_to_download)
+
+        self.assertEqual({"total_files": 2, "downloaded": 1, "skipped": 1, "failed": 0}, stats)
+        self.assertEqual(1, len(loop_calls))
+        self.assertIs(files_to_download, loop_calls[0][0])
+        self.assertIs(stats, loop_calls[0][1])
+        self.assertEqual(
+            [
+                "🎉 数据库下载完成:",
+                "   📊 总文件数: 2",
+                "   ✅ 下载成功: 1",
+                "   ⚠️ 跳过: 1",
+                "   ❌ 失败: 0",
+            ],
+            downloader.logs,
+        )
+
     def test_download_files_from_database_preserves_filtered_query_shape_and_legacy_order_by(self):
         downloader = self._downloader_for_query_capture()
 
