@@ -541,6 +541,8 @@ class FileDownloaderPaginationTests(unittest.TestCase):
     def test_file_collection_log_id_preserves_empty_and_truthy_row_semantics(self):
         self.assertIsNone(_file_collection_log_id(None))
         self.assertIsNone(_file_collection_log_id(()))
+        self.assertIsNone(_file_collection_log_id((None,)))
+        self.assertEqual("", _file_collection_log_id(("",)))
         self.assertEqual(0, _file_collection_log_id((0,)))
         self.assertEqual(99, _file_collection_log_id((99,)))
         self.assertEqual(99, _file_collection_log_id((99, "ignored")))

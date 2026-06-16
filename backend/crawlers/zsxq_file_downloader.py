@@ -249,10 +249,17 @@ def _query_group_id(group_id: str) -> Any:
     return download_query_group_id(group_id)
 
 
-def _file_collection_log_id(row: Any) -> Optional[Any]:
+def _file_collection_log_row(row: Any) -> Optional[FileCollectionLogRow]:
     if not row:
         return None
-    return FileCollectionLogRow(row[0]).log_id
+    return FileCollectionLogRow(row[0])
+
+
+def _file_collection_log_id(row: Any) -> Optional[Any]:
+    collection_log = _file_collection_log_row(row)
+    if not collection_log:
+        return None
+    return collection_log.log_id
 
 
 def _latest_file_create_time_row(row: Any) -> Optional[LatestFileCreateTimeRow]:
