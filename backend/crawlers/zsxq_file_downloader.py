@@ -250,6 +250,12 @@ class DownloadUrlAttemptTarget(NamedTuple):
     max_retries: int
 
 
+class DownloadUrlRetryLoopTarget(NamedTuple):
+    url: str
+    file_id: int
+    max_retries: int
+
+
 class DownloadRetryWaitTarget(NamedTuple):
     attempt: int
     download_retries: int
@@ -1357,20 +1363,14 @@ class ZSXQFileDownloader:
             ):
                 return DownloadUrlResponseDecision(None, True, False)
             return DownloadUrlResponseDecision(None, False, False)
-    
-    def get_download_url(self, file_id: int) -> Optional[str]:
-        """获取文件下载链接（带重试机制）
-        
-        注意：file_id 参数在不同场景下含义不同：
-        - 边获取边下载时：传入的是真实的 file_id
-        - 从数据库下载时：传入的是 topic_id
-        """
-        url = self._start_download_url_request(file_id)
-        max_retries = DOWNLOAD_URL_MAX_RETRIES
-        
-        for attempt in range(max_retries):
+
+    def _run_download_url_retry_loop_target(
+        self,
+        target: DownloadUrlRetryLoopTarget,
+    ) -> Optional[str]:
+        for attempt in range(target.max_retries):
             decision = self._run_download_url_attempt_target(
-                DownloadUrlAttemptTarget(url, file_id, attempt, max_retries),
+                DownloadUrlAttemptTarget(target.url, target.file_id, attempt, target.max_retries),
             )
             if decision.download_url:
                 return decision.download_url
@@ -1378,10 +1378,22 @@ class ZSXQFileDownloader:
                 continue
             if decision.should_stop:
                 return None
-        
-        print(retry_exhausted_message(max_retries))
+
+        print(retry_exhausted_message(target.max_retries))
         return None
-    
+
+    def get_download_url(self, file_id: int) -> Optional[str]:
+        """获取文件下载链接（带重试机制）
+
+        注意：file_id 参数在不同场景下含义不同：
+        - 边获取边下载时：传入的是真实的 file_id
+        - 从数据库下载时：传入的是 topic_id
+        """
+        url = self._start_download_url_request(file_id)
+        return self._run_download_url_retry_loop_target(
+            DownloadUrlRetryLoopTarget(url, file_id, DOWNLOAD_URL_MAX_RETRIES),
+        )
+
     def download_file(self, file_info: Dict[str, Any]) -> bool:
         """下载单个文件"""
         prepared_file = self._prepare_download_file_target(file_info)
