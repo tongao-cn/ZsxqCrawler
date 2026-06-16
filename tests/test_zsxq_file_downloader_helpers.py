@@ -2640,6 +2640,35 @@ class FileDownloaderDatabaseStatsTests(unittest.TestCase):
                 ("2026-05-01 09:00:00", "2026-05-07 10:00:00", 2, "extra")
             )
 
+    def test_show_database_stats_preserves_entry_handoff_and_print_order(self):
+        stats = {"files": 2, "topics": 3}
+        calls = []
+        downloader = object.__new__(ZSXQFileDownloader)
+        downloader.group_id = "511"
+        downloader.file_db = SimpleNamespace(
+            get_database_stats=lambda: calls.append(("get_stats", stats)) or stats
+        )
+        downloader._print_database_core_stats = lambda value: calls.append(("core", value))
+        downloader._print_database_total_size = lambda: calls.append(("total_size", None))
+        downloader._print_database_table_stats = lambda value: calls.append(("tables", value))
+        downloader._print_database_time_range = lambda: calls.append(("time_range", None))
+        downloader._print_database_api_response_stats = lambda: calls.append(("api_stats", None))
+
+        with contextlib.redirect_stdout(io.StringIO()) as output:
+            ZSXQFileDownloader.show_database_stats(downloader)
+
+        self.assertEqual(
+            ["get_stats", "core", "total_size", "tables", "time_range", "api_stats"],
+            [name for name, _ in calls],
+        )
+        self.assertIs(stats, calls[1][1])
+        self.assertIs(stats, calls[3][1])
+
+        printed = output.getvalue()
+        self.assertIn("📊 完整数据库统计信息:", printed)
+        self.assertIn("📁 PostgreSQL schema:", printed)
+        self.assertTrue(printed.rstrip().endswith("=" * 60))
+
     def test_show_database_stats_preserves_query_order_and_output_shape(self):
         downloader = object.__new__(ZSXQFileDownloader)
         downloader.group_id = "511"

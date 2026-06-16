@@ -28781,6 +28781,50 @@ Result:
 - Full backend unittest discovery passed in the current worktree: 1207 tests, 15 skipped.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-16 - P96 database stats display target handoff
+
+Changed:
+
+- Added direct characterization coverage for `show_database_stats()` before changing production
+  code, locking stats retrieval, internal display-step order, stats object handoff, header/schema
+  output, and final footer output.
+- Added private `ShowDatabaseStatsTarget` to carry the loaded database stats together.
+- Added private `_show_database_stats_target(...)` and delegated the statistics display sequence
+  from `show_database_stats()` to it.
+- Kept public `show_database_stats()` signature and behavior unchanged.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Database stats retrieval, query helper usage, SQL query order, optional section omission,
+  printed output shape, fallback/legacy behavior, error semantics, and configuration semantics are
+  unchanged.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderDatabaseStatsTests.test_show_database_stats_preserves_entry_handoff_and_print_order tests.test_zsxq_file_downloader_helpers.FileDownloaderDatabaseStatsTests.test_show_database_stats_preserves_query_order_and_output_shape tests.test_zsxq_file_downloader_helpers.FileDownloaderDatabaseStatsTests.test_show_database_stats_omits_optional_sections_when_empty -v
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py
+uv run python scripts\scan_postgres_compat_debt.py
+uv run ruff check backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py --select F401,F841
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- New direct database stats entry characterization test plus existing focused database stats tests
+  passed before production helper handoff: 3 tests.
+- Focused database stats entry tests passed after helper handoff: 3 tests.
+- `py_compile` passed.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- ZSXQ file downloader helper tests passed: 230 tests.
+- Full backend unittest discovery passed in the current worktree: 1208 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:

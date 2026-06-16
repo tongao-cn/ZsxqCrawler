@@ -584,6 +584,10 @@ class DatabaseStatsTimeRange(NamedTuple):
     time_count: Any
 
 
+class ShowDatabaseStatsTarget(NamedTuple):
+    stats: Dict[str, Any]
+
+
 class FileCollectionLogRow(NamedTuple):
     log_id: Any
 
@@ -3602,22 +3606,25 @@ class ZSXQFileDownloader:
         # 使用新数据库的统计方法
         stats = self.file_db.get_database_stats()
 
+        self._show_database_stats_target(ShowDatabaseStatsTarget(stats))
+
+        print("="*60)
+
+    def _show_database_stats_target(self, target: ShowDatabaseStatsTarget) -> None:
         # 主要数据统计
-        self._print_database_core_stats(stats)
+        self._print_database_core_stats(target.stats)
 
         # 文件大小统计
         self._print_database_total_size()
 
         # 详细表统计
-        self._print_database_table_stats(stats)
+        self._print_database_table_stats(target.stats)
 
         # 文件创建时间范围
         self._print_database_time_range()
 
         # API响应统计
         self._print_database_api_response_stats()
-
-        print("="*60)
     
     def _print_download_settings(self) -> None:
         for line in download_settings_display_lines(
