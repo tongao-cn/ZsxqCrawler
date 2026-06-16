@@ -208,6 +208,12 @@ class DownloadAttemptResult(NamedTuple):
     file_path: str
 
 
+class FileCollectionPage(NamedTuple):
+    data: Dict[str, Any]
+    files: list[Dict[str, Any]]
+    next_index: Optional[Any]
+
+
 class TimeCollectionPage(NamedTuple):
     data: Dict[str, Any]
     files: list[Dict[str, Any]]
@@ -1513,6 +1519,25 @@ class ZSXQFileDownloader:
         time.sleep(random.uniform(next_page["delay_min"], next_page["delay_max"]))
         return next_page["next_index"]
 
+    def _fetch_file_collection_page(
+        self,
+        page_count: int,
+        current_index: Optional[Any],
+    ) -> Optional[FileCollectionPage]:
+        data = self.fetch_file_list(count=20, index=current_index)
+        if not data:
+            for message in file_collection_fetch_failed_messages(page_count):
+                print(message)
+            return None
+
+        files, next_index = file_list_response_page(data)
+        if not files:
+            print(file_collection_empty_page_message())
+            return None
+
+        print(file_collection_page_files_message(len(files)))
+        return FileCollectionPage(data, files, next_index)
+
     def _run_file_collection_loop(self, stats: Dict[str, int]) -> int:
         current_index = None
         page_count = 0
@@ -1523,25 +1548,20 @@ class ZSXQFileDownloader:
                 print(file_collection_page_message(page_count))
 
                 # 获取文件列表
-                data = self.fetch_file_list(count=20, index=current_index)
-                if not data:
-                    for message in file_collection_fetch_failed_messages(page_count):
-                        print(message)
+                page = self._fetch_file_collection_page(page_count, current_index)
+                if page is None:
                     break
-
-                files, next_index = file_list_response_page(data)
-
-                if not files:
-                    print(file_collection_empty_page_message())
-                    break
-
-                print(file_collection_page_files_message(len(files)))
 
                 # 使用完整数据库导入整个API响应
-                if not self._import_file_collection_page(data, len(files), page_count, stats):
+                if not self._import_file_collection_page(
+                    page.data,
+                    len(page.files),
+                    page_count,
+                    stats,
+                ):
                     break
 
-                current_index = self._next_file_collection_index(next_index)
+                current_index = self._next_file_collection_index(page.next_index)
                 if current_index is None:
                     break
 

@@ -600,6 +600,37 @@ class FileDownloaderPaginationTests(unittest.TestCase):
         self.assertIn("💾 已成功收集前0页的数据", printed)
         self.assertIn("   📄 收集页数: 1", printed)
 
+    def test_collect_all_files_empty_page_preserves_summary_without_import_or_sleep(self):
+        page = {"resp_data": {"index": "ignored-next", "files": []}}
+        downloader = object.__new__(ZSXQFileDownloader)
+        downloader.file_db = CollectAllFileDb()
+        downloader.fetch_calls = []
+
+        def fetch_file_list(**kwargs):
+            downloader.fetch_calls.append(kwargs)
+            return page
+
+        downloader.fetch_file_list = fetch_file_list
+
+        with (
+            contextlib.redirect_stdout(io.StringIO()) as output,
+            patch("backend.crawlers.zsxq_file_downloader.random.uniform") as uniform,
+            patch("backend.crawlers.zsxq_file_downloader.time.sleep") as sleep,
+        ):
+            stats = ZSXQFileDownloader.collect_all_files_to_database(downloader)
+
+        self.assertEqual({"total_files": 0, "new_files": 0, "skipped_files": 0}, stats)
+        self.assertEqual([{"count": 20, "index": None}], downloader.fetch_calls)
+        self.assertEqual([], downloader.file_db.imported_responses)
+        self.assertEqual(2, downloader.file_db.commits)
+        uniform.assert_not_called()
+        sleep.assert_not_called()
+        printed = output.getvalue()
+        self.assertIn("📄 收集第1页文件列表", printed)
+        self.assertIn("📭 没有更多文件", printed)
+        self.assertNotIn("   📋 当前页面:", printed)
+        self.assertIn("   📄 收集页数: 1", printed)
+
     def test_collect_all_files_preserves_success_import_log_and_collection_record(self):
         page = {
             "resp_data": {
