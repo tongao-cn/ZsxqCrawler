@@ -25262,6 +25262,54 @@ Result:
 - Full backend unittest discovery passed in the current worktree: 1192 tests, 15 skipped.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-16 - P21 download interval control helper extraction
+
+Changed:
+
+- Confirmed existing characterization coverage for `download_interval_plan(...)` long sleep,
+  normal sleep, and no-sleep branches.
+- Confirmed existing characterization coverage for `_apply_download_intervals(...)` long-sleep
+  side effects, random normal interval range, and random long-sleep range at batch boundaries.
+- Added internal `DownloadIntervalValues` and extracted
+  `ZSXQFileDownloader._download_interval_values(...)` plus
+  `ZSXQFileDownloader._apply_download_interval_plan(...)` from `_apply_download_intervals(...)`.
+- Kept random interval conditions, `download_interval_plan(...)` arguments, log order,
+  `time.sleep(...)` side effect, and `current_batch_count` reset semantics unchanged.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Download pacing, random interval/fallback behavior, logging, sleep calls, and batch counter side
+  effects are unchanged.
+- The new helpers are internal and do not create a new public API surface.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderFileDataHelperTests.test_download_interval_plan_preserves_long_sleep_branch tests.test_zsxq_file_downloader_helpers.FileDownloaderFileDataHelperTests.test_download_interval_plan_preserves_normal_and_no_sleep_branches tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_apply_download_intervals_preserves_long_sleep_side_effects tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_apply_download_intervals_uses_random_interval_range tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_apply_download_intervals_uses_random_long_sleep_range_at_batch_boundary -v
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderFileDataHelperTests.test_download_interval_plan_preserves_long_sleep_branch tests.test_zsxq_file_downloader_helpers.FileDownloaderFileDataHelperTests.test_download_interval_plan_preserves_normal_and_no_sleep_branches tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_apply_download_intervals_preserves_long_sleep_side_effects tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_apply_download_intervals_uses_random_interval_range tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_apply_download_intervals_uses_random_long_sleep_range_at_batch_boundary -v
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderFileDataHelperTests tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run ruff check backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py --select F401,F841
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers -v
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- Existing characterization coverage passed before helper extraction: 5 focused tests.
+- `py_compile` passed.
+- Focused download interval tests passed after helper extraction: 5 tests.
+- File downloader file-data/download tests passed: 78 tests.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- ZSXQ file downloader helper tests passed: 214 tests.
+- Full backend unittest discovery passed in the current worktree: 1192 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:

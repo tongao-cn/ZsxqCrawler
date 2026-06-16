@@ -240,6 +240,11 @@ class DownloadRetryDecision(NamedTuple):
     result: Optional[bool]
 
 
+class DownloadIntervalValues(NamedTuple):
+    download_interval: float
+    long_sleep_interval: float
+
+
 class FileCollectionPage(NamedTuple):
     data: Dict[str, Any]
     files: list[Dict[str, Any]]
@@ -1495,10 +1500,7 @@ class ZSXQFileDownloader:
         )
         remove_partial_download(temp_path)
 
-    def _apply_download_intervals(self):
-        """应用下载间隔控制"""
-        import time
-
+    def _download_interval_values(self) -> DownloadIntervalValues:
         download_interval = self.download_interval
         long_sleep_interval = self.long_sleep_interval
         if getattr(self, "use_random_interval", False):
@@ -1514,7 +1516,13 @@ class ZSXQFileDownloader:
                 )
             elif self.download_interval_min is not None and self.download_interval_max is not None:
                 download_interval = random.uniform(self.download_interval_min, self.download_interval_max)
+        return DownloadIntervalValues(download_interval, long_sleep_interval)
 
+    def _apply_download_interval_plan(
+        self,
+        download_interval: float,
+        long_sleep_interval: float,
+    ) -> None:
         delay, messages, should_reset_batch = download_interval_plan(
             self.current_batch_count,
             self.files_per_batch,
@@ -1529,6 +1537,14 @@ class ZSXQFileDownloader:
         if should_reset_batch:
             self.current_batch_count = 0  # 重置批次计数
             self.log(messages[1])
+
+    def _apply_download_intervals(self):
+        """应用下载间隔控制"""
+        interval_values = self._download_interval_values()
+        self._apply_download_interval_plan(
+            interval_values.download_interval,
+            interval_values.long_sleep_interval,
+        )
 
     def _download_batch_file_item(
         self,
