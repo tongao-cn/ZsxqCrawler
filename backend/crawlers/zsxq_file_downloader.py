@@ -203,6 +203,12 @@ class DownloadFilenameOverride(NamedTuple):
     file_path: str
 
 
+class ResponseFilenameOverrideTarget(NamedTuple):
+    file_name: str
+    file_id: int
+    response_headers: Dict[str, Any]
+
+
 class DownloadFailureDetail(NamedTuple):
     error_code: str
     error_message: str
@@ -1503,11 +1509,19 @@ class ZSXQFileDownloader:
         file_id: int,
         response_headers: Dict[str, Any],
     ) -> Optional[DownloadFilenameOverride]:
+        return self._apply_response_filename_override_target(
+            ResponseFilenameOverrideTarget(file_name, file_id, response_headers),
+        )
+
+    def _apply_response_filename_override_target(
+        self,
+        target: ResponseFilenameOverrideTarget,
+    ) -> Optional[DownloadFilenameOverride]:
         filename_override = response_filename_override(
-            file_name,
-            file_id,
+            target.file_name,
+            target.file_id,
             self.download_dir,
-            response_headers,
+            target.response_headers,
         )
         if not filename_override:
             return None
@@ -1590,10 +1604,12 @@ class ZSXQFileDownloader:
         response: Any,
         target: DownloadFileTarget,
     ) -> DownloadFileTarget:
-        filename_override = self._apply_response_filename_override(
-            target.file_name,
-            target.file_id,
-            response.headers,
+        filename_override = self._apply_response_filename_override_target(
+            ResponseFilenameOverrideTarget(
+                target.file_name,
+                target.file_id,
+                response.headers,
+            ),
         )
         if not filename_override:
             return target._replace()
