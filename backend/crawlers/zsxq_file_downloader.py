@@ -503,6 +503,11 @@ class BatchDownloadLoopTarget(NamedTuple):
     start_index: Optional[str]
 
 
+class BatchDownloadTarget(NamedTuple):
+    max_files: Optional[int]
+    start_index: Optional[str]
+
+
 class BatchDownloadNextIndexTarget(NamedTuple):
     next_index: Optional[str]
     downloaded_in_batch: int
@@ -2668,8 +2673,14 @@ class ZSXQFileDownloader:
                 break
 
     def download_files_batch(self, max_files: Optional[int] = None, start_index: Optional[str] = None) -> Dict[str, int]:
+        return self._download_files_batch_target(BatchDownloadTarget(max_files, start_index))
+
+    def _download_files_batch_target(
+        self,
+        target: BatchDownloadTarget,
+    ) -> Dict[str, int]:
         """批量下载文件"""
-        for message in batch_download_start_messages(max_files):
+        for message in batch_download_start_messages(target.max_files):
             self.log(message)
 
         # 检查是否需要停止
@@ -2679,7 +2690,7 @@ class ZSXQFileDownloader:
 
         stats = download_result_stats()
         self._run_batch_download_loop_target(
-            BatchDownloadLoopTarget(stats, max_files, start_index),
+            BatchDownloadLoopTarget(stats, target.max_files, target.start_index),
         )
 
         for message in batch_download_completion_messages(stats):

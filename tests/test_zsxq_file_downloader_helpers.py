@@ -1967,6 +1967,42 @@ class FileDownloaderBatchDownloadTests(unittest.TestCase):
         self.assertIsNone(terminal_targets[0].max_files)
         self.assertIs(stats, terminal_targets[0].stats)
 
+    def test_download_files_batch_preserves_loop_target_stats_and_completion(self):
+        downloader = object.__new__(ZSXQFileDownloader)
+        downloader.logs = []
+        downloader.log = downloader.logs.append
+        downloader.check_stop = lambda: False
+        loop_targets = []
+
+        def run_loop(target):
+            loop_targets.append(target)
+            target.stats.update({"total_files": 3, "downloaded": 1, "skipped": 1, "failed": 1})
+
+        downloader._run_batch_download_loop_target = run_loop
+
+        stats = ZSXQFileDownloader.download_files_batch(
+            downloader,
+            max_files=5,
+            start_index="cursor",
+        )
+
+        self.assertEqual({"total_files": 3, "downloaded": 1, "skipped": 1, "failed": 1}, stats)
+        self.assertEqual(1, len(loop_targets))
+        self.assertIs(stats, loop_targets[0].stats)
+        self.assertEqual(5, loop_targets[0].max_files)
+        self.assertEqual("cursor", loop_targets[0].start_index)
+        self.assertEqual(
+            [
+                "📥 开始批量下载文件 (最多5个)",
+                "🎉 批量下载完成:",
+                "   📊 总文件数: 3",
+                "   ✅ 下载成功: 1",
+                "   ⚠️ 跳过: 1",
+                "   ❌ 失败: 1",
+            ],
+            downloader.logs,
+        )
+
     def test_download_files_batch_stops_page_after_success_limit(self):
         files = [
             {"file": {"id": 101, "name": "first.pdf"}},
