@@ -28361,6 +28361,54 @@ Result:
 - Full backend unittest discovery passed in the current worktree: 1199 tests, 15 skipped.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-16 - P87 batch download next-index target handoff
+
+Changed:
+
+- Confirmed existing characterization coverage for `batch_download_next_page_plan(...)`,
+  `_next_batch_download_index(...)`, next-page fetch/sleep behavior, and max-file stop behavior.
+- Added private `BatchDownloadNextIndexTarget` to carry next page index, current downloaded count,
+  and max-file limit together.
+- Added private `_next_batch_download_index_target(...)` and reused it from
+  `_run_batch_download_page(...)`.
+- Kept `_next_batch_download_index(...)` with its existing private signature as a compatibility
+  wrapper for any internal direct callers.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Public `download_files_batch(...)`, next-page continuation rules, next-page log message, page sleep,
+  max-file terminal behavior, fallback/legacy behavior, error semantics, and configuration semantics
+  are unchanged.
+- The old `_next_batch_download_index(...)` private helper signature remains available.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderBatchDownloadTests.test_batch_download_next_page_plan_preserves_truthiness_limit_and_delay tests.test_zsxq_file_downloader_helpers.FileDownloaderBatchDownloadTests.test_next_batch_download_index_preserves_log_sleep_and_terminal_paths tests.test_zsxq_file_downloader_helpers.FileDownloaderBatchDownloadTests.test_download_files_batch_preserves_next_page_sleep_and_fetch_index tests.test_zsxq_file_downloader_helpers.FileDownloaderBatchDownloadTests.test_download_files_batch_stops_page_after_success_limit -v
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py
+uv run python scripts\scan_postgres_compat_debt.py
+uv run ruff check backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py --select F401,F841
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- First focused pre-change command used the wrong unittest method name for the next-page plan test;
+  the other three selected tests passed. This was a test selection error, not a product behavior
+  failure.
+- Focused next-index coverage passed before helper handoff with the corrected test name: 4 tests.
+- Focused next-index tests passed after helper handoff: 4 tests.
+- `py_compile` passed.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- ZSXQ file downloader helper tests passed: 221 tests.
+- Full backend unittest discovery passed in the current worktree: 1199 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:

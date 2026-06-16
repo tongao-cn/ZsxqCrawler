@@ -491,6 +491,12 @@ class BatchDownloadLoopStep(NamedTuple):
     next_index: Optional[str]
 
 
+class BatchDownloadNextIndexTarget(NamedTuple):
+    next_index: Optional[str]
+    downloaded_in_batch: int
+    max_files: Optional[int]
+
+
 class BatchDownloadFileItemTarget(NamedTuple):
     file_info: Dict[str, Any]
     item_number: int
@@ -2496,7 +2502,19 @@ class ZSXQFileDownloader:
         downloaded_in_batch: int,
         max_files: Optional[int],
     ) -> Optional[str]:
-        next_page = batch_download_next_page_plan(next_index, downloaded_in_batch, max_files)
+        return self._next_batch_download_index_target(
+            BatchDownloadNextIndexTarget(next_index, downloaded_in_batch, max_files),
+        )
+
+    def _next_batch_download_index_target(
+        self,
+        target: BatchDownloadNextIndexTarget,
+    ) -> Optional[str]:
+        next_page = batch_download_next_page_plan(
+            target.next_index,
+            target.downloaded_in_batch,
+            target.max_files,
+        )
         if not next_page["should_continue"]:
             return None
 
@@ -2565,10 +2583,12 @@ class ZSXQFileDownloader:
             stats,
         )
 
-        next_index = self._next_batch_download_index(
-            page.next_index,
-            downloaded_in_batch,
-            max_files,
+        next_index = self._next_batch_download_index_target(
+            BatchDownloadNextIndexTarget(
+                page.next_index,
+                downloaded_in_batch,
+                max_files,
+            ),
         )
         return BatchDownloadLoopStep(downloaded_in_batch, next_index)
 
