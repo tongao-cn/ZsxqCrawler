@@ -191,6 +191,12 @@ class DownloadFileTarget(NamedTuple):
     file_path: str
 
 
+class ExistingDownloadTarget(NamedTuple):
+    file_id: int
+    file_path: str
+    file_size: int
+
+
 class DownloadFilenameOverride(NamedTuple):
     file_name: str
     safe_filename: str
@@ -1127,10 +1133,12 @@ class ZSXQFileDownloader:
             return False
 
         # 🚀 优化：先检查本地文件，避免无意义的API请求
-        existing_file_result = self._skip_existing_download_if_complete(
-            prepared_file.file_id,
-            prepared_file.file_path,
-            prepared_file.file_size,
+        existing_file_result = self._skip_existing_download_target(
+            ExistingDownloadTarget(
+                prepared_file.file_id,
+                prepared_file.file_path,
+                prepared_file.file_size,
+            ),
         )
         if existing_file_result:
             return existing_file_result
@@ -1287,13 +1295,32 @@ class ZSXQFileDownloader:
         file_path: str,
         file_size: int,
     ) -> Optional[str]:
-        file_exists, size_matches, _existing_size = existing_file_matches(file_path, file_size)
+        return self._skip_existing_download_target(
+            ExistingDownloadTarget(
+                file_id,
+                file_path,
+                file_size,
+            ),
+        )
+
+    def _skip_existing_download_target(
+        self,
+        target: ExistingDownloadTarget,
+    ) -> Optional[str]:
+        file_exists, size_matches, _existing_size = existing_file_matches(
+            target.file_path,
+            target.file_size,
+        )
         if not file_exists:
             return None
 
         if size_matches:
             self.log(f"   ✅ 文件已存在且大小匹配，跳过下载")
-            self.file_db.update_file_download_status(file_id, 'completed', file_path)
+            self.file_db.update_file_download_status(
+                target.file_id,
+                'completed',
+                target.file_path,
+            )
             return "skipped"  # 返回特殊值表示跳过
 
         self.log(f"   ⚠️ 文件已存在但大小不匹配，重新下载")
