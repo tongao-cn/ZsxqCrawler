@@ -304,6 +304,17 @@ def _database_download_row(row: Any) -> DatabaseDownloadRow:
     return DatabaseDownloadRow(*row)
 
 
+def _record_file_download_result(result: Any, stats: Dict[str, int]) -> str:
+    if result == "skipped":
+        stats['skipped'] += 1
+        return "skipped"
+    if result:
+        stats['downloaded'] += 1
+        return "downloaded"
+    stats['failed'] += 1
+    return "failed"
+
+
 class ZSXQFileDownloader:
     """知识星球文件下载器"""
     
@@ -1315,19 +1326,16 @@ class ZSXQFileDownloader:
         max_files: Optional[int],
         stats: Dict[str, int],
     ) -> int:
-        if result == "skipped":
-            stats['skipped'] += 1
+        result_status = _record_file_download_result(result, stats)
+        if result_status == "skipped":
             self.log(batch_download_skipped_message())
-        elif result:
-            stats['downloaded'] += 1
+        elif result_status == "downloaded":
             downloaded_in_batch += 1
             self.check_long_delay()
 
             not_reached_limit = max_files is None or downloaded_in_batch < max_files
             if has_more_in_batch and not_reached_limit:
                 self.download_delay()
-        else:
-            stats['failed'] += 1
 
         return downloaded_in_batch
 
@@ -1939,16 +1947,14 @@ class ZSXQFileDownloader:
         total_files: int,
         stats: Dict[str, int],
     ) -> None:
-        if result == "skipped":
-            stats['skipped'] += 1
+        result_status = _record_file_download_result(result, stats)
+        if result_status == "skipped":
             self.log(f"   ⚠️ 文件已跳过")
-        elif result:
-            stats['downloaded'] += 1
+        elif result_status == "downloaded":
             self.check_long_delay()
             if position < total_files:
                 self.download_delay()
         else:
-            stats['failed'] += 1
             self.log(f"   ❌ 下载失败")
 
     def _fetch_database_download_rows(
