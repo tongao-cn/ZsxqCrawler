@@ -2138,6 +2138,10 @@ class ZSXQFileDownloader:
         if time_range_message:
             self.log(time_range_message)
 
+    def _log_database_download_completion(self, stats: Dict[str, int]) -> None:
+        for message in database_download_completion_messages(stats):
+            self.log(message)
+
     def download_files_from_database(
         self,
         max_files: Optional[int] = None,
@@ -2176,9 +2180,8 @@ class ZSXQFileDownloader:
 
         self._download_database_file_rows(files_to_download, stats)
 
-        for message in database_download_completion_messages(stats):
-            self.log(message)
-        
+        self._log_database_download_completion(stats)
+
         return stats
 
     def _print_database_core_stats(self, stats: Dict[str, Any]) -> None:
