@@ -206,6 +206,11 @@ class CollectAllFileDb:
         return {"files": 2, "topics": 3, "users": 4}
 
 
+class MissingCollectionLogIdFileDb(CollectAllFileDb):
+    def fetchone(self):
+        return None
+
+
 class FakeDownloadFileDb:
     def __init__(self):
         self.status_updates = []
@@ -599,6 +604,27 @@ class FileDownloaderPaginationTests(unittest.TestCase):
         self.assertIn("❌ 第1页获取失败，收集过程中断", printed)
         self.assertIn("💾 已成功收集前0页的数据", printed)
         self.assertIn("   📄 收集页数: 1", printed)
+
+    def test_collect_all_files_preserves_missing_collection_log_id_update(self):
+        downloader = object.__new__(ZSXQFileDownloader)
+        downloader.file_db = MissingCollectionLogIdFileDb()
+        downloader.fetch_calls = []
+
+        def fetch_file_list(**kwargs):
+            downloader.fetch_calls.append(kwargs)
+            return None
+
+        downloader.fetch_file_list = fetch_file_list
+
+        with contextlib.redirect_stdout(io.StringIO()):
+            stats = ZSXQFileDownloader.collect_all_files_to_database(downloader)
+
+        self.assertEqual({"total_files": 0, "new_files": 0, "skipped_files": 0}, stats)
+        self.assertEqual([{"count": 20, "index": None}], downloader.fetch_calls)
+        self.assertEqual(2, downloader.file_db.commits)
+        update_query, update_params = downloader.file_db.executed[-1]
+        self.assertIn("UPDATE collection_log SET", update_query)
+        self.assertEqual((0, 0, None), update_params[1:])
 
     def test_collect_all_files_empty_page_preserves_summary_without_import_or_sleep(self):
         page = {"resp_data": {"index": "ignored-next", "files": []}}

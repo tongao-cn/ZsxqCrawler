@@ -24045,6 +24045,51 @@ Result:
 - Full backend unittest discovery passed in the current worktree: 1175 tests, 15 skipped.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-16 - P9 file collection log helper extraction
+
+Changed:
+
+- Added characterization coverage for the collection-log insert `fetchone()` returning no row,
+  preserving the existing update call with `log_id=None`.
+- Extracted internal `ZSXQFileDownloader._create_file_collection_log(...)` and
+  `ZSXQFileDownloader._update_file_collection_log(...)` from
+  `collect_all_files_to_database(...)`.
+- Kept insert SQL, update SQL, timestamp creation points, fetchone handling, commit count, stats
+  payloads, and completion summary unchanged.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Collection log creation/update order, missing-log-id compatibility, stats values, commit side
+  effects, public API, fallback/legacy behavior, error semantics, config semantics, and task
+  behavior are unchanged.
+- The new helpers are internal and do not create a new public API surface.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderPaginationTests.test_collect_all_files_preserves_missing_collection_log_id_update -v
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderPaginationTests.test_collect_all_files_stops_when_page_import_fails tests.test_zsxq_file_downloader_helpers.FileDownloaderPaginationTests.test_collect_all_files_import_failure_preserves_log_and_summary tests.test_zsxq_file_downloader_helpers.FileDownloaderPaginationTests.test_collect_all_files_preserves_fetch_failure_record_update_and_summary tests.test_zsxq_file_downloader_helpers.FileDownloaderPaginationTests.test_collect_all_files_preserves_missing_collection_log_id_update tests.test_zsxq_file_downloader_helpers.FileDownloaderPaginationTests.test_collect_all_files_empty_page_preserves_summary_without_import_or_sleep tests.test_zsxq_file_downloader_helpers.FileDownloaderPaginationTests.test_collect_all_files_preserves_success_import_log_and_collection_record tests.test_zsxq_file_downloader_helpers.FileDownloaderPaginationTests.test_collect_all_files_finishes_without_sleep_when_no_next_page tests.test_zsxq_file_downloader_helpers.FileDownloaderPaginationTests.test_collect_all_files_preserves_next_page_sleep_and_fetch_index -v
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run ruff check backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py --select F401,F841
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- Characterization test passed against the pre-refactor behavior before helper extraction: 1 test.
+- `py_compile` passed.
+- Focused file collection tests passed: 8 tests.
+- ZSXQ file downloader helper tests passed: 198 tests.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- Full backend unittest discovery passed in the current worktree: 1176 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:

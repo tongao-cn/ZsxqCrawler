@@ -1572,11 +1572,7 @@ class ZSXQFileDownloader:
 
         return page_count
 
-    def collect_all_files_to_database(self) -> Dict[str, int]:
-        """收集所有文件信息到数据库"""
-        print(file_collection_start_message())
-
-        # 创建收集记录
+    def _create_file_collection_log(self) -> Optional[Any]:
         insert_query, insert_params = file_collection_log_insert_query(
             datetime.datetime.now().isoformat()
         )
@@ -1584,11 +1580,13 @@ class ZSXQFileDownloader:
         row = self.file_db.cursor.fetchone()
         log_id = _file_collection_log_id(row)
         self.file_db.conn.commit()
+        return log_id
 
-        stats = file_collection_stats()
-        page_count = self._run_file_collection_loop(stats)
-
-        # 更新收集记录
+    def _update_file_collection_log(
+        self,
+        stats: Dict[str, int],
+        log_id: Optional[Any],
+    ) -> None:
         update_query, update_params = file_collection_log_update_query(
             datetime.datetime.now().isoformat(),
             stats,
@@ -1596,6 +1594,19 @@ class ZSXQFileDownloader:
         )
         self.file_db.cursor.execute(update_query, update_params)
         self.file_db.conn.commit()
+
+    def collect_all_files_to_database(self) -> Dict[str, int]:
+        """收集所有文件信息到数据库"""
+        print(file_collection_start_message())
+
+        # 创建收集记录
+        log_id = self._create_file_collection_log()
+
+        stats = file_collection_stats()
+        page_count = self._run_file_collection_loop(stats)
+
+        # 更新收集记录
+        self._update_file_collection_log(stats, log_id)
         
         for message in file_collection_completion_messages(stats, page_count):
             print(message)
