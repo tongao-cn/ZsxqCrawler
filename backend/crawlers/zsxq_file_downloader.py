@@ -1088,36 +1088,36 @@ class ZSXQFileDownloader:
         if not prepared_file:
             return False
 
-        file_id = prepared_file.file_id
-        file_name = prepared_file.file_name
-        file_size = prepared_file.file_size
-        safe_filename = prepared_file.safe_filename
-        file_path = prepared_file.file_path
-
         # 🚀 优化：先检查本地文件，避免无意义的API请求
-        existing_file_result = self._skip_existing_download_if_complete(file_id, file_path, file_size)
+        existing_file_result = self._skip_existing_download_if_complete(
+            prepared_file.file_id,
+            prepared_file.file_path,
+            prepared_file.file_size,
+        )
         if existing_file_result:
             return existing_file_result
 
-        return self._run_download_retry_loop(file_id, file_name, file_size, safe_filename, file_path)
+        return self._run_download_retry_loop(prepared_file)
 
     def _run_download_retry_loop(
         self,
-        file_id: int,
-        file_name: str,
-        file_size: int,
-        safe_filename: str,
-        file_path: str,
+        prepared_file: DownloadFileTarget,
     ) -> bool:
         download_retries = DOWNLOAD_FILE_MAX_RETRIES
-        retry_state = DownloadRetryState(file_name, safe_filename, file_path, None, None)
+        retry_state = DownloadRetryState(
+            prepared_file.file_name,
+            prepared_file.safe_filename,
+            prepared_file.file_path,
+            None,
+            None,
+        )
 
         for attempt in range(download_retries):
             retry_decision = self._run_download_retry_loop_attempt(
                 attempt,
                 download_retries,
-                file_id,
-                file_size,
+                prepared_file.file_id,
+                prepared_file.file_size,
                 retry_state,
             )
             retry_state = retry_decision.state
@@ -1126,7 +1126,7 @@ class ZSXQFileDownloader:
             return retry_decision.result
 
         self._mark_download_failed_after_retries(
-            file_id,
+            prepared_file.file_id,
             download_retries,
             retry_state.last_error_code,
             retry_state.last_error,

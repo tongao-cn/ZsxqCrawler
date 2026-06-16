@@ -25889,6 +25889,53 @@ Result:
 - Full backend unittest discovery passed in the current worktree: 1192 tests, 15 skipped.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-16 - P34 download retry loop target handoff
+
+Changed:
+
+- Confirmed existing characterization coverage for file download success, existing-file skip, URL
+  lookup failure, API-error failure details, HTTP retry exhaustion, request exceptions, body
+  exceptions, size mismatch retry/failure, response filename override, partial-file cleanup,
+  stop-during-body behavior, and retry wait logging.
+- Reused the existing internal `DownloadFileTarget` as the input to
+  `_run_download_retry_loop(...)` instead of unpacking and re-passing five scalar fields from
+  `download_file(...)`.
+- Kept `DownloadRetryState` as the retry-time holder for mutable filename/path state after a
+  response-header filename override.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Public `download_file(...)` inputs/outputs, local-file skip behavior, download URL lookup,
+  retry counts, retry waits, response filename override semantics, partial-file cleanup, failure
+  status details, and logs are unchanged.
+- The signature change is limited to the private `_run_download_retry_loop(...)` helper.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests -v
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run ruff check backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py --select F401,F841
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers -v
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- Existing download characterization coverage passed before retry-loop handoff: 54 tests.
+- `py_compile` passed.
+- Download tests passed after retry-loop handoff: 54 tests.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- ZSXQ file downloader helper tests passed: 214 tests.
+- Full backend unittest discovery passed in the current worktree: 1192 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:
