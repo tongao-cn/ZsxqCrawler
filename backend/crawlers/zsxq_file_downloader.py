@@ -969,6 +969,13 @@ class ZSXQFileDownloader:
         self.log(f"   🔗 获取下载链接: ID={file_id}")
         self.log(f"   🌐 请求URL: {url}")
         return url
+
+    def _request_download_url_response(self, url: str, headers: Dict[str, str]) -> Any:
+        return self.session.get(
+            url,
+            headers=headers,
+            timeout=DOWNLOAD_URL_REQUEST_TIMEOUT_SECONDS,
+        )
     
     def get_download_url(self, file_id: int) -> Optional[str]:
         """获取文件下载链接（带重试机制）
@@ -984,11 +991,7 @@ class ZSXQFileDownloader:
             headers = self._prepare_retry_api_request(attempt, file_id=file_id)
             
             try:
-                response = self.session.get(
-                    url,
-                    headers=headers,
-                    timeout=DOWNLOAD_URL_REQUEST_TIMEOUT_SECONDS,
-                )
+                response = self._request_download_url_response(url, headers)
                 decision = self._handle_download_url_response(
                     response,
                     file_id,
