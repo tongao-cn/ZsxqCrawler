@@ -1449,6 +1449,24 @@ class ZSXQFileDownloader:
             target.file_path,
         )
 
+    def _download_target_for_response(
+        self,
+        response: Any,
+        target: DownloadFileTarget,
+    ) -> DownloadFileTarget:
+        response_target = self._resolve_download_response_target(
+            target.file_name,
+            target.file_id,
+            response.headers,
+            target.safe_filename,
+            target.file_path,
+        )
+        return target._replace(
+            file_name=response_target.file_name,
+            safe_filename=response_target.safe_filename,
+            file_path=response_target.file_path,
+        )
+
     def _handle_download_response(
         self,
         response,
@@ -1459,23 +1477,19 @@ class ZSXQFileDownloader:
         file_path: str,
     ) -> DownloadAttemptResult:
         try:
-            response_target = self._resolve_download_response_target(
-                file_name,
-                file_id,
-                response.headers,
-                safe_filename,
-                file_path,
+            response_download_target = self._download_target_for_response(
+                response,
+                DownloadFileTarget(
+                    file_id,
+                    file_name,
+                    file_size,
+                    safe_filename,
+                    file_path,
+                ),
             )
-            file_name = response_target.file_name
-            safe_filename = response_target.safe_filename
-            file_path = response_target.file_path
-            response_download_target = DownloadFileTarget(
-                file_id,
-                file_name,
-                file_size,
-                safe_filename,
-                file_path,
-            )
+            file_name = response_download_target.file_name
+            safe_filename = response_download_target.safe_filename
+            file_path = response_download_target.file_path
 
             return self._download_attempt_result_for_response_status(
                 response,
