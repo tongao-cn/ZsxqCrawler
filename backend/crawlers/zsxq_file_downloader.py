@@ -182,6 +182,12 @@ class FileListOkResponseTarget(NamedTuple):
     max_retries: int
 
 
+class FileListApiFailureResponseTarget(NamedTuple):
+    data: Dict[str, Any]
+    attempt: int
+    max_retries: int
+
+
 class StealthHeaderSelection(NamedTuple):
     user_agent: str
     sec_ch_ua: str
@@ -901,9 +907,21 @@ class ZSXQFileDownloader:
         attempt: int,
         max_retries: int,
     ) -> str:
-        error_msg, error_code = api_failure_detail(data)
+        return self._handle_file_list_api_failure_response_target(
+            FileListApiFailureResponseTarget(data, attempt, max_retries),
+        )
+
+    def _handle_file_list_api_failure_response_target(
+        self,
+        target: FileListApiFailureResponseTarget,
+    ) -> str:
+        error_msg, error_code = api_failure_detail(target.data)
         print(f"   ❌ API返回失败: {error_msg} (代码: {error_code})")
-        failure_class = classify_api_failure(error_code, attempt, max_retries)
+        failure_class = classify_api_failure(
+            error_code,
+            target.attempt,
+            target.max_retries,
+        )
         if failure_class == API_FAILURE_RETRY:
             print(f"   🔄 检测到可重试错误，准备重试...")
         elif failure_class in {API_FAILURE_NON_RETRY, API_FAILURE_PERMISSION_DENIED_1030}:
@@ -971,10 +989,12 @@ class ZSXQFileDownloader:
                 False,
             )
 
-        failure_class = self._handle_file_list_api_failure_response(
-            data,
-            target.attempt,
-            target.max_retries,
+        failure_class = self._handle_file_list_api_failure_response_target(
+            FileListApiFailureResponseTarget(
+                data,
+                target.attempt,
+                target.max_retries,
+            ),
         )
         return self._file_list_api_failure_decision(failure_class)
 

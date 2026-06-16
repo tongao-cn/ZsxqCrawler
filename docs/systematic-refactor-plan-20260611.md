@@ -27611,6 +27611,52 @@ Result:
 - Full backend unittest discovery passed in the current worktree: 1198 tests, 15 skipped.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-16 - P71 file-list API failure target handoff
+
+Changed:
+
+- Confirmed existing characterization coverage for file-list retryable API failure followed by
+  success, non-retry API failure stop, and retryable API failure exhaustion.
+- Added private `FileListApiFailureResponseTarget` to carry file-list API-failure response fields
+  together.
+- Added private `_handle_file_list_api_failure_response_target(...)` and reused it from
+  `_handle_file_list_ok_response_target(...)`.
+- Kept `_handle_file_list_api_failure_response(...)` with its existing private signature as a
+  compatibility wrapper for any internal direct callers.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Public `fetch_file_list(...)`, `show_file_list(...)`, batch download, collection, and time-range
+  collection callers keep the same inputs/outputs, API failure detail extraction, retry/non-retry
+  classification, retry count/order, retry delay/log output, retry-exhausted output, stop behavior,
+  fallback/legacy behavior, error semantics, and configuration semantics.
+- The old `_handle_file_list_api_failure_response(...)` private helper signature remains available.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderRetryHelperTests.test_fetch_file_list_retries_api_failure_then_success tests.test_zsxq_file_downloader_helpers.FileDownloaderRetryHelperTests.test_fetch_file_list_stops_on_non_retry_api_failure tests.test_zsxq_file_downloader_helpers.FileDownloaderRetryHelperTests.test_fetch_file_list_retryable_api_failure_exhausts_retries -v
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py
+uv run python scripts\scan_postgres_compat_debt.py
+uv run ruff check backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py --select F401,F841
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- Focused file-list API-failure coverage passed before helper handoff: 3 tests.
+- Focused file-list API-failure tests passed after helper handoff: 3 tests.
+- `py_compile` passed.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- ZSXQ file downloader helper tests passed: 220 tests.
+- Full backend unittest discovery passed in the current worktree: 1198 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:
