@@ -403,6 +403,11 @@ class DownloadRetryState(NamedTuple):
     last_error: Optional[str]
 
 
+class DownloadAttemptResultTarget(NamedTuple):
+    attempt_result: DownloadAttemptResult
+    retry_state: DownloadRetryState
+
+
 class DownloadRetryLoopAttemptTarget(NamedTuple):
     attempt: int
     download_retries: int
@@ -1582,7 +1587,9 @@ class ZSXQFileDownloader:
                 target.download_retries,
                 attempt_target,
             )
-            return self._apply_download_attempt_result(attempt_result, target.retry_state)
+            return self._apply_download_attempt_result_target(
+                DownloadAttemptResultTarget(attempt_result, target.retry_state),
+            )
         except Exception as e:
             return DownloadRetryDecision(
                 self._record_download_retry_exception(e, target.retry_state),
@@ -1594,6 +1601,16 @@ class ZSXQFileDownloader:
         attempt_result: DownloadAttemptResult,
         retry_state: DownloadRetryState,
     ) -> DownloadRetryDecision:
+        return self._apply_download_attempt_result_target(
+            DownloadAttemptResultTarget(attempt_result, retry_state),
+        )
+
+    def _apply_download_attempt_result_target(
+        self,
+        target: DownloadAttemptResultTarget,
+    ) -> DownloadRetryDecision:
+        attempt_result = target.attempt_result
+        retry_state = target.retry_state
         retry_state = DownloadRetryState(
             attempt_result.file_name,
             attempt_result.safe_filename,
