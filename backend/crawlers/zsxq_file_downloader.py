@@ -564,6 +564,16 @@ class DatabaseDownloadAfterInitialStopTarget(NamedTuple):
     sort_by: str
 
 
+class DatabaseDownloadTarget(NamedTuple):
+    max_files: Optional[int]
+    status_filter: str
+    sort_by: str
+    start_date: Optional[str]
+    end_date: Optional[str]
+    last_days: Optional[int]
+    kwargs: Dict[str, Any]
+
+
 class DatabaseStatsTotalSize(NamedTuple):
     total_size: Any
 
@@ -3489,16 +3499,32 @@ class ZSXQFileDownloader:
         **kwargs,
     ) -> Dict[str, int]:
         """从完整数据库下载文件（使用file_id字段）"""
-        self._log_database_download_start(max_files, status_filter)
+        return self._download_files_from_database_target(
+            DatabaseDownloadTarget(
+                max_files,
+                status_filter,
+                sort_by,
+                start_date,
+                end_date,
+                last_days,
+                kwargs,
+            ),
+        )
+
+    def _download_files_from_database_target(
+        self,
+        target: DatabaseDownloadTarget,
+    ) -> Dict[str, int]:
+        self._log_database_download_start(target.max_files, target.status_filter)
 
         query_plan = self._prepare_database_download_query_plan(
-            max_files,
-            status_filter,
-            sort_by,
-            start_date,
-            end_date,
-            last_days,
-            kwargs,
+            target.max_files,
+            target.status_filter,
+            target.sort_by,
+            target.start_date,
+            target.end_date,
+            target.last_days,
+            target.kwargs,
         )
         sort_by = query_plan["sort_by"]
 

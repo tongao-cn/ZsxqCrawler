@@ -2323,6 +2323,77 @@ class FileDownloaderDatabaseDownloadTests(unittest.TestCase):
         self.assertEqual([(rows, "download_count")], nonempty_summary_calls)
         self.assertEqual([rows], nonempty_run_calls)
 
+    def test_download_files_from_database_preserves_entry_handoff_kwargs_and_initial_stop(self):
+        downloader = object.__new__(ZSXQFileDownloader)
+        start_calls = []
+        query_calls = []
+        after_calls = []
+        query_plan = {"query": "SELECT files", "params": (511,), "sort_by": "create_time"}
+        expected_stats = {"total_files": 2, "downloaded": 1, "skipped": 1, "failed": 0}
+        downloader._log_database_download_start = (
+            lambda max_files, status_filter: start_calls.append((max_files, status_filter))
+        )
+
+        def prepare_query(max_files, status_filter, sort_by, start_date, end_date, last_days, kwargs):
+            query_calls.append((max_files, status_filter, sort_by, start_date, end_date, last_days, kwargs))
+            return query_plan
+
+        downloader._prepare_database_download_query_plan = prepare_query
+        downloader._should_stop_database_download_initially = lambda: False
+        downloader._run_database_download_after_initial_stop = (
+            lambda plan, sort_by: after_calls.append((plan, sort_by)) or expected_stats
+        )
+
+        stats = ZSXQFileDownloader.download_files_from_database(
+            downloader,
+            max_files=9,
+            status_filter="failed",
+            sort_by="download_count",
+            start_date="2026-05-01",
+            end_date="2026-05-07",
+            last_days=3,
+            recent_days=5,
+            order_by="create_time DESC",
+        )
+
+        self.assertIs(expected_stats, stats)
+        self.assertEqual([(9, "failed")], start_calls)
+        self.assertEqual(
+            [
+                (
+                    9,
+                    "failed",
+                    "download_count",
+                    "2026-05-01",
+                    "2026-05-07",
+                    3,
+                    {"recent_days": 5, "order_by": "create_time DESC"},
+                )
+            ],
+            query_calls,
+        )
+        self.assertEqual([(query_plan, "create_time")], after_calls)
+
+        stopped_downloader = object.__new__(ZSXQFileDownloader)
+        stopped_start_calls = []
+        stopped_query_calls = []
+        stopped_downloader._log_database_download_start = (
+            lambda max_files, status_filter: stopped_start_calls.append((max_files, status_filter))
+        )
+        stopped_downloader._prepare_database_download_query_plan = (
+            lambda *args: stopped_query_calls.append(args) or query_plan
+        )
+        stopped_downloader._should_stop_database_download_initially = lambda: True
+        stopped_downloader._run_database_download_after_initial_stop = lambda *args: self.fail(
+            "initial stop should not run database download"
+        )
+
+        stopped_stats = ZSXQFileDownloader.download_files_from_database(stopped_downloader)
+
+        self.assertEqual({"total_files": 0, "downloaded": 0, "skipped": 0, "failed": 0}, stopped_stats)
+        self.assertEqual([(None, "pending")], stopped_start_calls)
+        self.assertEqual([(None, "pending", "download_count", None, None, None, {})], stopped_query_calls)
+
     def test_download_files_from_database_preserves_filtered_query_shape_and_legacy_order_by(self):
         downloader = self._downloader_for_query_capture()
 
