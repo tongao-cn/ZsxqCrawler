@@ -756,6 +756,28 @@ class ZSXQFileDownloader:
             return FileListResponseDecision(None, False, True)
         return FileListResponseDecision(None, False, False)
 
+    def _handle_file_list_response(
+        self,
+        response: requests.Response,
+        attempt: int,
+        max_retries: int,
+    ) -> FileListResponseDecision:
+        print(f"   📊 响应状态: {response.status_code}")
+
+        if response.status_code == 200:
+            return self._handle_file_list_ok_response(response, attempt, max_retries)
+
+        http_failure_class = self._handle_file_list_http_failure_response(
+            response,
+            attempt,
+            max_retries,
+        )
+        if http_failure_class == HTTP_FAILURE_RETRY:
+            return FileListResponseDecision(None, True, False)
+        if http_failure_class == HTTP_FAILURE_NON_RETRY:
+            return FileListResponseDecision(None, False, True)
+        return FileListResponseDecision(None, False, False)
+
     def fetch_file_list(self, count: int = 20, index: Optional[str] = None, sort: str = "by_download_count") -> Optional[Dict[str, Any]]:
         """获取文件列表（带重试机制）"""
         url = f"{self.base_url}/v2/groups/{self.group_id}/files"
@@ -770,28 +792,13 @@ class ZSXQFileDownloader:
             
             try:
                 response = self.session.get(url, headers=headers, params=params, timeout=30)
-                
-                print(f"   📊 响应状态: {response.status_code}")
-                
-                if response.status_code == 200:
-                    decision = self._handle_file_list_ok_response(response, attempt, max_retries)
-                    if decision.result is not None:
-                        return decision.result
-                    if decision.should_retry:
-                        continue
-                    if decision.should_stop:
-                        return None
-                        
-                else:
-                    http_failure_class = self._handle_file_list_http_failure_response(
-                        response,
-                        attempt,
-                        max_retries,
-                    )
-                    if http_failure_class == HTTP_FAILURE_RETRY:
-                        continue
-                    if http_failure_class == HTTP_FAILURE_NON_RETRY:
-                        return None
+                decision = self._handle_file_list_response(response, attempt, max_retries)
+                if decision.result is not None:
+                    return decision.result
+                if decision.should_retry:
+                    continue
+                if decision.should_stop:
+                    return None
                     
             except Exception as e:
                 if self._handle_file_list_request_exception(e, attempt, max_retries):
