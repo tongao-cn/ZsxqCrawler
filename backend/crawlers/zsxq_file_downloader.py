@@ -491,6 +491,10 @@ class BatchDownloadLoopStep(NamedTuple):
     next_index: Optional[str]
 
 
+class BatchDownloadFetchTarget(NamedTuple):
+    current_index: Optional[str]
+
+
 class BatchDownloadPageRunTarget(NamedTuple):
     step: BatchDownloadLoopStep
     max_files: Optional[int]
@@ -2586,7 +2590,13 @@ class ZSXQFileDownloader:
         return downloaded_in_batch
 
     def _fetch_batch_download_page(self, current_index: Optional[str]) -> Optional[BatchDownloadPage]:
-        data = self.fetch_file_list(count=20, index=current_index)
+        return self._fetch_batch_download_page_target(BatchDownloadFetchTarget(current_index))
+
+    def _fetch_batch_download_page_target(
+        self,
+        target: BatchDownloadFetchTarget,
+    ) -> Optional[BatchDownloadPage]:
+        data = self.fetch_file_list(count=20, index=target.current_index)
         if not data:
             self.log(batch_download_fetch_failed_message())
             return None
@@ -2614,7 +2624,9 @@ class ZSXQFileDownloader:
         self,
         target: BatchDownloadPageRunTarget,
     ) -> Optional[BatchDownloadLoopStep]:
-        page = self._fetch_batch_download_page(target.step.next_index)
+        page = self._fetch_batch_download_page_target(
+            BatchDownloadFetchTarget(target.step.next_index),
+        )
         if page is None:
             return None
 
