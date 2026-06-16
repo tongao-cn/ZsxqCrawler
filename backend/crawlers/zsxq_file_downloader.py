@@ -194,6 +194,12 @@ class FileListHttpFailureResponseTarget(NamedTuple):
     max_retries: int
 
 
+class FileListRequestExceptionTarget(NamedTuple):
+    exc: Exception
+    attempt: int
+    max_retries: int
+
+
 class StealthHeaderSelection(NamedTuple):
     user_agent: str
     sec_ch_ua: str
@@ -964,7 +970,19 @@ class ZSXQFileDownloader:
         attempt: int,
         max_retries: int,
     ) -> bool:
-        request_exception = request_exception_plan(exc, attempt, max_retries)
+        return self._handle_file_list_request_exception_target(
+            FileListRequestExceptionTarget(exc, attempt, max_retries),
+        )
+
+    def _handle_file_list_request_exception_target(
+        self,
+        target: FileListRequestExceptionTarget,
+    ) -> bool:
+        request_exception = request_exception_plan(
+            target.exc,
+            target.attempt,
+            target.max_retries,
+        )
         for message in request_exception["messages"]:
             print(message)
         return request_exception["should_retry"]
@@ -1080,7 +1098,9 @@ class ZSXQFileDownloader:
                     return None
                     
             except Exception as e:
-                if self._handle_file_list_request_exception(e, attempt, max_retries):
+                if self._handle_file_list_request_exception_target(
+                    FileListRequestExceptionTarget(e, attempt, max_retries),
+                ):
                     continue
         
         print(retry_exhausted_message(max_retries))
