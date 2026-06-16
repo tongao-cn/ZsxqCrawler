@@ -419,6 +419,11 @@ class DownloadAttemptTarget(NamedTuple):
     file_target: DownloadFileTarget
 
 
+class DownloadResponseTarget(NamedTuple):
+    response: Any
+    file_target: DownloadFileTarget
+
+
 class DownloadRetryLoopAttemptTarget(NamedTuple):
     attempt: int
     download_retries: int
@@ -2020,17 +2025,26 @@ class ZSXQFileDownloader:
         response: Any,
         target: DownloadFileTarget,
     ) -> DownloadFileTarget:
+        return self._download_target_for_response_target(
+            DownloadResponseTarget(response, target),
+        )
+
+    def _download_target_for_response_target(
+        self,
+        target: DownloadResponseTarget,
+    ) -> DownloadFileTarget:
+        file_target = target.file_target
         filename_override = self._apply_response_filename_override_target(
             ResponseFilenameOverrideTarget(
-                target.file_name,
-                target.file_id,
-                response.headers,
+                file_target.file_name,
+                file_target.file_id,
+                target.response.headers,
             ),
         )
         if not filename_override:
-            return target._replace()
+            return file_target._replace()
 
-        return target._replace(
+        return file_target._replace(
             file_name=filename_override.file_name,
             safe_filename=filename_override.safe_filename,
             file_path=filename_override.file_path,
@@ -2063,9 +2077,8 @@ class ZSXQFileDownloader:
     ) -> DownloadAttemptResult:
         response_download_target = target
         try:
-            response_download_target = self._download_target_for_response(
-                response,
-                target,
+            response_download_target = self._download_target_for_response_target(
+                DownloadResponseTarget(response, target),
             )
 
             return self._download_attempt_result_for_response_status(
