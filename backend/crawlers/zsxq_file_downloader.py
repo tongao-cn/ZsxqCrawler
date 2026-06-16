@@ -176,6 +176,12 @@ class FileListResponseTarget(NamedTuple):
     max_retries: int
 
 
+class FileListOkResponseTarget(NamedTuple):
+    response: requests.Response
+    attempt: int
+    max_retries: int
+
+
 class StealthHeaderSelection(NamedTuple):
     user_agent: str
     sec_ch_ua: str
@@ -939,7 +945,19 @@ class ZSXQFileDownloader:
         attempt: int,
         max_retries: int,
     ) -> FileListResponseDecision:
-        json_parse = self._parse_api_json_response(response, attempt, max_retries)
+        return self._handle_file_list_ok_response_target(
+            FileListOkResponseTarget(response, attempt, max_retries),
+        )
+
+    def _handle_file_list_ok_response_target(
+        self,
+        target: FileListOkResponseTarget,
+    ) -> FileListResponseDecision:
+        json_parse = self._parse_api_json_response(
+            target.response,
+            target.attempt,
+            target.max_retries,
+        )
         if json_parse.should_retry:
             return FileListResponseDecision(None, True, False)
         data = json_parse.data
@@ -948,15 +966,15 @@ class ZSXQFileDownloader:
 
         if data.get('succeeded'):
             return FileListResponseDecision(
-                self._handle_file_list_success_response(data, attempt),
+                self._handle_file_list_success_response(data, target.attempt),
                 False,
                 False,
             )
 
         failure_class = self._handle_file_list_api_failure_response(
             data,
-            attempt,
-            max_retries,
+            target.attempt,
+            target.max_retries,
         )
         return self._file_list_api_failure_decision(failure_class)
 
@@ -977,10 +995,12 @@ class ZSXQFileDownloader:
         print(f"   📊 响应状态: {target.response.status_code}")
 
         if target.response.status_code == 200:
-            return self._handle_file_list_ok_response(
-                target.response,
-                target.attempt,
-                target.max_retries,
+            return self._handle_file_list_ok_response_target(
+                FileListOkResponseTarget(
+                    target.response,
+                    target.attempt,
+                    target.max_retries,
+                ),
             )
 
         http_failure_class = self._handle_file_list_http_failure_response(
