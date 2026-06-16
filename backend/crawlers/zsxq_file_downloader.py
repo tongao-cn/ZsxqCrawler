@@ -405,13 +405,37 @@ class ZSXQFileDownloader:
         self.cookie = self.clean_cookie(cookie)
         self.group_id = group_id
 
-        # 下载间隔控制参数
+        self._configure_download_intervals(
+            download_interval,
+            long_sleep_interval,
+            files_per_batch,
+            download_interval_min,
+            download_interval_max,
+            long_sleep_interval_min,
+            long_sleep_interval_max,
+        )
+        self.download_dir = self._resolve_download_dir(group_id, download_dir)
+
+        print(f"📁 群组 {group_id} 下载目录: {self.download_dir}")
+
+        self._initialize_runtime_state()
+        self._initialize_download_storage(group_id)
+
+    def _configure_download_intervals(
+        self,
+        download_interval: float,
+        long_sleep_interval: float,
+        files_per_batch: int,
+        download_interval_min: Optional[float],
+        download_interval_max: Optional[float],
+        long_sleep_interval_min: Optional[float],
+        long_sleep_interval_max: Optional[float],
+    ) -> None:
         self.download_interval = download_interval
         self.long_sleep_interval = long_sleep_interval
         self.files_per_batch = files_per_batch
         self.current_batch_count = 0  # 当前批次已下载文件数
 
-        # 随机间隔范围参数（如果提供了范围参数，则使用随机间隔）
         self.use_random_interval = download_interval_min is not None
         if self.use_random_interval:
             self.download_interval_min = download_interval_min
@@ -425,44 +449,37 @@ class ZSXQFileDownloader:
             self.long_sleep_interval_min = 180  # 长休眠最小值（3分钟）
             self.long_sleep_interval_max = 300  # 长休眠最大值（5分钟）
 
-        # 为每个群组创建专属的下载目录
+    def _resolve_download_dir(self, group_id: str, download_dir: str) -> str:
         if download_dir == "downloads":  # 默认目录
             from backend.core.db_path_manager import get_db_path_manager
             path_manager = get_db_path_manager()
             group_dir = path_manager.get_group_dir(group_id)
-            self.download_dir = os.path.join(group_dir, "downloads")
-        else:
-            # 如果指定了自定义目录，也在其下创建群组子目录
-            self.download_dir = os.path.join(download_dir, f"group_{group_id}")
+            return os.path.join(group_dir, "downloads")
+        return os.path.join(download_dir, f"group_{group_id}")
 
-        print(f"📁 群组 {group_id} 下载目录: {self.download_dir}")
+    def _initialize_runtime_state(self) -> None:
         self.base_url = "https://api.zsxq.com"
 
-        # 日志回调和停止检查函数
         self.log_callback = None
         self.stop_check_func = None
         self.risk_event_log_path = None
         self.stop_flag = False  # 本地停止标志
         self.last_download_url_error = None
 
-        # 反检测设置
         self.min_delay = 2.0  # 最小延迟（秒）
         self.max_delay = 5.0  # 最大延迟（秒）
         self.long_delay_interval = 5  # 每N个文件进行长休眠
 
-        # 统计
         self.request_count = 0
         self.download_count = 0
         self.debug_mode = False
 
-        # 创建session
+    def _initialize_download_storage(self, group_id: str) -> None:
         self.session = requests.Session()
 
-        # 确保下载目录存在
         os.makedirs(self.download_dir, exist_ok=True)
         self.log(f"📁 下载目录: {os.path.abspath(self.download_dir)}")
 
-        # 使用完整的文件数据库
         self.file_db = ZSXQFileDatabase(group_id)
         self.log(f"📊 完整文件存储初始化完成: PostgreSQL schema={CORE_SCHEMA}")
 

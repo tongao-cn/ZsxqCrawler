@@ -309,6 +309,16 @@ class EmptyShowDatabaseStatsFileDb:
         return []
 
 
+class FakeDownloaderPathManager:
+    def __init__(self, group_dir):
+        self.group_dir = group_dir
+        self.group_ids = []
+
+    def get_group_dir(self, group_id):
+        self.group_ids.append(group_id)
+        return self.group_dir
+
+
 class TimeDedupeFileDb:
     def __init__(self, latest_time, initial_files=10, final_files=11):
         self.cursor = self
@@ -2718,6 +2728,108 @@ class FileDownloaderTimeHelperTests(unittest.TestCase):
 
         self.assertTrue(crossed)
         self.assertEqual(datetime.datetime(2026, 5, 1, 9, 0), oldest)
+
+
+class FileDownloaderInitTests(unittest.TestCase):
+    def test_init_preserves_default_directory_intervals_and_storage_side_effects(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            group_dir = str(Path(temp_dir) / "group-511")
+            path_manager = FakeDownloaderPathManager(group_dir)
+            fake_db = object()
+            fake_session = object()
+            expected_dir = str(Path(group_dir) / "downloads")
+
+            with (
+                patch.object(ZSXQFileDownloader, "clean_cookie", return_value="cleaned-cookie") as clean_cookie,
+                patch("backend.core.db_path_manager.get_db_path_manager", return_value=path_manager),
+                patch("backend.crawlers.zsxq_file_downloader.ZSXQFileDatabase", return_value=fake_db) as file_db,
+                patch("backend.crawlers.zsxq_file_downloader.requests.Session", return_value=fake_session),
+                patch("backend.crawlers.zsxq_file_downloader.os.makedirs") as makedirs,
+                contextlib.redirect_stdout(io.StringIO()) as output,
+            ):
+                downloader = ZSXQFileDownloader(" raw-cookie ", "511")
+
+        clean_cookie.assert_called_once_with(" raw-cookie ")
+        file_db.assert_called_once_with("511")
+        makedirs.assert_called_once_with(expected_dir, exist_ok=True)
+        self.assertEqual(["511"], path_manager.group_ids)
+        self.assertEqual("cleaned-cookie", downloader.cookie)
+        self.assertEqual("511", downloader.group_id)
+        self.assertEqual(expected_dir, downloader.download_dir)
+        self.assertEqual(
+            (1.0, 60.0, 10),
+            (downloader.download_interval, downloader.long_sleep_interval, downloader.files_per_batch),
+        )
+        self.assertEqual(0, downloader.current_batch_count)
+        self.assertFalse(downloader.use_random_interval)
+        self.assertEqual((60, 180, 180, 300), (
+            downloader.download_interval_min,
+            downloader.download_interval_max,
+            downloader.long_sleep_interval_min,
+            downloader.long_sleep_interval_max,
+        ))
+        self.assertEqual("https://api.zsxq.com", downloader.base_url)
+        self.assertIsNone(downloader.log_callback)
+        self.assertIsNone(downloader.stop_check_func)
+        self.assertIsNone(downloader.risk_event_log_path)
+        self.assertFalse(downloader.stop_flag)
+        self.assertIsNone(downloader.last_download_url_error)
+        self.assertEqual((2.0, 5.0, 5), (downloader.min_delay, downloader.max_delay, downloader.long_delay_interval))
+        self.assertEqual(
+            (0, 0, False),
+            (downloader.request_count, downloader.download_count, downloader.debug_mode),
+        )
+        self.assertIs(fake_session, downloader.session)
+        self.assertIs(fake_db, downloader.file_db)
+        printed = output.getvalue()
+        self.assertIn(f"📁 群组 511 下载目录: {expected_dir}", printed)
+        self.assertIn(f"📁 下载目录: {Path(expected_dir).absolute()}", printed)
+        self.assertIn("📊 完整文件存储初始化完成: PostgreSQL schema=", printed)
+
+    def test_init_preserves_custom_directory_and_random_interval_values(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            custom_dir = str(Path(temp_dir) / "custom-downloads")
+            fake_db = object()
+            fake_session = object()
+            expected_dir = str(Path(custom_dir) / "group_group-1")
+
+            with (
+                patch.object(ZSXQFileDownloader, "clean_cookie", return_value="cleaned-cookie"),
+                patch("backend.core.db_path_manager.get_db_path_manager") as get_path_manager,
+                patch("backend.crawlers.zsxq_file_downloader.ZSXQFileDatabase", return_value=fake_db),
+                patch("backend.crawlers.zsxq_file_downloader.requests.Session", return_value=fake_session),
+                patch("backend.crawlers.zsxq_file_downloader.os.makedirs") as makedirs,
+                contextlib.redirect_stdout(io.StringIO()),
+            ):
+                downloader = ZSXQFileDownloader(
+                    "cookie",
+                    "group-1",
+                    download_dir=custom_dir,
+                    download_interval=2.5,
+                    long_sleep_interval=33.0,
+                    files_per_batch=4,
+                    download_interval_min=8,
+                    download_interval_max=9,
+                    long_sleep_interval_min=120,
+                    long_sleep_interval_max=240,
+                )
+
+        get_path_manager.assert_not_called()
+        makedirs.assert_called_once_with(expected_dir, exist_ok=True)
+        self.assertEqual(expected_dir, downloader.download_dir)
+        self.assertEqual(
+            (2.5, 33.0, 4),
+            (downloader.download_interval, downloader.long_sleep_interval, downloader.files_per_batch),
+        )
+        self.assertTrue(downloader.use_random_interval)
+        self.assertEqual((8, 9, 120, 240), (
+            downloader.download_interval_min,
+            downloader.download_interval_max,
+            downloader.long_sleep_interval_min,
+            downloader.long_sleep_interval_max,
+        ))
+        self.assertIs(fake_session, downloader.session)
+        self.assertIs(fake_db, downloader.file_db)
 
 
 class FileDownloaderFileDataHelperTests(unittest.TestCase):

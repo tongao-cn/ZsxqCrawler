@@ -26308,6 +26308,54 @@ Result:
 - Full backend unittest discovery passed in the current worktree: 1194 tests, 15 skipped.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-16 - P43 file downloader initialization helper extraction
+
+Changed:
+
+- Added characterization coverage for `ZSXQFileDownloader.__init__(...)` default group download
+  directory resolution, custom-directory grouping, fixed interval defaults, random interval
+  preservation, runtime default attributes, session creation, directory creation, and file database
+  initialization.
+- Extracted private `_configure_download_intervals(...)`, `_resolve_download_dir(...)`,
+  `_initialize_runtime_state(...)`, and `_initialize_download_storage(...)` helpers from
+  `__init__(...)`.
+- Kept the public constructor signature, argument order, print/log sequence, default directory
+  behavior, and storage side effects unchanged.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Cookie cleanup, group ID assignment, fixed/random interval semantics, default compatibility
+  interval values, default/custom download directory shape, path-manager usage, console output,
+  runtime flags, session construction, `os.makedirs(...)` call, file database creation, public
+  `ZSXQFileDownloader(...)` behavior, fallback/legacy behavior, error semantics, and configuration
+  semantics are unchanged.
+- The new helpers are private and do not create a public API surface.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderInitTests -v
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py
+uv run python scripts\scan_postgres_compat_debt.py
+uv run ruff check backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py --select F401,F841
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers -v
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- New initialization characterization tests passed against the pre-refactor behavior: 2 tests.
+- Initialization tests passed after helper extraction: 2 tests.
+- `py_compile` passed.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- ZSXQ file downloader helper tests passed: 218 tests.
+- Full backend unittest discovery passed in the current worktree: 1196 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:
