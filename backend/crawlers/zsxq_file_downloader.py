@@ -1703,9 +1703,8 @@ class ZSXQFileDownloader:
             )
 
         response = self._request_download_response(download_url)
-        return self._handle_download_response_target(
-            response,
-            file_target,
+        return self._handle_download_response_result_target(
+            DownloadResponseTarget(response, file_target),
         )
 
     def _prepare_download_file_target(
@@ -2093,10 +2092,19 @@ class ZSXQFileDownloader:
         response: Any,
         target: DownloadFileTarget,
     ) -> DownloadAttemptResult:
-        response_download_target = target
+        return self._handle_download_response_result_target(
+            DownloadResponseTarget(response, target),
+        )
+
+    def _handle_download_response_result_target(
+        self,
+        target: DownloadResponseTarget,
+    ) -> DownloadAttemptResult:
+        response = target.response
+        response_download_target = target.file_target
         try:
             response_download_target = self._download_target_for_response_target(
-                DownloadResponseTarget(response, target),
+                target,
             )
 
             return self._download_attempt_result_for_response_status_target(
