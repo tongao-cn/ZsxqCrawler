@@ -183,6 +183,11 @@ class DownloadUrlResponseDecision(NamedTuple):
     should_stop: bool
 
 
+class DownloadRetryWaitTarget(NamedTuple):
+    attempt: int
+    download_retries: int
+
+
 class DownloadFileTarget(NamedTuple):
     file_id: int
     file_name: str
@@ -1282,7 +1287,9 @@ class ZSXQFileDownloader:
         target: DownloadFileTarget,
     ) -> DownloadAttemptResult:
         if attempt > 0:
-            self._wait_before_download_retry(attempt, download_retries)
+            self._wait_before_download_retry_target(
+                DownloadRetryWaitTarget(attempt, download_retries),
+            )
 
         download_url = self._get_download_url_or_mark_unavailable(target.file_id)
         if not download_url:
@@ -1555,7 +1562,15 @@ class ZSXQFileDownloader:
         return DownloadFailureDetail(error_code, error_message)
 
     def _wait_before_download_retry(self, attempt: int, download_retries: int) -> None:
-        retry_delay, retry_message = download_retry_wait(attempt, download_retries)
+        self._wait_before_download_retry_target(
+            DownloadRetryWaitTarget(attempt, download_retries),
+        )
+
+    def _wait_before_download_retry_target(
+        self,
+        target: DownloadRetryWaitTarget,
+    ) -> None:
+        retry_delay, retry_message = download_retry_wait(target.attempt, target.download_retries)
         self.log(retry_message)
         time.sleep(retry_delay)
 

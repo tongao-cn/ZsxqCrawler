@@ -26946,6 +26946,51 @@ Result:
 - Full backend unittest discovery passed in the current worktree: 1196 tests, 15 skipped.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-16 - P57 download retry wait target handoff
+
+Changed:
+
+- Confirmed existing characterization coverage for direct retry wait delay/log behavior, public
+  `download_file(...)` retry wait log ordering and sleep delay, request-exception retry cleanup,
+  and retry-after-size-mismatch success.
+- Added private `DownloadRetryWaitTarget` to carry retry wait fields together.
+- Added private `_wait_before_download_retry_target(...)` and reused it from
+  `_run_download_attempt(...)`.
+- Kept `_wait_before_download_retry(...)` with its existing private signature as a compatibility
+  wrapper for tests and any internal direct callers.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Public `download_file(...)` inputs/outputs, retry count display, retry delay calculation, sleep
+  side effect, retry wait log text/order, request-exception cleanup, retry-after-mismatch behavior,
+  fallback/legacy behavior, error semantics, and configuration semantics are unchanged.
+- The old `_wait_before_download_retry(...)` private helper signature remains available.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_wait_before_download_retry_preserves_log_and_delay tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_download_file_preserves_retry_wait_log_and_delay tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_download_file_retries_request_exception_and_removes_partial_file tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_download_file_retries_after_size_mismatch_before_success -v
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py
+uv run python scripts\scan_postgres_compat_debt.py
+uv run ruff check backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py --select F401,F841
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- Existing focused retry-wait coverage passed before helper handoff: 4 tests.
+- Focused retry-wait tests passed after the helper handoff: 4 tests.
+- `py_compile` passed.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- ZSXQ file downloader helper tests passed: 218 tests.
+- Full backend unittest discovery passed in the current worktree: 1196 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:
