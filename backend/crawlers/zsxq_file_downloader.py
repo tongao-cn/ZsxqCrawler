@@ -208,6 +208,12 @@ class DownloadBodyTarget(NamedTuple):
     temp_path: str
 
 
+class DownloadBodyWriteTarget(NamedTuple):
+    temp_path: str
+    total_size: int
+    file_id: int
+
+
 class DownloadBodyFinalizationTarget(NamedTuple):
     expected_size: int
     temp_path: str
@@ -1340,20 +1346,33 @@ class ZSXQFileDownloader:
         total_size: int,
         file_id: int,
     ) -> Optional[int]:
+        return self._write_download_response_body_target(
+            response,
+            DownloadBodyWriteTarget(temp_path, total_size, file_id),
+        )
+
+    def _write_download_response_body_target(
+        self,
+        response: Any,
+        target: DownloadBodyWriteTarget,
+    ) -> Optional[int]:
         downloaded_size = 0
-        with open(temp_path, 'wb') as f:
+        with open(target.temp_path, 'wb') as f:
             for chunk in response.iter_content(chunk_size=8192):
                 if chunk:
                     f.write(chunk)
                     downloaded_size += len(chunk)
 
-                    progress_message = download_progress_message(downloaded_size, total_size)
+                    progress_message = download_progress_message(
+                        downloaded_size,
+                        target.total_size,
+                    )
                     if progress_message:
                         self.log(progress_message)
 
                     # 检查是否需要停止
                     if self.check_stop():
-                        self._handle_download_stop(file_id, temp_path)
+                        self._handle_download_stop(target.file_id, target.temp_path)
                         return None
 
         return downloaded_size
@@ -1547,11 +1566,13 @@ class ZSXQFileDownloader:
             target.file_path,
         )
 
-        downloaded_size = self._write_download_response_body(
+        downloaded_size = self._write_download_response_body_target(
             response,
-            body_target.temp_path,
-            body_target.total_size,
-            target.file_id,
+            DownloadBodyWriteTarget(
+                body_target.temp_path,
+                body_target.total_size,
+                target.file_id,
+            ),
         )
         return self._finalize_download_body_result_target(
             downloaded_size,
