@@ -2245,6 +2245,10 @@ class FileDownloaderTimeHelperTests(unittest.TestCase):
             },
             database_time_range_result(5, ("old", "new", 2, "ignored")),
         )
+        with self.assertRaises(IndexError):
+            database_time_range_result(5, ("old",))
+        with self.assertRaises(IndexError):
+            database_time_range_result(5, ("old", "new"))
 
     def test_time_collection_mode_preserves_dedupe_and_force_refresh_rules(self):
         default_mode = time_collection_mode("by_create_time", False, None)

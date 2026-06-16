@@ -771,14 +771,16 @@ def database_time_range_query(query_group_id: Any) -> tuple[str, tuple[Any, ...]
     )
 
 
+def _database_time_range_row(result: Any) -> DatabaseTimeRangeRow:
+    if not result:
+        return DatabaseTimeRangeRow(None, None, 0)
+    return DatabaseTimeRangeRow(result[0], result[1], result[2])
+
+
 def database_time_range_result(total_files: Any, result: Any) -> Dict[str, Any]:
     if total_files == 0:
         return {"has_data": False, "total_files": 0}
-    time_range = (
-        DatabaseTimeRangeRow(result[0], result[1], result[2])
-        if result
-        else DatabaseTimeRangeRow(None, None, 0)
-    )
+    time_range = _database_time_range_row(result)
     return {
         "has_data": True,
         "total_files": total_files,
