@@ -451,6 +451,12 @@ class DownloadIntervalValues(NamedTuple):
     long_sleep_interval: float
 
 
+class DownloadIntervalPlanTarget(NamedTuple):
+    current_batch_count: int
+    files_per_batch: int
+    interval_values: DownloadIntervalValues
+
+
 class FileCollectionPage(NamedTuple):
     data: Dict[str, Any]
     files: list[Dict[str, Any]]
@@ -2350,9 +2356,22 @@ class ZSXQFileDownloader:
         self,
         interval_values: DownloadIntervalValues,
     ) -> None:
+        self._apply_download_interval_plan_target(
+            DownloadIntervalPlanTarget(
+                self.current_batch_count,
+                self.files_per_batch,
+                interval_values,
+            ),
+        )
+
+    def _apply_download_interval_plan_target(
+        self,
+        target: DownloadIntervalPlanTarget,
+    ) -> None:
+        interval_values = target.interval_values
         delay, messages, should_reset_batch = download_interval_plan(
-            self.current_batch_count,
-            self.files_per_batch,
+            target.current_batch_count,
+            target.files_per_batch,
             interval_values.download_interval,
             interval_values.long_sleep_interval,
         )
@@ -2367,7 +2386,13 @@ class ZSXQFileDownloader:
 
     def _apply_download_intervals(self):
         """应用下载间隔控制"""
-        self._apply_download_interval_plan(self._download_interval_values())
+        self._apply_download_interval_plan_target(
+            DownloadIntervalPlanTarget(
+                self.current_batch_count,
+                self.files_per_batch,
+                self._download_interval_values(),
+            ),
+        )
 
     def _download_batch_file_item(
         self,
