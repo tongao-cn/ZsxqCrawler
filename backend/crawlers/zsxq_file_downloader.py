@@ -877,6 +877,18 @@ class ZSXQFileDownloader:
             print(message)
         return request_exception["should_retry"]
 
+    def _download_url_api_failure_decision(
+        self,
+        failure_class: str,
+    ) -> DownloadUrlResponseDecision:
+        if failure_class == API_FAILURE_PERMISSION_DENIED_1030:
+            return DownloadUrlResponseDecision(None, False, True)
+        if failure_class == API_FAILURE_RETRY:
+            return DownloadUrlResponseDecision(None, True, False)
+        if failure_class == API_FAILURE_NON_RETRY:
+            return DownloadUrlResponseDecision(None, False, True)
+        return DownloadUrlResponseDecision(None, False, False)
+
     def _handle_download_url_ok_response(
         self,
         response: Any,
@@ -911,13 +923,7 @@ class ZSXQFileDownloader:
             response.status_code,
         )
 
-        if failure_class == API_FAILURE_PERMISSION_DENIED_1030:
-            return DownloadUrlResponseDecision(None, False, True)
-        if failure_class == API_FAILURE_RETRY:
-            return DownloadUrlResponseDecision(None, True, False)
-        if failure_class == API_FAILURE_NON_RETRY:
-            return DownloadUrlResponseDecision(None, False, True)
-        return DownloadUrlResponseDecision(None, False, False)
+        return self._download_url_api_failure_decision(failure_class)
 
     def _handle_download_url_response(
         self,
