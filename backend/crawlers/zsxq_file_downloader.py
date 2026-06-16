@@ -1324,6 +1324,30 @@ class ZSXQFileDownloader:
             stream=True,
         )
 
+    def _successful_download_attempt_result(
+        self,
+        response: Any,
+        file_id: int,
+        file_name: str,
+        file_size: int,
+        safe_filename: str,
+        file_path: str,
+    ) -> DownloadAttemptResult:
+        body_result = self._handle_successful_download_response(
+            response,
+            file_id,
+            file_size,
+            safe_filename,
+            file_path,
+        )
+        return DownloadAttemptResult(
+            body_result.success_result,
+            body_result.failure_detail,
+            file_name,
+            safe_filename,
+            file_path,
+        )
+
     def _handle_download_response(
         self,
         response,
@@ -1346,17 +1370,11 @@ class ZSXQFileDownloader:
             file_path = response_target.file_path
 
             if response.status_code == 200:
-                body_result = self._handle_successful_download_response(
+                return self._successful_download_attempt_result(
                     response,
                     file_id,
-                    file_size,
-                    safe_filename,
-                    file_path,
-                )
-                return DownloadAttemptResult(
-                    body_result.success_result,
-                    body_result.failure_detail,
                     file_name,
+                    file_size,
                     safe_filename,
                     file_path,
                 )

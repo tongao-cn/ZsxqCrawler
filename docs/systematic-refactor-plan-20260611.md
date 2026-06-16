@@ -25124,6 +25124,52 @@ Result:
 - Full backend unittest discovery passed in the current worktree: 1192 tests, 15 skipped.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-16 - P18 successful download attempt result helper extraction
+
+Changed:
+
+- Confirmed existing characterization coverage for download response filename override, HTTP
+  failure handling, successful body download, body completion side effects, stop handling, and
+  overridden partial-file cleanup after body exceptions.
+- Extracted internal `ZSXQFileDownloader._successful_download_attempt_result(...)` from the
+  success branch of `_handle_download_response(...)`.
+- Kept response-target resolution, success body handling, exception boundary, partial-file cleanup,
+  HTTP failure handling, retry result shape, and returned `DownloadAttemptResult` fields unchanged.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- `download_file(...)` and `_handle_download_response(...)` public-facing behavior, retry/fallback
+  behavior, error semantics, logging, filesystem side effects, and status updates are unchanged.
+- The new helper is internal and does not create a new public API surface.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_handle_download_response_preserves_override_http_failure_and_success_paths tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_handle_successful_download_response_preserves_completion_retry_and_stop_paths tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_download_file_applies_response_filename_override_before_http_failure tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_download_file_cleans_overridden_partial_file_after_body_exception -v
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_handle_download_response_preserves_override_http_failure_and_success_paths tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_handle_successful_download_response_preserves_completion_retry_and_stop_paths tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_download_file_applies_response_filename_override_before_http_failure tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_download_file_cleans_overridden_partial_file_after_body_exception -v
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run ruff check backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py --select F401,F841
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers -v
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- Existing characterization coverage passed before helper extraction: 4 focused tests.
+- `py_compile` passed.
+- Focused download response tests passed after helper extraction: 4 tests.
+- File downloader download tests passed: 54 tests.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- ZSXQ file downloader helper tests passed: 214 tests.
+- Full backend unittest discovery passed in the current worktree: 1192 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:
