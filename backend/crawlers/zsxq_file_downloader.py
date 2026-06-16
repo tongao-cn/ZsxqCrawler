@@ -497,6 +497,12 @@ class BatchDownloadPageRunTarget(NamedTuple):
     stats: Dict[str, int]
 
 
+class BatchDownloadLoopTarget(NamedTuple):
+    stats: Dict[str, int]
+    max_files: Optional[int]
+    start_index: Optional[str]
+
+
 class BatchDownloadNextIndexTarget(NamedTuple):
     next_index: Optional[str]
     downloaded_in_batch: int
@@ -2631,9 +2637,17 @@ class ZSXQFileDownloader:
         max_files: Optional[int],
         start_index: Optional[str],
     ) -> None:
-        step = BatchDownloadLoopStep(0, start_index)
+        self._run_batch_download_loop_target(
+            BatchDownloadLoopTarget(stats, max_files, start_index),
+        )
 
-        while max_files is None or step.downloaded_in_batch < max_files:
+    def _run_batch_download_loop_target(
+        self,
+        target: BatchDownloadLoopTarget,
+    ) -> None:
+        step = BatchDownloadLoopStep(0, target.start_index)
+
+        while target.max_files is None or step.downloaded_in_batch < target.max_files:
             # 检查是否需要停止
             if self.check_stop():
                 self.log(batch_download_loop_stop_message())
@@ -2642,8 +2656,8 @@ class ZSXQFileDownloader:
             next_step = self._run_batch_download_page_target(
                 BatchDownloadPageRunTarget(
                     step,
-                    max_files,
-                    stats,
+                    target.max_files,
+                    target.stats,
                 ),
             )
             if next_step is None:
@@ -2664,7 +2678,9 @@ class ZSXQFileDownloader:
             return download_result_stats()
 
         stats = download_result_stats()
-        self._run_batch_download_loop(stats, max_files, start_index)
+        self._run_batch_download_loop_target(
+            BatchDownloadLoopTarget(stats, max_files, start_index),
+        )
 
         for message in batch_download_completion_messages(stats):
             self.log(message)

@@ -1891,6 +1891,82 @@ class FileDownloaderBatchDownloadTests(unittest.TestCase):
         self.assertEqual(3, next_targets[0].downloaded_in_batch)
         self.assertEqual(4, next_targets[0].max_files)
 
+    def test_run_batch_download_loop_preserves_stop_page_handoff_and_terminal_paths(self):
+        stats = {"total_files": 0, "downloaded": 0, "skipped": 0, "failed": 0}
+        stop_downloader = object.__new__(ZSXQFileDownloader)
+        stop_downloader.logs = []
+        stop_downloader.log = stop_downloader.logs.append
+        stop_downloader.check_stop = lambda: True
+        stop_calls = []
+        stop_downloader._run_batch_download_page_target = lambda target: stop_calls.append(target)
+
+        ZSXQFileDownloader._run_batch_download_loop(
+            stop_downloader,
+            stats,
+            max_files=3,
+            start_index="unused",
+        )
+
+        self.assertEqual(["🛑 批量下载任务被停止"], stop_downloader.logs)
+        self.assertEqual([], stop_calls)
+
+        page_downloader = object.__new__(ZSXQFileDownloader)
+        page_downloader.logs = []
+        page_downloader.log = page_downloader.logs.append
+        page_downloader.check_stop = lambda: False
+        page_targets = []
+        page_results = [
+            SimpleNamespace(downloaded_in_batch=1, next_index="next-page"),
+            SimpleNamespace(downloaded_in_batch=2, next_index=None),
+        ]
+
+        def run_page(target):
+            page_targets.append(target)
+            return page_results.pop(0)
+
+        page_downloader._run_batch_download_page_target = run_page
+
+        ZSXQFileDownloader._run_batch_download_loop(
+            page_downloader,
+            stats,
+            max_files=4,
+            start_index="start",
+        )
+
+        self.assertEqual([], page_downloader.logs)
+        self.assertEqual(2, len(page_targets))
+        self.assertEqual(0, page_targets[0].step.downloaded_in_batch)
+        self.assertEqual("start", page_targets[0].step.next_index)
+        self.assertEqual(4, page_targets[0].max_files)
+        self.assertIs(stats, page_targets[0].stats)
+        self.assertEqual(1, page_targets[1].step.downloaded_in_batch)
+        self.assertEqual("next-page", page_targets[1].step.next_index)
+        self.assertEqual(4, page_targets[1].max_files)
+        self.assertIs(stats, page_targets[1].stats)
+
+        terminal_downloader = object.__new__(ZSXQFileDownloader)
+        terminal_downloader.logs = []
+        terminal_downloader.log = terminal_downloader.logs.append
+        terminal_downloader.check_stop = lambda: False
+        terminal_targets = []
+        terminal_downloader._run_batch_download_page_target = (
+            lambda target: terminal_targets.append(target) or None
+        )
+
+        ZSXQFileDownloader._run_batch_download_loop(
+            terminal_downloader,
+            stats,
+            max_files=None,
+            start_index="terminal",
+        )
+
+        self.assertEqual([], terminal_downloader.logs)
+        self.assertEqual(1, len(terminal_targets))
+        self.assertEqual(0, terminal_targets[0].step.downloaded_in_batch)
+        self.assertEqual("terminal", terminal_targets[0].step.next_index)
+        self.assertIsNone(terminal_targets[0].max_files)
+        self.assertIs(stats, terminal_targets[0].stats)
+
     def test_download_files_batch_stops_page_after_success_limit(self):
         files = [
             {"file": {"id": 101, "name": "first.pdf"}},
