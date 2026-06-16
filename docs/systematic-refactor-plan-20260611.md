@@ -26761,6 +26761,51 @@ Result:
 - Full backend unittest discovery passed in the current worktree: 1196 tests, 15 skipped.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-16 - P53 download exception target handoff
+
+Changed:
+
+- Confirmed existing characterization coverage for direct download-exception detail/log/cleanup,
+  body exception retry cleanup, overridden-filename partial cleanup, and request exception retry
+  cleanup.
+- Added private `DownloadExceptionTarget` to carry exception cleanup fields together.
+- Added private `_record_download_exception_target(...)` and reused it from retry-loop exception
+  handling and response handling.
+- Kept `_record_download_exception(...)` with its existing private signature as a compatibility
+  wrapper for tests and any internal direct callers.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Public `download_file(...)` inputs/outputs, `download_exception` error code, exception-string
+  error message, exception log text, partial-file cleanup, overridden filename cleanup,
+  fallback/legacy behavior, error semantics, and configuration semantics are unchanged.
+- The old `_record_download_exception(...)` private helper signature remains available.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_record_download_exception_preserves_error_detail_log_and_cleanup tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_download_file_cleans_partial_file_after_body_exception_retries tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_download_file_cleans_overridden_partial_file_after_body_exception tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_download_file_retries_request_exception_and_removes_partial_file -v
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py
+uv run python scripts\scan_postgres_compat_debt.py
+uv run ruff check backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py --select F401,F841
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- Existing focused exception-path coverage passed before helper handoff: 4 tests.
+- Focused exception-path tests passed after the helper handoff: 4 tests.
+- `py_compile` passed.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- ZSXQ file downloader helper tests passed: 218 tests.
+- Full backend unittest discovery passed in the current worktree: 1196 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:

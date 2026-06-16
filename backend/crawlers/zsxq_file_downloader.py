@@ -208,6 +208,11 @@ class DownloadFailureDetail(NamedTuple):
     error_message: str
 
 
+class DownloadExceptionTarget(NamedTuple):
+    exc: Exception
+    file_path: str
+
+
 class DownloadFinalFailureTarget(NamedTuple):
     file_id: int
     download_retries: int
@@ -1246,7 +1251,9 @@ class ZSXQFileDownloader:
         exc: Exception,
         retry_state: DownloadRetryState,
     ) -> DownloadRetryState:
-        failure_detail = self._record_download_exception(exc, retry_state.file_path)
+        failure_detail = self._record_download_exception_target(
+            DownloadExceptionTarget(exc, retry_state.file_path),
+        )
         return retry_state._replace(
             last_error_code=failure_detail.error_code,
             last_error=failure_detail.error_message,
@@ -1494,9 +1501,15 @@ class ZSXQFileDownloader:
         return DownloadFailureDetail(error_code, error_message)
 
     def _record_download_exception(self, exc: Exception, file_path: str) -> DownloadFailureDetail:
-        error_code, error_message = download_exception_detail(exc)
-        self.log(f"   ❌ 下载异常: {exc}")
-        temp_path = partial_download_path(file_path)
+        return self._record_download_exception_target(DownloadExceptionTarget(exc, file_path))
+
+    def _record_download_exception_target(
+        self,
+        target: DownloadExceptionTarget,
+    ) -> DownloadFailureDetail:
+        error_code, error_message = download_exception_detail(target.exc)
+        self.log(f"   ❌ 下载异常: {target.exc}")
+        temp_path = partial_download_path(target.file_path)
         if remove_partial_download(temp_path):
             self.log(f"   🗑️ 删除不完整文件")
         return DownloadFailureDetail(error_code, error_message)
@@ -1607,7 +1620,12 @@ class ZSXQFileDownloader:
                 response_download_target,
             )
         except Exception as exc:
-            failure_detail = self._record_download_exception(exc, response_download_target.file_path)
+            failure_detail = self._record_download_exception_target(
+                DownloadExceptionTarget(
+                    exc,
+                    response_download_target.file_path,
+                ),
+            )
         return DownloadAttemptResult(
             None,
             failure_detail,
