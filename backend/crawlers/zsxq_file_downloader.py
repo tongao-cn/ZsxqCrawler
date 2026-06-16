@@ -1578,14 +1578,13 @@ class ZSXQFileDownloader:
 
     def _apply_download_interval_plan(
         self,
-        download_interval: float,
-        long_sleep_interval: float,
+        interval_values: DownloadIntervalValues,
     ) -> None:
         delay, messages, should_reset_batch = download_interval_plan(
             self.current_batch_count,
             self.files_per_batch,
-            download_interval,
-            long_sleep_interval,
+            interval_values.download_interval,
+            interval_values.long_sleep_interval,
         )
         if delay is None:
             return
@@ -1598,11 +1597,7 @@ class ZSXQFileDownloader:
 
     def _apply_download_intervals(self):
         """应用下载间隔控制"""
-        interval_values = self._download_interval_values()
-        self._apply_download_interval_plan(
-            interval_values.download_interval,
-            interval_values.long_sleep_interval,
-        )
+        self._apply_download_interval_plan(self._download_interval_values())
 
     def _download_batch_file_item(
         self,

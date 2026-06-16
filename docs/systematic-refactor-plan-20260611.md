@@ -26129,6 +26129,50 @@ Result:
 - Full backend unittest discovery passed in the current worktree: 1192 tests, 15 skipped.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-16 - P39 download interval values handoff
+
+Changed:
+
+- Confirmed `_apply_download_interval_plan(...)` has no direct test or cross-module callers; it is
+  only invoked by `_apply_download_intervals()`.
+- Changed `_apply_download_interval_plan(...)` to accept the existing `DownloadIntervalValues`
+  bundle instead of unpacking it into two scalar interval parameters and passing them back together.
+- Kept `_download_interval_values()` and `_apply_download_intervals()` behavior intact, including
+  random interval selection, long-sleep branch selection, sleep calls, batch-count reset, and log
+  order.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Public `download_file(...)` behavior, download interval delays, random interval bounds,
+  long-sleep behavior, batch counter reset, and logs are unchanged.
+- The signature change is limited to a private helper with no direct external references.
+
+Verification:
+
+```powershell
+rg -n "_download_interval_values|_apply_download_interval_plan|_apply_download_intervals|DownloadIntervalValues|download_interval_plan" tests\test_zsxq_file_downloader_helpers.py backend\crawlers\zsxq_file_downloader.py backend\crawlers\zsxq_file_downloader_helpers.py
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests -v
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py
+uv run python scripts\scan_postgres_compat_debt.py
+uv run ruff check backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py --select F401,F841
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers -v
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- Existing download characterization coverage passed before interval handoff: 54 tests.
+- `py_compile` passed.
+- Download tests passed after interval handoff: 54 tests.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- ZSXQ file downloader helper tests passed: 214 tests.
+- Full backend unittest discovery passed in the current worktree: 1192 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:
