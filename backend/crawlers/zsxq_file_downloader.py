@@ -2280,6 +2280,33 @@ class ZSXQFileDownloader:
 
         return False
 
+    def _run_time_collection_after_initial_stop(
+        self,
+        start_time: Optional[str],
+        sort: str,
+        enable_time_dedupe: bool,
+        stop_before_time: Optional[datetime.datetime],
+    ) -> Dict[str, int]:
+        database_state = self._load_time_collection_database_state(
+            enable_time_dedupe,
+        )
+
+        total_imported_stats = empty_import_stats()
+        page_count = self._run_time_collection_loop(
+            start_time,
+            sort,
+            enable_time_dedupe,
+            database_state.db_latest_time,
+            total_imported_stats,
+            stop_before_time,
+        )
+
+        return self._finalize_time_collection_result(
+            database_state.initial_files,
+            total_imported_stats,
+            page_count,
+        )
+
     def collect_files_by_time(
         self,
         sort: str = "by_create_time",
@@ -2300,24 +2327,11 @@ class ZSXQFileDownloader:
             return {'total_files': 0, 'new_files': 0}
 
         # 使用完整数据库的统计信息
-        database_state = self._load_time_collection_database_state(
-            enable_time_dedupe,
-        )
-        
-        total_imported_stats = empty_import_stats()
-        page_count = self._run_time_collection_loop(
+        return self._run_time_collection_after_initial_stop(
             start_time,
             sort,
             enable_time_dedupe,
-            database_state.db_latest_time,
-            total_imported_stats,
             stop_before_time,
-        )
-
-        return self._finalize_time_collection_result(
-            database_state.initial_files,
-            total_imported_stats,
-            page_count,
         )
     
     def collect_incremental_files(self) -> Dict[str, int]:
