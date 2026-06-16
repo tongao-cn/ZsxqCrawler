@@ -202,6 +202,12 @@ class DownloadFailureDetail(NamedTuple):
     error_message: str
 
 
+class DownloadBodyPreparationTarget(NamedTuple):
+    response_headers: Dict[str, Any]
+    file_size: int
+    file_path: str
+
+
 class DownloadBodyTarget(NamedTuple):
     total_size: int
     expected_size: int
@@ -1530,9 +1536,21 @@ class ZSXQFileDownloader:
         file_size: int,
         file_path: str,
     ) -> DownloadBodyTarget:
-        total_size = download_total_size(response_headers)
-        expected_size = download_expected_size(file_size, total_size)
-        temp_path = partial_download_path(file_path)
+        return self._prepare_download_body_target_from_target(
+            DownloadBodyPreparationTarget(
+                response_headers,
+                file_size,
+                file_path,
+            )
+        )
+
+    def _prepare_download_body_target_from_target(
+        self,
+        target: DownloadBodyPreparationTarget,
+    ) -> DownloadBodyTarget:
+        total_size = download_total_size(target.response_headers)
+        expected_size = download_expected_size(target.file_size, total_size)
+        temp_path = partial_download_path(target.file_path)
         remove_partial_download(temp_path)
         return DownloadBodyTarget(total_size, expected_size, temp_path)
 
@@ -1560,10 +1578,12 @@ class ZSXQFileDownloader:
         response: Any,
         target: DownloadFileTarget,
     ) -> DownloadBodyResult:
-        body_target = self._prepare_download_body_target(
-            response.headers,
-            target.file_size,
-            target.file_path,
+        body_target = self._prepare_download_body_target_from_target(
+            DownloadBodyPreparationTarget(
+                response.headers,
+                target.file_size,
+                target.file_path,
+            ),
         )
 
         downloaded_size = self._write_download_response_body_target(
