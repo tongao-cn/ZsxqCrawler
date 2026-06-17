@@ -26,6 +26,7 @@ from backend.crawlers.zsxq_file_downloader import (
     DownloadFinalFailureTarget,
     DownloadFileTarget,
     DownloadHttpFailureTarget,
+    DownloadIntervalValues,
     DownloadResponseTarget,
     DownloadRetryDecision,
     DownloadRetryLoopAttemptTarget,
@@ -9368,6 +9369,24 @@ class FileDownloaderDownloadTests(unittest.TestCase):
             ],
             calls,
         )
+
+    def test_download_interval_values_preserves_random_long_sleep_priority(self):
+        downloader = object.__new__(ZSXQFileDownloader)
+        downloader.current_batch_count = 10
+        downloader.files_per_batch = 10
+        downloader.download_interval = 1
+        downloader.long_sleep_interval = 60
+        downloader.use_random_interval = True
+        downloader.download_interval_min = 8
+        downloader.download_interval_max = 20
+        downloader.long_sleep_interval_min = 300
+        downloader.long_sleep_interval_max = 900
+
+        with patch("backend.crawlers.zsxq_file_downloader.random.uniform", return_value=480.0) as uniform:
+            values = ZSXQFileDownloader._download_interval_values(downloader)
+
+        uniform.assert_called_once_with(300, 900)
+        self.assertEqual(DownloadIntervalValues(1, 480.0), values)
 
     def test_apply_download_intervals_preserves_long_sleep_side_effects(self):
         downloader = object.__new__(ZSXQFileDownloader)

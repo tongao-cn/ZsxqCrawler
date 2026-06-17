@@ -3196,20 +3196,34 @@ class ZSXQFileDownloader:
     def _download_interval_values(self) -> DownloadIntervalValues:
         download_interval = self.download_interval
         long_sleep_interval = self.long_sleep_interval
-        if getattr(self, "use_random_interval", False):
-            should_long_sleep = self.current_batch_count >= self.files_per_batch
-            if (
-                should_long_sleep
-                and self.long_sleep_interval_min is not None
-                and self.long_sleep_interval_max is not None
-            ):
-                long_sleep_interval = random.uniform(
-                    self.long_sleep_interval_min,
-                    self.long_sleep_interval_max,
-                )
-            elif self.download_interval_min is not None and self.download_interval_max is not None:
-                download_interval = random.uniform(self.download_interval_min, self.download_interval_max)
+        if self._should_use_random_interval():
+            if self._should_use_random_long_sleep_interval():
+                long_sleep_interval = self._random_long_sleep_interval()
+            elif self._has_random_download_interval_range():
+                download_interval = self._random_download_interval()
         return DownloadIntervalValues(download_interval, long_sleep_interval)
+
+    def _should_use_random_interval(self) -> bool:
+        return bool(getattr(self, "use_random_interval", False))
+
+    def _should_use_random_long_sleep_interval(self) -> bool:
+        return (
+            self.current_batch_count >= self.files_per_batch
+            and self.long_sleep_interval_min is not None
+            and self.long_sleep_interval_max is not None
+        )
+
+    def _has_random_download_interval_range(self) -> bool:
+        return self.download_interval_min is not None and self.download_interval_max is not None
+
+    def _random_long_sleep_interval(self) -> float:
+        return random.uniform(
+            self.long_sleep_interval_min,
+            self.long_sleep_interval_max,
+        )
+
+    def _random_download_interval(self) -> float:
+        return random.uniform(self.download_interval_min, self.download_interval_max)
 
     def _apply_download_interval_plan(
         self,

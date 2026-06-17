@@ -32249,6 +32249,52 @@ Result:
 - Full backend unittest discovery passed in the current worktree: 1317 tests, 15 skipped.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-17 - P171 isolate randomized download interval selection
+
+Changed:
+
+- Added characterization coverage for `_download_interval_values(...)` preserving random
+  long-sleep priority at a batch boundary.
+- Extracted `_should_use_random_interval(...)`, `_should_use_random_long_sleep_interval(...)`,
+  `_has_random_download_interval_range(...)`, `_random_long_sleep_interval(...)`, and
+  `_random_download_interval(...)` from `_download_interval_values(...)`.
+- Kept fixed interval defaults, random download interval range selection, random long-sleep range
+  selection, branch priority, and `random.uniform(...)` call ranges unchanged.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- At a batch boundary with both random ranges configured, long-sleep randomization still wins over
+  normal download interval randomization and still uses the configured long-sleep range.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_download_interval_values_preserves_random_long_sleep_priority -v
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_download_interval_values_preserves_random_long_sleep_priority tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_apply_download_intervals_preserves_long_sleep_side_effects tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_apply_download_intervals_uses_random_interval_range tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_apply_download_intervals_uses_random_long_sleep_range_at_batch_boundary tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_complete_successful_download_preserves_side_effect_order tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_complete_successful_download_target_preserves_side_effect_order -v
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run ruff check backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py --select F401,F841
+git diff --check
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- New random long-sleep priority characterization test passed before helper extraction: 1 test.
+- Focused interval and successful completion side-effect tests passed after helper extraction: 6
+  tests.
+- `py_compile` passed.
+- ZSXQ file downloader helper tests passed: 334 tests.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- `git diff --check` passed; Git only reported existing LF-to-CRLF working-copy warnings.
+- Full backend unittest discovery passed in the current worktree: 1318 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:
