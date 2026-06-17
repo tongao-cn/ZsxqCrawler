@@ -1276,6 +1276,13 @@ class ZSXQFileDownloader:
             return FileListResponseDecision(None, False, True)
         return FileListResponseDecision(None, False, False)
 
+    def _file_list_http_failure_decision(self, failure_class: str) -> FileListResponseDecision:
+        if failure_class == HTTP_FAILURE_RETRY:
+            return FileListResponseDecision(None, True, False)
+        if failure_class == HTTP_FAILURE_NON_RETRY:
+            return FileListResponseDecision(None, False, True)
+        return FileListResponseDecision(None, False, False)
+
     def _handle_file_list_ok_response(
         self,
         response: requests.Response,
@@ -1349,11 +1356,7 @@ class ZSXQFileDownloader:
                 target.max_retries,
             ),
         )
-        if http_failure_class == HTTP_FAILURE_RETRY:
-            return FileListResponseDecision(None, True, False)
-        if http_failure_class == HTTP_FAILURE_NON_RETRY:
-            return FileListResponseDecision(None, False, True)
-        return FileListResponseDecision(None, False, False)
+        return self._file_list_http_failure_decision(http_failure_class)
 
     def fetch_file_list(self, count: int = 20, index: Optional[str] = None, sort: str = "by_download_count") -> Optional[Dict[str, Any]]:
         """获取文件列表（带重试机制）"""

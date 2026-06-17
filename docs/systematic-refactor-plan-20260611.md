@@ -29861,6 +29861,54 @@ Result:
 - Full backend unittest discovery passed in the current worktree: 1237 tests, 15 skipped.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-17 - P119 file-list HTTP failure decision helper extraction
+
+Changed:
+
+- Added characterization coverage for `_file_list_api_failure_decision()`, locking retry, non-retry
+  stop, permission-denied stop, and exhausted/fallback decision semantics.
+- Added characterization coverage for `_handle_file_list_response()` HTTP failure decisions,
+  locking retry, stop, and exhausted/fallback behavior before changing production code.
+- Added private `_file_list_http_failure_decision(...)` to mirror the existing API failure decision
+  helper.
+- Reused `_file_list_http_failure_decision(...)` from `_handle_file_list_response_target(...)`.
+- Kept response handler signature, status logging, HTTP failure planning, retry/stop flags, and
+  exhausted/fallback behavior unchanged.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Existing HTTP failure retry/stop decision behavior is preserved.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderRetryHelperTests.test_file_list_api_failure_decision_preserves_retry_stop_and_fallbacks tests.test_zsxq_file_downloader_helpers.FileDownloaderRetryHelperTests.test_handle_file_list_response_preserves_http_failure_decisions -v
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderRetryHelperTests -v
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py
+uv run python scripts\scan_postgres_compat_debt.py
+uv run ruff check backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py --select F401,F841
+git diff --check
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- New file-list API/HTTP failure decision characterization tests passed before production helper
+  extraction: 2 tests.
+- The same focused tests passed after production helper extraction: 2 tests.
+- Retry helper tests passed after helper extraction: 48 tests.
+- `py_compile` passed.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- `git diff --check` passed; Git only reported existing LF-to-CRLF working-copy warnings.
+- ZSXQ file downloader helper tests passed: 261 tests.
+- Full backend unittest discovery passed in the current worktree: 1239 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:

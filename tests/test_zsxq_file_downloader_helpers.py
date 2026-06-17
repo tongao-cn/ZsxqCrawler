@@ -4421,6 +4421,76 @@ class FileDownloaderRetryHelperTests(unittest.TestCase):
         self.assertFalse(should_retry_http_status(403, 0, 2))
         self.assertFalse(should_retry_http_status(429, 1, 2))
 
+    def test_file_list_api_failure_decision_preserves_retry_stop_and_fallbacks(self):
+        downloader = object.__new__(ZSXQFileDownloader)
+
+        retry_decision = ZSXQFileDownloader._file_list_api_failure_decision(
+            downloader,
+            API_FAILURE_RETRY,
+        )
+        self.assertIsNone(retry_decision.result)
+        self.assertTrue(retry_decision.should_retry)
+        self.assertFalse(retry_decision.should_stop)
+
+        non_retry_decision = ZSXQFileDownloader._file_list_api_failure_decision(
+            downloader,
+            API_FAILURE_NON_RETRY,
+        )
+        self.assertIsNone(non_retry_decision.result)
+        self.assertFalse(non_retry_decision.should_retry)
+        self.assertTrue(non_retry_decision.should_stop)
+
+        permission_denied_decision = ZSXQFileDownloader._file_list_api_failure_decision(
+            downloader,
+            API_FAILURE_PERMISSION_DENIED_1030,
+        )
+        self.assertFalse(permission_denied_decision.should_retry)
+        self.assertTrue(permission_denied_decision.should_stop)
+
+        exhausted_decision = ZSXQFileDownloader._file_list_api_failure_decision(
+            downloader,
+            API_FAILURE_RETRY_EXHAUSTED,
+        )
+        self.assertIsNone(exhausted_decision.result)
+        self.assertFalse(exhausted_decision.should_retry)
+        self.assertFalse(exhausted_decision.should_stop)
+
+    def test_handle_file_list_response_preserves_http_failure_decisions(self):
+        downloader = object.__new__(ZSXQFileDownloader)
+
+        with contextlib.redirect_stdout(io.StringIO()):
+            retry_decision = ZSXQFileDownloader._handle_file_list_response(
+                downloader,
+                FakeHttpDownloadUrlResponse(500, "temporary outage"),
+                0,
+                2,
+            )
+        self.assertIsNone(retry_decision.result)
+        self.assertTrue(retry_decision.should_retry)
+        self.assertFalse(retry_decision.should_stop)
+
+        with contextlib.redirect_stdout(io.StringIO()):
+            stop_decision = ZSXQFileDownloader._handle_file_list_response(
+                downloader,
+                FakeHttpDownloadUrlResponse(403, "forbidden"),
+                0,
+                2,
+            )
+        self.assertIsNone(stop_decision.result)
+        self.assertFalse(stop_decision.should_retry)
+        self.assertTrue(stop_decision.should_stop)
+
+        with contextlib.redirect_stdout(io.StringIO()):
+            exhausted_decision = ZSXQFileDownloader._handle_file_list_response(
+                downloader,
+                FakeHttpDownloadUrlResponse(503, "still unavailable"),
+                1,
+                2,
+            )
+        self.assertIsNone(exhausted_decision.result)
+        self.assertFalse(exhausted_decision.should_retry)
+        self.assertFalse(exhausted_decision.should_stop)
+
     def test_should_log_full_response_on_first_last_or_success(self):
         self.assertTrue(should_log_full_response(0, 3, False))
         self.assertFalse(should_log_full_response(1, 3, False))
