@@ -5362,6 +5362,51 @@ class FileDownloaderRetryHelperTests(unittest.TestCase):
         self.assertIn("JSON解析失败", output.getvalue())
         self.assertIn("准备重试", output.getvalue())
 
+    def test_parse_api_json_response_preserves_decode_failure_output_and_retry_result(self):
+        downloader = object.__new__(ZSXQFileDownloader)
+        output = io.StringIO()
+
+        with contextlib.redirect_stdout(output):
+            data, should_retry = ZSXQFileDownloader._parse_api_json_response(
+                downloader,
+                FakeInvalidJsonResponse(),
+                0,
+                2,
+            )
+
+        self.assertIsNone(data)
+        self.assertTrue(should_retry)
+        self.assertEqual(
+            [
+                "   ❌ JSON解析失败: bad json: line 1 column 2 (char 1)",
+                "   📄 原始响应: {not json",
+                "   🔄 JSON解析失败，准备重试...",
+            ],
+            output.getvalue().splitlines(),
+        )
+
+    def test_parse_api_json_response_preserves_terminal_decode_failure_output(self):
+        downloader = object.__new__(ZSXQFileDownloader)
+        output = io.StringIO()
+
+        with contextlib.redirect_stdout(output):
+            data, should_retry = ZSXQFileDownloader._parse_api_json_response(
+                downloader,
+                FakeInvalidJsonResponse(),
+                1,
+                2,
+            )
+
+        self.assertIsNone(data)
+        self.assertFalse(should_retry)
+        self.assertEqual(
+            [
+                "   ❌ JSON解析失败: bad json: line 1 column 2 (char 1)",
+                "   📄 原始响应: {not json",
+            ],
+            output.getvalue().splitlines(),
+        )
+
     def test_handle_file_list_success_response_preserves_first_attempt_output(self):
         downloader = object.__new__(ZSXQFileDownloader)
         data = {"resp_data": {"files": [{"file_id": 1}, {"file_id": 2}], "index": "next"}}

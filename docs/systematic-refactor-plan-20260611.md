@@ -30086,6 +30086,49 @@ Result:
 - Full backend unittest discovery passed in the current worktree: 1247 tests, 15 skipped.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-17 - P124 shared JSON decode failure stdout helper
+
+Changed:
+
+- Added characterization coverage for `_parse_api_json_response()` JSON decode failure retry and
+  terminal paths before changing production code.
+- Added `JsonDecodeFailureOutputTarget` to name the JSON decode failure output boundary.
+- Added `_json_decode_failure_result_with_output(...)` and reused it from
+  `_parse_api_json_response_target(...)`.
+- Kept `json_decode_failure_plan(...)` inputs, stdout message order, redaction behavior, and
+  returned `ApiJsonParseResult(None, should_retry)` semantics unchanged.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Existing JSON decode retry/terminal behavior and stdout diagnostics are preserved.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderRetryHelperTests.test_parse_api_json_response_preserves_decode_failure_output_and_retry_result tests.test_zsxq_file_downloader_helpers.FileDownloaderRetryHelperTests.test_parse_api_json_response_preserves_terminal_decode_failure_output -v
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run ruff check backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py --select F401,F841
+git diff --check
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- New JSON decode failure characterization tests passed before helper extraction: 2 tests.
+- The same focused tests passed after helper extraction: 2 tests.
+- `py_compile` passed.
+- ZSXQ file downloader helper tests passed: 271 tests.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- `git diff --check` passed; Git only reported existing LF-to-CRLF working-copy warnings.
+- Full backend unittest discovery passed in the current worktree: 1249 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:

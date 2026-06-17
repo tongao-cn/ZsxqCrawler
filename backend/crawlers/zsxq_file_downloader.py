@@ -225,6 +225,13 @@ class RequestExceptionOutputTarget(NamedTuple):
     max_retries: int
 
 
+class JsonDecodeFailureOutputTarget(NamedTuple):
+    exc: json.JSONDecodeError
+    response_text: str
+    attempt: int
+    max_retries: int
+
+
 class FetchFileListTarget(NamedTuple):
     count: int
     index: Optional[str]
@@ -774,6 +781,20 @@ def _request_exception_should_retry_with_output(
     return request_exception["should_retry"]
 
 
+def _json_decode_failure_result_with_output(
+    target: JsonDecodeFailureOutputTarget,
+) -> ApiJsonParseResult:
+    decode_failure = json_decode_failure_plan(
+        target.exc,
+        target.response_text,
+        target.attempt,
+        target.max_retries,
+    )
+    for message in decode_failure["messages"]:
+        print(message)
+    return ApiJsonParseResult(None, decode_failure["should_retry"])
+
+
 def _database_stats_total_size_row(result: Any) -> Optional[DatabaseStatsTotalSize]:
     if not result or not result[0]:
         return None
@@ -1213,15 +1234,14 @@ class ZSXQFileDownloader:
         try:
             data = target.response.json()
         except json.JSONDecodeError as e:
-            decode_failure = json_decode_failure_plan(
-                e,
-                target.response.text,
-                target.attempt,
-                target.max_retries,
+            return _json_decode_failure_result_with_output(
+                JsonDecodeFailureOutputTarget(
+                    e,
+                    target.response.text,
+                    target.attempt,
+                    target.max_retries,
+                ),
             )
-            for message in decode_failure["messages"]:
-                print(message)
-            return ApiJsonParseResult(None, decode_failure["should_retry"])
 
         if should_log_full_response(target.attempt, target.max_retries, data.get('succeeded')):
             print(f"   📋 响应内容: {json.dumps(redact_json_like(data), ensure_ascii=False, indent=2)}")
