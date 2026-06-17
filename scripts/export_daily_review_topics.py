@@ -150,14 +150,48 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--output-dir", default=None, help="Exact output directory. Defaults under output/exports/daily-review-topics.")
     parser.add_argument("--max-topic-chars", type=int, default=8000)
     parser.add_argument("--crawl-latest-first", action="store_true", help="Pull latest topics before exporting.")
+    parser.add_argument(
+        "--include-prior-evening",
+        action="store_true",
+        help="When exporting a morning report, also export the previous date's evening report.",
+    )
     parser.add_argument("--poll-seconds", type=float, default=5)
     parser.add_argument("--crawl-timeout-seconds", type=int, default=0)
     parser.add_argument("--log-tail", type=int, default=20)
     return parser
 
 
+def _payload_without_topics(payload: dict[str, Any]) -> dict[str, Any]:
+    return {key: value for key, value in payload.items() if key != "topics"}
+
+
+def _build_export_payload(
+    *,
+    group_ids: list[str],
+    report_date: Any,
+    slot: Any,
+    max_topic_chars: int,
+    crawl_results: list[dict[str, Any]],
+) -> dict[str, Any]:
+    topics = load_review_topics(
+        group_ids=group_ids,
+        report_date=report_date,
+        slot=slot,
+        max_topic_chars=max_topic_chars,
+    )
+    return build_review_topic_export(
+        group_ids=group_ids,
+        report_date=report_date,
+        slot=slot,
+        topics=topics,
+        crawl_results=crawl_results,
+    )
+
+
 async def _run(args: argparse.Namespace) -> dict[str, Any]:
     slot = normalize_review_slot(args.slot)
+    if args.include_prior_evening and slot != "morning":
+        raise ValueError("--include-prior-evening is only supported with morning exports")
     group_ids = normalize_group_ids(args.group_id or DEFAULT_GROUP_IDS)
     report_date = parse_report_date(args.date)
     started_at = datetime.now(SHANGHAI_TZ).isoformat()
@@ -166,24 +200,34 @@ async def _run(args: argparse.Namespace) -> dict[str, Any]:
     if args.crawl_latest_first:
         crawl_results = await _pull_latest_topics(group_ids, args)
 
-    topics = load_review_topics(
+    payload = _build_export_payload(
         group_ids=group_ids,
         report_date=report_date,
         slot=slot,
         max_topic_chars=args.max_topic_chars,
-    )
-    payload = build_review_topic_export(
-        group_ids=group_ids,
-        report_date=report_date,
-        slot=slot,
-        topics=topics,
         crawl_results=crawl_results,
     )
     payload["started_at"] = started_at
+
+    additional_exports: list[dict[str, Any]] = []
+    if args.include_prior_evening:
+        prior_evening = _build_export_payload(
+            group_ids=group_ids,
+            report_date=report_date - timedelta(days=1),
+            slot="evening",
+            max_topic_chars=args.max_topic_chars,
+            crawl_results=crawl_results,
+        )
+        prior_evening["started_at"] = started_at
+        prior_evening["finished_at"] = datetime.now(SHANGHAI_TZ).isoformat()
+        prior_evening["output_files"] = write_review_topic_export(prior_evening)
+        additional_exports.append(_payload_without_topics(prior_evening))
+
+    payload["additional_exports"] = additional_exports
     payload["finished_at"] = datetime.now(SHANGHAI_TZ).isoformat()
     output_files = write_review_topic_export(payload, args.output_dir)
     payload["output_files"] = output_files
-    _safe_print(json.dumps({key: value for key, value in payload.items() if key != "topics"}, ensure_ascii=False, indent=2, default=str))
+    _safe_print(json.dumps(_payload_without_topics(payload), ensure_ascii=False, indent=2, default=str))
     return payload
 
 
