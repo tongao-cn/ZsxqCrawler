@@ -660,6 +660,10 @@ class CleanCookieTarget(NamedTuple):
     cookie: Any
 
 
+class SmartDelayTarget(NamedTuple):
+    pass
+
+
 class FileCollectionLogRow(NamedTuple):
     log_id: Any
 
@@ -959,6 +963,12 @@ class ZSXQFileDownloader:
     
     def smart_delay(self):
         """智能延迟"""
+        return self._smart_delay_target(SmartDelayTarget())
+
+    def _smart_delay_target(
+        self,
+        target: SmartDelayTarget,
+    ) -> None:
         delay = random.uniform(self.min_delay, self.max_delay)
         if self.debug_mode:
             print(f"   ⏱️ 延迟 {delay:.1f}秒")

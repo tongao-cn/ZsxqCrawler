@@ -3806,6 +3806,43 @@ class FileDownloaderRuntimeStateTests(unittest.TestCase):
         self.assertEqual("stop-result", ZSXQFileDownloader.check_stop(downloader))
         self.assertEqual(["checked"], calls)
 
+    def test_smart_delay_preserves_random_sleep_and_debug_output(self):
+        downloader = object.__new__(ZSXQFileDownloader)
+        downloader.min_delay = 2.0
+        downloader.max_delay = 5.0
+        downloader.debug_mode = True
+
+        output = io.StringIO()
+        with (
+            patch("backend.crawlers.zsxq_file_downloader.random.uniform", return_value=3.4) as uniform,
+            patch("backend.crawlers.zsxq_file_downloader.time.sleep") as sleep,
+            contextlib.redirect_stdout(output),
+        ):
+            result = ZSXQFileDownloader.smart_delay(downloader)
+
+        self.assertIsNone(result)
+        uniform.assert_called_once_with(2.0, 5.0)
+        sleep.assert_called_once_with(3.4)
+        self.assertEqual("   ⏱️ 延迟 3.4秒\n", output.getvalue())
+
+    def test_smart_delay_preserves_silent_non_debug_output(self):
+        downloader = object.__new__(ZSXQFileDownloader)
+        downloader.min_delay = 1.0
+        downloader.max_delay = 2.0
+        downloader.debug_mode = False
+
+        output = io.StringIO()
+        with (
+            patch("backend.crawlers.zsxq_file_downloader.random.uniform", return_value=1.25),
+            patch("backend.crawlers.zsxq_file_downloader.time.sleep") as sleep,
+            contextlib.redirect_stdout(output),
+        ):
+            result = ZSXQFileDownloader.smart_delay(downloader)
+
+        self.assertIsNone(result)
+        sleep.assert_called_once_with(1.25)
+        self.assertEqual("", output.getvalue())
+
 
 class FileDownloaderFileDataHelperTests(unittest.TestCase):
     def test_download_file_data_accepts_id_or_file_id(self):
