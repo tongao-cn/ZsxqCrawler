@@ -4151,6 +4151,16 @@ class FileDownloaderCookieHelperTests(unittest.TestCase):
                 self.assertIsNone(error)
                 self.assertEqual(expected, cleaned)
 
+    def test_clean_cookie_method_preserves_normalized_value_and_no_output(self):
+        downloader = object.__new__(ZSXQFileDownloader)
+
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            result = ZSXQFileDownloader.clean_cookie(downloader, b" a=1; b=2 \nignored")
+
+        self.assertEqual("a=1; b=2", result)
+        self.assertEqual("", output.getvalue())
+
     def test_clean_cookie_method_preserves_failure_message_and_fallback_value(self):
         class StripFailure:
             def strip(self):

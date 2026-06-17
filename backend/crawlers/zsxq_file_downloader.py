@@ -656,6 +656,10 @@ class CheckStopTarget(NamedTuple):
     pass
 
 
+class CleanCookieTarget(NamedTuple):
+    cookie: Any
+
+
 class FileCollectionLogRow(NamedTuple):
     log_id: Any
 
@@ -897,7 +901,13 @@ class ZSXQFileDownloader:
         Returns:
             str: 清理后的Cookie字符串
         """
-        cookie, error = clean_cookie_result(cookie)
+        return self._clean_cookie_target(CleanCookieTarget(cookie))
+
+    def _clean_cookie_target(
+        self,
+        target: CleanCookieTarget,
+    ) -> Any:
+        cookie, error = clean_cookie_result(target.cookie)
         if error is not None:
             print(f"Cookie清理失败: {error}")
         return cookie

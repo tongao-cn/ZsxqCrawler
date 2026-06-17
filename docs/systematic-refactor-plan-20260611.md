@@ -29534,6 +29534,51 @@ Result:
 - Full backend unittest discovery passed in the current worktree: 1226 tests, 15 skipped.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-17 - P112 clean cookie entry target handoff
+
+Changed:
+
+- Added characterization coverage for `clean_cookie()` normal method behavior before changing
+  production code, locking normalized return value and no-output behavior on success.
+- Reused existing failure-path characterization coverage that locks the fallback return value and
+  `Cookie清理失败: ...` output when cookie normalization raises.
+- Added private `CleanCookieTarget` carrying the raw cookie input.
+- Added private `_clean_cookie_target(...)` and delegated the public `clean_cookie()` method to it.
+- Kept public `clean_cookie()` signature, normalization behavior, error message, and fallback return
+  behavior unchanged.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Existing clean-cookie normalization, silent success path, failure diagnostic output,
+  raw-value fallback behavior, and initialization call path are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderCookieHelperTests -v
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py
+uv run python scripts\scan_postgres_compat_debt.py
+uv run ruff check backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py --select F401,F841
+git diff --check
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- Cookie helper characterization tests passed before production helper handoff: 3 tests.
+- Focused cookie helper tests passed after helper handoff: 3 tests.
+- `py_compile` passed.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- `git diff --check` passed; Git only reported existing LF-to-CRLF working-copy warnings.
+- ZSXQ file downloader helper tests passed: 249 tests.
+- Full backend unittest discovery passed in the current worktree: 1227 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:
