@@ -33320,6 +33320,53 @@ Result:
 - Full backend unittest discovery passed in the current worktree: 1342 tests, 15 skipped.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-17 - P194 isolate batch page file item handoff
+
+Changed:
+
+- Added characterization coverage for `_download_batch_page_files_target(...)` preserving the file-item
+  builder-to-downloader handoff, including passing the exact batch target, file info, file index, and
+  downloaded count into `_batch_page_file_item_target(...)`, then passing the exact returned item target
+  into `_download_batch_file_item_target(...)`.
+- Extracted `_download_batch_page_file_for_target(...)` from `_download_batch_page_files_target(...)`.
+- Kept stop-before-limit ordering, max-files limit behavior, item target construction, item download
+  return value, and returned downloaded count unchanged.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Batch page file loops still build a `BatchDownloadFileItemTarget` before downloading each file and
+  use the item downloader's return value as the next downloaded count.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderBatchDownloadTests.test_download_batch_page_files_target_preserves_file_item_builder_handoff -v
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderBatchDownloadTests.test_download_batch_page_files_target_preserves_file_item_builder_handoff tests.test_zsxq_file_downloader_helpers.FileDownloaderBatchDownloadTests.test_download_batch_page_files_target_preserves_item_target_construction tests.test_zsxq_file_downloader_helpers.FileDownloaderBatchDownloadTests.test_download_batch_page_files_target_preserves_limit_before_item_target tests.test_zsxq_file_downloader_helpers.FileDownloaderBatchDownloadTests.test_download_batch_page_files_target_preserves_stop_check_before_limit tests.test_zsxq_file_downloader_helpers.FileDownloaderBatchDownloadTests.test_run_batch_download_page_target_preserves_page_files_builder_handoff -v
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run ruff check backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py --select F401,F841
+git diff --check -- backend/crawlers/zsxq_file_downloader.py tests/test_zsxq_file_downloader_helpers.py docs/systematic-refactor-plan-20260611.md
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- New file-item builder handoff characterization test passed before helper extraction: 1 test.
+- Focused file-item handoff, item-target, limit, stop/limit, and page-files handoff tests passed after
+  helper extraction: 5 tests.
+- `py_compile` passed.
+- ZSXQ file downloader helper tests passed: 357 tests.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- Scoped `git diff --check` passed for the P194 files; Git only reported existing LF-to-CRLF
+  working-copy warnings.
+- Full backend unittest discovery passed in the current worktree: 1343 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:

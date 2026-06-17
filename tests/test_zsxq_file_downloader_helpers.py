@@ -2459,6 +2459,37 @@ class FileDownloaderBatchDownloadTests(unittest.TestCase):
             targets,
         )
 
+    def test_download_batch_page_files_target_preserves_file_item_builder_handoff(self):
+        files = [{"file": {"id": 101, "name": "first.pdf"}}]
+        stats = {"total_files": 0, "downloaded": 0, "skipped": 0, "failed": 0}
+        item_target = SimpleNamespace(downloaded_in_batch=2)
+        downloader = object.__new__(ZSXQFileDownloader)
+        downloader.check_stop = lambda: False
+        events = []
+
+        def build_item(target, file_info, file_index, downloaded_in_batch):
+            events.append(("build", target, file_info, file_index, downloaded_in_batch))
+            return item_target
+
+        def download_item(target):
+            events.append(("download", target))
+            return 3
+
+        downloader._batch_page_file_item_target = build_item
+        downloader._download_batch_file_item_target = download_item
+
+        batch_target = BatchDownloadPageFilesTarget(files, 2, None, stats)
+        downloaded = ZSXQFileDownloader._download_batch_page_files_target(downloader, batch_target)
+
+        self.assertEqual(3, downloaded)
+        self.assertEqual("build", events[0][0])
+        self.assertIs(batch_target, events[0][1])
+        self.assertIs(files[0], events[0][2])
+        self.assertEqual(0, events[0][3])
+        self.assertEqual(2, events[0][4])
+        self.assertEqual("download", events[1][0])
+        self.assertIs(item_target, events[1][1])
+
     def test_run_batch_download_page_preserves_fetch_terminal_and_step_handoff(self):
         stats = {"total_files": 0, "downloaded": 0, "skipped": 0, "failed": 0}
         terminal_downloader = object.__new__(ZSXQFileDownloader)

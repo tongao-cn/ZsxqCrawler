@@ -3446,8 +3446,11 @@ class ZSXQFileDownloader:
             if self._has_reached_batch_page_file_download_limit(target, downloaded_in_batch):
                 break
 
-            downloaded_in_batch = self._download_batch_file_item_target(
-                self._batch_page_file_item_target(target, file_info, i, downloaded_in_batch),
+            downloaded_in_batch = self._download_batch_page_file_for_target(
+                target,
+                file_info,
+                i,
+                downloaded_in_batch,
             )
 
         return downloaded_in_batch
@@ -3465,6 +3468,17 @@ class ZSXQFileDownloader:
         downloaded_in_batch: int,
     ) -> bool:
         return target.max_files is not None and downloaded_in_batch >= target.max_files
+
+    def _download_batch_page_file_for_target(
+        self,
+        target: BatchDownloadPageFilesTarget,
+        file_info: Dict[str, Any],
+        file_index: int,
+        downloaded_in_batch: int,
+    ) -> int:
+        return self._download_batch_file_item_target(
+            self._batch_page_file_item_target(target, file_info, file_index, downloaded_in_batch),
+        )
 
     def _batch_page_file_item_target(
         self,
