@@ -3586,8 +3586,7 @@ class ZSXQFileDownloader:
         target: BatchDownloadTarget,
     ) -> Dict[str, int]:
         """批量下载文件"""
-        for message in batch_download_start_messages(target.max_files):
-            self.log(message)
+        self._log_batch_download_start(target.max_files)
 
         # 检查是否需要停止
         if self.check_stop():
@@ -3599,10 +3598,17 @@ class ZSXQFileDownloader:
             BatchDownloadLoopTarget(stats, target.max_files, target.start_index),
         )
 
-        for message in batch_download_completion_messages(stats):
-            self.log(message)
+        self._log_batch_download_completion(stats)
         
         return stats
+
+    def _log_batch_download_start(self, max_files: Optional[int]) -> None:
+        for message in batch_download_start_messages(max_files):
+            self.log(message)
+
+    def _log_batch_download_completion(self, stats: Dict[str, int]) -> None:
+        for message in batch_download_completion_messages(stats):
+            self.log(message)
 
     def _print_file_list_page(
         self,

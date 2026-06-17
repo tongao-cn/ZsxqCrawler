@@ -14,6 +14,7 @@ from backend.crawlers.zsxq_file_downloader import (
     BatchDownloadNextIndexTarget,
     BatchDownloadPageFilesTarget,
     BatchDownloadResultTarget,
+    BatchDownloadTarget,
     DownloadAttemptResult,
     DownloadAttemptTarget,
     DownloadBodyFinalizationDecisionTarget,
@@ -2674,6 +2675,44 @@ class FileDownloaderBatchDownloadTests(unittest.TestCase):
                 "   ✅ 下载成功: 1",
                 "   ⚠️ 跳过: 1",
                 "   ❌ 失败: 1",
+            ],
+            downloader.logs,
+        )
+
+    def test_download_files_batch_target_preserves_start_loop_and_completion(self):
+        downloader = object.__new__(ZSXQFileDownloader)
+        downloader.logs = []
+        downloader.log = downloader.logs.append
+        downloader.check_stop = lambda: False
+        loop_targets = []
+
+        def run_loop(target):
+            loop_targets.append(
+                (
+                    target.max_files,
+                    target.start_index,
+                    target.stats["total_files"],
+                )
+            )
+            target.stats.update({"total_files": 2, "downloaded": 2, "skipped": 0, "failed": 0})
+
+        downloader._run_batch_download_loop_target = run_loop
+
+        stats = ZSXQFileDownloader._download_files_batch_target(
+            downloader,
+            BatchDownloadTarget(None, "cursor"),
+        )
+
+        self.assertEqual({"total_files": 2, "downloaded": 2, "skipped": 0, "failed": 0}, stats)
+        self.assertEqual([(None, "cursor", 0)], loop_targets)
+        self.assertEqual(
+            [
+                "📥 开始无限下载文件 (直到没有更多文件)",
+                "🎉 批量下载完成:",
+                "   📊 总文件数: 2",
+                "   ✅ 下载成功: 2",
+                "   ⚠️ 跳过: 0",
+                "   ❌ 失败: 0",
             ],
             downloader.logs,
         )

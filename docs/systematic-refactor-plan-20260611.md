@@ -32628,6 +32628,54 @@ Result:
 - Full backend unittest discovery passed in the current worktree: 1325 tests, 15 skipped.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-17 - P179 isolate batch download entry logs
+
+Changed:
+
+- Added characterization coverage for `_download_files_batch_target(...)` preserving start log,
+  loop target handoff, stats mutation visibility, and completion log order.
+- Extracted `_log_batch_download_start(...)` from `_download_files_batch_target(...)`.
+- Extracted `_log_batch_download_completion(...)` from `_download_files_batch_target(...)`.
+- Kept `download_files_batch(...)` and `_download_files_batch_target(...)` entrypoints, initial
+  stop behavior, stats initialization, loop target construction, completion summary messages, and
+  returned stats unchanged.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Batch download entry still logs the same start message before the initial stop check, skips
+  completion logging on initial stop, logs completion after the loop for non-initial-stop paths, and
+  returns the same stats object.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderBatchDownloadTests.test_download_files_batch_target_preserves_start_loop_and_completion -v
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderBatchDownloadTests.test_download_files_batch_target_preserves_start_loop_and_completion tests.test_zsxq_file_downloader_helpers.FileDownloaderBatchDownloadTests.test_download_files_batch_preserves_loop_target_stats_and_completion tests.test_zsxq_file_downloader_helpers.FileDownloaderBatchDownloadTests.test_download_files_batch_initial_stop_returns_empty_stats_without_fetch_or_completion tests.test_zsxq_file_downloader_helpers.FileDownloaderBatchDownloadTests.test_download_files_batch_loop_stop_returns_empty_stats_with_completion tests.test_zsxq_file_downloader_helpers.FileDownloaderBatchDownloadTests.test_download_files_batch_fetch_failure_preserves_log_and_completion tests.test_zsxq_file_downloader_helpers.FileDownloaderBatchDownloadTests.test_download_files_batch_empty_page_preserves_log_and_completion -v
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run ruff check backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py --select F401,F841
+git diff --check
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- New batch entry target start-loop-completion characterization test passed before helper
+  extraction: 1 test.
+- Focused batch entry stop, fetch-failure, empty-page, and completion tests passed after helper
+  extraction: 6 tests.
+- `py_compile` passed.
+- ZSXQ file downloader helper tests passed: 342 tests.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- `git diff --check` passed; Git only reported existing LF-to-CRLF working-copy warnings.
+- Full backend unittest discovery passed in the current worktree: 1326 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:
