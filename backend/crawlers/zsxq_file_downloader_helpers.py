@@ -559,6 +559,10 @@ def download_url_success_plan(attempt: int) -> tuple[str, str]:
     return "   ✅ 获取下载链接成功", "download_url_response"
 
 
+def download_url_from_response_data(data: Dict[str, Any]) -> Optional[str]:
+    return data.get("resp_data", {}).get("download_url")
+
+
 def parse_create_time(value: Optional[str]) -> Optional[datetime.datetime]:
     if not value:
         return None

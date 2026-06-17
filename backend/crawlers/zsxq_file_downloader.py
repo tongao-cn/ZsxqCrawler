@@ -72,6 +72,7 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     download_total_size,
     download_url_api_failure_plan,
     download_url_failure_detail,
+    download_url_from_response_data,
     download_url_success_plan,
     empty_import_stats,
     existing_file_matches,
@@ -1416,7 +1417,7 @@ class ZSXQFileDownloader:
         self,
         target: DownloadUrlSuccessResponseTarget,
     ) -> Optional[str]:
-        download_url = target.data.get('resp_data', {}).get('download_url')
+        download_url = download_url_from_response_data(target.data)
         if download_url:
             success_message, success_phase = download_url_success_plan(target.attempt)
             print(success_message)

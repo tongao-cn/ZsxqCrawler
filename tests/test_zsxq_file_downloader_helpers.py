@@ -4804,6 +4804,36 @@ class FileDownloaderRetryHelperTests(unittest.TestCase):
             download_url_success_plan(2),
         )
 
+    def test_handle_download_url_success_response_preserves_missing_url_output(self):
+        downloader = object.__new__(ZSXQFileDownloader)
+        output = io.StringIO()
+
+        with contextlib.redirect_stdout(output):
+            result = ZSXQFileDownloader._handle_download_url_success_response(
+                downloader,
+                {"succeeded": True, "resp_data": {}},
+                101,
+                0,
+                {"User-Agent": "unit-test-agent"},
+                200,
+            )
+
+        self.assertIsNone(result)
+        self.assertEqual("   ❌ 响应中无下载链接字段\n", output.getvalue())
+
+    def test_handle_download_url_success_response_preserves_resp_data_none_error(self):
+        downloader = object.__new__(ZSXQFileDownloader)
+
+        with self.assertRaises(AttributeError):
+            ZSXQFileDownloader._handle_download_url_success_response(
+                downloader,
+                {"succeeded": True, "resp_data": None},
+                101,
+                0,
+                {"User-Agent": "unit-test-agent"},
+                200,
+            )
+
     def test_risk_event_user_agent_label_preserves_browser_platform_labels(self):
         self.assertEqual(
             "Edge Windows",
