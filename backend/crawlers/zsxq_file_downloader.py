@@ -3448,17 +3448,26 @@ class ZSXQFileDownloader:
                 break
 
             downloaded_in_batch = self._download_batch_file_item_target(
-                BatchDownloadFileItemTarget(
-                    file_info,
-                    downloaded_in_batch + 1,
-                    target.max_files,
-                    (i + 1) < len(target.files),
-                    downloaded_in_batch,
-                    target.stats,
-                ),
+                self._batch_page_file_item_target(target, file_info, i, downloaded_in_batch),
             )
 
         return downloaded_in_batch
+
+    def _batch_page_file_item_target(
+        self,
+        target: BatchDownloadPageFilesTarget,
+        file_info: Dict[str, Any],
+        file_index: int,
+        downloaded_in_batch: int,
+    ) -> BatchDownloadFileItemTarget:
+        return BatchDownloadFileItemTarget(
+            file_info,
+            downloaded_in_batch + 1,
+            target.max_files,
+            (file_index + 1) < len(target.files),
+            downloaded_in_batch,
+            target.stats,
+        )
 
     def _fetch_batch_download_page(self, current_index: Optional[str]) -> Optional[BatchDownloadPage]:
         return self._fetch_batch_download_page_target(BatchDownloadFetchTarget(current_index))

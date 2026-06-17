@@ -32490,6 +32490,51 @@ Result:
 - Full backend unittest discovery passed in the current worktree: 1322 tests, 15 skipped.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-17 - P176 isolate batch page file-item target construction
+
+Changed:
+
+- Added characterization coverage for `_download_batch_page_files_target(...)` preserving
+  per-file `BatchDownloadFileItemTarget` construction from page-file state.
+- Extracted `_batch_page_file_item_target(...)` from `_download_batch_page_files_target(...)`.
+- Kept page-file loop ordering, stop checks, max-file break condition, item numbering,
+  `has_more_in_batch` calculation, downloaded-count handoff, and stats-reference handoff unchanged.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Batch page processing still checks stop before max-file limit, builds the same item targets, calls
+  `_download_batch_file_item_target(...)` in the same order, and returns the same downloaded count.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderBatchDownloadTests.test_download_batch_page_files_target_preserves_item_target_construction -v
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderBatchDownloadTests.test_download_batch_page_files_target_preserves_item_target_construction tests.test_zsxq_file_downloader_helpers.FileDownloaderBatchDownloadTests.test_download_batch_page_files_preserves_item_targets_stop_and_limit tests.test_zsxq_file_downloader_helpers.FileDownloaderBatchDownloadTests.test_download_batch_file_item_target_preserves_download_apply_and_total_order tests.test_zsxq_file_downloader_helpers.FileDownloaderBatchDownloadTests.test_run_batch_download_page_preserves_fetch_terminal_and_step_handoff tests.test_zsxq_file_downloader_helpers.FileDownloaderBatchDownloadTests.test_run_batch_download_loop_preserves_stop_page_handoff_and_terminal_paths -v
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run ruff check backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py --select F401,F841
+git diff --check
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- New batch page-file target construction characterization test passed before helper extraction:
+  1 test.
+- Focused batch page-files, item, page-run, and loop tests passed after helper extraction:
+  5 tests.
+- `py_compile` passed.
+- ZSXQ file downloader helper tests passed: 339 tests.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- `git diff --check` passed; Git only reported existing LF-to-CRLF working-copy warnings.
+- Full backend unittest discovery passed in the current worktree: 1323 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:

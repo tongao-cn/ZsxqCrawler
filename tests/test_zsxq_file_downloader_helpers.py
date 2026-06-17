@@ -12,6 +12,7 @@ from unittest.mock import patch
 from backend.crawlers.zsxq_file_downloader import (
     BatchDownloadFileItemTarget,
     BatchDownloadNextIndexTarget,
+    BatchDownloadPageFilesTarget,
     BatchDownloadResultTarget,
     DownloadAttemptResult,
     DownloadAttemptTarget,
@@ -2377,6 +2378,47 @@ class FileDownloaderBatchDownloadTests(unittest.TestCase):
         self.assertEqual(files[0], stop_targets[0].file_info)
         self.assertIsNone(stop_targets[0].max_files)
         self.assertEqual(["🛑 文件下载过程中被停止"], stop_downloader.logs)
+
+    def test_download_batch_page_files_target_preserves_item_target_construction(self):
+        files = [
+            {"file": {"id": 101, "name": "first.pdf"}},
+            {"file": {"id": 102, "name": "second.pdf"}},
+            {"file": {"id": 103, "name": "third.pdf"}},
+        ]
+        stats = {"total_files": 0, "downloaded": 0, "skipped": 0, "failed": 0}
+        downloader = object.__new__(ZSXQFileDownloader)
+        downloader.check_stop = lambda: False
+        targets = []
+
+        def file_item(target):
+            targets.append(
+                (
+                    target.file_info,
+                    target.item_number,
+                    target.max_files,
+                    target.has_more_in_batch,
+                    target.downloaded_in_batch,
+                    target.stats is stats,
+                )
+            )
+            return target.downloaded_in_batch + 1
+
+        downloader._download_batch_file_item_target = file_item
+
+        downloaded = ZSXQFileDownloader._download_batch_page_files_target(
+            downloader,
+            BatchDownloadPageFilesTarget(files, 2, None, stats),
+        )
+
+        self.assertEqual(5, downloaded)
+        self.assertEqual(
+            [
+                (files[0], 3, None, True, 2, True),
+                (files[1], 4, None, True, 3, True),
+                (files[2], 5, None, False, 4, True),
+            ],
+            targets,
+        )
 
     def test_run_batch_download_page_preserves_fetch_terminal_and_step_handoff(self):
         stats = {"total_files": 0, "downloaded": 0, "skipped": 0, "failed": 0}
