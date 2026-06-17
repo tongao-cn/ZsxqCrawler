@@ -366,6 +366,13 @@ class DownloadFileTarget(NamedTuple):
     file_path: str
 
 
+class DownloadFilePreparationData(NamedTuple):
+    file_id: Any
+    file_name: Any
+    file_size: Any
+    download_count: Any
+
+
 class ExistingDownloadTarget(NamedTuple):
     file_id: int
     file_path: str
@@ -2215,27 +2222,55 @@ class ZSXQFileDownloader:
         self,
         file_info: Dict[str, Any],
     ) -> Optional[DownloadFileTarget]:
-        file_data = download_file_data(file_info)
-        file_id = file_data["file_id"]
-        file_name = file_data["file_name"]
-        file_size = file_data["file_size"]
-        download_count = file_data["download_count"]
-
-        self.log(f"📥 准备下载文件:")
-        self.log(f"   📄 名称: {file_name}")
-        self.log(f"   📊 大小: {file_size:,} bytes ({file_size/1024/1024:.2f} MB)")
-        self.log(f"   📈 下载次数: {download_count}")
-        if not file_id:
+        file_data = self._download_file_preparation_data(file_info)
+        self._log_download_file_preparation(file_data)
+        if not file_data.file_id:
             self.log("   ❌ 文件缺少 file_id，无法下载")
             return None
 
-        # 检查是否需要停止
         if self.check_stop():
             self.log("🛑 下载任务被停止")
             return None
 
-        safe_filename, file_path = download_target_path(self.download_dir, file_name, file_id)
-        return DownloadFileTarget(file_id, file_name, file_size, safe_filename, file_path)
+        return self._download_file_target_from_preparation_data(file_data)
+
+    def _download_file_preparation_data(
+        self,
+        file_info: Dict[str, Any],
+    ) -> DownloadFilePreparationData:
+        file_data = download_file_data(file_info)
+        return DownloadFilePreparationData(
+            file_data["file_id"],
+            file_data["file_name"],
+            file_data["file_size"],
+            file_data["download_count"],
+        )
+
+    def _log_download_file_preparation(
+        self,
+        file_data: DownloadFilePreparationData,
+    ) -> None:
+        self.log(f"📥 准备下载文件:")
+        self.log(f"   📄 名称: {file_data.file_name}")
+        self.log(f"   📊 大小: {file_data.file_size:,} bytes ({file_data.file_size/1024/1024:.2f} MB)")
+        self.log(f"   📈 下载次数: {file_data.download_count}")
+
+    def _download_file_target_from_preparation_data(
+        self,
+        file_data: DownloadFilePreparationData,
+    ) -> DownloadFileTarget:
+        safe_filename, file_path = download_target_path(
+            self.download_dir,
+            file_data.file_name,
+            file_data.file_id,
+        )
+        return DownloadFileTarget(
+            file_data.file_id,
+            file_data.file_name,
+            file_data.file_size,
+            safe_filename,
+            file_path,
+        )
 
     def _skip_existing_download_if_complete(
         self,

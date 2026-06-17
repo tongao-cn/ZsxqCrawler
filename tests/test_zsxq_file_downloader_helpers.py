@@ -6923,6 +6923,62 @@ class FileDownloaderDownloadTests(unittest.TestCase):
                 downloader.logs,
             )
 
+    def test_prepare_download_file_target_skips_stop_check_when_file_id_missing(self):
+        downloader = object.__new__(ZSXQFileDownloader)
+        downloader.download_dir = "C:\\Downloads"
+        downloader.logs = []
+        downloader.log = downloader.logs.append
+        downloader.check_stop = lambda: self.fail("missing file_id should return before stop check")
+
+        prepared = ZSXQFileDownloader._prepare_download_file_target(
+            downloader,
+            {"file": {"name": "memo.pdf", "size": 4, "download_count": 2}},
+        )
+
+        self.assertIsNone(prepared)
+        self.assertEqual(
+            [
+                "📥 准备下载文件:",
+                "   📄 名称: memo.pdf",
+                "   📊 大小: 4 bytes (0.00 MB)",
+                "   📈 下载次数: 2",
+                "   ❌ 文件缺少 file_id，无法下载",
+            ],
+            downloader.logs,
+        )
+
+    def test_prepare_download_file_target_preserves_path_handoff_after_stop_check(self):
+        downloader = object.__new__(ZSXQFileDownloader)
+        downloader.download_dir = "C:\\Downloads"
+        downloader.logs = []
+        downloader.log = downloader.logs.append
+        calls = []
+
+        def check_stop():
+            calls.append(("stop",))
+            return False
+
+        def target_path(download_dir, file_name, file_id):
+            calls.append(("path", download_dir, file_name, file_id))
+            return "safe.pdf", "C:\\Downloads\\safe.pdf"
+
+        downloader.check_stop = check_stop
+
+        with patch("backend.crawlers.zsxq_file_downloader.download_target_path", target_path):
+            prepared = ZSXQFileDownloader._prepare_download_file_target(
+                downloader,
+                {"file": {"id": 707, "name": "memo?.pdf", "size": 9, "download_count": 1}},
+            )
+
+        self.assertEqual(
+            DownloadFileTarget(707, "memo?.pdf", 9, "safe.pdf", "C:\\Downloads\\safe.pdf"),
+            prepared,
+        )
+        self.assertEqual(
+            [("stop",), ("path", "C:\\Downloads", "memo?.pdf", 707)],
+            calls,
+        )
+
     def test_download_file_uses_safe_filename_for_local_target(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             session = FakeDownloadSession([FakeDownloadResponse(200, b"memo")])

@@ -30708,6 +30708,53 @@ Result:
 - Full backend unittest discovery passed in the current worktree: 1275 tests, 15 skipped.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-17 - P138 isolate download file preparation data and target path
+
+Changed:
+
+- Added characterization coverage for `_prepare_download_file_target(...)` returning before
+  `check_stop()` when `file_id` is missing.
+- Added characterization coverage for the valid-file path where `check_stop()` runs before
+  `download_target_path(...)`, and for the path helper handoff arguments.
+- Added `DownloadFilePreparationData` to name the parsed file payload used during preparation.
+- Extracted `_download_file_preparation_data(...)`, `_log_download_file_preparation(...)`, and
+  `_download_file_target_from_preparation_data(...)` from `_prepare_download_file_target(...)`.
+- Kept file payload defaults, preparation logs, missing `file_id` log/return, stop log/return,
+  safe filename/path generation, and returned `DownloadFileTarget` fields unchanged.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Existing download file preparation, missing-id fallback, stop handling, and local target path
+  behavior is preserved.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_prepare_download_file_target_skips_stop_check_when_file_id_missing tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_prepare_download_file_target_preserves_path_handoff_after_stop_check -v
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_prepare_download_file_target_skips_stop_check_when_file_id_missing tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_prepare_download_file_target_preserves_path_handoff_after_stop_check tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_prepare_download_file_target_preserves_logs_target_and_early_returns tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_download_file_without_file_id_logs_and_returns_before_request tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_download_file_uses_safe_filename_for_local_target -v
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run ruff check backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py --select F401,F841
+git diff --check
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- New download file preparation characterization tests passed before helper extraction: 2 tests.
+- Focused preparation and adjacent download-file tests passed after helper extraction: 5 tests.
+- `py_compile` passed.
+- ZSXQ file downloader helper tests passed: 299 tests.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- `git diff --check` passed; Git only reported existing LF-to-CRLF working-copy warnings.
+- Full backend unittest discovery passed in the current worktree: 1277 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:
