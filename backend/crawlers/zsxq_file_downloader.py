@@ -2988,6 +2988,12 @@ class ZSXQFileDownloader:
         if mismatch_detail:
             return DownloadBodyResult(None, mismatch_detail)
 
+        return self._successful_download_body_result_target(finalization_target)
+
+    def _successful_download_body_result_target(
+        self,
+        finalization_target: DownloadBodyFinalizationTarget,
+    ) -> DownloadBodyResult:
         self._complete_successful_download_target(
             DownloadCompletionTarget(
                 finalization_target.file_id,
