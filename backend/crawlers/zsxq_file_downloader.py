@@ -3358,16 +3358,33 @@ class ZSXQFileDownloader:
         downloaded_in_batch = target.downloaded_in_batch
         result_status = _record_file_download_result(target.result, target.stats)
         if result_status == "skipped":
-            self.log(batch_download_skipped_message())
+            self._log_batch_download_skipped()
         elif result_status == "downloaded":
-            downloaded_in_batch += 1
-            self.check_long_delay()
-
-            not_reached_limit = target.max_files is None or downloaded_in_batch < target.max_files
-            if target.has_more_in_batch and not_reached_limit:
-                self.download_delay()
+            downloaded_in_batch = self._apply_successful_batch_download_result(target, downloaded_in_batch)
 
         return downloaded_in_batch
+
+    def _log_batch_download_skipped(self) -> None:
+        self.log(batch_download_skipped_message())
+
+    def _apply_successful_batch_download_result(
+        self,
+        target: BatchDownloadResultTarget,
+        downloaded_in_batch: int,
+    ) -> int:
+        downloaded_in_batch += 1
+        self.check_long_delay()
+        if self._should_delay_after_batch_download(target, downloaded_in_batch):
+            self.download_delay()
+        return downloaded_in_batch
+
+    def _should_delay_after_batch_download(
+        self,
+        target: BatchDownloadResultTarget,
+        downloaded_in_batch: int,
+    ) -> bool:
+        not_reached_limit = target.max_files is None or downloaded_in_batch < target.max_files
+        return target.has_more_in_batch and not_reached_limit
 
     def _next_batch_download_index(
         self,

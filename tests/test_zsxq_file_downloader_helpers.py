@@ -11,6 +11,7 @@ from unittest.mock import patch
 
 from backend.crawlers.zsxq_file_downloader import (
     BatchDownloadFileItemTarget,
+    BatchDownloadResultTarget,
     DownloadAttemptResult,
     DownloadAttemptTarget,
     DownloadBodyFinalizationDecisionTarget,
@@ -2092,6 +2093,36 @@ class FileDownloaderBatchDownloadTests(unittest.TestCase):
         self.assertEqual({"total_files": 0, "downloaded": 2, "skipped": 1, "failed": 1}, stats)
         self.assertEqual(["   ⚠️ 文件已跳过，继续下一个"], downloader.logs)
         self.assertEqual(["long", "delay", "long"], interval_events)
+
+    def test_apply_batch_download_result_target_preserves_download_delay_order(self):
+        downloader = object.__new__(ZSXQFileDownloader)
+        events = []
+        downloader.log = lambda message: events.append(("log", message))
+        stats = {"total_files": 3, "downloaded": 1, "skipped": 0, "failed": 0}
+
+        def check_long_delay():
+            events.append(("long", stats["downloaded"]))
+
+        def download_delay():
+            events.append(("delay", stats["downloaded"]))
+
+        downloader.check_long_delay = check_long_delay
+        downloader.download_delay = download_delay
+
+        downloaded = ZSXQFileDownloader._apply_batch_download_result_target(
+            downloader,
+            BatchDownloadResultTarget(
+                True,
+                True,
+                4,
+                6,
+                stats,
+            ),
+        )
+
+        self.assertEqual(5, downloaded)
+        self.assertEqual({"total_files": 3, "downloaded": 2, "skipped": 0, "failed": 0}, stats)
+        self.assertEqual([("long", 2), ("delay", 2)], events)
 
     def test_download_files_batch_preserves_result_stats_payloads_and_delays(self):
         files = [
