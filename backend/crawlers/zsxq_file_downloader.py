@@ -2909,6 +2909,15 @@ class ZSXQFileDownloader:
             ),
         )
 
+        return self._download_body_result_for_response_target(target, body_target)
+
+    def _download_body_result_for_response_target(
+        self,
+        target: DownloadResponseTarget,
+        body_target: DownloadBodyTarget,
+    ) -> DownloadBodyResult:
+        response = target.response
+        file_target = target.file_target
         downloaded_size = self._write_download_response_body_result_target(
             DownloadBodyResponseTarget(
                 response,
