@@ -3241,13 +3241,27 @@ class ZSXQFileDownloader:
         self,
         target: DownloadIntervalPlanTarget,
     ) -> None:
+        delay, messages, should_reset_batch = self._download_interval_plan_for_target(target)
+        self._apply_download_interval_delay(delay, messages, should_reset_batch)
+
+    def _download_interval_plan_for_target(
+        self,
+        target: DownloadIntervalPlanTarget,
+    ) -> Tuple[Optional[float], Tuple[str, ...], bool]:
         interval_values = target.interval_values
-        delay, messages, should_reset_batch = download_interval_plan(
+        return download_interval_plan(
             target.current_batch_count,
             target.files_per_batch,
             interval_values.download_interval,
             interval_values.long_sleep_interval,
         )
+
+    def _apply_download_interval_delay(
+        self,
+        delay: Optional[float],
+        messages: Tuple[str, ...],
+        should_reset_batch: bool,
+    ) -> None:
         if delay is None:
             return
 

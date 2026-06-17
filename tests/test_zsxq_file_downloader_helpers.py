@@ -26,6 +26,7 @@ from backend.crawlers.zsxq_file_downloader import (
     DownloadFinalFailureTarget,
     DownloadFileTarget,
     DownloadHttpFailureTarget,
+    DownloadIntervalPlanTarget,
     DownloadIntervalValues,
     DownloadResponseTarget,
     DownloadRetryDecision,
@@ -9387,6 +9388,32 @@ class FileDownloaderDownloadTests(unittest.TestCase):
 
         uniform.assert_called_once_with(300, 900)
         self.assertEqual(DownloadIntervalValues(1, 480.0), values)
+
+    def test_apply_download_interval_plan_target_preserves_sleep_reset_and_logs(self):
+        downloader = object.__new__(ZSXQFileDownloader)
+        downloader.current_batch_count = 7
+        downloader.logs = []
+        downloader.log = downloader.logs.append
+
+        with patch("backend.crawlers.zsxq_file_downloader.time.sleep") as sleep:
+            ZSXQFileDownloader._apply_download_interval_plan_target(
+                downloader,
+                DownloadIntervalPlanTarget(
+                    10,
+                    10,
+                    DownloadIntervalValues(1, 60),
+                ),
+            )
+
+        sleep.assert_called_once_with(60)
+        self.assertEqual(0, downloader.current_batch_count)
+        self.assertEqual(
+            [
+                "⏰ 已下载 10 个文件，开始长休眠 60 秒...",
+                "😴 长休眠结束，继续下载",
+            ],
+            downloader.logs,
+        )
 
     def test_apply_download_intervals_preserves_long_sleep_side_effects(self):
         downloader = object.__new__(ZSXQFileDownloader)
