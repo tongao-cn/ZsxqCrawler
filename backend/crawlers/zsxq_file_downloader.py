@@ -3579,7 +3579,16 @@ class ZSXQFileDownloader:
         )
 
     def download_files_batch(self, max_files: Optional[int] = None, start_index: Optional[str] = None) -> Dict[str, int]:
-        return self._download_files_batch_target(BatchDownloadTarget(max_files, start_index))
+        return self._download_files_batch_target(
+            self._batch_download_target(max_files, start_index),
+        )
+
+    def _batch_download_target(
+        self,
+        max_files: Optional[int],
+        start_index: Optional[str],
+    ) -> BatchDownloadTarget:
+        return BatchDownloadTarget(max_files, start_index)
 
     def _download_files_batch_target(
         self,

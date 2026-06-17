@@ -2679,6 +2679,26 @@ class FileDownloaderBatchDownloadTests(unittest.TestCase):
             downloader.logs,
         )
 
+    def test_download_files_batch_preserves_entry_target_and_return_value(self):
+        downloader = object.__new__(ZSXQFileDownloader)
+        targets = []
+        expected_stats = {"total_files": 9, "downloaded": 8, "skipped": 1, "failed": 0}
+
+        def run_target(target):
+            targets.append(target)
+            return expected_stats
+
+        downloader._download_files_batch_target = run_target
+
+        stats = ZSXQFileDownloader.download_files_batch(
+            downloader,
+            max_files=0,
+            start_index="",
+        )
+
+        self.assertIs(expected_stats, stats)
+        self.assertEqual([BatchDownloadTarget(0, "")], targets)
+
     def test_download_files_batch_target_preserves_start_loop_and_completion(self):
         downloader = object.__new__(ZSXQFileDownloader)
         downloader.logs = []
