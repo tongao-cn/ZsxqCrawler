@@ -20,6 +20,7 @@ from backend.crawlers.zsxq_file_downloader import (
     DownloadRetryState,
     DownloadUrlResponseDecision,
     DownloadUrlRetryLoopTarget,
+    DownloadUrlUnavailableTarget,
     ExistingDownloadTarget,
     ZSXQFileDownloader,
     _database_stats_time_range,
@@ -7970,6 +7971,24 @@ class FileDownloaderDownloadTests(unittest.TestCase):
             ["   ❌ 无法获取下载链接", "   ❌ 无法获取下载链接"],
             downloader.logs,
         )
+
+    def test_mark_download_url_unavailable_target_uses_target_error_detail(self):
+        downloader = object.__new__(ZSXQFileDownloader)
+        downloader.file_db = FakeDownloadFileDb()
+        downloader.logs = []
+        downloader.log = downloader.logs.append
+        downloader.last_download_url_error = {"code": "ignored", "message": "ignored"}
+
+        ZSXQFileDownloader._mark_download_url_unavailable_target(
+            downloader,
+            DownloadUrlUnavailableTarget(201, {"code": 1030, "message": "mobile only"}),
+        )
+
+        self.assertEqual(
+            [(201, "failed", None, "1030", "mobile only")],
+            downloader.file_db.status_updates,
+        )
+        self.assertEqual(["   ❌ 无法获取下载链接"], downloader.logs)
 
     def test_mark_download_failed_after_retries_preserves_error_detail_defaults(self):
         downloader = object.__new__(ZSXQFileDownloader)

@@ -30801,6 +30801,54 @@ Result:
 - Full backend unittest discovery passed in the current worktree: 1280 tests, 15 skipped.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-17 - P140 isolate download URL unavailable status
+
+Changed:
+
+- Added target-level characterization coverage for `_mark_download_url_unavailable_target(...)`
+  proving it uses `DownloadUrlUnavailableTarget.last_download_url_error` rather than
+  `downloader.last_download_url_error`.
+- Extracted `_download_url_unavailable_failure_detail(...)` from
+  `_mark_download_url_unavailable_target(...)`.
+- Extracted `_update_download_url_unavailable_status(...)` from
+  `_mark_download_url_unavailable_target(...)`.
+- Kept the unavailable-link log text, `download_url_failure_detail(...)` semantics, `failed`
+  status payload, and adjacent `_get_download_url_or_mark_unavailable(...)` success/failure
+  behavior unchanged.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Missing signed-download-URL handling and API error detail preservation are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_mark_download_url_unavailable_target_uses_target_error_detail -v
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_mark_download_url_unavailable_target_uses_target_error_detail tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_mark_download_url_unavailable_preserves_default_and_api_error_details tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_get_download_url_or_mark_unavailable_preserves_success_and_failure_paths tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_download_file_marks_failed_when_download_url_missing tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_download_file_marks_failed_with_download_url_api_error_detail -v
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run ruff check backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py --select F401,F841
+git diff --check
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- New target-level unavailable-link characterization test passed before helper extraction: 1 test.
+- Focused unavailable-link and adjacent download-file tests passed after helper extraction:
+  5 tests.
+- `py_compile` passed.
+- ZSXQ file downloader helper tests passed: 303 tests.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- `git diff --check` passed; Git only reported existing LF-to-CRLF working-copy warnings.
+- Full backend unittest discovery passed in the current worktree: 1281 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:

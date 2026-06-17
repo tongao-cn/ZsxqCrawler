@@ -2354,12 +2354,26 @@ class ZSXQFileDownloader:
         target: DownloadUrlUnavailableTarget,
     ) -> None:
         self.log(f"   ❌ 无法获取下载链接")
+        failure_detail = self._download_url_unavailable_failure_detail(target)
+        self._update_download_url_unavailable_status(target.file_id, failure_detail)
+
+    def _download_url_unavailable_failure_detail(
+        self,
+        target: DownloadUrlUnavailableTarget,
+    ) -> DownloadFailureDetail:
         error_code, error_message = download_url_failure_detail(target.last_download_url_error)
+        return DownloadFailureDetail(error_code, error_message)
+
+    def _update_download_url_unavailable_status(
+        self,
+        file_id: int,
+        failure_detail: DownloadFailureDetail,
+    ) -> None:
         self.file_db.update_file_download_status(
-            target.file_id,
+            file_id,
             'failed',
-            error_code=error_code,
-            error_message=error_message,
+            error_code=failure_detail.error_code,
+            error_message=failure_detail.error_message,
         )
 
     def _mark_download_failed_after_retries(
