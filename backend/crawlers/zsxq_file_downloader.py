@@ -648,6 +648,10 @@ class SetStopFlagTarget(NamedTuple):
     pass
 
 
+class IsStoppedTarget(NamedTuple):
+    pass
+
+
 class FileCollectionLogRow(NamedTuple):
     log_id: Any
 
@@ -855,6 +859,12 @@ class ZSXQFileDownloader:
 
     def is_stopped(self):
         """检查是否被停止（综合检查本地标志和外部函数）"""
+        return self._is_stopped_target(IsStoppedTarget())
+
+    def _is_stopped_target(
+        self,
+        target: IsStoppedTarget,
+    ) -> bool:
         # 首先检查本地停止标志
         if self.stop_flag:
             return True

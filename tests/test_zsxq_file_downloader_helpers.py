@@ -3757,6 +3757,42 @@ class FileDownloaderRuntimeStateTests(unittest.TestCase):
         self.assertTrue(downloader.stop_flag)
         self.assertEqual(["🛑 收到停止信号，任务将在下一个检查点停止"], logs)
 
+    def test_is_stopped_preserves_local_stop_flag_short_circuit(self):
+        downloader = object.__new__(ZSXQFileDownloader)
+        downloader.stop_flag = True
+        downloader.stop_check_func = lambda: self.fail("external stop check should not be called")
+
+        self.assertTrue(ZSXQFileDownloader.is_stopped(downloader))
+        self.assertTrue(downloader.stop_flag)
+
+    def test_is_stopped_preserves_external_stop_sync(self):
+        downloader = object.__new__(ZSXQFileDownloader)
+        downloader.stop_flag = False
+        calls = []
+
+        def stop_check():
+            calls.append("checked")
+            return True
+
+        downloader.stop_check_func = stop_check
+
+        self.assertTrue(ZSXQFileDownloader.is_stopped(downloader))
+        self.assertTrue(downloader.stop_flag)
+        self.assertEqual(["checked"], calls)
+
+    def test_is_stopped_preserves_false_paths(self):
+        downloader = object.__new__(ZSXQFileDownloader)
+        downloader.stop_flag = False
+        downloader.stop_check_func = None
+
+        self.assertFalse(ZSXQFileDownloader.is_stopped(downloader))
+        self.assertFalse(downloader.stop_flag)
+
+        downloader.stop_check_func = lambda: False
+
+        self.assertFalse(ZSXQFileDownloader.is_stopped(downloader))
+        self.assertFalse(downloader.stop_flag)
+
 
 class FileDownloaderFileDataHelperTests(unittest.TestCase):
     def test_download_file_data_accepts_id_or_file_id(self):

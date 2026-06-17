@@ -29444,6 +29444,51 @@ Result:
 - Full backend unittest discovery passed in the current worktree: 1222 tests, 15 skipped.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-17 - P110 is stopped entry target handoff
+
+Changed:
+
+- Added characterization coverage for `is_stopped()` before changing production code, locking local
+  stop-flag short-circuit behavior, external stop callback synchronization, and false paths with
+  missing or false-returning external callbacks.
+- Added private no-field `IsStoppedTarget` for the no-argument runtime-state check entrypoint.
+- Added private `_is_stopped_target(...)` and delegated the public `is_stopped()` method to it.
+- Kept public `is_stopped()` signature and behavior unchanged.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Existing local stop flag precedence, external `stop_check_func` invocation behavior, local flag
+  synchronization when the external check returns true, false-path return values, and
+  fallback/legacy behavior are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderRuntimeStateTests.test_is_stopped_preserves_local_stop_flag_short_circuit tests.test_zsxq_file_downloader_helpers.FileDownloaderRuntimeStateTests.test_is_stopped_preserves_external_stop_sync tests.test_zsxq_file_downloader_helpers.FileDownloaderRuntimeStateTests.test_is_stopped_preserves_false_paths -v
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderRuntimeStateTests -v
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py
+uv run python scripts\scan_postgres_compat_debt.py
+uv run ruff check backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py --select F401,F841
+git diff --check
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- New `is_stopped()` characterization tests passed before production helper handoff: 3 tests.
+- Focused runtime-state tests passed after helper handoff: 4 tests.
+- `py_compile` passed.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- `git diff --check` passed; Git only reported existing LF-to-CRLF working-copy warnings.
+- ZSXQ file downloader helper tests passed: 247 tests.
+- Full backend unittest discovery passed in the current worktree: 1225 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:
