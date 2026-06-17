@@ -863,6 +863,64 @@ class FileDownloaderPaginationTests(unittest.TestCase):
         self.assertEqual([], downloader.file_db.executed)
         self.assertEqual(0, downloader.file_db.fetchone_calls)
 
+    def test_get_database_time_range_preserves_entry_query_and_result_handoff(self):
+        downloader = object.__new__(ZSXQFileDownloader)
+        downloader.group_id = "511"
+        row = ("2026-01-01T00:00:00", "2026-02-01T00:00:00", 7)
+        result_payload = {"stable": "result"}
+        calls = []
+
+        class FileDb:
+            cursor = None
+
+            def __init__(self):
+                self.cursor = self
+
+            def get_database_stats(self):
+                calls.append(("stats",))
+                return {"files": 10}
+
+            def execute(self, query, params):
+                calls.append(("execute", query, params))
+
+            def fetchone(self):
+                calls.append(("fetchone",))
+                return row
+
+        def time_range_query(group_id):
+            calls.append(("query", group_id))
+            return "stable-query", ("stable-param",)
+
+        def time_range_result(total_files, result):
+            calls.append(("result", total_files, result))
+            return result_payload
+
+        downloader.file_db = FileDb()
+
+        with (
+            patch(
+                "backend.crawlers.zsxq_file_downloader.database_time_range_query",
+                time_range_query,
+            ),
+            patch(
+                "backend.crawlers.zsxq_file_downloader.database_time_range_result",
+                time_range_result,
+            ),
+        ):
+            result = ZSXQFileDownloader.get_database_time_range(downloader)
+
+        self.assertIs(result_payload, result)
+        self.assertEqual(
+            [
+                ("stats",),
+                ("query", 511),
+                ("execute", "stable-query", ("stable-param",)),
+                ("fetchone",),
+                ("result", 10, row),
+            ],
+            calls,
+        )
+
     def test_get_database_time_range_preserves_query_params_and_result_shape(self):
         downloader = object.__new__(ZSXQFileDownloader)
         downloader.group_id = "511"

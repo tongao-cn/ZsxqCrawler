@@ -475,6 +475,10 @@ class FileCollectionTarget(NamedTuple):
     pass
 
 
+class DatabaseTimeRangeTarget(NamedTuple):
+    pass
+
+
 class FileCollectionPage(NamedTuple):
     data: Dict[str, Any]
     files: list[Dict[str, Any]]
@@ -2955,6 +2959,12 @@ class ZSXQFileDownloader:
     
     def get_database_time_range(self) -> Dict[str, Any]:
         """获取完整数据库中文件的时间范围信息"""
+        return self._get_database_time_range_target(DatabaseTimeRangeTarget())
+
+    def _get_database_time_range_target(
+        self,
+        target: DatabaseTimeRangeTarget,
+    ) -> Dict[str, Any]:
         # 使用新数据库检查是否有数据
         stats = self.file_db.get_database_stats()
         total_files = stats.get('files', 0)
