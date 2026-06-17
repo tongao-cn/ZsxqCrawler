@@ -2643,6 +2643,25 @@ class FileDownloaderBatchDownloadTests(unittest.TestCase):
             targets,
         )
 
+    def test_run_batch_download_loop_preserves_loop_target_construction(self):
+        stats = {"total_files": 0, "downloaded": 0, "skipped": 0, "failed": 0}
+        downloader = object.__new__(ZSXQFileDownloader)
+        targets = []
+
+        downloader._run_batch_download_loop_target = targets.append
+
+        ZSXQFileDownloader._run_batch_download_loop(
+            downloader,
+            stats,
+            max_files=0,
+            start_index="",
+        )
+
+        self.assertEqual(1, len(targets))
+        self.assertIs(stats, targets[0].stats)
+        self.assertEqual(0, targets[0].max_files)
+        self.assertEqual("", targets[0].start_index)
+
     def test_download_files_batch_preserves_loop_target_stats_and_completion(self):
         downloader = object.__new__(ZSXQFileDownloader)
         downloader.logs = []
