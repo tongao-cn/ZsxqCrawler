@@ -354,6 +354,10 @@ class DownloadRetryWaitTarget(NamedTuple):
     download_retries: int
 
 
+class DownloadFileResponseRequestTarget(NamedTuple):
+    download_url: str
+
+
 class DownloadFileEntryTarget(NamedTuple):
     file_info: Dict[str, Any]
 
@@ -2655,9 +2659,26 @@ class ZSXQFileDownloader:
         time.sleep(retry_delay)
 
     def _request_download_response(self, download_url: str) -> Any:
+        return self._request_download_response_target(
+            DownloadFileResponseRequestTarget(download_url),
+        )
+
+    def _request_download_response_target(
+        self,
+        target: DownloadFileResponseRequestTarget,
+    ) -> Any:
+        self._log_download_response_request_start()
+        return self._send_download_response_request(target)
+
+    def _log_download_response_request_start(self) -> None:
         self.log(f"   🚀 开始下载...")
+
+    def _send_download_response_request(
+        self,
+        target: DownloadFileResponseRequestTarget,
+    ) -> Any:
         return self.session.get(
-            download_url,
+            target.download_url,
             timeout=DOWNLOAD_FILE_RESPONSE_TIMEOUT_SECONDS,
             stream=True,
         )

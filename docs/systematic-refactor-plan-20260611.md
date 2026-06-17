@@ -21266,6 +21266,7 @@ uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloader
 uv run python -m unittest tests.test_zsxq_file_downloader_helpers -v
 uv run python scripts\scan_postgres_compat_debt.py
 uv run ruff check backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py --select F401,F841
+git diff --check
 uv run python -m unittest discover -s tests
 npm --prefix frontend run build
 ```
@@ -31144,6 +31145,56 @@ Result:
   not available.
 - `git diff --check` passed; Git only reported existing LF-to-CRLF working-copy warnings.
 - Full backend unittest discovery passed in the current worktree: 1287 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+
+### 2026-06-17 - P147 isolate download response request side effects
+
+Changed:
+
+- Added `DownloadFileResponseRequestTarget` and target-level characterization coverage for
+  `_request_download_response_target(...)` preserving target-provided download URL,
+  `DOWNLOAD_FILE_RESPONSE_TIMEOUT_SECONDS`, `stream=True`, returned response object, and request
+  start log text.
+- Routed `_request_download_response(...)` through the target-level helper.
+- Extracted `_log_download_response_request_start(...)` from
+  `_request_download_response_target(...)`.
+- Extracted `_send_download_response_request(...)` from
+  `_request_download_response_target(...)`.
+- Kept the `session.get(...)` argument order, timeout value, streaming flag, and
+  `   🚀 开始下载...` log text unchanged.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Download response request timing, retry-loop handoff, stream timeout, and adjacent download-file
+  request behavior are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_request_download_response_preserves_stream_timeout_and_log tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_request_download_response_target_uses_target_url -v
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_request_download_response_preserves_stream_timeout_and_log tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_request_download_response_target_uses_target_url tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_run_download_attempt_preserves_response_handoff tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_download_file_requests_response_with_stream_timeout_and_log -v
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run ruff check backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py --select F401,F841
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- Existing ordinary-entry request test and new target-level request test passed before helper
+  extraction: 2 tests.
+- Focused request and adjacent attempt/download-file handoff tests passed after helper extraction:
+  4 tests.
+- `py_compile` passed.
+- ZSXQ file downloader helper tests passed: 310 tests.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- `git diff --check` passed; Git only reported existing LF-to-CRLF working-copy warnings.
+- Full backend unittest discovery passed in the current worktree: 1288 tests, 15 skipped.
 - Frontend build passed, including Next.js lint/type checks.
 
 ## Stop Conditions

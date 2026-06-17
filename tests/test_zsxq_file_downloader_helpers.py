@@ -17,6 +17,7 @@ from backend.crawlers.zsxq_file_downloader import (
     DownloadCompletionTarget,
     DownloadExceptionTarget,
     DownloadFailureDetail,
+    DownloadFileResponseRequestTarget,
     DownloadFinalFailureTarget,
     DownloadFileTarget,
     DownloadHttpFailureTarget,
@@ -7463,6 +7464,23 @@ class FileDownloaderDownloadTests(unittest.TestCase):
 
         self.assertIs(response, requested_response)
         self.assertEqual([("https://download.test/101", 300, True)], session.get_calls)
+        self.assertEqual(["   🚀 开始下载..."], downloader.logs)
+
+    def test_request_download_response_target_uses_target_url(self):
+        response = FakeDownloadResponse(200, b"memo")
+        session = FakeDownloadSession([response])
+        downloader = object.__new__(ZSXQFileDownloader)
+        downloader.session = session
+        downloader.logs = []
+        downloader.log = downloader.logs.append
+
+        requested_response = ZSXQFileDownloader._request_download_response_target(
+            downloader,
+            DownloadFileResponseRequestTarget("https://download.test/target"),
+        )
+
+        self.assertIs(response, requested_response)
+        self.assertEqual([("https://download.test/target", 300, True)], session.get_calls)
         self.assertEqual(["   🚀 开始下载..."], downloader.logs)
 
     def test_handle_download_response_preserves_override_http_failure_and_success_paths(self):
