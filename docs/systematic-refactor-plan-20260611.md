@@ -32859,6 +32859,52 @@ Result:
 - Full backend unittest discovery passed in the current worktree: 1332 tests, 15 skipped.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-17 - P184 isolate batch loop continuation condition
+
+Changed:
+
+- Added characterization coverage for `_run_batch_download_loop_target(...)` preserving the
+  `max_files=0` terminal path, including no stop check, no page-run handoff, and no loop-stop log.
+- Extracted `_should_continue_batch_download_loop(...)` from the loop `while` condition.
+- Kept infinite-download behavior, max-file limit handling, initial step construction, stop-check
+  timing, loop stop log, page-run target construction, returned-step handoff, and terminal
+  next-index behavior unchanged.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Batch download loops still continue when `max_files is None` or `downloaded_in_batch < max_files`;
+  with `max_files=0`, the loop still terminates before checking stop or running any page.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderBatchDownloadTests.test_run_batch_download_loop_target_preserves_zero_max_without_stop_or_page -v
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderBatchDownloadTests.test_run_batch_download_loop_target_preserves_zero_max_without_stop_or_page tests.test_zsxq_file_downloader_helpers.FileDownloaderBatchDownloadTests.test_run_batch_download_loop_target_preserves_initial_step_from_start_index tests.test_zsxq_file_downloader_helpers.FileDownloaderBatchDownloadTests.test_run_batch_download_loop_target_preserves_page_run_target_sequence tests.test_zsxq_file_downloader_helpers.FileDownloaderBatchDownloadTests.test_run_batch_download_loop_preserves_stop_page_handoff_and_terminal_paths tests.test_zsxq_file_downloader_helpers.FileDownloaderBatchDownloadTests.test_download_files_batch_stops_page_after_success_limit tests.test_zsxq_file_downloader_helpers.FileDownloaderBatchDownloadTests.test_download_files_batch_loop_stop_returns_empty_stats_with_completion -v
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run ruff check backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py --select F401,F841
+git diff --check -- backend/crawlers/zsxq_file_downloader.py tests/test_zsxq_file_downloader_helpers.py docs/systematic-refactor-plan-20260611.md
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- New zero-max loop termination characterization test passed before helper extraction: 1 test.
+- Focused loop continuation, loop target, and batch limit tests passed after helper extraction:
+  6 tests.
+- `py_compile` passed.
+- ZSXQ file downloader helper tests passed: 347 tests.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- Scoped `git diff --check` passed for the P184 files; Git only reported existing LF-to-CRLF
+  working-copy warnings.
+- Full backend unittest discovery passed in the current worktree: 1333 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:
