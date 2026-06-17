@@ -5105,6 +5105,43 @@ class FileDownloaderRetryHelperTests(unittest.TestCase):
         self.assertIsNone(result)
         self.assertEqual("   ❌ 响应中无下载链接字段\n", output.getvalue())
 
+    def test_handle_download_url_success_response_preserves_print_event_order(self):
+        downloader = object.__new__(ZSXQFileDownloader)
+        operations = []
+        downloader._record_risk_event = lambda **kwargs: operations.append(("event", kwargs))
+
+        with patch(
+            "backend.crawlers.zsxq_file_downloader.print",
+            lambda message: operations.append(("print", message)),
+        ):
+            result = ZSXQFileDownloader._handle_download_url_success_response(
+                downloader,
+                {"succeeded": True, "resp_data": {"download_url": "https://files.example/signed-token"}},
+                101,
+                2,
+                {"User-Agent": "unit-test-agent"},
+                200,
+            )
+
+        self.assertEqual("https://files.example/signed-token", result)
+        self.assertEqual(
+            [
+                ("print", "   ✅ 重试成功！第2次重试获取到下载链接"),
+                (
+                    "event",
+                    {
+                        "file_id": 101,
+                        "phase": "download_url_retry_response",
+                        "attempt": 2,
+                        "headers": {"User-Agent": "unit-test-agent"},
+                        "http_status": 200,
+                        "status": "api_success",
+                    },
+                ),
+            ],
+            operations,
+        )
+
     def test_handle_download_url_success_response_preserves_resp_data_none_error(self):
         downloader = object.__new__(ZSXQFileDownloader)
 

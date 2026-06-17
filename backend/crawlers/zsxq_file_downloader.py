@@ -292,6 +292,14 @@ class DownloadUrlSuccessResponseTarget(NamedTuple):
     http_status: int
 
 
+class DownloadUrlSuccessEventTarget(NamedTuple):
+    file_id: int
+    phase: str
+    attempt: int
+    headers: Dict[str, str]
+    http_status: int
+
+
 class DownloadUrlApiFailureResponseTarget(NamedTuple):
     data: Dict[str, Any]
     file_id: int
@@ -1481,18 +1489,32 @@ class ZSXQFileDownloader:
         if download_url:
             success_message, success_phase = download_url_success_plan(target.attempt)
             print(success_message)
-            self._record_risk_event(
-                file_id=target.file_id,
-                phase=success_phase,
-                attempt=target.attempt,
-                headers=target.headers,
-                http_status=target.http_status,
-                status="api_success",
+            self._record_download_url_success_event(
+                DownloadUrlSuccessEventTarget(
+                    target.file_id,
+                    success_phase,
+                    target.attempt,
+                    target.headers,
+                    target.http_status,
+                ),
             )
             return download_url
 
         print(f"   ❌ 响应中无下载链接字段")
         return None
+
+    def _record_download_url_success_event(
+        self,
+        target: DownloadUrlSuccessEventTarget,
+    ) -> None:
+        self._record_risk_event(
+            file_id=target.file_id,
+            phase=target.phase,
+            attempt=target.attempt,
+            headers=target.headers,
+            http_status=target.http_status,
+            status="api_success",
+        )
 
     def _handle_download_url_api_failure_response(
         self,
