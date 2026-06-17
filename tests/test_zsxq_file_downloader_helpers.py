@@ -2531,6 +2531,38 @@ class FileDownloaderBatchDownloadTests(unittest.TestCase):
             events,
         )
 
+    def test_run_batch_download_page_target_preserves_fetch_target_terminal(self):
+        stats = {"total_files": 0, "downloaded": 0, "skipped": 0, "failed": 0}
+        downloader = object.__new__(ZSXQFileDownloader)
+        fetch_targets = []
+
+        def fetch_page(target):
+            fetch_targets.append(target)
+            return None
+
+        def page_files(target):
+            self.fail("terminal page fetch must not download batch page files")
+
+        def next_index(target):
+            self.fail("terminal page fetch must not compute next batch index")
+
+        downloader._fetch_batch_download_page_target = fetch_page
+        downloader._download_batch_page_files_target = page_files
+        downloader._next_batch_download_index_target = next_index
+
+        step = ZSXQFileDownloader._run_batch_download_page_target(
+            downloader,
+            SimpleNamespace(
+                step=SimpleNamespace(downloaded_in_batch=2, next_index="cursor"),
+                max_files=7,
+                stats=stats,
+            ),
+        )
+
+        self.assertIsNone(step)
+        self.assertEqual(1, len(fetch_targets))
+        self.assertEqual("cursor", fetch_targets[0].current_index)
+
     def test_run_batch_download_loop_preserves_stop_page_handoff_and_terminal_paths(self):
         stats = {"total_files": 0, "downloaded": 0, "skipped": 0, "failed": 0}
         stop_downloader = object.__new__(ZSXQFileDownloader)
