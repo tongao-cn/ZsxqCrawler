@@ -87,6 +87,7 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     file_collection_start_message,
     file_collection_stats,
     file_collection_storage_failed_message,
+    file_list_api_failure_plan,
     file_list_item_display_lines,
     file_list_next_index_message,
     file_list_request_params,
@@ -4455,6 +4456,61 @@ class FileDownloaderRetryHelperTests(unittest.TestCase):
         self.assertFalse(exhausted_decision.should_retry)
         self.assertFalse(exhausted_decision.should_stop)
 
+    def test_handle_file_list_api_failure_response_preserves_retry_output_and_failure_class(self):
+        downloader = object.__new__(ZSXQFileDownloader)
+        output = io.StringIO()
+
+        with contextlib.redirect_stdout(output):
+            failure_class = ZSXQFileDownloader._handle_file_list_api_failure_response(
+                downloader,
+                {"message": "slow down", "code": 1059},
+                0,
+                2,
+            )
+
+        self.assertEqual(API_FAILURE_RETRY, failure_class)
+        self.assertEqual(
+            [
+                "   ❌ API返回失败: slow down (代码: 1059)",
+                "   🔄 检测到可重试错误，准备重试...",
+            ],
+            output.getvalue().splitlines(),
+        )
+
+    def test_handle_file_list_api_failure_response_preserves_permission_and_exhausted_output(self):
+        downloader = object.__new__(ZSXQFileDownloader)
+        permission_output = io.StringIO()
+        exhausted_output = io.StringIO()
+
+        with contextlib.redirect_stdout(permission_output):
+            permission_failure_class = ZSXQFileDownloader._handle_file_list_api_failure_response(
+                downloader,
+                {"message": "mobile only", "code": 1030},
+                0,
+                2,
+            )
+        with contextlib.redirect_stdout(exhausted_output):
+            exhausted_failure_class = ZSXQFileDownloader._handle_file_list_api_failure_response(
+                downloader,
+                {"message": "slow down", "code": 1059},
+                1,
+                2,
+            )
+
+        self.assertEqual(API_FAILURE_PERMISSION_DENIED_1030, permission_failure_class)
+        self.assertEqual(
+            [
+                "   ❌ API返回失败: mobile only (代码: 1030)",
+                "   🚫 非可重试错误，停止重试",
+            ],
+            permission_output.getvalue().splitlines(),
+        )
+        self.assertEqual(API_FAILURE_RETRY_EXHAUSTED, exhausted_failure_class)
+        self.assertEqual(
+            ["   ❌ API返回失败: slow down (代码: 1059)"],
+            exhausted_output.getvalue().splitlines(),
+        )
+
     def test_handle_file_list_response_preserves_http_failure_decisions(self):
         downloader = object.__new__(ZSXQFileDownloader)
 
@@ -4688,6 +4744,33 @@ class FileDownloaderRetryHelperTests(unittest.TestCase):
         self.assertEqual(API_FAILURE_RETRY_EXHAUSTED, classify_api_failure("1059", 1, 2))
         self.assertEqual(API_FAILURE_NON_RETRY, classify_api_failure("N/A", 0, 2))
         self.assertEqual(API_FAILURE_PERMISSION_DENIED_1030, classify_api_failure(1030, 0, 2))
+
+    def test_file_list_api_failure_plan_preserves_retry_permission_and_exhausted_messages(self):
+        retry_plan = file_list_api_failure_plan({"message": "slow", "code": 1059}, 0, 2)
+        self.assertEqual(API_FAILURE_RETRY, retry_plan["failure_class"])
+        self.assertEqual("slow", retry_plan["error_msg"])
+        self.assertEqual(1059, retry_plan["error_code"])
+        self.assertEqual(
+            (
+                "   ❌ API返回失败: slow (代码: 1059)",
+                "   🔄 检测到可重试错误，准备重试...",
+            ),
+            retry_plan["messages"],
+        )
+
+        permission_plan = file_list_api_failure_plan({"message": "mobile only", "code": 1030}, 0, 2)
+        self.assertEqual(API_FAILURE_PERMISSION_DENIED_1030, permission_plan["failure_class"])
+        self.assertEqual(
+            (
+                "   ❌ API返回失败: mobile only (代码: 1030)",
+                "   🚫 非可重试错误，停止重试",
+            ),
+            permission_plan["messages"],
+        )
+
+        exhausted_plan = file_list_api_failure_plan({"message": "slow", "code": 1059}, 1, 2)
+        self.assertEqual(API_FAILURE_RETRY_EXHAUSTED, exhausted_plan["failure_class"])
+        self.assertEqual(("   ❌ API返回失败: slow (代码: 1059)",), exhausted_plan["messages"])
 
     def test_download_url_api_failure_plan_preserves_retry_and_terminal_paths(self):
         retry_plan = download_url_api_failure_plan({"message": "slow", "code": 1059}, 0, 2)

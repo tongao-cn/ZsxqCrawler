@@ -27,7 +27,6 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     add_file_collection_page_stats,
     api_retry_user_agent_message,
     api_retry_wait_message,
-    api_failure_detail,
     add_import_stats,
     batch_download_completion_messages,
     batch_download_empty_page_message,
@@ -40,7 +39,6 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     batch_download_page_files_message,
     batch_download_skipped_message,
     batch_download_start_messages,
-    classify_api_failure,
     clean_cookie_result,
     database_download_completion_messages,
     database_download_effective_last_days,
@@ -91,6 +89,7 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     file_collection_start_message,
     file_collection_stats,
     file_collection_storage_failed_message,
+    file_list_api_failure_plan,
     file_list_item_display_lines,
     file_list_next_index_message,
     file_list_request_params,
@@ -1277,18 +1276,14 @@ class ZSXQFileDownloader:
         self,
         target: FileListApiFailureResponseTarget,
     ) -> str:
-        error_msg, error_code = api_failure_detail(target.data)
-        print(f"   ❌ API返回失败: {error_msg} (代码: {error_code})")
-        failure_class = classify_api_failure(
-            error_code,
+        api_failure = file_list_api_failure_plan(
+            target.data,
             target.attempt,
             target.max_retries,
         )
-        if failure_class == API_FAILURE_RETRY:
-            print(f"   🔄 检测到可重试错误，准备重试...")
-        elif failure_class in {API_FAILURE_NON_RETRY, API_FAILURE_PERMISSION_DENIED_1030}:
-            print(f"   🚫 非可重试错误，停止重试")
-        return failure_class
+        for message in api_failure["messages"]:
+            print(message)
+        return api_failure["failure_class"]
 
     def _handle_file_list_http_failure_response(
         self,

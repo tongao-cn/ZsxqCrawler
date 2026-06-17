@@ -470,6 +470,24 @@ def classify_api_failure(error_code: Any, attempt: int, max_retries: int) -> str
     return API_FAILURE_RETRY_EXHAUSTED
 
 
+def file_list_api_failure_plan(data: Dict[str, Any], attempt: int, max_retries: int) -> Dict[str, Any]:
+    error_msg, error_code = api_failure_detail(data)
+    failure_class = classify_api_failure(error_code, attempt, max_retries)
+    messages = [f"   ❌ API返回失败: {error_msg} (代码: {error_code})"]
+
+    if failure_class == API_FAILURE_RETRY:
+        messages.append("   🔄 检测到可重试错误，准备重试...")
+    elif failure_class in {API_FAILURE_NON_RETRY, API_FAILURE_PERMISSION_DENIED_1030}:
+        messages.append("   🚫 非可重试错误，停止重试")
+
+    return {
+        "error_msg": error_msg,
+        "error_code": error_code,
+        "failure_class": failure_class,
+        "messages": tuple(messages),
+    }
+
+
 def download_url_api_failure_plan(data: Dict[str, Any], attempt: int, max_retries: int) -> Dict[str, Any]:
     error_msg, error_code = api_failure_detail(data)
     failure_class = classify_api_failure(error_code, attempt, max_retries)
