@@ -1867,21 +1867,36 @@ class ZSXQFileDownloader:
             response = self._request_download_url_response_target(
                 DownloadUrlRequestTarget(target.url, headers),
             )
-            return self._handle_download_url_response_target(
-                DownloadUrlResponseTarget(
-                    response,
-                    target.file_id,
-                    target.attempt,
-                    target.max_retries,
-                    headers,
-                ),
-            )
+            return self._handle_download_url_attempt_response(target, headers, response)
         except Exception as e:
-            if self._handle_download_url_request_exception_target(
-                DownloadUrlRequestExceptionTarget(e, target.attempt, target.max_retries),
-            ):
-                return DownloadUrlResponseDecision(None, True, False)
-            return DownloadUrlResponseDecision(None, False, False)
+            return self._handle_download_url_attempt_exception(target, e)
+
+    def _handle_download_url_attempt_response(
+        self,
+        target: DownloadUrlAttemptTarget,
+        headers: Dict[str, str],
+        response: Any,
+    ) -> DownloadUrlResponseDecision:
+        return self._handle_download_url_response_target(
+            DownloadUrlResponseTarget(
+                response,
+                target.file_id,
+                target.attempt,
+                target.max_retries,
+                headers,
+            ),
+        )
+
+    def _handle_download_url_attempt_exception(
+        self,
+        target: DownloadUrlAttemptTarget,
+        exc: Exception,
+    ) -> DownloadUrlResponseDecision:
+        if self._handle_download_url_request_exception_target(
+            DownloadUrlRequestExceptionTarget(exc, target.attempt, target.max_retries),
+        ):
+            return DownloadUrlResponseDecision(None, True, False)
+        return DownloadUrlResponseDecision(None, False, False)
 
     def _run_download_url_retry_loop_target(
         self,
