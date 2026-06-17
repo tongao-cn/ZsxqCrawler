@@ -30614,6 +30614,53 @@ Result:
 - Full backend unittest discovery passed in the current worktree: 1270 tests, 15 skipped.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-17 - P136 isolate download attempt-result retry decision
+
+Changed:
+
+- Added characterization coverage for `_apply_download_attempt_result(...)` false-result,
+  empty-failure-detail, and explicit-failure-detail branches before changing production code.
+- Extracted `_download_retry_state_after_attempt_result(...)` from
+  `_apply_download_attempt_result_target(...)`.
+- Extracted `_download_retry_decision_after_attempt_result(...)` from
+  `_apply_download_attempt_result_target(...)`.
+- Kept file-name/path propagation, existing last-error preservation, failure-detail overwrite,
+  `False`, `True`, and `None` retry decision semantics unchanged.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Existing download retry result decision behavior is preserved, including the legacy behavior where
+  an empty failure detail returns a successful retry decision even when `success_result` is `None`.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_apply_download_attempt_result_preserves_false_retry_decision tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_apply_download_attempt_result_preserves_empty_failure_detail_as_success tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_apply_download_attempt_result_preserves_failure_detail_retry_state -v
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_apply_download_attempt_result_preserves_false_retry_decision tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_apply_download_attempt_result_preserves_empty_failure_detail_as_success tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_apply_download_attempt_result_preserves_failure_detail_retry_state tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_run_download_retry_loop_attempt_preserves_state_file_target_handoff tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_run_download_retry_loop_attempt_preserves_exception_retry_decision -v
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run ruff check backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py --select F401,F841
+git diff --check
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- New download attempt-result characterization tests passed before helper extraction: 3 tests.
+- Focused attempt-result and adjacent retry-loop attempt tests passed after helper extraction:
+  5 tests.
+- `py_compile` passed.
+- ZSXQ file downloader helper tests passed: 295 tests.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- `git diff --check` passed; Git only reported existing LF-to-CRLF working-copy warnings.
+- Full backend unittest discovery passed in the current worktree: 1273 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:

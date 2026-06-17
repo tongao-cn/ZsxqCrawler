@@ -11,6 +11,7 @@ from unittest.mock import patch
 
 from backend.crawlers.zsxq_file_downloader import (
     DownloadAttemptResult,
+    DownloadFailureDetail,
     DownloadFileTarget,
     DownloadRetryDecision,
     DownloadRetryLoopAttemptTarget,
@@ -6693,6 +6694,57 @@ class FileDownloaderDownloadTests(unittest.TestCase):
                 ("exception", "socket down", retry_state),
             ],
             calls,
+        )
+
+    def test_apply_download_attempt_result_preserves_false_retry_decision(self):
+        downloader = object.__new__(ZSXQFileDownloader)
+        retry_state = DownloadRetryState("old.pdf", "old.pdf", "C:\\Downloads\\old.pdf", "old_code", "old error")
+        attempt_result = DownloadAttemptResult(False, None, "new.pdf", "new.pdf", "C:\\Downloads\\new.pdf")
+
+        decision = ZSXQFileDownloader._apply_download_attempt_result(downloader, attempt_result, retry_state)
+
+        self.assertEqual(
+            DownloadRetryDecision(
+                DownloadRetryState("new.pdf", "new.pdf", "C:\\Downloads\\new.pdf", "old_code", "old error"),
+                False,
+            ),
+            decision,
+        )
+
+    def test_apply_download_attempt_result_preserves_empty_failure_detail_as_success(self):
+        downloader = object.__new__(ZSXQFileDownloader)
+        retry_state = DownloadRetryState("old.pdf", "old.pdf", "C:\\Downloads\\old.pdf", "old_code", "old error")
+        attempt_result = DownloadAttemptResult(None, None, "new.pdf", "new.pdf", "C:\\Downloads\\new.pdf")
+
+        decision = ZSXQFileDownloader._apply_download_attempt_result(downloader, attempt_result, retry_state)
+
+        self.assertEqual(
+            DownloadRetryDecision(
+                DownloadRetryState("new.pdf", "new.pdf", "C:\\Downloads\\new.pdf", "old_code", "old error"),
+                True,
+            ),
+            decision,
+        )
+
+    def test_apply_download_attempt_result_preserves_failure_detail_retry_state(self):
+        downloader = object.__new__(ZSXQFileDownloader)
+        retry_state = DownloadRetryState("old.pdf", "old.pdf", "C:\\Downloads\\old.pdf", "old_code", "old error")
+        attempt_result = DownloadAttemptResult(
+            None,
+            DownloadFailureDetail("size_mismatch", "size mismatch"),
+            "new.pdf",
+            "new.pdf",
+            "C:\\Downloads\\new.pdf",
+        )
+
+        decision = ZSXQFileDownloader._apply_download_attempt_result(downloader, attempt_result, retry_state)
+
+        self.assertEqual(
+            DownloadRetryDecision(
+                DownloadRetryState("new.pdf", "new.pdf", "C:\\Downloads\\new.pdf", "size_mismatch", "size mismatch"),
+                None,
+            ),
+            decision,
         )
 
     def test_download_file_accepts_raw_file_id_payload(self):

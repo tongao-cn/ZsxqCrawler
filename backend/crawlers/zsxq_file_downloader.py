@@ -2098,15 +2098,31 @@ class ZSXQFileDownloader:
         self,
         target: DownloadAttemptResultTarget,
     ) -> DownloadRetryDecision:
+        retry_state = self._download_retry_state_after_attempt_result(target)
+        return self._download_retry_decision_after_attempt_result(
+            DownloadAttemptResultTarget(target.attempt_result, retry_state),
+        )
+
+    def _download_retry_state_after_attempt_result(
+        self,
+        target: DownloadAttemptResultTarget,
+    ) -> DownloadRetryState:
         attempt_result = target.attempt_result
         retry_state = target.retry_state
-        retry_state = DownloadRetryState(
+        return DownloadRetryState(
             attempt_result.file_name,
             attempt_result.safe_filename,
             attempt_result.file_path,
             retry_state.last_error_code,
             retry_state.last_error,
         )
+
+    def _download_retry_decision_after_attempt_result(
+        self,
+        target: DownloadAttemptResultTarget,
+    ) -> DownloadRetryDecision:
+        attempt_result = target.attempt_result
+        retry_state = target.retry_state
         if attempt_result.success_result is False:
             return DownloadRetryDecision(retry_state, False)
         if not attempt_result.failure_detail:
