@@ -12,7 +12,7 @@ import json
 import os
 import random
 import time
-from typing import Dict, NamedTuple, Optional, Any
+from typing import Dict, NamedTuple, Optional, Any, Tuple
 
 import requests
 
@@ -2564,15 +2564,27 @@ class ZSXQFileDownloader:
         self,
         target: ResponseFilenameOverrideTarget,
     ) -> Optional[DownloadFilenameOverride]:
-        filename_override = response_filename_override(
+        filename_override = self._response_filename_override_for_target(target)
+        if not filename_override:
+            return None
+
+        return self._download_filename_override_from_raw(filename_override)
+
+    def _response_filename_override_for_target(
+        self,
+        target: ResponseFilenameOverrideTarget,
+    ) -> Optional[Tuple[str, str, str]]:
+        return response_filename_override(
             target.file_name,
             target.file_id,
             self.download_dir,
             target.response_headers,
         )
-        if not filename_override:
-            return None
 
+    def _download_filename_override_from_raw(
+        self,
+        filename_override: Tuple[str, str, str],
+    ) -> DownloadFilenameOverride:
         real_filename, safe_filename, file_path = filename_override
         self.log(f"   📝 从响应头获取到真实文件名: {real_filename}")
         return DownloadFilenameOverride(real_filename, safe_filename, file_path)

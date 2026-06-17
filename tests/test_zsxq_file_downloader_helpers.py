@@ -26,6 +26,7 @@ from backend.crawlers.zsxq_file_downloader import (
     DownloadUrlRetryLoopTarget,
     DownloadUrlUnavailableTarget,
     ExistingDownloadTarget,
+    ResponseFilenameOverrideTarget,
     ZSXQFileDownloader,
     _database_stats_time_range,
     _database_stats_total_size,
@@ -7307,6 +7308,45 @@ class FileDownloaderDownloadTests(unittest.TestCase):
             self.assertEqual(("real?.pdf", "real.pdf", str(Path(temp_dir) / "real.pdf")), override)
             self.assertIsNone(noop)
             self.assertEqual(["   📝 从响应头获取到真实文件名: real?.pdf"], downloader.logs)
+
+    def test_apply_response_filename_override_target_uses_target_fields(self):
+        downloader = object.__new__(ZSXQFileDownloader)
+        downloader.download_dir = "C:\\Downloads"
+        downloader.logs = []
+        downloader.log = downloader.logs.append
+        calls = []
+        override_headers = {"content-disposition": 'attachment; filename="real?.pdf"'}
+        noop_headers = {"content-disposition": 'attachment; filename="ignored.pdf"'}
+
+        def filename_override(file_name, file_id, download_dir, response_headers):
+            calls.append((file_name, file_id, download_dir, response_headers))
+            if file_name == "file_201":
+                return ("real?.pdf", "real.pdf", "C:\\Downloads\\real.pdf")
+            return None
+
+        with patch(
+            "backend.crawlers.zsxq_file_downloader.response_filename_override",
+            filename_override,
+        ):
+            override = ZSXQFileDownloader._apply_response_filename_override_target(
+                downloader,
+                ResponseFilenameOverrideTarget("file_201", 201, override_headers),
+            )
+            noop = ZSXQFileDownloader._apply_response_filename_override_target(
+                downloader,
+                ResponseFilenameOverrideTarget("memo.pdf", 202, noop_headers),
+            )
+
+        self.assertEqual(("real?.pdf", "real.pdf", "C:\\Downloads\\real.pdf"), override)
+        self.assertIsNone(noop)
+        self.assertEqual(
+            [
+                ("file_201", 201, "C:\\Downloads", override_headers),
+                ("memo.pdf", 202, "C:\\Downloads", noop_headers),
+            ],
+            calls,
+        )
+        self.assertEqual(["   📝 从响应头获取到真实文件名: real?.pdf"], downloader.logs)
 
     def test_record_download_http_failure_preserves_error_detail_and_log(self):
         downloader = object.__new__(ZSXQFileDownloader)
