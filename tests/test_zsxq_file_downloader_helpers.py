@@ -31,6 +31,7 @@ from backend.crawlers.zsxq_file_downloader import (
     DownloadRetryLoopAttemptTarget,
     DownloadRetryState,
     DownloadSizeMismatchTarget,
+    DownloadStopTarget,
     DownloadUrlResponseDecision,
     DownloadUrlRetryLoopTarget,
     DownloadUrlUnavailableTarget,
@@ -8623,6 +8624,27 @@ class FileDownloaderDownloadTests(unittest.TestCase):
             downloader.log = downloader.logs.append
 
             ZSXQFileDownloader._handle_download_stop(downloader, 101, str(temp_path))
+
+            self.assertEqual(
+                (101, "failed", None, "stopped", "下载过程中被停止"),
+                downloader.file_db.status_updates[-1],
+            )
+            self.assertFalse(temp_path.exists())
+            self.assertEqual(["🛑 下载过程中被停止"], downloader.logs)
+
+    def test_handle_download_stop_target_preserves_status_log_and_cleanup(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir) / "memo.pdf.part"
+            temp_path.write_bytes(b"memo")
+            downloader = object.__new__(ZSXQFileDownloader)
+            downloader.file_db = FakeDownloadFileDb()
+            downloader.logs = []
+            downloader.log = downloader.logs.append
+
+            ZSXQFileDownloader._handle_download_stop_target(
+                downloader,
+                DownloadStopTarget(101, str(temp_path)),
+            )
 
             self.assertEqual(
                 (101, "failed", None, "stopped", "下载过程中被停止"),

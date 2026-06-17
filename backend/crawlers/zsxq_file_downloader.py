@@ -3041,6 +3041,12 @@ class ZSXQFileDownloader:
         self,
         target: DownloadStopTarget,
     ) -> None:
+        self._record_download_stop_target(target)
+
+    def _record_download_stop_target(
+        self,
+        target: DownloadStopTarget,
+    ) -> None:
         self.log("🛑 下载过程中被停止")
         self.file_db.update_file_download_status(
             target.file_id,
