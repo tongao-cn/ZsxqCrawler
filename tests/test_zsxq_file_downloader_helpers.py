@@ -2266,6 +2266,37 @@ class FileDownloaderBatchDownloadTests(unittest.TestCase):
         )
         self.assertEqual(["📭 没有更多文件"], empty_downloader.logs)
 
+    def test_fetch_batch_download_page_target_preserves_fetch_then_response_handoff(self):
+        downloader = object.__new__(ZSXQFileDownloader)
+        data = {"resp_data": {"files": [{"file": {"id": 101, "name": "memo.pdf"}}], "index": "next"}}
+        page = SimpleNamespace(files=data["resp_data"]["files"], next_index="next")
+        events = []
+
+        def fetch_file_list(**kwargs):
+            events.append(("fetch", kwargs))
+            return data
+
+        def response_page(received_data):
+            events.append(("response", received_data))
+            return page
+
+        downloader.fetch_file_list = fetch_file_list
+        downloader._batch_download_page_from_response = response_page
+
+        fetched_page = ZSXQFileDownloader._fetch_batch_download_page_target(
+            downloader,
+            BatchDownloadFetchTarget("cursor"),
+        )
+
+        self.assertIs(page, fetched_page)
+        self.assertEqual(
+            [
+                ("fetch", {"count": 20, "index": "cursor"}),
+                ("response", data),
+            ],
+            events,
+        )
+
     def test_download_batch_file_item_preserves_limit_reached_delay_skip(self):
         downloader = object.__new__(ZSXQFileDownloader)
         downloader.logs = []
