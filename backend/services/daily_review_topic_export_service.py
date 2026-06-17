@@ -7,7 +7,7 @@ from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Iterable, Literal, Pattern
 
-from backend.services.daily_topic_analysis_topics import clip_text, date_bounds
+from backend.services.daily_topic_analysis_topics import clip_text
 from backend.storage.db_compat import connect
 
 
@@ -16,7 +16,7 @@ ReviewTopicSlot = Literal["morning", "evening"]
 SHANGHAI_TZ = timezone(timedelta(hours=8))
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_OUTPUT_ROOT = PROJECT_ROOT / "output" / "exports" / "daily-review-topics"
-DEFAULT_GROUP_IDS = ("51111112855254", "15552822451452")
+DEFAULT_GROUP_IDS = ("51111112855254", "15552822451452", "28888222124181")
 
 
 @dataclass(frozen=True)
@@ -27,7 +27,9 @@ class ReviewTopicRule:
 
 MORNING_RULES = (
     ReviewTopicRule("盘前热点事件", re.compile(r"盘前热点事件", re.I)),
+    ReviewTopicRule("盘前热点", re.compile(r"\d{1,2}月\d{1,2}日，?盘前热点", re.I)),
     ReviewTopicRule("股市早报", re.compile(r"\d{1,2}月\d{1,2}日股市早报|股市早报", re.I)),
+    ReviewTopicRule("TMT早报", re.compile(r"^TMTB?\s*.*(早|晨|盘前|收盘综述|市场动态|要闻|速览|摘要|突破)", re.I)),
     ReviewTopicRule("盘前PH解盘追踪", re.compile(r"盘前\d{3,4}.*PH解盘追踪|PH解盘追踪", re.I)),
     ReviewTopicRule(
         "高盛中国开盘",
@@ -40,6 +42,7 @@ EVENING_RULES = (
     ReviewTopicRule("复盘数据/市场情绪", re.compile(r"复盘数据/市场情绪", re.I)),
     ReviewTopicRule("盘后解读", re.compile(r"盘后解读", re.I)),
     ReviewTopicRule("东财策略每日复盘", re.compile(r"东财策略.*每日复盘|每日复盘.*东财策略", re.I)),
+    ReviewTopicRule("日报", re.compile(r"^日报\d{4}[:：]", re.I)),
     ReviewTopicRule("晚报", re.compile(r"行业新闻晚报|晚报", re.I)),
     ReviewTopicRule("市场总结/回顾", re.compile(r"市场总结|市场回顾", re.I)),
 )
@@ -87,6 +90,21 @@ def parse_report_date(value: str | None) -> date:
     if not value:
         return shanghai_today()
     return datetime.strptime(value, "%Y-%m-%d").date()
+
+
+def _format_bj(dt: datetime) -> str:
+    return dt.astimezone(SHANGHAI_TZ).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "+0800"
+
+
+def review_topic_time_bounds(report_date: date, slot: ReviewTopicSlot) -> tuple[str, str]:
+    if slot == "morning":
+        start_dt = datetime.combine(report_date - timedelta(days=1), datetime.min.time(), tzinfo=SHANGHAI_TZ)
+        start_dt = start_dt.replace(hour=18)
+        end_dt = datetime.combine(report_date, datetime.min.time(), tzinfo=SHANGHAI_TZ).replace(hour=11, minute=30)
+        return _format_bj(start_dt), _format_bj(end_dt)
+    start_dt = datetime.combine(report_date, datetime.min.time(), tzinfo=SHANGHAI_TZ).replace(hour=12)
+    end_dt = datetime.combine(report_date + timedelta(days=1), datetime.min.time(), tzinfo=SHANGHAI_TZ).replace(hour=1, minute=30)
+    return _format_bj(start_dt), _format_bj(end_dt)
 
 
 def normalize_group_ids(values: Iterable[str] | None) -> list[str]:
@@ -169,7 +187,7 @@ def fetch_review_topics(
     max_topic_chars: int = 8000,
 ) -> list[dict[str, Any]]:
     normalized_group_ids = normalize_group_ids(group_ids)
-    start_time, end_time = date_bounds(report_date)
+    start_time, end_time = review_topic_time_bounds(report_date, slot)
     placeholders = ",".join("?" for _ in normalized_group_ids)
     rows = conn.execute(
         f"""
@@ -334,5 +352,6 @@ __all__ = [
     "normalize_review_slot",
     "parse_report_date",
     "render_review_topics_markdown",
+    "review_topic_time_bounds",
     "write_review_topic_export",
 ]

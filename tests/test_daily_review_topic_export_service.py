@@ -47,10 +47,33 @@ def _row(**overrides):
 
 class DailyReviewTopicExportServiceTests(unittest.TestCase):
     def test_normalize_review_slot_accepts_chinese_aliases(self):
-        from backend.services.daily_review_topic_export_service import normalize_review_slot
+        from backend.services.daily_review_topic_export_service import DEFAULT_GROUP_IDS, normalize_review_slot
 
         self.assertEqual("morning", normalize_review_slot("早报"))
         self.assertEqual("evening", normalize_review_slot("晚报"))
+        self.assertIn("28888222124181", DEFAULT_GROUP_IDS)
+
+    def test_new_group_tmt_and_daily_rules_are_classified(self):
+        from backend.services.daily_review_topic_export_service import match_review_rule
+
+        morning_rule = match_review_rule("morning", "TMT早间市场动态 | TMT...")
+        evening_rule = match_review_rule("evening", "日报0616：")
+        pre_market_rule = match_review_rule("morning", "6月17日，盘前热点")
+
+        self.assertEqual("TMT早报", morning_rule.name)
+        self.assertEqual("日报", evening_rule.name)
+        self.assertEqual("盘前热点", pre_market_rule.name)
+
+    def test_review_topic_time_bounds_include_prior_evening_for_morning(self):
+        from backend.services.daily_review_topic_export_service import review_topic_time_bounds
+
+        morning_start, morning_end = review_topic_time_bounds(date(2026, 6, 17), "morning")
+        evening_start, evening_end = review_topic_time_bounds(date(2026, 6, 17), "evening")
+
+        self.assertEqual("2026-06-16T18:00:00.000+0800", morning_start)
+        self.assertEqual("2026-06-17T11:30:00.000+0800", morning_end)
+        self.assertEqual("2026-06-17T12:00:00.000+0800", evening_start)
+        self.assertEqual("2026-06-18T01:30:00.000+0800", evening_end)
 
     def test_fetch_review_topics_matches_slot_rules(self):
         from backend.services.daily_review_topic_export_service import fetch_review_topics
