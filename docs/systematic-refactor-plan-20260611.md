@@ -33458,6 +33458,52 @@ Result:
 - Full backend unittest discovery passed in the current worktree: 1345 tests, 15 skipped.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-17 - P197 isolate batch page fetch failure handling
+
+Changed:
+
+- Added characterization coverage for `_fetch_batch_download_page_target(...)` preserving the failed-fetch
+  short-circuit: a missing page response logs the existing fetch-failed message, returns `None`, and
+  does not call `_batch_download_page_from_response(...)`.
+- Extracted `_handle_batch_download_page_fetch_failure(...)` from `_fetch_batch_download_page_target(...)`.
+- Kept the falsy-data condition, fetch target handoff, failure log text, terminal return value, and
+  success response path unchanged.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Batch download page fetch failures still stop before response parsing and preserve the existing
+  `❌ 获取文件列表失败` log.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderBatchDownloadTests.test_fetch_batch_download_page_target_preserves_fetch_failure_short_circuit -v
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderBatchDownloadTests.test_fetch_batch_download_page_target_preserves_fetch_failure_short_circuit tests.test_zsxq_file_downloader_helpers.FileDownloaderBatchDownloadTests.test_fetch_batch_download_page_target_preserves_fetch_then_response_handoff tests.test_zsxq_file_downloader_helpers.FileDownloaderBatchDownloadTests.test_fetch_batch_download_page_target_preserves_fetch_response_handling tests.test_zsxq_file_downloader_helpers.FileDownloaderBatchDownloadTests.test_fetch_batch_download_page_preserves_fetch_args_success_and_terminal_logs tests.test_zsxq_file_downloader_helpers.FileDownloaderBatchDownloadTests.test_run_batch_download_page_preserves_fetch_terminal_and_step_handoff tests.test_zsxq_file_downloader_helpers.FileDownloaderBatchDownloadTests.test_run_batch_download_page_target_preserves_fetch_target_terminal -v
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run ruff check backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py --select F401,F841
+git diff --check -- backend/crawlers/zsxq_file_downloader.py tests/test_zsxq_file_downloader_helpers.py docs/systematic-refactor-plan-20260611.md
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- New failed-fetch short-circuit characterization test passed before helper extraction: 1 test.
+- Focused failed-fetch, fetch handoff, response handling, fetch wrapper, and terminal page tests
+  passed after helper extraction: 6 tests.
+- `py_compile` passed.
+- ZSXQ file downloader helper tests passed: 360 tests.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- Scoped `git diff --check` passed for the P197 files; Git only reported existing LF-to-CRLF
+  working-copy warnings.
+- Full backend unittest discovery passed in the current worktree: 1346 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:

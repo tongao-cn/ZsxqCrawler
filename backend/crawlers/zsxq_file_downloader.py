@@ -3505,8 +3505,7 @@ class ZSXQFileDownloader:
     ) -> Optional[BatchDownloadPage]:
         data = self._fetch_batch_download_page_data(target)
         if not data:
-            self.log(batch_download_fetch_failed_message())
-            return None
+            return self._handle_batch_download_page_fetch_failure()
 
         return self._batch_download_page_from_response(data)
 
@@ -3515,6 +3514,10 @@ class ZSXQFileDownloader:
         target: BatchDownloadFetchTarget,
     ) -> Optional[Dict[str, Any]]:
         return self.fetch_file_list(count=20, index=target.current_index)
+
+    def _handle_batch_download_page_fetch_failure(self) -> Optional[BatchDownloadPage]:
+        self.log(batch_download_fetch_failed_message())
+        return None
 
     def _batch_download_page_from_response(
         self,

@@ -2297,6 +2297,32 @@ class FileDownloaderBatchDownloadTests(unittest.TestCase):
             events,
         )
 
+    def test_fetch_batch_download_page_target_preserves_fetch_failure_short_circuit(self):
+        downloader = object.__new__(ZSXQFileDownloader)
+        downloader.logs = []
+        downloader.log = downloader.logs.append
+        fetch_targets = []
+
+        def fetch_page_data(target):
+            fetch_targets.append(target)
+            return None
+
+        def response_page(data):
+            self.fail("failed batch page fetch must not parse a response")
+
+        downloader._fetch_batch_download_page_data = fetch_page_data
+        downloader._batch_download_page_from_response = response_page
+
+        page = ZSXQFileDownloader._fetch_batch_download_page_target(
+            downloader,
+            BatchDownloadFetchTarget("cursor"),
+        )
+
+        self.assertIsNone(page)
+        self.assertEqual(1, len(fetch_targets))
+        self.assertEqual("cursor", fetch_targets[0].current_index)
+        self.assertEqual(["❌ 获取文件列表失败"], downloader.logs)
+
     def test_download_batch_file_item_preserves_limit_reached_delay_skip(self):
         downloader = object.__new__(ZSXQFileDownloader)
         downloader.logs = []
