@@ -344,6 +344,11 @@ class DownloadUrlRetryLoopTarget(NamedTuple):
     max_retries: int
 
 
+class DownloadUrlRetryLoopStepDecision(NamedTuple):
+    result: Optional[str]
+    should_continue: bool
+
+
 class DownloadRetryWaitTarget(NamedTuple):
     attempt: int
     download_retries: int
@@ -1898,6 +1903,18 @@ class ZSXQFileDownloader:
             return DownloadUrlResponseDecision(None, True, False)
         return DownloadUrlResponseDecision(None, False, False)
 
+    def _download_url_retry_loop_step_decision(
+        self,
+        decision: DownloadUrlResponseDecision,
+    ) -> DownloadUrlRetryLoopStepDecision:
+        if decision.download_url:
+            return DownloadUrlRetryLoopStepDecision(decision.download_url, False)
+        if decision.should_retry:
+            return DownloadUrlRetryLoopStepDecision(None, True)
+        if decision.should_stop:
+            return DownloadUrlRetryLoopStepDecision(None, False)
+        return DownloadUrlRetryLoopStepDecision(None, True)
+
     def _run_download_url_retry_loop_target(
         self,
         target: DownloadUrlRetryLoopTarget,
@@ -1906,12 +1923,10 @@ class ZSXQFileDownloader:
             decision = self._run_download_url_attempt_target(
                 DownloadUrlAttemptTarget(target.url, target.file_id, attempt, target.max_retries),
             )
-            if decision.download_url:
-                return decision.download_url
-            if decision.should_retry:
+            step_decision = self._download_url_retry_loop_step_decision(decision)
+            if step_decision.should_continue:
                 continue
-            if decision.should_stop:
-                return None
+            return step_decision.result
 
         print(retry_exhausted_message(target.max_retries))
         return None

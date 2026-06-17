@@ -10,6 +10,8 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from backend.crawlers.zsxq_file_downloader import (
+    DownloadUrlResponseDecision,
+    DownloadUrlRetryLoopTarget,
     ZSXQFileDownloader,
     _database_stats_time_range,
     _database_stats_total_size,
@@ -5462,6 +5464,85 @@ class FileDownloaderRetryHelperTests(unittest.TestCase):
             ],
             operations,
         )
+
+    def test_run_download_url_retry_loop_preserves_retry_then_success(self):
+        downloader = object.__new__(ZSXQFileDownloader)
+        calls = []
+        decisions = [
+            DownloadUrlResponseDecision(None, True, False),
+            DownloadUrlResponseDecision("https://signed.example/file.pdf", False, False),
+        ]
+
+        def run_download_url_attempt_target(target):
+            calls.append((target.url, target.file_id, target.attempt, target.max_retries))
+            return decisions[target.attempt]
+
+        downloader._run_download_url_attempt_target = run_download_url_attempt_target
+
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            result = ZSXQFileDownloader._run_download_url_retry_loop_target(
+                downloader,
+                DownloadUrlRetryLoopTarget("https://api.example/v2/files/303/download_url", 303, 3),
+            )
+
+        self.assertEqual("https://signed.example/file.pdf", result)
+        self.assertEqual(
+            [
+                ("https://api.example/v2/files/303/download_url", 303, 0, 3),
+                ("https://api.example/v2/files/303/download_url", 303, 1, 3),
+            ],
+            calls,
+        )
+        self.assertEqual("", output.getvalue())
+
+    def test_run_download_url_retry_loop_preserves_stop_without_exhausted_output(self):
+        downloader = object.__new__(ZSXQFileDownloader)
+        calls = []
+
+        def run_download_url_attempt_target(target):
+            calls.append((target.url, target.file_id, target.attempt, target.max_retries))
+            return DownloadUrlResponseDecision(None, False, True)
+
+        downloader._run_download_url_attempt_target = run_download_url_attempt_target
+
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            result = ZSXQFileDownloader._run_download_url_retry_loop_target(
+                downloader,
+                DownloadUrlRetryLoopTarget("https://api.example/v2/files/404/download_url", 404, 3),
+            )
+
+        self.assertIsNone(result)
+        self.assertEqual([("https://api.example/v2/files/404/download_url", 404, 0, 3)], calls)
+        self.assertEqual("", output.getvalue())
+
+    def test_run_download_url_retry_loop_preserves_exhausted_output(self):
+        downloader = object.__new__(ZSXQFileDownloader)
+        calls = []
+
+        def run_download_url_attempt_target(target):
+            calls.append((target.url, target.file_id, target.attempt, target.max_retries))
+            return DownloadUrlResponseDecision(None, True, False)
+
+        downloader._run_download_url_attempt_target = run_download_url_attempt_target
+
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            result = ZSXQFileDownloader._run_download_url_retry_loop_target(
+                downloader,
+                DownloadUrlRetryLoopTarget("https://api.example/v2/files/505/download_url", 505, 2),
+            )
+
+        self.assertIsNone(result)
+        self.assertEqual(
+            [
+                ("https://api.example/v2/files/505/download_url", 505, 0, 2),
+                ("https://api.example/v2/files/505/download_url", 505, 1, 2),
+            ],
+            calls,
+        )
+        self.assertEqual([retry_exhausted_message(2)], output.getvalue().splitlines())
 
     def test_risk_event_user_agent_label_preserves_browser_platform_labels(self):
         self.assertEqual(
