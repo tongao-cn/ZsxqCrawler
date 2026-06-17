@@ -29059,6 +29059,58 @@ Result:
 - Full backend unittest discovery passed in the current worktree: 1213 tests, 15 skipped.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-17 - P102 download URL entry target handoff
+
+Changed:
+
+- Added direct characterization coverage for `get_download_url(file_id)` before changing
+  production code, locking public `file_id` handoff into `_start_download_url_request(...)`, retry
+  loop target construction, retry limit, and returned URL propagation.
+- Added private `DownloadUrlEntryTarget` to carry the public download-URL input together.
+- Added private `_get_download_url_target(...)` and delegated the public `get_download_url(...)`
+  method to it.
+- Kept public `get_download_url(file_id)` signature, docstring, retry count, and historical
+  `file_id` / `topic_id` compatibility note unchanged.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Download URL request URL construction, retry-loop handoff, retry count, signed URL redaction,
+  risk-event logging, request exception handling, API/HTTP failure handling, fallback/legacy
+  behavior, error semantics, and return values are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderRetryHelperTests.test_get_download_url_preserves_entry_request_and_retry_handoff -v
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderRetryHelperTests.test_get_download_url_preserves_entry_request_and_retry_handoff tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_get_download_url_redacts_signed_url_in_stdout tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_get_download_url_retries_api_failure_then_success_preserves_events tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_get_download_url_stops_on_non_retry_http_failure tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_get_download_url_initial_request_preserves_url_timeout_retry_limit_and_error_reset -v
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py
+uv run python scripts\scan_postgres_compat_debt.py
+uv run ruff check backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py --select F401,F841
+git diff --check
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- New direct download-URL entry characterization test passed before production helper handoff:
+  1 test.
+- A first post-change focused command used the wrong test class for existing download-URL tests
+  and failed with unittest `AttributeError`; this was a test-selection error, then the corrected
+  focused command below passed.
+- Focused download-URL entry and retry/failure/redaction tests passed after helper handoff:
+  5 tests.
+- `py_compile` passed.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- `git diff --check` passed; Git only reported existing LF-to-CRLF working-copy warnings.
+- ZSXQ file downloader helper tests passed: 236 tests.
+- Full backend unittest discovery passed in the current worktree: 1214 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:

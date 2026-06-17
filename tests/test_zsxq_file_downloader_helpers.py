@@ -3848,6 +3848,52 @@ class FileDownloaderRetryHelperTests(unittest.TestCase):
         self.assertTrue(should_log_full_response(1, 3, True))
         self.assertTrue(should_log_full_response(2, 3, False))
 
+    def test_get_download_url_preserves_entry_request_and_retry_handoff(self):
+        downloader = object.__new__(ZSXQFileDownloader)
+        expected_url = "https://api.example/v2/files/202/download_url"
+        expected_result = "https://signed.example/file.pdf"
+        calls = []
+
+        def start_download_url_request(downloader_self, file_id):
+            self.assertIs(downloader, downloader_self)
+            calls.append(("start", file_id))
+            return expected_url
+
+        def run_download_url_retry_loop_target(downloader_self, target):
+            self.assertIs(downloader, downloader_self)
+            calls.append(
+                (
+                    "retry",
+                    target.url,
+                    target.file_id,
+                    target.max_retries,
+                )
+            )
+            return expected_result
+
+        with (
+            patch.object(
+                ZSXQFileDownloader,
+                "_start_download_url_request",
+                start_download_url_request,
+            ),
+            patch.object(
+                ZSXQFileDownloader,
+                "_run_download_url_retry_loop_target",
+                run_download_url_retry_loop_target,
+            ),
+        ):
+            result = ZSXQFileDownloader.get_download_url(downloader, 202)
+
+        self.assertEqual(expected_result, result)
+        self.assertEqual(
+            [
+                ("start", 202),
+                ("retry", expected_url, 202, 10),
+            ],
+            calls,
+        )
+
     def test_file_list_request_params_preserve_index_truthiness_and_log_order(self):
         self.assertEqual(
             {"count": "20", "sort": "by_download_count", "index": "next-index"},

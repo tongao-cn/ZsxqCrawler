@@ -219,6 +219,10 @@ class DownloadUrlResponseDecision(NamedTuple):
     should_stop: bool
 
 
+class DownloadUrlEntryTarget(NamedTuple):
+    file_id: int
+
+
 class DownloadUrlRequestTarget(NamedTuple):
     url: str
     headers: Dict[str, str]
@@ -1632,9 +1636,15 @@ class ZSXQFileDownloader:
         - 边获取边下载时：传入的是真实的 file_id
         - 从数据库下载时：传入的是 topic_id
         """
-        url = self._start_download_url_request(file_id)
+        return self._get_download_url_target(DownloadUrlEntryTarget(file_id))
+
+    def _get_download_url_target(
+        self,
+        target: DownloadUrlEntryTarget,
+    ) -> Optional[str]:
+        url = self._start_download_url_request(target.file_id)
         return self._run_download_url_retry_loop_target(
-            DownloadUrlRetryLoopTarget(url, file_id, DOWNLOAD_URL_MAX_RETRIES),
+            DownloadUrlRetryLoopTarget(url, target.file_id, DOWNLOAD_URL_MAX_RETRIES),
         )
 
     def download_file(self, file_info: Dict[str, Any]) -> bool:
