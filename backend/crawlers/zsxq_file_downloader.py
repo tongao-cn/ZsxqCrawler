@@ -471,6 +471,10 @@ class DownloadIntervalPlanTarget(NamedTuple):
     interval_values: DownloadIntervalValues
 
 
+class FileCollectionTarget(NamedTuple):
+    pass
+
+
 class FileCollectionPage(NamedTuple):
     data: Dict[str, Any]
     files: list[Dict[str, Any]]
@@ -2927,6 +2931,12 @@ class ZSXQFileDownloader:
 
     def collect_all_files_to_database(self) -> Dict[str, int]:
         """收集所有文件信息到数据库"""
+        return self._collect_all_files_to_database_target(FileCollectionTarget())
+
+    def _collect_all_files_to_database_target(
+        self,
+        target: FileCollectionTarget,
+    ) -> Dict[str, int]:
         print(file_collection_start_message())
 
         # 创建收集记录

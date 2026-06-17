@@ -563,6 +563,82 @@ class FileDownloaderPaginationTests(unittest.TestCase):
         self.assertEqual(99, _file_collection_log_id((99,)))
         self.assertEqual(99, _file_collection_log_id((99, "ignored")))
 
+    def test_collect_all_files_preserves_entry_log_loop_update_and_summary_handoff(self):
+        downloader = object.__new__(ZSXQFileDownloader)
+        stats = {"total_files": 2, "new_files": 1, "skipped_files": 0}
+        calls = []
+
+        def print_message(message=""):
+            calls.append(("print", message))
+
+        def create_file_collection_log(downloader_self):
+            self.assertIs(downloader, downloader_self)
+            calls.append(("create_log",))
+            return "log-1"
+
+        def file_collection_stats_target():
+            calls.append(("stats",))
+            return stats
+
+        def run_file_collection_loop(downloader_self, stats_arg):
+            self.assertIs(downloader, downloader_self)
+            self.assertIs(stats, stats_arg)
+            calls.append(("loop", stats_arg))
+            return 3
+
+        def update_file_collection_log(downloader_self, stats_arg, log_id):
+            self.assertIs(downloader, downloader_self)
+            self.assertIs(stats, stats_arg)
+            calls.append(("update", stats_arg, log_id))
+
+        def completion_messages(stats_arg, page_count):
+            self.assertIs(stats, stats_arg)
+            calls.append(("summary", stats_arg, page_count))
+            return ("done-1", "done-2")
+
+        with (
+            patch("backend.crawlers.zsxq_file_downloader.print", print_message),
+            patch.object(
+                ZSXQFileDownloader,
+                "_create_file_collection_log",
+                create_file_collection_log,
+            ),
+            patch(
+                "backend.crawlers.zsxq_file_downloader.file_collection_stats",
+                file_collection_stats_target,
+            ),
+            patch.object(
+                ZSXQFileDownloader,
+                "_run_file_collection_loop",
+                run_file_collection_loop,
+            ),
+            patch.object(
+                ZSXQFileDownloader,
+                "_update_file_collection_log",
+                update_file_collection_log,
+            ),
+            patch(
+                "backend.crawlers.zsxq_file_downloader.file_collection_completion_messages",
+                completion_messages,
+            ),
+        ):
+            result = ZSXQFileDownloader.collect_all_files_to_database(downloader)
+
+        self.assertIs(stats, result)
+        self.assertEqual(
+            [
+                ("print", "\n📊 开始收集文件列表到数据库..."),
+                ("create_log",),
+                ("stats",),
+                ("loop", stats),
+                ("update", stats, "log-1"),
+                ("summary", stats, 3),
+                ("print", "done-1"),
+                ("print", "done-2"),
+            ],
+            calls,
+        )
+
     def test_collect_all_files_stops_when_page_import_fails(self):
         downloader = self._downloader_with_failing_import()
 
