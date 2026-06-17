@@ -843,6 +843,60 @@ class FileDownloaderPaginationTests(unittest.TestCase):
         self.assertEqual(0, downloader.time_range_calls)
         self.assertEqual([], downloader.collect_calls)
 
+    def test_collect_incremental_files_preserves_entry_start_stop_and_time_info_handoff(self):
+        downloader = object.__new__(ZSXQFileDownloader)
+        time_info = {
+            "has_data": True,
+            "total_files": 5,
+            "oldest_time": "1680000000000",
+            "newest_time": "2026-05-02",
+        }
+        expected_stats = {"total_files": 8, "new_files": 4}
+        calls = []
+
+        downloader.log = lambda message: calls.append(("log", message))
+
+        def should_stop_time_collection_initially(downloader_self):
+            self.assertIs(downloader, downloader_self)
+            calls.append(("should_stop",))
+            return False
+
+        def get_database_time_range():
+            calls.append(("time_range",))
+            return time_info
+
+        def collect_incremental_from_time_info(downloader_self, time_info_arg):
+            self.assertIs(downloader, downloader_self)
+            calls.append(("collect", time_info_arg))
+            return expected_stats
+
+        downloader.get_database_time_range = get_database_time_range
+
+        with (
+            patch.object(
+                ZSXQFileDownloader,
+                "_should_stop_time_collection_initially",
+                should_stop_time_collection_initially,
+            ),
+            patch.object(
+                ZSXQFileDownloader,
+                "_collect_incremental_from_time_info",
+                collect_incremental_from_time_info,
+            ),
+        ):
+            result = ZSXQFileDownloader.collect_incremental_files(downloader)
+
+        self.assertIs(expected_stats, result)
+        self.assertEqual(
+            [
+                ("log", "🔄 开始增量文件收集..."),
+                ("should_stop",),
+                ("time_range",),
+                ("collect", time_info),
+            ],
+            calls,
+        )
+
     def test_collect_incremental_files_preserves_empty_database_fallback(self):
         downloader = self._incremental_downloader({"has_data": False, "total_files": 0})
 

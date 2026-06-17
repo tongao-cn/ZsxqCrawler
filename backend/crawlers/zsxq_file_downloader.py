@@ -507,6 +507,10 @@ class TimeCollectionTarget(NamedTuple):
     force_refresh: bool
 
 
+class IncrementalCollectionTarget(NamedTuple):
+    pass
+
+
 class DateRangeCollectionTarget(NamedTuple):
     start_date: Optional[str]
     end_date: Optional[str]
@@ -3355,6 +3359,12 @@ class ZSXQFileDownloader:
     
     def collect_incremental_files(self) -> Dict[str, int]:
         """增量收集：从数据库最老时间戳开始继续收集"""
+        return self._collect_incremental_files_target(IncrementalCollectionTarget())
+
+    def _collect_incremental_files_target(
+        self,
+        target: IncrementalCollectionTarget,
+    ) -> Dict[str, int]:
         self.log(incremental_collection_start_message())
 
         # 检查是否需要停止

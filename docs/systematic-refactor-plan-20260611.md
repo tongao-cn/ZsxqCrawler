@@ -29111,6 +29111,55 @@ Result:
 - Full backend unittest discovery passed in the current worktree: 1214 tests, 15 skipped.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-17 - P103 incremental collection entry target handoff
+
+Changed:
+
+- Added direct characterization coverage for `collect_incremental_files()` before changing
+  production code, locking entry start logging, initial stop check ordering, database time-range
+  lookup, incremental time-info helper handoff, and returned stats identity.
+- Added private no-field `IncrementalCollectionTarget` for the no-argument incremental collection
+  entrypoint.
+- Added private `_collect_incremental_files_target(...)` and delegated the public
+  `collect_incremental_files()` method to it.
+- Kept public `collect_incremental_files()` signature and behavior unchanged.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Start logging, initial stop fallback, database time-range lookup, empty database fallback,
+  missing oldest-time fallback, oldest timestamp conversion, timestamp failure fallback,
+  downstream `collect_files_by_time(...)` calls, error semantics, return values, and
+  fallback/legacy behavior are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderPaginationTests.test_collect_incremental_files_preserves_entry_start_stop_and_time_info_handoff -v
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderPaginationTests.test_collect_incremental_files_preserves_entry_start_stop_and_time_info_handoff tests.test_zsxq_file_downloader_helpers.FileDownloaderPaginationTests.test_collect_incremental_files_preserves_stop_before_time_range_lookup tests.test_zsxq_file_downloader_helpers.FileDownloaderPaginationTests.test_collect_incremental_files_preserves_empty_database_fallback tests.test_zsxq_file_downloader_helpers.FileDownloaderPaginationTests.test_collect_incremental_files_preserves_missing_oldest_time_fallback tests.test_zsxq_file_downloader_helpers.FileDownloaderPaginationTests.test_collect_incremental_files_preserves_start_index_collection_path tests.test_zsxq_file_downloader_helpers.FileDownloaderPaginationTests.test_collect_incremental_files_preserves_timestamp_failure_fallback -v
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py
+uv run python scripts\scan_postgres_compat_debt.py
+uv run ruff check backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py --select F401,F841
+git diff --check
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- New direct incremental-collection entry characterization test passed before production helper
+  handoff: 1 test.
+- Focused incremental entry and fallback/timestamp tests passed after helper handoff: 6 tests.
+- `py_compile` passed.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- `git diff --check` passed; Git only reported existing LF-to-CRLF working-copy warnings.
+- ZSXQ file downloader helper tests passed: 237 tests.
+- Full backend unittest discovery passed in the current worktree: 1215 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:
