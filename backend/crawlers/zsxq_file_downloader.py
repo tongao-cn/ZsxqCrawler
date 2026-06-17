@@ -3044,15 +3044,21 @@ class ZSXQFileDownloader:
             return DownloadBodyResult(False, None)
 
         mismatch_detail = self._handle_download_size_mismatch_target(
-            DownloadSizeMismatchTarget(
-                finalization_target.expected_size,
-                finalization_target.temp_path,
-            ),
+            self._download_size_mismatch_target_for_finalization(finalization_target),
         )
         if mismatch_detail:
             return DownloadBodyResult(None, mismatch_detail)
 
         return self._successful_download_body_result_target(finalization_target)
+
+    def _download_size_mismatch_target_for_finalization(
+        self,
+        finalization_target: DownloadBodyFinalizationTarget,
+    ) -> DownloadSizeMismatchTarget:
+        return DownloadSizeMismatchTarget(
+            finalization_target.expected_size,
+            finalization_target.temp_path,
+        )
 
     def _successful_download_body_result_target(
         self,
