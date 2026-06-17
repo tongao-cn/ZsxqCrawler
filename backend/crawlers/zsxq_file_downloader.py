@@ -2508,10 +2508,19 @@ class ZSXQFileDownloader:
         self,
         target: DownloadBodyResponseTarget,
     ) -> Optional[int]:
-        body_target = target.body_target
+        return self._write_download_body_response_stream(
+            target.response,
+            target.body_target,
+        )
+
+    def _write_download_body_response_stream(
+        self,
+        response: Any,
+        body_target: DownloadBodyWriteTarget,
+    ) -> Optional[int]:
         downloaded_size = 0
         with open(body_target.temp_path, 'wb') as f:
-            for chunk in target.response.iter_content(chunk_size=8192):
+            for chunk in response.iter_content(chunk_size=8192):
                 if chunk:
                     chunk_result = self._write_download_body_content_chunk(
                         f,

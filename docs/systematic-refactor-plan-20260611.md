@@ -31565,6 +31565,52 @@ Result:
 - Full backend unittest discovery passed in the current worktree: 1296 tests, 15 skipped.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-17 - P156 isolate download body response stream writing
+
+Changed:
+
+- Added response-body characterization coverage for `_write_download_response_body_result_target(...)`
+  preserving existing partial-file truncation, returned downloaded size, rewritten file content,
+  and progress log text.
+- Extracted `_write_download_body_response_stream(...)` from
+  `_write_download_response_body_result_target(...)`.
+- Kept `open(..., 'wb')`, `iter_content(chunk_size=8192)`, empty-chunk skipping, nonempty chunk
+  handling, stop behavior, and returned downloaded size unchanged.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Existing `.part` files are still truncated before writing the response stream, and download body
+  streaming still uses the same chunk and stop semantics.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_write_download_response_body_result_target_truncates_existing_partial_file -v
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_write_download_response_body_result_target_truncates_existing_partial_file tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_write_download_response_body_result_target_stops_after_nonempty_chunk tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_write_download_response_body_result_target_preserves_chunk_order tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_write_download_body_chunk_preserves_write_size_and_progress_log tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_write_download_response_body_preserves_progress_stop_and_empty_chunks tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_download_file_clears_existing_partial_file_before_successful_body_write tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_download_file_stops_during_body_download -v
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run ruff check backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py --select F401,F841
+git diff --check
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- New response-body truncation characterization test passed before helper extraction: 1 test.
+- Focused response-stream, progress, stop, truncation, and adjacent download tests passed after
+  helper extraction: 7 tests.
+- `py_compile` passed.
+- ZSXQ file downloader helper tests passed: 319 tests.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- `git diff --check` passed; Git only reported existing LF-to-CRLF working-copy warnings.
+- Full backend unittest discovery passed in the current worktree: 1297 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:

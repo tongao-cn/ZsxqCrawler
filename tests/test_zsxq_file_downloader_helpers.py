@@ -8119,6 +8119,28 @@ class FileDownloaderDownloadTests(unittest.TestCase):
                 downloader.logs,
             )
 
+    def test_write_download_response_body_result_target_truncates_existing_partial_file(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir) / "memo.pdf.part"
+            temp_path.write_bytes(b"old-body")
+            response = FakeChunkedDownloadResponse([b"new"])
+            downloader = object.__new__(ZSXQFileDownloader)
+            downloader.logs = []
+            downloader.log = downloader.logs.append
+            downloader.check_stop = lambda: False
+
+            downloaded_size = ZSXQFileDownloader._write_download_response_body_result_target(
+                downloader,
+                DownloadBodyResponseTarget(
+                    response,
+                    DownloadBodyWriteTarget(str(temp_path), 3, 101),
+                ),
+            )
+
+            self.assertEqual(3, downloaded_size)
+            self.assertEqual(b"new", temp_path.read_bytes())
+            self.assertEqual(["   📊 进度: 100.0% (3/3 bytes)"], downloader.logs)
+
     def test_write_download_body_chunk_preserves_write_size_and_progress_log(self):
         downloader = object.__new__(ZSXQFileDownloader)
         downloader.logs = []
