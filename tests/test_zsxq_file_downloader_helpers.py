@@ -4513,6 +4513,27 @@ class FileDownloaderRetryHelperTests(unittest.TestCase):
             output.getvalue().splitlines(),
         )
 
+    def test_handle_file_list_request_exception_preserves_output_and_retry_decision(self):
+        downloader = object.__new__(ZSXQFileDownloader)
+        output = io.StringIO()
+
+        with contextlib.redirect_stdout(output):
+            should_retry = ZSXQFileDownloader._handle_file_list_request_exception(
+                downloader,
+                RuntimeError("socket reset"),
+                0,
+                2,
+            )
+
+        self.assertTrue(should_retry)
+        self.assertEqual(
+            [
+                "   ❌ 请求异常: socket reset",
+                "   🔄 请求异常，准备重试...",
+            ],
+            output.getvalue().splitlines(),
+        )
+
     def test_should_log_full_response_on_first_last_or_success(self):
         self.assertTrue(should_log_full_response(0, 3, False))
         self.assertFalse(should_log_full_response(1, 3, False))
@@ -4806,6 +4827,26 @@ class FileDownloaderRetryHelperTests(unittest.TestCase):
                 "   ❌ HTTP错误: 403",
                 "   📄 响应内容: forbidden",
                 "   🚫 非可重试HTTP错误，停止重试",
+            ],
+            output.getvalue().splitlines(),
+        )
+
+    def test_handle_download_url_request_exception_preserves_output_and_retry_decision(self):
+        downloader = object.__new__(ZSXQFileDownloader)
+        output = io.StringIO()
+
+        with contextlib.redirect_stdout(output):
+            should_retry = ZSXQFileDownloader._handle_download_url_request_exception(
+                downloader,
+                RuntimeError("final"),
+                1,
+                2,
+            )
+
+        self.assertFalse(should_retry)
+        self.assertEqual(
+            [
+                "   ❌ 请求异常: final",
             ],
             output.getvalue().splitlines(),
         )

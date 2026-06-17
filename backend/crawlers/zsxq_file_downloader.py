@@ -219,6 +219,12 @@ class FileListRequestExceptionTarget(NamedTuple):
     max_retries: int
 
 
+class RequestExceptionOutputTarget(NamedTuple):
+    exc: Exception
+    attempt: int
+    max_retries: int
+
+
 class FetchFileListTarget(NamedTuple):
     count: int
     index: Optional[str]
@@ -755,6 +761,19 @@ def _http_failure_class_with_output(target: HttpFailureOutputTarget) -> str:
     return http_failure["failure_class"]
 
 
+def _request_exception_should_retry_with_output(
+    target: RequestExceptionOutputTarget,
+) -> bool:
+    request_exception = request_exception_plan(
+        target.exc,
+        target.attempt,
+        target.max_retries,
+    )
+    for message in request_exception["messages"]:
+        print(message)
+    return request_exception["should_retry"]
+
+
 def _database_stats_total_size_row(result: Any) -> Optional[DatabaseStatsTotalSize]:
     if not result or not result[0]:
         return None
@@ -1288,14 +1307,13 @@ class ZSXQFileDownloader:
         self,
         target: FileListRequestExceptionTarget,
     ) -> bool:
-        request_exception = request_exception_plan(
-            target.exc,
-            target.attempt,
-            target.max_retries,
+        return _request_exception_should_retry_with_output(
+            RequestExceptionOutputTarget(
+                target.exc,
+                target.attempt,
+                target.max_retries,
+            ),
         )
-        for message in request_exception["messages"]:
-            print(message)
-        return request_exception["should_retry"]
 
     def _file_list_api_failure_decision(self, failure_class: str) -> FileListResponseDecision:
         if failure_class == API_FAILURE_RETRY:
@@ -1577,14 +1595,13 @@ class ZSXQFileDownloader:
         self,
         target: DownloadUrlRequestExceptionTarget,
     ) -> bool:
-        request_exception = request_exception_plan(
-            target.exc,
-            target.attempt,
-            target.max_retries,
+        return _request_exception_should_retry_with_output(
+            RequestExceptionOutputTarget(
+                target.exc,
+                target.attempt,
+                target.max_retries,
+            ),
         )
-        for message in request_exception["messages"]:
-            print(message)
-        return request_exception["should_retry"]
 
     def _download_url_api_failure_decision(
         self,

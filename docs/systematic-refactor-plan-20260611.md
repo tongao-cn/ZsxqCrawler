@@ -30043,6 +30043,49 @@ Result:
 - Full backend unittest discovery passed in the current worktree: 1245 tests, 15 skipped.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-17 - P123 shared request-exception stdout helper
+
+Changed:
+
+- Added characterization coverage for `_handle_file_list_request_exception()` and
+  `_handle_download_url_request_exception()` before changing production code.
+- Added `RequestExceptionOutputTarget` to name the shared request-exception output boundary.
+- Added `_request_exception_should_retry_with_output(...)` and reused it from both file-list and
+  download-url request-exception handlers.
+- Kept `request_exception_plan(...)` inputs, stdout message order, and returned `should_retry`
+  values unchanged.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Existing retry/terminal request-exception behavior and stdout diagnostics are preserved.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderRetryHelperTests.test_handle_file_list_request_exception_preserves_output_and_retry_decision tests.test_zsxq_file_downloader_helpers.FileDownloaderRetryHelperTests.test_handle_download_url_request_exception_preserves_output_and_retry_decision -v
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run ruff check backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py --select F401,F841
+git diff --check
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- New request-exception wrapper characterization tests passed before helper extraction: 2 tests.
+- The same focused tests passed after helper extraction: 2 tests.
+- `py_compile` passed.
+- ZSXQ file downloader helper tests passed: 269 tests.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- `git diff --check` passed; Git only reported existing LF-to-CRLF working-copy warnings.
+- Full backend unittest discovery passed in the current worktree: 1247 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:
