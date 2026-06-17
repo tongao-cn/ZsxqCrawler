@@ -2480,6 +2480,56 @@ class FileDownloaderBatchDownloadTests(unittest.TestCase):
         self.assertEqual(3, next_targets[0].downloaded_in_batch)
         self.assertEqual(4, next_targets[0].max_files)
 
+    def test_run_batch_download_page_target_preserves_page_files_target_order(self):
+        stats = {"total_files": 0, "downloaded": 0, "skipped": 0, "failed": 0}
+        files = [{"file": {"id": 101, "name": "first.pdf"}}]
+        downloader = object.__new__(ZSXQFileDownloader)
+        events = []
+
+        def fetch_page(target):
+            events.append(("fetch", target.current_index))
+            return SimpleNamespace(files=files, next_index="next-page")
+
+        def page_files(target):
+            events.append(
+                (
+                    "page_files",
+                    target.files,
+                    target.downloaded_in_batch,
+                    target.max_files,
+                    target.stats is stats,
+                )
+            )
+            return 5
+
+        def next_index(target):
+            events.append(("next", target.next_index, target.downloaded_in_batch, target.max_files))
+            return "after-page"
+
+        downloader._fetch_batch_download_page_target = fetch_page
+        downloader._download_batch_page_files_target = page_files
+        downloader._next_batch_download_index_target = next_index
+
+        step = ZSXQFileDownloader._run_batch_download_page_target(
+            downloader,
+            SimpleNamespace(
+                step=SimpleNamespace(downloaded_in_batch=2, next_index="cursor"),
+                max_files=7,
+                stats=stats,
+            ),
+        )
+
+        self.assertEqual(5, step.downloaded_in_batch)
+        self.assertEqual("after-page", step.next_index)
+        self.assertEqual(
+            [
+                ("fetch", "cursor"),
+                ("page_files", files, 2, 7, True),
+                ("next", "next-page", 5, 7),
+            ],
+            events,
+        )
+
     def test_run_batch_download_loop_preserves_stop_page_handoff_and_terminal_paths(self):
         stats = {"total_files": 0, "downloaded": 0, "skipped": 0, "failed": 0}
         stop_downloader = object.__new__(ZSXQFileDownloader)
