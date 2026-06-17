@@ -12,6 +12,7 @@ from unittest.mock import patch
 from backend.crawlers.zsxq_file_downloader import (
     DownloadAttemptResult,
     DownloadAttemptTarget,
+    DownloadCompletionTarget,
     DownloadFailureDetail,
     DownloadFinalFailureTarget,
     DownloadFileTarget,
@@ -7228,6 +7229,58 @@ class FileDownloaderDownloadTests(unittest.TestCase):
                 ],
                 downloader.logs,
             )
+
+    def test_complete_successful_download_target_preserves_side_effect_order(self):
+        events = []
+
+        class RecordingFileDb:
+            def update_file_download_status(
+                self,
+                file_id,
+                status,
+                file_path=None,
+                error_code=None,
+                error_message=None,
+            ):
+                events.append((file_id, status, file_path, error_code, error_message))
+
+        downloader = object.__new__(ZSXQFileDownloader)
+        downloader.file_db = RecordingFileDb()
+        downloader.download_count = 5
+        downloader.current_batch_count = 7
+
+        def log(message):
+            events.append(("log", message))
+
+        def apply_intervals():
+            events.append(
+                ("intervals", downloader.download_count, downloader.current_batch_count)
+            )
+
+        downloader.log = log
+        downloader._apply_download_intervals = apply_intervals
+
+        with patch("backend.crawlers.zsxq_file_downloader.os.replace") as replace:
+            replace.side_effect = lambda temp_path, file_path: events.append(
+                ("replace", temp_path, file_path)
+            )
+            ZSXQFileDownloader._complete_successful_download_target(
+                downloader,
+                DownloadCompletionTarget(202, "target.pdf", "final.pdf", "temp.part"),
+            )
+
+        self.assertEqual(6, downloader.download_count)
+        self.assertEqual(8, downloader.current_batch_count)
+        self.assertEqual(
+            [
+                ("replace", "temp.part", "final.pdf"),
+                ("log", "   ✅ 下载完成: target.pdf"),
+                ("log", "   💾 保存路径: final.pdf"),
+                (202, "completed", "final.pdf", None, None),
+                ("intervals", 6, 8),
+            ],
+            events,
+        )
 
     def test_apply_response_filename_override_preserves_override_and_noop_paths(self):
         with tempfile.TemporaryDirectory() as temp_dir:

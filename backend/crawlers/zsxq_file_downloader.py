@@ -2442,21 +2442,38 @@ class ZSXQFileDownloader:
         self,
         target: DownloadCompletionTarget,
     ) -> None:
+        self._replace_successful_download_file(target)
+        self._log_successful_download_target(target)
+        self._mark_successful_download_completed(target)
+        self._increment_successful_download_counters()
+        self._apply_download_intervals()
+
+    def _replace_successful_download_file(
+        self,
+        target: DownloadCompletionTarget,
+    ) -> None:
         os.replace(target.temp_path, target.file_path)
 
+    def _log_successful_download_target(
+        self,
+        target: DownloadCompletionTarget,
+    ) -> None:
         self.log(f"   ✅ 下载完成: {target.safe_filename}")
         self.log(f"   💾 保存路径: {target.file_path}")
+
+    def _mark_successful_download_completed(
+        self,
+        target: DownloadCompletionTarget,
+    ) -> None:
         self.file_db.update_file_download_status(
             target.file_id,
             'completed',
             target.file_path,
         )
 
+    def _increment_successful_download_counters(self) -> None:
         self.download_count += 1
         self.current_batch_count += 1
-
-        # 下载间隔控制
-        self._apply_download_intervals()
 
     def _write_download_response_body(
         self,

@@ -30896,6 +30896,58 @@ Result:
 - Full backend unittest discovery passed in the current worktree: 1282 tests, 15 skipped.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-17 - P142 isolate successful download completion side effects
+
+Changed:
+
+- Added target-level characterization coverage for `_complete_successful_download_target(...)`
+  preserving side-effect order: `os.replace(...)`, completion log, save-path log, completed status
+  update, counter increments, and download interval handling.
+- Extracted `_replace_successful_download_file(...)` from
+  `_complete_successful_download_target(...)`.
+- Extracted `_log_successful_download_target(...)` from
+  `_complete_successful_download_target(...)`.
+- Extracted `_mark_successful_download_completed(...)` from
+  `_complete_successful_download_target(...)`.
+- Extracted `_increment_successful_download_counters(...)` from
+  `_complete_successful_download_target(...)`.
+- Removed the redundant inline interval-control comment from the extracted block.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Successful download finalization, log order, completed status payload, counter updates, and
+  interval timing handoff are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_complete_successful_download_target_preserves_side_effect_order -v
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_complete_successful_download_target_preserves_side_effect_order tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_complete_successful_download_preserves_side_effect_order tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_download_file_finalizes_success_with_status_counters_logs_and_interval -v
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run ruff check backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py --select F401,F841
+git diff --check
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- New target-level successful-completion side-effect-order characterization test passed before
+  helper extraction: 1 test.
+- Focused successful-completion and adjacent download-file finalization tests passed after helper
+  extraction: 3 tests.
+- `py_compile` passed.
+- ZSXQ file downloader helper tests passed: 305 tests.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- `git diff --check` passed; Git only reported existing LF-to-CRLF working-copy warnings.
+- Full backend unittest discovery passed in the current worktree: 1283 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:
