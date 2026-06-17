@@ -3561,8 +3561,7 @@ class ZSXQFileDownloader:
 
         while self._should_continue_batch_download_loop(target, step):
             # 检查是否需要停止
-            if self.check_stop():
-                self.log(batch_download_loop_stop_message())
+            if self._is_batch_download_loop_stopped():
                 break
 
             next_step = self._run_batch_download_page_target(
@@ -3581,6 +3580,13 @@ class ZSXQFileDownloader:
         step: BatchDownloadLoopStep,
     ) -> bool:
         return target.max_files is None or step.downloaded_in_batch < target.max_files
+
+    def _is_batch_download_loop_stopped(self) -> bool:
+        if not self.check_stop():
+            return False
+
+        self.log(batch_download_loop_stop_message())
+        return True
 
     def _initial_batch_download_loop_step(
         self,

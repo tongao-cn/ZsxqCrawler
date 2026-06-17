@@ -2691,6 +2691,31 @@ class FileDownloaderBatchDownloadTests(unittest.TestCase):
 
         self.assertEqual([], downloader.logs)
 
+    def test_run_batch_download_loop_target_preserves_stop_without_page(self):
+        stats = {"total_files": 0, "downloaded": 0, "skipped": 0, "failed": 0}
+        downloader = object.__new__(ZSXQFileDownloader)
+        downloader.logs = []
+        downloader.log = downloader.logs.append
+        stop_checks = []
+
+        def check_stop():
+            stop_checks.append("checked")
+            return True
+
+        def run_page(target):
+            self.fail("stopped loop must not run any batch page")
+
+        downloader.check_stop = check_stop
+        downloader._run_batch_download_page_target = run_page
+
+        ZSXQFileDownloader._run_batch_download_loop_target(
+            downloader,
+            SimpleNamespace(stats=stats, max_files=1, start_index="cursor"),
+        )
+
+        self.assertEqual(["checked"], stop_checks)
+        self.assertEqual(["🛑 批量下载任务被停止"], downloader.logs)
+
     def test_run_batch_download_loop_preserves_loop_target_construction(self):
         stats = {"total_files": 0, "downloaded": 0, "skipped": 0, "failed": 0}
         downloader = object.__new__(ZSXQFileDownloader)
