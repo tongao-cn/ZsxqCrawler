@@ -3880,6 +3880,47 @@ class FileDownloaderFileDataHelperTests(unittest.TestCase):
         makedirs.assert_not_called()
         self.assertIn("❌ 输入无效，保持原设置", output.getvalue())
 
+    def test_close_preserves_database_close_and_output_order(self):
+        downloader = object.__new__(ZSXQFileDownloader)
+        calls = []
+
+        class FileDb:
+            def close(self):
+                calls.append(("close",))
+
+        downloader.file_db = FileDb()
+
+        def print_message(message=""):
+            calls.append(("print", message))
+
+        with patch("builtins.print", print_message):
+            result = ZSXQFileDownloader.close(downloader)
+
+        self.assertIsNone(result)
+        self.assertEqual(
+            [
+                ("close",),
+                ("print", "🔒 文件数据库连接已关闭"),
+            ],
+            calls,
+        )
+
+    def test_close_preserves_missing_or_empty_database_silent_return(self):
+        downloader = object.__new__(ZSXQFileDownloader)
+
+        with patch("builtins.print") as print_mock:
+            result = ZSXQFileDownloader.close(downloader)
+
+        self.assertIsNone(result)
+        print_mock.assert_not_called()
+
+        downloader.file_db = None
+        with patch("builtins.print") as print_mock:
+            result = ZSXQFileDownloader.close(downloader)
+
+        self.assertIsNone(result)
+        print_mock.assert_not_called()
+
     def test_download_query_group_id_preserves_cast_and_blank_semantics(self):
         self.assertEqual(123, download_query_group_id("123"))
         self.assertEqual(123, download_query_group_id(" 123 "))

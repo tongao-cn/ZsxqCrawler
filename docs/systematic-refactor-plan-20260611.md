@@ -29357,6 +29357,50 @@ Result:
 - Full backend unittest discovery passed in the current worktree: 1219 tests, 15 skipped.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-17 - P108 close entry target handoff
+
+Changed:
+
+- Added characterization coverage for `close()` before changing production code, locking
+  file-database close call order, close-output text, `None` return value, and silent return when
+  `file_db` is missing or empty.
+- Added private no-field `CloseTarget` for the no-argument resource-close entrypoint.
+- Added private `_close_target(...)` and delegated the public `close()` method to it.
+- Kept public `close()` signature and close behavior unchanged.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Existing `hasattr(self, 'file_db') and self.file_db` guard, database close side effect, close
+  output text, missing/empty database silent behavior, return value, and fallback/legacy behavior
+  are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderFileDataHelperTests.test_close_preserves_database_close_and_output_order tests.test_zsxq_file_downloader_helpers.FileDownloaderFileDataHelperTests.test_close_preserves_missing_or_empty_database_silent_return -v
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py
+uv run python scripts\scan_postgres_compat_debt.py
+uv run ruff check backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py --select F401,F841
+git diff --check
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- New close-entry characterization tests passed before production helper handoff: 2 tests.
+- Focused close-entry tests passed after helper handoff: 2 tests.
+- `py_compile` passed.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- `git diff --check` passed; Git only reported existing LF-to-CRLF working-copy warnings.
+- ZSXQ file downloader helper tests passed: 243 tests.
+- Full backend unittest discovery passed in the current worktree: 1221 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:

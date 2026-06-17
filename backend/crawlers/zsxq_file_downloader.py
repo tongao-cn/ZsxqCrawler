@@ -640,6 +640,10 @@ class AdjustSettingsTarget(NamedTuple):
     pass
 
 
+class CloseTarget(NamedTuple):
+    pass
+
+
 class FileCollectionLogRow(NamedTuple):
     log_id: Any
 
@@ -3783,6 +3787,12 @@ class ZSXQFileDownloader:
     
     def close(self):
         """关闭资源"""
+        return self._close_target(CloseTarget())
+
+    def _close_target(
+        self,
+        target: CloseTarget,
+    ) -> None:
         if hasattr(self, 'file_db') and self.file_db:
             self.file_db.close()
             print("🔒 文件数据库连接已关闭")
