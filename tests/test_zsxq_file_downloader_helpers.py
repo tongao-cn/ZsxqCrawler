@@ -8328,6 +8328,40 @@ class FileDownloaderDownloadTests(unittest.TestCase):
         self.assertEqual((None, mismatch_detail), result)
         self.assertEqual([("mismatch-detail", finalization_target)], calls)
 
+    def test_successful_download_body_result_target_preserves_completion_target_handoff(self):
+        downloader = object.__new__(ZSXQFileDownloader)
+        finalization_target = DownloadBodyFinalizationTarget(
+            42,
+            "C:\\Downloads\\memo.pdf.part",
+            808,
+            "memo.pdf",
+            "C:\\Downloads\\memo.pdf",
+        )
+        calls = []
+
+        def complete_successful_download_target(target):
+            calls.append(target)
+
+        downloader._complete_successful_download_target = complete_successful_download_target
+
+        result = ZSXQFileDownloader._successful_download_body_result_target(
+            downloader,
+            finalization_target,
+        )
+
+        self.assertEqual((True, None), result)
+        self.assertEqual(
+            [
+                DownloadCompletionTarget(
+                    808,
+                    "memo.pdf",
+                    "C:\\Downloads\\memo.pdf",
+                    "C:\\Downloads\\memo.pdf.part",
+                ),
+            ],
+            calls,
+        )
+
     def test_write_download_response_body_preserves_progress_stop_and_empty_chunks(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir) / "memo.pdf.part"

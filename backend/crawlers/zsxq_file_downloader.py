@@ -3080,14 +3080,20 @@ class ZSXQFileDownloader:
         finalization_target: DownloadBodyFinalizationTarget,
     ) -> DownloadBodyResult:
         self._complete_successful_download_target(
-            DownloadCompletionTarget(
-                finalization_target.file_id,
-                finalization_target.safe_filename,
-                finalization_target.file_path,
-                finalization_target.temp_path,
-            ),
+            self._download_completion_target_for_finalization(finalization_target),
         )
         return DownloadBodyResult(True, None)
+
+    def _download_completion_target_for_finalization(
+        self,
+        finalization_target: DownloadBodyFinalizationTarget,
+    ) -> DownloadCompletionTarget:
+        return DownloadCompletionTarget(
+            finalization_target.file_id,
+            finalization_target.safe_filename,
+            finalization_target.file_path,
+            finalization_target.temp_path,
+        )
 
     def _handle_download_size_mismatch(
         self,
