@@ -8074,6 +8074,51 @@ class FileDownloaderDownloadTests(unittest.TestCase):
                 events,
             )
 
+    def test_write_download_response_body_result_target_stops_after_nonempty_chunk(self):
+        class StoppingChunkResponse:
+            def __init__(self):
+                self.seen = []
+
+            def iter_content(self, chunk_size=8192):
+                self.seen.append(("chunk_size", chunk_size))
+                yield b"ab"
+                self.seen.append(("after_first",))
+                yield b"cd"
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir) / "memo.pdf.part"
+            response = StoppingChunkResponse()
+            downloader = object.__new__(ZSXQFileDownloader)
+            downloader.file_db = FakeDownloadFileDb()
+            downloader.logs = []
+            downloader.log = downloader.logs.append
+            downloader.check_stop = lambda: True
+
+            with patch(
+                "backend.crawlers.zsxq_file_downloader.remove_partial_download",
+                return_value=True,
+            ) as remove_partial:
+                downloaded_size = ZSXQFileDownloader._write_download_response_body_result_target(
+                    downloader,
+                    DownloadBodyResponseTarget(
+                        response,
+                        DownloadBodyWriteTarget(str(temp_path), 0, 101),
+                    ),
+                )
+
+            self.assertIsNone(downloaded_size)
+            self.assertEqual([("chunk_size", 8192)], response.seen)
+            self.assertEqual(b"ab", temp_path.read_bytes())
+            remove_partial.assert_called_once_with(str(temp_path))
+            self.assertEqual(
+                (101, "failed", None, "stopped", "下载过程中被停止"),
+                downloader.file_db.status_updates[-1],
+            )
+            self.assertEqual(
+                ["   📊 已下载: 2 bytes", "🛑 下载过程中被停止"],
+                downloader.logs,
+            )
+
     def test_write_download_body_chunk_preserves_write_size_and_progress_log(self):
         downloader = object.__new__(ZSXQFileDownloader)
         downloader.logs = []

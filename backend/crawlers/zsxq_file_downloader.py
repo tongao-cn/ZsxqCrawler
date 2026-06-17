@@ -2513,15 +2513,33 @@ class ZSXQFileDownloader:
         with open(body_target.temp_path, 'wb') as f:
             for chunk in target.response.iter_content(chunk_size=8192):
                 if chunk:
-                    downloaded_size = self._write_download_body_chunk(
+                    chunk_result = self._write_download_body_content_chunk(
                         f,
                         chunk,
                         downloaded_size,
-                        body_target.total_size,
+                        body_target,
                     )
-                    if self._stop_download_body_if_requested(body_target):
+                    if chunk_result is None:
                         return None
+                    downloaded_size = chunk_result
 
+        return downloaded_size
+
+    def _write_download_body_content_chunk(
+        self,
+        file_obj: Any,
+        chunk: bytes,
+        downloaded_size: int,
+        body_target: DownloadBodyWriteTarget,
+    ) -> Optional[int]:
+        downloaded_size = self._write_download_body_chunk(
+            file_obj,
+            chunk,
+            downloaded_size,
+            body_target.total_size,
+        )
+        if self._stop_download_body_if_requested(body_target):
+            return None
         return downloaded_size
 
     def _write_download_body_chunk(
