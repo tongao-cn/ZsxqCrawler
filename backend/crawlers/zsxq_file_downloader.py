@@ -3564,9 +3564,7 @@ class ZSXQFileDownloader:
             if self._is_batch_download_loop_stopped():
                 break
 
-            next_step = self._run_batch_download_page_target(
-                self._batch_download_page_run_target(target, step),
-            )
+            next_step = self._run_next_batch_download_loop_step(target, step)
             if self._is_missing_batch_download_loop_step(next_step):
                 break
 
@@ -3587,6 +3585,15 @@ class ZSXQFileDownloader:
 
         self.log(batch_download_loop_stop_message())
         return True
+
+    def _run_next_batch_download_loop_step(
+        self,
+        target: BatchDownloadLoopTarget,
+        step: BatchDownloadLoopStep,
+    ) -> Optional[BatchDownloadLoopStep]:
+        return self._run_batch_download_page_target(
+            self._batch_download_page_run_target(target, step),
+        )
 
     def _is_missing_batch_download_loop_step(
         self,
