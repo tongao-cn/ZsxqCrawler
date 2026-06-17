@@ -2938,17 +2938,22 @@ class ZSXQFileDownloader:
         self,
         target: DownloadResponseTarget,
     ) -> DownloadBodyResult:
+        body_target = self._download_body_target_for_response(target)
+        return self._download_body_result_for_response_target(target, body_target)
+
+    def _download_body_target_for_response(
+        self,
+        target: DownloadResponseTarget,
+    ) -> DownloadBodyTarget:
         response = target.response
         file_target = target.file_target
-        body_target = self._prepare_download_body_target_from_target(
+        return self._prepare_download_body_target_from_target(
             DownloadBodyPreparationTarget(
                 response.headers,
                 file_target.file_size,
                 file_target.file_path,
             ),
         )
-
-        return self._download_body_result_for_response_target(target, body_target)
 
     def _download_body_result_for_response_target(
         self,

@@ -7852,6 +7852,60 @@ class FileDownloaderDownloadTests(unittest.TestCase):
             calls,
         )
 
+    def test_handle_successful_download_response_result_target_preserves_body_preparation_handoff(self):
+        downloader = object.__new__(ZSXQFileDownloader)
+        response = FakeDownloadResponse(200, b"memo", headers={"content-length": "8"})
+        file_target = DownloadFileTarget(
+            101,
+            "memo?.pdf",
+            4,
+            "memo.pdf",
+            "C:\\Downloads\\memo.pdf",
+        )
+        body_target = DownloadBodyTarget(
+            8,
+            4,
+            "C:\\Downloads\\memo.pdf.part",
+        )
+        result_target = DownloadBodyResult(True, None)
+        calls = []
+
+        def prepare_download_body_target_from_target(target):
+            calls.append(("prepare", target))
+            return body_target
+
+        def download_body_result_for_response_target(target, prepared_body_target):
+            calls.append(("body", target, prepared_body_target))
+            return result_target
+
+        downloader._prepare_download_body_target_from_target = prepare_download_body_target_from_target
+        downloader._download_body_result_for_response_target = download_body_result_for_response_target
+
+        result = ZSXQFileDownloader._handle_successful_download_response_result_target(
+            downloader,
+            DownloadResponseTarget(response, file_target),
+        )
+
+        self.assertEqual(result_target, result)
+        self.assertEqual(
+            [
+                (
+                    "prepare",
+                    DownloadBodyPreparationTarget(
+                        response.headers,
+                        4,
+                        "C:\\Downloads\\memo.pdf",
+                    ),
+                ),
+                (
+                    "body",
+                    DownloadResponseTarget(response, file_target),
+                    body_target,
+                ),
+            ],
+            calls,
+        )
+
     def test_finalize_download_body_result_preserves_stop_mismatch_and_success_paths(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             downloader = object.__new__(ZSXQFileDownloader)
