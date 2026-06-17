@@ -11,6 +11,7 @@ from unittest.mock import patch
 
 from backend.crawlers.zsxq_file_downloader import (
     BatchDownloadFileItemTarget,
+    BatchDownloadNextIndexTarget,
     BatchDownloadResultTarget,
     DownloadAttemptResult,
     DownloadAttemptTarget,
@@ -2037,6 +2038,26 @@ class FileDownloaderBatchDownloadTests(unittest.TestCase):
                 "ignored-page",
                 2,
                 2,
+            )
+
+        self.assertEqual("next-page", next_index)
+        self.assertIsNone(terminal_index)
+        sleep.assert_called_once_with(2)
+        self.assertEqual(["📄 准备获取下一页: next-page"], downloader.logs)
+
+    def test_next_batch_download_index_target_preserves_plan_side_effects(self):
+        downloader = object.__new__(ZSXQFileDownloader)
+        downloader.logs = []
+        downloader.log = downloader.logs.append
+
+        with patch("backend.crawlers.zsxq_file_downloader.time.sleep") as sleep:
+            next_index = ZSXQFileDownloader._next_batch_download_index_target(
+                downloader,
+                BatchDownloadNextIndexTarget("next-page", 1, 2),
+            )
+            terminal_index = ZSXQFileDownloader._next_batch_download_index_target(
+                downloader,
+                BatchDownloadNextIndexTarget("ignored-page", 2, 2),
             )
 
         self.assertEqual("next-page", next_index)

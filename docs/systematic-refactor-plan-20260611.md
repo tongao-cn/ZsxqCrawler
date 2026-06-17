@@ -32442,6 +32442,54 @@ Result:
 - Full backend unittest discovery passed in the current worktree: 1321 tests, 15 skipped.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-17 - P175 separate batch next-page plan side effects
+
+Changed:
+
+- Added characterization coverage for `_next_batch_download_index_target(...)` preserving
+  target-driven next-page planning, log text, `time.sleep(...)`, returned next index, and terminal
+  no-op behavior.
+- Extracted `_batch_download_next_page_plan_for_target(...)` from
+  `_next_batch_download_index_target(...)`.
+- Extracted `_apply_batch_download_next_page(...)` for the existing next-page log, sleep, and return
+  side effects.
+- Kept `_next_batch_download_index(...)` and `_next_batch_download_index_target(...)` entrypoints,
+  `batch_download_next_page_plan(...)` arguments, terminal no-op behavior, log text, sleep duration,
+  and returned next index unchanged.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Continuing next-page flow still logs `📄 准备获取下一页: ...`, sleeps for the planned delay, and
+  returns the same next index; terminal plans still return `None` without logging or sleeping.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderBatchDownloadTests.test_next_batch_download_index_target_preserves_plan_side_effects -v
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderBatchDownloadTests.test_next_batch_download_index_target_preserves_plan_side_effects tests.test_zsxq_file_downloader_helpers.FileDownloaderBatchDownloadTests.test_next_batch_download_index_preserves_log_sleep_and_terminal_paths tests.test_zsxq_file_downloader_helpers.FileDownloaderBatchDownloadTests.test_batch_download_next_page_plan_preserves_truthiness_limit_and_delay tests.test_zsxq_file_downloader_helpers.FileDownloaderBatchDownloadTests.test_run_batch_download_page_preserves_fetch_terminal_and_step_handoff tests.test_zsxq_file_downloader_helpers.FileDownloaderBatchDownloadTests.test_run_batch_download_loop_preserves_stop_page_handoff_and_terminal_paths -v
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run ruff check backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py --select F401,F841
+git diff --check
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- New batch next-index target characterization test passed before helper extraction: 1 test.
+- Focused next-page plan and batch loop tests passed after helper extraction: 5 tests.
+- `py_compile` passed.
+- ZSXQ file downloader helper tests passed: 338 tests.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- `git diff --check` passed; Git only reported existing LF-to-CRLF working-copy warnings.
+- Full backend unittest discovery passed in the current worktree: 1322 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:

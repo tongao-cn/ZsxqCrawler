@@ -3400,11 +3400,20 @@ class ZSXQFileDownloader:
         self,
         target: BatchDownloadNextIndexTarget,
     ) -> Optional[str]:
-        next_page = batch_download_next_page_plan(
+        next_page = self._batch_download_next_page_plan_for_target(target)
+        return self._apply_batch_download_next_page(next_page)
+
+    def _batch_download_next_page_plan_for_target(
+        self,
+        target: BatchDownloadNextIndexTarget,
+    ) -> Dict[str, Any]:
+        return batch_download_next_page_plan(
             target.next_index,
             target.downloaded_in_batch,
             target.max_files,
         )
+
+    def _apply_batch_download_next_page(self, next_page: Dict[str, Any]) -> Optional[str]:
         if not next_page["should_continue"]:
             return None
 
