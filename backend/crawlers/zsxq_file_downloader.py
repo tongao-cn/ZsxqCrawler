@@ -636,6 +636,10 @@ class ShowDatabaseStatsTarget(NamedTuple):
     stats: Dict[str, Any]
 
 
+class AdjustSettingsTarget(NamedTuple):
+    pass
+
+
 class FileCollectionLogRow(NamedTuple):
     log_id: Any
 
@@ -3761,6 +3765,12 @@ class ZSXQFileDownloader:
 
     def adjust_settings(self):
         """调整下载设置"""
+        return self._adjust_settings_target(AdjustSettingsTarget())
+
+    def _adjust_settings_target(
+        self,
+        target: AdjustSettingsTarget,
+    ) -> None:
         self._print_download_settings()
 
         try:

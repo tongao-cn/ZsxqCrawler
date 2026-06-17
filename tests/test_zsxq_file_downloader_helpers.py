@@ -3829,6 +3829,36 @@ class FileDownloaderFileDataHelperTests(unittest.TestCase):
         self.assertIn(f"📁 下载目录已更新: {Path(new_dir).absolute()}", printed)
         self.assertIn("✅ 设置已更新", printed)
 
+    def test_adjust_settings_preserves_entry_prompt_parse_and_apply_order(self):
+        downloader = object.__new__(ZSXQFileDownloader)
+        downloader.long_delay_interval = 5
+        downloader.download_dir = "old-downloads"
+        calls = []
+        responses = iter(["8", " new-downloads "])
+
+        downloader._print_download_settings = lambda: calls.append(("print_settings",))
+        downloader._apply_adjusted_settings = lambda interval, directory: calls.append(
+            ("apply", interval, directory)
+        )
+
+        def input_prompt(prompt):
+            calls.append(("input", prompt))
+            return next(responses)
+
+        with patch("builtins.input", input_prompt):
+            result = ZSXQFileDownloader.adjust_settings(downloader)
+
+        self.assertIsNone(result)
+        self.assertEqual(
+            [
+                ("print_settings",),
+                ("input", "长休眠间隔 (当前每5个文件): "),
+                ("input", "下载目录 (当前: old-downloads): "),
+                ("apply", 8, "new-downloads"),
+            ],
+            calls,
+        )
+
     def test_adjust_settings_preserves_invalid_input_without_changes(self):
         downloader = object.__new__(ZSXQFileDownloader)
         downloader.download_interval_min = 60

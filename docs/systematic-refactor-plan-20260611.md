@@ -29309,6 +29309,54 @@ Result:
 - Full backend unittest discovery passed in the current worktree: 1218 tests, 15 skipped.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-17 - P107 adjust settings entry target handoff
+
+Changed:
+
+- Added direct characterization coverage for `adjust_settings()` before changing production code,
+  locking current-settings display order, input prompt text/order, interval parsing, directory
+  stripping/default handoff, adjusted-settings helper call, and `None` return value.
+- Added private no-field `AdjustSettingsTarget` for the no-argument interactive settings entrypoint.
+- Added private `_adjust_settings_target(...)` and delegated the public `adjust_settings()` method
+  to it.
+- Kept public `adjust_settings()` signature and interactive behavior unchanged.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Current settings output, input prompt text, blank/default handling, integer parsing, invalid
+  input fallback, directory creation/update behavior, success/error output, return value, and
+  fallback/legacy behavior are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderFileDataHelperTests.test_adjust_settings_preserves_entry_prompt_parse_and_apply_order -v
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderFileDataHelperTests.test_adjust_settings_preserves_entry_prompt_parse_and_apply_order tests.test_zsxq_file_downloader_helpers.FileDownloaderFileDataHelperTests.test_adjust_settings_preserves_successful_update_and_directory_creation tests.test_zsxq_file_downloader_helpers.FileDownloaderFileDataHelperTests.test_adjust_settings_preserves_invalid_input_without_changes -v
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py
+uv run python scripts\scan_postgres_compat_debt.py
+uv run ruff check backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py --select F401,F841
+git diff --check
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- New direct adjust-settings entry characterization test passed before production helper handoff:
+  1 test.
+- Focused adjust-settings entry, successful update, and invalid-input fallback tests passed after
+  helper handoff: 3 tests.
+- `py_compile` passed.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- `git diff --check` passed; Git only reported existing LF-to-CRLF working-copy warnings.
+- ZSXQ file downloader helper tests passed: 241 tests.
+- Full backend unittest discovery passed in the current worktree: 1219 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:
