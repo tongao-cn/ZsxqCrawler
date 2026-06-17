@@ -402,6 +402,10 @@ class DownloadFailureDetail(NamedTuple):
     error_message: str
 
 
+class DownloadHttpFailureTarget(NamedTuple):
+    status_code: int
+
+
 class DownloadUrlUnavailableTarget(NamedTuple):
     file_id: int
     last_download_url_error: Optional[Dict[str, Any]]
@@ -2590,9 +2594,26 @@ class ZSXQFileDownloader:
         return DownloadFilenameOverride(real_filename, safe_filename, file_path)
 
     def _record_download_http_failure(self, status_code: int) -> DownloadFailureDetail:
-        error_code, error_message = download_http_failure_detail(status_code)
-        self.log(f"   ❌ 下载失败: {error_message}")
+        return self._record_download_http_failure_target(
+            DownloadHttpFailureTarget(status_code),
+        )
+
+    def _record_download_http_failure_target(
+        self,
+        target: DownloadHttpFailureTarget,
+    ) -> DownloadFailureDetail:
+        error_code, error_message = self._download_http_failure_detail(target)
+        self._log_download_http_failure(error_message)
         return DownloadFailureDetail(error_code, error_message)
+
+    def _download_http_failure_detail(
+        self,
+        target: DownloadHttpFailureTarget,
+    ) -> Tuple[str, str]:
+        return download_http_failure_detail(target.status_code)
+
+    def _log_download_http_failure(self, error_message: str) -> None:
+        self.log(f"   ❌ 下载失败: {error_message}")
 
     def _record_download_exception(self, exc: Exception, file_path: str) -> DownloadFailureDetail:
         return self._record_download_exception_target(DownloadExceptionTarget(exc, file_path))

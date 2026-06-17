@@ -18,6 +18,7 @@ from backend.crawlers.zsxq_file_downloader import (
     DownloadFailureDetail,
     DownloadFinalFailureTarget,
     DownloadFileTarget,
+    DownloadHttpFailureTarget,
     DownloadResponseTarget,
     DownloadRetryDecision,
     DownloadRetryLoopAttemptTarget,
@@ -7362,6 +7363,19 @@ class FileDownloaderDownloadTests(unittest.TestCase):
             ["   ❌ 下载失败: HTTP 500", "   ❌ 下载失败: HTTP 404"],
             downloader.logs,
         )
+
+    def test_record_download_http_failure_target_uses_target_status(self):
+        downloader = object.__new__(ZSXQFileDownloader)
+        downloader.logs = []
+        downloader.log = downloader.logs.append
+
+        failure = ZSXQFileDownloader._record_download_http_failure_target(
+            downloader,
+            DownloadHttpFailureTarget(503),
+        )
+
+        self.assertEqual(("http_status", "HTTP 503"), failure)
+        self.assertEqual(["   ❌ 下载失败: HTTP 503"], downloader.logs)
 
     def test_record_download_exception_preserves_error_detail_log_and_cleanup(self):
         with tempfile.TemporaryDirectory() as temp_dir:

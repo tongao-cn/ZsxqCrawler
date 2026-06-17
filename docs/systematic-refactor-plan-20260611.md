@@ -31047,6 +31047,54 @@ Result:
 - Full backend unittest discovery passed in the current worktree: 1285 tests, 15 skipped.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-17 - P145 isolate download HTTP failure recording
+
+Changed:
+
+- Added `DownloadHttpFailureTarget` and target-level characterization coverage for
+  `_record_download_http_failure_target(...)` preserving target-provided HTTP status, returned
+  error detail tuple, and failure log text.
+- Routed `_record_download_http_failure(...)` through the target-level helper.
+- Extracted `_download_http_failure_detail(...)` from
+  `_record_download_http_failure_target(...)`.
+- Extracted `_log_download_http_failure(...)` from
+  `_record_download_http_failure_target(...)`.
+- Kept `download_http_failure_detail(...)` semantics, `DownloadFailureDetail` fields, and
+  `   ❌ 下载失败: ...` log text unchanged.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- HTTP download failure recording, retry/final-failure handoff, error code/message values, and
+  adjacent 404/500 retry behavior are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_record_download_http_failure_preserves_error_detail_and_log tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_record_download_http_failure_target_uses_target_status -v
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_record_download_http_failure_preserves_error_detail_and_log tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_record_download_http_failure_target_uses_target_status tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_download_file_marks_final_failure_after_http_retries tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_download_file_retries_and_marks_final_failure_after_http_404 -v
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run ruff check backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py --select F401,F841
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- Existing ordinary-entry HTTP failure test and new target-level HTTP failure test passed after
+  adding the target entry: 2 tests.
+- Focused HTTP failure and adjacent final-failure retry tests passed after helper extraction:
+  4 tests.
+- `py_compile` passed.
+- ZSXQ file downloader helper tests passed: 308 tests.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- Full backend unittest discovery passed in the current worktree: 1286 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:
