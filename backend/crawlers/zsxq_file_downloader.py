@@ -3571,7 +3571,7 @@ class ZSXQFileDownloader:
                 break
 
             step = next_step
-            if step.next_index is None:
+            if self._is_terminal_batch_download_loop_step(step):
                 break
 
     def _should_continue_batch_download_loop(
@@ -3587,6 +3587,9 @@ class ZSXQFileDownloader:
 
         self.log(batch_download_loop_stop_message())
         return True
+
+    def _is_terminal_batch_download_loop_step(self, step: BatchDownloadLoopStep) -> bool:
+        return step.next_index is None
 
     def _initial_batch_download_loop_step(
         self,
