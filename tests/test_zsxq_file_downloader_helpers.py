@@ -3793,6 +3793,19 @@ class FileDownloaderRuntimeStateTests(unittest.TestCase):
         self.assertFalse(ZSXQFileDownloader.is_stopped(downloader))
         self.assertFalse(downloader.stop_flag)
 
+    def test_check_stop_preserves_legacy_alias_delegation(self):
+        downloader = object.__new__(ZSXQFileDownloader)
+        calls = []
+
+        def is_stopped():
+            calls.append("checked")
+            return "stop-result"
+
+        downloader.is_stopped = is_stopped
+
+        self.assertEqual("stop-result", ZSXQFileDownloader.check_stop(downloader))
+        self.assertEqual(["checked"], calls)
+
 
 class FileDownloaderFileDataHelperTests(unittest.TestCase):
     def test_download_file_data_accepts_id_or_file_id(self):

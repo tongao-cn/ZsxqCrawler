@@ -652,6 +652,10 @@ class IsStoppedTarget(NamedTuple):
     pass
 
 
+class CheckStopTarget(NamedTuple):
+    pass
+
+
 class FileCollectionLogRow(NamedTuple):
     log_id: Any
 
@@ -876,6 +880,12 @@ class ZSXQFileDownloader:
 
     def check_stop(self):
         """检查是否需要停止（兼容旧方法名）"""
+        return self._check_stop_target(CheckStopTarget())
+
+    def _check_stop_target(
+        self,
+        target: CheckStopTarget,
+    ) -> Any:
         return self.is_stopped()
     
     def clean_cookie(self, cookie: str) -> str:

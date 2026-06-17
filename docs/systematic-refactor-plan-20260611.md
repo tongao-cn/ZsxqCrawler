@@ -29489,6 +29489,51 @@ Result:
 - Full backend unittest discovery passed in the current worktree: 1225 tests, 15 skipped.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-17 - P111 check stop compatibility alias target handoff
+
+Changed:
+
+- Added characterization coverage for `check_stop()` before changing production code, locking its
+  legacy alias delegation to `is_stopped()`, original return-value propagation, and single-call
+  behavior.
+- Added private no-field `CheckStopTarget` for the no-argument compatibility entrypoint.
+- Added private `_check_stop_target(...)` and delegated the public `check_stop()` method to it.
+- Kept public `check_stop()` signature and compatibility behavior unchanged.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Existing legacy alias behavior, `is_stopped()` delegation, return-value propagation, and
+  fallback/compatibility behavior are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderRuntimeStateTests.test_check_stop_preserves_legacy_alias_delegation -v
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderRuntimeStateTests -v
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py
+uv run python scripts\scan_postgres_compat_debt.py
+uv run ruff check backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py --select F401,F841
+git diff --check
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- New `check_stop()` legacy-alias characterization test passed before production helper handoff: 1
+  test.
+- Focused runtime-state tests passed after helper handoff: 5 tests.
+- `py_compile` passed.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- `git diff --check` passed; Git only reported existing LF-to-CRLF working-copy warnings.
+- ZSXQ file downloader helper tests passed: 248 tests.
+- Full backend unittest discovery passed in the current worktree: 1226 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:
