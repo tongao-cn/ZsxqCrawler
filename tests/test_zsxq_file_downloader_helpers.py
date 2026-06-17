@@ -12,6 +12,8 @@ from unittest.mock import patch
 from backend.crawlers.zsxq_file_downloader import (
     DownloadAttemptResult,
     DownloadAttemptTarget,
+    DownloadBodyResponseTarget,
+    DownloadBodyWriteTarget,
     DownloadCompletionTarget,
     DownloadFailureDetail,
     DownloadFinalFailureTarget,
@@ -7664,6 +7666,50 @@ class FileDownloaderDownloadTests(unittest.TestCase):
             self.assertEqual(
                 ["   📊 已下载: 4 bytes", "🛑 下载过程中被停止"],
                 downloader.logs,
+            )
+
+    def test_write_download_response_body_result_target_preserves_chunk_order(self):
+        class RecordingChunkResponse:
+            def __init__(self):
+                self.chunk_sizes = []
+
+            def iter_content(self, chunk_size=8192):
+                self.chunk_sizes.append(chunk_size)
+                yield b"ab"
+                yield b""
+                yield b"cd"
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir) / "memo.pdf.part"
+            response = RecordingChunkResponse()
+            events = []
+            downloader = object.__new__(ZSXQFileDownloader)
+            downloader.log = lambda message: events.append(("log", message))
+
+            def check_stop():
+                events.append(("stop",))
+                return False
+
+            downloader.check_stop = check_stop
+
+            downloaded_size = ZSXQFileDownloader._write_download_response_body_result_target(
+                downloader,
+                DownloadBodyResponseTarget(
+                    response,
+                    DownloadBodyWriteTarget(str(temp_path), 4, 101),
+                ),
+            )
+
+            self.assertEqual(4, downloaded_size)
+            self.assertEqual([8192], response.chunk_sizes)
+            self.assertEqual(b"abcd", temp_path.read_bytes())
+            self.assertEqual(
+                [
+                    ("stop",),
+                    ("log", "   📊 进度: 100.0% (4/4 bytes)"),
+                    ("stop",),
+                ],
+                events,
             )
 
     def test_download_file_stops_during_body_download(self):

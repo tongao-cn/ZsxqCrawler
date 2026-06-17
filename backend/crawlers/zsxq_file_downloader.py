@@ -2505,27 +2505,50 @@ class ZSXQFileDownloader:
         with open(body_target.temp_path, 'wb') as f:
             for chunk in target.response.iter_content(chunk_size=8192):
                 if chunk:
-                    f.write(chunk)
-                    downloaded_size += len(chunk)
-
-                    progress_message = download_progress_message(
+                    downloaded_size = self._write_download_body_chunk(
+                        f,
+                        chunk,
                         downloaded_size,
                         body_target.total_size,
                     )
-                    if progress_message:
-                        self.log(progress_message)
-
-                    # 检查是否需要停止
-                    if self.check_stop():
-                        self._handle_download_stop_target(
-                            DownloadStopTarget(
-                                body_target.file_id,
-                                body_target.temp_path,
-                            ),
-                        )
+                    if self._stop_download_body_if_requested(body_target):
                         return None
 
         return downloaded_size
+
+    def _write_download_body_chunk(
+        self,
+        file_obj: Any,
+        chunk: bytes,
+        downloaded_size: int,
+        total_size: int,
+    ) -> int:
+        file_obj.write(chunk)
+        downloaded_size += len(chunk)
+
+        progress_message = download_progress_message(
+            downloaded_size,
+            total_size,
+        )
+        if progress_message:
+            self.log(progress_message)
+
+        return downloaded_size
+
+    def _stop_download_body_if_requested(
+        self,
+        target: DownloadBodyWriteTarget,
+    ) -> bool:
+        if not self.check_stop():
+            return False
+
+        self._handle_download_stop_target(
+            DownloadStopTarget(
+                target.file_id,
+                target.temp_path,
+            ),
+        )
+        return True
 
     def _apply_response_filename_override(
         self,
