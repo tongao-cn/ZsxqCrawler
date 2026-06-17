@@ -664,6 +664,10 @@ class SmartDelayTarget(NamedTuple):
     pass
 
 
+class CheckLongDelayTarget(NamedTuple):
+    pass
+
+
 class FileCollectionLogRow(NamedTuple):
     log_id: Any
 
@@ -1057,6 +1061,12 @@ class ZSXQFileDownloader:
     
     def check_long_delay(self):
         """检查是否需要长休眠"""
+        return self._check_long_delay_target(CheckLongDelayTarget())
+
+    def _check_long_delay_target(
+        self,
+        target: CheckLongDelayTarget,
+    ) -> None:
         if self.download_count > 0 and self.download_count % self.long_delay_interval == 0:
             if self.use_random_interval:
                 # 使用API传入的随机长休眠间隔范围

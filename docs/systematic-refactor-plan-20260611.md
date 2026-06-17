@@ -29623,6 +29623,54 @@ Result:
 - Full backend unittest discovery passed in the current worktree: 1229 tests, 15 skipped.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-17 - P114 long delay entry target handoff
+
+Changed:
+
+- Added characterization coverage for `check_long_delay()` before changing production code, locking
+  the no-op path when the long-delay threshold is not reached.
+- Added characterization coverage for fixed long-delay behavior, including output text, start/end
+  time formatting, `time.sleep(...)` argument, no random delay selection, and `None` return value.
+- Added characterization coverage for random long-delay behavior, including random range arguments,
+  output text, start/end time formatting, `time.sleep(...)` argument, and `None` return value.
+- Added private no-field `CheckLongDelayTarget` for the no-argument long-delay entrypoint.
+- Added private `_check_long_delay_target(...)` and delegated the public `check_long_delay()` method
+  to it.
+- Kept public `check_long_delay()` signature and delay behavior unchanged.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Existing threshold condition, fixed/random interval selection, time display format, sleep side
+  effect, return value, and caller behavior are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderRuntimeStateTests.test_check_long_delay_preserves_noop_when_threshold_not_reached tests.test_zsxq_file_downloader_helpers.FileDownloaderRuntimeStateTests.test_check_long_delay_preserves_fixed_interval_sleep_and_output tests.test_zsxq_file_downloader_helpers.FileDownloaderRuntimeStateTests.test_check_long_delay_preserves_random_interval_sleep_and_output -v
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderRuntimeStateTests -v
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py
+uv run python scripts\scan_postgres_compat_debt.py
+uv run ruff check backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py --select F401,F841
+git diff --check
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- New `check_long_delay()` characterization tests passed before production helper handoff: 3 tests.
+- Focused runtime-state tests passed after helper handoff: 10 tests.
+- `py_compile` passed.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- `git diff --check` passed; Git only reported existing LF-to-CRLF working-copy warnings.
+- ZSXQ file downloader helper tests passed: 254 tests.
+- Full backend unittest discovery passed in the current worktree: 1232 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:

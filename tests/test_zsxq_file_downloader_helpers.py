@@ -3843,6 +3843,109 @@ class FileDownloaderRuntimeStateTests(unittest.TestCase):
         sleep.assert_called_once_with(1.25)
         self.assertEqual("", output.getvalue())
 
+    def test_check_long_delay_preserves_noop_when_threshold_not_reached(self):
+        downloader = object.__new__(ZSXQFileDownloader)
+        downloader.download_count = 4
+        downloader.long_delay_interval = 5
+
+        output = io.StringIO()
+        with (
+            patch("backend.crawlers.zsxq_file_downloader.random.uniform") as uniform,
+            patch("backend.crawlers.zsxq_file_downloader.time.sleep") as sleep,
+            contextlib.redirect_stdout(output),
+        ):
+            result = ZSXQFileDownloader.check_long_delay(downloader)
+
+        self.assertIsNone(result)
+        uniform.assert_not_called()
+        sleep.assert_not_called()
+        self.assertEqual("", output.getvalue())
+
+    def test_check_long_delay_preserves_fixed_interval_sleep_and_output(self):
+        downloader = object.__new__(ZSXQFileDownloader)
+        downloader.download_count = 10
+        downloader.long_delay_interval = 5
+        downloader.use_random_interval = False
+        downloader.long_sleep_interval = 120
+
+        class FakeDateTime:
+            calls = [
+                datetime.datetime(2026, 6, 17, 9, 0, 0),
+                datetime.datetime(2026, 6, 17, 9, 5, 0),
+            ]
+
+            @classmethod
+            def now(cls):
+                return cls.calls.pop(0)
+
+        output = io.StringIO()
+        with (
+            patch("backend.crawlers.zsxq_file_downloader.datetime.datetime", FakeDateTime),
+            patch("backend.crawlers.zsxq_file_downloader.random.uniform") as uniform,
+            patch("backend.crawlers.zsxq_file_downloader.time.sleep") as sleep,
+            contextlib.redirect_stdout(output),
+        ):
+            result = ZSXQFileDownloader.check_long_delay(downloader)
+
+        self.assertIsNone(result)
+        uniform.assert_not_called()
+        sleep.assert_called_once_with(120)
+        self.assertEqual(
+            "\n".join([
+                "🛌 长休眠开始: 120秒 (2.0分钟) [固定间隔]",
+                "   已下载 10 个文件，进入长休眠模式...",
+                "   ⏰ 开始时间: 09:00:00",
+                "   🕐 预计恢复: 09:02:00",
+                "😴 长休眠结束，继续下载...",
+                "   🕐 实际结束: 09:05:00",
+                "",
+            ]),
+            output.getvalue(),
+        )
+
+    def test_check_long_delay_preserves_random_interval_sleep_and_output(self):
+        downloader = object.__new__(ZSXQFileDownloader)
+        downloader.download_count = 6
+        downloader.long_delay_interval = 3
+        downloader.use_random_interval = True
+        downloader.long_sleep_interval_min = 60
+        downloader.long_sleep_interval_max = 180
+
+        class FakeDateTime:
+            calls = [
+                datetime.datetime(2026, 6, 17, 9, 10, 0),
+                datetime.datetime(2026, 6, 17, 9, 12, 0),
+            ]
+
+            @classmethod
+            def now(cls):
+                return cls.calls.pop(0)
+
+        output = io.StringIO()
+        with (
+            patch("backend.crawlers.zsxq_file_downloader.datetime.datetime", FakeDateTime),
+            patch("backend.crawlers.zsxq_file_downloader.random.uniform", return_value=90) as uniform,
+            patch("backend.crawlers.zsxq_file_downloader.time.sleep") as sleep,
+            contextlib.redirect_stdout(output),
+        ):
+            result = ZSXQFileDownloader.check_long_delay(downloader)
+
+        self.assertIsNone(result)
+        uniform.assert_called_once_with(60, 180)
+        sleep.assert_called_once_with(90)
+        self.assertEqual(
+            "\n".join([
+                "🛌 长休眠开始: 90秒 (1.5分钟) [随机范围: 1.0-3.0分钟]",
+                "   已下载 6 个文件，进入长休眠模式...",
+                "   ⏰ 开始时间: 09:10:00",
+                "   🕐 预计恢复: 09:11:30",
+                "😴 长休眠结束，继续下载...",
+                "   🕐 实际结束: 09:12:00",
+                "",
+            ]),
+            output.getvalue(),
+        )
+
 
 class FileDownloaderFileDataHelperTests(unittest.TestCase):
     def test_download_file_data_accepts_id_or_file_id(self):
