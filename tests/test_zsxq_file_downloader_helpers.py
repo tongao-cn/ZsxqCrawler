@@ -11,6 +11,7 @@ from unittest.mock import patch
 
 from backend.crawlers.zsxq_file_downloader import (
     BatchDownloadFileItemTarget,
+    BatchDownloadFetchTarget,
     BatchDownloadNextIndexTarget,
     BatchDownloadPageFilesTarget,
     BatchDownloadResultTarget,
@@ -2214,6 +2215,55 @@ class FileDownloaderBatchDownloadTests(unittest.TestCase):
         empty_downloader.fetch_file_list = lambda **kwargs: {"resp_data": {"files": [], "index": "ignored"}}
 
         self.assertIsNone(ZSXQFileDownloader._fetch_batch_download_page(empty_downloader, "empty"))
+        self.assertEqual(["📭 没有更多文件"], empty_downloader.logs)
+
+    def test_fetch_batch_download_page_target_preserves_fetch_response_handling(self):
+        files = [{"file": {"id": 101, "name": "memo.pdf"}}]
+        success_downloader = object.__new__(ZSXQFileDownloader)
+        success_downloader.logs = []
+        success_downloader.log = success_downloader.logs.append
+        success_downloader.fetch_calls = []
+
+        def fetch_success(**kwargs):
+            success_downloader.fetch_calls.append(kwargs)
+            return {"resp_data": {"files": files, "index": "next-page"}}
+
+        success_downloader.fetch_file_list = fetch_success
+
+        page = ZSXQFileDownloader._fetch_batch_download_page_target(
+            success_downloader,
+            BatchDownloadFetchTarget("cursor"),
+        )
+
+        self.assertEqual([{"count": 20, "index": "cursor"}], success_downloader.fetch_calls)
+        self.assertEqual(files, page.files)
+        self.assertEqual("next-page", page.next_index)
+        self.assertEqual(["📋 当前批次: 1 个文件"], success_downloader.logs)
+
+        failure_downloader = object.__new__(ZSXQFileDownloader)
+        failure_downloader.logs = []
+        failure_downloader.log = failure_downloader.logs.append
+        failure_downloader.fetch_file_list = lambda **kwargs: None
+
+        self.assertIsNone(
+            ZSXQFileDownloader._fetch_batch_download_page_target(
+                failure_downloader,
+                BatchDownloadFetchTarget("failed"),
+            ),
+        )
+        self.assertEqual(["❌ 获取文件列表失败"], failure_downloader.logs)
+
+        empty_downloader = object.__new__(ZSXQFileDownloader)
+        empty_downloader.logs = []
+        empty_downloader.log = empty_downloader.logs.append
+        empty_downloader.fetch_file_list = lambda **kwargs: {"resp_data": {"files": [], "index": "ignored"}}
+
+        self.assertIsNone(
+            ZSXQFileDownloader._fetch_batch_download_page_target(
+                empty_downloader,
+                BatchDownloadFetchTarget("empty"),
+            ),
+        )
         self.assertEqual(["📭 没有更多文件"], empty_downloader.logs)
 
     def test_download_batch_file_item_preserves_limit_reached_delay_skip(self):

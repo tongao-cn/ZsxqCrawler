@@ -3508,6 +3508,12 @@ class ZSXQFileDownloader:
             self.log(batch_download_fetch_failed_message())
             return None
 
+        return self._batch_download_page_from_response(data)
+
+    def _batch_download_page_from_response(
+        self,
+        data: Dict[str, Any],
+    ) -> Optional[BatchDownloadPage]:
         files, next_index = file_list_response_page(data)
 
         if not files:
