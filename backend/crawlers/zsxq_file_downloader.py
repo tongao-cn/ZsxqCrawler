@@ -3553,6 +3553,13 @@ class ZSXQFileDownloader:
         if page is None:
             return None
 
+        return self._batch_download_loop_step_from_page(target, page)
+
+    def _batch_download_loop_step_from_page(
+        self,
+        target: BatchDownloadPageRunTarget,
+        page: BatchDownloadPage,
+    ) -> BatchDownloadLoopStep:
         downloaded_in_batch = self._download_batch_page_files_for_run_target(target, page)
 
         next_index = self._next_batch_download_index_for_run_target(target, page, downloaded_in_batch)
