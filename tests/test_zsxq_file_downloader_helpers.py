@@ -15,6 +15,7 @@ from backend.crawlers.zsxq_file_downloader import (
     DownloadBodyResponseTarget,
     DownloadBodyWriteTarget,
     DownloadCompletionTarget,
+    DownloadExceptionTarget,
     DownloadFailureDetail,
     DownloadFinalFailureTarget,
     DownloadFileTarget,
@@ -7405,6 +7406,30 @@ class FileDownloaderDownloadTests(unittest.TestCase):
                     "   ❌ 下载异常: stream down",
                     "   🗑️ 删除不完整文件",
                     "   ❌ 下载异常: no part",
+                ],
+                downloader.logs,
+            )
+
+    def test_record_download_exception_target_uses_target_file_path(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            file_path = Path(temp_dir) / "target-name.pdf"
+            partial_path = Path(f"{file_path}.part")
+            partial_path.write_bytes(b"pa")
+            downloader = object.__new__(ZSXQFileDownloader)
+            downloader.logs = []
+            downloader.log = downloader.logs.append
+
+            failure = ZSXQFileDownloader._record_download_exception_target(
+                downloader,
+                DownloadExceptionTarget(RuntimeError("target stream down"), str(file_path)),
+            )
+
+            self.assertEqual(("download_exception", "target stream down"), failure)
+            self.assertFalse(partial_path.exists())
+            self.assertEqual(
+                [
+                    "   ❌ 下载异常: target stream down",
+                    "   🗑️ 删除不完整文件",
                 ],
                 downloader.logs,
             )

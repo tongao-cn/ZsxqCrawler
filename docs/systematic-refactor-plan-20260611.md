@@ -21218,6 +21218,7 @@ uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloader
 uv run python -m unittest tests.test_zsxq_file_downloader_helpers -v
 uv run python scripts\scan_postgres_compat_debt.py
 uv run ruff check backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py --select F401,F841
+git diff --check
 uv run python -m unittest discover -s tests
 npm --prefix frontend run build
 ```
@@ -31093,6 +31094,56 @@ Result:
 - Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
   not available.
 - Full backend unittest discovery passed in the current worktree: 1286 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+
+### 2026-06-17 - P146 isolate download exception recording
+
+Changed:
+
+- Added target-level characterization coverage for `_record_download_exception_target(...)`
+  preserving target-provided file path, returned exception detail tuple, exception log text,
+  `.part` cleanup, and cleanup log text.
+- Extracted `_download_exception_detail(...)` from
+  `_record_download_exception_target(...)`.
+- Extracted `_log_download_exception(...)` from
+  `_record_download_exception_target(...)`.
+- Extracted `_remove_partial_download_after_exception(...)` from
+  `_record_download_exception_target(...)`.
+- Kept `download_exception_detail(...)` semantics, partial-download path calculation,
+  `remove_partial_download(...)` behavior, and log text unchanged.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Download exception cleanup, retry-state error detail handoff, overridden partial-file cleanup,
+  and request-exception cleanup behavior are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_record_download_exception_preserves_error_detail_log_and_cleanup tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_record_download_exception_target_uses_target_file_path -v
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_record_download_exception_preserves_error_detail_log_and_cleanup tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_record_download_exception_target_uses_target_file_path tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_download_file_cleans_partial_file_after_body_exception_retries tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_download_file_cleans_overridden_partial_file_after_body_exception tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_download_file_retries_request_exception_and_removes_partial_file -v
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run ruff check backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py --select F401,F841
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- Existing ordinary-entry exception cleanup test and new target-level exception cleanup test passed
+  before helper extraction: 2 tests.
+- Focused exception cleanup and adjacent body/request exception retry tests passed after helper
+  extraction: 5 tests.
+- `py_compile` passed.
+- ZSXQ file downloader helper tests passed: 309 tests.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- `git diff --check` passed; Git only reported existing LF-to-CRLF working-copy warnings.
+- Full backend unittest discovery passed in the current worktree: 1287 tests, 15 skipped.
 - Frontend build passed, including Next.js lint/type checks.
 
 ## Stop Conditions

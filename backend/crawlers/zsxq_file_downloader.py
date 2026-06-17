@@ -2622,12 +2622,24 @@ class ZSXQFileDownloader:
         self,
         target: DownloadExceptionTarget,
     ) -> DownloadFailureDetail:
-        error_code, error_message = download_exception_detail(target.exc)
-        self.log(f"   ❌ 下载异常: {target.exc}")
-        temp_path = partial_download_path(target.file_path)
+        error_code, error_message = self._download_exception_detail(target)
+        self._log_download_exception(target.exc)
+        self._remove_partial_download_after_exception(target.file_path)
+        return DownloadFailureDetail(error_code, error_message)
+
+    def _download_exception_detail(
+        self,
+        target: DownloadExceptionTarget,
+    ) -> Tuple[str, str]:
+        return download_exception_detail(target.exc)
+
+    def _log_download_exception(self, exc: Exception) -> None:
+        self.log(f"   ❌ 下载异常: {exc}")
+
+    def _remove_partial_download_after_exception(self, file_path: str) -> None:
+        temp_path = partial_download_path(file_path)
         if remove_partial_download(temp_path):
             self.log(f"   🗑️ 删除不完整文件")
-        return DownloadFailureDetail(error_code, error_message)
 
     def _wait_before_download_retry(self, attempt: int, download_retries: int) -> None:
         self._wait_before_download_retry_target(
