@@ -30849,6 +30849,53 @@ Result:
 - Full backend unittest discovery passed in the current worktree: 1281 tests, 15 skipped.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-17 - P141 isolate final download failure status
+
+Changed:
+
+- Added target-level characterization coverage for `_mark_download_failed_after_retries_target(...)`
+  preserving target-provided retry count, error code, error message, status payload, and log text.
+- Extracted `_download_final_failure_detail(...)` from
+  `_mark_download_failed_after_retries_target(...)`.
+- Extracted `_update_download_final_failure_status(...)` from
+  `_mark_download_failed_after_retries_target(...)`.
+- Kept `download_final_failure_detail(...)` defaults, final failed status payload, retry-exhausted
+  log text, and adjacent request-exception retry cleanup behavior unchanged.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Final download failure handling, default error semantics, and persisted failed status details are
+  unchanged.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_mark_download_failed_after_retries_target_uses_target_detail -v
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_mark_download_failed_after_retries_preserves_error_detail_defaults tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_mark_download_failed_after_retries_target_uses_target_detail tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_download_file_retries_request_exception_and_removes_partial_file -v
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run ruff check backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py --select F401,F841
+git diff --check
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- New target-level final-failure characterization test passed before helper extraction: 1 test.
+- Focused final-failure and adjacent request-exception retry tests passed after helper extraction:
+  3 tests.
+- `py_compile` passed.
+- ZSXQ file downloader helper tests passed: 304 tests.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- `git diff --check` passed; Git only reported existing LF-to-CRLF working-copy warnings.
+- Full backend unittest discovery passed in the current worktree: 1282 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:

@@ -13,6 +13,7 @@ from backend.crawlers.zsxq_file_downloader import (
     DownloadAttemptResult,
     DownloadAttemptTarget,
     DownloadFailureDetail,
+    DownloadFinalFailureTarget,
     DownloadFileTarget,
     DownloadResponseTarget,
     DownloadRetryDecision,
@@ -8024,6 +8025,26 @@ class FileDownloaderDownloadTests(unittest.TestCase):
                 "   🚫 文件下载重试3次仍失败: HTTP 500",
                 "   🚫 文件下载重试3次仍失败: None",
             ],
+            downloader.logs,
+        )
+
+    def test_mark_download_failed_after_retries_target_uses_target_detail(self):
+        downloader = object.__new__(ZSXQFileDownloader)
+        downloader.file_db = FakeDownloadFileDb()
+        downloader.logs = []
+        downloader.log = downloader.logs.append
+
+        ZSXQFileDownloader._mark_download_failed_after_retries_target(
+            downloader,
+            DownloadFinalFailureTarget(201, 4, "download_exception", "socket down"),
+        )
+
+        self.assertEqual(
+            [(201, "failed", None, "download_exception", "socket down")],
+            downloader.file_db.status_updates,
+        )
+        self.assertEqual(
+            ["   🚫 文件下载重试4次仍失败: socket down"],
             downloader.logs,
         )
 

@@ -2397,15 +2397,29 @@ class ZSXQFileDownloader:
         target: DownloadFinalFailureTarget,
     ) -> None:
         self.log(f"   🚫 文件下载重试{target.download_retries}次仍失败: {target.last_error}")
+        failure_detail = self._download_final_failure_detail(target)
+        self._update_download_final_failure_status(target.file_id, failure_detail)
+
+    def _download_final_failure_detail(
+        self,
+        target: DownloadFinalFailureTarget,
+    ) -> DownloadFailureDetail:
         error_code, error_message = download_final_failure_detail(
             target.last_error_code,
             target.last_error,
         )
+        return DownloadFailureDetail(error_code, error_message)
+
+    def _update_download_final_failure_status(
+        self,
+        file_id: int,
+        failure_detail: DownloadFailureDetail,
+    ) -> None:
         self.file_db.update_file_download_status(
-            target.file_id,
+            file_id,
             'failed',
-            error_code=error_code,
-            error_message=error_message,
+            error_code=failure_detail.error_code,
+            error_message=failure_detail.error_message,
         )
 
     def _complete_successful_download(
