@@ -2893,10 +2893,17 @@ class ZSXQFileDownloader:
         self,
         target: DownloadBodyPreparationTarget,
     ) -> DownloadBodyTarget:
+        body_target = self._download_body_target_for_preparation(target)
+        remove_partial_download(body_target.temp_path)
+        return body_target
+
+    def _download_body_target_for_preparation(
+        self,
+        target: DownloadBodyPreparationTarget,
+    ) -> DownloadBodyTarget:
         total_size = download_total_size(target.response_headers)
         expected_size = download_expected_size(target.file_size, total_size)
         temp_path = partial_download_path(target.file_path)
-        remove_partial_download(temp_path)
         return DownloadBodyTarget(total_size, expected_size, temp_path)
 
     def _handle_successful_download_response(

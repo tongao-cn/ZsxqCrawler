@@ -7675,6 +7675,25 @@ class FileDownloaderDownloadTests(unittest.TestCase):
                 fallback_prepared,
             )
 
+    def test_prepare_download_body_target_from_target_preserves_values_and_cleanup(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            file_path = Path(temp_dir) / "memo.pdf"
+            partial_path = Path(f"{file_path}.part")
+            partial_path.write_bytes(b"stale")
+            downloader = object.__new__(ZSXQFileDownloader)
+
+            prepared = ZSXQFileDownloader._prepare_download_body_target_from_target(
+                downloader,
+                DownloadBodyPreparationTarget(
+                    {"content-length": "8"},
+                    4,
+                    str(file_path),
+                ),
+            )
+
+            self.assertEqual((8, 4, str(partial_path)), prepared)
+            self.assertFalse(partial_path.exists())
+
     def test_handle_successful_download_response_preserves_completion_retry_and_stop_paths(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             file_path = Path(temp_dir) / "memo.pdf"
