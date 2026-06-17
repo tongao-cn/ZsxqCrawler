@@ -2728,6 +2728,14 @@ class ZSXQFileDownloader:
                 DownloadResponseTarget(response, file_target),
             )
 
+        return self._http_failure_download_attempt_result(target)
+
+    def _http_failure_download_attempt_result(
+        self,
+        target: DownloadResponseTarget,
+    ) -> DownloadAttemptResult:
+        response = target.response
+        file_target = target.file_target
         failure_detail = self._record_download_http_failure(response.status_code)
         return DownloadAttemptResult(
             None,

@@ -7483,6 +7483,49 @@ class FileDownloaderDownloadTests(unittest.TestCase):
         self.assertEqual([("https://download.test/target", 300, True)], session.get_calls)
         self.assertEqual(["   🚀 开始下载..."], downloader.logs)
 
+    def test_download_attempt_result_for_response_status_target_preserves_branches(self):
+        downloader = object.__new__(ZSXQFileDownloader)
+        downloader.logs = []
+        downloader.log = downloader.logs.append
+        file_target = DownloadFileTarget(
+            101,
+            "memo.pdf",
+            4,
+            "memo.pdf",
+            "C:\\Downloads\\memo.pdf",
+        )
+        success_response = FakeDownloadResponse(200, b"memo")
+        success_calls = []
+
+        def successful_download_attempt_result_target(target):
+            success_calls.append(target)
+            return DownloadAttemptResult(
+                True,
+                None,
+                "memo.pdf",
+                "memo.pdf",
+                "C:\\Downloads\\memo.pdf",
+            )
+
+        downloader._successful_download_attempt_result_target = successful_download_attempt_result_target
+
+        success = ZSXQFileDownloader._download_attempt_result_for_response_status_target(
+            downloader,
+            DownloadResponseTarget(success_response, file_target),
+        )
+        failure = ZSXQFileDownloader._download_attempt_result_for_response_status_target(
+            downloader,
+            DownloadResponseTarget(FakeDownloadResponse(503), file_target),
+        )
+
+        self.assertEqual((True, None, "memo.pdf", "memo.pdf", "C:\\Downloads\\memo.pdf"), success)
+        self.assertEqual([DownloadResponseTarget(success_response, file_target)], success_calls)
+        self.assertEqual(
+            (None, ("http_status", "HTTP 503"), "memo.pdf", "memo.pdf", "C:\\Downloads\\memo.pdf"),
+            failure,
+        )
+        self.assertEqual(["   ❌ 下载失败: HTTP 503"], downloader.logs)
+
     def test_handle_download_response_preserves_override_http_failure_and_success_paths(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             downloader = object.__new__(ZSXQFileDownloader)

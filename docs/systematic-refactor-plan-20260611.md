@@ -21315,6 +21315,7 @@ uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py tests\test_
 uv run python -m unittest tests.test_zsxq_file_downloader_helpers -v
 uv run python scripts\scan_postgres_compat_debt.py
 uv run ruff check backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py --select F401,F841
+git diff --check
 uv run python -m unittest discover -s tests
 npm --prefix frontend run build
 ```
@@ -31195,6 +31196,53 @@ Result:
   not available.
 - `git diff --check` passed; Git only reported existing LF-to-CRLF working-copy warnings.
 - Full backend unittest discovery passed in the current worktree: 1288 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+
+### 2026-06-17 - P148 isolate HTTP failure download attempt result
+
+Changed:
+
+- Added target-level characterization coverage for
+  `_download_attempt_result_for_response_status_target(...)` preserving the 200-status success
+  delegate target, non-200 HTTP failure detail, failure log text, and returned
+  `DownloadAttemptResult` file fields.
+- Extracted `_http_failure_download_attempt_result(...)` from
+  `_download_attempt_result_for_response_status_target(...)`.
+- Kept `response.status_code == 200` success branching, `_record_download_http_failure(...)`
+  semantics, and non-200 result tuple fields unchanged.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Success response finalization handoff, HTTP failure recording, retry-state error propagation,
+  and adjacent final-failure retry behavior are unchanged.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_download_attempt_result_for_response_status_target_preserves_branches -v
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_download_attempt_result_for_response_status_target_preserves_branches tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_handle_download_response_preserves_override_http_failure_and_success_paths tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_download_file_marks_final_failure_after_http_retries tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_download_file_retries_and_marks_final_failure_after_http_404 -v
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run ruff check backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py --select F401,F841
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- New target-level response-status branch characterization test passed before helper extraction:
+  1 test.
+- Focused response-status, response handling, and adjacent HTTP final-failure retry tests passed
+  after helper extraction: 4 tests.
+- `py_compile` passed.
+- ZSXQ file downloader helper tests passed: 311 tests.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- `git diff --check` passed; Git only reported existing LF-to-CRLF working-copy warnings.
+- Full backend unittest discovery passed in the current worktree: 1289 tests, 15 skipped.
 - Frontend build passed, including Next.js lint/type checks.
 
 ## Stop Conditions
