@@ -3167,13 +3167,30 @@ class ZSXQFileDownloader:
         self,
         target: DownloadStopTarget,
     ) -> None:
-        self.log("🛑 下载过程中被停止")
+        failure_detail = self._download_stop_failure_detail()
+        self._log_download_stop(failure_detail)
+        self._update_download_stop_status(target, failure_detail)
+        self._cleanup_stopped_download(target)
+
+    def _download_stop_failure_detail(self) -> DownloadFailureDetail:
+        return DownloadFailureDetail("stopped", "下载过程中被停止")
+
+    def _log_download_stop(self, failure_detail: DownloadFailureDetail) -> None:
+        self.log(f"🛑 {failure_detail.error_message}")
+
+    def _update_download_stop_status(
+        self,
+        target: DownloadStopTarget,
+        failure_detail: DownloadFailureDetail,
+    ) -> None:
         self.file_db.update_file_download_status(
             target.file_id,
             'failed',
-            error_code='stopped',
-            error_message='下载过程中被停止',
+            error_code=failure_detail.error_code,
+            error_message=failure_detail.error_message,
         )
+
+    def _cleanup_stopped_download(self, target: DownloadStopTarget) -> None:
         remove_partial_download(target.temp_path)
 
     def _download_interval_values(self) -> DownloadIntervalValues:

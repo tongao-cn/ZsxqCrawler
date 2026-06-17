@@ -32202,6 +32202,53 @@ Result:
 - Full backend unittest discovery passed in the current worktree: 1316 tests, 15 skipped.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-17 - P170 separate download-stop status and cleanup side effects
+
+Changed:
+
+- Added characterization coverage for `_record_download_stop_target(...)` preserving warning log,
+  failed status update payload, and partial-file cleanup order.
+- Extracted `_download_stop_failure_detail(...)` for the existing stopped error code/message.
+- Extracted `_log_download_stop(...)`, `_update_download_stop_status(...)`, and
+  `_cleanup_stopped_download(...)` from `_record_download_stop_target(...)`.
+- Kept stop handling entrypoints, status update arguments, error code, error message, log text,
+  cleanup target, and body-download stop behavior unchanged.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Stop handling still logs `🛑 下载过程中被停止`, marks the file failed with
+  `error_code="stopped"` and `error_message="下载过程中被停止"`, then removes the same partial
+  file path.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_record_download_stop_target_preserves_log_status_and_cleanup_order -v
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_record_download_stop_target_preserves_log_status_and_cleanup_order tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_handle_download_stop_target_preserves_status_log_and_cleanup tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_handle_download_stop_preserves_status_log_and_cleanup tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_write_download_response_body_result_target_stops_after_nonempty_chunk tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_download_file_stops_during_body_download tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_download_body_result_for_response_target_preserves_stopped_write_handoff -v
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run ruff check backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py --select F401,F841
+git diff --check
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- New download-stop record-order characterization test passed before helper extraction: 1 test.
+- Focused stop, body-write stop, and stopped body-result tests passed after helper extraction:
+  6 tests.
+- `py_compile` passed.
+- ZSXQ file downloader helper tests passed: 333 tests.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- `git diff --check` passed; Git only reported existing LF-to-CRLF working-copy warnings.
+- Full backend unittest discovery passed in the current worktree: 1317 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:

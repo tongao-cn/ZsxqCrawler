@@ -9328,6 +9328,47 @@ class FileDownloaderDownloadTests(unittest.TestCase):
             self.assertFalse(temp_path.exists())
             self.assertEqual(["🛑 下载过程中被停止"], downloader.logs)
 
+    def test_record_download_stop_target_preserves_log_status_and_cleanup_order(self):
+        downloader = object.__new__(ZSXQFileDownloader)
+        calls = []
+        downloader.log = lambda message: calls.append(("log", message))
+
+        class RecordingFileDb:
+            def update_file_download_status(self, file_id, status, **kwargs):
+                calls.append(("status", file_id, status, kwargs))
+
+        downloader.file_db = RecordingFileDb()
+
+        def remove_partial(temp_path):
+            calls.append(("remove", temp_path))
+            return True
+
+        with patch(
+            "backend.crawlers.zsxq_file_downloader.remove_partial_download",
+            remove_partial,
+        ):
+            ZSXQFileDownloader._record_download_stop_target(
+                downloader,
+                DownloadStopTarget(202, "C:\\Downloads\\memo.pdf.part"),
+            )
+
+        self.assertEqual(
+            [
+                ("log", "🛑 下载过程中被停止"),
+                (
+                    "status",
+                    202,
+                    "failed",
+                    {
+                        "error_code": "stopped",
+                        "error_message": "下载过程中被停止",
+                    },
+                ),
+                ("remove", "C:\\Downloads\\memo.pdf.part"),
+            ],
+            calls,
+        )
+
     def test_apply_download_intervals_preserves_long_sleep_side_effects(self):
         downloader = object.__new__(ZSXQFileDownloader)
         downloader.current_batch_count = 10
