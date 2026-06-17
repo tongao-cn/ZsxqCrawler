@@ -3510,13 +3510,7 @@ class ZSXQFileDownloader:
 
         downloaded_in_batch = self._download_batch_page_files_for_run_target(target, page)
 
-        next_index = self._next_batch_download_index_target(
-            BatchDownloadNextIndexTarget(
-                page.next_index,
-                downloaded_in_batch,
-                target.max_files,
-            ),
-        )
+        next_index = self._next_batch_download_index_for_run_target(target, page, downloaded_in_batch)
         return BatchDownloadLoopStep(downloaded_in_batch, next_index)
 
     def _fetch_batch_download_page_for_run_target(
@@ -3534,6 +3528,20 @@ class ZSXQFileDownloader:
     ) -> int:
         return self._download_batch_page_files_target(
             self._batch_page_files_target_for_page(target, page),
+        )
+
+    def _next_batch_download_index_for_run_target(
+        self,
+        target: BatchDownloadPageRunTarget,
+        page: BatchDownloadPage,
+        downloaded_in_batch: int,
+    ) -> Optional[str]:
+        return self._next_batch_download_index_target(
+            BatchDownloadNextIndexTarget(
+                page.next_index,
+                downloaded_in_batch,
+                target.max_files,
+            ),
         )
 
     def _batch_page_files_target_for_page(
