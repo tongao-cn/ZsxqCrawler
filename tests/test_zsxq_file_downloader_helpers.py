@@ -20,6 +20,7 @@ from backend.crawlers.zsxq_file_downloader import (
     DownloadRetryState,
     DownloadUrlResponseDecision,
     DownloadUrlRetryLoopTarget,
+    ExistingDownloadTarget,
     ZSXQFileDownloader,
     _database_stats_time_range,
     _database_stats_total_size,
@@ -6993,6 +6994,67 @@ class FileDownloaderDownloadTests(unittest.TestCase):
             self.assertTrue(result)
             self.assertTrue((Path(temp_dir) / "..memo.pdf").exists())
             self.assertEqual((101, "completed", expected_path), downloader.file_db.status_updates[-1][:3])
+
+    def test_skip_existing_download_target_preserves_missing_file_noop(self):
+        downloader = object.__new__(ZSXQFileDownloader)
+        downloader.logs = []
+        downloader.log = downloader.logs.append
+        downloader.file_db = FakeDownloadFileDb()
+
+        with patch(
+            "backend.crawlers.zsxq_file_downloader.existing_file_matches",
+            return_value=(False, False, 0),
+        ) as matches:
+            result = ZSXQFileDownloader._skip_existing_download_target(
+                downloader,
+                ExistingDownloadTarget(101, "C:\\Downloads\\memo.pdf", 4),
+            )
+
+        self.assertIsNone(result)
+        matches.assert_called_once_with("C:\\Downloads\\memo.pdf", 4)
+        self.assertEqual([], downloader.logs)
+        self.assertEqual([], downloader.file_db.status_updates)
+
+    def test_skip_existing_download_target_preserves_completed_update(self):
+        downloader = object.__new__(ZSXQFileDownloader)
+        downloader.logs = []
+        downloader.log = downloader.logs.append
+        downloader.file_db = FakeDownloadFileDb()
+
+        with patch(
+            "backend.crawlers.zsxq_file_downloader.existing_file_matches",
+            return_value=(True, True, 4),
+        ):
+            result = ZSXQFileDownloader._skip_existing_download_target(
+                downloader,
+                ExistingDownloadTarget(101, "C:\\Downloads\\memo.pdf", 4),
+            )
+
+        self.assertEqual("skipped", result)
+        self.assertEqual(["   ✅ 文件已存在且大小匹配，跳过下载"], downloader.logs)
+        self.assertEqual(
+            [(101, "completed", "C:\\Downloads\\memo.pdf", None, None)],
+            downloader.file_db.status_updates,
+        )
+
+    def test_skip_existing_download_target_preserves_size_mismatch_redownload(self):
+        downloader = object.__new__(ZSXQFileDownloader)
+        downloader.logs = []
+        downloader.log = downloader.logs.append
+        downloader.file_db = FakeDownloadFileDb()
+
+        with patch(
+            "backend.crawlers.zsxq_file_downloader.existing_file_matches",
+            return_value=(True, False, 3),
+        ):
+            result = ZSXQFileDownloader._skip_existing_download_target(
+                downloader,
+                ExistingDownloadTarget(101, "C:\\Downloads\\memo.pdf", 4),
+            )
+
+        self.assertIsNone(result)
+        self.assertEqual(["   ⚠️ 文件已存在但大小不匹配，重新下载"], downloader.logs)
+        self.assertEqual([], downloader.file_db.status_updates)
 
     def test_download_file_skips_existing_matching_file_without_request(self):
         with tempfile.TemporaryDirectory() as temp_dir:

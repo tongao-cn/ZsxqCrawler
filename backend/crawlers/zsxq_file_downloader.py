@@ -379,6 +379,12 @@ class ExistingDownloadTarget(NamedTuple):
     file_size: int
 
 
+class ExistingDownloadMatch(NamedTuple):
+    file_exists: bool
+    size_matches: bool
+    existing_size: int
+
+
 class DownloadFilenameOverride(NamedTuple):
     file_name: str
     safe_filename: str
@@ -2290,24 +2296,37 @@ class ZSXQFileDownloader:
         self,
         target: ExistingDownloadTarget,
     ) -> Optional[str]:
-        file_exists, size_matches, _existing_size = existing_file_matches(
-            target.file_path,
-            target.file_size,
-        )
-        if not file_exists:
+        existing_match = self._existing_download_match(target)
+        if not existing_match.file_exists:
             return None
 
-        if size_matches:
-            self.log(f"   ✅ 文件已存在且大小匹配，跳过下载")
-            self.file_db.update_file_download_status(
-                target.file_id,
-                'completed',
-                target.file_path,
-            )
-            return "skipped"  # 返回特殊值表示跳过
+        if existing_match.size_matches:
+            return self._mark_existing_download_completed_target(target)
 
         self.log(f"   ⚠️ 文件已存在但大小不匹配，重新下载")
         return None
+
+    def _existing_download_match(
+        self,
+        target: ExistingDownloadTarget,
+    ) -> ExistingDownloadMatch:
+        file_exists, size_matches, existing_size = existing_file_matches(
+            target.file_path,
+            target.file_size,
+        )
+        return ExistingDownloadMatch(file_exists, size_matches, existing_size)
+
+    def _mark_existing_download_completed_target(
+        self,
+        target: ExistingDownloadTarget,
+    ) -> str:
+        self.log(f"   ✅ 文件已存在且大小匹配，跳过下载")
+        self.file_db.update_file_download_status(
+            target.file_id,
+            'completed',
+            target.file_path,
+        )
+        return "skipped"
 
     def _get_download_url_or_mark_unavailable(self, file_id: int) -> Optional[str]:
         download_url = self.get_download_url(file_id)

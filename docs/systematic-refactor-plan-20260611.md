@@ -30755,6 +30755,52 @@ Result:
 - Full backend unittest discovery passed in the current worktree: 1277 tests, 15 skipped.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-17 - P139 isolate existing download skip decision
+
+Changed:
+
+- Added direct characterization coverage for `_skip_existing_download_target(...)` missing-file,
+  matching-file, and size-mismatch branches before changing production code.
+- Added `ExistingDownloadMatch` to name the existing-file probe result.
+- Extracted `_existing_download_match(...)` from `_skip_existing_download_target(...)`.
+- Extracted `_mark_existing_download_completed_target(...)` from
+  `_skip_existing_download_target(...)`.
+- Kept `existing_file_matches(...)` arguments, missing-file no-op behavior, completed status update
+  payload, `"skipped"` return value, and size-mismatch redownload log unchanged.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Existing downloaded-file skip, completed status update, and size-mismatch redownload behavior is
+  preserved.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_skip_existing_download_target_preserves_missing_file_noop tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_skip_existing_download_target_preserves_completed_update tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_skip_existing_download_target_preserves_size_mismatch_redownload -v
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_skip_existing_download_target_preserves_missing_file_noop tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_skip_existing_download_target_preserves_completed_update tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_skip_existing_download_target_preserves_size_mismatch_redownload tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_download_file_skips_existing_matching_file_without_request tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_download_file_redownloads_existing_size_mismatch -v
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run ruff check backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py --select F401,F841
+git diff --check
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- New existing-download skip characterization tests passed before helper extraction: 3 tests.
+- Focused skip and adjacent download-file tests passed after helper extraction: 5 tests.
+- `py_compile` passed.
+- ZSXQ file downloader helper tests passed: 302 tests.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- `git diff --check` passed; Git only reported existing LF-to-CRLF working-copy warnings.
+- Full backend unittest discovery passed in the current worktree: 1280 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:
