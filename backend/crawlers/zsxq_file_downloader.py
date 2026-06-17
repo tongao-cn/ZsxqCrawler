@@ -644,6 +644,10 @@ class CloseTarget(NamedTuple):
     pass
 
 
+class SetStopFlagTarget(NamedTuple):
+    pass
+
+
 class FileCollectionLogRow(NamedTuple):
     log_id: Any
 
@@ -840,6 +844,12 @@ class ZSXQFileDownloader:
 
     def set_stop_flag(self):
         """设置停止标志"""
+        return self._set_stop_flag_target(SetStopFlagTarget())
+
+    def _set_stop_flag_target(
+        self,
+        target: SetStopFlagTarget,
+    ) -> None:
         self.stop_flag = True
         self.log("🛑 收到停止信号，任务将在下一个检查点停止")
 

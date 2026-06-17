@@ -29401,6 +29401,49 @@ Result:
 - Full backend unittest discovery passed in the current worktree: 1221 tests, 15 skipped.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-17 - P109 stop flag entry target handoff
+
+Changed:
+
+- Added characterization coverage for `set_stop_flag()` before changing production code, locking
+  stop-flag mutation, stop-log text, and `None` return value.
+- Added private no-field `SetStopFlagTarget` for the no-argument runtime-state entrypoint.
+- Added private `_set_stop_flag_target(...)` and delegated the public `set_stop_flag()` method to
+  it.
+- Kept public `set_stop_flag()` signature and behavior unchanged.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Existing stop-flag side effect, log text, return value, and fallback/legacy behavior are
+  unchanged.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderRuntimeStateTests.test_set_stop_flag_preserves_flag_update_log_and_return_value -v
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py
+uv run python scripts\scan_postgres_compat_debt.py
+uv run ruff check backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py --select F401,F841
+git diff --check
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- New stop-flag characterization test passed before production helper handoff: 1 test.
+- Focused stop-flag entry test passed after helper handoff: 1 test.
+- `py_compile` passed.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- `git diff --check` passed; Git only reported existing LF-to-CRLF working-copy warnings.
+- ZSXQ file downloader helper tests passed: 244 tests.
+- Full backend unittest discovery passed in the current worktree: 1222 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:

@@ -3744,6 +3744,20 @@ class FileDownloaderInitTests(unittest.TestCase):
         self.assertIs(fake_db, downloader.file_db)
 
 
+class FileDownloaderRuntimeStateTests(unittest.TestCase):
+    def test_set_stop_flag_preserves_flag_update_log_and_return_value(self):
+        downloader = object.__new__(ZSXQFileDownloader)
+        downloader.stop_flag = False
+        logs = []
+        downloader.log = lambda message: logs.append(message)
+
+        result = ZSXQFileDownloader.set_stop_flag(downloader)
+
+        self.assertIsNone(result)
+        self.assertTrue(downloader.stop_flag)
+        self.assertEqual(["🛑 收到停止信号，任务将在下一个检查点停止"], logs)
+
+
 class FileDownloaderFileDataHelperTests(unittest.TestCase):
     def test_download_file_data_accepts_id_or_file_id(self):
         self.assertEqual(
