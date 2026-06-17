@@ -2643,6 +2643,32 @@ class FileDownloaderBatchDownloadTests(unittest.TestCase):
             targets,
         )
 
+    def test_run_batch_download_loop_target_preserves_initial_step_from_start_index(self):
+        stats = {"total_files": 0, "downloaded": 0, "skipped": 0, "failed": 0}
+        downloader = object.__new__(ZSXQFileDownloader)
+        downloader.check_stop = lambda: False
+        targets = []
+
+        def run_page(target):
+            targets.append(
+                (
+                    target.step.downloaded_in_batch,
+                    target.step.next_index,
+                    target.max_files,
+                    target.stats is stats,
+                )
+            )
+            return None
+
+        downloader._run_batch_download_page_target = run_page
+
+        ZSXQFileDownloader._run_batch_download_loop_target(
+            downloader,
+            SimpleNamespace(stats=stats, max_files=1, start_index=""),
+        )
+
+        self.assertEqual([(0, "", 1, True)], targets)
+
     def test_run_batch_download_loop_preserves_loop_target_construction(self):
         stats = {"total_files": 0, "downloaded": 0, "skipped": 0, "failed": 0}
         downloader = object.__new__(ZSXQFileDownloader)
