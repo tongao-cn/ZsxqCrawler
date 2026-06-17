@@ -9198,6 +9198,50 @@ class FileDownloaderDownloadTests(unittest.TestCase):
             self.assertTrue(matching_path.exists())
             self.assertEqual(["   ⚠️ 文件大小不匹配: 预期4, 实际3"], downloader.logs)
 
+    def test_handle_download_size_mismatch_target_preserves_raw_detail_handoff(self):
+        downloader = object.__new__(ZSXQFileDownloader)
+        target = DownloadSizeMismatchTarget(17, "C:\\Downloads\\memo.pdf.part")
+        failure_detail = DownloadFailureDetail("size_mismatch", "bad size")
+        calls = []
+
+        def getsize(temp_path):
+            calls.append(("getsize", temp_path))
+            return 13
+
+        def size_mismatch_detail(expected_size, final_size):
+            calls.append(("detail", expected_size, final_size))
+            return ("size_mismatch", "bad size")
+
+        def download_size_mismatch_failure_detail(detail_target, raw_mismatch_detail):
+            calls.append(("failure", detail_target, raw_mismatch_detail))
+            return failure_detail
+
+        downloader._download_size_mismatch_failure_detail = (
+            download_size_mismatch_failure_detail
+        )
+
+        with (
+            patch("backend.crawlers.zsxq_file_downloader.os.path.getsize", getsize),
+            patch(
+                "backend.crawlers.zsxq_file_downloader.download_size_mismatch_detail",
+                size_mismatch_detail,
+            ),
+        ):
+            result = ZSXQFileDownloader._handle_download_size_mismatch_target(
+                downloader,
+                target,
+            )
+
+        self.assertEqual(failure_detail, result)
+        self.assertEqual(
+            [
+                ("getsize", "C:\\Downloads\\memo.pdf.part"),
+                ("detail", 17, 13),
+                ("failure", target, ("size_mismatch", "bad size")),
+            ],
+            calls,
+        )
+
     def test_download_file_retries_and_fails_on_size_mismatch(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             session = FakeDownloadSession([

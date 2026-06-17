@@ -3118,12 +3118,18 @@ class ZSXQFileDownloader:
         self,
         target: DownloadSizeMismatchTarget,
     ) -> Optional[DownloadFailureDetail]:
-        final_size = os.path.getsize(target.temp_path)
-        raw_mismatch_detail = download_size_mismatch_detail(target.expected_size, final_size)
+        raw_mismatch_detail = self._raw_download_size_mismatch_detail_for_target(target)
         if not raw_mismatch_detail:
             return None
 
         return self._download_size_mismatch_failure_detail(target, raw_mismatch_detail)
+
+    def _raw_download_size_mismatch_detail_for_target(
+        self,
+        target: DownloadSizeMismatchTarget,
+    ) -> Optional[Tuple[str, str]]:
+        final_size = os.path.getsize(target.temp_path)
+        return download_size_mismatch_detail(target.expected_size, final_size)
 
     def _download_size_mismatch_failure_detail(
         self,
