@@ -1731,17 +1731,29 @@ class ZSXQFileDownloader:
         target: DownloadUrlDataDecisionTarget,
     ) -> DownloadUrlResponseDecision:
         if target.data.get('succeeded'):
-            download_url = self._handle_download_url_success_response_target(
-                DownloadUrlSuccessResponseTarget(
-                    target.data,
-                    target.file_id,
-                    target.attempt,
-                    target.headers,
-                    target.http_status,
-                ),
-            )
-            return DownloadUrlResponseDecision(download_url, False, False)
+            return self._download_url_success_data_decision(target)
 
+        return self._download_url_api_failure_data_decision(target)
+
+    def _download_url_success_data_decision(
+        self,
+        target: DownloadUrlDataDecisionTarget,
+    ) -> DownloadUrlResponseDecision:
+        download_url = self._handle_download_url_success_response_target(
+            DownloadUrlSuccessResponseTarget(
+                target.data,
+                target.file_id,
+                target.attempt,
+                target.headers,
+                target.http_status,
+            ),
+        )
+        return DownloadUrlResponseDecision(download_url, False, False)
+
+    def _download_url_api_failure_data_decision(
+        self,
+        target: DownloadUrlDataDecisionTarget,
+    ) -> DownloadUrlResponseDecision:
         failure_class = self._handle_download_url_api_failure_response_target(
             DownloadUrlApiFailureResponseTarget(
                 target.data,

@@ -4815,6 +4815,86 @@ class FileDownloaderRetryHelperTests(unittest.TestCase):
             non_retry_plan["messages"],
         )
 
+    def test_download_url_data_decision_preserves_success_decision_and_event(self):
+        downloader = object.__new__(ZSXQFileDownloader)
+        events = []
+        downloader._record_risk_event = lambda **kwargs: events.append(kwargs)
+        output = io.StringIO()
+
+        with contextlib.redirect_stdout(output):
+            decision = ZSXQFileDownloader._download_url_data_decision(
+                downloader,
+                {"succeeded": True, "resp_data": {"download_url": "https://files.example/signed-token"}},
+                101,
+                2,
+                3,
+                {"User-Agent": "unit-test-agent"},
+                200,
+            )
+
+        self.assertEqual("https://files.example/signed-token", decision.download_url)
+        self.assertFalse(decision.should_retry)
+        self.assertFalse(decision.should_stop)
+        self.assertEqual("   ✅ 重试成功！第2次重试获取到下载链接\n", output.getvalue())
+        self.assertEqual(
+            [
+                {
+                    "file_id": 101,
+                    "phase": "download_url_retry_response",
+                    "attempt": 2,
+                    "headers": {"User-Agent": "unit-test-agent"},
+                    "http_status": 200,
+                    "status": "api_success",
+                }
+            ],
+            events,
+        )
+
+    def test_download_url_data_decision_preserves_permission_failure_decision(self):
+        downloader = object.__new__(ZSXQFileDownloader)
+        downloader.logged = []
+        downloader.log = downloader.logged.append
+        events = []
+        downloader._record_risk_event = lambda **kwargs: events.append(kwargs)
+        downloader.last_download_url_error = None
+
+        decision = ZSXQFileDownloader._download_url_data_decision(
+            downloader,
+            {"succeeded": False, "message": "mobile only", "code": 1030},
+            202,
+            0,
+            2,
+            {"User-Agent": "unit-test-agent"},
+            200,
+        )
+
+        self.assertIsNone(decision.download_url)
+        self.assertFalse(decision.should_retry)
+        self.assertTrue(decision.should_stop)
+        self.assertEqual({"code": 1030, "message": "mobile only"}, downloader.last_download_url_error)
+        self.assertEqual(
+            [
+                "   ❌ API返回失败: mobile only (代码: 1030)",
+                "   🚫 权限不足错误(1030)：此文件可能只能在手机端下载，已跳过当前文件",
+            ],
+            downloader.logged,
+        )
+        self.assertEqual(
+            [
+                {
+                    "file_id": 202,
+                    "phase": "download_url_response",
+                    "attempt": 0,
+                    "headers": {"User-Agent": "unit-test-agent"},
+                    "http_status": 200,
+                    "api_code": 1030,
+                    "api_message": "mobile only",
+                    "status": "api_failed",
+                }
+            ],
+            events,
+        )
+
     def test_handle_download_url_api_failure_response_preserves_retry_logs_event_and_decision(self):
         downloader = object.__new__(ZSXQFileDownloader)
         downloader.logged = []

@@ -30305,6 +30305,49 @@ Result:
 - Full backend unittest discovery passed in the current worktree: 1255 tests, 15 skipped.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-17 - P129 split download-url data decision branches
+
+Changed:
+
+- Added characterization coverage for `_download_url_data_decision(...)` success and permission
+  failure decisions before changing production code.
+- Extracted `_download_url_success_data_decision(...)` and
+  `_download_url_api_failure_data_decision(...)` from `_download_url_data_decision_target(...)`.
+- Kept success stdout, risk-event payloads, permission-error `last_download_url_error`, and
+  `DownloadUrlResponseDecision` retry/stop flags unchanged.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Existing download URL data-branch decisions and side effects are preserved.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderRetryHelperTests.test_download_url_data_decision_preserves_success_decision_and_event tests.test_zsxq_file_downloader_helpers.FileDownloaderRetryHelperTests.test_download_url_data_decision_preserves_permission_failure_decision -v
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderRetryHelperTests.test_download_url_data_decision_preserves_success_decision_and_event tests.test_zsxq_file_downloader_helpers.FileDownloaderRetryHelperTests.test_download_url_data_decision_preserves_permission_failure_decision tests.test_zsxq_file_downloader_helpers.FileDownloaderRetryHelperTests.test_handle_download_url_success_response_preserves_print_event_order tests.test_zsxq_file_downloader_helpers.FileDownloaderRetryHelperTests.test_handle_download_url_api_failure_response_preserves_log_event_log_order -v
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run ruff check backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py --select F401,F841
+git diff --check
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- New download URL data-decision characterization tests passed before helper extraction: 2 tests.
+- Focused data-decision and adjacent side-effect tests passed after helper extraction: 4 tests.
+- `py_compile` passed.
+- ZSXQ file downloader helper tests passed: 279 tests.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- `git diff --check` passed; Git only reported existing LF-to-CRLF working-copy warnings.
+- Full backend unittest discovery passed in the current worktree: 1257 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:
