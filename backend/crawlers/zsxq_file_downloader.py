@@ -3136,10 +3136,23 @@ class ZSXQFileDownloader:
         target: DownloadSizeMismatchTarget,
         raw_mismatch_detail: Tuple[str, str],
     ) -> DownloadFailureDetail:
-        mismatch_detail = DownloadFailureDetail(*raw_mismatch_detail)
+        mismatch_detail = self._download_failure_detail_from_raw_mismatch(raw_mismatch_detail)
+        self._record_download_size_mismatch_failure(target, mismatch_detail)
+        return mismatch_detail
+
+    def _download_failure_detail_from_raw_mismatch(
+        self,
+        raw_mismatch_detail: Tuple[str, str],
+    ) -> DownloadFailureDetail:
+        return DownloadFailureDetail(*raw_mismatch_detail)
+
+    def _record_download_size_mismatch_failure(
+        self,
+        target: DownloadSizeMismatchTarget,
+        mismatch_detail: DownloadFailureDetail,
+    ) -> None:
         self.log(f"   ⚠️ {mismatch_detail.error_message}")
         os.remove(target.temp_path)
-        return mismatch_detail
 
     def _handle_download_stop(self, file_id: int, temp_path: str) -> None:
         self._handle_download_stop_target(DownloadStopTarget(file_id, temp_path))

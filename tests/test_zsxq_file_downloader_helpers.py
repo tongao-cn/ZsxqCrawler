@@ -9242,6 +9242,32 @@ class FileDownloaderDownloadTests(unittest.TestCase):
             calls,
         )
 
+    def test_download_size_mismatch_failure_detail_preserves_log_cleanup_and_return(self):
+        downloader = object.__new__(ZSXQFileDownloader)
+        target = DownloadSizeMismatchTarget(17, "C:\\Downloads\\memo.pdf.part")
+        raw_mismatch_detail = ("size_mismatch", "bad size")
+        calls = []
+        downloader.log = lambda message: calls.append(("log", message))
+
+        def remove(temp_path):
+            calls.append(("remove", temp_path))
+
+        with patch("backend.crawlers.zsxq_file_downloader.os.remove", remove):
+            result = ZSXQFileDownloader._download_size_mismatch_failure_detail(
+                downloader,
+                target,
+                raw_mismatch_detail,
+            )
+
+        self.assertEqual(DownloadFailureDetail("size_mismatch", "bad size"), result)
+        self.assertEqual(
+            [
+                ("log", "   ⚠️ bad size"),
+                ("remove", "C:\\Downloads\\memo.pdf.part"),
+            ],
+            calls,
+        )
+
     def test_download_file_retries_and_fails_on_size_mismatch(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             session = FakeDownloadSession([
