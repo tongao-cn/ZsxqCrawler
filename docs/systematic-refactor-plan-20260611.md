@@ -30661,6 +30661,53 @@ Result:
 - Full backend unittest discovery passed in the current worktree: 1273 tests, 15 skipped.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-17 - P137 isolate download attempt URL and response handoff
+
+Changed:
+
+- Added characterization coverage for `_run_download_attempt_target(...)` retry-wait plus missing
+  download URL behavior before changing production code.
+- Added characterization coverage for successful download URL request/response-handler handoff.
+- Added `DownloadAttemptResponseTarget` to name the URL-to-response handoff boundary.
+- Extracted `_download_attempt_missing_url_result(...)` and
+  `_run_download_attempt_response_target(...)` from `_run_download_attempt_target(...)`.
+- Kept retry wait ordering, file id lookup, missing URL `DownloadAttemptResult(False, None, ...)`,
+  response request URL, `DownloadResponseTarget`, and response handler return semantics unchanged.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Existing download attempt URL lookup, missing URL failure, and response handoff behavior is
+  preserved.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_run_download_attempt_preserves_retry_wait_and_missing_url_result tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_run_download_attempt_preserves_response_handoff -v
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_run_download_attempt_preserves_retry_wait_and_missing_url_result tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_run_download_attempt_preserves_response_handoff tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_apply_download_attempt_result_preserves_false_retry_decision tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_apply_download_attempt_result_preserves_empty_failure_detail_as_success tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_apply_download_attempt_result_preserves_failure_detail_retry_state -v
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run ruff check backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py --select F401,F841
+git diff --check
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- New download attempt characterization tests passed before helper extraction: 2 tests.
+- Focused download attempt and adjacent attempt-result tests passed after helper extraction:
+  5 tests.
+- `py_compile` passed.
+- ZSXQ file downloader helper tests passed: 297 tests.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- `git diff --check` passed; Git only reported existing LF-to-CRLF working-copy warnings.
+- Full backend unittest discovery passed in the current worktree: 1275 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:

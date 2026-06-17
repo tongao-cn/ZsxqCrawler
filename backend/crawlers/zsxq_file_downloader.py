@@ -496,6 +496,11 @@ class DownloadAttemptTarget(NamedTuple):
     file_target: DownloadFileTarget
 
 
+class DownloadAttemptResponseTarget(NamedTuple):
+    download_url: str
+    file_target: DownloadFileTarget
+
+
 class DownloadResponseTarget(NamedTuple):
     response: Any
     file_target: DownloadFileTarget
@@ -2179,17 +2184,31 @@ class ZSXQFileDownloader:
         file_target = target.file_target
         download_url = self._get_download_url_or_mark_unavailable(file_target.file_id)
         if not download_url:
-            return DownloadAttemptResult(
-                False,
-                None,
-                file_target.file_name,
-                file_target.safe_filename,
-                file_target.file_path,
-            )
+            return self._download_attempt_missing_url_result(file_target)
 
-        response = self._request_download_response(download_url)
+        return self._run_download_attempt_response_target(
+            DownloadAttemptResponseTarget(download_url, file_target),
+        )
+
+    def _download_attempt_missing_url_result(
+        self,
+        file_target: DownloadFileTarget,
+    ) -> DownloadAttemptResult:
+        return DownloadAttemptResult(
+            False,
+            None,
+            file_target.file_name,
+            file_target.safe_filename,
+            file_target.file_path,
+        )
+
+    def _run_download_attempt_response_target(
+        self,
+        target: DownloadAttemptResponseTarget,
+    ) -> DownloadAttemptResult:
+        response = self._request_download_response(target.download_url)
         return self._handle_download_response_result_target(
-            DownloadResponseTarget(response, file_target),
+            DownloadResponseTarget(response, target.file_target),
         )
 
     def _prepare_download_file_target(

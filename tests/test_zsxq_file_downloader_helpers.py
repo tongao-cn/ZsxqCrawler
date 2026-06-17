@@ -11,8 +11,10 @@ from unittest.mock import patch
 
 from backend.crawlers.zsxq_file_downloader import (
     DownloadAttemptResult,
+    DownloadAttemptTarget,
     DownloadFailureDetail,
     DownloadFileTarget,
+    DownloadResponseTarget,
     DownloadRetryDecision,
     DownloadRetryLoopAttemptTarget,
     DownloadRetryState,
@@ -6745,6 +6747,75 @@ class FileDownloaderDownloadTests(unittest.TestCase):
                 None,
             ),
             decision,
+        )
+
+    def test_run_download_attempt_preserves_retry_wait_and_missing_url_result(self):
+        downloader = object.__new__(ZSXQFileDownloader)
+        file_target = DownloadFileTarget(505, "memo.pdf", 4, "memo.pdf", "C:\\Downloads\\memo.pdf")
+        calls = []
+
+        def wait_before_download_retry_target(target):
+            calls.append(("wait", target.attempt, target.download_retries))
+
+        def get_download_url_or_mark_unavailable(file_id):
+            calls.append(("url", file_id))
+            return None
+
+        downloader._wait_before_download_retry_target = wait_before_download_retry_target
+        downloader._get_download_url_or_mark_unavailable = get_download_url_or_mark_unavailable
+        downloader._request_download_response = lambda url: self.fail("missing URL should not request a response")
+        downloader._handle_download_response_result_target = lambda target: self.fail(
+            "missing URL should not handle a response"
+        )
+
+        result = ZSXQFileDownloader._run_download_attempt_target(
+            downloader,
+            DownloadAttemptTarget(1, 3, file_target),
+        )
+
+        self.assertEqual(
+            DownloadAttemptResult(False, None, "memo.pdf", "memo.pdf", "C:\\Downloads\\memo.pdf"),
+            result,
+        )
+        self.assertEqual([("wait", 1, 3), ("url", 505)], calls)
+
+    def test_run_download_attempt_preserves_response_handoff(self):
+        downloader = object.__new__(ZSXQFileDownloader)
+        file_target = DownloadFileTarget(606, "memo.pdf", 4, "memo.pdf", "C:\\Downloads\\memo.pdf")
+        response = object()
+        expected_result = DownloadAttemptResult(True, None, "memo.pdf", "memo.pdf", "C:\\Downloads\\memo.pdf")
+        calls = []
+
+        def get_download_url_or_mark_unavailable(file_id):
+            calls.append(("url", file_id))
+            return "https://download.test/606"
+
+        def request_download_response(url):
+            calls.append(("request", url))
+            return response
+
+        def handle_download_response_result_target(target):
+            calls.append(("handle", target))
+            return expected_result
+
+        downloader._wait_before_download_retry_target = lambda target: self.fail("first attempt should not wait")
+        downloader._get_download_url_or_mark_unavailable = get_download_url_or_mark_unavailable
+        downloader._request_download_response = request_download_response
+        downloader._handle_download_response_result_target = handle_download_response_result_target
+
+        result = ZSXQFileDownloader._run_download_attempt_target(
+            downloader,
+            DownloadAttemptTarget(0, 3, file_target),
+        )
+
+        self.assertIs(expected_result, result)
+        self.assertEqual(
+            [
+                ("url", 606),
+                ("request", "https://download.test/606"),
+                ("handle", DownloadResponseTarget(response, file_target)),
+            ],
+            calls,
         )
 
     def test_download_file_accepts_raw_file_id_payload(self):
