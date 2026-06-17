@@ -33504,6 +33504,51 @@ Result:
 - Full backend unittest discovery passed in the current worktree: 1346 tests, 15 skipped.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-17 - P198 isolate batch page empty response handling
+
+Changed:
+
+- Added direct characterization coverage for `_batch_download_page_from_response(...)` preserving both
+  empty-response and success-response behavior.
+- Extracted `_handle_empty_batch_download_page(...)` from `_batch_download_page_from_response(...)`.
+- Kept `file_list_response_page(...)` parsing, empty `files` truthiness semantics, empty-page log text,
+  terminal `None` return, success page-count log, and returned `BatchDownloadPage` fields unchanged.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Batch download page response parsing still treats falsy `files` as an empty page and stops before
+  constructing a `BatchDownloadPage`.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderBatchDownloadTests.test_batch_download_page_from_response_preserves_empty_and_success_paths -v
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderBatchDownloadTests.test_batch_download_page_from_response_preserves_empty_and_success_paths tests.test_zsxq_file_downloader_helpers.FileDownloaderBatchDownloadTests.test_fetch_batch_download_page_target_preserves_fetch_failure_short_circuit tests.test_zsxq_file_downloader_helpers.FileDownloaderBatchDownloadTests.test_fetch_batch_download_page_target_preserves_fetch_response_handling tests.test_zsxq_file_downloader_helpers.FileDownloaderBatchDownloadTests.test_fetch_batch_download_page_preserves_fetch_args_success_and_terminal_logs tests.test_zsxq_file_downloader_helpers.FileDownloaderBatchDownloadTests.test_run_batch_download_page_preserves_fetch_terminal_and_step_handoff tests.test_zsxq_file_downloader_helpers.FileDownloaderBatchDownloadTests.test_run_batch_download_page_target_preserves_fetch_target_terminal -v
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run ruff check backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py --select F401,F841
+git diff --check -- backend/crawlers/zsxq_file_downloader.py tests/test_zsxq_file_downloader_helpers.py docs/systematic-refactor-plan-20260611.md
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- New response empty/success characterization test passed before helper extraction: 1 test.
+- Focused response empty/success, failed-fetch, response handling, fetch wrapper, and terminal page
+  tests passed after helper extraction: 6 tests.
+- `py_compile` passed.
+- ZSXQ file downloader helper tests passed: 361 tests.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- Scoped `git diff --check` passed for the P198 files; Git only reported existing LF-to-CRLF
+  working-copy warnings.
+- Full backend unittest discovery passed in the current worktree: 1347 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:

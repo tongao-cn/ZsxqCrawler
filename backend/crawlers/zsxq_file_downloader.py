@@ -3526,11 +3526,14 @@ class ZSXQFileDownloader:
         files, next_index = file_list_response_page(data)
 
         if not files:
-            self.log(batch_download_empty_page_message())
-            return None
+            return self._handle_empty_batch_download_page()
 
         self.log(batch_download_page_files_message(len(files)))
         return BatchDownloadPage(files, next_index)
+
+    def _handle_empty_batch_download_page(self) -> Optional[BatchDownloadPage]:
+        self.log(batch_download_empty_page_message())
+        return None
 
     def _run_batch_download_page(
         self,
