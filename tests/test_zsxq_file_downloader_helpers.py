@@ -2717,6 +2717,34 @@ class FileDownloaderBatchDownloadTests(unittest.TestCase):
             downloader.logs,
         )
 
+    def test_download_files_batch_target_preserves_initial_stop_without_completion(self):
+        downloader = object.__new__(ZSXQFileDownloader)
+        downloader.logs = []
+        downloader.log = downloader.logs.append
+        stop_checks = []
+
+        def check_stop():
+            stop_checks.append("checked")
+            return True
+
+        def run_loop(target):
+            self.fail("initial stop must not run the batch loop")
+
+        downloader.check_stop = check_stop
+        downloader._run_batch_download_loop_target = run_loop
+
+        stats = ZSXQFileDownloader._download_files_batch_target(
+            downloader,
+            BatchDownloadTarget(3, "cursor"),
+        )
+
+        self.assertEqual({"total_files": 0, "downloaded": 0, "skipped": 0, "failed": 0}, stats)
+        self.assertEqual(["checked"], stop_checks)
+        self.assertEqual(
+            ["📥 开始批量下载文件 (最多3个)", "🛑 任务被停止"],
+            downloader.logs,
+        )
+
     def test_download_files_batch_stops_page_after_success_limit(self):
         files = [
             {"file": {"id": 101, "name": "first.pdf"}},
