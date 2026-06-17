@@ -4491,6 +4491,28 @@ class FileDownloaderRetryHelperTests(unittest.TestCase):
         self.assertFalse(exhausted_decision.should_retry)
         self.assertFalse(exhausted_decision.should_stop)
 
+    def test_handle_file_list_http_failure_response_preserves_output_and_failure_class(self):
+        downloader = object.__new__(ZSXQFileDownloader)
+        output = io.StringIO()
+
+        with contextlib.redirect_stdout(output):
+            failure_class = ZSXQFileDownloader._handle_file_list_http_failure_response(
+                downloader,
+                FakeHttpDownloadUrlResponse(429, "temporary outage"),
+                0,
+                2,
+            )
+
+        self.assertEqual(HTTP_FAILURE_RETRY, failure_class)
+        self.assertEqual(
+            [
+                "   ❌ HTTP错误: 429",
+                "   📄 响应内容: temporary outage",
+                "   🔄 服务器错误，准备重试...",
+            ],
+            output.getvalue().splitlines(),
+        )
+
     def test_should_log_full_response_on_first_last_or_success(self):
         self.assertTrue(should_log_full_response(0, 3, False))
         self.assertFalse(should_log_full_response(1, 3, False))
@@ -4764,6 +4786,29 @@ class FileDownloaderRetryHelperTests(unittest.TestCase):
         self.assertEqual(403, risk_events[0]["http_status"])
         self.assertEqual(1030, risk_events[0]["api_code"])
         self.assertEqual("mobile only", risk_events[0]["api_message"])
+
+    def test_handle_download_url_http_failure_response_preserves_output_and_failure_class(self):
+        downloader = object.__new__(ZSXQFileDownloader)
+        output = io.StringIO()
+
+        with contextlib.redirect_stdout(output):
+            failure_class = ZSXQFileDownloader._handle_download_url_http_failure_response(
+                downloader,
+                403,
+                "forbidden",
+                0,
+                2,
+            )
+
+        self.assertEqual(HTTP_FAILURE_NON_RETRY, failure_class)
+        self.assertEqual(
+            [
+                "   ❌ HTTP错误: 403",
+                "   📄 响应内容: forbidden",
+                "   🚫 非可重试HTTP错误，停止重试",
+            ],
+            output.getvalue().splitlines(),
+        )
 
     def test_classify_http_failure_distinguishes_retry_and_terminal_cases(self):
         self.assertEqual(HTTP_FAILURE_RETRY, classify_http_failure(429, 0, 2))

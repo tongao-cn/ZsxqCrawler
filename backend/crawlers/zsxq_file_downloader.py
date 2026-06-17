@@ -206,6 +206,13 @@ class FileListHttpFailureResponseTarget(NamedTuple):
     max_retries: int
 
 
+class HttpFailureOutputTarget(NamedTuple):
+    http_status: int
+    response_text: str
+    attempt: int
+    max_retries: int
+
+
 class FileListRequestExceptionTarget(NamedTuple):
     exc: Exception
     attempt: int
@@ -736,6 +743,18 @@ def _latest_file_create_time(row: Any) -> Optional[Any]:
     return latest_file.create_time
 
 
+def _http_failure_class_with_output(target: HttpFailureOutputTarget) -> str:
+    http_failure = http_failure_plan(
+        target.http_status,
+        target.response_text,
+        target.attempt,
+        target.max_retries,
+    )
+    for message in http_failure["messages"]:
+        print(message)
+    return http_failure["failure_class"]
+
+
 def _database_stats_total_size_row(result: Any) -> Optional[DatabaseStatsTotalSize]:
     if not result or not result[0]:
         return None
@@ -1246,15 +1265,14 @@ class ZSXQFileDownloader:
         self,
         target: FileListHttpFailureResponseTarget,
     ) -> str:
-        http_failure = http_failure_plan(
-            target.response.status_code,
-            target.response.text,
-            target.attempt,
-            target.max_retries,
+        return _http_failure_class_with_output(
+            HttpFailureOutputTarget(
+                target.response.status_code,
+                target.response.text,
+                target.attempt,
+                target.max_retries,
+            ),
         )
-        for message in http_failure["messages"]:
-            print(message)
-        return http_failure["failure_class"]
 
     def _handle_file_list_request_exception(
         self,
@@ -1526,15 +1544,14 @@ class ZSXQFileDownloader:
         self,
         target: DownloadUrlHttpFailureResponseTarget,
     ) -> str:
-        http_failure = http_failure_plan(
-            target.http_status,
-            target.response_text,
-            target.attempt,
-            target.max_retries,
+        return _http_failure_class_with_output(
+            HttpFailureOutputTarget(
+                target.http_status,
+                target.response_text,
+                target.attempt,
+                target.max_retries,
+            ),
         )
-        for message in http_failure["messages"]:
-            print(message)
-        return http_failure["failure_class"]
 
     def _download_url_http_failure_decision(
         self,
