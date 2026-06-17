@@ -1797,7 +1797,12 @@ class ZSXQFileDownloader:
         target: DownloadUrlResponseTarget,
     ) -> DownloadUrlResponseDecision:
         print(f"   📊 响应状态: {target.response.status_code}")
+        return self._download_url_status_decision(target)
 
+    def _download_url_status_decision(
+        self,
+        target: DownloadUrlResponseTarget,
+    ) -> DownloadUrlResponseDecision:
         if target.response.status_code == 200:
             return self._handle_download_url_ok_response_target(
                 DownloadUrlOkResponseTarget(

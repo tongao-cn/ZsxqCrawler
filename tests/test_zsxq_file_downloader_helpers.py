@@ -5308,6 +5308,71 @@ class FileDownloaderRetryHelperTests(unittest.TestCase):
         self.assertIn("   📋 响应内容: {}", output.getvalue())
         self.assertNotIn("响应中无下载链接字段", output.getvalue())
 
+    def test_handle_download_url_response_preserves_success_branch_output_and_event(self):
+        downloader = object.__new__(ZSXQFileDownloader)
+        events = []
+        downloader._record_risk_event = lambda **kwargs: events.append(kwargs)
+        output = io.StringIO()
+
+        with contextlib.redirect_stdout(output):
+            decision = ZSXQFileDownloader._handle_download_url_response(
+                downloader,
+                FakeJsonResponse(),
+                101,
+                0,
+                2,
+                {"User-Agent": "unit-test-agent"},
+            )
+
+        printed = output.getvalue()
+        self.assertEqual("https://files.example/signed-token", decision.download_url)
+        self.assertFalse(decision.should_retry)
+        self.assertFalse(decision.should_stop)
+        self.assertIn("   📊 响应状态: 200", printed)
+        self.assertIn('"download_url": "<redacted>"', printed)
+        self.assertNotIn("https://files.example/signed-token", printed)
+        self.assertIn("   ✅ 获取下载链接成功", printed)
+        self.assertEqual(
+            [
+                {
+                    "file_id": 101,
+                    "phase": "download_url_response",
+                    "attempt": 0,
+                    "headers": {"User-Agent": "unit-test-agent"},
+                    "http_status": 200,
+                    "status": "api_success",
+                }
+            ],
+            events,
+        )
+
+    def test_handle_download_url_response_preserves_http_failure_stop_decision(self):
+        downloader = object.__new__(ZSXQFileDownloader)
+        output = io.StringIO()
+
+        with contextlib.redirect_stdout(output):
+            decision = ZSXQFileDownloader._handle_download_url_response(
+                downloader,
+                FakeHttpDownloadUrlResponse(403, "forbidden"),
+                202,
+                0,
+                2,
+                {"User-Agent": "unit-test-agent"},
+            )
+
+        self.assertIsNone(decision.download_url)
+        self.assertFalse(decision.should_retry)
+        self.assertTrue(decision.should_stop)
+        self.assertEqual(
+            [
+                "   📊 响应状态: 403",
+                "   ❌ HTTP错误: 403",
+                "   📄 响应内容: forbidden",
+                "   🚫 非可重试HTTP错误，停止重试",
+            ],
+            output.getvalue().splitlines(),
+        )
+
     def test_risk_event_user_agent_label_preserves_browser_platform_labels(self):
         self.assertEqual(
             "Edge Windows",
