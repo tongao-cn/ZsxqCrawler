@@ -31750,6 +31750,52 @@ Result:
 - Full backend unittest discovery passed in the current worktree: 1306 tests, 15 skipped.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-17 - P160 isolate download body finalization decision target construction
+
+Changed:
+
+- Added characterization coverage for `_download_body_result_for_response_target(...)` preserving
+  write-target delegation, downloaded-size handoff, finalization-decision target construction, and
+  returned `DownloadBodyResult`.
+- Extracted `_download_body_finalization_decision_target(...)` from
+  `_download_body_result_for_response_target(...)`.
+- Kept downloaded size, expected size, partial path, file id, safe filename, final file path, and
+  delegate order unchanged.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Successful response body handling still writes the response body before delegating the same
+  finalization decision target into size-check/success handling.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_download_body_result_for_response_target_preserves_finalization_decision_handoff -v
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_download_body_result_for_response_target_preserves_finalization_decision_handoff tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_download_body_result_for_response_target_preserves_write_and_finalize_handoff tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_handle_successful_download_response_result_target_preserves_target_handoff tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_handle_successful_download_response_result_target_preserves_body_preparation_handoff tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_write_download_response_body_result_target_preserves_chunk_order tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_write_download_response_body_result_target_truncates_existing_partial_file tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_finalize_download_body_result_preserves_stop_mismatch_and_success_paths tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_finalize_download_body_result_decision_target_preserves_branch_handoff -v
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run ruff check backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py --select F401,F841
+git diff --check
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- New finalization-decision handoff characterization test passed before helper extraction: 1 test.
+- Focused successful-response, stream-write, and finalization tests passed after helper extraction:
+  8 tests.
+- `py_compile` passed.
+- ZSXQ file downloader helper tests passed: 323 tests.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- `git diff --check` passed; Git only reported existing LF-to-CRLF working-copy warnings.
+- Full backend unittest discovery passed in the current worktree: 1307 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:

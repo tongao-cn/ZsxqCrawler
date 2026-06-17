@@ -2963,18 +2963,12 @@ class ZSXQFileDownloader:
         downloaded_size = self._write_download_response_body_result_target(
             self._download_body_write_response_target(target, body_target),
         )
-        file_target = target.file_target
         return self._finalize_download_body_result_decision_target(
-            DownloadBodyFinalizationDecisionTarget(
+            self._download_body_finalization_decision_target(
                 downloaded_size,
-                DownloadBodyFinalizationTarget(
-                    body_target.expected_size,
-                    body_target.temp_path,
-                    file_target.file_id,
-                    file_target.safe_filename,
-                    file_target.file_path,
-                ),
-            ),
+                target,
+                body_target,
+            )
         )
 
     def _download_body_write_response_target(
@@ -2990,6 +2984,24 @@ class ZSXQFileDownloader:
                 body_target.temp_path,
                 body_target.total_size,
                 file_target.file_id,
+            ),
+        )
+
+    def _download_body_finalization_decision_target(
+        self,
+        downloaded_size: Optional[int],
+        target: DownloadResponseTarget,
+        body_target: DownloadBodyTarget,
+    ) -> DownloadBodyFinalizationDecisionTarget:
+        file_target = target.file_target
+        return DownloadBodyFinalizationDecisionTarget(
+            downloaded_size,
+            DownloadBodyFinalizationTarget(
+                body_target.expected_size,
+                body_target.temp_path,
+                file_target.file_id,
+                file_target.safe_filename,
+                file_target.file_path,
             ),
         )
 

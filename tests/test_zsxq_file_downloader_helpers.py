@@ -7974,6 +7974,86 @@ class FileDownloaderDownloadTests(unittest.TestCase):
             calls,
         )
 
+    def test_download_body_result_for_response_target_preserves_finalization_decision_handoff(self):
+        downloader = object.__new__(ZSXQFileDownloader)
+        response = FakeDownloadResponse(200, b"memo", headers={"content-length": "8"})
+        file_target = DownloadFileTarget(
+            303,
+            "memo?.pdf",
+            4,
+            "memo.pdf",
+            "C:\\Downloads\\memo.pdf",
+        )
+        body_target = DownloadBodyTarget(
+            8,
+            4,
+            "C:\\Downloads\\memo.pdf.part",
+        )
+        write_target = DownloadBodyResponseTarget(
+            response,
+            DownloadBodyWriteTarget(
+                "C:\\Downloads\\memo.pdf.part",
+                8,
+                303,
+            ),
+        )
+        result_target = DownloadBodyResult(True, None)
+        calls = []
+
+        def download_body_write_response_target(target, prepared_body_target):
+            calls.append(("write-target", target, prepared_body_target))
+            return write_target
+
+        def write_download_response_body_result_target(target):
+            calls.append(("write", target))
+            return 4
+
+        def finalize_download_body_result_decision_target(target):
+            calls.append(("finalize", target))
+            return result_target
+
+        downloader._download_body_write_response_target = download_body_write_response_target
+        downloader._write_download_response_body_result_target = write_download_response_body_result_target
+        downloader._finalize_download_body_result_decision_target = (
+            finalize_download_body_result_decision_target
+        )
+
+        response_target = DownloadResponseTarget(response, file_target)
+        result = ZSXQFileDownloader._download_body_result_for_response_target(
+            downloader,
+            response_target,
+            body_target,
+        )
+
+        self.assertEqual(result_target, result)
+        self.assertEqual(
+            [
+                (
+                    "write-target",
+                    response_target,
+                    body_target,
+                ),
+                (
+                    "write",
+                    write_target,
+                ),
+                (
+                    "finalize",
+                    DownloadBodyFinalizationDecisionTarget(
+                        4,
+                        DownloadBodyFinalizationTarget(
+                            4,
+                            "C:\\Downloads\\memo.pdf.part",
+                            303,
+                            "memo.pdf",
+                            "C:\\Downloads\\memo.pdf",
+                        ),
+                    ),
+                ),
+            ],
+            calls,
+        )
+
     def test_finalize_download_body_result_preserves_stop_mismatch_and_success_paths(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             downloader = object.__new__(ZSXQFileDownloader)
