@@ -8198,6 +8198,30 @@ class FileDownloaderDownloadTests(unittest.TestCase):
             success_calls,
         )
 
+    def test_finalize_download_body_result_decision_target_preserves_stopped_result_handoff(self):
+        downloader = object.__new__(ZSXQFileDownloader)
+        finalization_target = DownloadBodyFinalizationTarget(
+            4,
+            "C:\\Downloads\\memo.pdf.part",
+            303,
+            "memo.pdf",
+            "C:\\Downloads\\memo.pdf",
+        )
+
+        downloader._download_size_mismatch_detail_for_finalization = lambda target: self.fail(
+            "stop path should not check size mismatch"
+        )
+        downloader._successful_download_body_result_target = lambda target: self.fail(
+            "stop path should not complete download"
+        )
+
+        result = ZSXQFileDownloader._finalize_download_body_result_decision_target(
+            downloader,
+            DownloadBodyFinalizationDecisionTarget(None, finalization_target),
+        )
+
+        self.assertEqual((False, None), result)
+
     def test_finalize_download_body_result_decision_target_preserves_size_mismatch_target_handoff(self):
         downloader = object.__new__(ZSXQFileDownloader)
         finalization_target = DownloadBodyFinalizationTarget(
