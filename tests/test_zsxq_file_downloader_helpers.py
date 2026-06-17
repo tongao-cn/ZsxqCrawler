@@ -2563,6 +2563,52 @@ class FileDownloaderBatchDownloadTests(unittest.TestCase):
         self.assertEqual(1, len(fetch_targets))
         self.assertEqual("cursor", fetch_targets[0].current_index)
 
+    def test_run_batch_download_page_target_preserves_page_files_builder_handoff(self):
+        stats = {"total_files": 0, "downloaded": 0, "skipped": 0, "failed": 0}
+        page = SimpleNamespace(files=[{"file": {"id": 101, "name": "first.pdf"}}], next_index="next-page")
+        page_files_target = SimpleNamespace(token="page-files-target")
+        run_target = SimpleNamespace(
+            step=SimpleNamespace(downloaded_in_batch=2, next_index="cursor"),
+            max_files=7,
+            stats=stats,
+        )
+        downloader = object.__new__(ZSXQFileDownloader)
+        events = []
+
+        def fetch_page(target):
+            events.append(("fetch", target))
+            return page
+
+        def build_page_files(target, fetched_page):
+            events.append(("build_page_files", target, fetched_page))
+            return page_files_target
+
+        def download_page_files(target):
+            events.append(("download_page_files", target))
+            return 5
+
+        def next_index(target):
+            events.append(("next", target.next_index, target.downloaded_in_batch, target.max_files))
+            return "after-page"
+
+        downloader._fetch_batch_download_page_for_run_target = fetch_page
+        downloader._batch_page_files_target_for_page = build_page_files
+        downloader._download_batch_page_files_target = download_page_files
+        downloader._next_batch_download_index_target = next_index
+
+        step = ZSXQFileDownloader._run_batch_download_page_target(downloader, run_target)
+
+        self.assertEqual(5, step.downloaded_in_batch)
+        self.assertEqual("after-page", step.next_index)
+        self.assertEqual("fetch", events[0][0])
+        self.assertIs(run_target, events[0][1])
+        self.assertEqual("build_page_files", events[1][0])
+        self.assertIs(run_target, events[1][1])
+        self.assertIs(page, events[1][2])
+        self.assertEqual("download_page_files", events[2][0])
+        self.assertIs(page_files_target, events[2][1])
+        self.assertEqual(("next", "next-page", 5, 7), events[3])
+
     def test_run_batch_download_loop_preserves_stop_page_handoff_and_terminal_paths(self):
         stats = {"total_files": 0, "downloaded": 0, "skipped": 0, "failed": 0}
         stop_downloader = object.__new__(ZSXQFileDownloader)
