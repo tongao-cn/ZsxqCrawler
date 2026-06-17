@@ -3558,11 +3558,7 @@ class ZSXQFileDownloader:
                 break
 
             next_step = self._run_batch_download_page_target(
-                BatchDownloadPageRunTarget(
-                    step,
-                    target.max_files,
-                    target.stats,
-                ),
+                self._batch_download_page_run_target(target, step),
             )
             if next_step is None:
                 break
@@ -3570,6 +3566,17 @@ class ZSXQFileDownloader:
             step = next_step
             if step.next_index is None:
                 break
+
+    def _batch_download_page_run_target(
+        self,
+        target: BatchDownloadLoopTarget,
+        step: BatchDownloadLoopStep,
+    ) -> BatchDownloadPageRunTarget:
+        return BatchDownloadPageRunTarget(
+            step,
+            target.max_files,
+            target.stats,
+        )
 
     def download_files_batch(self, max_files: Optional[int] = None, start_index: Optional[str] = None) -> Dict[str, int]:
         return self._download_files_batch_target(BatchDownloadTarget(max_files, start_index))
