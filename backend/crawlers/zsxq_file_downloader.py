@@ -2819,12 +2819,22 @@ class ZSXQFileDownloader:
                 DownloadResponseTarget(response, response_download_target),
             )
         except Exception as exc:
-            failure_detail = self._record_download_exception_target(
-                DownloadExceptionTarget(
-                    exc,
-                    response_download_target.file_path,
-                ),
+            return self._download_response_exception_result(
+                exc,
+                response_download_target,
             )
+
+    def _download_response_exception_result(
+        self,
+        exc: Exception,
+        response_download_target: DownloadFileTarget,
+    ) -> DownloadAttemptResult:
+        failure_detail = self._record_download_exception_target(
+            DownloadExceptionTarget(
+                exc,
+                response_download_target.file_path,
+            ),
+        )
         return DownloadAttemptResult(
             None,
             failure_detail,

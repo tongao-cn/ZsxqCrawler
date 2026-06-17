@@ -7584,6 +7584,63 @@ class FileDownloaderDownloadTests(unittest.TestCase):
             self.assertEqual(b"memo", success_path.read_bytes())
             self.assertEqual((102, "completed", str(success_path)), downloader.file_db.status_updates[-1][:3])
 
+    def test_handle_download_response_result_target_records_exception_for_response_target(self):
+        downloader = object.__new__(ZSXQFileDownloader)
+        original_target = DownloadFileTarget(
+            101,
+            "file_101",
+            4,
+            "file_101",
+            "C:\\Downloads\\file_101",
+        )
+        response_target = original_target._replace(
+            file_name="real?.pdf",
+            safe_filename="real.pdf",
+            file_path="C:\\Downloads\\real.pdf",
+        )
+        response = FakeDownloadResponse(200)
+        failure_exc = RuntimeError("body down")
+        calls = []
+        exception_targets = []
+
+        def download_target_for_response_target(target):
+            calls.append(("target", target))
+            return response_target
+
+        def download_attempt_result_for_response_status_target(target):
+            calls.append(("status", target))
+            raise failure_exc
+
+        def record_download_exception_target(target):
+            exception_targets.append(target)
+            return DownloadFailureDetail("download_exception", "body down")
+
+        downloader._download_target_for_response_target = download_target_for_response_target
+        downloader._download_attempt_result_for_response_status_target = (
+            download_attempt_result_for_response_status_target
+        )
+        downloader._record_download_exception_target = record_download_exception_target
+
+        result = ZSXQFileDownloader._handle_download_response_result_target(
+            downloader,
+            DownloadResponseTarget(response, original_target),
+        )
+
+        self.assertEqual(
+            [
+                ("target", DownloadResponseTarget(response, original_target)),
+                ("status", DownloadResponseTarget(response, response_target)),
+            ],
+            calls,
+        )
+        self.assertEqual(
+            (None, ("download_exception", "body down"), "real?.pdf", "real.pdf", "C:\\Downloads\\real.pdf"),
+            result,
+        )
+        self.assertEqual(1, len(exception_targets))
+        self.assertIs(failure_exc, exception_targets[0].exc)
+        self.assertEqual("C:\\Downloads\\real.pdf", exception_targets[0].file_path)
+
     def test_prepare_download_body_target_preserves_sizes_temp_path_and_cleanup(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             file_path = Path(temp_dir) / "memo.pdf"
