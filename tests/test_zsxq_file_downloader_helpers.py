@@ -8074,6 +8074,36 @@ class FileDownloaderDownloadTests(unittest.TestCase):
                 events,
             )
 
+    def test_write_download_body_chunk_preserves_write_size_and_progress_log(self):
+        downloader = object.__new__(ZSXQFileDownloader)
+        downloader.logs = []
+        downloader.log = downloader.logs.append
+        file_obj = io.BytesIO()
+
+        downloaded_size = ZSXQFileDownloader._write_download_body_chunk(
+            downloader,
+            file_obj,
+            b"ab",
+            0,
+            4,
+        )
+
+        self.assertEqual(2, downloaded_size)
+        self.assertEqual(b"ab", file_obj.getvalue())
+        self.assertEqual([], downloader.logs)
+
+        downloaded_size = ZSXQFileDownloader._write_download_body_chunk(
+            downloader,
+            file_obj,
+            b"cd",
+            downloaded_size,
+            4,
+        )
+
+        self.assertEqual(4, downloaded_size)
+        self.assertEqual(b"abcd", file_obj.getvalue())
+        self.assertEqual(["   📊 进度: 100.0% (4/4 bytes)"], downloader.logs)
+
     def test_download_file_stops_during_body_download(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             session = FakeDownloadSession([FakeDownloadResponse(200, b"memo")])

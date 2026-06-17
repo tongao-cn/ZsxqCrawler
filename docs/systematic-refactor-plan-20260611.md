@@ -31475,6 +31475,50 @@ Result:
 - Full backend unittest discovery passed in the current worktree: 1294 tests, 15 skipped.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-17 - P154 isolate download body progress logging
+
+Changed:
+
+- Added chunk-level characterization coverage for `_write_download_body_chunk(...)` preserving
+  incremental writes, returned downloaded size, intermediate no-log behavior, and final progress
+  log text.
+- Extracted `_log_download_body_progress(...)` from `_write_download_body_chunk(...)`.
+- Kept chunk write ordering, byte counting, progress-message calculation, and log emission behavior
+  unchanged.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Download body writing still writes the same chunks to the same file object, returns the same
+  downloaded size, and emits the same progress logs at the same thresholds.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_write_download_body_chunk_preserves_write_size_and_progress_log -v
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_write_download_body_chunk_preserves_write_size_and_progress_log tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_write_download_response_body_result_target_preserves_chunk_order tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_write_download_response_body_preserves_progress_stop_and_empty_chunks tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_download_file_stops_during_body_download tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_finalize_download_body_result_preserves_stop_mismatch_and_success_paths -v
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run ruff check backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py --select F401,F841
+git diff --check
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- New chunk-level characterization test passed before helper extraction: 1 test.
+- Focused body-write, stop, and finalization tests passed after helper extraction: 5 tests.
+- `py_compile` passed.
+- ZSXQ file downloader helper tests passed: 317 tests.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- `git diff --check` passed; Git only reported existing LF-to-CRLF working-copy warnings.
+- Full backend unittest discovery passed in the current worktree: 1295 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:

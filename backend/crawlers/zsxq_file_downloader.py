@@ -2533,15 +2533,20 @@ class ZSXQFileDownloader:
     ) -> int:
         file_obj.write(chunk)
         downloaded_size += len(chunk)
+        self._log_download_body_progress(downloaded_size, total_size)
+        return downloaded_size
 
+    def _log_download_body_progress(
+        self,
+        downloaded_size: int,
+        total_size: int,
+    ) -> None:
         progress_message = download_progress_message(
             downloaded_size,
             total_size,
         )
         if progress_message:
             self.log(progress_message)
-
-        return downloaded_size
 
     def _stop_download_body_if_requested(
         self,
