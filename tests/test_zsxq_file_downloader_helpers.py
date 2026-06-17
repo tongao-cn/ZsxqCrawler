@@ -10,8 +10,10 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from backend.crawlers.zsxq_file_downloader import (
+    DownloadAttemptResult,
     DownloadFileTarget,
     DownloadRetryDecision,
+    DownloadRetryLoopAttemptTarget,
     DownloadRetryState,
     DownloadUrlResponseDecision,
     DownloadUrlRetryLoopTarget,
@@ -6615,6 +6617,82 @@ class FileDownloaderDownloadTests(unittest.TestCase):
         self.assertEqual(
             [(202, 3, "download_exception", "stream down 2")],
             final_failures,
+        )
+
+    def test_run_download_retry_loop_attempt_preserves_state_file_target_handoff(self):
+        downloader = object.__new__(ZSXQFileDownloader)
+        prepared_file = DownloadFileTarget(303, "original.pdf", 4, "original.pdf", "C:\\Downloads\\original.pdf")
+        retry_state = DownloadRetryState("renamed.pdf", "renamed.pdf", "C:\\Downloads\\renamed.pdf", None, None)
+        attempt_result = DownloadAttemptResult(True, None, "renamed.pdf", "renamed.pdf", "C:\\Downloads\\renamed.pdf")
+        expected_decision = DownloadRetryDecision(retry_state, True)
+        calls = []
+
+        def run_download_attempt_target(target):
+            calls.append(("attempt", target.attempt, target.download_retries, target.file_target))
+            return attempt_result
+
+        def apply_download_attempt_result_target(target):
+            calls.append(("apply", target.attempt_result, target.retry_state))
+            return expected_decision
+
+        downloader._run_download_attempt_target = run_download_attempt_target
+        downloader._apply_download_attempt_result_target = apply_download_attempt_result_target
+        downloader._record_download_retry_exception_target = lambda target: self.fail(
+            "successful attempt should not record an exception"
+        )
+
+        decision = ZSXQFileDownloader._run_download_retry_loop_attempt_target(
+            downloader,
+            DownloadRetryLoopAttemptTarget(1, 3, prepared_file, retry_state),
+        )
+
+        self.assertIs(expected_decision, decision)
+        self.assertEqual(
+            [
+                (
+                    "attempt",
+                    1,
+                    3,
+                    DownloadFileTarget(303, "renamed.pdf", 4, "renamed.pdf", "C:\\Downloads\\renamed.pdf"),
+                ),
+                ("apply", attempt_result, retry_state),
+            ],
+            calls,
+        )
+
+    def test_run_download_retry_loop_attempt_preserves_exception_retry_decision(self):
+        downloader = object.__new__(ZSXQFileDownloader)
+        prepared_file = DownloadFileTarget(404, "memo.pdf", 4, "memo.pdf", "C:\\Downloads\\memo.pdf")
+        retry_state = DownloadRetryState("memo.pdf", "memo.pdf", "C:\\Downloads\\memo.pdf", None, None)
+        updated_state = retry_state._replace(last_error_code="download_exception", last_error="socket down")
+        calls = []
+
+        def run_download_attempt_target(target):
+            calls.append(("attempt", target.attempt, target.download_retries, target.file_target))
+            raise RuntimeError("socket down")
+
+        def record_download_retry_exception_target(target):
+            calls.append(("exception", str(target.exc), target.retry_state))
+            return updated_state
+
+        downloader._run_download_attempt_target = run_download_attempt_target
+        downloader._apply_download_attempt_result_target = lambda target: self.fail(
+            "failed attempt should not apply a result"
+        )
+        downloader._record_download_retry_exception_target = record_download_retry_exception_target
+
+        decision = ZSXQFileDownloader._run_download_retry_loop_attempt_target(
+            downloader,
+            DownloadRetryLoopAttemptTarget(2, 3, prepared_file, retry_state),
+        )
+
+        self.assertEqual(DownloadRetryDecision(updated_state, None), decision)
+        self.assertEqual(
+            [
+                ("attempt", 2, 3, prepared_file),
+                ("exception", "socket down", retry_state),
+            ],
+            calls,
         )
 
     def test_download_file_accepts_raw_file_id_payload(self):

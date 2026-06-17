@@ -2049,11 +2049,7 @@ class ZSXQFileDownloader:
         target: DownloadRetryLoopAttemptTarget,
     ) -> DownloadRetryDecision:
         try:
-            attempt_target = target.prepared_file._replace(
-                file_name=target.retry_state.file_name,
-                safe_filename=target.retry_state.safe_filename,
-                file_path=target.retry_state.file_path,
-            )
+            attempt_target = self._download_retry_attempt_file_target(target)
             attempt_result = self._run_download_attempt_target(
                 DownloadAttemptTarget(
                     target.attempt,
@@ -2065,12 +2061,29 @@ class ZSXQFileDownloader:
                 DownloadAttemptResultTarget(attempt_result, target.retry_state),
             )
         except Exception as e:
-            return DownloadRetryDecision(
-                self._record_download_retry_exception_target(
-                    DownloadRetryExceptionTarget(e, target.retry_state),
-                ),
-                None,
-            )
+            return self._handle_download_retry_loop_attempt_exception(target, e)
+
+    def _download_retry_attempt_file_target(
+        self,
+        target: DownloadRetryLoopAttemptTarget,
+    ) -> DownloadFileTarget:
+        return target.prepared_file._replace(
+            file_name=target.retry_state.file_name,
+            safe_filename=target.retry_state.safe_filename,
+            file_path=target.retry_state.file_path,
+        )
+
+    def _handle_download_retry_loop_attempt_exception(
+        self,
+        target: DownloadRetryLoopAttemptTarget,
+        exc: Exception,
+    ) -> DownloadRetryDecision:
+        return DownloadRetryDecision(
+            self._record_download_retry_exception_target(
+                DownloadRetryExceptionTarget(exc, target.retry_state),
+            ),
+            None,
+        )
 
     def _apply_download_attempt_result(
         self,
