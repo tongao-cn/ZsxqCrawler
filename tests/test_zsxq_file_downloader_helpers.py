@@ -5100,6 +5100,36 @@ class FileDownloaderRetryHelperTests(unittest.TestCase):
         self.assertIn("JSON解析失败", output.getvalue())
         self.assertIn("准备重试", output.getvalue())
 
+    def test_handle_file_list_success_response_preserves_first_attempt_output(self):
+        downloader = object.__new__(ZSXQFileDownloader)
+        data = {"resp_data": {"files": [{"file_id": 1}, {"file_id": 2}], "index": "next"}}
+        output = io.StringIO()
+
+        with contextlib.redirect_stdout(output):
+            result = ZSXQFileDownloader._handle_file_list_success_response(
+                downloader,
+                data,
+                0,
+            )
+
+        self.assertIs(data, result)
+        self.assertEqual("   ✅ 获取成功: 2个文件\n", output.getvalue())
+
+    def test_handle_file_list_success_response_preserves_retry_output(self):
+        downloader = object.__new__(ZSXQFileDownloader)
+        data = {"resp_data": {"files": [{"file_id": 1}], "index": None}}
+        output = io.StringIO()
+
+        with contextlib.redirect_stdout(output):
+            result = ZSXQFileDownloader._handle_file_list_success_response(
+                downloader,
+                data,
+                2,
+            )
+
+        self.assertIs(data, result)
+        self.assertEqual("   ✅ 重试成功！第2次重试获取到文件列表\n", output.getvalue())
+
     def test_fetch_file_list_preserves_entry_url_params_logs_and_response_handoff(self):
         class CapturingFileListSession:
             def __init__(self):

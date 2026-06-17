@@ -29814,6 +29814,53 @@ Result:
 - Full backend unittest discovery passed in the current worktree: 1235 tests, 15 skipped.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-17 - P118 file-list success response entry target handoff
+
+Changed:
+
+- Added characterization coverage for `_handle_file_list_success_response()` before changing
+  production code, locking first-attempt output, retry output, and returning the original `data`
+  object.
+- Added private `FileListSuccessResponseTarget` for the file-list success response boundary.
+- Added private `_handle_file_list_success_response_target(...)` and delegated
+  `_handle_file_list_success_response(...)` to it.
+- Kept entry signature, `file_list_response_page(...)` use, output messages, retry wording, and
+  return value unchanged.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Existing first-attempt and retry success response behavior is preserved.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderRetryHelperTests.test_handle_file_list_success_response_preserves_first_attempt_output tests.test_zsxq_file_downloader_helpers.FileDownloaderRetryHelperTests.test_handle_file_list_success_response_preserves_retry_output -v
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderRetryHelperTests -v
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py
+uv run python scripts\scan_postgres_compat_debt.py
+uv run ruff check backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py --select F401,F841
+git diff --check
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- New `_handle_file_list_success_response()` characterization tests passed before production helper
+  handoff: 2 tests.
+- The same focused tests passed after production helper handoff: 2 tests.
+- Retry helper tests passed after helper handoff: 46 tests.
+- `py_compile` passed.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- `git diff --check` passed; Git only reported existing LF-to-CRLF working-copy warnings.
+- ZSXQ file downloader helper tests passed: 259 tests.
+- Full backend unittest discovery passed in the current worktree: 1237 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:

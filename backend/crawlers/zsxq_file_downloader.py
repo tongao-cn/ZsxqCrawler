@@ -188,6 +188,11 @@ class FileListOkResponseTarget(NamedTuple):
     max_retries: int
 
 
+class FileListSuccessResponseTarget(NamedTuple):
+    data: Dict[str, Any]
+    attempt: int
+
+
 class FileListApiFailureResponseTarget(NamedTuple):
     data: Dict[str, Any]
     attempt: int
@@ -1175,12 +1180,20 @@ class ZSXQFileDownloader:
         return ApiJsonParseResult(data, False)
 
     def _handle_file_list_success_response(self, data: Dict[str, Any], attempt: int) -> Dict[str, Any]:
-        files, _ = file_list_response_page(data)
-        if attempt > 0:
-            print(f"   ✅ 重试成功！第{attempt}次重试获取到文件列表")
+        return self._handle_file_list_success_response_target(
+            FileListSuccessResponseTarget(data, attempt),
+        )
+
+    def _handle_file_list_success_response_target(
+        self,
+        target: FileListSuccessResponseTarget,
+    ) -> Dict[str, Any]:
+        files, _ = file_list_response_page(target.data)
+        if target.attempt > 0:
+            print(f"   ✅ 重试成功！第{target.attempt}次重试获取到文件列表")
         else:
             print(f"   ✅ 获取成功: {len(files)}个文件")
-        return data
+        return target.data
 
     def _handle_file_list_api_failure_response(
         self,
