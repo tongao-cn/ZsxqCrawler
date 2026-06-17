@@ -3016,6 +3016,36 @@ class FileDownloaderDatabaseStatsTests(unittest.TestCase):
                 ("2026-05-01 09:00:00", "2026-05-07 10:00:00", 2, "extra")
             )
 
+    def test_show_database_stats_preserves_entry_print_stats_and_target_order(self):
+        stats = {"files": 2, "topics": 3}
+        calls = []
+        downloader = object.__new__(ZSXQFileDownloader)
+        downloader.file_db = SimpleNamespace(
+            get_database_stats=lambda: calls.append(("get_stats",)) or stats
+        )
+        downloader._show_database_stats_target = lambda target: calls.append(
+            ("target", target.stats)
+        )
+
+        def print_message(message=""):
+            calls.append(("print", message))
+
+        with patch("builtins.print", print_message):
+            ZSXQFileDownloader.show_database_stats(downloader)
+
+        self.assertEqual(
+            [
+                ("print", "\n📊 完整数据库统计信息:"),
+                ("print", "=" * 60),
+                ("print", "📁 PostgreSQL schema: zsxq_core"),
+                ("get_stats",),
+                ("target", stats),
+                ("print", "=" * 60),
+            ],
+            calls,
+        )
+        self.assertIs(stats, calls[4][1])
+
     def test_show_database_stats_preserves_entry_handoff_and_print_order(self):
         stats = {"files": 2, "topics": 3}
         calls = []

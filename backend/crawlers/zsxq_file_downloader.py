@@ -628,6 +628,10 @@ class DatabaseStatsTimeRange(NamedTuple):
     time_count: Any
 
 
+class ShowDatabaseStatsEntryTarget(NamedTuple):
+    pass
+
+
 class ShowDatabaseStatsTarget(NamedTuple):
     stats: Dict[str, Any]
 
@@ -3701,6 +3705,12 @@ class ZSXQFileDownloader:
 
     def show_database_stats(self):
         """显示完整数据库统计信息"""
+        return self._show_database_stats_entry_target(ShowDatabaseStatsEntryTarget())
+
+    def _show_database_stats_entry_target(
+        self,
+        target: ShowDatabaseStatsEntryTarget,
+    ) -> None:
         print(f"\n📊 完整数据库统计信息:")
         print("="*60)
         print(f"📁 PostgreSQL schema: {CORE_SCHEMA}")
