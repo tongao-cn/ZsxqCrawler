@@ -3946,6 +3946,83 @@ class FileDownloaderRuntimeStateTests(unittest.TestCase):
             output.getvalue(),
         )
 
+    def test_download_delay_preserves_fixed_interval_sleep_and_output(self):
+        downloader = object.__new__(ZSXQFileDownloader)
+        downloader.use_random_interval = False
+        downloader.download_interval = 15
+
+        class FakeDateTime:
+            calls = [
+                datetime.datetime(2026, 6, 17, 10, 0, 0),
+                datetime.datetime(2026, 6, 17, 10, 0, 20),
+            ]
+
+            @classmethod
+            def now(cls):
+                return cls.calls.pop(0)
+
+        output = io.StringIO()
+        with (
+            patch("backend.crawlers.zsxq_file_downloader.datetime.datetime", FakeDateTime),
+            patch("backend.crawlers.zsxq_file_downloader.random.uniform") as uniform,
+            patch("backend.crawlers.zsxq_file_downloader.time.sleep") as sleep,
+            contextlib.redirect_stdout(output),
+        ):
+            result = ZSXQFileDownloader.download_delay(downloader)
+
+        self.assertIsNone(result)
+        uniform.assert_not_called()
+        sleep.assert_called_once_with(15)
+        self.assertEqual(
+            "\n".join([
+                "⏳ 下载间隔: 15.0秒 [固定间隔]",
+                "   ⏰ 开始时间: 10:00:00",
+                "   🕐 预计恢复: 10:00:15",
+                "   🕐 实际结束: 10:00:20",
+                "",
+            ]),
+            output.getvalue(),
+        )
+
+    def test_download_delay_preserves_random_interval_sleep_and_output(self):
+        downloader = object.__new__(ZSXQFileDownloader)
+        downloader.use_random_interval = True
+        downloader.download_interval_min = 30
+        downloader.download_interval_max = 90
+
+        class FakeDateTime:
+            calls = [
+                datetime.datetime(2026, 6, 17, 10, 5, 0),
+                datetime.datetime(2026, 6, 17, 10, 5, 40),
+            ]
+
+            @classmethod
+            def now(cls):
+                return cls.calls.pop(0)
+
+        output = io.StringIO()
+        with (
+            patch("backend.crawlers.zsxq_file_downloader.datetime.datetime", FakeDateTime),
+            patch("backend.crawlers.zsxq_file_downloader.random.uniform", return_value=45) as uniform,
+            patch("backend.crawlers.zsxq_file_downloader.time.sleep") as sleep,
+            contextlib.redirect_stdout(output),
+        ):
+            result = ZSXQFileDownloader.download_delay(downloader)
+
+        self.assertIsNone(result)
+        uniform.assert_called_once_with(30, 90)
+        sleep.assert_called_once_with(45)
+        self.assertEqual(
+            "\n".join([
+                "⏳ 下载间隔: 45秒 (0.8分钟) [随机范围: 30-90秒]",
+                "   ⏰ 开始时间: 10:05:00",
+                "   🕐 预计恢复: 10:05:45",
+                "   🕐 实际结束: 10:05:40",
+                "",
+            ]),
+            output.getvalue(),
+        )
+
 
 class FileDownloaderFileDataHelperTests(unittest.TestCase):
     def test_download_file_data_accepts_id_or_file_id(self):

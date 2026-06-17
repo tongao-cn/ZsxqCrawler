@@ -668,6 +668,10 @@ class CheckLongDelayTarget(NamedTuple):
     pass
 
 
+class DownloadDelayTarget(NamedTuple):
+    pass
+
+
 class FileCollectionLogRow(NamedTuple):
     log_id: Any
 
@@ -1039,6 +1043,12 @@ class ZSXQFileDownloader:
 
     def download_delay(self):
         """下载间隔延迟"""
+        return self._download_delay_target(DownloadDelayTarget())
+
+    def _download_delay_target(
+        self,
+        target: DownloadDelayTarget,
+    ) -> None:
         if self.use_random_interval:
             # 使用API传入的随机间隔范围
             delay = random.uniform(self.download_interval_min, self.download_interval_max)
