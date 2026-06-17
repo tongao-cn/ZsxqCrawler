@@ -31387,6 +31387,51 @@ Result:
 - Full backend unittest discovery passed in the current worktree: 1292 tests, 15 skipped.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-17 - P152 isolate download size mismatch failure detail
+
+Changed:
+
+- Added target-level characterization coverage for `_handle_download_size_mismatch_target(...)`
+  preserving mismatch and no-op paths, returned `DownloadFailureDetail`, log text, and partial-file
+  cleanup behavior.
+- Extracted `_download_size_mismatch_failure_detail(...)` from
+  `_handle_download_size_mismatch_target(...)`.
+- Kept final size calculation, mismatch decision rules, warning log, temp-file removal, and return
+  shape unchanged.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Matching-size partial files remain untouched, and mismatched partial files are still removed after
+  logging the same warning and returning the same failure detail.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_handle_download_size_mismatch_target_preserves_cleanup_and_noop_paths -v
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_handle_download_size_mismatch_target_preserves_cleanup_and_noop_paths tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_handle_download_size_mismatch_preserves_cleanup_and_noop_paths tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_finalize_download_body_result_preserves_stop_mismatch_and_success_paths tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_download_file_retries_and_fails_on_size_mismatch tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_download_file_retries_after_size_mismatch_before_success -v
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run ruff check backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py --select F401,F841
+git diff --check
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- New target-level size mismatch characterization test passed before helper extraction: 1 test.
+- Focused size mismatch, finalization, and retry tests passed after helper extraction: 5 tests.
+- `py_compile` passed.
+- ZSXQ file downloader helper tests passed: 315 tests.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- `git diff --check` passed; Git only reported existing LF-to-CRLF working-copy warnings.
+- Full backend unittest discovery passed in the current worktree: 1293 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:
