@@ -40,7 +40,11 @@ def _public_table_ref(table_name: str) -> str:
 
 
 def _normalize_group_id(group_id: Optional[str]) -> str:
-    return str(group_id or "").strip()
+    return _clean_postgres_text(group_id).strip()
+
+
+def _clean_postgres_text(value: Any) -> str:
+    return str(value or "").replace("\x00", "")
 
 
 def _load_env_file(path: Path = DEFAULT_KNOW_ACTION_ENV_PATH) -> Dict[str, str]:
@@ -255,25 +259,25 @@ def _build_topic_stock_extraction_rows(
     normalized_group_id = _normalize_group_id(group_id)
     rows: List[Tuple[str, str, str, str, str, str, str, str, str, float, str, str, datetime]] = []
     for item in extractions:
-        stock_name = str(item.get("stock_name") or "").strip()
-        topic_id = str(item.get("topic_id") or "").strip()
-        topic_date = str(item.get("topic_date") or item.get("day") or "").strip()
+        stock_name = _clean_postgres_text(item.get("stock_name")).strip()
+        topic_id = _clean_postgres_text(item.get("topic_id")).strip()
+        topic_date = _clean_postgres_text(item.get("topic_date") or item.get("day")).strip()
         if not stock_name or not topic_id or not topic_date:
             continue
         rows.append(
             (
-                str(item.get("group_id") or normalized_group_id),
+                _clean_postgres_text(item.get("group_id") or normalized_group_id),
                 topic_id,
                 topic_date,
                 stock_name,
-                str(item.get("stock_code") or ""),
-                str(item.get("market") or ""),
-                json.dumps(list(item.get("concepts") or []), ensure_ascii=False),
-                str(item.get("excerpt") or ""),
-                str(item.get("reason") or ""),
+                _clean_postgres_text(item.get("stock_code")),
+                _clean_postgres_text(item.get("market")),
+                _clean_postgres_text(json.dumps(list(item.get("concepts") or []), ensure_ascii=False)),
+                _clean_postgres_text(item.get("excerpt")),
+                _clean_postgres_text(item.get("reason")),
                 float(item.get("confidence") or 0),
-                str(item.get("model") or ""),
-                str(item.get("prompt_version") or ""),
+                _clean_postgres_text(item.get("model")),
+                _clean_postgres_text(item.get("prompt_version")),
                 now,
             )
         )
@@ -312,7 +316,15 @@ def save_recommendation_pool_checkpoint(
             mention_count = int(count or 0)
             if not company or mention_count <= 0:
                 continue
-            mention_rows.append((normalized_group_id, day, company, mention_count, now))
+            mention_rows.append(
+                (
+                    normalized_group_id,
+                    _clean_postgres_text(day),
+                    _clean_postgres_text(company),
+                    mention_count,
+                    now,
+                )
+            )
 
     extraction_rows = _build_topic_stock_extraction_rows(topic_stock_extractions, normalized_group_id, now)
     state_rows = _build_processed_state_rows(processed_keys, normalized_group_id, now)
@@ -443,9 +455,9 @@ def _parse_state_key(key: str) -> Optional[Tuple[str, str, str]]:
     parts = str(key or "").split(":")
     if len(parts) < 3:
         return None
-    source = parts[0].strip()
-    topic_id = parts[1].strip()
-    day = parts[-1].strip()
+    source = _clean_postgres_text(parts[0]).strip()
+    topic_id = _clean_postgres_text(parts[1]).strip()
+    day = _clean_postgres_text(parts[-1]).strip()
     if not source or not topic_id or len(day) != 10:
         return None
     return source, topic_id, day

@@ -303,6 +303,36 @@ class AShareAnalysisDbStorageHelperTests(unittest.TestCase):
         self.assertTrue(conn.committed)
 
     @unittest.skipUnless(HAS_STORAGE_DEPS, "PostgreSQL storage dependencies are not installed")
+    def test_topic_stock_extraction_rows_strip_nul_characters(self):
+        from backend.services import a_share_analysis_db_storage as storage
+
+        rows = storage._build_topic_stock_extraction_rows(
+            [
+                {
+                    "group_id": "5\x0011",
+                    "topic_id": "10\x0001",
+                    "topic_date": "2026-05-10",
+                    "stock_name": "钧达\x00股份",
+                    "stock_code": "002\x00865",
+                    "market": "SZ\x00",
+                    "concepts": ["商业\x00航天"],
+                    "excerpt": "原文\x00证据",
+                    "reason": "推荐\x00逻辑。",
+                    "model": "test\x00model",
+                    "prompt_version": "v\x001",
+                }
+            ],
+            group_id="511",
+            now=datetime(2026, 5, 10, 10, 0, 0),
+        )
+
+        self.assertEqual(1, len(rows))
+        for value in rows[0][:-1]:
+            self.assertNotIn("\x00", str(value))
+        self.assertEqual("1001", rows[0][1])
+        self.assertEqual("钧达股份", rows[0][3])
+
+    @unittest.skipUnless(HAS_STORAGE_DEPS, "PostgreSQL storage dependencies are not installed")
     def test_checkpoint_rolls_back_when_any_write_fails(self):
         from backend.services import a_share_analysis_db_storage as storage
 
