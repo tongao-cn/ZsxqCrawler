@@ -2673,6 +2673,31 @@ class FileDownloaderBatchDownloadTests(unittest.TestCase):
         self.assertEqual([(0, "cursor-1"), (1, "cursor-2")], targets)
         self.assertEqual([], page_results)
 
+    def test_run_batch_download_loop_target_preserves_none_step_terminal_stop_checks(self):
+        stats = {"total_files": 0, "downloaded": 0, "skipped": 0, "failed": 0}
+        downloader = object.__new__(ZSXQFileDownloader)
+        stop_checks = []
+        targets = []
+
+        def check_stop():
+            stop_checks.append("checked")
+            return False
+
+        def run_page(target):
+            targets.append((target.step.downloaded_in_batch, target.step.next_index))
+            return None
+
+        downloader.check_stop = check_stop
+        downloader._run_batch_download_page_target = run_page
+
+        ZSXQFileDownloader._run_batch_download_loop_target(
+            downloader,
+            SimpleNamespace(stats=stats, max_files=None, start_index="cursor"),
+        )
+
+        self.assertEqual(["checked"], stop_checks)
+        self.assertEqual([(0, "cursor")], targets)
+
     def test_run_batch_download_loop_target_preserves_initial_step_from_start_index(self):
         stats = {"total_files": 0, "downloaded": 0, "skipped": 0, "failed": 0}
         downloader = object.__new__(ZSXQFileDownloader)
