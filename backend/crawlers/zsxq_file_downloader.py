@@ -3305,14 +3305,22 @@ class ZSXQFileDownloader:
         self,
         target: BatchDownloadFileItemTarget,
     ) -> int:
-        file_info = target.file_info
-        file_name = _batch_download_file_name(file_info)
+        self._log_batch_download_file_item(target)
+        result = self.download_file(target.file_info)
+        downloaded_in_batch = self._apply_batch_file_item_result(target, result)
+        self._record_batch_file_item_attempt(target.stats)
+        return downloaded_in_batch
 
+    def _log_batch_download_file_item(self, target: BatchDownloadFileItemTarget) -> None:
+        file_name = _batch_download_file_name(target.file_info)
         self.log(batch_download_item_message(target.item_number, target.max_files, file_name))
 
-        result = self.download_file(file_info)
-
-        downloaded_in_batch = self._apply_batch_download_result_target(
+    def _apply_batch_file_item_result(
+        self,
+        target: BatchDownloadFileItemTarget,
+        result: Any,
+    ) -> int:
+        return self._apply_batch_download_result_target(
             BatchDownloadResultTarget(
                 result,
                 target.has_more_in_batch,
@@ -3321,8 +3329,9 @@ class ZSXQFileDownloader:
                 target.stats,
             ),
         )
-        target.stats['total_files'] += 1
-        return downloaded_in_batch
+
+    def _record_batch_file_item_attempt(self, stats: Dict[str, int]) -> None:
+        stats['total_files'] += 1
 
     def _apply_batch_download_result(
         self,

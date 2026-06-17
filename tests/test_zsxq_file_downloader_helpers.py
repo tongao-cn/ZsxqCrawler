@@ -10,6 +10,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from backend.crawlers.zsxq_file_downloader import (
+    BatchDownloadFileItemTarget,
     DownloadAttemptResult,
     DownloadAttemptTarget,
     DownloadBodyFinalizationDecisionTarget,
@@ -2211,6 +2212,56 @@ class FileDownloaderBatchDownloadTests(unittest.TestCase):
         self.assertEqual([file_info], payloads)
         self.assertEqual({"total_files": 1, "downloaded": 0, "skipped": 1, "failed": 0}, stats)
         self.assertEqual(["【第3个文件】Unknown", "   ⚠️ 文件已跳过，继续下一个"], downloader.logs)
+
+    def test_download_batch_file_item_target_preserves_download_apply_and_total_order(self):
+        downloader = object.__new__(ZSXQFileDownloader)
+        events = []
+        downloader.log = lambda message: events.append(("log", message))
+        file_info = {"file": {"id": 103, "name": "target.pdf"}}
+        stats = {"total_files": 4, "downloaded": 2, "skipped": 1, "failed": 1}
+
+        def download_file(received_file_info):
+            events.append(("download", received_file_info, stats["total_files"]))
+            return "downloaded"
+
+        def apply_result(result_target):
+            events.append(
+                (
+                    "apply",
+                    result_target.result,
+                    result_target.has_more_in_batch,
+                    result_target.downloaded_in_batch,
+                    result_target.max_files,
+                    result_target.stats["total_files"],
+                )
+            )
+            return 3
+
+        downloader.download_file = download_file
+        downloader._apply_batch_download_result_target = apply_result
+
+        downloaded = ZSXQFileDownloader._download_batch_file_item_target(
+            downloader,
+            BatchDownloadFileItemTarget(
+                file_info,
+                3,
+                5,
+                True,
+                2,
+                stats,
+            ),
+        )
+
+        self.assertEqual(3, downloaded)
+        self.assertEqual({"total_files": 5, "downloaded": 2, "skipped": 1, "failed": 1}, stats)
+        self.assertEqual(
+            [
+                ("log", "【3/5】target.pdf"),
+                ("download", file_info, 4),
+                ("apply", "downloaded", True, 2, 5, 4),
+            ],
+            events,
+        )
 
     def test_download_batch_page_files_preserves_item_targets_stop_and_limit(self):
         files = [

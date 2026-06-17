@@ -32344,6 +32344,53 @@ Result:
 - Full backend unittest discovery passed in the current worktree: 1319 tests, 15 skipped.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-17 - P173 separate batch-download item side effects
+
+Changed:
+
+- Added characterization coverage for `_download_batch_file_item_target(...)` preserving item log,
+  `download_file(...)` handoff, result-application handoff, `stats["total_files"]` increment timing,
+  and returned downloaded count.
+- Extracted `_log_batch_download_file_item(...)` from `_download_batch_file_item_target(...)`.
+- Extracted `_apply_batch_file_item_result(...)` from `_download_batch_file_item_target(...)`.
+- Extracted `_record_batch_file_item_attempt(...)` for the existing `total_files` increment.
+- Kept batch item entrypoints, file-name fallback, item log text, `download_file(...)` argument,
+  `BatchDownloadResultTarget` payload fields, `total_files` increment timing, and return value
+  unchanged.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Batch item processing still logs the item first, downloads the same `file_info`, applies the same
+  result target before incrementing `total_files`, then returns the result-applied batch count.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderBatchDownloadTests.test_download_batch_file_item_target_preserves_download_apply_and_total_order -v
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderBatchDownloadTests.test_download_batch_file_item_target_preserves_download_apply_and_total_order tests.test_zsxq_file_downloader_helpers.FileDownloaderBatchDownloadTests.test_download_batch_file_item_preserves_limit_reached_delay_skip tests.test_zsxq_file_downloader_helpers.FileDownloaderBatchDownloadTests.test_download_batch_file_item_preserves_missing_file_name_fallback tests.test_zsxq_file_downloader_helpers.FileDownloaderBatchDownloadTests.test_download_batch_page_files_preserves_item_targets_stop_and_limit tests.test_zsxq_file_downloader_helpers.FileDownloaderBatchDownloadTests.test_apply_batch_download_result_preserves_stats_logs_and_delays -v
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run ruff check backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py --select F401,F841
+git diff --check
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- New batch item target ordering characterization test passed before helper extraction: 1 test.
+- Focused batch item and result-application tests passed after helper extraction: 5 tests.
+- `py_compile` passed.
+- ZSXQ file downloader helper tests passed: 336 tests.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- `git diff --check` passed; Git only reported existing LF-to-CRLF working-copy warnings.
+- Full backend unittest discovery passed in the current worktree: 1320 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:
