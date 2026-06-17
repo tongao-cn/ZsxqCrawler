@@ -5059,6 +5059,30 @@ class FileDownloaderRetryHelperTests(unittest.TestCase):
         self.assertEqual("referer+sec-fetch", rows[0]["header_profile"])
         self.assertEqual(["   🧭 UA分类: Chrome Windows"], downloader.logs)
 
+    def test_parse_api_json_response_logs_redacted_success_payload(self):
+        downloader = object.__new__(ZSXQFileDownloader)
+        output = io.StringIO()
+
+        with contextlib.redirect_stdout(output):
+            data, should_retry = ZSXQFileDownloader._parse_api_json_response(
+                downloader,
+                FakeJsonResponse(),
+                0,
+                2,
+            )
+
+        self.assertEqual(
+            {
+                "succeeded": True,
+                "resp_data": {"download_url": "https://files.example/signed-token"},
+            },
+            data,
+        )
+        self.assertFalse(should_retry)
+        self.assertIn("响应内容", output.getvalue())
+        self.assertIn('"download_url": "<redacted>"', output.getvalue())
+        self.assertNotIn("https://files.example/signed-token", output.getvalue())
+
     def test_parse_api_json_response_returns_retry_on_decode_error(self):
         downloader = object.__new__(ZSXQFileDownloader)
         output = io.StringIO()

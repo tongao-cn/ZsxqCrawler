@@ -164,6 +164,12 @@ class ApiJsonParseResult(NamedTuple):
     should_retry: bool
 
 
+class ParseApiJsonResponseTarget(NamedTuple):
+    response: requests.Response
+    attempt: int
+    max_retries: int
+
+
 class FileListResponseDecision(NamedTuple):
     result: Optional[Dict[str, Any]]
     should_retry: bool
@@ -1143,15 +1149,28 @@ class ZSXQFileDownloader:
         attempt: int,
         max_retries: int,
     ) -> ApiJsonParseResult:
+        return self._parse_api_json_response_target(
+            ParseApiJsonResponseTarget(response, attempt, max_retries),
+        )
+
+    def _parse_api_json_response_target(
+        self,
+        target: ParseApiJsonResponseTarget,
+    ) -> ApiJsonParseResult:
         try:
-            data = response.json()
+            data = target.response.json()
         except json.JSONDecodeError as e:
-            decode_failure = json_decode_failure_plan(e, response.text, attempt, max_retries)
+            decode_failure = json_decode_failure_plan(
+                e,
+                target.response.text,
+                target.attempt,
+                target.max_retries,
+            )
             for message in decode_failure["messages"]:
                 print(message)
             return ApiJsonParseResult(None, decode_failure["should_retry"])
 
-        if should_log_full_response(attempt, max_retries, data.get('succeeded')):
+        if should_log_full_response(target.attempt, target.max_retries, data.get('succeeded')):
             print(f"   📋 响应内容: {json.dumps(redact_json_like(data), ensure_ascii=False, indent=2)}")
         return ApiJsonParseResult(data, False)
 

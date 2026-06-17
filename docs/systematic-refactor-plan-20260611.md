@@ -29765,6 +29765,55 @@ Result:
 - Full backend unittest discovery passed in the current worktree: 1234 tests, 15 skipped.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-17 - P117 parse API JSON response entry target handoff
+
+Changed:
+
+- Added characterization coverage for `_parse_api_json_response()` before changing production code,
+  locking successful JSON return shape, `should_retry=False`, full-response logging, and
+  `download_url` redaction in printed payloads.
+- Reused existing decode-failure characterization coverage to preserve JSON decode fallback retry
+  behavior and messages.
+- Added private `ParseApiJsonResponseTarget` for the API response JSON parse boundary.
+- Added private `_parse_api_json_response_target(...)` and delegated
+  `_parse_api_json_response(...)` to it.
+- Kept entry signature, JSON parsing, decode failure handling, retry decision, response logging,
+  redaction, and return type unchanged.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Existing JSON decode fallback behavior and logged response redaction behavior are preserved.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderRetryHelperTests.test_parse_api_json_response_logs_redacted_success_payload tests.test_zsxq_file_downloader_helpers.FileDownloaderRetryHelperTests.test_parse_api_json_response_returns_retry_on_decode_error -v
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderRetryHelperTests -v
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py
+uv run python scripts\scan_postgres_compat_debt.py
+uv run ruff check backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py --select F401,F841
+git diff --check
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- New `_parse_api_json_response()` success/redaction characterization test and existing decode
+  fallback characterization test passed before production helper handoff: 2 tests.
+- The same focused tests passed after production helper handoff: 2 tests.
+- Retry helper tests passed after helper handoff: 44 tests.
+- `py_compile` passed.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- `git diff --check` passed; Git only reported existing LF-to-CRLF working-copy warnings.
+- ZSXQ file downloader helper tests passed: 257 tests.
+- Full backend unittest discovery passed in the current worktree: 1235 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:
