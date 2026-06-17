@@ -29718,6 +29718,53 @@ Result:
 - Full backend unittest discovery passed in the current worktree: 1234 tests, 15 skipped.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-17 - P116 retry API request entry target handoff
+
+Changed:
+
+- Reused existing characterization coverage for `_prepare_retry_api_request()` before changing
+  production code, locking retry sleep, `request_count` increment, header handoff, no-risk-log
+  behavior, risk-event CSV recording, and UA classification logging.
+- Added private `PrepareRetryApiRequestTarget` for the retry API request preparation boundary.
+- Added private `_prepare_retry_api_request_target(...)` and delegated
+  `_prepare_retry_api_request(...)` to it.
+- Kept public/private entry signature, retry wait behavior, smart-delay call order, request count
+  side effect, stealth header generation, risk-event logging, and return value unchanged.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Existing retry/fallback behavior and risk-event compatibility behavior are preserved.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderRetryHelperTests.test_prepare_retry_api_request_sleeps_counts_and_rotates_headers tests.test_zsxq_file_downloader_helpers.FileDownloaderRetryHelperTests.test_prepare_retry_api_request_without_risk_log_preserves_no_ua_log tests.test_zsxq_file_downloader_helpers.FileDownloaderRetryHelperTests.test_prepare_retry_api_request_with_risk_log_records_request_event -v
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderRetryHelperTests -v
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py
+uv run python scripts\scan_postgres_compat_debt.py
+uv run ruff check backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py --select F401,F841
+git diff --check
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- Existing `_prepare_retry_api_request()` characterization tests passed before production helper
+  handoff: 3 tests.
+- The same focused tests passed after production helper handoff: 3 tests.
+- Retry helper tests passed after helper handoff: 43 tests.
+- `py_compile` passed.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- `git diff --check` passed; Git only reported the existing LF-to-CRLF working-copy warning.
+- ZSXQ file downloader helper tests passed: 256 tests.
+- Full backend unittest discovery passed in the current worktree: 1234 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:

@@ -672,6 +672,11 @@ class DownloadDelayTarget(NamedTuple):
     pass
 
 
+class PrepareRetryApiRequestTarget(NamedTuple):
+    attempt: int
+    file_id: Optional[int]
+
+
 class FileCollectionLogRow(NamedTuple):
     log_id: Any
 
@@ -1101,27 +1106,35 @@ class ZSXQFileDownloader:
             print(f"   🕐 实际结束: {actual_end_time.strftime('%H:%M:%S')}")
     
     def _prepare_retry_api_request(self, attempt: int, file_id: Optional[int] = None) -> Dict[str, str]:
-        if attempt > 0:
+        return self._prepare_retry_api_request_target(
+            PrepareRetryApiRequestTarget(attempt, file_id),
+        )
+
+    def _prepare_retry_api_request_target(
+        self,
+        target: PrepareRetryApiRequestTarget,
+    ) -> Dict[str, str]:
+        if target.attempt > 0:
             retry_delay = random.uniform(15, 30)
-            print(api_retry_wait_message(attempt, retry_delay))
+            print(api_retry_wait_message(target.attempt, retry_delay))
             time.sleep(retry_delay)
 
         self.smart_delay()
         self.request_count += 1
         headers = self.get_stealth_headers()
-        if file_id is not None and getattr(self, "risk_event_log_path", None):
+        if target.file_id is not None and getattr(self, "risk_event_log_path", None):
             user_agent = risk_event_header_user_agent(headers)
             self.log(f"   🧭 UA分类: {self._user_agent_label(user_agent)}")
-        if file_id is not None:
+        if target.file_id is not None:
             self._record_risk_event(
-                file_id=file_id,
+                file_id=target.file_id,
                 phase="download_url_request",
-                attempt=attempt,
+                attempt=target.attempt,
                 headers=headers,
             )
 
-        if attempt > 0:
-            print(api_retry_user_agent_message(attempt, headers))
+        if target.attempt > 0:
+            print(api_retry_user_agent_message(target.attempt, headers))
         return headers
 
     def _parse_api_json_response(
