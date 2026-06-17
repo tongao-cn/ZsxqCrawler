@@ -5255,6 +5255,59 @@ class FileDownloaderRetryHelperTests(unittest.TestCase):
                 200,
             )
 
+    def test_handle_download_url_ok_response_preserves_json_decode_retry_decision(self):
+        downloader = object.__new__(ZSXQFileDownloader)
+        output = io.StringIO()
+
+        with contextlib.redirect_stdout(output):
+            decision = ZSXQFileDownloader._handle_download_url_ok_response(
+                downloader,
+                FakeInvalidJsonResponse(),
+                101,
+                0,
+                2,
+                {"User-Agent": "unit-test-agent"},
+            )
+
+        self.assertIsNone(decision.download_url)
+        self.assertTrue(decision.should_retry)
+        self.assertFalse(decision.should_stop)
+        self.assertEqual(
+            [
+                "   ❌ JSON解析失败: bad json: line 1 column 2 (char 1)",
+                "   📄 原始响应: {not json",
+                "   🔄 JSON解析失败，准备重试...",
+            ],
+            output.getvalue().splitlines(),
+        )
+
+    def test_handle_download_url_ok_response_preserves_empty_json_retry_without_missing_url_output(self):
+        class FakeEmptyJsonResponse:
+            status_code = 200
+            text = "{}"
+
+            def json(self):
+                return {}
+
+        downloader = object.__new__(ZSXQFileDownloader)
+        output = io.StringIO()
+
+        with contextlib.redirect_stdout(output):
+            decision = ZSXQFileDownloader._handle_download_url_ok_response(
+                downloader,
+                FakeEmptyJsonResponse(),
+                101,
+                0,
+                2,
+                {"User-Agent": "unit-test-agent"},
+            )
+
+        self.assertIsNone(decision.download_url)
+        self.assertTrue(decision.should_retry)
+        self.assertFalse(decision.should_stop)
+        self.assertIn("   📋 响应内容: {}", output.getvalue())
+        self.assertNotIn("响应中无下载链接字段", output.getvalue())
+
     def test_risk_event_user_agent_label_preserves_browser_platform_labels(self):
         self.assertEqual(
             "Edge Windows",

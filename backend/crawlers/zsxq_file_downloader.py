@@ -1689,6 +1689,13 @@ class ZSXQFileDownloader:
             target.attempt,
             target.max_retries,
         )
+        return self._download_url_json_parse_decision(target, json_parse)
+
+    def _download_url_json_parse_decision(
+        self,
+        target: DownloadUrlOkResponseTarget,
+        json_parse: ApiJsonParseResult,
+    ) -> DownloadUrlResponseDecision:
         if json_parse.should_retry:
             return DownloadUrlResponseDecision(None, True, False)
         data = json_parse.data
