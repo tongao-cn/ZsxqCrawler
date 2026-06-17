@@ -513,6 +513,12 @@ class DownloadRetryDecision(NamedTuple):
     result: Optional[bool]
 
 
+class DownloadRetryLoopFailureTarget(NamedTuple):
+    prepared_file: DownloadFileTarget
+    download_retries: int
+    retry_state: DownloadRetryState
+
+
 class DownloadIntervalValues(NamedTuple):
     download_interval: float
     long_sleep_interval: float
@@ -1976,13 +1982,7 @@ class ZSXQFileDownloader:
         prepared_file: DownloadFileTarget,
     ) -> bool:
         download_retries = DOWNLOAD_FILE_MAX_RETRIES
-        retry_state = DownloadRetryState(
-            prepared_file.file_name,
-            prepared_file.safe_filename,
-            prepared_file.file_path,
-            None,
-            None,
-        )
+        retry_state = self._initial_download_retry_state(prepared_file)
 
         for attempt in range(download_retries):
             retry_decision = self._run_download_retry_loop_attempt_target(
@@ -1998,12 +1998,32 @@ class ZSXQFileDownloader:
                 continue
             return retry_decision.result
 
+        return self._finish_download_retry_loop_failure_target(
+            DownloadRetryLoopFailureTarget(prepared_file, download_retries, retry_state),
+        )
+
+    def _initial_download_retry_state(
+        self,
+        prepared_file: DownloadFileTarget,
+    ) -> DownloadRetryState:
+        return DownloadRetryState(
+            prepared_file.file_name,
+            prepared_file.safe_filename,
+            prepared_file.file_path,
+            None,
+            None,
+        )
+
+    def _finish_download_retry_loop_failure_target(
+        self,
+        target: DownloadRetryLoopFailureTarget,
+    ) -> bool:
         self._mark_download_failed_after_retries_target(
             DownloadFinalFailureTarget(
-                prepared_file.file_id,
-                download_retries,
-                retry_state.last_error_code,
-                retry_state.last_error,
+                target.prepared_file.file_id,
+                target.download_retries,
+                target.retry_state.last_error_code,
+                target.retry_state.last_error,
             ),
         )
         return False

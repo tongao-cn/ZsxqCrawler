@@ -10,6 +10,9 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from backend.crawlers.zsxq_file_downloader import (
+    DownloadFileTarget,
+    DownloadRetryDecision,
+    DownloadRetryState,
     DownloadUrlResponseDecision,
     DownloadUrlRetryLoopTarget,
     ZSXQFileDownloader,
@@ -6537,6 +6540,82 @@ class FileDownloaderDownloadTests(unittest.TestCase):
 
         self.assertFalse(missing_result)
         self.assertEqual([("prepare", file_info)], missing_calls)
+
+    def test_run_download_retry_loop_preserves_initial_state_and_success_return(self):
+        downloader = object.__new__(ZSXQFileDownloader)
+        prepared_file = DownloadFileTarget(101, "memo.pdf", 4, "memo.pdf", "C:\\Downloads\\memo.pdf")
+        calls = []
+
+        def run_download_retry_loop_attempt_target(target):
+            calls.append((target.attempt, target.download_retries, target.prepared_file, target.retry_state))
+            if target.attempt == 0:
+                self.assertEqual(
+                    DownloadRetryState("memo.pdf", "memo.pdf", "C:\\Downloads\\memo.pdf", None, None),
+                    target.retry_state,
+                )
+                return DownloadRetryDecision(
+                    target.retry_state._replace(last_error_code="http_status", last_error="HTTP 500"),
+                    None,
+                )
+            self.assertEqual(
+                DownloadRetryState("memo.pdf", "memo.pdf", "C:\\Downloads\\memo.pdf", "http_status", "HTTP 500"),
+                target.retry_state,
+            )
+            return DownloadRetryDecision(target.retry_state, True)
+
+        downloader._run_download_retry_loop_attempt_target = run_download_retry_loop_attempt_target
+        downloader._mark_download_failed_after_retries_target = lambda target: self.fail(
+            "successful retry loop should not mark final failure"
+        )
+
+        result = ZSXQFileDownloader._run_download_retry_loop(downloader, prepared_file)
+
+        self.assertTrue(result)
+        self.assertEqual([0, 1], [attempt for attempt, *_ in calls])
+        self.assertEqual([3, 3], [download_retries for _, download_retries, *_ in calls])
+        self.assertTrue(all(call[2] is prepared_file for call in calls))
+
+    def test_run_download_retry_loop_preserves_final_failure_handoff(self):
+        downloader = object.__new__(ZSXQFileDownloader)
+        prepared_file = DownloadFileTarget(202, "report.pdf", 10, "report.pdf", "C:\\Downloads\\report.pdf")
+        attempt_states = []
+        final_failures = []
+
+        def run_download_retry_loop_attempt_target(target):
+            attempt_states.append(target.retry_state)
+            return DownloadRetryDecision(
+                target.retry_state._replace(
+                    last_error_code="download_exception",
+                    last_error=f"stream down {target.attempt}",
+                ),
+                None,
+            )
+
+        def mark_download_failed_after_retries_target(target):
+            final_failures.append(
+                (
+                    target.file_id,
+                    target.download_retries,
+                    target.last_error_code,
+                    target.last_error,
+                )
+            )
+
+        downloader._run_download_retry_loop_attempt_target = run_download_retry_loop_attempt_target
+        downloader._mark_download_failed_after_retries_target = mark_download_failed_after_retries_target
+
+        result = ZSXQFileDownloader._run_download_retry_loop(downloader, prepared_file)
+
+        self.assertFalse(result)
+        self.assertEqual(3, len(attempt_states))
+        self.assertEqual(
+            DownloadRetryState("report.pdf", "report.pdf", "C:\\Downloads\\report.pdf", None, None),
+            attempt_states[0],
+        )
+        self.assertEqual(
+            [(202, 3, "download_exception", "stream down 2")],
+            final_failures,
+        )
 
     def test_download_file_accepts_raw_file_id_payload(self):
         with tempfile.TemporaryDirectory() as temp_dir:
