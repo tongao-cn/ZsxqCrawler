@@ -29956,6 +29956,50 @@ Result:
 - Full backend unittest discovery passed in the current worktree: 1241 tests, 15 skipped.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-17 - P121 download-url API failure event helper
+
+Changed:
+
+- Added characterization coverage for `_handle_download_url_api_failure_response()` before changing
+  production code, locking retry and 1030 permission paths.
+- Added `DownloadUrlApiFailureEventTarget` to name the risk-event side-effect boundary.
+- Added `_record_download_url_api_failure_event(...)` and reused it from
+  `_handle_download_url_api_failure_response_target(...)`.
+- Kept API failure classification, log order, risk-event field names/values, and
+  `last_download_url_error` semantics unchanged.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Existing retry and 1030 compatibility behavior is preserved.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderRetryHelperTests.test_handle_download_url_api_failure_response_preserves_retry_logs_event_and_decision tests.test_zsxq_file_downloader_helpers.FileDownloaderRetryHelperTests.test_handle_download_url_api_failure_response_preserves_permission_error_state -v
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run ruff check backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py --select F401,F841
+git diff --check
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- New download-url API failure response characterization tests passed before production helper
+  extraction: 2 tests.
+- The same focused tests passed after production helper extraction: 2 tests.
+- `py_compile` passed.
+- ZSXQ file downloader helper tests passed: 265 tests.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- `git diff --check` passed; Git only reported existing LF-to-CRLF working-copy warnings.
+- Full backend unittest discovery passed in the current worktree: 1243 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:

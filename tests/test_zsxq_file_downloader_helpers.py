@@ -4689,6 +4689,82 @@ class FileDownloaderRetryHelperTests(unittest.TestCase):
             non_retry_plan["messages"],
         )
 
+    def test_handle_download_url_api_failure_response_preserves_retry_logs_event_and_decision(self):
+        downloader = object.__new__(ZSXQFileDownloader)
+        downloader.logged = []
+        downloader.log = downloader.logged.append
+        risk_events = []
+        downloader._record_risk_event = lambda **kwargs: risk_events.append(kwargs)
+        downloader.last_download_url_error = None
+
+        failure_class = ZSXQFileDownloader._handle_download_url_api_failure_response(
+            downloader,
+            {"message": "slow down", "code": 1059},
+            101,
+            0,
+            2,
+            {"User-Agent": "unit-test-agent"},
+            200,
+        )
+
+        self.assertEqual(API_FAILURE_RETRY, failure_class)
+        self.assertIsNone(downloader.last_download_url_error)
+        self.assertEqual(
+            [
+                "   ❌ API返回失败: slow down (代码: 1059)",
+                "   🔄 检测到可重试错误，准备重试...",
+            ],
+            downloader.logged,
+        )
+        self.assertEqual(
+            [
+                {
+                    "file_id": 101,
+                    "phase": "download_url_response",
+                    "attempt": 0,
+                    "headers": {"User-Agent": "unit-test-agent"},
+                    "http_status": 200,
+                    "api_code": 1059,
+                    "api_message": "slow down",
+                    "status": "api_failed",
+                }
+            ],
+            risk_events,
+        )
+
+    def test_handle_download_url_api_failure_response_preserves_permission_error_state(self):
+        downloader = object.__new__(ZSXQFileDownloader)
+        downloader.logged = []
+        downloader.log = downloader.logged.append
+        risk_events = []
+        downloader._record_risk_event = lambda **kwargs: risk_events.append(kwargs)
+        downloader.last_download_url_error = None
+
+        failure_class = ZSXQFileDownloader._handle_download_url_api_failure_response(
+            downloader,
+            {"message": "mobile only", "code": 1030},
+            202,
+            0,
+            2,
+            {"User-Agent": "unit-test-agent"},
+            403,
+        )
+
+        self.assertEqual(API_FAILURE_PERMISSION_DENIED_1030, failure_class)
+        self.assertEqual({"code": 1030, "message": "mobile only"}, downloader.last_download_url_error)
+        self.assertEqual(
+            [
+                "   ❌ API返回失败: mobile only (代码: 1030)",
+                "   🚫 权限不足错误(1030)：此文件可能只能在手机端下载，已跳过当前文件",
+            ],
+            downloader.logged,
+        )
+        self.assertEqual(1, len(risk_events))
+        self.assertEqual(202, risk_events[0]["file_id"])
+        self.assertEqual(403, risk_events[0]["http_status"])
+        self.assertEqual(1030, risk_events[0]["api_code"])
+        self.assertEqual("mobile only", risk_events[0]["api_message"])
+
     def test_classify_http_failure_distinguishes_retry_and_terminal_cases(self):
         self.assertEqual(HTTP_FAILURE_RETRY, classify_http_failure(429, 0, 2))
         self.assertEqual(HTTP_FAILURE_RETRY_EXHAUSTED, classify_http_failure(503, 1, 2))

@@ -282,6 +282,15 @@ class DownloadUrlApiFailureResponseTarget(NamedTuple):
     http_status: int
 
 
+class DownloadUrlApiFailureEventTarget(NamedTuple):
+    file_id: int
+    attempt: int
+    headers: Dict[str, str]
+    http_status: int
+    error_code: Any
+    error_msg: Any
+
+
 class DownloadUrlHttpFailureResponseTarget(NamedTuple):
     http_status: int
     response_text: str
@@ -1464,15 +1473,15 @@ class ZSXQFileDownloader:
             target.max_retries,
         )
         self.log(api_failure["messages"][0])
-        self._record_risk_event(
-            file_id=target.file_id,
-            phase="download_url_response",
-            attempt=target.attempt,
-            headers=target.headers,
-            http_status=target.http_status,
-            api_code=api_failure["error_code"],
-            api_message=api_failure["error_msg"],
-            status="api_failed",
+        self._record_download_url_api_failure_event(
+            DownloadUrlApiFailureEventTarget(
+                target.file_id,
+                target.attempt,
+                target.headers,
+                target.http_status,
+                api_failure["error_code"],
+                api_failure["error_msg"],
+            ),
         )
         for message in api_failure["messages"][1:]:
             self.log(message)
@@ -1481,6 +1490,21 @@ class ZSXQFileDownloader:
         if failure_class == API_FAILURE_PERMISSION_DENIED_1030:
             self.last_download_url_error = api_failure["last_download_url_error"]
         return failure_class
+
+    def _record_download_url_api_failure_event(
+        self,
+        target: DownloadUrlApiFailureEventTarget,
+    ) -> None:
+        self._record_risk_event(
+            file_id=target.file_id,
+            phase="download_url_response",
+            attempt=target.attempt,
+            headers=target.headers,
+            http_status=target.http_status,
+            api_code=target.error_code,
+            api_message=target.error_msg,
+            status="api_failed",
+        )
 
     def _handle_download_url_http_failure_response(
         self,
