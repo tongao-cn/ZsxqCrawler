@@ -8362,6 +8362,49 @@ class FileDownloaderDownloadTests(unittest.TestCase):
             calls,
         )
 
+    def test_successful_download_body_result_target_preserves_success_result_handoff(self):
+        downloader = object.__new__(ZSXQFileDownloader)
+        finalization_target = DownloadBodyFinalizationTarget(
+            17,
+            "C:\\Downloads\\ready.part",
+            909,
+            "ready.pdf",
+            "C:\\Downloads\\ready.pdf",
+        )
+        completion_target = DownloadCompletionTarget(
+            909,
+            "ready.pdf",
+            "C:\\Downloads\\ready.pdf",
+            "C:\\Downloads\\ready.part",
+        )
+        calls = []
+
+        def download_completion_target_for_finalization(target):
+            calls.append(("target", target))
+            return completion_target
+
+        def complete_successful_download_target(target):
+            calls.append(("complete", target))
+
+        downloader._download_completion_target_for_finalization = (
+            download_completion_target_for_finalization
+        )
+        downloader._complete_successful_download_target = complete_successful_download_target
+
+        result = ZSXQFileDownloader._successful_download_body_result_target(
+            downloader,
+            finalization_target,
+        )
+
+        self.assertEqual((True, None), result)
+        self.assertEqual(
+            [
+                ("target", finalization_target),
+                ("complete", completion_target),
+            ],
+            calls,
+        )
+
     def test_write_download_response_body_preserves_progress_stop_and_empty_chunks(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir) / "memo.pdf.part"
