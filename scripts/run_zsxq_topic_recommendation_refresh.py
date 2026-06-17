@@ -357,6 +357,19 @@ def _record_task(label: str, task: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _extra_crawl_group_ids(args: argparse.Namespace) -> list[str]:
+    seen = {str(args.group_id).strip()}
+    group_ids: list[str] = []
+    for raw_value in args.extra_crawl_group_id or []:
+        for group_id in str(raw_value or "").split(","):
+            normalized = group_id.strip()
+            if not normalized or normalized in seen:
+                continue
+            seen.add(normalized)
+            group_ids.append(normalized)
+    return group_ids
+
+
 def _write_run_record(summary: WorkflowSummary, args: argparse.Namespace) -> None:
     summary.finished_at = datetime.now(SHANGHAI_TZ).isoformat()
     run_dir = (
@@ -374,6 +387,7 @@ def _write_run_record(summary: WorkflowSummary, args: argparse.Namespace) -> Non
         "finished_at": summary.finished_at,
         "args": {
             "group_id": args.group_id,
+            "extra_crawl_group_ids": _extra_crawl_group_ids(args),
             "days": args.days,
             "concurrency": args.concurrency,
             "daily_stock_concepts": args.daily_stock_concepts,
@@ -420,6 +434,22 @@ async def _run(args: argparse.Namespace) -> None:
         )
         summary.add_task("crawl", crawl_task)
         _raise_for_task(crawl_task, "crawl")
+
+        for extra_group_id in _extra_crawl_group_ids(args):
+            try:
+                _safe_print(f"Refreshing extra_crawl_group_id={extra_group_id}")
+                extra_crawl_task_id = await _create_crawl_task(extra_group_id)
+                _safe_print(f"extra_crawl_task_id={extra_crawl_task_id}")
+                extra_crawl_task = _wait_task(
+                    extra_crawl_task_id,
+                    poll_seconds=args.poll_seconds,
+                    timeout_seconds=args.crawl_timeout_seconds,
+                    log_tail=args.log_tail,
+                )
+                summary.add_task(f"extra crawl {extra_group_id}", extra_crawl_task)
+                _raise_for_task(extra_crawl_task, f"extra crawl {extra_group_id}")
+            except Exception as exc:
+                summary.warn(f"extra crawl group {extra_group_id} failed: {exc}")
 
         a_share_task_id = await _create_a_share_task(args.group_id, args.days, args.concurrency)
         _safe_print(f"a_share_task_id={a_share_task_id}")
@@ -492,6 +522,7 @@ def main() -> None:
         description="Refresh latest ZSXQ topics and run the A-share recommendation pool without starting the API server."
     )
     parser.add_argument("--group-id", default="51111112855254")
+    parser.add_argument("--extra-crawl-group-id", action="append", default=[])
     parser.add_argument("--days", type=int, default=21)
     parser.add_argument("--concurrency", type=int, default=1)
     parser.add_argument("--poll-seconds", type=float, default=5)
