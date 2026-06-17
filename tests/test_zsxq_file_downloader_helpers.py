@@ -5105,6 +5105,26 @@ class FileDownloaderRetryHelperTests(unittest.TestCase):
         self.assertIsNone(result)
         self.assertEqual("   ❌ 响应中无下载链接字段\n", output.getvalue())
 
+    def test_handle_download_url_success_response_missing_url_does_not_record_risk_event(self):
+        downloader = object.__new__(ZSXQFileDownloader)
+        events = []
+        downloader._record_risk_event = lambda **kwargs: events.append(kwargs)
+        output = io.StringIO()
+
+        with contextlib.redirect_stdout(output):
+            result = ZSXQFileDownloader._handle_download_url_success_response(
+                downloader,
+                {"succeeded": True, "resp_data": {}},
+                101,
+                0,
+                {"User-Agent": "unit-test-agent"},
+                200,
+            )
+
+        self.assertIsNone(result)
+        self.assertEqual([], events)
+        self.assertEqual("   ❌ 响应中无下载链接字段\n", output.getvalue())
+
     def test_handle_download_url_success_response_preserves_print_event_order(self):
         downloader = object.__new__(ZSXQFileDownloader)
         operations = []

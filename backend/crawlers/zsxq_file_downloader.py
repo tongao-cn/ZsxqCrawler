@@ -1500,6 +1500,9 @@ class ZSXQFileDownloader:
             )
             return download_url
 
+        return self._handle_missing_download_url_response()
+
+    def _handle_missing_download_url_response(self) -> Optional[str]:
         print(f"   ❌ 响应中无下载链接字段")
         return None
 
