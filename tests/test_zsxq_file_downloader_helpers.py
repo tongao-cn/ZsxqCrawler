@@ -2399,6 +2399,25 @@ class FileDownloaderBatchDownloadTests(unittest.TestCase):
         self.assertEqual(2, downloaded)
         self.assertEqual(["🛑 文件下载过程中被停止"], downloader.logs)
 
+    def test_download_batch_page_files_target_preserves_limit_before_item_target(self):
+        files = [{"file": {"id": 101, "name": "first.pdf"}}]
+        stats = {"total_files": 0, "downloaded": 0, "skipped": 0, "failed": 0}
+        downloader = object.__new__(ZSXQFileDownloader)
+        downloader.logs = []
+        downloader.log = downloader.logs.append
+        downloader.check_stop = lambda: False
+        downloader._download_batch_file_item_target = (
+            lambda target: self.fail("limit-reached page file loop must not download an item")
+        )
+
+        downloaded = ZSXQFileDownloader._download_batch_page_files_target(
+            downloader,
+            BatchDownloadPageFilesTarget(files, 2, 2, stats),
+        )
+
+        self.assertEqual(2, downloaded)
+        self.assertEqual([], downloader.logs)
+
     def test_download_batch_page_files_target_preserves_item_target_construction(self):
         files = [
             {"file": {"id": 101, "name": "first.pdf"}},

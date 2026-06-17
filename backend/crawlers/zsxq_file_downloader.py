@@ -3443,7 +3443,7 @@ class ZSXQFileDownloader:
             if self._is_batch_page_file_download_stopped():
                 break
 
-            if target.max_files is not None and downloaded_in_batch >= target.max_files:
+            if self._has_reached_batch_page_file_download_limit(target, downloaded_in_batch):
                 break
 
             downloaded_in_batch = self._download_batch_file_item_target(
@@ -3458,6 +3458,13 @@ class ZSXQFileDownloader:
 
         self.log(batch_download_file_stop_message())
         return True
+
+    def _has_reached_batch_page_file_download_limit(
+        self,
+        target: BatchDownloadPageFilesTarget,
+        downloaded_in_batch: int,
+    ) -> bool:
+        return target.max_files is not None and downloaded_in_batch >= target.max_files
 
     def _batch_page_file_item_target(
         self,
