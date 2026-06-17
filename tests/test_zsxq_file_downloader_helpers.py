@@ -4858,6 +4858,45 @@ class FileDownloaderRetryHelperTests(unittest.TestCase):
             risk_events,
         )
 
+    def test_handle_download_url_api_failure_response_preserves_log_event_log_order(self):
+        downloader = object.__new__(ZSXQFileDownloader)
+        operations = []
+        downloader.log = lambda message: operations.append(("log", message))
+        downloader._record_risk_event = lambda **kwargs: operations.append(("event", kwargs))
+        downloader.last_download_url_error = None
+
+        failure_class = ZSXQFileDownloader._handle_download_url_api_failure_response(
+            downloader,
+            {"message": "slow down", "code": 1059},
+            101,
+            0,
+            2,
+            {"User-Agent": "unit-test-agent"},
+            200,
+        )
+
+        self.assertEqual(API_FAILURE_RETRY, failure_class)
+        self.assertEqual(
+            [
+                ("log", "   ❌ API返回失败: slow down (代码: 1059)"),
+                (
+                    "event",
+                    {
+                        "file_id": 101,
+                        "phase": "download_url_response",
+                        "attempt": 0,
+                        "headers": {"User-Agent": "unit-test-agent"},
+                        "http_status": 200,
+                        "api_code": 1059,
+                        "api_message": "slow down",
+                        "status": "api_failed",
+                    },
+                ),
+                ("log", "   🔄 检测到可重试错误，准备重试..."),
+            ],
+            operations,
+        )
+
     def test_handle_download_url_api_failure_response_preserves_permission_error_state(self):
         downloader = object.__new__(ZSXQFileDownloader)
         downloader.logged = []

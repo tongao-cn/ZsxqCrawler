@@ -1523,6 +1523,13 @@ class ZSXQFileDownloader:
             target.attempt,
             target.max_retries,
         )
+        return self._apply_download_url_api_failure_plan(target, api_failure)
+
+    def _apply_download_url_api_failure_plan(
+        self,
+        target: DownloadUrlApiFailureResponseTarget,
+        api_failure: Dict[str, Any],
+    ) -> str:
         self.log(api_failure["messages"][0])
         self._record_download_url_api_failure_event(
             DownloadUrlApiFailureEventTarget(
