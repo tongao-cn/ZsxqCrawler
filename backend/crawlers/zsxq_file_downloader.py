@@ -1570,15 +1570,22 @@ class ZSXQFileDownloader:
 
         try:
             response = self._request_file_list_response_target(
-                FileListRequestTarget(
-                    target.request_context.url,
-                    headers,
-                    target.request_context.params,
-                ),
+                self._file_list_request_target_for_attempt(target, headers),
             )
             return self._handle_file_list_request_attempt_response(target, response)
         except Exception as e:
             return self._handle_file_list_request_attempt_exception(target, e)
+
+    def _file_list_request_target_for_attempt(
+        self,
+        target: FileListRequestAttemptTarget,
+        headers: Dict[str, str],
+    ) -> FileListRequestTarget:
+        return FileListRequestTarget(
+            target.request_context.url,
+            headers,
+            target.request_context.params,
+        )
 
     def _handle_file_list_request_attempt_response(
         self,
