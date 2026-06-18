@@ -1481,7 +1481,12 @@ class ZSXQFileDownloader:
 
     def _fetch_file_list_target(self, target: FetchFileListTarget) -> Optional[Dict[str, Any]]:
         request_context = self._start_file_list_request(target)
+        return self._run_file_list_request_loop(request_context)
 
+    def _run_file_list_request_loop(
+        self,
+        request_context: FileListRequestContext,
+    ) -> Optional[Dict[str, Any]]:
         for attempt in range(request_context.max_retries):
             decision = self._run_file_list_request_attempt(
                 FileListRequestAttemptTarget(request_context, attempt),

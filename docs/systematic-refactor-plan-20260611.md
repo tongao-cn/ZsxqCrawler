@@ -33873,6 +33873,51 @@ Result:
 - Full backend unittest discovery passed in the current worktree: 1354 tests, 15 skipped.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-18 - P206 isolate file-list request loop
+
+Changed:
+
+- Added characterization coverage for `_fetch_file_list_target(...)` preserving start-context
+  creation, loop attempt target handoff, empty-decision exhaustion, and exhausted retry output.
+- Extracted `_run_file_list_request_loop(...)` from `_fetch_file_list_target(...)`.
+- Kept retry attempt construction, decision dispatch, retry continuation, stop return, successful
+  result return, and exhausted output unchanged.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Public `fetch_file_list(...)` inputs/outputs, retry count, stop semantics, empty-decision
+  fallthrough, retry exhaustion output, API/HTTP failure paths, and request-exception behavior are
+  unchanged.
+- No fallback, legacy, compatibility, storage, schema, route, configuration, or task-status behavior
+  was changed.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderRetryHelperTests.test_fetch_file_list_target_preserves_start_context_loop_and_exhausted_output -v
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderRetryHelperTests.test_fetch_file_list_target_preserves_start_context_loop_and_exhausted_output tests.test_zsxq_file_downloader_helpers.FileDownloaderRetryHelperTests.test_fetch_file_list_target_preserves_empty_decision_fallthrough_to_next_attempt tests.test_zsxq_file_downloader_helpers.FileDownloaderRetryHelperTests.test_fetch_file_list_target_preserves_start_context_before_retry_attempt tests.test_zsxq_file_downloader_helpers.FileDownloaderRetryHelperTests.test_fetch_file_list_preserves_entry_url_params_logs_and_response_handoff tests.test_zsxq_file_downloader_helpers.FileDownloaderRetryHelperTests.test_fetch_file_list_retries_json_decode_failure_then_success tests.test_zsxq_file_downloader_helpers.FileDownloaderRetryHelperTests.test_fetch_file_list_retries_api_failure_then_success tests.test_zsxq_file_downloader_helpers.FileDownloaderRetryHelperTests.test_fetch_file_list_stops_on_non_retry_api_failure tests.test_zsxq_file_downloader_helpers.FileDownloaderRetryHelperTests.test_fetch_file_list_retryable_api_failure_exhausts_retries tests.test_zsxq_file_downloader_helpers.FileDownloaderRetryHelperTests.test_fetch_file_list_retries_http_failure_then_success tests.test_zsxq_file_downloader_helpers.FileDownloaderRetryHelperTests.test_fetch_file_list_retryable_http_failure_exhausts_retries tests.test_zsxq_file_downloader_helpers.FileDownloaderRetryHelperTests.test_fetch_file_list_retries_request_exception_then_success tests.test_zsxq_file_downloader_helpers.FileDownloaderRetryHelperTests.test_fetch_file_list_request_exception_exhausts_retries -v
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run ruff check backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py --select F401,F841
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- New start-context loop/exhaustion characterization test passed before helper extraction: 1 test.
+- Focused file-list start, loop, fallthrough, JSON/API/HTTP retry, non-retry stop, retry
+  exhaustion, and request exception tests passed after helper extraction: 12 tests.
+- `py_compile` passed.
+- ZSXQ file downloader helper tests passed: 369 tests.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- Full backend unittest discovery passed in the current worktree: 1355 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:

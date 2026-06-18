@@ -7236,6 +7236,43 @@ class FileDownloaderRetryHelperTests(unittest.TestCase):
             events,
         )
 
+    def test_fetch_file_list_target_preserves_start_context_loop_and_exhausted_output(self):
+        request_context = SimpleNamespace(max_retries=2)
+        events = []
+        downloader = object.__new__(ZSXQFileDownloader)
+        downloader._start_file_list_request = (
+            lambda target: events.append(("start", target)) or request_context
+        )
+
+        def run_attempt(target):
+            events.append(
+                (
+                    "attempt",
+                    target.request_context is request_context,
+                    target.attempt,
+                )
+            )
+            return SimpleNamespace(result=None, should_retry=False, should_stop=False)
+
+        downloader._run_file_list_request_attempt = run_attempt
+
+        with contextlib.redirect_stdout(io.StringIO()) as output:
+            result = ZSXQFileDownloader._fetch_file_list_target(
+                downloader,
+                FetchFileListTarget(7, "cursor", "by_create_time"),
+            )
+
+        self.assertIsNone(result)
+        self.assertEqual(
+            [
+                ("start", FetchFileListTarget(7, "cursor", "by_create_time")),
+                ("attempt", True, 0),
+                ("attempt", True, 1),
+            ],
+            events,
+        )
+        self.assertEqual([retry_exhausted_message(2)], output.getvalue().splitlines())
+
     def test_fetch_file_list_retries_json_decode_failure_then_success(self):
         class FakeFileListJsonResponse:
             status_code = 200
