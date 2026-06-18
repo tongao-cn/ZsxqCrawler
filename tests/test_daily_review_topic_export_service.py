@@ -82,10 +82,14 @@ class DailyReviewTopicExportServiceTests(unittest.TestCase):
         morning_rule = match_review_rule("morning", "TMT早间市场动态 | TMT...")
         evening_rule = match_review_rule("evening", "日报0616：")
         pre_market_rule = match_review_rule("morning", "6月17日，盘前热点")
+        hot_topic_rule = match_review_rule("evening", "20260617盘后热门题材消息梳理")
+        price_daily_rule = match_review_rule("evening", "国联民生化工价格日报👆")
 
         self.assertEqual("TMT早报", morning_rule.name)
         self.assertEqual("日报", evening_rule.name)
         self.assertEqual("盘前热点", pre_market_rule.name)
+        self.assertEqual("盘后热门题材", hot_topic_rule.name)
+        self.assertEqual("行业/价格日报", price_daily_rule.name)
 
     def test_review_topic_time_bounds_include_prior_evening_for_morning(self):
         from backend.services.daily_review_topic_export_service import review_topic_time_bounds

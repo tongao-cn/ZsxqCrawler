@@ -41,8 +41,13 @@ EVENING_RULES = (
     ReviewTopicRule("复盘笔记", re.compile(r"\d{1,2}月\d{1,2}\s*日?复盘笔记|复盘笔记", re.I)),
     ReviewTopicRule("复盘数据/市场情绪", re.compile(r"复盘数据/市场情绪", re.I)),
     ReviewTopicRule("盘后解读", re.compile(r"盘后解读", re.I)),
+    ReviewTopicRule("盘后热门题材", re.compile(r"盘后热门题材", re.I)),
     ReviewTopicRule("东财策略每日复盘", re.compile(r"东财策略.*每日复盘|每日复盘.*东财策略", re.I)),
     ReviewTopicRule("日报", re.compile(r"^日报\d{4}[:：]", re.I)),
+    ReviewTopicRule(
+        "行业/价格日报",
+        re.compile(r"价格日报|行业日报|市场日报|机器人行业日报|商业航天日报|AI\s*日报|AI日报|TMT.*日报", re.I),
+    ),
     ReviewTopicRule("晚报", re.compile(r"行业新闻晚报|晚报", re.I)),
     ReviewTopicRule("市场总结/回顾", re.compile(r"市场总结|市场回顾", re.I)),
 )
