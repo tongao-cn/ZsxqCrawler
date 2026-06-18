@@ -7373,6 +7373,67 @@ class FileDownloaderRetryHelperTests(unittest.TestCase):
             operations,
         )
 
+    def test_run_file_list_request_attempt_preserves_request_execution_handoff(self):
+        request_context = FileListRequestContext(
+            "https://api.example/v2/groups/group-1/files",
+            {"count": "7", "sort": "by_create_time", "index": "cursor"},
+            10,
+        )
+        request_target = FileListRequestTarget(
+            "https://api.example/v2/groups/group-1/files",
+            {"X-Test": "header"},
+            {"count": "7", "sort": "by_create_time", "index": "cursor"},
+        )
+        response = SimpleNamespace(status_code=200)
+        expected_decision = SimpleNamespace(
+            result={"resp_data": {}},
+            should_retry=False,
+            should_stop=False,
+        )
+        operations = []
+        downloader = object.__new__(ZSXQFileDownloader)
+        downloader._prepare_retry_api_request = (
+            lambda attempt: operations.append(("prepare", attempt)) or {"X-Test": "header"}
+        )
+
+        def build_request_target(target, headers):
+            self.assertIs(request_context, target.request_context)
+            operations.append(("target", target.attempt, headers))
+            return request_target
+
+        def request_response(target):
+            operations.append(("request", target is request_target))
+            return response
+
+        downloader._file_list_request_target_for_attempt = build_request_target
+        downloader._request_file_list_response_target = request_response
+        downloader._handle_file_list_request_attempt_response = (
+            lambda target, actual_response: operations.append(
+                (
+                    "response",
+                    target.attempt,
+                    actual_response is response,
+                )
+            )
+            or expected_decision
+        )
+
+        decision = ZSXQFileDownloader._run_file_list_request_attempt(
+            downloader,
+            FileListRequestAttemptTarget(request_context, 5),
+        )
+
+        self.assertIs(expected_decision, decision)
+        self.assertEqual(
+            [
+                ("prepare", 5),
+                ("target", 5, {"X-Test": "header"}),
+                ("request", True),
+                ("response", 5, True),
+            ],
+            operations,
+        )
+
     def test_run_file_list_request_attempt_preserves_exception_handoff_and_decision(self):
         request_context = FileListRequestContext(
             "https://api.example/v2/groups/group-1/files",
