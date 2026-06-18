@@ -243,6 +243,12 @@ class FileListRequestContext(NamedTuple):
     max_retries: int
 
 
+class FileListRequestTarget(NamedTuple):
+    url: str
+    headers: Dict[str, str]
+    params: Dict[str, str]
+
+
 class FileListRequestAttemptTarget(NamedTuple):
     request_context: FileListRequestContext
     attempt: int
@@ -1511,6 +1517,17 @@ class ZSXQFileDownloader:
 
         return FileListRequestContext(url, params, max_retries)
 
+    def _request_file_list_response_target(
+        self,
+        target: FileListRequestTarget,
+    ) -> Any:
+        return self.session.get(
+            target.url,
+            headers=target.headers,
+            params=target.params,
+            timeout=30,
+        )
+
     def _run_file_list_request_attempt(
         self,
         target: FileListRequestAttemptTarget,
@@ -1518,11 +1535,12 @@ class ZSXQFileDownloader:
         headers = self._prepare_retry_api_request(target.attempt)
 
         try:
-            response = self.session.get(
-                target.request_context.url,
-                headers=headers,
-                params=target.request_context.params,
-                timeout=30,
+            response = self._request_file_list_response_target(
+                FileListRequestTarget(
+                    target.request_context.url,
+                    headers,
+                    target.request_context.params,
+                ),
             )
             return self._handle_file_list_response_target(
                 FileListResponseTarget(

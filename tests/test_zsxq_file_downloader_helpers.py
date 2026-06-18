@@ -45,6 +45,8 @@ from backend.crawlers.zsxq_file_downloader import (
     DownloadUrlUnavailableTarget,
     ExistingDownloadTarget,
     FetchFileListTarget,
+    FileListRequestAttemptTarget,
+    FileListRequestContext,
     ResponseFilenameOverrideTarget,
     ZSXQFileDownloader,
     _database_stats_time_range,
@@ -7113,6 +7115,68 @@ class FileDownloaderRetryHelperTests(unittest.TestCase):
         self.assertIs(session.response, response_targets[0].response)
         self.assertEqual(0, response_targets[0].attempt)
         self.assertEqual(10, response_targets[0].max_retries)
+
+    def test_run_file_list_request_attempt_preserves_get_args_and_response_handoff(self):
+        class CapturingFileListSession:
+            def __init__(self):
+                self.response = SimpleNamespace(status_code=200)
+                self.get_calls = []
+
+            def get(self, url, headers=None, params=None, timeout=None):
+                self.get_calls.append((url, headers, params, timeout))
+                return self.response
+
+        expected_decision = SimpleNamespace(
+            result={"resp_data": {}},
+            should_retry=False,
+            should_stop=False,
+        )
+        session = CapturingFileListSession()
+        downloader = object.__new__(ZSXQFileDownloader)
+        downloader.session = session
+        operations = []
+        downloader._prepare_retry_api_request = (
+            lambda attempt: operations.append(("prepare", attempt)) or {"X-Test": "header"}
+        )
+
+        def handle_response(target):
+            operations.append(
+                (
+                    "response",
+                    target.response is session.response,
+                    target.attempt,
+                    target.max_retries,
+                )
+            )
+            return expected_decision
+
+        downloader._handle_file_list_response_target = handle_response
+
+        decision = ZSXQFileDownloader._run_file_list_request_attempt(
+            downloader,
+            FileListRequestAttemptTarget(
+                FileListRequestContext(
+                    "https://api.example/v2/groups/group-1/files",
+                    {"count": "7", "sort": "by_create_time", "index": "cursor"},
+                    10,
+                ),
+                1,
+            ),
+        )
+
+        self.assertIs(expected_decision, decision)
+        self.assertEqual(
+            [
+                (
+                    "https://api.example/v2/groups/group-1/files",
+                    {"X-Test": "header"},
+                    {"count": "7", "sort": "by_create_time", "index": "cursor"},
+                    30,
+                )
+            ],
+            session.get_calls,
+        )
+        self.assertEqual([("prepare", 1), ("response", True, 1, 10)], operations)
 
     def test_fetch_file_list_target_preserves_start_context_before_retry_attempt(self):
         class CapturingFileListSession:
