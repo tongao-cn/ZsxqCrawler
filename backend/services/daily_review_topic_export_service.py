@@ -143,6 +143,54 @@ def topic_content(row: Any) -> str:
     return "\n".join(str(part or "").strip() for part in parts if str(part or "").strip())
 
 
+def _display_image_url(image: dict[str, Any]) -> str:
+    for key in ("local_path", "original_url", "large_url", "thumbnail_url"):
+        value = str(image.get(key) or "").strip()
+        if value:
+            return value.replace("\\", "/")
+    return ""
+
+
+def _image_row_to_payload(row: Any) -> dict[str, Any]:
+    return {
+        "image_id": str(row["image_id"] or ""),
+        "type": row["type"] or "",
+        "thumbnail_url": row["thumbnail_url"] or "",
+        "thumbnail_width": row["thumbnail_width"] or 0,
+        "thumbnail_height": row["thumbnail_height"] or 0,
+        "large_url": row["large_url"] or "",
+        "large_width": row["large_width"] or 0,
+        "large_height": row["large_height"] or 0,
+        "original_url": row["original_url"] or "",
+        "original_width": row["original_width"] or 0,
+        "original_height": row["original_height"] or 0,
+        "local_path": row["local_path"] or "",
+    }
+
+
+def _load_images_by_topic(conn: Any, topic_ids: Iterable[str]) -> dict[str, list[dict[str, Any]]]:
+    normalized_topic_ids = [str(topic_id).strip() for topic_id in topic_ids if str(topic_id).strip()]
+    if not normalized_topic_ids:
+        return {}
+    placeholders = ",".join("?" for _ in normalized_topic_ids)
+    rows = conn.execute(
+        f"""
+        SELECT
+            topic_id, image_id, type, thumbnail_url, thumbnail_width, thumbnail_height,
+            large_url, large_width, large_height, original_url, original_width,
+            original_height, local_path
+        FROM images
+        WHERE topic_id IN ({placeholders})
+        ORDER BY topic_id ASC, image_id ASC
+        """,
+        [int(topic_id) if topic_id.isdigit() else topic_id for topic_id in normalized_topic_ids],
+    ).fetchall()
+    images_by_topic: dict[str, list[dict[str, Any]]] = {}
+    for row in rows:
+        images_by_topic.setdefault(str(row["topic_id"] or ""), []).append(_image_row_to_payload(row))
+    return images_by_topic
+
+
 def match_review_rule(slot: ReviewTopicSlot, text: str) -> ReviewTopicRule | None:
     first_line = first_non_empty_line(text)
     if not first_line:
@@ -153,7 +201,14 @@ def match_review_rule(slot: ReviewTopicSlot, text: str) -> ReviewTopicRule | Non
     return None
 
 
-def _topic_row_to_payload(row: Any, slot: ReviewTopicSlot, rule: ReviewTopicRule, *, max_topic_chars: int) -> dict[str, Any]:
+def _topic_row_to_payload(
+    row: Any,
+    slot: ReviewTopicSlot,
+    rule: ReviewTopicRule,
+    *,
+    max_topic_chars: int,
+    images: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
     content = topic_content(row)
     first_line = first_non_empty_line(content)
     return {
@@ -175,6 +230,7 @@ def _topic_row_to_payload(row: Any, slot: ReviewTopicSlot, rule: ReviewTopicRule
         },
         "first_line": first_line,
         "content": clip_text(content, max_topic_chars),
+        "images": images or [],
     }
 
 
@@ -216,12 +272,25 @@ def fetch_review_topics(
         [*(_group_id_param(group_id) for group_id in normalized_group_ids), start_time, end_time],
     ).fetchall()
 
-    topics: list[dict[str, Any]] = []
+    matched_rows: list[tuple[Any, ReviewTopicRule]] = []
     for row in rows:
         content = topic_content(row)
         rule = match_review_rule(slot, content)
         if rule:
-            topics.append(_topic_row_to_payload(row, slot, rule, max_topic_chars=max_topic_chars))
+            matched_rows.append((row, rule))
+    images_by_topic = _load_images_by_topic(conn, [str(row["topic_id"] or "") for row, _rule in matched_rows])
+    topics: list[dict[str, Any]] = []
+    for row, rule in matched_rows:
+        topic_id = str(row["topic_id"] or "")
+        topics.append(
+            _topic_row_to_payload(
+                row,
+                slot,
+                rule,
+                max_topic_chars=max_topic_chars,
+                images=images_by_topic.get(topic_id, []),
+            )
+        )
     return topics
 
 
@@ -288,7 +357,15 @@ def _topic_markdown(topic: dict[str, Any]) -> str:
         f"reads={metrics.get('reading_count', 0)}"
     )
     content = str(topic.get("content") or "").strip()
-    return f"{header}\n\n{meta}\n\n{content}\n"
+    image_lines: list[str] = []
+    for index, image in enumerate(topic.get("images") or [], start=1):
+        image_url = _display_image_url(image)
+        if image_url:
+            image_lines.append(f"![{topic.get('topic_id', '')} image {index}]({image_url})")
+    images = "\n\n".join(image_lines)
+    body_parts = [part for part in (content, images) if part]
+    body = "\n\n".join(body_parts)
+    return f"{header}\n\n{meta}\n\n{body}\n"
 
 
 def render_review_topics_markdown(payload: dict[str, Any]) -> str:

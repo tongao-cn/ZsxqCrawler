@@ -14,12 +14,15 @@ class _Rows:
 
 
 class _Connection:
-    def __init__(self, rows):
+    def __init__(self, rows, image_rows=None):
         self.rows = rows
+        self.image_rows = image_rows or []
         self.calls = []
 
     def execute(self, sql, params=None):
         self.calls.append((sql, params))
+        if "FROM images" in sql:
+            return _Rows(self.image_rows)
         return _Rows(self.rows)
 
 
@@ -40,6 +43,26 @@ def _row(**overrides):
         "question_text": "",
         "answer_text": "",
         "detail_text": "",
+    }
+    data.update(overrides)
+    return data
+
+
+def _image_row(**overrides):
+    data = {
+        "topic_id": 1,
+        "image_id": 10,
+        "type": "png",
+        "thumbnail_url": "https://example.com/thumb.png",
+        "thumbnail_width": 120,
+        "thumbnail_height": 80,
+        "large_url": "https://example.com/large.png",
+        "large_width": 1200,
+        "large_height": 800,
+        "original_url": "https://example.com/original.png",
+        "original_width": 1200,
+        "original_height": 800,
+        "local_path": "",
     }
     data.update(overrides)
     return data
@@ -83,7 +106,8 @@ class DailyReviewTopicExportServiceTests(unittest.TestCase):
                 _row(topic_id=1, talk_text="盘前热点事件\n一、昨日热点"),
                 _row(topic_id=2, create_time="2026-05-22T17:12:00.000+0800", talk_text="5月22日复盘笔记：PCB/P..."),
                 _row(topic_id=3, talk_text="普通调研纪要"),
-            ]
+            ],
+            image_rows=[_image_row(topic_id=1)],
         )
 
         morning = fetch_review_topics(
@@ -101,6 +125,7 @@ class DailyReviewTopicExportServiceTests(unittest.TestCase):
 
         self.assertEqual(["1"], [topic["topic_id"] for topic in morning])
         self.assertEqual("盘前热点事件", morning[0]["matched_rule"])
+        self.assertEqual("https://example.com/original.png", morning[0]["images"][0]["original_url"])
         self.assertEqual(["2"], [topic["topic_id"] for topic in evening])
         self.assertEqual("复盘笔记", evening[0]["matched_rule"])
 
@@ -121,6 +146,7 @@ class DailyReviewTopicExportServiceTests(unittest.TestCase):
             "metrics": {"likes_count": 1, "comments_count": 2, "reading_count": 3, "readers_count": 4},
             "first_line": "盘前热点事件",
             "content": "盘前热点事件\n一、昨日热点",
+            "images": [_image_row()],
         }
         payload = build_review_topic_export(
             group_ids=["15552822451452"],
@@ -139,6 +165,7 @@ class DailyReviewTopicExportServiceTests(unittest.TestCase):
             markdown = Path(files["markdown"]).read_text(encoding="utf-8")
             self.assertIn("# 早报话题导出 2026-05-22", markdown)
             self.assertIn("盘前热点事件", markdown)
+            self.assertIn("![1 image 1](https://example.com/original.png)", markdown)
 
 
 if __name__ == "__main__":
