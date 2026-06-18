@@ -182,6 +182,12 @@ class FileListResponseTarget(NamedTuple):
     max_retries: int
 
 
+class FileListResponseStatusTarget(NamedTuple):
+    response: requests.Response
+    attempt: int
+    max_retries: int
+
+
 class FileListOkResponseTarget(NamedTuple):
     response: requests.Response
     attempt: int
@@ -1479,7 +1485,18 @@ class ZSXQFileDownloader:
         target: FileListResponseTarget,
     ) -> FileListResponseDecision:
         print(f"   📊 响应状态: {target.response.status_code}")
+        return self._file_list_response_status_decision_target(
+            FileListResponseStatusTarget(
+                target.response,
+                target.attempt,
+                target.max_retries,
+            ),
+        )
 
+    def _file_list_response_status_decision_target(
+        self,
+        target: FileListResponseStatusTarget,
+    ) -> FileListResponseDecision:
         if target.response.status_code == 200:
             return self._handle_file_list_ok_response_target(
                 FileListOkResponseTarget(
