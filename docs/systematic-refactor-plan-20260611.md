@@ -33731,6 +33731,53 @@ Result:
   `Cannot find module for page: /_document`; an immediate standalone rerun passed, including Next.js
   lint/type checks.
 
+### 2026-06-18 - P203 isolate batch download loop iteration
+
+Changed:
+
+- Added characterization coverage for `_run_batch_download_loop_target(...)` preserving the loop
+  continuation boundary around each iteration.
+- Extracted `_run_batch_download_loop_iteration(...)` from `_run_batch_download_loop_target(...)`.
+- Kept the ordering of continuation checks, stop checks, step advance, missing-step exits, terminal
+  next-index exits, and max-file termination unchanged.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- A stopped loop, missing next step, or terminal next-index step still exits the same outer batch loop
+  without running another page fetch.
+- No public API, result shape, pagination input, log text, fallback, legacy, or compatibility path was
+  changed.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderBatchDownloadTests.test_run_batch_download_loop_target_preserves_continue_iteration_boundary -v
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderBatchDownloadTests.test_run_batch_download_loop_target_preserves_continue_iteration_boundary tests.test_zsxq_file_downloader_helpers.FileDownloaderBatchDownloadTests.test_run_batch_download_loop_target_preserves_step_advance_checker_order tests.test_zsxq_file_downloader_helpers.FileDownloaderBatchDownloadTests.test_run_batch_download_loop_target_preserves_page_run_target_sequence tests.test_zsxq_file_downloader_helpers.FileDownloaderBatchDownloadTests.test_run_batch_download_loop_target_preserves_page_step_builder_handoff tests.test_zsxq_file_downloader_helpers.FileDownloaderBatchDownloadTests.test_run_batch_download_loop_target_preserves_next_index_terminal_stop_checks tests.test_zsxq_file_downloader_helpers.FileDownloaderBatchDownloadTests.test_run_batch_download_loop_target_preserves_none_step_terminal_stop_checks tests.test_zsxq_file_downloader_helpers.FileDownloaderBatchDownloadTests.test_run_batch_download_loop_target_preserves_initial_step_from_start_index tests.test_zsxq_file_downloader_helpers.FileDownloaderBatchDownloadTests.test_run_batch_download_loop_target_preserves_zero_max_without_stop_or_page tests.test_zsxq_file_downloader_helpers.FileDownloaderBatchDownloadTests.test_run_batch_download_loop_target_preserves_stop_without_page -v
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run ruff check backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py --select F401,F841
+git diff --check -- backend/crawlers/zsxq_file_downloader.py tests/test_zsxq_file_downloader_helpers.py docs/systematic-refactor-plan-20260611.md
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- New continue/iteration-boundary characterization test passed before helper extraction: 1 test.
+- Focused loop boundary, step advance, page target handoff, next-index terminal, missing-step
+  terminal, zero-max, and stop-without-page tests passed after helper extraction: 9 tests.
+- `py_compile` passed.
+- ZSXQ file downloader helper tests passed: 366 tests.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- Scoped `git diff --check` passed for the P203 files; Git only reported existing LF-to-CRLF
+  working-copy warnings.
+- Full backend unittest discovery passed in the current worktree: 1352 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:

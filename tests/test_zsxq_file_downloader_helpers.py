@@ -3130,6 +3130,59 @@ class FileDownloaderBatchDownloadTests(unittest.TestCase):
         )
         self.assertEqual([], page_results)
 
+    def test_run_batch_download_loop_target_preserves_continue_iteration_boundary(self):
+        stats = {"total_files": 0, "downloaded": 0, "skipped": 0, "failed": 0}
+        downloader = object.__new__(ZSXQFileDownloader)
+        events = []
+        continue_results = [True, True, False]
+        page_results = [
+            SimpleNamespace(downloaded_in_batch=1, next_index="cursor-2"),
+            SimpleNamespace(downloaded_in_batch=2, next_index="cursor-3"),
+        ]
+
+        def should_continue(target, step):
+            events.append(("continue", step.downloaded_in_batch, step.next_index))
+            return continue_results.pop(0)
+
+        def is_stopped():
+            events.append(("stop",))
+            return False
+
+        def advance(target, step):
+            events.append(("advance", step.downloaded_in_batch, step.next_index))
+            return page_results.pop(0)
+
+        def is_terminal(step):
+            events.append(("terminal", step.downloaded_in_batch, step.next_index))
+            return False
+
+        downloader._should_continue_batch_download_loop = should_continue
+        downloader._is_batch_download_loop_stopped = is_stopped
+        downloader._advance_batch_download_loop_step = advance
+        downloader._is_terminal_batch_download_loop_step = is_terminal
+
+        ZSXQFileDownloader._run_batch_download_loop_target(
+            downloader,
+            SimpleNamespace(stats=stats, max_files=2, start_index="cursor-1"),
+        )
+
+        self.assertEqual(
+            [
+                ("continue", 0, "cursor-1"),
+                ("stop",),
+                ("advance", 0, "cursor-1"),
+                ("terminal", 1, "cursor-2"),
+                ("continue", 1, "cursor-2"),
+                ("stop",),
+                ("advance", 1, "cursor-2"),
+                ("terminal", 2, "cursor-3"),
+                ("continue", 2, "cursor-3"),
+            ],
+            events,
+        )
+        self.assertEqual([], continue_results)
+        self.assertEqual([], page_results)
+
     def test_run_batch_download_loop_target_preserves_initial_step_from_start_index(self):
         stats = {"total_files": 0, "downloaded": 0, "skipped": 0, "failed": 0}
         downloader = object.__new__(ZSXQFileDownloader)
