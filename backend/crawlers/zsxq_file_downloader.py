@@ -243,6 +243,11 @@ class FileListRequestContext(NamedTuple):
     max_retries: int
 
 
+class FileListRequestAttemptTarget(NamedTuple):
+    request_context: FileListRequestContext
+    attempt: int
+
+
 class StealthHeaderSelection(NamedTuple):
     user_agent: str
     sec_ch_ua: str
@@ -1478,30 +1483,15 @@ class ZSXQFileDownloader:
         request_context = self._start_file_list_request(target)
 
         for attempt in range(request_context.max_retries):
-            headers = self._prepare_retry_api_request(attempt)
-            
-            try:
-                response = self.session.get(
-                    request_context.url,
-                    headers=headers,
-                    params=request_context.params,
-                    timeout=30,
-                )
-                decision = self._handle_file_list_response_target(
-                    FileListResponseTarget(response, attempt, request_context.max_retries),
-                )
-                if decision.result is not None:
-                    return decision.result
-                if decision.should_retry:
-                    continue
-                if decision.should_stop:
-                    return None
-                    
-            except Exception as e:
-                if self._handle_file_list_request_exception_target(
-                    FileListRequestExceptionTarget(e, attempt, request_context.max_retries),
-                ):
-                    continue
+            decision = self._run_file_list_request_attempt(
+                FileListRequestAttemptTarget(request_context, attempt),
+            )
+            if decision.result is not None:
+                return decision.result
+            if decision.should_retry:
+                continue
+            if decision.should_stop:
+                return None
         
         print(retry_exhausted_message(request_context.max_retries))
         return None
@@ -1515,6 +1505,36 @@ class ZSXQFileDownloader:
             self.log(message)
 
         return FileListRequestContext(url, params, max_retries)
+
+    def _run_file_list_request_attempt(
+        self,
+        target: FileListRequestAttemptTarget,
+    ) -> FileListResponseDecision:
+        headers = self._prepare_retry_api_request(target.attempt)
+
+        try:
+            response = self.session.get(
+                target.request_context.url,
+                headers=headers,
+                params=target.request_context.params,
+                timeout=30,
+            )
+            return self._handle_file_list_response_target(
+                FileListResponseTarget(
+                    response,
+                    target.attempt,
+                    target.request_context.max_retries,
+                ),
+            )
+        except Exception as e:
+            should_retry = self._handle_file_list_request_exception_target(
+                FileListRequestExceptionTarget(
+                    e,
+                    target.attempt,
+                    target.request_context.max_retries,
+                ),
+            )
+            return FileListResponseDecision(None, should_retry, False)
 
     def _handle_download_url_success_response(
         self,

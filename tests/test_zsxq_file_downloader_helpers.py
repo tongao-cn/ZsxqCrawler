@@ -7171,6 +7171,71 @@ class FileDownloaderRetryHelperTests(unittest.TestCase):
             events,
         )
 
+    def test_fetch_file_list_target_preserves_empty_decision_fallthrough_to_next_attempt(self):
+        class CapturingFileListSession:
+            def __init__(self):
+                self.responses = [
+                    SimpleNamespace(status_code=200, label="empty-decision"),
+                    SimpleNamespace(status_code=200, label="success"),
+                ]
+
+            def get(self, url, headers=None, params=None, timeout=None):
+                events.append(("get", headers, params, timeout))
+                return self.responses.pop(0)
+
+        expected_result = {"succeeded": True, "resp_data": {"files": [], "index": None}}
+        events = []
+        session = CapturingFileListSession()
+        downloader = object.__new__(ZSXQFileDownloader)
+        downloader.base_url = "https://api.example"
+        downloader.group_id = "group-1"
+        downloader.session = session
+        downloader.log = lambda message: events.append(("log", message))
+        downloader._prepare_retry_api_request = (
+            lambda attempt: events.append(("prepare", attempt)) or {"X-Attempt": str(attempt)}
+        )
+
+        def handle_response(target):
+            events.append(("response", target.response.label, target.attempt, target.max_retries))
+            if target.attempt == 0:
+                return SimpleNamespace(result=None, should_retry=False, should_stop=False)
+            return SimpleNamespace(result=expected_result, should_retry=False, should_stop=False)
+
+        downloader._handle_file_list_response_target = handle_response
+
+        result = ZSXQFileDownloader._fetch_file_list_target(
+            downloader,
+            FetchFileListTarget(7, "cursor", "by_create_time"),
+        )
+
+        self.assertIs(expected_result, result)
+        self.assertEqual([], session.responses)
+        self.assertEqual(
+            [
+                ("log", "🌐 获取文件列表"),
+                ("log", "   📊 参数: count=7, sort=by_create_time"),
+                ("log", "   📑 索引: cursor"),
+                ("log", "   🌐 请求URL: https://api.example/v2/groups/group-1/files"),
+                ("prepare", 0),
+                (
+                    "get",
+                    {"X-Attempt": "0"},
+                    {"count": "7", "sort": "by_create_time", "index": "cursor"},
+                    30,
+                ),
+                ("response", "empty-decision", 0, 10),
+                ("prepare", 1),
+                (
+                    "get",
+                    {"X-Attempt": "1"},
+                    {"count": "7", "sort": "by_create_time", "index": "cursor"},
+                    30,
+                ),
+                ("response", "success", 1, 10),
+            ],
+            events,
+        )
+
     def test_fetch_file_list_retries_json_decode_failure_then_success(self):
         class FakeFileListJsonResponse:
             status_code = 200
