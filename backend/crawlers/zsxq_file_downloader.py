@@ -4428,6 +4428,22 @@ class ZSXQFileDownloader:
 
         return False
 
+    def _prepare_time_collection_loop_context(
+        self,
+        sort: str,
+        enable_time_dedupe: bool,
+        db_latest_time: Optional[Any],
+        stop_before_time: Optional[datetime.datetime],
+    ) -> tuple[Dict[str, int], TimeCollectionLoopContext]:
+        total_imported_stats = empty_import_stats()
+        return total_imported_stats, TimeCollectionLoopContext(
+            sort,
+            enable_time_dedupe,
+            db_latest_time,
+            total_imported_stats,
+            stop_before_time,
+        )
+
     def _run_time_collection_after_initial_stop(
         self,
         start_time: Optional[str],
@@ -4439,12 +4455,10 @@ class ZSXQFileDownloader:
             enable_time_dedupe,
         )
 
-        total_imported_stats = empty_import_stats()
-        loop_context = TimeCollectionLoopContext(
+        total_imported_stats, loop_context = self._prepare_time_collection_loop_context(
             sort,
             enable_time_dedupe,
             database_state.db_latest_time,
-            total_imported_stats,
             stop_before_time,
         )
         page_count = self._run_time_collection_loop(

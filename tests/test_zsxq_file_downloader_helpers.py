@@ -49,6 +49,7 @@ from backend.crawlers.zsxq_file_downloader import (
     FileListRequestContext,
     FileListRequestTarget,
     ResponseFilenameOverrideTarget,
+    TimeCollectionDatabaseState,
     ZSXQFileDownloader,
     _database_stats_time_range,
     _database_stats_total_size,
@@ -1331,6 +1332,78 @@ class FileDownloaderPaginationTests(unittest.TestCase):
             ],
             downloader.logs,
         )
+
+    def test_run_time_collection_after_initial_stop_preserves_context_and_finalize_handoff(self):
+        downloader = object.__new__(ZSXQFileDownloader)
+        stop_before_time = datetime.datetime(2026, 5, 3, 12, 30)
+        expected_stats = {"total_files": 12, "new_files": 2, "pages": 4}
+        calls = []
+        loop_import_stats = []
+
+        def load_database_state(enable_time_dedupe):
+            calls.append(("load_state", enable_time_dedupe))
+            return TimeCollectionDatabaseState(10, "latest-time")
+
+        def run_loop(start_time, context):
+            loop_import_stats.append(context.total_imported_stats)
+            calls.append(
+                (
+                    "run_loop",
+                    start_time,
+                    context.sort,
+                    context.enable_time_dedupe,
+                    context.db_latest_time,
+                    context.stop_before_time,
+                )
+            )
+            context.total_imported_stats["files"] = 2
+            return 4
+
+        def finalize(initial_files, total_imported_stats, page_count):
+            calls.append(
+                (
+                    "finalize",
+                    initial_files,
+                    total_imported_stats,
+                    page_count,
+                )
+            )
+            return expected_stats
+
+        downloader._load_time_collection_database_state = load_database_state
+        downloader._run_time_collection_loop = run_loop
+        downloader._finalize_time_collection_result = finalize
+
+        stats = ZSXQFileDownloader._run_time_collection_after_initial_stop(
+            downloader,
+            start_time="cursor-1",
+            sort="by_create_time",
+            enable_time_dedupe=True,
+            stop_before_time=stop_before_time,
+        )
+
+        self.assertIs(expected_stats, stats)
+        self.assertEqual("load_state", calls[0][0])
+        self.assertEqual("run_loop", calls[1][0])
+        self.assertEqual("finalize", calls[2][0])
+        self.assertEqual(("load_state", True), calls[0])
+        self.assertEqual(
+            (
+                "run_loop",
+                "cursor-1",
+                "by_create_time",
+                True,
+                "latest-time",
+                stop_before_time,
+            ),
+            calls[1],
+        )
+        self.assertEqual(10, calls[2][1])
+        expected_import_stats = empty_import_stats()
+        expected_import_stats["files"] = 2
+        self.assertIs(loop_import_stats[0], calls[2][2])
+        self.assertEqual(expected_import_stats, calls[2][2])
+        self.assertEqual(4, calls[2][3])
 
     def test_collect_files_by_time_preserves_entry_mode_stop_and_run_handoff(self):
         downloader = object.__new__(ZSXQFileDownloader)
