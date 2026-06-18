@@ -44,13 +44,13 @@ from backend.storage.zsxq_columns_database_helpers import (
     _topic_comment_insert_params,
     _topic_comment_insert_statement,
     _topic_comments_query,
-    _topic_comment_row_to_dict,
+    _topic_comment_row_to_dict,  # noqa: F401 - compatibility re-export for helper tests/imports
     _topic_comment_row_with_images,
     _topic_detail_insert_params,
     _topic_detail_insert_statement,
     _topic_detail_exists_query,
     _topic_detail_query,
-    _topic_detail_row_to_dict,
+    _topic_detail_row_to_dict,  # noqa: F401 - compatibility re-export for helper tests/imports
     _topic_detail_row_with_related_payloads,
     _topic_file_insert_params,
     _topic_file_insert_statement,

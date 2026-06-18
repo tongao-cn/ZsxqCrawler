@@ -45,4 +45,6 @@ build-backend = "hatchling.build"
 packages = ["backend", "scripts"]
 
 [dependency-groups]
-dev = []
+dev = [
+    "ruff>=0.15.17",
+]
