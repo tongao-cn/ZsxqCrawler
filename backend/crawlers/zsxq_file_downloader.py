@@ -915,7 +915,7 @@ def _batch_download_file_name(file_info: Dict[str, Any]) -> Any:
 
 class ZSXQFileDownloader:
     """知识星球文件下载器"""
-    
+
     def __init__(self, cookie: str, group_id: str, download_dir: str = "downloads",
                  download_interval: float = 1.0, long_sleep_interval: float = 60.0,
                  files_per_batch: int = 10, download_interval_min: float = None,
@@ -1061,13 +1061,13 @@ class ZSXQFileDownloader:
         target: CheckStopTarget,
     ) -> Any:
         return self.is_stopped()
-    
+
     def clean_cookie(self, cookie: str) -> str:
         """清理Cookie字符串，去除不合法字符
-        
+
         Args:
             cookie (str): 原始Cookie字符串
-        
+
         Returns:
             str: 清理后的Cookie字符串
         """
@@ -1081,7 +1081,7 @@ class ZSXQFileDownloader:
         if error is not None:
             print(f"Cookie清理失败: {error}")
         return cookie
-    
+
     def _select_stealth_header_values(self) -> StealthHeaderSelection:
         user_agents = stealth_user_agents()
         selected_ua = random.choice(user_agents)
@@ -1126,7 +1126,7 @@ class ZSXQFileDownloader:
         self._apply_optional_stealth_headers(headers)
         self._apply_dynamic_stealth_headers(headers)
         return headers
-    
+
     def smart_delay(self):
         """智能延迟"""
         return self._smart_delay_target(SmartDelayTarget())
@@ -1249,7 +1249,7 @@ class ZSXQFileDownloader:
 
         actual_end_time = datetime.datetime.now()
         print(f"   🕐 实际结束: {actual_end_time.strftime('%H:%M:%S')}")
-    
+
     def check_long_delay(self):
         """检查是否需要长休眠"""
         return self._check_long_delay_target(CheckLongDelayTarget())
@@ -1280,7 +1280,7 @@ class ZSXQFileDownloader:
             actual_end_time = datetime.datetime.now()
             print(f"😴 长休眠结束，继续下载...")
             print(f"   🕐 实际结束: {actual_end_time.strftime('%H:%M:%S')}")
-    
+
     def _prepare_retry_api_request(self, attempt: int, file_id: Optional[int] = None) -> Dict[str, str]:
         return self._prepare_retry_api_request_target(
             PrepareRetryApiRequestTarget(attempt, file_id),
@@ -1560,7 +1560,7 @@ class ZSXQFileDownloader:
                 continue
             if decision.should_stop:
                 return None
-        
+
         print(retry_exhausted_message(request_context.max_retries))
         return None
 
@@ -3955,7 +3955,7 @@ class ZSXQFileDownloader:
         data = self.fetch_file_list(count=target.count, index=target.index)
         if not data:
             return None
-        
+
         files, next_index = file_list_response_page(data)
         self._print_file_list_page(files, next_index)
 
@@ -4095,12 +4095,12 @@ class ZSXQFileDownloader:
 
         # 更新收集记录
         self._update_file_collection_log(stats, log_id)
-        
+
         for message in file_collection_completion_messages(stats, page_count):
             print(message)
-        
+
         return stats
-    
+
     def get_database_time_range(self) -> Dict[str, Any]:
         """获取完整数据库中文件的时间范围信息"""
         return self._get_database_time_range_target(DatabaseTimeRangeTarget())
@@ -4112,16 +4112,16 @@ class ZSXQFileDownloader:
         # 使用新数据库检查是否有数据
         stats = self.file_db.get_database_stats()
         total_files = stats.get('files', 0)
-        
+
         if total_files == 0:
             return database_time_range_result(total_files, None)
-        
+
         # 获取时间范围
         query, params = database_time_range_query(_query_group_id(self.group_id))
         self.file_db.cursor.execute(query, params)
-        
+
         result = self.file_db.cursor.fetchone()
-        
+
         return database_time_range_result(total_files, result)
 
     def _load_time_collection_latest_file_time(
@@ -4554,7 +4554,7 @@ class ZSXQFileDownloader:
                 kwargs.get('force_refresh', False),
             )
         )
-    
+
     def collect_incremental_files(self) -> Dict[str, int]:
         """增量收集：从数据库最老时间戳开始继续收集"""
         return self._collect_incremental_files_target(IncrementalCollectionTarget())
@@ -4573,7 +4573,7 @@ class ZSXQFileDownloader:
         time_info = self.get_database_time_range()
 
         return self._collect_incremental_from_time_info(time_info)
-    
+
     def _collect_files_for_date_range_target(
         self,
         target: DateRangeCollectionTarget,
@@ -4932,7 +4932,7 @@ class ZSXQFileDownloader:
 
         # API响应统计
         self._print_database_api_response_stats()
-    
+
     def _print_download_settings(self) -> None:
         for line in download_settings_display_lines(
             self.download_interval_min,
@@ -4968,10 +4968,10 @@ class ZSXQFileDownloader:
             new_interval = int(input(f"长休眠间隔 (当前每{self.long_delay_interval}个文件): ") or self.long_delay_interval)
             new_dir = input(f"下载目录 (当前: {self.download_dir}): ").strip() or self.download_dir
             self._apply_adjusted_settings(new_interval, new_dir)
-            
+
         except ValueError:
             print("❌ 输入无效，保持原设置")
-    
+
     def close(self):
         """关闭资源"""
         return self._close_target(CloseTarget())

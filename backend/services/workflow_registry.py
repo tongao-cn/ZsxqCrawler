@@ -89,4 +89,3 @@ def workflow_types_for_lock(lock_category: str) -> frozenset[str]:
         for task_type, spec in WORKFLOW_SPECS.items()
         if spec.lock_category == lock_category
     )
-

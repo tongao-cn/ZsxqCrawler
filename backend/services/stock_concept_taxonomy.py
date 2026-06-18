@@ -113,4 +113,3 @@ def normalize_concept_name(value: str) -> str:
 def normalize_signal_tag_name(value: str) -> Optional[str]:
     class_name, normalized = normalize_stock_concept_term(value)
     return normalized if class_name == "signal" else None
-
