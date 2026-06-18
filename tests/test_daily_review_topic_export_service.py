@@ -149,7 +149,7 @@ class DailyReviewTopicExportServiceTests(unittest.TestCase):
             "create_time": "2026-05-22T08:19:00.000+0800",
             "metrics": {"likes_count": 1, "comments_count": 2, "reading_count": 3, "readers_count": 4},
             "first_line": "盘前热点事件",
-            "content": "盘前热点事件\n一、昨日热点",
+            "content": "盘前热点事件\n一、昨日热点...\n盘前热点事件\n一、昨日热点",
             "images": [_image_row()],
         }
         payload = build_review_topic_export(
@@ -167,8 +167,14 @@ class DailyReviewTopicExportServiceTests(unittest.TestCase):
             self.assertEqual("OK", summary["level"])
             self.assertEqual(1, summary["matched_count"])
             markdown = Path(files["markdown"]).read_text(encoding="utf-8")
-            self.assertIn("# 早报话题导出 2026-05-22", markdown)
+            self.assertIn("# 2026-05-22 早报话题", markdown)
+            self.assertIn("## 概览", markdown)
+            self.assertIn("## 命中分布", markdown)
+            self.assertIn("## 话题目录", markdown)
+            self.assertIn("| 1 | 2026-05-22 08:19 | 调研鹅纪要 | 盘前热点事件 | 盘前热点事件 |", markdown)
+            self.assertIn("### 1. 盘前热点事件", markdown)
             self.assertIn("盘前热点事件", markdown)
+            self.assertNotIn("一、昨日热点...", markdown)
             self.assertIn("![1 image 1](https://example.com/original.png)", markdown)
 
 
