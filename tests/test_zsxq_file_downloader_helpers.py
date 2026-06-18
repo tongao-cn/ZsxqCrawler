@@ -7526,6 +7526,35 @@ class FileDownloaderRetryHelperTests(unittest.TestCase):
             operations,
         )
 
+    def test_run_file_list_request_attempt_preserves_header_exception_boundary(self):
+        request_context = FileListRequestContext(
+            "https://api.example/v2/groups/group-1/files",
+            {"count": "7", "sort": "by_create_time", "index": "cursor"},
+            10,
+        )
+        operations = []
+        downloader = object.__new__(ZSXQFileDownloader)
+
+        def prepare(attempt):
+            operations.append(("prepare", attempt))
+            raise RuntimeError("header unavailable")
+
+        downloader._prepare_retry_api_request = prepare
+        downloader._file_list_request_attempt_decision = (
+            lambda target, headers: operations.append(("decision", target.attempt, headers))
+        )
+        downloader._handle_file_list_request_exception_target = (
+            lambda target: operations.append(("exception", str(target.exc))) or True
+        )
+
+        with self.assertRaisesRegex(RuntimeError, "header unavailable"):
+            ZSXQFileDownloader._run_file_list_request_attempt(
+                downloader,
+                FileListRequestAttemptTarget(request_context, 7),
+            )
+
+        self.assertEqual([("prepare", 7)], operations)
+
     def test_handle_file_list_request_attempt_exception_preserves_handoff_and_decision(self):
         request_context = FileListRequestContext(
             "https://api.example/v2/groups/group-1/files",

@@ -1566,12 +1566,18 @@ class ZSXQFileDownloader:
         self,
         target: FileListRequestAttemptTarget,
     ) -> FileListResponseDecision:
-        headers = self._prepare_retry_api_request(target.attempt)
+        headers = self._file_list_request_attempt_headers(target)
 
         try:
             return self._file_list_request_attempt_decision(target, headers)
         except Exception as e:
             return self._handle_file_list_request_attempt_exception(target, e)
+
+    def _file_list_request_attempt_headers(
+        self,
+        target: FileListRequestAttemptTarget,
+    ) -> Dict[str, str]:
+        return self._prepare_retry_api_request(target.attempt)
 
     def _file_list_request_attempt_decision(
         self,
