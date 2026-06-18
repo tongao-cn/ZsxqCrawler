@@ -64,7 +64,7 @@ Out of scope unless explicitly requested:
 
 - `docs/project-architecture-roadmap.md`
 - `docs/module-refactor-execution-plan-20260610.md`
-- `docs/systematic-refactor-plan-20260611.md`
+- `docs/archive/systematic-refactor-plan-20260611.md`
 - `docs/archive/stock-topic-analysis-tab-plan.md`
 
 ## Execution Plan
