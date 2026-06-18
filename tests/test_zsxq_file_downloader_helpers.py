@@ -7054,6 +7054,70 @@ class FileDownloaderRetryHelperTests(unittest.TestCase):
         self.assertIs(data, result)
         self.assertEqual("   ✅ 重试成功！第2次重试获取到文件列表\n", output.getvalue())
 
+    def test_handle_file_list_ok_response_preserves_parsed_data_dispatch(self):
+        response = object()
+        success_data = {"succeeded": True, "resp_data": {"files": [], "index": None}}
+        failure_data = {"succeeded": False, "code": 1059, "message": "busy"}
+        parsed_payloads = [success_data, failure_data, None]
+        operations = []
+        downloader = object.__new__(ZSXQFileDownloader)
+
+        def parse_response(response_arg, attempt, max_retries):
+            operations.append(("parse", response_arg is response, attempt, max_retries))
+            return SimpleNamespace(data=parsed_payloads.pop(0), should_retry=False)
+
+        def handle_success(data, attempt):
+            operations.append(("success", data, attempt))
+            return {"ok": "success"}
+
+        def handle_api_failure(target):
+            operations.append(("api_failure", target.data, target.attempt, target.max_retries))
+            return API_FAILURE_NON_RETRY
+
+        downloader._parse_api_json_response = parse_response
+        downloader._handle_file_list_success_response = handle_success
+        downloader._handle_file_list_api_failure_response_target = handle_api_failure
+
+        success_decision = ZSXQFileDownloader._handle_file_list_ok_response(
+            downloader,
+            response,
+            1,
+            4,
+        )
+        failure_decision = ZSXQFileDownloader._handle_file_list_ok_response(
+            downloader,
+            response,
+            2,
+            4,
+        )
+        empty_decision = ZSXQFileDownloader._handle_file_list_ok_response(
+            downloader,
+            response,
+            3,
+            4,
+        )
+
+        self.assertEqual({"ok": "success"}, success_decision.result)
+        self.assertFalse(success_decision.should_retry)
+        self.assertFalse(success_decision.should_stop)
+        self.assertIsNone(failure_decision.result)
+        self.assertFalse(failure_decision.should_retry)
+        self.assertTrue(failure_decision.should_stop)
+        self.assertIsNone(empty_decision.result)
+        self.assertTrue(empty_decision.should_retry)
+        self.assertFalse(empty_decision.should_stop)
+        self.assertEqual([], parsed_payloads)
+        self.assertEqual(
+            [
+                ("parse", True, 1, 4),
+                ("success", success_data, 1),
+                ("parse", True, 2, 4),
+                ("api_failure", failure_data, 2, 4),
+                ("parse", True, 3, 4),
+            ],
+            operations,
+        )
+
     def test_fetch_file_list_preserves_entry_url_params_logs_and_response_handoff(self):
         class CapturingFileListSession:
             def __init__(self):

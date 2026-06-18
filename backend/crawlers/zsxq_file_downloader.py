@@ -188,6 +188,12 @@ class FileListOkResponseTarget(NamedTuple):
     max_retries: int
 
 
+class FileListOkDataTarget(NamedTuple):
+    data: Optional[Dict[str, Any]]
+    attempt: int
+    max_retries: int
+
+
 class FileListSuccessResponseTarget(NamedTuple):
     data: Dict[str, Any]
     attempt: int
@@ -1427,20 +1433,31 @@ class ZSXQFileDownloader:
         )
         if json_parse.should_retry:
             return FileListResponseDecision(None, True, False)
-        data = json_parse.data
-        if not data:
+        return self._file_list_ok_data_decision_target(
+            FileListOkDataTarget(
+                json_parse.data,
+                target.attempt,
+                target.max_retries,
+            ),
+        )
+
+    def _file_list_ok_data_decision_target(
+        self,
+        target: FileListOkDataTarget,
+    ) -> FileListResponseDecision:
+        if not target.data:
             return FileListResponseDecision(None, True, False)
 
-        if data.get('succeeded'):
+        if target.data.get('succeeded'):
             return FileListResponseDecision(
-                self._handle_file_list_success_response(data, target.attempt),
+                self._handle_file_list_success_response(target.data, target.attempt),
                 False,
                 False,
             )
 
         failure_class = self._handle_file_list_api_failure_response_target(
             FileListApiFailureResponseTarget(
-                data,
+                target.data,
                 target.attempt,
                 target.max_retries,
             ),

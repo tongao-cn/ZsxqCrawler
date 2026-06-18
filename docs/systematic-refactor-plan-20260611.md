@@ -33965,6 +33965,52 @@ Result:
 - Full backend unittest discovery passed in the current worktree: 1356 tests, 15 skipped.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-18 - P208 isolate file-list ok-data decision
+
+Changed:
+
+- Added characterization coverage for `_handle_file_list_ok_response(...)` preserving parsed-data
+  dispatch across success, API failure, and empty-data retry paths.
+- Added internal `FileListOkDataTarget` and extracted `_file_list_ok_data_decision_target(...)`
+  from `_handle_file_list_ok_response_target(...)`.
+- Kept JSON parse retry behavior, success response handling, API failure classification, empty-data
+  retry behavior, decision flags, and handoff order unchanged.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Public `fetch_file_list(...)` inputs/outputs, response parsing, API success output, API failure
+  retry/stop semantics, empty-data retry behavior, and exhausted output are unchanged.
+- No fallback, legacy, compatibility, storage, schema, route, configuration, or task-status behavior
+  was changed.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderRetryHelperTests.test_handle_file_list_ok_response_preserves_parsed_data_dispatch -v
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderRetryHelperTests.test_handle_file_list_ok_response_preserves_parsed_data_dispatch tests.test_zsxq_file_downloader_helpers.FileDownloaderRetryHelperTests.test_parse_api_json_response_logs_redacted_success_payload tests.test_zsxq_file_downloader_helpers.FileDownloaderRetryHelperTests.test_parse_api_json_response_returns_retry_on_decode_error tests.test_zsxq_file_downloader_helpers.FileDownloaderRetryHelperTests.test_parse_api_json_response_preserves_decode_failure_output_and_retry_result tests.test_zsxq_file_downloader_helpers.FileDownloaderRetryHelperTests.test_parse_api_json_response_preserves_terminal_decode_failure_output tests.test_zsxq_file_downloader_helpers.FileDownloaderRetryHelperTests.test_handle_file_list_success_response_preserves_first_attempt_output tests.test_zsxq_file_downloader_helpers.FileDownloaderRetryHelperTests.test_handle_file_list_success_response_preserves_retry_output tests.test_zsxq_file_downloader_helpers.FileDownloaderRetryHelperTests.test_handle_file_list_api_failure_response_preserves_retry_output_and_failure_class tests.test_zsxq_file_downloader_helpers.FileDownloaderRetryHelperTests.test_handle_file_list_api_failure_response_preserves_permission_and_exhausted_output tests.test_zsxq_file_downloader_helpers.FileDownloaderRetryHelperTests.test_fetch_file_list_retries_json_decode_failure_then_success tests.test_zsxq_file_downloader_helpers.FileDownloaderRetryHelperTests.test_fetch_file_list_retries_api_failure_then_success tests.test_zsxq_file_downloader_helpers.FileDownloaderRetryHelperTests.test_fetch_file_list_stops_on_non_retry_api_failure tests.test_zsxq_file_downloader_helpers.FileDownloaderRetryHelperTests.test_fetch_file_list_retryable_api_failure_exhausts_retries -v
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers -v
+uv run python scripts\scan_postgres_compat_debt.py
+uv run ruff check backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py --select F401,F841
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- New file-list ok-response parsed-data dispatch characterization test passed before helper
+  extraction: 1 test.
+- Focused file-list parse, success, API failure, JSON decode, and retry behavior tests passed after
+  helper extraction: 13 tests.
+- `py_compile` passed.
+- ZSXQ file downloader helper tests passed: 371 tests.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- Full backend unittest discovery passed in the current worktree: 1357 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:
