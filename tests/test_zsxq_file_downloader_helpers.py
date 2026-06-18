@@ -3843,6 +3843,45 @@ class FileDownloaderDatabaseDownloadTests(unittest.TestCase):
         self.assertEqual([(None, "pending")], stopped_start_calls)
         self.assertEqual([(None, "pending", "download_count", None, None, None, {})], stopped_query_calls)
 
+    def test_prepare_database_download_query_plan_preserves_legacy_kwargs_and_filter_logs(self):
+        downloader = self._downloader_for_query_capture()
+
+        with patch(
+            "backend.crawlers.zsxq_file_downloader_helpers.normalize_date_range",
+            return_value=("2026-05-01", "2026-05-07", None),
+        ) as normalize:
+            query_plan = ZSXQFileDownloader._prepare_database_download_query_plan(
+                downloader,
+                max_files=5,
+                status_filter="failed",
+                sort_by="download_count",
+                start_date=None,
+                end_date=None,
+                last_days=None,
+                kwargs={"recent_days": 7, "order_by": "create_time DESC"},
+            )
+
+        compact_query = self._compact_sql(query_plan["query"])
+        self.assertIn(
+            "WHERE group_id = ? AND download_status = ? AND substr(create_time, 1, 10) >= ? "
+            "AND substr(create_time, 1, 10) <= ?",
+            compact_query,
+        )
+        self.assertIn("ORDER BY create_time DESC, download_count DESC", compact_query)
+        self.assertTrue(compact_query.endswith("LIMIT ?"))
+        self.assertEqual((511, "failed", "2026-05-01", "2026-05-07", 5), query_plan["params"])
+        self.assertEqual("create_time", query_plan["sort_by"])
+        self.assertEqual("2026-05-01", query_plan["normalized_start"])
+        self.assertEqual("2026-05-07", query_plan["normalized_end"])
+        normalize.assert_called_once_with(start_date=None, end_date=None, last_days=7)
+        self.assertEqual(
+            [
+                "   📅 下载区间: 2026-05-01 ~ 2026-05-07",
+                "   📌 下载排序: 按时间倒序",
+            ],
+            downloader.logs,
+        )
+
     def test_download_files_from_database_preserves_filtered_query_shape_and_legacy_order_by(self):
         downloader = self._downloader_for_query_capture()
 

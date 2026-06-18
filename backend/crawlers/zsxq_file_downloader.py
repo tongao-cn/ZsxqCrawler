@@ -4622,7 +4622,7 @@ class ZSXQFileDownloader:
 
         return False
 
-    def _prepare_database_download_query_plan(
+    def _database_download_query_plan_with_effective_days(
         self,
         max_files: Optional[int],
         status_filter: str,
@@ -4631,7 +4631,7 @@ class ZSXQFileDownloader:
         end_date: Optional[str],
         last_days: Optional[int],
         kwargs: Dict[str, Any],
-    ) -> Dict[str, Any]:
+    ) -> tuple[Dict[str, Any], Any]:
         last_days = database_download_effective_last_days(last_days, kwargs.get('recent_days'))
 
         query_plan = database_download_query_plan(
@@ -4643,6 +4643,27 @@ class ZSXQFileDownloader:
             end_date=end_date,
             last_days=last_days,
             legacy_order_by=kwargs.get('order_by'),
+        )
+        return query_plan, last_days
+
+    def _prepare_database_download_query_plan(
+        self,
+        max_files: Optional[int],
+        status_filter: str,
+        sort_by: str,
+        start_date: Optional[str],
+        end_date: Optional[str],
+        last_days: Optional[int],
+        kwargs: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        query_plan, last_days = self._database_download_query_plan_with_effective_days(
+            max_files,
+            status_filter,
+            sort_by,
+            start_date,
+            end_date,
+            last_days,
+            kwargs,
         )
         normalized_start = query_plan["normalized_start"]
         normalized_end = query_plan["normalized_end"]
