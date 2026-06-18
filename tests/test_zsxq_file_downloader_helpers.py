@@ -3266,6 +3266,52 @@ class FileDownloaderBatchDownloadTests(unittest.TestCase):
             downloader.logs,
         )
 
+    def test_download_files_batch_target_preserves_start_stop_loop_completion_order(self):
+        downloader = object.__new__(ZSXQFileDownloader)
+        events = []
+
+        def log_start(max_files):
+            events.append(("start", max_files))
+
+        def initial_stop():
+            events.append(("initial_stop",))
+            return False
+
+        def run_loop(loop_target):
+            events.append(
+                (
+                    "loop",
+                    loop_target.max_files,
+                    loop_target.start_index,
+                    dict(loop_target.stats),
+                )
+            )
+            loop_target.stats.update({"total_files": 3, "downloaded": 2, "skipped": 1, "failed": 0})
+
+        def log_completion(stats):
+            events.append(("completion", dict(stats)))
+
+        downloader._log_batch_download_start = log_start
+        downloader._is_initial_batch_download_stopped = initial_stop
+        downloader._run_batch_download_loop_target = run_loop
+        downloader._log_batch_download_completion = log_completion
+
+        stats = ZSXQFileDownloader._download_files_batch_target(
+            downloader,
+            BatchDownloadTarget(4, "cursor"),
+        )
+
+        self.assertEqual({"total_files": 3, "downloaded": 2, "skipped": 1, "failed": 0}, stats)
+        self.assertEqual(
+            [
+                ("start", 4),
+                ("initial_stop",),
+                ("loop", 4, "cursor", {"total_files": 0, "downloaded": 0, "skipped": 0, "failed": 0}),
+                ("completion", {"total_files": 3, "downloaded": 2, "skipped": 1, "failed": 0}),
+            ],
+            events,
+        )
+
     def test_download_files_batch_target_preserves_initial_stop_without_completion(self):
         downloader = object.__new__(ZSXQFileDownloader)
         downloader.logs = []

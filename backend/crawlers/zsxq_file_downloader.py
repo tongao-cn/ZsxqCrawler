@@ -3717,13 +3717,19 @@ class ZSXQFileDownloader:
         if self._is_initial_batch_download_stopped():
             return download_result_stats()
 
+        return self._run_batch_download_after_initial_stop(target)
+
+    def _run_batch_download_after_initial_stop(
+        self,
+        target: BatchDownloadTarget,
+    ) -> Dict[str, int]:
         stats = download_result_stats()
         self._run_batch_download_loop_target(
             self._batch_download_loop_target(stats, target.max_files, target.start_index),
         )
 
         self._log_batch_download_completion(stats)
-        
+
         return stats
 
     def _is_initial_batch_download_stopped(self) -> bool:
