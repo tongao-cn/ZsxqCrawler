@@ -7317,6 +7317,51 @@ class FileDownloaderRetryHelperTests(unittest.TestCase):
         )
         self.assertEqual([("prepare", 1), ("response", True, 1, 10)], operations)
 
+    def test_run_file_list_request_attempt_preserves_exception_handoff_and_decision(self):
+        request_context = FileListRequestContext(
+            "https://api.example/v2/groups/group-1/files",
+            {"count": "7", "sort": "by_create_time", "index": "cursor"},
+            10,
+        )
+        operations = []
+        downloader = object.__new__(ZSXQFileDownloader)
+        downloader._prepare_retry_api_request = (
+            lambda attempt: operations.append(("prepare", attempt)) or {"X-Test": "header"}
+        )
+
+        def request_response(target):
+            operations.append(("request", target.url, target.headers, target.params))
+            raise RuntimeError("socket reset")
+
+        def handle_exception(target):
+            operations.append(("exception", str(target.exc), target.attempt, target.max_retries))
+            return True
+
+        downloader._request_file_list_response_target = request_response
+        downloader._handle_file_list_request_exception_target = handle_exception
+
+        decision = ZSXQFileDownloader._run_file_list_request_attempt(
+            downloader,
+            FileListRequestAttemptTarget(request_context, 2),
+        )
+
+        self.assertIsNone(decision.result)
+        self.assertTrue(decision.should_retry)
+        self.assertFalse(decision.should_stop)
+        self.assertEqual(
+            [
+                ("prepare", 2),
+                (
+                    "request",
+                    "https://api.example/v2/groups/group-1/files",
+                    {"X-Test": "header"},
+                    {"count": "7", "sort": "by_create_time", "index": "cursor"},
+                ),
+                ("exception", "socket reset", 2, 10),
+            ],
+            operations,
+        )
+
     def test_fetch_file_list_target_preserves_start_context_before_retry_attempt(self):
         class CapturingFileListSession:
             def __init__(self):

@@ -34057,6 +34057,51 @@ Result:
 - Full backend unittest discovery passed in the current worktree: 1358 tests, 15 skipped.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-18 - P210 isolate file-list request-attempt handlers
+
+Changed:
+
+- Added characterization coverage for `_run_file_list_request_attempt(...)` preserving request helper
+  exception handoff, exception-target fields, and retry decision return shape.
+- Extracted `_handle_file_list_request_attempt_response(...)` and
+  `_handle_file_list_request_attempt_exception(...)` from `_run_file_list_request_attempt(...)`.
+- Kept retry header preparation, request target construction, response target fields, exception
+  catch boundary, and retry decision semantics unchanged.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Public `fetch_file_list(...)` inputs/outputs, request parameters, response handling, request
+  exception retry behavior, stop semantics, and exhausted output are unchanged.
+- No fallback, legacy, compatibility, storage, schema, route, configuration, or task-status behavior
+  was changed.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderRetryHelperTests.test_run_file_list_request_attempt_preserves_exception_handoff_and_decision -v
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderRetryHelperTests.test_run_file_list_request_attempt_preserves_exception_handoff_and_decision tests.test_zsxq_file_downloader_helpers.FileDownloaderRetryHelperTests.test_run_file_list_request_attempt_preserves_get_args_and_response_handoff tests.test_zsxq_file_downloader_helpers.FileDownloaderRetryHelperTests.test_fetch_file_list_retries_request_exception_then_success tests.test_zsxq_file_downloader_helpers.FileDownloaderRetryHelperTests.test_fetch_file_list_request_exception_exhausts_retries tests.test_zsxq_file_downloader_helpers.FileDownloaderRetryHelperTests.test_fetch_file_list_target_preserves_start_context_loop_and_exhausted_output tests.test_zsxq_file_downloader_helpers.FileDownloaderRetryHelperTests.test_fetch_file_list_target_preserves_empty_decision_fallthrough_to_next_attempt tests.test_zsxq_file_downloader_helpers.FileDownloaderRetryHelperTests.test_fetch_file_list_preserves_entry_url_params_logs_and_response_handoff tests.test_zsxq_file_downloader_helpers.FileDownloaderRetryHelperTests.test_fetch_file_list_retries_json_decode_failure_then_success tests.test_zsxq_file_downloader_helpers.FileDownloaderRetryHelperTests.test_fetch_file_list_retries_api_failure_then_success tests.test_zsxq_file_downloader_helpers.FileDownloaderRetryHelperTests.test_fetch_file_list_retries_http_failure_then_success -v
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers
+uv run python scripts\scan_postgres_compat_debt.py
+uv run ruff check backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py --select F401,F841
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- New request-attempt exception characterization test passed before helper extraction: 1 test.
+- Focused file-list request-attempt, response, request-exception, retry, JSON/API/HTTP behavior
+  tests passed after helper extraction: 10 tests.
+- `py_compile` passed.
+- ZSXQ file downloader helper tests passed: 373 tests.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- Full backend unittest discovery passed in the current worktree: 1359 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:

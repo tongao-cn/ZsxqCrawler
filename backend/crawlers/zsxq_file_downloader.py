@@ -1576,22 +1576,36 @@ class ZSXQFileDownloader:
                     target.request_context.params,
                 ),
             )
-            return self._handle_file_list_response_target(
-                FileListResponseTarget(
-                    response,
-                    target.attempt,
-                    target.request_context.max_retries,
-                ),
-            )
+            return self._handle_file_list_request_attempt_response(target, response)
         except Exception as e:
-            should_retry = self._handle_file_list_request_exception_target(
-                FileListRequestExceptionTarget(
-                    e,
-                    target.attempt,
-                    target.request_context.max_retries,
-                ),
-            )
-            return FileListResponseDecision(None, should_retry, False)
+            return self._handle_file_list_request_attempt_exception(target, e)
+
+    def _handle_file_list_request_attempt_response(
+        self,
+        target: FileListRequestAttemptTarget,
+        response: Any,
+    ) -> FileListResponseDecision:
+        return self._handle_file_list_response_target(
+            FileListResponseTarget(
+                response,
+                target.attempt,
+                target.request_context.max_retries,
+            ),
+        )
+
+    def _handle_file_list_request_attempt_exception(
+        self,
+        target: FileListRequestAttemptTarget,
+        exc: Exception,
+    ) -> FileListResponseDecision:
+        should_retry = self._handle_file_list_request_exception_target(
+            FileListRequestExceptionTarget(
+                exc,
+                target.attempt,
+                target.request_context.max_retries,
+            ),
+        )
+        return FileListResponseDecision(None, should_retry, False)
 
     def _handle_download_url_success_response(
         self,
