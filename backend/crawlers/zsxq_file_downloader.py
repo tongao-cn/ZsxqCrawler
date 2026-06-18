@@ -237,6 +237,12 @@ class FetchFileListTarget(NamedTuple):
     sort: str
 
 
+class FileListRequestContext(NamedTuple):
+    url: str
+    params: Dict[str, str]
+    max_retries: int
+
+
 class StealthHeaderSelection(NamedTuple):
     user_agent: str
     sec_ch_ua: str
@@ -1469,20 +1475,20 @@ class ZSXQFileDownloader:
         return self._fetch_file_list_target(FetchFileListTarget(count, index, sort))
 
     def _fetch_file_list_target(self, target: FetchFileListTarget) -> Optional[Dict[str, Any]]:
-        url = f"{self.base_url}/v2/groups/{self.group_id}/files"
-        max_retries = 10
+        request_context = self._start_file_list_request(target)
 
-        params = file_list_request_params(target.count, target.sort, target.index)
-        for message in file_list_start_messages(target.count, target.sort, target.index, url):
-            self.log(message)
-        
-        for attempt in range(max_retries):
+        for attempt in range(request_context.max_retries):
             headers = self._prepare_retry_api_request(attempt)
             
             try:
-                response = self.session.get(url, headers=headers, params=params, timeout=30)
+                response = self.session.get(
+                    request_context.url,
+                    headers=headers,
+                    params=request_context.params,
+                    timeout=30,
+                )
                 decision = self._handle_file_list_response_target(
-                    FileListResponseTarget(response, attempt, max_retries),
+                    FileListResponseTarget(response, attempt, request_context.max_retries),
                 )
                 if decision.result is not None:
                     return decision.result
@@ -1493,12 +1499,22 @@ class ZSXQFileDownloader:
                     
             except Exception as e:
                 if self._handle_file_list_request_exception_target(
-                    FileListRequestExceptionTarget(e, attempt, max_retries),
+                    FileListRequestExceptionTarget(e, attempt, request_context.max_retries),
                 ):
                     continue
         
-        print(retry_exhausted_message(max_retries))
+        print(retry_exhausted_message(request_context.max_retries))
         return None
+
+    def _start_file_list_request(self, target: FetchFileListTarget) -> FileListRequestContext:
+        url = f"{self.base_url}/v2/groups/{self.group_id}/files"
+        params = file_list_request_params(target.count, target.sort, target.index)
+        max_retries = 10
+
+        for message in file_list_start_messages(target.count, target.sort, target.index, url):
+            self.log(message)
+
+        return FileListRequestContext(url, params, max_retries)
 
     def _handle_download_url_success_response(
         self,

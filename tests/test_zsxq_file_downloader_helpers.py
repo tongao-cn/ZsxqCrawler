@@ -44,6 +44,7 @@ from backend.crawlers.zsxq_file_downloader import (
     DownloadUrlRetryLoopTarget,
     DownloadUrlUnavailableTarget,
     ExistingDownloadTarget,
+    FetchFileListTarget,
     ResponseFilenameOverrideTarget,
     ZSXQFileDownloader,
     _database_stats_time_range,
@@ -7112,6 +7113,63 @@ class FileDownloaderRetryHelperTests(unittest.TestCase):
         self.assertIs(session.response, response_targets[0].response)
         self.assertEqual(0, response_targets[0].attempt)
         self.assertEqual(10, response_targets[0].max_retries)
+
+    def test_fetch_file_list_target_preserves_start_context_before_retry_attempt(self):
+        class CapturingFileListSession:
+            def __init__(self):
+                self.response = SimpleNamespace(status_code=200)
+
+            def get(self, url, headers=None, params=None, timeout=None):
+                events.append(("get", url, headers, params, timeout))
+                return self.response
+
+        expected_result = {"succeeded": True, "resp_data": {"files": [], "index": None}}
+        events = []
+        session = CapturingFileListSession()
+        downloader = object.__new__(ZSXQFileDownloader)
+        downloader.base_url = "https://api.example"
+        downloader.group_id = "group-1"
+        downloader.session = session
+        downloader.log = lambda message: events.append(("log", message))
+        downloader._prepare_retry_api_request = (
+            lambda attempt: events.append(("prepare", attempt)) or {"X-Test": "header"}
+        )
+        downloader._handle_file_list_response_target = (
+            lambda target: events.append(
+                (
+                    "response",
+                    target.response is session.response,
+                    target.attempt,
+                    target.max_retries,
+                )
+            )
+            or SimpleNamespace(result=expected_result, should_retry=False, should_stop=False)
+        )
+
+        result = ZSXQFileDownloader._fetch_file_list_target(
+            downloader,
+            FetchFileListTarget(7, "cursor", "by_create_time"),
+        )
+
+        self.assertIs(expected_result, result)
+        self.assertEqual(
+            [
+                ("log", "🌐 获取文件列表"),
+                ("log", "   📊 参数: count=7, sort=by_create_time"),
+                ("log", "   📑 索引: cursor"),
+                ("log", "   🌐 请求URL: https://api.example/v2/groups/group-1/files"),
+                ("prepare", 0),
+                (
+                    "get",
+                    "https://api.example/v2/groups/group-1/files",
+                    {"X-Test": "header"},
+                    {"count": "7", "sort": "by_create_time", "index": "cursor"},
+                    30,
+                ),
+                ("response", True, 0, 10),
+            ],
+            events,
+        )
 
     def test_fetch_file_list_retries_json_decode_failure_then_success(self):
         class FakeFileListJsonResponse:
