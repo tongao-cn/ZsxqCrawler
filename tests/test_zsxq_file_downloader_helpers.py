@@ -7362,6 +7362,44 @@ class FileDownloaderRetryHelperTests(unittest.TestCase):
             operations,
         )
 
+    def test_handle_file_list_request_attempt_exception_preserves_handoff_and_decision(self):
+        request_context = FileListRequestContext(
+            "https://api.example/v2/groups/group-1/files",
+            {"count": "7", "sort": "by_create_time", "index": "cursor"},
+            10,
+        )
+        exc = RuntimeError("socket reset")
+        operations = []
+        downloader = object.__new__(ZSXQFileDownloader)
+
+        def handle_exception(target):
+            operations.append(
+                (
+                    "exception",
+                    target.exc is exc,
+                    str(target.exc),
+                    target.attempt,
+                    target.max_retries,
+                )
+            )
+            return False
+
+        downloader._handle_file_list_request_exception_target = handle_exception
+
+        decision = ZSXQFileDownloader._handle_file_list_request_attempt_exception(
+            downloader,
+            FileListRequestAttemptTarget(request_context, 3),
+            exc,
+        )
+
+        self.assertIsNone(decision.result)
+        self.assertFalse(decision.should_retry)
+        self.assertFalse(decision.should_stop)
+        self.assertEqual(
+            [("exception", True, "socket reset", 3, 10)],
+            operations,
+        )
+
     def test_fetch_file_list_target_preserves_start_context_before_retry_attempt(self):
         class CapturingFileListSession:
             def __init__(self):

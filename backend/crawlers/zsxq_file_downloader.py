@@ -1605,6 +1605,12 @@ class ZSXQFileDownloader:
                 target.request_context.max_retries,
             ),
         )
+        return self._file_list_request_exception_decision(should_retry)
+
+    def _file_list_request_exception_decision(
+        self,
+        should_retry: bool,
+    ) -> FileListResponseDecision:
         return FileListResponseDecision(None, should_retry, False)
 
     def _handle_download_url_success_response(
