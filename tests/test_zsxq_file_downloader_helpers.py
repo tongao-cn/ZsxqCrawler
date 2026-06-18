@@ -51,6 +51,7 @@ from backend.crawlers.zsxq_file_downloader import (
     ResponseFilenameOverrideTarget,
     TimeCollectionDatabaseState,
     TimeCollectionLoopContext,
+    TimeCollectionPage,
     ZSXQFileDownloader,
     _database_stats_time_range,
     _database_stats_total_size,
@@ -1481,6 +1482,98 @@ class FileDownloaderPaginationTests(unittest.TestCase):
             [time_collection_exception_message(RuntimeError("stable collection failure"))],
             downloader.logs,
         )
+
+    def test_dedupe_and_import_time_collection_page_preserves_stop_before_import(self):
+        downloader = object.__new__(ZSXQFileDownloader)
+        page = TimeCollectionPage(
+            {"resp_data": {"files": [{"file": {"id": 101}}]}},
+            [{"file": {"id": 101}}],
+            "next-page",
+        )
+        calls = []
+
+        def apply_dedupe(data, files, enable_time_dedupe, db_latest_time):
+            calls.append(("dedupe", data, files, enable_time_dedupe, db_latest_time))
+            return {
+                "should_stop_before_insert": True,
+                "should_stop_after_insert": False,
+            }
+
+        downloader._apply_time_collection_dedupe_plan = apply_dedupe
+        downloader._import_time_collection_page = lambda *args: self.fail(
+            "stop-before dedupe should skip page import"
+        )
+
+        result = ZSXQFileDownloader._dedupe_and_import_time_collection_page(
+            downloader,
+            page,
+            3,
+            True,
+            "latest-time",
+            {"files": 0},
+        )
+
+        self.assertIsNone(result)
+        self.assertEqual([("dedupe", page.data, page.files, True, "latest-time")], calls)
+
+    def test_dedupe_and_import_time_collection_page_preserves_import_failure(self):
+        downloader = object.__new__(ZSXQFileDownloader)
+        page = TimeCollectionPage({"resp_data": {"files": []}}, [], None)
+        total_stats = {"files": 0}
+        calls = []
+
+        downloader._apply_time_collection_dedupe_plan = lambda data, files, enabled, latest: {
+            "should_stop_before_insert": False,
+            "should_stop_after_insert": True,
+        }
+        downloader._import_time_collection_page = (
+            lambda data, page_count, should_stop_after_insert, total_imported_stats: calls.append(
+                (data, page_count, should_stop_after_insert, total_imported_stats)
+            )
+            or False
+        )
+
+        result = ZSXQFileDownloader._dedupe_and_import_time_collection_page(
+            downloader,
+            page,
+            4,
+            False,
+            None,
+            total_stats,
+        )
+
+        self.assertIsNone(result)
+        self.assertEqual([(page.data, 4, True, total_stats)], calls)
+
+    def test_dedupe_and_import_time_collection_page_preserves_success_result(self):
+        downloader = object.__new__(ZSXQFileDownloader)
+        page = TimeCollectionPage({"resp_data": {"files": []}}, [], None)
+        total_stats = {"files": 0}
+        calls = []
+
+        downloader._apply_time_collection_dedupe_plan = lambda data, files, enabled, latest: {
+            "should_stop_before_insert": False,
+            "should_stop_after_insert": False,
+        }
+        downloader._import_time_collection_page = (
+            lambda data, page_count, should_stop_after_insert, total_imported_stats: calls.append(
+                (data, page_count, should_stop_after_insert, total_imported_stats)
+            )
+            or True
+        )
+
+        result = ZSXQFileDownloader._dedupe_and_import_time_collection_page(
+            downloader,
+            page,
+            5,
+            True,
+            "latest-time",
+            total_stats,
+        )
+
+        self.assertEqual((False,), result)
+        self.assertFalse(result.should_stop_after_insert)
+        self.assertEqual([(page.data, 5, False, total_stats)], calls)
 
     def test_collect_files_by_time_preserves_entry_mode_stop_and_run_handoff(self):
         downloader = object.__new__(ZSXQFileDownloader)

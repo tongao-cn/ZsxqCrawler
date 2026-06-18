@@ -4306,6 +4306,23 @@ class ZSXQFileDownloader:
             context.stop_before_time,
         )
 
+    def _time_collection_page_import_result(
+        self,
+        page: TimeCollectionPage,
+        page_count: int,
+        should_stop_after_insert: bool,
+        total_imported_stats: Dict[str, int],
+    ) -> Optional[TimeCollectionPageImportResult]:
+        if not self._import_time_collection_page(
+            page.data,
+            page_count,
+            should_stop_after_insert,
+            total_imported_stats,
+        ):
+            return None
+
+        return TimeCollectionPageImportResult(should_stop_after_insert)
+
     def _dedupe_and_import_time_collection_page(
         self,
         page: TimeCollectionPage,
@@ -4324,15 +4341,12 @@ class ZSXQFileDownloader:
             return None
         should_stop_after_insert = dedupe_result["should_stop_after_insert"]
 
-        if not self._import_time_collection_page(
-            page.data,
+        return self._time_collection_page_import_result(
+            page,
             page_count,
             should_stop_after_insert,
             total_imported_stats,
-        ):
-            return None
-
-        return TimeCollectionPageImportResult(should_stop_after_insert)
+        )
 
     def _should_stop_time_collection_loop(self) -> bool:
         if self.check_stop():

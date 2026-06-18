@@ -34520,6 +34520,55 @@ Result:
 - Full backend unittest discovery passed in the current worktree: 1371 tests, 15 skipped.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-18 - P220 isolate time-collection page import result
+
+Changed:
+
+- Added characterization coverage for `_dedupe_and_import_time_collection_page(...)` preserving the
+  dedupe stop-before-insert branch: page import is skipped and `None` is returned.
+- Added characterization coverage for `_dedupe_and_import_time_collection_page(...)` preserving page
+  import failure: dedupe `should_stop_after_insert` is passed through to import, import failure
+  returns `None`, and original page data/stat objects are handed through.
+- Added characterization coverage for `_dedupe_and_import_time_collection_page(...)` preserving page
+  import success: `TimeCollectionPageImportResult(should_stop_after_insert)` is returned and import
+  receives unchanged page data, page count, stop-after flag, and aggregate stats object.
+- Extracted `_time_collection_page_import_result(...)` from
+  `_dedupe_and_import_time_collection_page(...)`.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Public `collect_files_by_time(...)` inputs/outputs, time-dedupe filtering, stop-before/stop-after
+  semantics, import failure behavior, import stats accumulation, page loop behavior, logging,
+  storage, route, configuration, and task-status behavior are unchanged.
+- No fallback, legacy, compatibility, crawler request, SQL, or storage schema behavior was changed.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderPaginationTests.test_dedupe_and_import_time_collection_page_preserves_stop_before_import tests.test_zsxq_file_downloader_helpers.FileDownloaderPaginationTests.test_dedupe_and_import_time_collection_page_preserves_import_failure tests.test_zsxq_file_downloader_helpers.FileDownloaderPaginationTests.test_dedupe_and_import_time_collection_page_preserves_success_result -v
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderPaginationTests.test_dedupe_and_import_time_collection_page_preserves_stop_before_import tests.test_zsxq_file_downloader_helpers.FileDownloaderPaginationTests.test_dedupe_and_import_time_collection_page_preserves_import_failure tests.test_zsxq_file_downloader_helpers.FileDownloaderPaginationTests.test_dedupe_and_import_time_collection_page_preserves_success_result tests.test_zsxq_file_downloader_helpers.FileDownloaderPaginationTests.test_run_time_collection_loop_preserves_page_sequence_and_terminal_count tests.test_zsxq_file_downloader_helpers.FileDownloaderPaginationTests.test_run_time_collection_after_initial_stop_preserves_context_and_finalize_handoff tests.test_zsxq_file_downloader_helpers.FileDownloaderPaginationTests.test_collect_files_by_time_preserves_entry_mode_stop_and_run_handoff tests.test_zsxq_file_downloader_helpers.FileDownloaderTimeHelperTests.test_time_collection_page_import_messages_preserve_success_and_stop_logs -v
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py
+uv run python scripts\scan_postgres_compat_debt.py
+uv run ruff check backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py --select F401,F841
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- New time-collection dedupe/import characterization tests passed before helper extraction: 3 tests.
+- Focused dedupe/import, loop, after-initial-stop, entry handoff, and import-message tests passed
+  after helper extraction: 7 tests.
+- `py_compile` passed.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- ZSXQ file downloader helper tests passed: 388 tests.
+- Full backend unittest discovery passed in the current worktree: 1374 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:
