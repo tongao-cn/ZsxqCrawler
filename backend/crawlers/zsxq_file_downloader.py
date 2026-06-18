@@ -1169,6 +1169,31 @@ class ZSXQFileDownloader:
                 writer.writeheader()
             writer.writerow(row)
 
+    def _risk_event_row(
+        self,
+        *,
+        file_id: int,
+        phase: str,
+        attempt: int = 0,
+        headers: Optional[Dict[str, str]] = None,
+        http_status: Optional[int] = None,
+        api_code: Optional[Any] = None,
+        api_message: Optional[str] = None,
+        status: str = "observed",
+    ) -> Dict[str, Any]:
+        return risk_event_row(
+            datetime.datetime.now().isoformat(timespec="seconds"),
+            self.group_id,
+            file_id,
+            phase,
+            attempt,
+            headers,
+            http_status,
+            api_code,
+            api_message,
+            status,
+        )
+
     def _record_risk_event(
         self,
         *,
@@ -1185,17 +1210,15 @@ class ZSXQFileDownloader:
         if path is None:
             return
 
-        row = risk_event_row(
-            datetime.datetime.now().isoformat(timespec="seconds"),
-            self.group_id,
-            file_id,
-            phase,
-            attempt,
-            headers,
-            http_status,
-            api_code,
-            api_message,
-            status,
+        row = self._risk_event_row(
+            file_id=file_id,
+            phase=phase,
+            attempt=attempt,
+            headers=headers,
+            http_status=http_status,
+            api_code=api_code,
+            api_message=api_message,
+            status=status,
         )
         self._write_risk_event_row(path, row)
 

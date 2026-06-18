@@ -6886,6 +6886,80 @@ class FileDownloaderRetryHelperTests(unittest.TestCase):
         self.assertEqual("", row["api_code"])
         self.assertEqual("", row["api_message"])
 
+    def test_record_risk_event_without_log_path_skips_row_construction_and_write(self):
+        downloader = object.__new__(ZSXQFileDownloader)
+        downloader.group_id = "group-1"
+        downloader.risk_event_log_path = None
+        downloader._write_risk_event_row = lambda *args: self.fail("risk event write should be skipped")
+
+        with patch(
+            "backend.crawlers.zsxq_file_downloader.risk_event_row",
+            side_effect=AssertionError("risk event row should be skipped"),
+        ):
+            ZSXQFileDownloader._record_risk_event(
+                downloader,
+                file_id=101,
+                phase="download_url_request",
+                headers={"User-Agent": "unit-test-agent"},
+            )
+
+    def test_record_risk_event_preserves_row_construction_and_write_handoff(self):
+        downloader = object.__new__(ZSXQFileDownloader)
+        downloader.group_id = "group-1"
+        path = object()
+        writes = []
+        downloader._prepare_risk_event_log_path = lambda: path
+        downloader._write_risk_event_row = lambda write_path, row: writes.append((write_path, row))
+
+        ZSXQFileDownloader._record_risk_event(
+            downloader,
+            file_id=101,
+            phase="download_url_retry_response",
+            attempt=2,
+            headers={
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/131.0.0.0",
+                "Referer": "https://wx.zsxq.com/dweb2/index/group/group-1",
+                "Origin": "https://wx.zsxq.com",
+                "Sec-Fetch-Site": "same-site",
+                "X-Request-Id": "req-1",
+            },
+            http_status=200,
+            api_code="1059",
+            api_message="slow down",
+            status="api_failed",
+        )
+
+        self.assertEqual(1, len(writes))
+        self.assertIs(path, writes[0][0])
+        row = writes[0][1]
+        self.assertEqual(
+            [
+                "timestamp",
+                "group_id",
+                "file_id",
+                "phase",
+                "attempt",
+                "ua_label",
+                "header_profile",
+                "status",
+                "http_status",
+                "api_code",
+                "api_message",
+            ],
+            list(row.keys()),
+        )
+        self.assertRegex(row["timestamp"], r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$")
+        self.assertEqual("group-1", row["group_id"])
+        self.assertEqual(101, row["file_id"])
+        self.assertEqual("download_url_retry_response", row["phase"])
+        self.assertEqual(2, row["attempt"])
+        self.assertEqual("Chrome Windows", row["ua_label"])
+        self.assertEqual("referer+origin+sec-fetch+x-request-id", row["header_profile"])
+        self.assertEqual("api_failed", row["status"])
+        self.assertEqual(200, row["http_status"])
+        self.assertEqual("1059", row["api_code"])
+        self.assertEqual("slow down", row["api_message"])
+
     def test_sec_ch_ua_for_user_agent_preserves_existing_mapping(self):
         self.assertEqual(
             '"Google Chrome";v="131", "Chromium";v="131", "Not_A Brand";v="24"',

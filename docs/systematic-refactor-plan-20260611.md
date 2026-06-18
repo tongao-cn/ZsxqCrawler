@@ -34425,6 +34425,53 @@ Result:
 - Full backend unittest discovery passed in the current worktree: 1366 tests, 15 skipped.
 - Frontend build passed, including Next.js lint/type checks.
 
+### 2026-06-18 - P218 isolate risk-event row construction
+
+Changed:
+
+- Added characterization coverage for `_record_risk_event(...)` preserving the opt-in risk-log
+  short circuit: when no risk log path is configured, row construction and file writes are skipped.
+- Added characterization coverage for `_record_risk_event(...)` preserving risk-event row field
+  order, timestamp shape, group/file/phase/attempt fields, UA classification, header-profile label,
+  status, HTTP status, API code, API message, and writer handoff.
+- Extracted `_risk_event_row(...)` from `_record_risk_event(...)`.
+- Kept `_record_risk_event(...)` path preparation before row construction so unconfigured risk logs
+  remain side-effect free.
+
+Behavior impact:
+
+- Intended behavior change: none.
+- Public download URL behavior, retry behavior, opt-in risk logging, CSV field order, row values,
+  no-risk-log short-circuit behavior, logging, route, storage schema, configuration, and task-status
+  behavior are unchanged.
+- No fallback, legacy, compatibility, crawler request, SQL, or storage behavior was changed.
+
+Verification:
+
+```powershell
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderRetryHelperTests.test_record_risk_event_without_log_path_skips_row_construction_and_write tests.test_zsxq_file_downloader_helpers.FileDownloaderRetryHelperTests.test_record_risk_event_preserves_row_construction_and_write_handoff -v
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers.FileDownloaderRetryHelperTests.test_record_risk_event_without_log_path_skips_row_construction_and_write tests.test_zsxq_file_downloader_helpers.FileDownloaderRetryHelperTests.test_record_risk_event_preserves_row_construction_and_write_handoff tests.test_zsxq_file_downloader_helpers.FileDownloaderRetryHelperTests.test_risk_event_row_preserves_field_order_labels_and_empty_values tests.test_zsxq_file_downloader_helpers.FileDownloaderRetryHelperTests.test_prepare_retry_api_request_with_risk_log_records_request_event tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_get_download_url_writes_opt_in_risk_log_events tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_get_download_url_retries_api_failure_then_success_preserves_events tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_get_download_url_retries_http_failure_then_success_preserves_events tests.test_zsxq_file_downloader_helpers.FileDownloaderDownloadTests.test_get_download_url_retries_request_exception_then_success_preserves_events -v
+uv run python -m py_compile backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py
+uv run python scripts\scan_postgres_compat_debt.py
+uv run ruff check backend\crawlers\zsxq_file_downloader.py tests\test_zsxq_file_downloader_helpers.py --select F401,F841
+uv run python -m unittest tests.test_zsxq_file_downloader_helpers
+uv run python -m unittest discover -s tests
+npm --prefix frontend run build
+```
+
+Result:
+
+- New risk-event characterization tests passed before helper extraction: 2 tests.
+- Focused risk-event row, risk-log request, and download URL event tests passed after helper
+  extraction: 8 tests.
+- `py_compile` passed.
+- PostgreSQL compatibility debt scan found no SQLite compatibility patterns.
+- Focused backend Ruff could not run in this checkout: `uv run ruff ...` failed because `ruff` is
+  not available.
+- ZSXQ file downloader helper tests passed: 382 tests.
+- Full backend unittest discovery passed in the current worktree: 1368 tests, 15 skipped.
+- Frontend build passed, including Next.js lint/type checks.
+
 ## Stop Conditions
 
 Pause before editing if:
