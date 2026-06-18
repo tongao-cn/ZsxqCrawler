@@ -4334,6 +4334,13 @@ class ZSXQFileDownloader:
 
         return TimeCollectionPageImportResult(should_stop_after_insert)
 
+    def _should_stop_time_collection_loop(self) -> bool:
+        if self.check_stop():
+            self.log(time_collection_loop_stop_message())
+            return True
+
+        return False
+
     def _run_time_collection_loop(
         self,
         start_time: Optional[str],
@@ -4344,8 +4351,7 @@ class ZSXQFileDownloader:
 
         try:
             while True:
-                if self.check_stop():
-                    self.log(time_collection_loop_stop_message())
+                if self._should_stop_time_collection_loop():
                     break
 
                 page_count += 1

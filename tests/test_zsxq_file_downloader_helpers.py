@@ -50,6 +50,7 @@ from backend.crawlers.zsxq_file_downloader import (
     FileListRequestTarget,
     ResponseFilenameOverrideTarget,
     TimeCollectionDatabaseState,
+    TimeCollectionLoopContext,
     ZSXQFileDownloader,
     _database_stats_time_range,
     _database_stats_total_size,
@@ -1404,6 +1405,82 @@ class FileDownloaderPaginationTests(unittest.TestCase):
         self.assertIs(loop_import_stats[0], calls[2][2])
         self.assertEqual(expected_import_stats, calls[2][2])
         self.assertEqual(4, calls[2][3])
+
+    def test_run_time_collection_loop_preserves_page_sequence_and_terminal_count(self):
+        downloader = object.__new__(ZSXQFileDownloader)
+        context = TimeCollectionLoopContext("by_create_time", False, None, {}, None)
+        stop_calls = []
+        collect_calls = []
+        downloader.logs = []
+        downloader.log = downloader.logs.append
+        downloader.check_stop = lambda: stop_calls.append("check") or False
+
+        def collect_page(page_count, current_index, context_arg):
+            collect_calls.append((page_count, current_index, context_arg))
+            if page_count == 1:
+                return "cursor-2"
+            return None
+
+        downloader._collect_time_collection_page = collect_page
+
+        page_count = ZSXQFileDownloader._run_time_collection_loop(
+            downloader,
+            "cursor-1",
+            context,
+        )
+
+        self.assertEqual(2, page_count)
+        self.assertEqual(["check", "check"], stop_calls)
+        self.assertEqual(2, len(collect_calls))
+        self.assertEqual((1, "cursor-1", context), collect_calls[0])
+        self.assertEqual((2, "cursor-2", context), collect_calls[1])
+        self.assertEqual([], downloader.logs)
+
+    def test_run_time_collection_loop_preserves_initial_stop_without_page_increment(self):
+        downloader = object.__new__(ZSXQFileDownloader)
+        context = TimeCollectionLoopContext("by_create_time", False, None, {}, None)
+        downloader.logs = []
+        downloader.log = downloader.logs.append
+        downloader.check_stop = lambda: True
+        downloader._collect_time_collection_page = lambda *args: self.fail(
+            "stopped loop should not collect a page"
+        )
+
+        page_count = ZSXQFileDownloader._run_time_collection_loop(
+            downloader,
+            "cursor-1",
+            context,
+        )
+
+        self.assertEqual(0, page_count)
+        self.assertEqual([time_collection_loop_stop_message()], downloader.logs)
+
+    def test_run_time_collection_loop_preserves_exception_log_and_page_count(self):
+        downloader = object.__new__(ZSXQFileDownloader)
+        context = TimeCollectionLoopContext("by_create_time", False, None, {}, None)
+        downloader.logs = []
+        downloader.log = downloader.logs.append
+        downloader.check_stop = lambda: False
+
+        def collect_page(page_count, current_index, context_arg):
+            self.assertEqual(1, page_count)
+            self.assertEqual("cursor-1", current_index)
+            self.assertIs(context, context_arg)
+            raise RuntimeError("stable collection failure")
+
+        downloader._collect_time_collection_page = collect_page
+
+        page_count = ZSXQFileDownloader._run_time_collection_loop(
+            downloader,
+            "cursor-1",
+            context,
+        )
+
+        self.assertEqual(1, page_count)
+        self.assertEqual(
+            [time_collection_exception_message(RuntimeError("stable collection failure"))],
+            downloader.logs,
+        )
 
     def test_collect_files_by_time_preserves_entry_mode_stop_and_run_handoff(self):
         downloader = object.__new__(ZSXQFileDownloader)
