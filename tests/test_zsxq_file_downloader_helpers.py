@@ -32,6 +32,7 @@ from backend.crawlers.zsxq_file_downloader import (
     DownloadRetryWaitTarget,
     DownloadSizeMismatchTarget,
     DownloadStopTarget,
+    DownloadUrlApiFailureResponseTarget,
     DownloadUrlResponseDecision,
     DownloadUrlRetryLoopTarget,
     DownloadUrlSuccessResponseTarget,
@@ -6368,7 +6369,7 @@ class FileDownloaderRetryHelperTests(unittest.TestCase):
             events,
         )
 
-    def test_handle_download_url_api_failure_response_preserves_retry_logs_event_and_decision(self):
+    def test_handle_download_url_api_failure_response_target_preserves_retry_logs_event_and_decision(self):
         downloader = object.__new__(ZSXQFileDownloader)
         downloader.logged = []
         downloader.log = downloader.logged.append
@@ -6376,14 +6377,16 @@ class FileDownloaderRetryHelperTests(unittest.TestCase):
         downloader._record_risk_event = lambda **kwargs: risk_events.append(kwargs)
         downloader.last_download_url_error = None
 
-        failure_class = ZSXQFileDownloader._handle_download_url_api_failure_response(
+        failure_class = ZSXQFileDownloader._handle_download_url_api_failure_response_target(
             downloader,
-            {"message": "slow down", "code": 1059},
-            101,
-            0,
-            2,
-            {"User-Agent": "unit-test-agent"},
-            200,
+            DownloadUrlApiFailureResponseTarget(
+                {"message": "slow down", "code": 1059},
+                101,
+                0,
+                2,
+                {"User-Agent": "unit-test-agent"},
+                200,
+            ),
         )
 
         self.assertEqual(API_FAILURE_RETRY, failure_class)
@@ -6411,21 +6414,23 @@ class FileDownloaderRetryHelperTests(unittest.TestCase):
             risk_events,
         )
 
-    def test_handle_download_url_api_failure_response_preserves_log_event_log_order(self):
+    def test_handle_download_url_api_failure_response_target_preserves_log_event_log_order(self):
         downloader = object.__new__(ZSXQFileDownloader)
         operations = []
         downloader.log = lambda message: operations.append(("log", message))
         downloader._record_risk_event = lambda **kwargs: operations.append(("event", kwargs))
         downloader.last_download_url_error = None
 
-        failure_class = ZSXQFileDownloader._handle_download_url_api_failure_response(
+        failure_class = ZSXQFileDownloader._handle_download_url_api_failure_response_target(
             downloader,
-            {"message": "slow down", "code": 1059},
-            101,
-            0,
-            2,
-            {"User-Agent": "unit-test-agent"},
-            200,
+            DownloadUrlApiFailureResponseTarget(
+                {"message": "slow down", "code": 1059},
+                101,
+                0,
+                2,
+                {"User-Agent": "unit-test-agent"},
+                200,
+            ),
         )
 
         self.assertEqual(API_FAILURE_RETRY, failure_class)
@@ -6450,7 +6455,7 @@ class FileDownloaderRetryHelperTests(unittest.TestCase):
             operations,
         )
 
-    def test_handle_download_url_api_failure_response_preserves_permission_error_state(self):
+    def test_handle_download_url_api_failure_response_target_preserves_permission_error_state(self):
         downloader = object.__new__(ZSXQFileDownloader)
         downloader.logged = []
         downloader.log = downloader.logged.append
@@ -6458,14 +6463,16 @@ class FileDownloaderRetryHelperTests(unittest.TestCase):
         downloader._record_risk_event = lambda **kwargs: risk_events.append(kwargs)
         downloader.last_download_url_error = None
 
-        failure_class = ZSXQFileDownloader._handle_download_url_api_failure_response(
+        failure_class = ZSXQFileDownloader._handle_download_url_api_failure_response_target(
             downloader,
-            {"message": "mobile only", "code": 1030},
-            202,
-            0,
-            2,
-            {"User-Agent": "unit-test-agent"},
-            403,
+            DownloadUrlApiFailureResponseTarget(
+                {"message": "mobile only", "code": 1030},
+                202,
+                0,
+                2,
+                {"User-Agent": "unit-test-agent"},
+                403,
+            ),
         )
 
         self.assertEqual(API_FAILURE_PERMISSION_DENIED_1030, failure_class)
