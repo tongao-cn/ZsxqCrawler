@@ -428,6 +428,16 @@ def download_attempt_result_from_body_result(
     )
 
 
+def download_attempt_missing_url_result(file_target: DownloadFileTarget) -> DownloadAttemptResult:
+    return DownloadAttemptResult(
+        False,
+        None,
+        file_target.file_name,
+        file_target.safe_filename,
+        file_target.file_path,
+    )
+
+
 def download_attempt_result_for_response_status(
     target: DownloadResponseTarget,
     *,

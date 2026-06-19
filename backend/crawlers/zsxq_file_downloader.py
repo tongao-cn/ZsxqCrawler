@@ -41,6 +41,7 @@ from backend.crawlers.file_download_transfer import (
     DownloadRetryState,
     DownloadResponseTarget,
     DownloadSizeMismatchTarget,
+    download_attempt_missing_url_result,
     download_attempt_result_for_response,
     initial_download_retry_state,
     run_download_retry_loop_attempt,
@@ -2110,22 +2111,10 @@ class ZSXQFileDownloader:
         file_target = target.file_target
         download_url = self._get_download_url_or_mark_unavailable(file_target.file_id)
         if not download_url:
-            return self._download_attempt_missing_url_result(file_target)
+            return download_attempt_missing_url_result(file_target)
 
         return self._run_download_attempt_response_target(
             DownloadAttemptResponseTarget(download_url, file_target),
-        )
-
-    def _download_attempt_missing_url_result(
-        self,
-        file_target: DownloadFileTarget,
-    ) -> DownloadAttemptResult:
-        return DownloadAttemptResult(
-            False,
-            None,
-            file_target.file_name,
-            file_target.safe_filename,
-            file_target.file_path,
         )
 
     def _run_download_attempt_response_target(

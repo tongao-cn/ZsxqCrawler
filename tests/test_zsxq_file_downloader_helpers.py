@@ -83,6 +83,7 @@ from backend.crawlers.file_download_transfer import (
     DownloadSizeMismatchTarget as TransferDownloadSizeMismatchTarget,
     apply_download_attempt_result as apply_transfer_download_attempt_result,
     apply_download_retry_exception as apply_transfer_download_retry_exception,
+    download_attempt_missing_url_result as transfer_download_attempt_missing_url_result,
     download_attempt_result_for_response as transfer_download_attempt_result_for_response,
     download_attempt_result_for_response_status as transfer_download_attempt_result_for_response_status,
     download_attempt_result_from_body_result as transfer_download_attempt_result_from_body_result,
@@ -8804,6 +8805,19 @@ class FileDownloaderDownloadTests(unittest.TestCase):
         )
 
         self.assertEqual((True, None, "memo?.pdf", "memo.pdf", "C:\\Downloads\\memo.pdf"), result)
+
+    def test_download_transfer_missing_url_attempt_result_uses_file_target(self):
+        file_target = TransferDownloadFileTarget(
+            101,
+            "memo?.pdf",
+            4,
+            "memo.pdf",
+            "C:\\Downloads\\memo.pdf",
+        )
+
+        result = transfer_download_attempt_missing_url_result(file_target)
+
+        self.assertEqual((False, None, "memo?.pdf", "memo.pdf", "C:\\Downloads\\memo.pdf"), result)
 
     def test_download_transfer_body_target_preparation_derives_sizes_and_temp_path(self):
         prepared = transfer_download_body_target_for_preparation(
