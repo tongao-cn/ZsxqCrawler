@@ -2211,14 +2211,6 @@ class ZSXQFileDownloader:
         )
         return None
 
-    def _mark_download_url_unavailable(self, file_id: int) -> None:
-        self._mark_download_url_unavailable_target(
-            DownloadUrlUnavailableTarget(
-                file_id,
-                self.last_download_url_error,
-            ),
-        )
-
     def _mark_download_url_unavailable_target(
         self,
         target: DownloadUrlUnavailableTarget,

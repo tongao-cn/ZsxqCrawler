@@ -10917,31 +10917,6 @@ class FileDownloaderDownloadTests(unittest.TestCase):
             self.assertIn("   🗑️ 删除不完整文件", downloader.logs)
             self.assertIn("   🚫 文件下载重试3次仍失败: socket down", downloader.logs)
 
-    def test_mark_download_url_unavailable_preserves_default_and_api_error_details(self):
-        downloader = object.__new__(ZSXQFileDownloader)
-        downloader.file_db = FakeDownloadFileDb()
-        downloader.logs = []
-        downloader.log = downloader.logs.append
-
-        downloader.last_download_url_error = None
-        ZSXQFileDownloader._mark_download_url_unavailable(downloader, 101)
-
-        downloader.last_download_url_error = {"code": 1030, "message": "mobile only"}
-        ZSXQFileDownloader._mark_download_url_unavailable(downloader, 102)
-
-        self.assertEqual(
-            (101, "failed", None, "download_url_unavailable", "无法获取下载链接"),
-            downloader.file_db.status_updates[0],
-        )
-        self.assertEqual(
-            (102, "failed", None, "1030", "mobile only"),
-            downloader.file_db.status_updates[1],
-        )
-        self.assertEqual(
-            ["   ❌ 无法获取下载链接", "   ❌ 无法获取下载链接"],
-            downloader.logs,
-        )
-
     def test_mark_download_url_unavailable_target_uses_target_error_detail(self):
         downloader = object.__new__(ZSXQFileDownloader)
         downloader.file_db = FakeDownloadFileDb()
