@@ -97,6 +97,7 @@ from backend.crawlers.file_download_transfer import (
     download_retry_state_after_exception_result as transfer_download_retry_state_after_exception_result,
     download_response_exception_attempt_result as transfer_download_response_exception_attempt_result,
     finalize_download_body_result_decision as finalize_transfer_download_body_result_decision,
+    initial_download_retry_state as initial_transfer_download_retry_state,
     prepare_download_body_target as prepare_transfer_download_body_target,
     run_download_retry_loop_attempt as run_download_transfer_retry_loop_attempt,
     run_download_retry_loop as run_download_transfer_retry_loop,
@@ -8629,6 +8630,22 @@ class FileDownloaderRetryHelperTests(unittest.TestCase):
 
 
 class FileDownloaderDownloadTests(unittest.TestCase):
+    def test_download_transfer_initial_retry_state_uses_prepared_file(self):
+        prepared_file = TransferDownloadFileTarget(
+            101,
+            "memo?.pdf",
+            4,
+            "memo.pdf",
+            "C:\\Downloads\\memo.pdf",
+        )
+
+        result = initial_transfer_download_retry_state(prepared_file)
+
+        self.assertEqual(
+            TransferDownloadRetryState("memo?.pdf", "memo.pdf", "C:\\Downloads\\memo.pdf", None, None),
+            result,
+        )
+
     def test_download_transfer_retry_loop_returns_success_after_retry(self):
         prepared_file = TransferDownloadFileTarget(101, "memo.pdf", 4, "memo.pdf", "C:\\Downloads\\memo.pdf")
         calls = []
