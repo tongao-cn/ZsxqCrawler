@@ -2582,15 +2582,6 @@ class ZSXQFileDownloader:
             record_exception=self._record_download_exception_target,
         )
 
-    def _handle_download_size_mismatch(
-        self,
-        expected_size: int,
-        temp_path: str,
-    ) -> Optional[DownloadFailureDetail]:
-        return self._handle_download_size_mismatch_target(
-            DownloadSizeMismatchTarget(expected_size, temp_path),
-        )
-
     def _handle_download_size_mismatch_target(
         self,
         target: DownloadSizeMismatchTarget,
