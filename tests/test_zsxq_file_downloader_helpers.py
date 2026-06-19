@@ -10089,51 +10089,6 @@ class FileDownloaderDownloadTests(unittest.TestCase):
             self.assertIn("   ✅ 下载完成: memo.pdf", downloader.logs)
             self.assertIn(f"   💾 保存路径: {expected_path}", downloader.logs)
 
-    def test_complete_successful_download_preserves_side_effect_order(self):
-        with tempfile.TemporaryDirectory() as temp_dir:
-            temp_path = Path(temp_dir) / "memo.pdf.part"
-            file_path = Path(temp_dir) / "memo.pdf"
-            temp_path.write_bytes(b"memo")
-            downloader = object.__new__(ZSXQFileDownloader)
-            downloader.file_db = FakeDownloadFileDb()
-            downloader.logs = []
-            downloader.log = downloader.logs.append
-            downloader.download_count = 3
-            downloader.current_batch_count = 4
-            interval_snapshots = []
-
-            def apply_intervals():
-                interval_snapshots.append(
-                    (downloader.download_count, downloader.current_batch_count)
-                )
-
-            downloader._apply_download_intervals = apply_intervals
-
-            ZSXQFileDownloader._complete_successful_download(
-                downloader,
-                101,
-                "memo.pdf",
-                str(file_path),
-                str(temp_path),
-            )
-
-            self.assertEqual(b"memo", file_path.read_bytes())
-            self.assertFalse(temp_path.exists())
-            self.assertEqual(
-                (101, "completed", str(file_path), None, None),
-                downloader.file_db.status_updates[-1],
-            )
-            self.assertEqual(4, downloader.download_count)
-            self.assertEqual(5, downloader.current_batch_count)
-            self.assertEqual([(4, 5)], interval_snapshots)
-            self.assertEqual(
-                [
-                    "   ✅ 下载完成: memo.pdf",
-                    f"   💾 保存路径: {file_path}",
-                ],
-                downloader.logs,
-            )
-
     def test_complete_successful_download_target_preserves_side_effect_order(self):
         events = []
 

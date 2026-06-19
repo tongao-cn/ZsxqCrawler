@@ -2292,22 +2292,6 @@ class ZSXQFileDownloader:
             error_message=failure_detail.error_message,
         )
 
-    def _complete_successful_download(
-        self,
-        file_id: int,
-        safe_filename: str,
-        file_path: str,
-        temp_path: str,
-    ) -> None:
-        self._complete_successful_download_target(
-            DownloadCompletionTarget(
-                file_id,
-                safe_filename,
-                file_path,
-                temp_path,
-            ),
-        )
-
     def _complete_successful_download_target(
         self,
         target: DownloadCompletionTarget,
