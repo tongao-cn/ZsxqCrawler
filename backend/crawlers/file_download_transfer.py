@@ -42,6 +42,11 @@ class DownloadRetryExceptionTarget(NamedTuple):
     retry_state: DownloadRetryState
 
 
+class DownloadRetryExceptionResultTarget(NamedTuple):
+    failure_detail: DownloadFailureDetail
+    retry_state: DownloadRetryState
+
+
 class DownloadRetryLoopAttemptTarget(NamedTuple):
     attempt: int
     download_retries: int
@@ -62,6 +67,7 @@ class DownloadRetryLoopFailureTarget(NamedTuple):
 
 RunDownloadAttempt = Callable[[DownloadRetryLoopAttemptTarget], DownloadRetryDecision]
 FinishDownloadFailure = Callable[[DownloadRetryLoopFailureTarget], bool]
+RecordDownloadRetryException = Callable[[DownloadRetryExceptionTarget], DownloadRetryState]
 
 
 def initial_download_retry_state(prepared_file: DownloadFileTarget) -> DownloadRetryState:
@@ -115,6 +121,21 @@ def apply_download_attempt_result(target: DownloadAttemptResultTarget) -> Downlo
     return download_retry_decision_after_attempt_result(
         DownloadAttemptResultTarget(target.attempt_result, retry_state),
     )
+
+
+def download_retry_state_after_exception_result(target: DownloadRetryExceptionResultTarget) -> DownloadRetryState:
+    return target.retry_state._replace(
+        last_error_code=target.failure_detail.error_code,
+        last_error=target.failure_detail.error_message,
+    )
+
+
+def apply_download_retry_exception(
+    target: DownloadRetryExceptionTarget,
+    *,
+    record_exception: RecordDownloadRetryException,
+) -> DownloadRetryDecision:
+    return DownloadRetryDecision(record_exception(target), None)
 
 
 def run_download_retry_loop(

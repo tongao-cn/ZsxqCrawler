@@ -33,12 +33,15 @@ from backend.crawlers.file_download_transfer import (
     DownloadFileTarget,
     DownloadRetryDecision,
     DownloadRetryExceptionTarget,
+    DownloadRetryExceptionResultTarget,
     DownloadRetryLoopAttemptTarget,
     DownloadRetryLoopFailureTarget,
     DownloadRetryState,
     apply_download_attempt_result,
+    apply_download_retry_exception,
     download_retry_attempt_file,
     download_retry_decision_after_attempt_result,
+    download_retry_state_after_exception_result,
     download_retry_state_after_attempt_result,
     initial_download_retry_state,
     run_download_retry_loop,
@@ -2176,11 +2179,9 @@ class ZSXQFileDownloader:
         target: DownloadRetryLoopAttemptTarget,
         exc: Exception,
     ) -> DownloadRetryDecision:
-        return DownloadRetryDecision(
-            self._record_download_retry_exception_target(
-                DownloadRetryExceptionTarget(exc, target.retry_state),
-            ),
-            None,
+        return apply_download_retry_exception(
+            DownloadRetryExceptionTarget(exc, target.retry_state),
+            record_exception=self._record_download_retry_exception_target,
         )
 
     def _apply_download_attempt_result(
@@ -2227,9 +2228,8 @@ class ZSXQFileDownloader:
         failure_detail = self._record_download_exception_target(
             DownloadExceptionTarget(target.exc, retry_state.file_path),
         )
-        return retry_state._replace(
-            last_error_code=failure_detail.error_code,
-            last_error=failure_detail.error_message,
+        return download_retry_state_after_exception_result(
+            DownloadRetryExceptionResultTarget(failure_detail, retry_state),
         )
 
     def _run_download_attempt(

@@ -64,9 +64,14 @@ from backend.crawlers.file_download_url import (
     run_download_url_retry_loop as run_download_url_loop,
 )
 from backend.crawlers.file_download_transfer import (
+    DownloadFailureDetail as TransferDownloadFailureDetail,
     DownloadFileTarget as TransferDownloadFileTarget,
     DownloadRetryDecision as TransferDownloadRetryDecision,
+    DownloadRetryExceptionResultTarget as TransferDownloadRetryExceptionResultTarget,
+    DownloadRetryExceptionTarget as TransferDownloadRetryExceptionTarget,
     DownloadRetryState as TransferDownloadRetryState,
+    apply_download_retry_exception as apply_transfer_download_retry_exception,
+    download_retry_state_after_exception_result as transfer_download_retry_state_after_exception_result,
     run_download_retry_loop as run_download_transfer_retry_loop,
 )
 from backend.crawlers.zsxq_file_downloader_helpers import (
@@ -8658,6 +8663,46 @@ class FileDownloaderDownloadTests(unittest.TestCase):
         self.assertEqual(3, final_failures[0].download_retries)
         self.assertEqual("download_exception", final_failures[0].retry_state.last_error_code)
         self.assertEqual("stream down 2", final_failures[0].retry_state.last_error)
+
+    def test_download_transfer_retry_state_after_exception_result(self):
+        retry_state = TransferDownloadRetryState("memo.pdf", "memo.pdf", "C:\\Downloads\\memo.pdf", None, None)
+
+        updated_state = transfer_download_retry_state_after_exception_result(
+            TransferDownloadRetryExceptionResultTarget(
+                TransferDownloadFailureDetail("download_exception", "socket down"),
+                retry_state,
+            ),
+        )
+
+        self.assertEqual(
+            TransferDownloadRetryState(
+                "memo.pdf",
+                "memo.pdf",
+                "C:\\Downloads\\memo.pdf",
+                "download_exception",
+                "socket down",
+            ),
+            updated_state,
+        )
+
+    def test_download_transfer_retry_exception_decision_records_state(self):
+        retry_state = TransferDownloadRetryState("memo.pdf", "memo.pdf", "C:\\Downloads\\memo.pdf", None, None)
+        updated_state = retry_state._replace(last_error_code="download_exception", last_error="socket down")
+        calls = []
+
+        def record_exception(target):
+            calls.append(target)
+            return updated_state
+
+        decision = apply_transfer_download_retry_exception(
+            TransferDownloadRetryExceptionTarget(RuntimeError("socket down"), retry_state),
+            record_exception=record_exception,
+        )
+
+        self.assertEqual(TransferDownloadRetryDecision(updated_state, None), decision)
+        self.assertEqual(1, len(calls))
+        self.assertIs(calls[0].retry_state, retry_state)
+        self.assertEqual("socket down", str(calls[0].exc))
 
     def _downloader_for_download(self, temp_dir, session):
         downloader = object.__new__(ZSXQFileDownloader)
