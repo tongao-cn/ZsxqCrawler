@@ -2087,7 +2087,9 @@ class ZSXQFileDownloader:
         self,
         target: DownloadAttemptResponseTarget,
     ) -> DownloadAttemptResult:
-        response = self._request_download_response(target.download_url)
+        response = self._request_download_response_target(
+            DownloadFileResponseRequestTarget(target.download_url),
+        )
         return self._handle_download_response_result_target(
             DownloadResponseTarget(response, target.file_target),
         )
@@ -2528,11 +2530,6 @@ class ZSXQFileDownloader:
         retry_delay, retry_message = download_retry_wait(target.attempt, target.download_retries)
         self.log(retry_message)
         time.sleep(retry_delay)
-
-    def _request_download_response(self, download_url: str) -> Any:
-        return self._request_download_response_target(
-            DownloadFileResponseRequestTarget(download_url),
-        )
 
     def _request_download_response_target(
         self,

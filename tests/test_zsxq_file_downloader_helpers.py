@@ -9668,7 +9668,9 @@ class FileDownloaderDownloadTests(unittest.TestCase):
 
         downloader._wait_before_download_retry_target = wait_before_download_retry_target
         downloader._get_download_url_or_mark_unavailable = get_download_url_or_mark_unavailable
-        downloader._request_download_response = lambda url: self.fail("missing URL should not request a response")
+        downloader._request_download_response_target = lambda target: self.fail(
+            "missing URL should not request a response"
+        )
         downloader._handle_download_response_result_target = lambda target: self.fail(
             "missing URL should not handle a response"
         )
@@ -9695,8 +9697,8 @@ class FileDownloaderDownloadTests(unittest.TestCase):
             calls.append(("url", file_id))
             return "https://download.test/606"
 
-        def request_download_response(url):
-            calls.append(("request", url))
+        def request_download_response_target(target):
+            calls.append(("request", target))
             return response
 
         def handle_download_response_result_target(target):
@@ -9705,7 +9707,7 @@ class FileDownloaderDownloadTests(unittest.TestCase):
 
         downloader._wait_before_download_retry_target = lambda target: self.fail("first attempt should not wait")
         downloader._get_download_url_or_mark_unavailable = get_download_url_or_mark_unavailable
-        downloader._request_download_response = request_download_response
+        downloader._request_download_response_target = request_download_response_target
         downloader._handle_download_response_result_target = handle_download_response_result_target
 
         result = ZSXQFileDownloader._run_download_attempt_target(
@@ -9717,7 +9719,7 @@ class FileDownloaderDownloadTests(unittest.TestCase):
         self.assertEqual(
             [
                 ("url", 606),
-                ("request", "https://download.test/606"),
+                ("request", DownloadFileResponseRequestTarget("https://download.test/606")),
                 ("handle", DownloadResponseTarget(response, file_target)),
             ],
             calls,
@@ -10343,23 +10345,6 @@ class FileDownloaderDownloadTests(unittest.TestCase):
             ["   🔄 文件下载重试 3/5，等待 4 秒..."],
             downloader.logs,
         )
-
-    def test_request_download_response_preserves_stream_timeout_and_log(self):
-        response = FakeDownloadResponse(200, b"memo")
-        session = FakeDownloadSession([response])
-        downloader = object.__new__(ZSXQFileDownloader)
-        downloader.session = session
-        downloader.logs = []
-        downloader.log = downloader.logs.append
-
-        requested_response = ZSXQFileDownloader._request_download_response(
-            downloader,
-            "https://download.test/101",
-        )
-
-        self.assertIs(response, requested_response)
-        self.assertEqual([("https://download.test/101", 300, True)], session.get_calls)
-        self.assertEqual(["   🚀 开始下载..."], downloader.logs)
 
     def test_request_download_response_target_uses_target_url(self):
         response = FakeDownloadResponse(200, b"memo")
