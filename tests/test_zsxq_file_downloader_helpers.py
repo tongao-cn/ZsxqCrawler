@@ -58,6 +58,12 @@ from backend.crawlers.zsxq_file_downloader import (
     _file_collection_log_id,
     _latest_file_create_time,
 )
+from backend.crawlers.file_download_transfer import (
+    DownloadFileTarget as TransferDownloadFileTarget,
+    DownloadRetryDecision as TransferDownloadRetryDecision,
+    DownloadRetryState as TransferDownloadRetryState,
+    run_download_retry_loop as run_download_transfer_retry_loop,
+)
 from backend.crawlers.zsxq_file_downloader_helpers import (
     API_FAILURE_NON_RETRY,
     API_FAILURE_PERMISSION_DENIED_1030,
@@ -8524,6 +8530,68 @@ class FileDownloaderRetryHelperTests(unittest.TestCase):
 
 
 class FileDownloaderDownloadTests(unittest.TestCase):
+    def test_download_transfer_retry_loop_returns_success_after_retry(self):
+        prepared_file = TransferDownloadFileTarget(101, "memo.pdf", 4, "memo.pdf", "C:\\Downloads\\memo.pdf")
+        calls = []
+
+        def run_attempt(target):
+            calls.append(target)
+            if target.attempt == 0:
+                return TransferDownloadRetryDecision(
+                    target.retry_state._replace(last_error_code="http_status", last_error="HTTP 500"),
+                    None,
+                )
+            return TransferDownloadRetryDecision(target.retry_state, True)
+
+        result = run_download_transfer_retry_loop(
+            prepared_file,
+            download_retries=3,
+            run_attempt=run_attempt,
+            finish_failure=lambda target: self.fail("successful retry loop should not finish failure"),
+        )
+
+        self.assertTrue(result)
+        self.assertEqual([0, 1], [call.attempt for call in calls])
+        self.assertEqual(
+            TransferDownloadRetryState("memo.pdf", "memo.pdf", "C:\\Downloads\\memo.pdf", None, None),
+            calls[0].retry_state,
+        )
+        self.assertEqual(
+            TransferDownloadRetryState("memo.pdf", "memo.pdf", "C:\\Downloads\\memo.pdf", "http_status", "HTTP 500"),
+            calls[1].retry_state,
+        )
+
+    def test_download_transfer_retry_loop_finishes_failure_with_last_error(self):
+        prepared_file = TransferDownloadFileTarget(202, "report.pdf", 10, "report.pdf", "C:\\Downloads\\report.pdf")
+        final_failures = []
+
+        def run_attempt(target):
+            return TransferDownloadRetryDecision(
+                target.retry_state._replace(
+                    last_error_code="download_exception",
+                    last_error=f"stream down {target.attempt}",
+                ),
+                None,
+            )
+
+        def finish_failure(target):
+            final_failures.append(target)
+            return False
+
+        result = run_download_transfer_retry_loop(
+            prepared_file,
+            download_retries=3,
+            run_attempt=run_attempt,
+            finish_failure=finish_failure,
+        )
+
+        self.assertFalse(result)
+        self.assertEqual(1, len(final_failures))
+        self.assertEqual(prepared_file, final_failures[0].prepared_file)
+        self.assertEqual(3, final_failures[0].download_retries)
+        self.assertEqual("download_exception", final_failures[0].retry_state.last_error_code)
+        self.assertEqual("stream down 2", final_failures[0].retry_state.last_error)
+
     def _downloader_for_download(self, temp_dir, session):
         downloader = object.__new__(ZSXQFileDownloader)
         downloader.download_dir = temp_dir
