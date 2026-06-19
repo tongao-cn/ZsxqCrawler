@@ -2238,22 +2238,6 @@ class ZSXQFileDownloader:
             error_message=failure_detail.error_message,
         )
 
-    def _mark_download_failed_after_retries(
-        self,
-        file_id: int,
-        download_retries: int,
-        last_error_code: Optional[str],
-        last_error: Optional[str],
-    ) -> None:
-        self._mark_download_failed_after_retries_target(
-            DownloadFinalFailureTarget(
-                file_id,
-                download_retries,
-                last_error_code,
-                last_error,
-            ),
-        )
-
     def _mark_download_failed_after_retries_target(
         self,
         target: DownloadFinalFailureTarget,

@@ -10935,43 +10935,6 @@ class FileDownloaderDownloadTests(unittest.TestCase):
         )
         self.assertEqual(["   ❌ 无法获取下载链接"], downloader.logs)
 
-    def test_mark_download_failed_after_retries_preserves_error_detail_defaults(self):
-        downloader = object.__new__(ZSXQFileDownloader)
-        downloader.file_db = FakeDownloadFileDb()
-        downloader.logs = []
-        downloader.log = downloader.logs.append
-
-        ZSXQFileDownloader._mark_download_failed_after_retries(
-            downloader,
-            101,
-            3,
-            "http_status",
-            "HTTP 500",
-        )
-        ZSXQFileDownloader._mark_download_failed_after_retries(
-            downloader,
-            102,
-            3,
-            None,
-            None,
-        )
-
-        self.assertEqual(
-            (101, "failed", None, "http_status", "HTTP 500"),
-            downloader.file_db.status_updates[0],
-        )
-        self.assertEqual(
-            (102, "failed", None, "download_failed", "文件下载失败"),
-            downloader.file_db.status_updates[1],
-        )
-        self.assertEqual(
-            [
-                "   🚫 文件下载重试3次仍失败: HTTP 500",
-                "   🚫 文件下载重试3次仍失败: None",
-            ],
-            downloader.logs,
-        )
-
     def test_mark_download_failed_after_retries_target_uses_target_detail(self):
         downloader = object.__new__(ZSXQFileDownloader)
         downloader.file_db = FakeDownloadFileDb()
