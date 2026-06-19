@@ -38,6 +38,7 @@ from backend.crawlers.file_download_transfer import (
     DownloadBodyTarget,
     DownloadBodyWriteTarget,
     DownloadCompletionTarget,
+    DownloadExceptionTarget,
     DownloadFailureDetail,
     DownloadFileTarget,
     DownloadHttpFailureAttemptTarget,
@@ -47,6 +48,7 @@ from backend.crawlers.file_download_transfer import (
     DownloadRetryLoopAttemptTarget,
     DownloadRetryLoopFailureTarget,
     DownloadRetryState,
+    DownloadResponseExceptionTarget,
     DownloadResponseTarget,
     DownloadSizeMismatchTarget,
     apply_download_attempt_result,
@@ -63,6 +65,7 @@ from backend.crawlers.file_download_transfer import (
     download_retry_decision_after_attempt_result,
     download_retry_state_after_exception_result,
     download_retry_state_after_attempt_result,
+    download_response_exception_attempt_result,
     download_size_mismatch_result,
     download_size_mismatch_target_for_finalization,
     finalize_download_body_result_decision,
@@ -453,11 +456,6 @@ class DownloadHttpFailureTarget(NamedTuple):
 class DownloadUrlUnavailableTarget(NamedTuple):
     file_id: int
     last_download_url_error: Optional[Dict[str, Any]]
-
-
-class DownloadExceptionTarget(NamedTuple):
-    exc: Exception
-    file_path: str
 
 
 class DownloadFinalFailureTarget(NamedTuple):
@@ -2863,18 +2861,12 @@ class ZSXQFileDownloader:
         exc: Exception,
         response_download_target: DownloadFileTarget,
     ) -> DownloadAttemptResult:
-        failure_detail = self._record_download_exception_target(
-            DownloadExceptionTarget(
+        return download_response_exception_attempt_result(
+            DownloadResponseExceptionTarget(
                 exc,
-                response_download_target.file_path,
+                response_download_target,
             ),
-        )
-        return DownloadAttemptResult(
-            None,
-            failure_detail,
-            response_download_target.file_name,
-            response_download_target.safe_filename,
-            response_download_target.file_path,
+            record_exception=self._record_download_exception_target,
         )
 
     def _prepare_download_body_target(

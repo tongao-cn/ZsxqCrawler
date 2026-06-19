@@ -73,8 +73,10 @@ from backend.crawlers.file_download_transfer import (
     DownloadBodyTarget as TransferDownloadBodyTarget,
     DownloadBodyWriteTarget as TransferDownloadBodyWriteTarget,
     DownloadCompletionTarget as TransferDownloadCompletionTarget,
+    DownloadExceptionTarget as TransferDownloadExceptionTarget,
     DownloadFailureDetail as TransferDownloadFailureDetail,
     DownloadFileTarget as TransferDownloadFileTarget,
+    DownloadResponseExceptionTarget as TransferDownloadResponseExceptionTarget,
     DownloadResponseTarget as TransferDownloadResponseTarget,
     DownloadRetryDecision as TransferDownloadRetryDecision,
     DownloadRetryExceptionResultTarget as TransferDownloadRetryExceptionResultTarget,
@@ -89,6 +91,7 @@ from backend.crawlers.file_download_transfer import (
     download_body_write_response_target as transfer_download_body_write_response_target,
     download_completion_target_for_finalization as transfer_download_completion_target_for_finalization,
     download_retry_state_after_exception_result as transfer_download_retry_state_after_exception_result,
+    download_response_exception_attempt_result as transfer_download_response_exception_attempt_result,
     finalize_download_body_result_decision as finalize_transfer_download_body_result_decision,
     prepare_download_body_target as prepare_transfer_download_body_target,
     run_download_retry_loop as run_download_transfer_retry_loop,
@@ -8894,6 +8897,36 @@ class FileDownloaderDownloadTests(unittest.TestCase):
             result,
         )
         self.assertEqual([503], calls)
+
+    def test_download_transfer_response_exception_result_records_exception_and_attempt_result(self):
+        file_target = TransferDownloadFileTarget(
+            101,
+            "real?.pdf",
+            4,
+            "real.pdf",
+            "C:\\Downloads\\real.pdf",
+        )
+        failure_exc = RuntimeError("body down")
+        failure_detail = TransferDownloadFailureDetail("download_exception", "body down")
+        calls = []
+
+        def record_exception(target):
+            calls.append(target)
+            return failure_detail
+
+        result = transfer_download_response_exception_attempt_result(
+            TransferDownloadResponseExceptionTarget(failure_exc, file_target),
+            record_exception=record_exception,
+        )
+
+        self.assertEqual(
+            (None, failure_detail, "real?.pdf", "real.pdf", "C:\\Downloads\\real.pdf"),
+            result,
+        )
+        self.assertEqual(
+            [TransferDownloadExceptionTarget(failure_exc, "C:\\Downloads\\real.pdf")],
+            calls,
+        )
 
     def test_download_transfer_body_finalization_returns_size_mismatch(self):
         finalization_target = TransferDownloadBodyFinalizationTarget(
