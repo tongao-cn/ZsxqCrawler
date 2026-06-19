@@ -2856,7 +2856,7 @@ class ZSXQFileDownloader:
         step: BatchDownloadLoopStep,
     ) -> Optional[BatchDownloadLoopStep]:
         return self._run_batch_download_page_target(
-            self._batch_download_page_run_target(target, step),
+            BatchDownloadPageRunTarget(step, target.max_files, target.stats),
         )
 
     def _advance_batch_download_loop_step(
@@ -2884,17 +2884,6 @@ class ZSXQFileDownloader:
         target: BatchDownloadLoopTarget,
     ) -> BatchDownloadLoopStep:
         return BatchDownloadLoopStep(0, target.start_index)
-
-    def _batch_download_page_run_target(
-        self,
-        target: BatchDownloadLoopTarget,
-        step: BatchDownloadLoopStep,
-    ) -> BatchDownloadPageRunTarget:
-        return BatchDownloadPageRunTarget(
-            step,
-            target.max_files,
-            target.stats,
-        )
 
     def download_files_batch(self, max_files: Optional[int] = None, start_index: Optional[str] = None) -> Dict[str, int]:
         return self._download_files_batch_target(

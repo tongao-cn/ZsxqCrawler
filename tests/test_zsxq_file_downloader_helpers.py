@@ -3094,37 +3094,6 @@ class FileDownloaderBatchDownloadTests(unittest.TestCase):
             targets,
         )
 
-    def test_run_batch_download_loop_target_preserves_page_step_builder_handoff(self):
-        stats = {"total_files": 0, "downloaded": 0, "skipped": 0, "failed": 0}
-        downloader = object.__new__(ZSXQFileDownloader)
-        downloader.check_stop = lambda: False
-        sentinel_page_target = object()
-        calls = []
-
-        def page_run_target(target, step):
-            calls.append(("build", step.downloaded_in_batch, step.next_index, target.stats is stats))
-            return sentinel_page_target
-
-        def run_page(target):
-            calls.append(("run", target is sentinel_page_target))
-            return None
-
-        downloader._batch_download_page_run_target = page_run_target
-        downloader._run_batch_download_page_target = run_page
-
-        ZSXQFileDownloader._run_batch_download_loop_target(
-            downloader,
-            SimpleNamespace(stats=stats, max_files=None, start_index="cursor"),
-        )
-
-        self.assertEqual(
-            [
-                ("build", 0, "cursor", True),
-                ("run", True),
-            ],
-            calls,
-        )
-
     def test_run_batch_download_loop_target_preserves_next_index_terminal_stop_checks(self):
         stats = {"total_files": 0, "downloaded": 0, "skipped": 0, "failed": 0}
         downloader = object.__new__(ZSXQFileDownloader)
