@@ -30,8 +30,6 @@ from backend.crawlers.zsxq_file_downloader import (
     DownloadIntervalValues,
     DownloadResponseTarget,
     DownloadRetryDecision,
-    DownloadRetryLoopAttemptTarget,
-    DownloadRetryState,
     DownloadSizeMismatchTarget,
     DownloadStopTarget,
     DownloadUrlResponseDecision,
@@ -9409,7 +9407,7 @@ class FileDownloaderDownloadTests(unittest.TestCase):
             calls.append((target.attempt, target.download_retries, target.prepared_file, target.retry_state))
             if target.attempt == 0:
                 self.assertEqual(
-                    DownloadRetryState("memo.pdf", "memo.pdf", "C:\\Downloads\\memo.pdf", None, None),
+                    TransferDownloadRetryState("memo.pdf", "memo.pdf", "C:\\Downloads\\memo.pdf", None, None),
                     target.retry_state,
                 )
                 return DownloadRetryDecision(
@@ -9417,7 +9415,7 @@ class FileDownloaderDownloadTests(unittest.TestCase):
                     None,
                 )
             self.assertEqual(
-                DownloadRetryState("memo.pdf", "memo.pdf", "C:\\Downloads\\memo.pdf", "http_status", "HTTP 500"),
+                TransferDownloadRetryState("memo.pdf", "memo.pdf", "C:\\Downloads\\memo.pdf", "http_status", "HTTP 500"),
                 target.retry_state,
             )
             return DownloadRetryDecision(target.retry_state, True)
@@ -9468,7 +9466,7 @@ class FileDownloaderDownloadTests(unittest.TestCase):
         self.assertFalse(result)
         self.assertEqual(3, len(attempt_states))
         self.assertEqual(
-            DownloadRetryState("report.pdf", "report.pdf", "C:\\Downloads\\report.pdf", None, None),
+            TransferDownloadRetryState("report.pdf", "report.pdf", "C:\\Downloads\\report.pdf", None, None),
             attempt_states[0],
         )
         self.assertEqual(
@@ -9533,7 +9531,13 @@ class FileDownloaderDownloadTests(unittest.TestCase):
 
     def test_download_transfer_retry_loop_attempt_records_exception_decision(self):
         prepared_file = TransferDownloadFileTarget(404, "memo.pdf", 4, "memo.pdf", "C:\\Downloads\\memo.pdf")
-        retry_state = TransferDownloadRetryState("memo.pdf", "memo.pdf", "C:\\Downloads\\memo.pdf", None, None)
+        retry_state = TransferDownloadRetryState(
+            "renamed.pdf",
+            "renamed.pdf",
+            "C:\\Downloads\\renamed.pdf",
+            None,
+            None,
+        )
         updated_state = retry_state._replace(last_error_code="download_exception", last_error="socket down")
         calls = []
         failure_exc = RuntimeError("socket down")
@@ -9555,42 +9559,19 @@ class FileDownloaderDownloadTests(unittest.TestCase):
         self.assertEqual(TransferDownloadRetryDecision(updated_state, None), decision)
         self.assertEqual(
             [
-                ("attempt", 2, 3, prepared_file),
-                ("exception", "socket down", "C:\\Downloads\\memo.pdf"),
-            ],
-            calls,
-        )
-
-    def test_run_download_retry_loop_attempt_delegates_to_transfer(self):
-        downloader = object.__new__(ZSXQFileDownloader)
-        prepared_file = DownloadFileTarget(303, "original.pdf", 4, "original.pdf", "C:\\Downloads\\original.pdf")
-        retry_state = DownloadRetryState("renamed.pdf", "renamed.pdf", "C:\\Downloads\\renamed.pdf", None, None)
-        attempt_result = DownloadAttemptResult(True, None, "renamed.pdf", "renamed.pdf", "C:\\Downloads\\renamed.pdf")
-        calls = []
-
-        def run_download_attempt_target(target):
-            calls.append(("attempt", target.attempt, target.download_retries, target.file_target))
-            return attempt_result
-
-        downloader._run_download_attempt_target = run_download_attempt_target
-        downloader._record_download_exception_target = lambda target: self.fail(
-            "successful attempt should not record an exception"
-        )
-
-        decision = ZSXQFileDownloader._run_download_retry_loop_attempt_target(
-            downloader,
-            DownloadRetryLoopAttemptTarget(1, 3, prepared_file, retry_state),
-        )
-
-        self.assertEqual(DownloadRetryDecision(retry_state, True), decision)
-        self.assertEqual(
-            [
                 (
                     "attempt",
-                    1,
+                    2,
                     3,
-                    DownloadFileTarget(303, "renamed.pdf", 4, "renamed.pdf", "C:\\Downloads\\renamed.pdf"),
+                    TransferDownloadFileTarget(
+                        404,
+                        "renamed.pdf",
+                        4,
+                        "renamed.pdf",
+                        "C:\\Downloads\\renamed.pdf",
+                    ),
                 ),
+                ("exception", "socket down", "C:\\Downloads\\renamed.pdf"),
             ],
             calls,
         )
