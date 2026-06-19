@@ -10196,38 +10196,6 @@ class FileDownloaderDownloadTests(unittest.TestCase):
         self.assertEqual(("http_status", "HTTP 503"), failure)
         self.assertEqual(["   ❌ 下载失败: HTTP 503"], downloader.logs)
 
-    def test_record_download_exception_preserves_error_detail_log_and_cleanup(self):
-        with tempfile.TemporaryDirectory() as temp_dir:
-            file_path = Path(temp_dir) / "memo.pdf"
-            partial_path = Path(f"{file_path}.part")
-            partial_path.write_bytes(b"pa")
-            downloader = object.__new__(ZSXQFileDownloader)
-            downloader.logs = []
-            downloader.log = downloader.logs.append
-
-            failure_with_partial = ZSXQFileDownloader._record_download_exception(
-                downloader,
-                RuntimeError("stream down"),
-                str(file_path),
-            )
-            failure_without_partial = ZSXQFileDownloader._record_download_exception(
-                downloader,
-                ValueError("no part"),
-                str(file_path),
-            )
-
-            self.assertEqual(("download_exception", "stream down"), failure_with_partial)
-            self.assertEqual(("download_exception", "no part"), failure_without_partial)
-            self.assertFalse(partial_path.exists())
-            self.assertEqual(
-                [
-                    "   ❌ 下载异常: stream down",
-                    "   🗑️ 删除不完整文件",
-                    "   ❌ 下载异常: no part",
-                ],
-                downloader.logs,
-            )
-
     def test_record_download_exception_target_uses_target_file_path(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             file_path = Path(temp_dir) / "target-name.pdf"

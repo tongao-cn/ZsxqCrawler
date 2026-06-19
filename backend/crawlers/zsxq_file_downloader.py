@@ -2434,9 +2434,6 @@ class ZSXQFileDownloader:
     def _log_download_http_failure(self, error_message: str) -> None:
         self.log(f"   ❌ 下载失败: {error_message}")
 
-    def _record_download_exception(self, exc: Exception, file_path: str) -> DownloadFailureDetail:
-        return self._record_download_exception_target(DownloadExceptionTarget(exc, file_path))
-
     def _record_download_exception_target(
         self,
         target: DownloadExceptionTarget,
