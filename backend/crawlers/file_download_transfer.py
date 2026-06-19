@@ -220,6 +220,23 @@ def download_retry_state_after_exception_result(target: DownloadRetryExceptionRe
     )
 
 
+def download_retry_exception_state(
+    target: DownloadRetryExceptionTarget,
+    *,
+    record_exception: RecordDownloadException,
+) -> DownloadRetryState:
+    retry_state = target.retry_state
+    failure_detail = record_exception(
+        DownloadExceptionTarget(
+            target.exc,
+            retry_state.file_path,
+        ),
+    )
+    return download_retry_state_after_exception_result(
+        DownloadRetryExceptionResultTarget(failure_detail, retry_state),
+    )
+
+
 def apply_download_retry_exception(
     target: DownloadRetryExceptionTarget,
     *,

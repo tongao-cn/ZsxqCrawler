@@ -44,7 +44,6 @@ from backend.crawlers.file_download_transfer import (
     DownloadHttpFailureAttemptTarget,
     DownloadRetryDecision,
     DownloadRetryExceptionTarget,
-    DownloadRetryExceptionResultTarget,
     DownloadRetryLoopAttemptTarget,
     DownloadRetryLoopFailureTarget,
     DownloadRetryState,
@@ -63,7 +62,7 @@ from backend.crawlers.file_download_transfer import (
     download_http_failure_attempt_result,
     download_retry_attempt_file,
     download_retry_decision_after_attempt_result,
-    download_retry_state_after_exception_result,
+    download_retry_exception_state,
     download_retry_state_after_attempt_result,
     download_response_exception_attempt_result,
     download_size_mismatch_result,
@@ -2188,12 +2187,9 @@ class ZSXQFileDownloader:
         self,
         target: DownloadRetryExceptionTarget,
     ) -> DownloadRetryState:
-        retry_state = target.retry_state
-        failure_detail = self._record_download_exception_target(
-            DownloadExceptionTarget(target.exc, retry_state.file_path),
-        )
-        return download_retry_state_after_exception_result(
-            DownloadRetryExceptionResultTarget(failure_detail, retry_state),
+        return download_retry_exception_state(
+            target,
+            record_exception=self._record_download_exception_target,
         )
 
     def _run_download_attempt(

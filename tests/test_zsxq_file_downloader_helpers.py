@@ -90,6 +90,7 @@ from backend.crawlers.file_download_transfer import (
     download_body_target_for_preparation as transfer_download_body_target_for_preparation,
     download_body_write_response_target as transfer_download_body_write_response_target,
     download_completion_target_for_finalization as transfer_download_completion_target_for_finalization,
+    download_retry_exception_state as transfer_download_retry_exception_state,
     download_retry_state_after_exception_result as transfer_download_retry_state_after_exception_result,
     download_response_exception_attempt_result as transfer_download_response_exception_attempt_result,
     finalize_download_body_result_decision as finalize_transfer_download_body_result_decision,
@@ -8705,6 +8706,35 @@ class FileDownloaderDownloadTests(unittest.TestCase):
                 "socket down",
             ),
             updated_state,
+        )
+
+    def test_download_transfer_retry_exception_state_records_exception_and_updates_state(self):
+        retry_state = TransferDownloadRetryState("memo.pdf", "memo.pdf", "C:\\Downloads\\memo.pdf", None, None)
+        failure_exc = RuntimeError("socket down")
+        calls = []
+
+        def record_exception(target):
+            calls.append(target)
+            return TransferDownloadFailureDetail("download_exception", "socket down")
+
+        updated_state = transfer_download_retry_exception_state(
+            TransferDownloadRetryExceptionTarget(failure_exc, retry_state),
+            record_exception=record_exception,
+        )
+
+        self.assertEqual(
+            TransferDownloadRetryState(
+                "memo.pdf",
+                "memo.pdf",
+                "C:\\Downloads\\memo.pdf",
+                "download_exception",
+                "socket down",
+            ),
+            updated_state,
+        )
+        self.assertEqual(
+            [TransferDownloadExceptionTarget(failure_exc, "C:\\Downloads\\memo.pdf")],
+            calls,
         )
 
     def test_download_transfer_retry_exception_decision_records_state(self):
