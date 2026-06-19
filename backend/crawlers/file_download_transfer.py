@@ -152,6 +152,7 @@ CompleteSuccessfulDownload = Callable[[DownloadCompletionTarget], None]
 WriteDownloadResponseBody = Callable[[DownloadBodyResponseTarget], Optional[int]]
 RecordDownloadHttpFailure = Callable[[int], DownloadFailureDetail]
 RemovePartialDownload = Callable[[str], bool]
+ResolveDownloadResponseTarget = Callable[[DownloadResponseTarget], DownloadFileTarget]
 
 
 def initial_download_retry_state(prepared_file: DownloadFileTarget) -> DownloadRetryState:
@@ -426,6 +427,35 @@ def download_attempt_result_for_response_status(
         file_target.safe_filename,
         file_target.file_path,
     )
+
+
+def download_attempt_result_for_response(
+    target: DownloadResponseTarget,
+    *,
+    resolve_response_target: ResolveDownloadResponseTarget,
+    remove_partial_download: RemovePartialDownload,
+    write_response_body: WriteDownloadResponseBody,
+    find_mismatch_detail: FindDownloadSizeMismatch,
+    complete_successful_download: CompleteSuccessfulDownload,
+    record_http_failure: RecordDownloadHttpFailure,
+    record_exception: RecordDownloadException,
+) -> DownloadAttemptResult:
+    response_download_target = target.file_target
+    try:
+        response_download_target = resolve_response_target(target)
+        return download_attempt_result_for_response_status(
+            DownloadResponseTarget(target.response, response_download_target),
+            remove_partial_download=remove_partial_download,
+            write_response_body=write_response_body,
+            find_mismatch_detail=find_mismatch_detail,
+            complete_successful_download=complete_successful_download,
+            record_http_failure=record_http_failure,
+        )
+    except Exception as exc:
+        return download_response_exception_attempt_result(
+            DownloadResponseExceptionTarget(exc, response_download_target),
+            record_exception=record_exception,
+        )
 
 
 def download_size_mismatch_target_for_finalization(

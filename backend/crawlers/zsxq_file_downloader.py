@@ -40,16 +40,14 @@ from backend.crawlers.file_download_transfer import (
     DownloadRetryLoopAttemptTarget,
     DownloadRetryLoopFailureTarget,
     DownloadRetryState,
-    DownloadResponseExceptionTarget,
     DownloadResponseTarget,
     DownloadSizeMismatchTarget,
     apply_download_attempt_result,
     apply_download_retry_exception,
-    download_attempt_result_for_response_status,
+    download_attempt_result_for_response,
     download_retry_attempt_file,
     download_retry_decision_after_attempt_result,
     download_retry_state_after_attempt_result,
-    download_response_exception_attempt_result,
     initial_download_retry_state,
     run_download_retry_loop,
 )
@@ -2748,37 +2746,14 @@ class ZSXQFileDownloader:
         self,
         target: DownloadResponseTarget,
     ) -> DownloadAttemptResult:
-        response = target.response
-        response_download_target = target.file_target
-        try:
-            response_download_target = self._download_target_for_response_target(
-                target,
-            )
-
-            return download_attempt_result_for_response_status(
-                DownloadResponseTarget(response, response_download_target),
-                remove_partial_download=remove_partial_download,
-                write_response_body=self._write_download_response_body_result_target,
-                find_mismatch_detail=self._handle_download_size_mismatch_target,
-                complete_successful_download=self._complete_successful_download_target,
-                record_http_failure=self._record_download_http_failure,
-            )
-        except Exception as exc:
-            return self._download_response_exception_result(
-                exc,
-                response_download_target,
-            )
-
-    def _download_response_exception_result(
-        self,
-        exc: Exception,
-        response_download_target: DownloadFileTarget,
-    ) -> DownloadAttemptResult:
-        return download_response_exception_attempt_result(
-            DownloadResponseExceptionTarget(
-                exc,
-                response_download_target,
-            ),
+        return download_attempt_result_for_response(
+            target,
+            resolve_response_target=self._download_target_for_response_target,
+            remove_partial_download=remove_partial_download,
+            write_response_body=self._write_download_response_body_result_target,
+            find_mismatch_detail=self._handle_download_size_mismatch_target,
+            complete_successful_download=self._complete_successful_download_target,
+            record_http_failure=self._record_download_http_failure,
             record_exception=self._record_download_exception_target,
         )
 
