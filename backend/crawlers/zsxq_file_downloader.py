@@ -2640,16 +2640,6 @@ class ZSXQFileDownloader:
         not_reached_limit = target.max_files is None or downloaded_in_batch < target.max_files
         return target.has_more_in_batch and not_reached_limit
 
-    def _next_batch_download_index(
-        self,
-        next_index: Optional[str],
-        downloaded_in_batch: int,
-        max_files: Optional[int],
-    ) -> Optional[str]:
-        return self._next_batch_download_index_target(
-            BatchDownloadNextIndexTarget(next_index, downloaded_in_batch, max_files),
-        )
-
     def _next_batch_download_index_target(
         self,
         target: BatchDownloadNextIndexTarget,

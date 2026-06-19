@@ -2322,30 +2322,6 @@ class FileDownloaderBatchDownloadTests(unittest.TestCase):
             batch_download_next_page_plan("", 1, None),
         )
 
-    def test_next_batch_download_index_preserves_log_sleep_and_terminal_paths(self):
-        downloader = object.__new__(ZSXQFileDownloader)
-        downloader.logs = []
-        downloader.log = downloader.logs.append
-
-        with patch("backend.crawlers.zsxq_file_downloader.time.sleep") as sleep:
-            next_index = ZSXQFileDownloader._next_batch_download_index(
-                downloader,
-                "next-page",
-                1,
-                2,
-            )
-            terminal_index = ZSXQFileDownloader._next_batch_download_index(
-                downloader,
-                "ignored-page",
-                2,
-                2,
-            )
-
-        self.assertEqual("next-page", next_index)
-        self.assertIsNone(terminal_index)
-        sleep.assert_called_once_with(2)
-        self.assertEqual(["📄 准备获取下一页: next-page"], downloader.logs)
-
     def test_next_batch_download_index_target_preserves_plan_side_effects(self):
         downloader = object.__new__(ZSXQFileDownloader)
         downloader.logs = []
