@@ -29,22 +29,28 @@ from backend.crawlers.file_download_url import (
 from backend.crawlers.file_download_transfer import (
     DownloadAttemptResult,
     DownloadAttemptResultTarget,
+    DownloadBodyAttemptResultTarget,
     DownloadBodyFinalizationDecisionTarget,
     DownloadBodyFinalizationTarget,
     DownloadBodyResult,
     DownloadCompletionTarget,
     DownloadFailureDetail,
     DownloadFileTarget,
+    DownloadHttpFailureAttemptTarget,
     DownloadRetryDecision,
     DownloadRetryExceptionTarget,
     DownloadRetryExceptionResultTarget,
     DownloadRetryLoopAttemptTarget,
     DownloadRetryLoopFailureTarget,
     DownloadRetryState,
+    DownloadResponseTarget,
     DownloadSizeMismatchTarget,
     apply_download_attempt_result,
     apply_download_retry_exception,
+    download_attempt_result_for_response_status,
+    download_attempt_result_from_body_result,
     download_completion_target_for_finalization,
+    download_http_failure_attempt_result,
     download_retry_attempt_file,
     download_retry_decision_after_attempt_result,
     download_retry_state_after_exception_result,
@@ -490,11 +496,6 @@ class DownloadAttemptTarget(NamedTuple):
 
 class DownloadAttemptResponseTarget(NamedTuple):
     download_url: str
-    file_target: DownloadFileTarget
-
-
-class DownloadResponseTarget(NamedTuple):
-    response: Any
     file_target: DownloadFileTarget
 
 
@@ -2762,12 +2763,8 @@ class ZSXQFileDownloader:
         body_result = self._handle_successful_download_response_result_target(
             target,
         )
-        return DownloadAttemptResult(
-            body_result.success_result,
-            body_result.failure_detail,
-            file_target.file_name,
-            file_target.safe_filename,
-            file_target.file_path,
+        return download_attempt_result_from_body_result(
+            DownloadBodyAttemptResultTarget(body_result, file_target),
         )
 
     def _download_attempt_result_for_response_status(
@@ -2783,28 +2780,19 @@ class ZSXQFileDownloader:
         self,
         target: DownloadResponseTarget,
     ) -> DownloadAttemptResult:
-        response = target.response
-        file_target = target.file_target
-        if response.status_code == 200:
-            return self._successful_download_attempt_result_target(
-                DownloadResponseTarget(response, file_target),
-            )
-
-        return self._http_failure_download_attempt_result(target)
+        return download_attempt_result_for_response_status(
+            target,
+            handle_successful_response=self._successful_download_attempt_result_target,
+            record_http_failure=self._record_download_http_failure,
+        )
 
     def _http_failure_download_attempt_result(
         self,
         target: DownloadResponseTarget,
     ) -> DownloadAttemptResult:
-        response = target.response
-        file_target = target.file_target
-        failure_detail = self._record_download_http_failure(response.status_code)
-        return DownloadAttemptResult(
-            None,
-            failure_detail,
-            file_target.file_name,
-            file_target.safe_filename,
-            file_target.file_path,
+        return download_http_failure_attempt_result(
+            DownloadHttpFailureAttemptTarget(target.response.status_code, target.file_target),
+            record_http_failure=self._record_download_http_failure,
         )
 
     def _download_target_for_response(

@@ -64,16 +64,21 @@ from backend.crawlers.file_download_url import (
     run_download_url_retry_loop as run_download_url_loop,
 )
 from backend.crawlers.file_download_transfer import (
+    DownloadBodyAttemptResultTarget as TransferDownloadBodyAttemptResultTarget,
+    DownloadBodyResult as TransferDownloadBodyResult,
     DownloadBodyFinalizationDecisionTarget as TransferDownloadBodyFinalizationDecisionTarget,
     DownloadBodyFinalizationTarget as TransferDownloadBodyFinalizationTarget,
     DownloadCompletionTarget as TransferDownloadCompletionTarget,
     DownloadFailureDetail as TransferDownloadFailureDetail,
     DownloadFileTarget as TransferDownloadFileTarget,
+    DownloadResponseTarget as TransferDownloadResponseTarget,
     DownloadRetryDecision as TransferDownloadRetryDecision,
     DownloadRetryExceptionResultTarget as TransferDownloadRetryExceptionResultTarget,
     DownloadRetryExceptionTarget as TransferDownloadRetryExceptionTarget,
     DownloadRetryState as TransferDownloadRetryState,
     apply_download_retry_exception as apply_transfer_download_retry_exception,
+    download_attempt_result_for_response_status as transfer_download_attempt_result_for_response_status,
+    download_attempt_result_from_body_result as transfer_download_attempt_result_from_body_result,
     download_completion_target_for_finalization as transfer_download_completion_target_for_finalization,
     download_retry_state_after_exception_result as transfer_download_retry_state_after_exception_result,
     finalize_download_body_result_decision as finalize_transfer_download_body_result_decision,
@@ -8725,6 +8730,75 @@ class FileDownloaderDownloadTests(unittest.TestCase):
         )
 
         self.assertEqual((False, None), result)
+
+    def test_download_transfer_attempt_result_from_body_result_uses_file_target(self):
+        file_target = TransferDownloadFileTarget(
+            101,
+            "memo?.pdf",
+            4,
+            "memo.pdf",
+            "C:\\Downloads\\memo.pdf",
+        )
+        body_result = TransferDownloadBodyResult(True, None)
+
+        result = transfer_download_attempt_result_from_body_result(
+            TransferDownloadBodyAttemptResultTarget(body_result, file_target),
+        )
+
+        self.assertEqual((True, None, "memo?.pdf", "memo.pdf", "C:\\Downloads\\memo.pdf"), result)
+
+    def test_download_transfer_response_status_delegates_200_to_success_handler(self):
+        file_target = TransferDownloadFileTarget(
+            101,
+            "memo.pdf",
+            4,
+            "memo.pdf",
+            "C:\\Downloads\\memo.pdf",
+        )
+        response = SimpleNamespace(status_code=200)
+        success_result = (True, None, "memo.pdf", "memo.pdf", "C:\\Downloads\\memo.pdf")
+        success_calls = []
+
+        def handle_successful_response(target):
+            success_calls.append(target)
+            return success_result
+
+        result = transfer_download_attempt_result_for_response_status(
+            TransferDownloadResponseTarget(response, file_target),
+            handle_successful_response=handle_successful_response,
+            record_http_failure=lambda status_code: self.fail("200 path should not record HTTP failure"),
+        )
+
+        self.assertEqual(success_result, result)
+        self.assertEqual([TransferDownloadResponseTarget(response, file_target)], success_calls)
+
+    def test_download_transfer_response_status_records_http_failure_result(self):
+        file_target = TransferDownloadFileTarget(
+            101,
+            "memo.pdf",
+            4,
+            "memo.pdf",
+            "C:\\Downloads\\memo.pdf",
+        )
+        calls = []
+
+        def record_http_failure(status_code):
+            calls.append(status_code)
+            return TransferDownloadFailureDetail("http_status", f"HTTP {status_code}")
+
+        result = transfer_download_attempt_result_for_response_status(
+            TransferDownloadResponseTarget(SimpleNamespace(status_code=503), file_target),
+            handle_successful_response=lambda target: self.fail(
+                "HTTP failure path should not handle success"
+            ),
+            record_http_failure=record_http_failure,
+        )
+
+        self.assertEqual(
+            (None, ("http_status", "HTTP 503"), "memo.pdf", "memo.pdf", "C:\\Downloads\\memo.pdf"),
+            result,
+        )
+        self.assertEqual([503], calls)
 
     def test_download_transfer_body_finalization_returns_size_mismatch(self):
         finalization_target = TransferDownloadBodyFinalizationTarget(

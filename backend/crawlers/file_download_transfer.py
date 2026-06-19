@@ -24,6 +24,11 @@ class DownloadAttemptResult(NamedTuple):
     file_path: str
 
 
+class DownloadResponseTarget(NamedTuple):
+    response: Any
+    file_target: DownloadFileTarget
+
+
 class DownloadRetryState(NamedTuple):
     file_name: str
     safe_filename: str
@@ -95,11 +100,23 @@ class DownloadBodyResult(NamedTuple):
     failure_detail: Optional[DownloadFailureDetail]
 
 
+class DownloadBodyAttemptResultTarget(NamedTuple):
+    body_result: DownloadBodyResult
+    file_target: DownloadFileTarget
+
+
+class DownloadHttpFailureAttemptTarget(NamedTuple):
+    status_code: int
+    file_target: DownloadFileTarget
+
+
 RunDownloadAttempt = Callable[[DownloadRetryLoopAttemptTarget], DownloadRetryDecision]
 FinishDownloadFailure = Callable[[DownloadRetryLoopFailureTarget], bool]
 RecordDownloadRetryException = Callable[[DownloadRetryExceptionTarget], DownloadRetryState]
 FindDownloadSizeMismatch = Callable[[DownloadBodyFinalizationTarget], Optional[DownloadFailureDetail]]
 CompleteSuccessfulDownloadBody = Callable[[DownloadBodyFinalizationTarget], DownloadBodyResult]
+HandleSuccessfulDownloadResponse = Callable[[DownloadResponseTarget], DownloadAttemptResult]
+RecordDownloadHttpFailure = Callable[[int], DownloadFailureDetail]
 
 
 def initial_download_retry_state(prepared_file: DownloadFileTarget) -> DownloadRetryState:
@@ -180,6 +197,51 @@ def download_size_mismatch_result(mismatch_detail: DownloadFailureDetail) -> Dow
 
 def successful_download_body_result() -> DownloadBodyResult:
     return DownloadBodyResult(True, None)
+
+
+def download_attempt_result_from_body_result(
+    target: DownloadBodyAttemptResultTarget,
+) -> DownloadAttemptResult:
+    file_target = target.file_target
+    body_result = target.body_result
+    return DownloadAttemptResult(
+        body_result.success_result,
+        body_result.failure_detail,
+        file_target.file_name,
+        file_target.safe_filename,
+        file_target.file_path,
+    )
+
+
+def download_http_failure_attempt_result(
+    target: DownloadHttpFailureAttemptTarget,
+    *,
+    record_http_failure: RecordDownloadHttpFailure,
+) -> DownloadAttemptResult:
+    file_target = target.file_target
+    failure_detail = record_http_failure(target.status_code)
+    return DownloadAttemptResult(
+        None,
+        failure_detail,
+        file_target.file_name,
+        file_target.safe_filename,
+        file_target.file_path,
+    )
+
+
+def download_attempt_result_for_response_status(
+    target: DownloadResponseTarget,
+    *,
+    handle_successful_response: HandleSuccessfulDownloadResponse,
+    record_http_failure: RecordDownloadHttpFailure,
+) -> DownloadAttemptResult:
+    if target.response.status_code == 200:
+        return handle_successful_response(target)
+
+    return download_http_failure_attempt_result(
+        DownloadHttpFailureAttemptTarget(target.response.status_code, target.file_target),
+        record_http_failure=record_http_failure,
+    )
 
 
 def download_size_mismatch_target_for_finalization(
