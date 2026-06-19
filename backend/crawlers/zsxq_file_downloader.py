@@ -2745,16 +2745,6 @@ class ZSXQFileDownloader:
         self.log(batch_download_empty_page_message())
         return None
 
-    def _run_batch_download_page(
-        self,
-        step: BatchDownloadLoopStep,
-        max_files: Optional[int],
-        stats: Dict[str, int],
-    ) -> Optional[BatchDownloadLoopStep]:
-        return self._run_batch_download_page_target(
-            BatchDownloadPageRunTarget(step, max_files, stats),
-        )
-
     def _run_batch_download_page_target(
         self,
         target: BatchDownloadPageRunTarget,

@@ -2860,66 +2860,6 @@ class FileDownloaderBatchDownloadTests(unittest.TestCase):
         self.assertEqual("download", events[1][0])
         self.assertIs(item_target, events[1][1])
 
-    def test_run_batch_download_page_preserves_fetch_terminal_and_step_handoff(self):
-        stats = {"total_files": 0, "downloaded": 0, "skipped": 0, "failed": 0}
-        terminal_downloader = object.__new__(ZSXQFileDownloader)
-        terminal_fetch_targets = []
-        terminal_downloader._fetch_batch_download_page_target = (
-            lambda target: terminal_fetch_targets.append(target) or None
-        )
-
-        terminal = ZSXQFileDownloader._run_batch_download_page(
-            terminal_downloader,
-            SimpleNamespace(downloaded_in_batch=7, next_index="cursor"),
-            max_files=8,
-            stats=stats,
-        )
-
-        self.assertIsNone(terminal)
-        self.assertEqual(1, len(terminal_fetch_targets))
-        self.assertEqual("cursor", terminal_fetch_targets[0].current_index)
-
-        files = [{"file": {"id": 101, "name": "first.pdf"}}]
-        downloader = object.__new__(ZSXQFileDownloader)
-        fetch_targets = []
-        page_targets = []
-        next_targets = []
-
-        def fetch_page(target):
-            fetch_targets.append(target)
-            return SimpleNamespace(files=files, next_index="next-page")
-
-        def page_files(target):
-            page_targets.append(target)
-            return 3
-
-        def next_index(target):
-            next_targets.append(target)
-            return "after-page"
-
-        downloader._fetch_batch_download_page_target = fetch_page
-        downloader._download_batch_page_files_target = page_files
-        downloader._next_batch_download_index_target = next_index
-
-        step = ZSXQFileDownloader._run_batch_download_page(
-            downloader,
-            SimpleNamespace(downloaded_in_batch=1, next_index="start"),
-            max_files=4,
-            stats=stats,
-        )
-
-        self.assertEqual(1, len(fetch_targets))
-        self.assertEqual("start", fetch_targets[0].current_index)
-        self.assertEqual(3, step.downloaded_in_batch)
-        self.assertEqual("after-page", step.next_index)
-        self.assertEqual(files, page_targets[0].files)
-        self.assertEqual(1, page_targets[0].downloaded_in_batch)
-        self.assertEqual(4, page_targets[0].max_files)
-        self.assertIs(stats, page_targets[0].stats)
-        self.assertEqual("next-page", next_targets[0].next_index)
-        self.assertEqual(3, next_targets[0].downloaded_in_batch)
-        self.assertEqual(4, next_targets[0].max_files)
-
     def test_run_batch_download_page_target_preserves_page_files_target_order(self):
         stats = {"total_files": 0, "downloaded": 0, "skipped": 0, "failed": 0}
         files = [{"file": {"id": 101, "name": "first.pdf"}}]
