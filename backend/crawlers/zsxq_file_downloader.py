@@ -2343,27 +2343,6 @@ class ZSXQFileDownloader:
         self.download_count += 1
         self.current_batch_count += 1
 
-    def _write_download_response_body(
-        self,
-        response,
-        temp_path: str,
-        total_size: int,
-        file_id: int,
-    ) -> Optional[int]:
-        return self._write_download_response_body_target(
-            response,
-            DownloadBodyWriteTarget(temp_path, total_size, file_id),
-        )
-
-    def _write_download_response_body_target(
-        self,
-        response: Any,
-        target: DownloadBodyWriteTarget,
-    ) -> Optional[int]:
-        return self._write_download_response_body_result_target(
-            DownloadBodyResponseTarget(response, target),
-        )
-
     def _write_download_response_body_result_target(
         self,
         target: DownloadBodyResponseTarget,

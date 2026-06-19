@@ -10454,12 +10454,12 @@ class FileDownloaderDownloadTests(unittest.TestCase):
             downloader.log = downloader.logs.append
             downloader.check_stop = lambda: False
 
-            downloaded_size = ZSXQFileDownloader._write_download_response_body(
+            downloaded_size = ZSXQFileDownloader._write_download_response_body_result_target(
                 downloader,
-                response,
-                str(temp_path),
-                4,
-                101,
+                DownloadBodyResponseTarget(
+                    response,
+                    DownloadBodyWriteTarget(str(temp_path), 4, 101),
+                ),
             )
 
             self.assertEqual(4, downloaded_size)
@@ -10478,12 +10478,12 @@ class FileDownloaderDownloadTests(unittest.TestCase):
                 return_value=True,
             ) as remove_partial:
                 self.assertIsNone(
-                    ZSXQFileDownloader._write_download_response_body(
+                    ZSXQFileDownloader._write_download_response_body_result_target(
                         downloader,
-                        stopping_response,
-                        str(stopping_path),
-                        0,
-                        102,
+                        DownloadBodyResponseTarget(
+                            stopping_response,
+                            DownloadBodyWriteTarget(str(stopping_path), 0, 102),
+                        ),
                     )
                 )
 
