@@ -2729,7 +2729,7 @@ class FileDownloaderBatchDownloadTests(unittest.TestCase):
             events,
         )
 
-    def test_download_batch_page_files_preserves_item_targets_stop_and_limit(self):
+    def test_download_batch_page_files_target_preserves_item_targets_stop_and_limit(self):
         files = [
             {"file": {"id": 101, "name": "first.pdf"}},
             {"file": {"id": 102, "name": "second.pdf"}},
@@ -2747,12 +2747,9 @@ class FileDownloaderBatchDownloadTests(unittest.TestCase):
 
         limit_downloader._download_batch_file_item_target = limit_file_item
 
-        limited = ZSXQFileDownloader._download_batch_page_files(
+        limited = ZSXQFileDownloader._download_batch_page_files_target(
             limit_downloader,
-            files,
-            downloaded_in_batch=1,
-            max_files=2,
-            stats=stats,
+            BatchDownloadPageFilesTarget(files, 1, 2, stats),
         )
 
         self.assertEqual(2, limited)
@@ -2778,12 +2775,9 @@ class FileDownloaderBatchDownloadTests(unittest.TestCase):
 
         stop_downloader._download_batch_file_item_target = stop_file_item
 
-        stopped = ZSXQFileDownloader._download_batch_page_files(
+        stopped = ZSXQFileDownloader._download_batch_page_files_target(
             stop_downloader,
-            files,
-            downloaded_in_batch=0,
-            max_files=None,
-            stats=stats,
+            BatchDownloadPageFilesTarget(files, 0, None, stats),
         )
 
         self.assertEqual(1, stopped)

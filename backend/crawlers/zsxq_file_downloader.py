@@ -2645,17 +2645,6 @@ class ZSXQFileDownloader:
         time.sleep(next_page["delay"])  # 页面间短暂延迟
         return next_page["next_index"]
 
-    def _download_batch_page_files(
-        self,
-        files: list[Dict[str, Any]],
-        downloaded_in_batch: int,
-        max_files: Optional[int],
-        stats: Dict[str, int],
-    ) -> int:
-        return self._download_batch_page_files_target(
-            BatchDownloadPageFilesTarget(files, downloaded_in_batch, max_files, stats),
-        )
-
     def _download_batch_page_files_target(
         self,
         target: BatchDownloadPageFilesTarget,
