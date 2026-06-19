@@ -30,8 +30,6 @@ from backend.crawlers.file_download_transfer import (
     DownloadAttemptResult,
     DownloadAttemptResultTarget,
     DownloadBodyAttemptResultTarget,
-    DownloadBodyFinalizationDecisionTarget,
-    DownloadBodyFinalizationTarget,
     DownloadBodyResponseTarget,
     DownloadBodyResult,
     DownloadBodyWriteTarget,
@@ -56,7 +54,6 @@ from backend.crawlers.file_download_transfer import (
     download_retry_decision_after_attempt_result,
     download_retry_state_after_attempt_result,
     download_response_exception_attempt_result,
-    finalize_download_body_result_decision,
     initial_download_retry_state,
     run_download_retry_loop,
 )
@@ -2860,44 +2857,6 @@ class ZSXQFileDownloader:
             target,
             remove_partial_download=remove_partial_download,
             write_response_body=self._write_download_response_body_result_target,
-            finalize_body_result=self._finalize_download_body_result_decision_target,
-        )
-
-    def _finalize_download_body_result(
-        self,
-        downloaded_size: Optional[int],
-        expected_size: int,
-        temp_path: str,
-        file_id: int,
-        safe_filename: str,
-        file_path: str,
-    ) -> DownloadBodyResult:
-        return self._finalize_download_body_result_target(
-            downloaded_size,
-            DownloadBodyFinalizationTarget(
-                expected_size,
-                temp_path,
-                file_id,
-                safe_filename,
-                file_path,
-            ),
-        )
-
-    def _finalize_download_body_result_target(
-        self,
-        downloaded_size: Optional[int],
-        target: DownloadBodyFinalizationTarget,
-    ) -> DownloadBodyResult:
-        return self._finalize_download_body_result_decision_target(
-            DownloadBodyFinalizationDecisionTarget(downloaded_size, target),
-        )
-
-    def _finalize_download_body_result_decision_target(
-        self,
-        target: DownloadBodyFinalizationDecisionTarget,
-    ) -> DownloadBodyResult:
-        return finalize_download_body_result_decision(
-            target,
             find_mismatch_detail=self._handle_download_size_mismatch_target,
             complete_successful_download=self._complete_successful_download_target,
         )

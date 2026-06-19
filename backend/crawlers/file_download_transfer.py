@@ -151,7 +151,6 @@ FindDownloadSizeMismatch = Callable[[DownloadSizeMismatchTarget], Optional[Downl
 CompleteSuccessfulDownload = Callable[[DownloadCompletionTarget], None]
 HandleSuccessfulDownloadResponse = Callable[[DownloadResponseTarget], DownloadAttemptResult]
 WriteDownloadResponseBody = Callable[[DownloadBodyResponseTarget], Optional[int]]
-FinalizeDownloadBodyResult = Callable[[DownloadBodyFinalizationDecisionTarget], DownloadBodyResult]
 RecordDownloadHttpFailure = Callable[[int], DownloadFailureDetail]
 RemovePartialDownload = Callable[[str], bool]
 
@@ -346,17 +345,20 @@ def download_body_result_for_response(
     body_target: DownloadBodyTarget,
     *,
     write_response_body: WriteDownloadResponseBody,
-    finalize_body_result: FinalizeDownloadBodyResult,
+    find_mismatch_detail: FindDownloadSizeMismatch,
+    complete_successful_download: CompleteSuccessfulDownload,
 ) -> DownloadBodyResult:
     downloaded_size = write_response_body(
         download_body_write_response_target(target, body_target),
     )
-    return finalize_body_result(
+    return finalize_download_body_result_decision(
         download_body_finalization_decision_target(
             downloaded_size,
             target,
             body_target,
         ),
+        find_mismatch_detail=find_mismatch_detail,
+        complete_successful_download=complete_successful_download,
     )
 
 
@@ -365,7 +367,8 @@ def download_body_result_for_successful_response(
     *,
     remove_partial_download: RemovePartialDownload,
     write_response_body: WriteDownloadResponseBody,
-    finalize_body_result: FinalizeDownloadBodyResult,
+    find_mismatch_detail: FindDownloadSizeMismatch,
+    complete_successful_download: CompleteSuccessfulDownload,
 ) -> DownloadBodyResult:
     body_target = prepare_download_body_target(
         download_body_preparation_target_for_response(target),
@@ -375,7 +378,8 @@ def download_body_result_for_successful_response(
         target,
         body_target,
         write_response_body=write_response_body,
-        finalize_body_result=finalize_body_result,
+        find_mismatch_detail=find_mismatch_detail,
+        complete_successful_download=complete_successful_download,
     )
 
 

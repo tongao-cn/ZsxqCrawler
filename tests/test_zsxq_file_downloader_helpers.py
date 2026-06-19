@@ -18,8 +18,6 @@ from backend.crawlers.zsxq_file_downloader import (
     BatchDownloadTarget,
     DownloadAttemptResult,
     DownloadAttemptTarget,
-    DownloadBodyFinalizationDecisionTarget,
-    DownloadBodyFinalizationTarget,
     DownloadBodyResponseTarget,
     DownloadBodyResult,
     DownloadBodyWriteTarget,
@@ -70,6 +68,7 @@ from backend.crawlers.file_download_transfer import (
     DownloadBodyResult as TransferDownloadBodyResult,
     DownloadBodyTarget as TransferDownloadBodyTarget,
     DownloadBodyWriteTarget as TransferDownloadBodyWriteTarget,
+    DownloadCompletionTarget as TransferDownloadCompletionTarget,
     DownloadExceptionTarget as TransferDownloadExceptionTarget,
     DownloadFailureDetail as TransferDownloadFailureDetail,
     DownloadFileTarget as TransferDownloadFileTarget,
@@ -8898,25 +8897,28 @@ class FileDownloaderDownloadTests(unittest.TestCase):
         )
         response_target = TransferDownloadResponseTarget(response, file_target)
         body_target = TransferDownloadBodyTarget(8, 4, "C:\\Downloads\\memo.pdf.part")
-        result_target = TransferDownloadBodyResult(True, None)
         calls = []
 
         def write_response_body(target):
             calls.append(("write", target))
             return 4
 
-        def finalize_body_result(target):
-            calls.append(("finalize", target))
-            return result_target
+        def find_mismatch_detail(target):
+            calls.append(("mismatch", target))
+            return None
+
+        def complete_successful_download(target):
+            calls.append(("complete", target))
 
         result = transfer_download_body_result_for_response(
             response_target,
             body_target,
             write_response_body=write_response_body,
-            finalize_body_result=finalize_body_result,
+            find_mismatch_detail=find_mismatch_detail,
+            complete_successful_download=complete_successful_download,
         )
 
-        self.assertEqual(result_target, result)
+        self.assertEqual(TransferDownloadBodyResult(True, None), result)
         self.assertEqual(
             [
                 (
@@ -8931,16 +8933,16 @@ class FileDownloaderDownloadTests(unittest.TestCase):
                     ),
                 ),
                 (
-                    "finalize",
-                    TransferDownloadBodyFinalizationDecisionTarget(
-                        4,
-                        TransferDownloadBodyFinalizationTarget(
-                            4,
-                            "C:\\Downloads\\memo.pdf.part",
-                            202,
-                            "memo.pdf",
-                            "C:\\Downloads\\memo.pdf",
-                        ),
+                    "mismatch",
+                    TransferDownloadSizeMismatchTarget(4, "C:\\Downloads\\memo.pdf.part"),
+                ),
+                (
+                    "complete",
+                    TransferDownloadCompletionTarget(
+                        202,
+                        "memo.pdf",
+                        "C:\\Downloads\\memo.pdf",
+                        "C:\\Downloads\\memo.pdf.part",
                     ),
                 ),
             ],
@@ -8957,7 +8959,6 @@ class FileDownloaderDownloadTests(unittest.TestCase):
             "C:\\Downloads\\memo.pdf",
         )
         response_target = TransferDownloadResponseTarget(response, file_target)
-        result_target = TransferDownloadBodyResult(True, None)
         calls = []
 
         def remove_partial(temp_path):
@@ -8968,18 +8969,22 @@ class FileDownloaderDownloadTests(unittest.TestCase):
             calls.append(("write", target))
             return 4
 
-        def finalize_body_result(target):
-            calls.append(("finalize", target))
-            return result_target
+        def find_mismatch_detail(target):
+            calls.append(("mismatch", target))
+            return None
+
+        def complete_successful_download(target):
+            calls.append(("complete", target))
 
         result = transfer_download_body_result_for_successful_response(
             response_target,
             remove_partial_download=remove_partial,
             write_response_body=write_response_body,
-            finalize_body_result=finalize_body_result,
+            find_mismatch_detail=find_mismatch_detail,
+            complete_successful_download=complete_successful_download,
         )
 
-        self.assertEqual(result_target, result)
+        self.assertEqual(TransferDownloadBodyResult(True, None), result)
         self.assertEqual(
             [
                 ("remove", "C:\\Downloads\\memo.pdf.part"),
@@ -8995,16 +9000,16 @@ class FileDownloaderDownloadTests(unittest.TestCase):
                     ),
                 ),
                 (
-                    "finalize",
-                    TransferDownloadBodyFinalizationDecisionTarget(
-                        4,
-                        TransferDownloadBodyFinalizationTarget(
-                            4,
-                            "C:\\Downloads\\memo.pdf.part",
-                            303,
-                            "memo.pdf",
-                            "C:\\Downloads\\memo.pdf",
-                        ),
+                    "mismatch",
+                    TransferDownloadSizeMismatchTarget(4, "C:\\Downloads\\memo.pdf.part"),
+                ),
+                (
+                    "complete",
+                    TransferDownloadCompletionTarget(
+                        303,
+                        "memo.pdf",
+                        "C:\\Downloads\\memo.pdf",
+                        "C:\\Downloads\\memo.pdf.part",
                     ),
                 ),
             ],
@@ -10403,7 +10408,6 @@ class FileDownloaderDownloadTests(unittest.TestCase):
             "memo.pdf",
             "C:\\Downloads\\memo.pdf",
         )
-        result_target = DownloadBodyResult(True, None)
         calls = []
 
         def remove_partial(temp_path):
@@ -10414,14 +10418,16 @@ class FileDownloaderDownloadTests(unittest.TestCase):
             calls.append(("write", target))
             return 4
 
-        def finalize_download_body_result_decision_target(target):
-            calls.append(("finalize", target))
-            return result_target
+        def handle_download_size_mismatch_target(target):
+            calls.append(("mismatch", target))
+            return None
+
+        def complete_successful_download_target(target):
+            calls.append(("complete", target))
 
         downloader._write_download_response_body_result_target = write_download_response_body_result_target
-        downloader._finalize_download_body_result_decision_target = (
-            finalize_download_body_result_decision_target
-        )
+        downloader._handle_download_size_mismatch_target = handle_download_size_mismatch_target
+        downloader._complete_successful_download_target = complete_successful_download_target
 
         with patch(
             "backend.crawlers.zsxq_file_downloader.remove_partial_download",
@@ -10432,7 +10438,7 @@ class FileDownloaderDownloadTests(unittest.TestCase):
                 DownloadResponseTarget(response, file_target),
             )
 
-        self.assertEqual(result_target, result)
+        self.assertEqual(DownloadBodyResult(True, None), result)
         self.assertEqual(
             [
                 ("remove", "C:\\Downloads\\memo.pdf.part"),
@@ -10448,153 +10454,9 @@ class FileDownloaderDownloadTests(unittest.TestCase):
                     ),
                 ),
                 (
-                    "finalize",
-                    DownloadBodyFinalizationDecisionTarget(
-                        4,
-                        DownloadBodyFinalizationTarget(
-                            4,
-                            "C:\\Downloads\\memo.pdf.part",
-                            101,
-                            "memo.pdf",
-                            "C:\\Downloads\\memo.pdf",
-                        ),
-                    ),
+                    "mismatch",
+                    DownloadSizeMismatchTarget(4, "C:\\Downloads\\memo.pdf.part"),
                 ),
-            ],
-            calls,
-        )
-
-    def test_finalize_download_body_result_preserves_stop_mismatch_and_success_paths(self):
-        with tempfile.TemporaryDirectory() as temp_dir:
-            downloader = object.__new__(ZSXQFileDownloader)
-            downloader.file_db = FakeDownloadFileDb()
-            downloader.logs = []
-            downloader.log = downloader.logs.append
-            downloader.download_count = 0
-            downloader.current_batch_count = 0
-            interval_snapshots = []
-            downloader._apply_download_intervals = lambda: interval_snapshots.append(
-                (downloader.download_count, downloader.current_batch_count)
-            )
-
-            stopped_part = Path(temp_dir) / "stopped.pdf.part"
-            stopped_part.write_bytes(b"stop")
-            stopped = ZSXQFileDownloader._finalize_download_body_result(
-                downloader,
-                None,
-                4,
-                str(stopped_part),
-                101,
-                "stopped.pdf",
-                str(Path(temp_dir) / "stopped.pdf"),
-            )
-
-            self.assertEqual((False, None), stopped)
-            self.assertTrue(stopped_part.exists())
-            self.assertEqual([], downloader.file_db.status_updates)
-
-            mismatch_part = Path(temp_dir) / "mismatch.pdf.part"
-            mismatch_part.write_bytes(b"bad")
-            mismatch = ZSXQFileDownloader._finalize_download_body_result(
-                downloader,
-                3,
-                4,
-                str(mismatch_part),
-                102,
-                "mismatch.pdf",
-                str(Path(temp_dir) / "mismatch.pdf"),
-            )
-
-            self.assertEqual((None, ("size_mismatch", "文件大小不匹配: 预期4, 实际3")), mismatch)
-            self.assertFalse(mismatch_part.exists())
-            self.assertEqual(["   ⚠️ 文件大小不匹配: 预期4, 实际3"], downloader.logs)
-            self.assertEqual([], downloader.file_db.status_updates)
-
-            success_part = Path(temp_dir) / "memo.pdf.part"
-            success_path = Path(temp_dir) / "memo.pdf"
-            success_part.write_bytes(b"memo")
-            success = ZSXQFileDownloader._finalize_download_body_result(
-                downloader,
-                4,
-                4,
-                str(success_part),
-                103,
-                "memo.pdf",
-                str(success_path),
-            )
-
-            self.assertEqual((True, None), success)
-            self.assertEqual(b"memo", success_path.read_bytes())
-            self.assertFalse(success_part.exists())
-            self.assertEqual((103, "completed", str(success_path)), downloader.file_db.status_updates[-1][:3])
-            self.assertEqual((1, 1), (downloader.download_count, downloader.current_batch_count))
-            self.assertEqual([(1, 1)], interval_snapshots)
-
-    def test_finalize_download_body_result_decision_target_preserves_branch_handoff(self):
-        downloader = object.__new__(ZSXQFileDownloader)
-        finalization_target = DownloadBodyFinalizationTarget(
-            4,
-            "C:\\Downloads\\memo.pdf.part",
-            101,
-            "memo.pdf",
-            "C:\\Downloads\\memo.pdf",
-        )
-
-        downloader._handle_download_size_mismatch_target = lambda target: self.fail(
-            "stop path should not check size mismatch"
-        )
-        downloader._complete_successful_download_target = lambda target: self.fail(
-            "stop path should not complete download"
-        )
-        stopped = ZSXQFileDownloader._finalize_download_body_result_decision_target(
-            downloader,
-            DownloadBodyFinalizationDecisionTarget(None, finalization_target),
-        )
-
-        self.assertEqual((False, None), stopped)
-
-        mismatch_detail = DownloadFailureDetail("size_mismatch", "bad size")
-        mismatch_calls = []
-
-        def mismatch_target_for_failure(target):
-            mismatch_calls.append(target)
-            return mismatch_detail
-
-        downloader._handle_download_size_mismatch_target = mismatch_target_for_failure
-        downloader._complete_successful_download_target = lambda target: self.fail(
-            "mismatch path should not complete download"
-        )
-        mismatch = ZSXQFileDownloader._finalize_download_body_result_decision_target(
-            downloader,
-            DownloadBodyFinalizationDecisionTarget(3, finalization_target),
-        )
-
-        self.assertEqual((None, mismatch_detail), mismatch)
-        self.assertEqual(
-            [DownloadSizeMismatchTarget(4, "C:\\Downloads\\memo.pdf.part")],
-            mismatch_calls,
-        )
-
-        success_calls = []
-
-        def mismatch_target_for_success(target):
-            success_calls.append(("mismatch", target))
-            return None
-
-        def complete_successful_download_target(target):
-            success_calls.append(("complete", target))
-
-        downloader._handle_download_size_mismatch_target = mismatch_target_for_success
-        downloader._complete_successful_download_target = complete_successful_download_target
-        success = ZSXQFileDownloader._finalize_download_body_result_decision_target(
-            downloader,
-            DownloadBodyFinalizationDecisionTarget(4, finalization_target),
-        )
-
-        self.assertEqual((True, None), success)
-        self.assertEqual(
-            [
-                ("mismatch", DownloadSizeMismatchTarget(4, "C:\\Downloads\\memo.pdf.part")),
                 (
                     "complete",
                     DownloadCompletionTarget(
@@ -10605,94 +10467,6 @@ class FileDownloaderDownloadTests(unittest.TestCase):
                     ),
                 ),
             ],
-            success_calls,
-        )
-
-    def test_finalize_download_body_result_decision_target_preserves_stopped_result_handoff(self):
-        downloader = object.__new__(ZSXQFileDownloader)
-        finalization_target = DownloadBodyFinalizationTarget(
-            4,
-            "C:\\Downloads\\memo.pdf.part",
-            303,
-            "memo.pdf",
-            "C:\\Downloads\\memo.pdf",
-        )
-
-        downloader._handle_download_size_mismatch_target = lambda target: self.fail(
-            "stop path should not check size mismatch"
-        )
-        downloader._complete_successful_download_target = lambda target: self.fail(
-            "stop path should not complete download"
-        )
-
-        result = ZSXQFileDownloader._finalize_download_body_result_decision_target(
-            downloader,
-            DownloadBodyFinalizationDecisionTarget(None, finalization_target),
-        )
-
-        self.assertEqual((False, None), result)
-
-    def test_finalize_download_body_result_decision_target_preserves_size_mismatch_target_handoff(self):
-        downloader = object.__new__(ZSXQFileDownloader)
-        finalization_target = DownloadBodyFinalizationTarget(
-            17,
-            "C:\\Downloads\\pending.tmp",
-            505,
-            "memo.pdf",
-            "C:\\Downloads\\memo.pdf",
-        )
-        mismatch_detail = DownloadFailureDetail("size_mismatch", "bad size")
-        calls = []
-
-        def handle_download_size_mismatch_target(target):
-            calls.append(target)
-            return mismatch_detail
-
-        downloader._handle_download_size_mismatch_target = handle_download_size_mismatch_target
-        downloader._complete_successful_download_target = lambda target: self.fail(
-            "mismatch path should not complete download"
-        )
-
-        result = ZSXQFileDownloader._finalize_download_body_result_decision_target(
-            downloader,
-            DownloadBodyFinalizationDecisionTarget(99, finalization_target),
-        )
-
-        self.assertEqual((None, mismatch_detail), result)
-        self.assertEqual(
-            [DownloadSizeMismatchTarget(17, "C:\\Downloads\\pending.tmp")],
-            calls,
-        )
-
-    def test_finalize_download_body_result_decision_target_preserves_size_mismatch_result_handoff(self):
-        downloader = object.__new__(ZSXQFileDownloader)
-        finalization_target = DownloadBodyFinalizationTarget(
-            4,
-            "C:\\Downloads\\memo.pdf.part",
-            707,
-            "memo.pdf",
-            "C:\\Downloads\\memo.pdf",
-        )
-        mismatch_detail = DownloadFailureDetail("size_mismatch", "bad size")
-        calls = []
-
-        def handle_download_size_mismatch_target(target):
-            calls.append(("mismatch-detail", target))
-            return mismatch_detail
-
-        downloader._handle_download_size_mismatch_target = handle_download_size_mismatch_target
-        downloader._complete_successful_download_target = lambda target: self.fail(
-            "mismatch path should not complete download"
-        )
-
-        result = ZSXQFileDownloader._finalize_download_body_result_decision_target(
-            downloader,
-            DownloadBodyFinalizationDecisionTarget(4, finalization_target),
-        )
-
-        self.assertEqual((None, mismatch_detail), result)
-        self.assertEqual(
-            [("mismatch-detail", DownloadSizeMismatchTarget(4, "C:\\Downloads\\memo.pdf.part"))],
             calls,
         )
 
