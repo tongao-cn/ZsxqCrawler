@@ -2535,26 +2535,6 @@ class ZSXQFileDownloader:
             ),
         )
 
-    def _download_batch_file_item(
-        self,
-        file_info: Dict[str, Any],
-        item_number: int,
-        max_files: Optional[int],
-        has_more_in_batch: bool,
-        downloaded_in_batch: int,
-        stats: Dict[str, int],
-    ) -> int:
-        return self._download_batch_file_item_target(
-            BatchDownloadFileItemTarget(
-                file_info,
-                item_number,
-                max_files,
-                has_more_in_batch,
-                downloaded_in_batch,
-                stats,
-            ),
-        )
-
     def _download_batch_file_item_target(
         self,
         target: BatchDownloadFileItemTarget,

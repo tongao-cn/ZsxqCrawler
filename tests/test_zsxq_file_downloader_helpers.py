@@ -2624,7 +2624,7 @@ class FileDownloaderBatchDownloadTests(unittest.TestCase):
         self.assertEqual("next-page", page.next_index)
         self.assertEqual(["📋 当前批次: 1 个文件"], success_downloader.logs)
 
-    def test_download_batch_file_item_preserves_limit_reached_delay_skip(self):
+    def test_download_batch_file_item_target_preserves_limit_reached_delay_skip(self):
         downloader = object.__new__(ZSXQFileDownloader)
         downloader.logs = []
         downloader.log = downloader.logs.append
@@ -2634,14 +2634,16 @@ class FileDownloaderBatchDownloadTests(unittest.TestCase):
         downloader.download_delay = lambda: interval_events.append("delay")
         stats = {"total_files": 0, "downloaded": 0, "skipped": 0, "failed": 0}
 
-        downloaded = ZSXQFileDownloader._download_batch_file_item(
+        downloaded = ZSXQFileDownloader._download_batch_file_item_target(
             downloader,
-            {"file": {"id": 102, "name": "ok.pdf"}},
-            item_number=2,
-            max_files=2,
-            has_more_in_batch=True,
-            downloaded_in_batch=1,
-            stats=stats,
+            BatchDownloadFileItemTarget(
+                {"file": {"id": 102, "name": "ok.pdf"}},
+                2,
+                2,
+                True,
+                1,
+                stats,
+            ),
         )
 
         self.assertEqual(2, downloaded)
@@ -2649,7 +2651,7 @@ class FileDownloaderBatchDownloadTests(unittest.TestCase):
         self.assertEqual(["long"], interval_events)
         self.assertEqual(["【2/2】ok.pdf"], downloader.logs)
 
-    def test_download_batch_file_item_preserves_missing_file_name_fallback(self):
+    def test_download_batch_file_item_target_preserves_missing_file_name_fallback(self):
         downloader = object.__new__(ZSXQFileDownloader)
         downloader.logs = []
         downloader.log = downloader.logs.append
@@ -2660,14 +2662,16 @@ class FileDownloaderBatchDownloadTests(unittest.TestCase):
         stats = {"total_files": 0, "downloaded": 0, "skipped": 0, "failed": 0}
         file_info = {}
 
-        downloaded = ZSXQFileDownloader._download_batch_file_item(
+        downloaded = ZSXQFileDownloader._download_batch_file_item_target(
             downloader,
-            file_info,
-            item_number=3,
-            max_files=None,
-            has_more_in_batch=False,
-            downloaded_in_batch=2,
-            stats=stats,
+            BatchDownloadFileItemTarget(
+                file_info,
+                3,
+                None,
+                False,
+                2,
+                stats,
+            ),
         )
 
         self.assertEqual(2, downloaded)
