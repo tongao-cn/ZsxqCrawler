@@ -2391,16 +2391,6 @@ class ZSXQFileDownloader:
         )
         return True
 
-    def _apply_response_filename_override(
-        self,
-        file_name: str,
-        file_id: int,
-        response_headers: Dict[str, Any],
-    ) -> Optional[DownloadFilenameOverride]:
-        return self._apply_response_filename_override_target(
-            ResponseFilenameOverrideTarget(file_name, file_id, response_headers),
-        )
-
     def _apply_response_filename_override_target(
         self,
         target: ResponseFilenameOverrideTarget,

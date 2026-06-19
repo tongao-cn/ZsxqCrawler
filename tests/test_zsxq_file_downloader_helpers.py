@@ -10141,30 +10141,6 @@ class FileDownloaderDownloadTests(unittest.TestCase):
             events,
         )
 
-    def test_apply_response_filename_override_preserves_override_and_noop_paths(self):
-        with tempfile.TemporaryDirectory() as temp_dir:
-            downloader = object.__new__(ZSXQFileDownloader)
-            downloader.download_dir = temp_dir
-            downloader.logs = []
-            downloader.log = downloader.logs.append
-
-            override = ZSXQFileDownloader._apply_response_filename_override(
-                downloader,
-                "file_101",
-                101,
-                {"content-disposition": 'attachment; filename="real?.pdf"'},
-            )
-            noop = ZSXQFileDownloader._apply_response_filename_override(
-                downloader,
-                "memo.pdf",
-                102,
-                {"content-disposition": 'attachment; filename="ignored.pdf"'},
-            )
-
-            self.assertEqual(("real?.pdf", "real.pdf", str(Path(temp_dir) / "real.pdf")), override)
-            self.assertIsNone(noop)
-            self.assertEqual(["   📝 从响应头获取到真实文件名: real?.pdf"], downloader.logs)
-
     def test_apply_response_filename_override_target_uses_target_fields(self):
         downloader = object.__new__(ZSXQFileDownloader)
         downloader.download_dir = "C:\\Downloads"
