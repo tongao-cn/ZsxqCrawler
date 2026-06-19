@@ -2808,14 +2808,6 @@ class ZSXQFileDownloader:
             target.stats,
         )
 
-    def _batch_download_loop_target(
-        self,
-        stats: Dict[str, int],
-        max_files: Optional[int],
-        start_index: Optional[str],
-    ) -> BatchDownloadLoopTarget:
-        return BatchDownloadLoopTarget(stats, max_files, start_index)
-
     def _run_batch_download_loop_target(
         self,
         target: BatchDownloadLoopTarget,
@@ -2938,7 +2930,7 @@ class ZSXQFileDownloader:
     ) -> Dict[str, int]:
         stats = download_result_stats()
         self._run_batch_download_loop_target(
-            self._batch_download_loop_target(stats, target.max_files, target.start_index),
+            BatchDownloadLoopTarget(stats, target.max_files, target.start_index),
         )
 
         self._log_batch_download_completion(stats)
