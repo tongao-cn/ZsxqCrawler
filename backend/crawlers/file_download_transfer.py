@@ -360,6 +360,25 @@ def download_body_result_for_response(
     )
 
 
+def download_body_result_for_successful_response(
+    target: DownloadResponseTarget,
+    *,
+    remove_partial_download: RemovePartialDownload,
+    write_response_body: WriteDownloadResponseBody,
+    finalize_body_result: FinalizeDownloadBodyResult,
+) -> DownloadBodyResult:
+    body_target = prepare_download_body_target(
+        download_body_preparation_target_for_response(target),
+        remove_partial_download=remove_partial_download,
+    )
+    return download_body_result_for_response(
+        target,
+        body_target,
+        write_response_body=write_response_body,
+        finalize_body_result=finalize_body_result,
+    )
+
+
 def download_attempt_result_from_body_result(
     target: DownloadBodyAttemptResultTarget,
 ) -> DownloadAttemptResult:

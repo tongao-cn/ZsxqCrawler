@@ -53,8 +53,7 @@ from backend.crawlers.file_download_transfer import (
     apply_download_retry_exception,
     download_attempt_result_for_response_status,
     download_attempt_result_from_body_result,
-    download_body_preparation_target_for_response,
-    download_body_result_for_response,
+    download_body_result_for_successful_response,
     download_body_target_for_preparation,
     download_retry_attempt_file,
     download_retry_decision_after_attempt_result,
@@ -2893,25 +2892,9 @@ class ZSXQFileDownloader:
         self,
         target: DownloadResponseTarget,
     ) -> DownloadBodyResult:
-        body_target = self._download_body_target_for_response(target)
-        return self._download_body_result_for_response_target(target, body_target)
-
-    def _download_body_target_for_response(
-        self,
-        target: DownloadResponseTarget,
-    ) -> DownloadBodyTarget:
-        return self._prepare_download_body_target_from_target(
-            download_body_preparation_target_for_response(target),
-        )
-
-    def _download_body_result_for_response_target(
-        self,
-        target: DownloadResponseTarget,
-        body_target: DownloadBodyTarget,
-    ) -> DownloadBodyResult:
-        return download_body_result_for_response(
+        return download_body_result_for_successful_response(
             target,
-            body_target,
+            remove_partial_download=remove_partial_download,
             write_response_body=self._write_download_response_body_result_target,
             finalize_body_result=self._finalize_download_body_result_decision_target,
         )

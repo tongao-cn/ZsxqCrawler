@@ -87,6 +87,7 @@ from backend.crawlers.file_download_transfer import (
     download_body_finalization_decision_target as transfer_download_body_finalization_decision_target,
     download_body_preparation_target_for_response as transfer_download_body_preparation_target_for_response,
     download_body_result_for_response as transfer_download_body_result_for_response,
+    download_body_result_for_successful_response as transfer_download_body_result_for_successful_response,
     download_body_target_for_preparation as transfer_download_body_target_for_preparation,
     download_body_write_response_target as transfer_download_body_write_response_target,
     download_retry_exception_state as transfer_download_retry_exception_state,
@@ -8947,6 +8948,70 @@ class FileDownloaderDownloadTests(unittest.TestCase):
             calls,
         )
 
+    def test_download_transfer_successful_response_body_prepares_writes_and_finalizes(self):
+        response = SimpleNamespace(headers={"content-length": "8"})
+        file_target = TransferDownloadFileTarget(
+            303,
+            "memo?.pdf",
+            4,
+            "memo.pdf",
+            "C:\\Downloads\\memo.pdf",
+        )
+        response_target = TransferDownloadResponseTarget(response, file_target)
+        result_target = TransferDownloadBodyResult(True, None)
+        calls = []
+
+        def remove_partial(temp_path):
+            calls.append(("remove", temp_path))
+            return True
+
+        def write_response_body(target):
+            calls.append(("write", target))
+            return 4
+
+        def finalize_body_result(target):
+            calls.append(("finalize", target))
+            return result_target
+
+        result = transfer_download_body_result_for_successful_response(
+            response_target,
+            remove_partial_download=remove_partial,
+            write_response_body=write_response_body,
+            finalize_body_result=finalize_body_result,
+        )
+
+        self.assertEqual(result_target, result)
+        self.assertEqual(
+            [
+                ("remove", "C:\\Downloads\\memo.pdf.part"),
+                (
+                    "write",
+                    TransferDownloadBodyResponseTarget(
+                        response,
+                        TransferDownloadBodyWriteTarget(
+                            "C:\\Downloads\\memo.pdf.part",
+                            8,
+                            303,
+                        ),
+                    ),
+                ),
+                (
+                    "finalize",
+                    TransferDownloadBodyFinalizationDecisionTarget(
+                        4,
+                        TransferDownloadBodyFinalizationTarget(
+                            4,
+                            "C:\\Downloads\\memo.pdf.part",
+                            303,
+                            "memo.pdf",
+                            "C:\\Downloads\\memo.pdf",
+                        ),
+                    ),
+                ),
+            ],
+            calls,
+        )
+
     def test_download_transfer_response_status_delegates_200_to_success_handler(self):
         file_target = TransferDownloadFileTarget(
             101,
@@ -10372,7 +10437,7 @@ class FileDownloaderDownloadTests(unittest.TestCase):
                 downloader.file_db.status_updates[-1],
             )
 
-    def test_handle_successful_download_response_result_target_preserves_target_handoff(self):
+    def test_handle_successful_download_response_result_target_uses_transfer_pipeline(self):
         downloader = object.__new__(ZSXQFileDownloader)
         response = FakeDownloadResponse(200, b"memo", headers={"content-length": "8"})
         file_target = DownloadFileTarget(
@@ -10382,17 +10447,12 @@ class FileDownloaderDownloadTests(unittest.TestCase):
             "memo.pdf",
             "C:\\Downloads\\memo.pdf",
         )
-        body_target = DownloadBodyTarget(
-            8,
-            4,
-            "C:\\Downloads\\memo.pdf.part",
-        )
         result_target = DownloadBodyResult(True, None)
         calls = []
 
-        def prepare_download_body_target_from_target(target):
-            calls.append(("prepare", target))
-            return body_target
+        def remove_partial(temp_path):
+            calls.append(("remove", temp_path))
+            return True
 
         def write_download_response_body_result_target(target):
             calls.append(("write", target))
@@ -10402,28 +10462,24 @@ class FileDownloaderDownloadTests(unittest.TestCase):
             calls.append(("finalize", target))
             return result_target
 
-        downloader._prepare_download_body_target_from_target = prepare_download_body_target_from_target
         downloader._write_download_response_body_result_target = write_download_response_body_result_target
         downloader._finalize_download_body_result_decision_target = (
             finalize_download_body_result_decision_target
         )
 
-        result = ZSXQFileDownloader._handle_successful_download_response_result_target(
-            downloader,
-            DownloadResponseTarget(response, file_target),
-        )
+        with patch(
+            "backend.crawlers.zsxq_file_downloader.remove_partial_download",
+            side_effect=remove_partial,
+        ):
+            result = ZSXQFileDownloader._handle_successful_download_response_result_target(
+                downloader,
+                DownloadResponseTarget(response, file_target),
+            )
 
         self.assertEqual(result_target, result)
         self.assertEqual(
             [
-                (
-                    "prepare",
-                    DownloadBodyPreparationTarget(
-                        response.headers,
-                        4,
-                        "C:\\Downloads\\memo.pdf",
-                    ),
-                ),
+                ("remove", "C:\\Downloads\\memo.pdf.part"),
                 (
                     "write",
                     DownloadBodyResponseTarget(
@@ -10443,128 +10499,6 @@ class FileDownloaderDownloadTests(unittest.TestCase):
                             4,
                             "C:\\Downloads\\memo.pdf.part",
                             101,
-                            "memo.pdf",
-                            "C:\\Downloads\\memo.pdf",
-                        ),
-                    ),
-                ),
-            ],
-            calls,
-        )
-
-    def test_handle_successful_download_response_result_target_preserves_body_preparation_handoff(self):
-        downloader = object.__new__(ZSXQFileDownloader)
-        response = FakeDownloadResponse(200, b"memo", headers={"content-length": "8"})
-        file_target = DownloadFileTarget(
-            101,
-            "memo?.pdf",
-            4,
-            "memo.pdf",
-            "C:\\Downloads\\memo.pdf",
-        )
-        body_target = DownloadBodyTarget(
-            8,
-            4,
-            "C:\\Downloads\\memo.pdf.part",
-        )
-        result_target = DownloadBodyResult(True, None)
-        calls = []
-
-        def prepare_download_body_target_from_target(target):
-            calls.append(("prepare", target))
-            return body_target
-
-        def download_body_result_for_response_target(target, prepared_body_target):
-            calls.append(("body", target, prepared_body_target))
-            return result_target
-
-        downloader._prepare_download_body_target_from_target = prepare_download_body_target_from_target
-        downloader._download_body_result_for_response_target = download_body_result_for_response_target
-
-        result = ZSXQFileDownloader._handle_successful_download_response_result_target(
-            downloader,
-            DownloadResponseTarget(response, file_target),
-        )
-
-        self.assertEqual(result_target, result)
-        self.assertEqual(
-            [
-                (
-                    "prepare",
-                    DownloadBodyPreparationTarget(
-                        response.headers,
-                        4,
-                        "C:\\Downloads\\memo.pdf",
-                    ),
-                ),
-                (
-                    "body",
-                    DownloadResponseTarget(response, file_target),
-                    body_target,
-                ),
-            ],
-            calls,
-        )
-
-    def test_download_body_result_for_response_target_preserves_write_and_finalize_handoff(self):
-        downloader = object.__new__(ZSXQFileDownloader)
-        response = FakeDownloadResponse(200, b"memo", headers={"content-length": "8"})
-        file_target = DownloadFileTarget(
-            202,
-            "memo?.pdf",
-            4,
-            "memo.pdf",
-            "C:\\Downloads\\memo.pdf",
-        )
-        body_target = DownloadBodyTarget(
-            8,
-            4,
-            "C:\\Downloads\\memo.pdf.part",
-        )
-        result_target = DownloadBodyResult(True, None)
-        calls = []
-
-        def write_download_response_body_result_target(target):
-            calls.append(("write", target))
-            return 4
-
-        def finalize_download_body_result_decision_target(target):
-            calls.append(("finalize", target))
-            return result_target
-
-        downloader._write_download_response_body_result_target = write_download_response_body_result_target
-        downloader._finalize_download_body_result_decision_target = (
-            finalize_download_body_result_decision_target
-        )
-
-        result = ZSXQFileDownloader._download_body_result_for_response_target(
-            downloader,
-            DownloadResponseTarget(response, file_target),
-            body_target,
-        )
-
-        self.assertEqual(result_target, result)
-        self.assertEqual(
-            [
-                (
-                    "write",
-                    DownloadBodyResponseTarget(
-                        response,
-                        DownloadBodyWriteTarget(
-                            "C:\\Downloads\\memo.pdf.part",
-                            8,
-                            202,
-                        ),
-                    ),
-                ),
-                (
-                    "finalize",
-                    DownloadBodyFinalizationDecisionTarget(
-                        4,
-                        DownloadBodyFinalizationTarget(
-                            4,
-                            "C:\\Downloads\\memo.pdf.part",
-                            202,
                             "memo.pdf",
                             "C:\\Downloads\\memo.pdf",
                         ),
