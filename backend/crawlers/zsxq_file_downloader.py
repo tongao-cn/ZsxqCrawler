@@ -2709,9 +2709,6 @@ class ZSXQFileDownloader:
             target.stats,
         )
 
-    def _fetch_batch_download_page(self, current_index: Optional[str]) -> Optional[BatchDownloadPage]:
-        return self._fetch_batch_download_page_target(BatchDownloadFetchTarget(current_index))
-
     def _fetch_batch_download_page_target(
         self,
         target: BatchDownloadFetchTarget,
