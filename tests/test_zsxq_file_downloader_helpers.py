@@ -34,6 +34,7 @@ from backend.crawlers.zsxq_file_downloader import (
     DownloadStopTarget,
     DownloadUrlApiFailureResponseTarget,
     DownloadUrlHttpFailureResponseTarget,
+    DownloadUrlRequestExceptionTarget,
     DownloadUrlResponseDecision,
     DownloadUrlRetryLoopTarget,
     DownloadUrlSuccessResponseTarget,
@@ -6511,16 +6512,14 @@ class FileDownloaderRetryHelperTests(unittest.TestCase):
             output.getvalue().splitlines(),
         )
 
-    def test_handle_download_url_request_exception_preserves_output_and_retry_decision(self):
+    def test_handle_download_url_request_exception_target_preserves_output_and_retry_decision(self):
         downloader = object.__new__(ZSXQFileDownloader)
         output = io.StringIO()
 
         with contextlib.redirect_stdout(output):
-            should_retry = ZSXQFileDownloader._handle_download_url_request_exception(
+            should_retry = ZSXQFileDownloader._handle_download_url_request_exception_target(
                 downloader,
-                RuntimeError("final"),
-                1,
-                2,
+                DownloadUrlRequestExceptionTarget(RuntimeError("final"), 1, 2),
             )
 
         self.assertFalse(should_retry)

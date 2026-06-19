@@ -1642,16 +1642,6 @@ class ZSXQFileDownloader:
             return DownloadUrlResponseDecision(None, False, True)
         return DownloadUrlResponseDecision(None, False, False)
 
-    def _handle_download_url_request_exception(
-        self,
-        exc: Exception,
-        attempt: int,
-        max_retries: int,
-    ) -> bool:
-        return self._handle_download_url_request_exception_target(
-            DownloadUrlRequestExceptionTarget(exc, attempt, max_retries),
-        )
-
     def _handle_download_url_request_exception_target(
         self,
         target: DownloadUrlRequestExceptionTarget,
