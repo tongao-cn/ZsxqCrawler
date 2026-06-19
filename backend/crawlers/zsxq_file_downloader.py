@@ -53,10 +53,9 @@ from backend.crawlers.file_download_transfer import (
     apply_download_retry_exception,
     download_attempt_result_for_response_status,
     download_attempt_result_from_body_result,
-    download_body_finalization_decision_target,
     download_body_preparation_target_for_response,
+    download_body_result_for_response,
     download_body_target_for_preparation,
-    download_body_write_response_target,
     download_retry_attempt_file,
     download_retry_decision_after_attempt_result,
     download_retry_state_after_attempt_result,
@@ -2910,41 +2909,11 @@ class ZSXQFileDownloader:
         target: DownloadResponseTarget,
         body_target: DownloadBodyTarget,
     ) -> DownloadBodyResult:
-        downloaded_size = self._downloaded_size_for_response_body_target(target, body_target)
-        return self._finalize_download_body_result_decision_target(
-            self._download_body_finalization_decision_target(
-                downloaded_size,
-                target,
-                body_target,
-            )
-        )
-
-    def _downloaded_size_for_response_body_target(
-        self,
-        target: DownloadResponseTarget,
-        body_target: DownloadBodyTarget,
-    ) -> Optional[int]:
-        return self._write_download_response_body_result_target(
-            self._download_body_write_response_target(target, body_target),
-        )
-
-    def _download_body_write_response_target(
-        self,
-        target: DownloadResponseTarget,
-        body_target: DownloadBodyTarget,
-    ) -> DownloadBodyResponseTarget:
-        return download_body_write_response_target(target, body_target)
-
-    def _download_body_finalization_decision_target(
-        self,
-        downloaded_size: Optional[int],
-        target: DownloadResponseTarget,
-        body_target: DownloadBodyTarget,
-    ) -> DownloadBodyFinalizationDecisionTarget:
-        return download_body_finalization_decision_target(
-            downloaded_size,
+        return download_body_result_for_response(
             target,
             body_target,
+            write_response_body=self._write_download_response_body_result_target,
+            finalize_body_result=self._finalize_download_body_result_decision_target,
         )
 
     def _finalize_download_body_result(

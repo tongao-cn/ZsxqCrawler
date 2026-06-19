@@ -150,6 +150,8 @@ RecordDownloadException = Callable[[DownloadExceptionTarget], DownloadFailureDet
 FindDownloadSizeMismatch = Callable[[DownloadBodyFinalizationTarget], Optional[DownloadFailureDetail]]
 CompleteSuccessfulDownload = Callable[[DownloadCompletionTarget], None]
 HandleSuccessfulDownloadResponse = Callable[[DownloadResponseTarget], DownloadAttemptResult]
+WriteDownloadResponseBody = Callable[[DownloadBodyResponseTarget], Optional[int]]
+FinalizeDownloadBodyResult = Callable[[DownloadBodyFinalizationDecisionTarget], DownloadBodyResult]
 RecordDownloadHttpFailure = Callable[[int], DownloadFailureDetail]
 RemovePartialDownload = Callable[[str], bool]
 
@@ -335,6 +337,25 @@ def download_body_finalization_decision_target(
             file_target.file_id,
             file_target.safe_filename,
             file_target.file_path,
+        ),
+    )
+
+
+def download_body_result_for_response(
+    target: DownloadResponseTarget,
+    body_target: DownloadBodyTarget,
+    *,
+    write_response_body: WriteDownloadResponseBody,
+    finalize_body_result: FinalizeDownloadBodyResult,
+) -> DownloadBodyResult:
+    downloaded_size = write_response_body(
+        download_body_write_response_target(target, body_target),
+    )
+    return finalize_body_result(
+        download_body_finalization_decision_target(
+            downloaded_size,
+            target,
+            body_target,
         ),
     )
 
