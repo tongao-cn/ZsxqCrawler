@@ -2808,16 +2808,6 @@ class ZSXQFileDownloader:
             target.stats,
         )
 
-    def _run_batch_download_loop(
-        self,
-        stats: Dict[str, int],
-        max_files: Optional[int],
-        start_index: Optional[str],
-    ) -> None:
-        self._run_batch_download_loop_target(
-            self._batch_download_loop_target(stats, max_files, start_index),
-        )
-
     def _batch_download_loop_target(
         self,
         stats: Dict[str, int],
