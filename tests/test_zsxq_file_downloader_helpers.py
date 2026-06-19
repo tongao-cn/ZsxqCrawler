@@ -10390,17 +10390,21 @@ class FileDownloaderDownloadTests(unittest.TestCase):
             downloader.current_batch_count = 0
             downloader._apply_download_intervals = lambda: None
 
-            http_failure = ZSXQFileDownloader._handle_download_response(
+            http_failure = ZSXQFileDownloader._handle_download_response_result_target(
                 downloader,
-                FakeDownloadResponse(
-                    500,
-                    headers={"content-disposition": 'attachment; filename="real?.pdf"'},
+                DownloadResponseTarget(
+                    FakeDownloadResponse(
+                        500,
+                        headers={"content-disposition": 'attachment; filename="real?.pdf"'},
+                    ),
+                    DownloadFileTarget(
+                        101,
+                        "file_101",
+                        4,
+                        "file_101",
+                        str(Path(temp_dir) / "file_101"),
+                    ),
                 ),
-                101,
-                "file_101",
-                4,
-                "file_101",
-                str(Path(temp_dir) / "file_101"),
             )
 
             self.assertEqual(
@@ -10422,14 +10426,18 @@ class FileDownloaderDownloadTests(unittest.TestCase):
             downloader.logs = []
             downloader.log = downloader.logs.append
             success_path = Path(temp_dir) / "memo.pdf"
-            success = ZSXQFileDownloader._handle_download_response(
+            success = ZSXQFileDownloader._handle_download_response_result_target(
                 downloader,
-                FakeDownloadResponse(200, b"memo"),
-                102,
-                "memo.pdf",
-                4,
-                "memo.pdf",
-                str(success_path),
+                DownloadResponseTarget(
+                    FakeDownloadResponse(200, b"memo"),
+                    DownloadFileTarget(
+                        102,
+                        "memo.pdf",
+                        4,
+                        "memo.pdf",
+                        str(success_path),
+                    ),
+                ),
             )
 
             self.assertEqual((True, None, "memo.pdf", "memo.pdf", str(success_path)), success)

@@ -2575,15 +2575,6 @@ class ZSXQFileDownloader:
             stream=True,
         )
 
-    def _download_target_for_response(
-        self,
-        response: Any,
-        target: DownloadFileTarget,
-    ) -> DownloadFileTarget:
-        return self._download_target_for_response_target(
-            DownloadResponseTarget(response, target),
-        )
-
     def _download_target_for_response_target(
         self,
         target: DownloadResponseTarget,
@@ -2603,35 +2594,6 @@ class ZSXQFileDownloader:
             file_name=filename_override.file_name,
             safe_filename=filename_override.safe_filename,
             file_path=filename_override.file_path,
-        )
-
-    def _handle_download_response(
-        self,
-        response,
-        file_id: int,
-        file_name: str,
-        file_size: int,
-        safe_filename: str,
-        file_path: str,
-    ) -> DownloadAttemptResult:
-        return self._handle_download_response_target(
-            response,
-            DownloadFileTarget(
-                file_id,
-                file_name,
-                file_size,
-                safe_filename,
-                file_path,
-            ),
-        )
-
-    def _handle_download_response_target(
-        self,
-        response: Any,
-        target: DownloadFileTarget,
-    ) -> DownloadAttemptResult:
-        return self._handle_download_response_result_target(
-            DownloadResponseTarget(response, target),
         )
 
     def _handle_download_response_result_target(
