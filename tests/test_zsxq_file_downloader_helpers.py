@@ -20,10 +20,8 @@ from backend.crawlers.zsxq_file_downloader import (
     DownloadAttemptTarget,
     DownloadBodyFinalizationDecisionTarget,
     DownloadBodyFinalizationTarget,
-    DownloadBodyPreparationTarget,
     DownloadBodyResponseTarget,
     DownloadBodyResult,
-    DownloadBodyTarget,
     DownloadBodyWriteTarget,
     DownloadCompletionTarget,
     DownloadExceptionTarget,
@@ -10312,52 +10310,6 @@ class FileDownloaderDownloadTests(unittest.TestCase):
         self.assertEqual(1, len(exception_targets))
         self.assertIs(failure_exc, exception_targets[0].exc)
         self.assertEqual("C:\\Downloads\\real.pdf", exception_targets[0].file_path)
-
-    def test_prepare_download_body_target_preserves_sizes_temp_path_and_cleanup(self):
-        with tempfile.TemporaryDirectory() as temp_dir:
-            file_path = Path(temp_dir) / "memo.pdf"
-            partial_path = Path(f"{file_path}.part")
-            partial_path.write_bytes(b"stale")
-            downloader = object.__new__(ZSXQFileDownloader)
-
-            prepared = ZSXQFileDownloader._prepare_download_body_target(
-                downloader,
-                {"content-length": "8"},
-                4,
-                str(file_path),
-            )
-            fallback_prepared = ZSXQFileDownloader._prepare_download_body_target(
-                downloader,
-                {"content-length": "8"},
-                0,
-                str(Path(temp_dir) / "unknown.bin"),
-            )
-
-            self.assertEqual((8, 4, str(partial_path)), prepared)
-            self.assertFalse(partial_path.exists())
-            self.assertEqual(
-                (8, 8, str(Path(temp_dir) / "unknown.bin.part")),
-                fallback_prepared,
-            )
-
-    def test_prepare_download_body_target_from_target_preserves_values_and_cleanup(self):
-        with tempfile.TemporaryDirectory() as temp_dir:
-            file_path = Path(temp_dir) / "memo.pdf"
-            partial_path = Path(f"{file_path}.part")
-            partial_path.write_bytes(b"stale")
-            downloader = object.__new__(ZSXQFileDownloader)
-
-            prepared = ZSXQFileDownloader._prepare_download_body_target_from_target(
-                downloader,
-                DownloadBodyPreparationTarget(
-                    {"content-length": "8"},
-                    4,
-                    str(file_path),
-                ),
-            )
-
-            self.assertEqual((8, 4, str(partial_path)), prepared)
-            self.assertFalse(partial_path.exists())
 
     def test_handle_successful_download_response_preserves_completion_retry_and_stop_paths(self):
         with tempfile.TemporaryDirectory() as temp_dir:

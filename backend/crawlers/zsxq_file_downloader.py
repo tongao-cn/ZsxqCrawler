@@ -32,10 +32,8 @@ from backend.crawlers.file_download_transfer import (
     DownloadBodyAttemptResultTarget,
     DownloadBodyFinalizationDecisionTarget,
     DownloadBodyFinalizationTarget,
-    DownloadBodyPreparationTarget,
     DownloadBodyResponseTarget,
     DownloadBodyResult,
-    DownloadBodyTarget,
     DownloadBodyWriteTarget,
     DownloadCompletionTarget,
     DownloadExceptionTarget,
@@ -54,18 +52,14 @@ from backend.crawlers.file_download_transfer import (
     download_attempt_result_for_response_status,
     download_attempt_result_from_body_result,
     download_body_result_for_successful_response,
-    download_body_target_for_preparation,
     download_retry_attempt_file,
     download_retry_decision_after_attempt_result,
     download_retry_state_after_attempt_result,
     download_response_exception_attempt_result,
-    download_size_mismatch_result,
     download_size_mismatch_target_for_finalization,
     finalize_download_body_result_decision,
     initial_download_retry_state,
-    prepare_download_body_target,
     run_download_retry_loop,
-    stopped_download_body_result,
 )
 from backend.crawlers.zsxq_file_downloader_helpers import (
     API_FAILURE_NON_RETRY,
@@ -2831,35 +2825,6 @@ class ZSXQFileDownloader:
             record_exception=self._record_download_exception_target,
         )
 
-    def _prepare_download_body_target(
-        self,
-        response_headers: Dict[str, Any],
-        file_size: int,
-        file_path: str,
-    ) -> DownloadBodyTarget:
-        return self._prepare_download_body_target_from_target(
-            DownloadBodyPreparationTarget(
-                response_headers,
-                file_size,
-                file_path,
-            )
-        )
-
-    def _prepare_download_body_target_from_target(
-        self,
-        target: DownloadBodyPreparationTarget,
-    ) -> DownloadBodyTarget:
-        return prepare_download_body_target(
-            target,
-            remove_partial_download=remove_partial_download,
-        )
-
-    def _download_body_target_for_preparation(
-        self,
-        target: DownloadBodyPreparationTarget,
-    ) -> DownloadBodyTarget:
-        return download_body_target_for_preparation(target)
-
     def _handle_successful_download_response(
         self,
         response,
@@ -2937,15 +2902,6 @@ class ZSXQFileDownloader:
             find_mismatch_detail=self._download_size_mismatch_detail_for_finalization,
             complete_successful_download=self._complete_successful_download_target,
         )
-
-    def _stopped_download_body_result(self) -> DownloadBodyResult:
-        return stopped_download_body_result()
-
-    def _download_size_mismatch_result(
-        self,
-        mismatch_detail: DownloadFailureDetail,
-    ) -> DownloadBodyResult:
-        return download_size_mismatch_result(mismatch_detail)
 
     def _download_size_mismatch_detail_for_finalization(
         self,
