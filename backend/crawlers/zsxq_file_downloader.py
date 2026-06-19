@@ -18,6 +18,14 @@ import requests
 
 from backend.core.console_output import safe_console_print as print
 from backend.core.log_redaction import redact_json_like
+from backend.crawlers.file_download_url import (
+    DownloadUrlAttemptTarget,
+    DownloadUrlResponseDecision,
+    DownloadUrlRetryLoopStepDecision,
+    DownloadUrlRetryLoopTarget,
+    download_url_retry_loop_step_decision,
+    run_download_url_retry_loop,
+)
 from backend.crawlers.file_download_transfer import (
     DownloadAttemptResult,
     DownloadAttemptResultTarget,
@@ -290,12 +298,6 @@ class StealthHeaderSelection(NamedTuple):
     platform: str
 
 
-class DownloadUrlResponseDecision(NamedTuple):
-    download_url: Optional[str]
-    should_retry: bool
-    should_stop: bool
-
-
 class DownloadUrlEntryTarget(NamedTuple):
     file_id: int
 
@@ -375,24 +377,6 @@ class DownloadUrlRequestExceptionTarget(NamedTuple):
     exc: Exception
     attempt: int
     max_retries: int
-
-
-class DownloadUrlAttemptTarget(NamedTuple):
-    url: str
-    file_id: int
-    attempt: int
-    max_retries: int
-
-
-class DownloadUrlRetryLoopTarget(NamedTuple):
-    url: str
-    file_id: int
-    max_retries: int
-
-
-class DownloadUrlRetryLoopStepDecision(NamedTuple):
-    result: Optional[str]
-    should_continue: bool
 
 
 class DownloadRetryWaitTarget(NamedTuple):
@@ -2058,29 +2042,23 @@ class ZSXQFileDownloader:
         self,
         decision: DownloadUrlResponseDecision,
     ) -> DownloadUrlRetryLoopStepDecision:
-        if decision.download_url:
-            return DownloadUrlRetryLoopStepDecision(decision.download_url, False)
-        if decision.should_retry:
-            return DownloadUrlRetryLoopStepDecision(None, True)
-        if decision.should_stop:
-            return DownloadUrlRetryLoopStepDecision(None, False)
-        return DownloadUrlRetryLoopStepDecision(None, True)
+        return download_url_retry_loop_step_decision(decision)
 
     def _run_download_url_retry_loop_target(
         self,
         target: DownloadUrlRetryLoopTarget,
     ) -> Optional[str]:
-        for attempt in range(target.max_retries):
-            decision = self._run_download_url_attempt_target(
-                DownloadUrlAttemptTarget(target.url, target.file_id, attempt, target.max_retries),
-            )
-            step_decision = self._download_url_retry_loop_step_decision(decision)
-            if step_decision.should_continue:
-                continue
-            return step_decision.result
+        return run_download_url_retry_loop(
+            target,
+            run_attempt=self._run_download_url_attempt_target,
+            finish_exhausted=self._finish_download_url_retry_loop_exhausted_target,
+        )
 
+    def _finish_download_url_retry_loop_exhausted_target(
+        self,
+        target: DownloadUrlRetryLoopTarget,
+    ) -> None:
         print(retry_exhausted_message(target.max_retries))
-        return None
 
     def get_download_url(self, file_id: int) -> Optional[str]:
         """获取文件下载链接（带重试机制）

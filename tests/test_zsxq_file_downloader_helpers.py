@@ -58,6 +58,11 @@ from backend.crawlers.zsxq_file_downloader import (
     _file_collection_log_id,
     _latest_file_create_time,
 )
+from backend.crawlers.file_download_url import (
+    DownloadUrlResponseDecision as UrlDownloadUrlResponseDecision,
+    DownloadUrlRetryLoopTarget as UrlDownloadUrlRetryLoopTarget,
+    run_download_url_retry_loop as run_download_url_loop,
+)
 from backend.crawlers.file_download_transfer import (
     DownloadFileTarget as TransferDownloadFileTarget,
     DownloadRetryDecision as TransferDownloadRetryDecision,
@@ -6928,6 +6933,68 @@ class FileDownloaderRetryHelperTests(unittest.TestCase):
             calls,
         )
         self.assertEqual("", output.getvalue())
+
+    def test_download_url_loop_returns_success_after_retry(self):
+        target = UrlDownloadUrlRetryLoopTarget("https://api.example/v2/files/303/download_url", 303, 3)
+        calls = []
+        decisions = [
+            UrlDownloadUrlResponseDecision(None, True, False),
+            UrlDownloadUrlResponseDecision("https://signed.example/file.pdf", False, False),
+        ]
+
+        def run_attempt(attempt_target):
+            calls.append(attempt_target)
+            return decisions[attempt_target.attempt]
+
+        result = run_download_url_loop(
+            target,
+            run_attempt=run_attempt,
+            finish_exhausted=lambda exhausted_target: self.fail(
+                f"successful retry loop should not exhaust: {exhausted_target}"
+            ),
+        )
+
+        self.assertEqual("https://signed.example/file.pdf", result)
+        self.assertEqual([0, 1], [call.attempt for call in calls])
+        self.assertEqual([3, 3], [call.max_retries for call in calls])
+
+    def test_download_url_loop_reports_exhaustion_after_retries(self):
+        target = UrlDownloadUrlRetryLoopTarget("https://api.example/v2/files/505/download_url", 505, 2)
+        calls = []
+        exhausted = []
+
+        def run_attempt(attempt_target):
+            calls.append(attempt_target)
+            return UrlDownloadUrlResponseDecision(None, True, False)
+
+        result = run_download_url_loop(
+            target,
+            run_attempt=run_attempt,
+            finish_exhausted=exhausted.append,
+        )
+
+        self.assertIsNone(result)
+        self.assertEqual([0, 1], [call.attempt for call in calls])
+        self.assertEqual([target], exhausted)
+
+    def test_download_url_loop_stops_without_exhaustion(self):
+        target = UrlDownloadUrlRetryLoopTarget("https://api.example/v2/files/404/download_url", 404, 3)
+        calls = []
+
+        def run_attempt(attempt_target):
+            calls.append(attempt_target)
+            return UrlDownloadUrlResponseDecision(None, False, True)
+
+        result = run_download_url_loop(
+            target,
+            run_attempt=run_attempt,
+            finish_exhausted=lambda exhausted_target: self.fail(
+                f"stopped retry loop should not exhaust: {exhausted_target}"
+            ),
+        )
+
+        self.assertIsNone(result)
+        self.assertEqual([0], [call.attempt for call in calls])
 
     def test_run_download_url_retry_loop_preserves_stop_without_exhausted_output(self):
         downloader = object.__new__(ZSXQFileDownloader)
