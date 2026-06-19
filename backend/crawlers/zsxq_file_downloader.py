@@ -1779,11 +1779,6 @@ class ZSXQFileDownloader:
         self.log(f"   🌐 请求URL: {url}")
         return url
 
-    def _request_download_url_response(self, url: str, headers: Dict[str, str]) -> Any:
-        return self._request_download_url_response_target(
-            DownloadUrlRequestTarget(url, headers),
-        )
-
     def _request_download_url_response_target(
         self,
         target: DownloadUrlRequestTarget,
@@ -1792,17 +1787,6 @@ class ZSXQFileDownloader:
             target.url,
             headers=target.headers,
             timeout=DOWNLOAD_URL_REQUEST_TIMEOUT_SECONDS,
-        )
-
-    def _run_download_url_attempt(
-        self,
-        url: str,
-        file_id: int,
-        attempt: int,
-        max_retries: int,
-    ) -> DownloadUrlResponseDecision:
-        return self._run_download_url_attempt_target(
-            DownloadUrlAttemptTarget(url, file_id, attempt, max_retries),
         )
 
     def _run_download_url_attempt_target(

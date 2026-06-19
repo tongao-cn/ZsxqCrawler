@@ -32,6 +32,7 @@ from backend.crawlers.zsxq_file_downloader import (
     DownloadRetryWaitTarget,
     DownloadSizeMismatchTarget,
     DownloadStopTarget,
+    DownloadUrlAttemptTarget,
     DownloadUrlApiFailureResponseTarget,
     DownloadUrlDataDecisionTarget,
     DownloadUrlHttpFailureResponseTarget,
@@ -6905,12 +6906,14 @@ class FileDownloaderRetryHelperTests(unittest.TestCase):
         downloader._request_download_url_response_target = request_download_url_response_target
         downloader._handle_download_url_response_target = handle_download_url_response_target
 
-        decision = ZSXQFileDownloader._run_download_url_attempt(
+        decision = ZSXQFileDownloader._run_download_url_attempt_target(
             downloader,
-            "https://api.example/v2/files/101/download_url",
-            101,
-            1,
-            3,
+            DownloadUrlAttemptTarget(
+                "https://api.example/v2/files/101/download_url",
+                101,
+                1,
+                3,
+            ),
         )
 
         self.assertIs(expected_decision, decision)
@@ -6943,12 +6946,14 @@ class FileDownloaderRetryHelperTests(unittest.TestCase):
         downloader._request_download_url_response_target = request_download_url_response_target
         downloader._handle_download_url_request_exception_target = handle_download_url_request_exception_target
 
-        decision = ZSXQFileDownloader._run_download_url_attempt(
+        decision = ZSXQFileDownloader._run_download_url_attempt_target(
             downloader,
-            "https://api.example/v2/files/202/download_url",
-            202,
-            0,
-            2,
+            DownloadUrlAttemptTarget(
+                "https://api.example/v2/files/202/download_url",
+                202,
+                0,
+                2,
+            ),
         )
 
         self.assertIsNone(decision.download_url)
