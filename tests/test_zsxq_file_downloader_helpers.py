@@ -68,8 +68,10 @@ from backend.crawlers.file_download_transfer import (
     DownloadBodyFinalizationDecisionTarget as TransferDownloadBodyFinalizationDecisionTarget,
     DownloadBodyFinalizationTarget as TransferDownloadBodyFinalizationTarget,
     DownloadBodyPreparationTarget as TransferDownloadBodyPreparationTarget,
+    DownloadBodyResponseTarget as TransferDownloadBodyResponseTarget,
     DownloadBodyResult as TransferDownloadBodyResult,
     DownloadBodyTarget as TransferDownloadBodyTarget,
+    DownloadBodyWriteTarget as TransferDownloadBodyWriteTarget,
     DownloadCompletionTarget as TransferDownloadCompletionTarget,
     DownloadFailureDetail as TransferDownloadFailureDetail,
     DownloadFileTarget as TransferDownloadFileTarget,
@@ -81,7 +83,10 @@ from backend.crawlers.file_download_transfer import (
     apply_download_retry_exception as apply_transfer_download_retry_exception,
     download_attempt_result_for_response_status as transfer_download_attempt_result_for_response_status,
     download_attempt_result_from_body_result as transfer_download_attempt_result_from_body_result,
+    download_body_finalization_decision_target as transfer_download_body_finalization_decision_target,
+    download_body_preparation_target_for_response as transfer_download_body_preparation_target_for_response,
     download_body_target_for_preparation as transfer_download_body_target_for_preparation,
+    download_body_write_response_target as transfer_download_body_write_response_target,
     download_completion_target_for_finalization as transfer_download_completion_target_for_finalization,
     download_retry_state_after_exception_result as transfer_download_retry_state_after_exception_result,
     finalize_download_body_result_decision as finalize_transfer_download_body_result_decision,
@@ -8787,6 +8792,55 @@ class FileDownloaderDownloadTests(unittest.TestCase):
 
         self.assertEqual(TransferDownloadBodyTarget(8, 4, "C:\\Downloads\\memo.pdf.part"), result)
         self.assertEqual(["C:\\Downloads\\memo.pdf.part"], calls)
+
+    def test_download_transfer_body_targets_for_response_use_response_and_file_fields(self):
+        response = SimpleNamespace(headers={"content-length": "8"})
+        file_target = TransferDownloadFileTarget(
+            101,
+            "memo?.pdf",
+            4,
+            "memo.pdf",
+            "C:\\Downloads\\memo.pdf",
+        )
+        response_target = TransferDownloadResponseTarget(response, file_target)
+        body_target = TransferDownloadBodyTarget(8, 4, "C:\\Downloads\\memo.pdf.part")
+
+        self.assertEqual(
+            TransferDownloadBodyPreparationTarget(
+                {"content-length": "8"},
+                4,
+                "C:\\Downloads\\memo.pdf",
+            ),
+            transfer_download_body_preparation_target_for_response(response_target),
+        )
+        self.assertEqual(
+            TransferDownloadBodyResponseTarget(
+                response,
+                TransferDownloadBodyWriteTarget(
+                    "C:\\Downloads\\memo.pdf.part",
+                    8,
+                    101,
+                ),
+            ),
+            transfer_download_body_write_response_target(response_target, body_target),
+        )
+        self.assertEqual(
+            TransferDownloadBodyFinalizationDecisionTarget(
+                4,
+                TransferDownloadBodyFinalizationTarget(
+                    4,
+                    "C:\\Downloads\\memo.pdf.part",
+                    101,
+                    "memo.pdf",
+                    "C:\\Downloads\\memo.pdf",
+                ),
+            ),
+            transfer_download_body_finalization_decision_target(
+                4,
+                response_target,
+                body_target,
+            ),
+        )
 
     def test_download_transfer_response_status_delegates_200_to_success_handler(self):
         file_target = TransferDownloadFileTarget(

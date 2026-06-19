@@ -95,6 +95,17 @@ class DownloadBodyTarget(NamedTuple):
     temp_path: str
 
 
+class DownloadBodyWriteTarget(NamedTuple):
+    temp_path: str
+    total_size: int
+    file_id: int
+
+
+class DownloadBodyResponseTarget(NamedTuple):
+    response: Any
+    body_target: DownloadBodyWriteTarget
+
+
 class DownloadBodyFinalizationTarget(NamedTuple):
     expected_size: int
     temp_path: str
@@ -233,6 +244,50 @@ def prepare_download_body_target(
     body_target = download_body_target_for_preparation(target)
     remove_partial_download(body_target.temp_path)
     return body_target
+
+
+def download_body_preparation_target_for_response(
+    target: DownloadResponseTarget,
+) -> DownloadBodyPreparationTarget:
+    file_target = target.file_target
+    return DownloadBodyPreparationTarget(
+        target.response.headers,
+        file_target.file_size,
+        file_target.file_path,
+    )
+
+
+def download_body_write_response_target(
+    target: DownloadResponseTarget,
+    body_target: DownloadBodyTarget,
+) -> DownloadBodyResponseTarget:
+    file_target = target.file_target
+    return DownloadBodyResponseTarget(
+        target.response,
+        DownloadBodyWriteTarget(
+            body_target.temp_path,
+            body_target.total_size,
+            file_target.file_id,
+        ),
+    )
+
+
+def download_body_finalization_decision_target(
+    downloaded_size: Optional[int],
+    target: DownloadResponseTarget,
+    body_target: DownloadBodyTarget,
+) -> DownloadBodyFinalizationDecisionTarget:
+    file_target = target.file_target
+    return DownloadBodyFinalizationDecisionTarget(
+        downloaded_size,
+        DownloadBodyFinalizationTarget(
+            body_target.expected_size,
+            body_target.temp_path,
+            file_target.file_id,
+            file_target.safe_filename,
+            file_target.file_path,
+        ),
+    )
 
 
 def download_attempt_result_from_body_result(

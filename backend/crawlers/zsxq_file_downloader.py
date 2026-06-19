@@ -33,8 +33,10 @@ from backend.crawlers.file_download_transfer import (
     DownloadBodyFinalizationDecisionTarget,
     DownloadBodyFinalizationTarget,
     DownloadBodyPreparationTarget,
+    DownloadBodyResponseTarget,
     DownloadBodyResult,
     DownloadBodyTarget,
+    DownloadBodyWriteTarget,
     DownloadCompletionTarget,
     DownloadFailureDetail,
     DownloadFileTarget,
@@ -51,7 +53,10 @@ from backend.crawlers.file_download_transfer import (
     apply_download_retry_exception,
     download_attempt_result_for_response_status,
     download_attempt_result_from_body_result,
+    download_body_finalization_decision_target,
+    download_body_preparation_target_for_response,
     download_body_target_for_preparation,
+    download_body_write_response_target,
     download_completion_target_for_finalization,
     download_http_failure_attempt_result,
     download_retry_attempt_file,
@@ -460,17 +465,6 @@ class DownloadFinalFailureTarget(NamedTuple):
     download_retries: int
     last_error_code: Optional[str]
     last_error: Optional[str]
-
-
-class DownloadBodyWriteTarget(NamedTuple):
-    temp_path: str
-    total_size: int
-    file_id: int
-
-
-class DownloadBodyResponseTarget(NamedTuple):
-    response: Any
-    body_target: DownloadBodyWriteTarget
 
 
 class DownloadStopTarget(NamedTuple):
@@ -2951,14 +2945,8 @@ class ZSXQFileDownloader:
         self,
         target: DownloadResponseTarget,
     ) -> DownloadBodyTarget:
-        response = target.response
-        file_target = target.file_target
         return self._prepare_download_body_target_from_target(
-            DownloadBodyPreparationTarget(
-                response.headers,
-                file_target.file_size,
-                file_target.file_path,
-            ),
+            download_body_preparation_target_for_response(target),
         )
 
     def _download_body_result_for_response_target(
@@ -2989,16 +2977,7 @@ class ZSXQFileDownloader:
         target: DownloadResponseTarget,
         body_target: DownloadBodyTarget,
     ) -> DownloadBodyResponseTarget:
-        response = target.response
-        file_target = target.file_target
-        return DownloadBodyResponseTarget(
-            response,
-            DownloadBodyWriteTarget(
-                body_target.temp_path,
-                body_target.total_size,
-                file_target.file_id,
-            ),
-        )
+        return download_body_write_response_target(target, body_target)
 
     def _download_body_finalization_decision_target(
         self,
@@ -3006,16 +2985,10 @@ class ZSXQFileDownloader:
         target: DownloadResponseTarget,
         body_target: DownloadBodyTarget,
     ) -> DownloadBodyFinalizationDecisionTarget:
-        file_target = target.file_target
-        return DownloadBodyFinalizationDecisionTarget(
+        return download_body_finalization_decision_target(
             downloaded_size,
-            DownloadBodyFinalizationTarget(
-                body_target.expected_size,
-                body_target.temp_path,
-                file_target.file_id,
-                file_target.safe_filename,
-                file_target.file_path,
-            ),
+            target,
+            body_target,
         )
 
     def _finalize_download_body_result(
