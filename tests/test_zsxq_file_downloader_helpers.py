@@ -33,10 +33,12 @@ from backend.crawlers.zsxq_file_downloader import (
     DownloadSizeMismatchTarget,
     DownloadStopTarget,
     DownloadUrlApiFailureResponseTarget,
+    DownloadUrlDataDecisionTarget,
     DownloadUrlHttpFailureResponseTarget,
     DownloadUrlOkResponseTarget,
     DownloadUrlRequestExceptionTarget,
     DownloadUrlResponseDecision,
+    DownloadUrlResponseTarget,
     DownloadUrlRetryLoopTarget,
     DownloadUrlSuccessResponseTarget,
     DownloadUrlUnavailableTarget,
@@ -6299,14 +6301,16 @@ class FileDownloaderRetryHelperTests(unittest.TestCase):
         output = io.StringIO()
 
         with contextlib.redirect_stdout(output):
-            decision = ZSXQFileDownloader._download_url_data_decision(
+            decision = ZSXQFileDownloader._download_url_data_decision_target(
                 downloader,
-                {"succeeded": True, "resp_data": {"download_url": "https://files.example/signed-token"}},
-                101,
-                2,
-                3,
-                {"User-Agent": "unit-test-agent"},
-                200,
+                DownloadUrlDataDecisionTarget(
+                    {"succeeded": True, "resp_data": {"download_url": "https://files.example/signed-token"}},
+                    101,
+                    2,
+                    3,
+                    {"User-Agent": "unit-test-agent"},
+                    200,
+                ),
             )
 
         self.assertEqual("https://files.example/signed-token", decision.download_url)
@@ -6335,14 +6339,16 @@ class FileDownloaderRetryHelperTests(unittest.TestCase):
         downloader._record_risk_event = lambda **kwargs: events.append(kwargs)
         downloader.last_download_url_error = None
 
-        decision = ZSXQFileDownloader._download_url_data_decision(
+        decision = ZSXQFileDownloader._download_url_data_decision_target(
             downloader,
-            {"succeeded": False, "message": "mobile only", "code": 1030},
-            202,
-            0,
-            2,
-            {"User-Agent": "unit-test-agent"},
-            200,
+            DownloadUrlDataDecisionTarget(
+                {"succeeded": False, "message": "mobile only", "code": 1030},
+                202,
+                0,
+                2,
+                {"User-Agent": "unit-test-agent"},
+                200,
+            ),
         )
 
         self.assertIsNone(decision.download_url)
@@ -6805,13 +6811,15 @@ class FileDownloaderRetryHelperTests(unittest.TestCase):
         output = io.StringIO()
 
         with contextlib.redirect_stdout(output):
-            decision = ZSXQFileDownloader._handle_download_url_response(
+            decision = ZSXQFileDownloader._handle_download_url_response_target(
                 downloader,
-                FakeJsonResponse(),
-                101,
-                0,
-                2,
-                {"User-Agent": "unit-test-agent"},
+                DownloadUrlResponseTarget(
+                    FakeJsonResponse(),
+                    101,
+                    0,
+                    2,
+                    {"User-Agent": "unit-test-agent"},
+                ),
             )
 
         printed = output.getvalue()
@@ -6841,13 +6849,15 @@ class FileDownloaderRetryHelperTests(unittest.TestCase):
         output = io.StringIO()
 
         with contextlib.redirect_stdout(output):
-            decision = ZSXQFileDownloader._handle_download_url_response(
+            decision = ZSXQFileDownloader._handle_download_url_response_target(
                 downloader,
-                FakeHttpDownloadUrlResponse(403, "forbidden"),
-                202,
-                0,
-                2,
-                {"User-Agent": "unit-test-agent"},
+                DownloadUrlResponseTarget(
+                    FakeHttpDownloadUrlResponse(403, "forbidden"),
+                    202,
+                    0,
+                    2,
+                    {"User-Agent": "unit-test-agent"},
+                ),
             )
 
         self.assertIsNone(decision.download_url)

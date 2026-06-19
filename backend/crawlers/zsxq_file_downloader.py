@@ -1699,26 +1699,6 @@ class ZSXQFileDownloader:
             ),
         )
 
-    def _download_url_data_decision(
-        self,
-        data: Dict[str, Any],
-        file_id: int,
-        attempt: int,
-        max_retries: int,
-        headers: Dict[str, str],
-        http_status: int,
-    ) -> DownloadUrlResponseDecision:
-        return self._download_url_data_decision_target(
-            DownloadUrlDataDecisionTarget(
-                data,
-                file_id,
-                attempt,
-                max_retries,
-                headers,
-                http_status,
-            ),
-        )
-
     def _download_url_data_decision_target(
         self,
         target: DownloadUrlDataDecisionTarget,
@@ -1759,24 +1739,6 @@ class ZSXQFileDownloader:
         )
 
         return self._download_url_api_failure_decision(failure_class)
-
-    def _handle_download_url_response(
-        self,
-        response: Any,
-        file_id: int,
-        attempt: int,
-        max_retries: int,
-        headers: Dict[str, str],
-    ) -> DownloadUrlResponseDecision:
-        return self._handle_download_url_response_target(
-            DownloadUrlResponseTarget(
-                response,
-                file_id,
-                attempt,
-                max_retries,
-                headers,
-            ),
-        )
 
     def _handle_download_url_response_target(
         self,
