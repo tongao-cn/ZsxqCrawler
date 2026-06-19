@@ -2518,11 +2518,6 @@ class ZSXQFileDownloader:
         if remove_partial_download(temp_path):
             self.log(f"   🗑️ 删除不完整文件")
 
-    def _wait_before_download_retry(self, attempt: int, download_retries: int) -> None:
-        self._wait_before_download_retry_target(
-            DownloadRetryWaitTarget(attempt, download_retries),
-        )
-
     def _wait_before_download_retry_target(
         self,
         target: DownloadRetryWaitTarget,

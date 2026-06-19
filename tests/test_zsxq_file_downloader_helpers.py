@@ -30,6 +30,7 @@ from backend.crawlers.zsxq_file_downloader import (
     DownloadIntervalValues,
     DownloadResponseTarget,
     DownloadRetryDecision,
+    DownloadRetryWaitTarget,
     DownloadSizeMismatchTarget,
     DownloadStopTarget,
     DownloadUrlResponseDecision,
@@ -10338,7 +10339,10 @@ class FileDownloaderDownloadTests(unittest.TestCase):
         downloader.log = downloader.logs.append
 
         with patch("backend.crawlers.zsxq_file_downloader.time.sleep") as sleep:
-            ZSXQFileDownloader._wait_before_download_retry(downloader, 2, 5)
+            ZSXQFileDownloader._wait_before_download_retry_target(
+                downloader,
+                DownloadRetryWaitTarget(2, 5),
+            )
 
         sleep.assert_called_once_with(4)
         self.assertEqual(
