@@ -1619,22 +1619,6 @@ class ZSXQFileDownloader:
             status="api_failed",
         )
 
-    def _handle_download_url_http_failure_response(
-        self,
-        http_status: int,
-        response_text: str,
-        attempt: int,
-        max_retries: int,
-    ) -> str:
-        return self._handle_download_url_http_failure_response_target(
-            DownloadUrlHttpFailureResponseTarget(
-                http_status,
-                response_text,
-                attempt,
-                max_retries,
-            ),
-        )
-
     def _handle_download_url_http_failure_response_target(
         self,
         target: DownloadUrlHttpFailureResponseTarget,

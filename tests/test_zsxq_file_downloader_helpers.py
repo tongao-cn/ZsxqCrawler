@@ -33,6 +33,7 @@ from backend.crawlers.zsxq_file_downloader import (
     DownloadSizeMismatchTarget,
     DownloadStopTarget,
     DownloadUrlApiFailureResponseTarget,
+    DownloadUrlHttpFailureResponseTarget,
     DownloadUrlResponseDecision,
     DownloadUrlRetryLoopTarget,
     DownloadUrlSuccessResponseTarget,
@@ -6490,17 +6491,14 @@ class FileDownloaderRetryHelperTests(unittest.TestCase):
         self.assertEqual(1030, risk_events[0]["api_code"])
         self.assertEqual("mobile only", risk_events[0]["api_message"])
 
-    def test_handle_download_url_http_failure_response_preserves_output_and_failure_class(self):
+    def test_handle_download_url_http_failure_response_target_preserves_output_and_failure_class(self):
         downloader = object.__new__(ZSXQFileDownloader)
         output = io.StringIO()
 
         with contextlib.redirect_stdout(output):
-            failure_class = ZSXQFileDownloader._handle_download_url_http_failure_response(
+            failure_class = ZSXQFileDownloader._handle_download_url_http_failure_response_target(
                 downloader,
-                403,
-                "forbidden",
-                0,
-                2,
+                DownloadUrlHttpFailureResponseTarget(403, "forbidden", 0, 2),
             )
 
         self.assertEqual(HTTP_FAILURE_NON_RETRY, failure_class)
