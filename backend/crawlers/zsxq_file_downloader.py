@@ -58,7 +58,6 @@ from backend.crawlers.file_download_transfer import (
     download_body_preparation_target_for_response,
     download_body_target_for_preparation,
     download_body_write_response_target,
-    download_completion_target_for_finalization,
     download_http_failure_attempt_result,
     download_retry_attempt_file,
     download_retry_decision_after_attempt_result,
@@ -71,7 +70,6 @@ from backend.crawlers.file_download_transfer import (
     prepare_download_body_target,
     run_download_retry_loop,
     stopped_download_body_result,
-    successful_download_body_result,
 )
 from backend.crawlers.zsxq_file_downloader_helpers import (
     API_FAILURE_NON_RETRY,
@@ -2996,7 +2994,7 @@ class ZSXQFileDownloader:
         return finalize_download_body_result_decision(
             target,
             find_mismatch_detail=self._download_size_mismatch_detail_for_finalization,
-            complete_successful_download=self._successful_download_body_result_target,
+            complete_successful_download=self._complete_successful_download_target,
         )
 
     def _stopped_download_body_result(self) -> DownloadBodyResult:
@@ -3021,24 +3019,6 @@ class ZSXQFileDownloader:
         finalization_target: DownloadBodyFinalizationTarget,
     ) -> DownloadSizeMismatchTarget:
         return download_size_mismatch_target_for_finalization(finalization_target)
-
-    def _successful_download_body_result_target(
-        self,
-        finalization_target: DownloadBodyFinalizationTarget,
-    ) -> DownloadBodyResult:
-        self._complete_successful_download_target(
-            self._download_completion_target_for_finalization(finalization_target),
-        )
-        return self._successful_download_body_result()
-
-    def _download_completion_target_for_finalization(
-        self,
-        finalization_target: DownloadBodyFinalizationTarget,
-    ) -> DownloadCompletionTarget:
-        return download_completion_target_for_finalization(finalization_target)
-
-    def _successful_download_body_result(self) -> DownloadBodyResult:
-        return successful_download_body_result()
 
     def _handle_download_size_mismatch(
         self,

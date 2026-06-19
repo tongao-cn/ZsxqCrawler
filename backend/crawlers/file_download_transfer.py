@@ -153,7 +153,7 @@ RunDownloadAttempt = Callable[[DownloadRetryLoopAttemptTarget], DownloadRetryDec
 FinishDownloadFailure = Callable[[DownloadRetryLoopFailureTarget], bool]
 RecordDownloadException = Callable[[DownloadExceptionTarget], DownloadFailureDetail]
 FindDownloadSizeMismatch = Callable[[DownloadBodyFinalizationTarget], Optional[DownloadFailureDetail]]
-CompleteSuccessfulDownloadBody = Callable[[DownloadBodyFinalizationTarget], DownloadBodyResult]
+CompleteSuccessfulDownload = Callable[[DownloadCompletionTarget], None]
 HandleSuccessfulDownloadResponse = Callable[[DownloadResponseTarget], DownloadAttemptResult]
 RecordDownloadHttpFailure = Callable[[int], DownloadFailureDetail]
 RemovePartialDownload = Callable[[str], bool]
@@ -409,11 +409,22 @@ def download_completion_target_for_finalization(
     )
 
 
+def successful_download_body_result_for_finalization(
+    finalization_target: DownloadBodyFinalizationTarget,
+    *,
+    complete_successful_download: CompleteSuccessfulDownload,
+) -> DownloadBodyResult:
+    complete_successful_download(
+        download_completion_target_for_finalization(finalization_target),
+    )
+    return successful_download_body_result()
+
+
 def finalize_download_body_result_decision(
     target: DownloadBodyFinalizationDecisionTarget,
     *,
     find_mismatch_detail: FindDownloadSizeMismatch,
-    complete_successful_download: CompleteSuccessfulDownloadBody,
+    complete_successful_download: CompleteSuccessfulDownload,
 ) -> DownloadBodyResult:
     finalization_target = target.finalization_target
     if target.downloaded_size is None:
@@ -423,7 +434,10 @@ def finalize_download_body_result_decision(
     if mismatch_detail:
         return download_size_mismatch_result(mismatch_detail)
 
-    return complete_successful_download(finalization_target)
+    return successful_download_body_result_for_finalization(
+        finalization_target,
+        complete_successful_download=complete_successful_download,
+    )
 
 
 def run_download_retry_loop(

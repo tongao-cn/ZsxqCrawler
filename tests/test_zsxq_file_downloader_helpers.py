@@ -72,7 +72,6 @@ from backend.crawlers.file_download_transfer import (
     DownloadBodyResult as TransferDownloadBodyResult,
     DownloadBodyTarget as TransferDownloadBodyTarget,
     DownloadBodyWriteTarget as TransferDownloadBodyWriteTarget,
-    DownloadCompletionTarget as TransferDownloadCompletionTarget,
     DownloadExceptionTarget as TransferDownloadExceptionTarget,
     DownloadFailureDetail as TransferDownloadFailureDetail,
     DownloadFileTarget as TransferDownloadFileTarget,
@@ -89,7 +88,6 @@ from backend.crawlers.file_download_transfer import (
     download_body_preparation_target_for_response as transfer_download_body_preparation_target_for_response,
     download_body_target_for_preparation as transfer_download_body_target_for_preparation,
     download_body_write_response_target as transfer_download_body_write_response_target,
-    download_completion_target_for_finalization as transfer_download_completion_target_for_finalization,
     download_retry_exception_state as transfer_download_retry_exception_state,
     download_retry_state_after_exception_result as transfer_download_retry_state_after_exception_result,
     download_response_exception_attempt_result as transfer_download_response_exception_attempt_result,
@@ -9009,7 +9007,6 @@ class FileDownloaderDownloadTests(unittest.TestCase):
 
         def complete_successful_download(target):
             calls.append(target)
-            return (True, None)
 
         result = finalize_transfer_download_body_result_decision(
             TransferDownloadBodyFinalizationDecisionTarget(4, finalization_target),
@@ -9018,15 +9015,16 @@ class FileDownloaderDownloadTests(unittest.TestCase):
         )
 
         self.assertEqual((True, None), result)
-        self.assertEqual([finalization_target], calls)
         self.assertEqual(
-            TransferDownloadCompletionTarget(
-                101,
-                "memo.pdf",
-                "C:\\Downloads\\memo.pdf",
-                "C:\\Downloads\\memo.pdf.part",
-            ),
-            transfer_download_completion_target_for_finalization(finalization_target),
+            [
+                DownloadCompletionTarget(
+                    101,
+                    "memo.pdf",
+                    "C:\\Downloads\\memo.pdf",
+                    "C:\\Downloads\\memo.pdf.part",
+                ),
+            ],
+            calls,
         )
 
     def _downloader_for_download(self, temp_dir, session):
@@ -10832,7 +10830,7 @@ class FileDownloaderDownloadTests(unittest.TestCase):
         downloader._download_size_mismatch_detail_for_finalization = lambda target: self.fail(
             "stop path should not check size mismatch"
         )
-        downloader._successful_download_body_result_target = lambda target: self.fail(
+        downloader._complete_successful_download_target = lambda target: self.fail(
             "stop path should not complete download"
         )
 
@@ -10860,7 +10858,7 @@ class FileDownloaderDownloadTests(unittest.TestCase):
             return mismatch_detail
 
         downloader._handle_download_size_mismatch_target = handle_download_size_mismatch_target
-        downloader._successful_download_body_result_target = lambda target: self.fail(
+        downloader._complete_successful_download_target = lambda target: self.fail(
             "mismatch path should not complete download"
         )
 
@@ -10900,7 +10898,7 @@ class FileDownloaderDownloadTests(unittest.TestCase):
             download_size_mismatch_target_for_finalization
         )
         downloader._handle_download_size_mismatch_target = handle_download_size_mismatch_target
-        downloader._successful_download_body_result_target = lambda target: self.fail(
+        downloader._complete_successful_download_target = lambda target: self.fail(
             "mismatch path should not complete download"
         )
 
@@ -10937,7 +10935,7 @@ class FileDownloaderDownloadTests(unittest.TestCase):
         downloader._download_size_mismatch_detail_for_finalization = (
             download_size_mismatch_detail_for_finalization
         )
-        downloader._successful_download_body_result_target = lambda target: self.fail(
+        downloader._complete_successful_download_target = lambda target: self.fail(
             "mismatch path should not complete download"
         )
 
@@ -10948,83 +10946,6 @@ class FileDownloaderDownloadTests(unittest.TestCase):
 
         self.assertEqual((None, mismatch_detail), result)
         self.assertEqual([("mismatch-detail", finalization_target)], calls)
-
-    def test_successful_download_body_result_target_preserves_completion_target_handoff(self):
-        downloader = object.__new__(ZSXQFileDownloader)
-        finalization_target = DownloadBodyFinalizationTarget(
-            42,
-            "C:\\Downloads\\memo.pdf.part",
-            808,
-            "memo.pdf",
-            "C:\\Downloads\\memo.pdf",
-        )
-        calls = []
-
-        def complete_successful_download_target(target):
-            calls.append(target)
-
-        downloader._complete_successful_download_target = complete_successful_download_target
-
-        result = ZSXQFileDownloader._successful_download_body_result_target(
-            downloader,
-            finalization_target,
-        )
-
-        self.assertEqual((True, None), result)
-        self.assertEqual(
-            [
-                DownloadCompletionTarget(
-                    808,
-                    "memo.pdf",
-                    "C:\\Downloads\\memo.pdf",
-                    "C:\\Downloads\\memo.pdf.part",
-                ),
-            ],
-            calls,
-        )
-
-    def test_successful_download_body_result_target_preserves_success_result_handoff(self):
-        downloader = object.__new__(ZSXQFileDownloader)
-        finalization_target = DownloadBodyFinalizationTarget(
-            17,
-            "C:\\Downloads\\ready.part",
-            909,
-            "ready.pdf",
-            "C:\\Downloads\\ready.pdf",
-        )
-        completion_target = DownloadCompletionTarget(
-            909,
-            "ready.pdf",
-            "C:\\Downloads\\ready.pdf",
-            "C:\\Downloads\\ready.part",
-        )
-        calls = []
-
-        def download_completion_target_for_finalization(target):
-            calls.append(("target", target))
-            return completion_target
-
-        def complete_successful_download_target(target):
-            calls.append(("complete", target))
-
-        downloader._download_completion_target_for_finalization = (
-            download_completion_target_for_finalization
-        )
-        downloader._complete_successful_download_target = complete_successful_download_target
-
-        result = ZSXQFileDownloader._successful_download_body_result_target(
-            downloader,
-            finalization_target,
-        )
-
-        self.assertEqual((True, None), result)
-        self.assertEqual(
-            [
-                ("target", finalization_target),
-                ("complete", completion_target),
-            ],
-            calls,
-        )
 
     def test_write_download_response_body_preserves_progress_stop_and_empty_chunks(self):
         with tempfile.TemporaryDirectory() as temp_dir:
