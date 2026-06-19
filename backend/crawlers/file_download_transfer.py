@@ -147,7 +147,7 @@ class DownloadBodyAttemptResultTarget(NamedTuple):
 RunDownloadAttempt = Callable[[DownloadRetryLoopAttemptTarget], DownloadRetryDecision]
 FinishDownloadFailure = Callable[[DownloadRetryLoopFailureTarget], bool]
 RecordDownloadException = Callable[[DownloadExceptionTarget], DownloadFailureDetail]
-FindDownloadSizeMismatch = Callable[[DownloadBodyFinalizationTarget], Optional[DownloadFailureDetail]]
+FindDownloadSizeMismatch = Callable[[DownloadSizeMismatchTarget], Optional[DownloadFailureDetail]]
 CompleteSuccessfulDownload = Callable[[DownloadCompletionTarget], None]
 HandleSuccessfulDownloadResponse = Callable[[DownloadResponseTarget], DownloadAttemptResult]
 WriteDownloadResponseBody = Callable[[DownloadBodyResponseTarget], Optional[int]]
@@ -454,7 +454,9 @@ def finalize_download_body_result_decision(
     if target.downloaded_size is None:
         return stopped_download_body_result()
 
-    mismatch_detail = find_mismatch_detail(finalization_target)
+    mismatch_detail = find_mismatch_detail(
+        download_size_mismatch_target_for_finalization(finalization_target),
+    )
     if mismatch_detail:
         return download_size_mismatch_result(mismatch_detail)
 

@@ -56,7 +56,6 @@ from backend.crawlers.file_download_transfer import (
     download_retry_decision_after_attempt_result,
     download_retry_state_after_attempt_result,
     download_response_exception_attempt_result,
-    download_size_mismatch_target_for_finalization,
     finalize_download_body_result_decision,
     initial_download_retry_state,
     run_download_retry_loop,
@@ -2899,23 +2898,9 @@ class ZSXQFileDownloader:
     ) -> DownloadBodyResult:
         return finalize_download_body_result_decision(
             target,
-            find_mismatch_detail=self._download_size_mismatch_detail_for_finalization,
+            find_mismatch_detail=self._handle_download_size_mismatch_target,
             complete_successful_download=self._complete_successful_download_target,
         )
-
-    def _download_size_mismatch_detail_for_finalization(
-        self,
-        finalization_target: DownloadBodyFinalizationTarget,
-    ) -> Optional[DownloadFailureDetail]:
-        return self._handle_download_size_mismatch_target(
-            self._download_size_mismatch_target_for_finalization(finalization_target),
-        )
-
-    def _download_size_mismatch_target_for_finalization(
-        self,
-        finalization_target: DownloadBodyFinalizationTarget,
-    ) -> DownloadSizeMismatchTarget:
-        return download_size_mismatch_target_for_finalization(finalization_target)
 
     def _handle_download_size_mismatch(
         self,
