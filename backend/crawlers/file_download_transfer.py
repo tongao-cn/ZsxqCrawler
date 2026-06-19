@@ -65,9 +65,41 @@ class DownloadRetryLoopFailureTarget(NamedTuple):
     retry_state: DownloadRetryState
 
 
+class DownloadCompletionTarget(NamedTuple):
+    file_id: int
+    safe_filename: str
+    file_path: str
+    temp_path: str
+
+
+class DownloadBodyFinalizationTarget(NamedTuple):
+    expected_size: int
+    temp_path: str
+    file_id: int
+    safe_filename: str
+    file_path: str
+
+
+class DownloadBodyFinalizationDecisionTarget(NamedTuple):
+    downloaded_size: Optional[int]
+    finalization_target: DownloadBodyFinalizationTarget
+
+
+class DownloadSizeMismatchTarget(NamedTuple):
+    expected_size: int
+    temp_path: str
+
+
+class DownloadBodyResult(NamedTuple):
+    success_result: Optional[bool]
+    failure_detail: Optional[DownloadFailureDetail]
+
+
 RunDownloadAttempt = Callable[[DownloadRetryLoopAttemptTarget], DownloadRetryDecision]
 FinishDownloadFailure = Callable[[DownloadRetryLoopFailureTarget], bool]
 RecordDownloadRetryException = Callable[[DownloadRetryExceptionTarget], DownloadRetryState]
+FindDownloadSizeMismatch = Callable[[DownloadBodyFinalizationTarget], Optional[DownloadFailureDetail]]
+CompleteSuccessfulDownloadBody = Callable[[DownloadBodyFinalizationTarget], DownloadBodyResult]
 
 
 def initial_download_retry_state(prepared_file: DownloadFileTarget) -> DownloadRetryState:
@@ -136,6 +168,55 @@ def apply_download_retry_exception(
     record_exception: RecordDownloadRetryException,
 ) -> DownloadRetryDecision:
     return DownloadRetryDecision(record_exception(target), None)
+
+
+def stopped_download_body_result() -> DownloadBodyResult:
+    return DownloadBodyResult(False, None)
+
+
+def download_size_mismatch_result(mismatch_detail: DownloadFailureDetail) -> DownloadBodyResult:
+    return DownloadBodyResult(None, mismatch_detail)
+
+
+def successful_download_body_result() -> DownloadBodyResult:
+    return DownloadBodyResult(True, None)
+
+
+def download_size_mismatch_target_for_finalization(
+    finalization_target: DownloadBodyFinalizationTarget,
+) -> DownloadSizeMismatchTarget:
+    return DownloadSizeMismatchTarget(
+        finalization_target.expected_size,
+        finalization_target.temp_path,
+    )
+
+
+def download_completion_target_for_finalization(
+    finalization_target: DownloadBodyFinalizationTarget,
+) -> DownloadCompletionTarget:
+    return DownloadCompletionTarget(
+        finalization_target.file_id,
+        finalization_target.safe_filename,
+        finalization_target.file_path,
+        finalization_target.temp_path,
+    )
+
+
+def finalize_download_body_result_decision(
+    target: DownloadBodyFinalizationDecisionTarget,
+    *,
+    find_mismatch_detail: FindDownloadSizeMismatch,
+    complete_successful_download: CompleteSuccessfulDownloadBody,
+) -> DownloadBodyResult:
+    finalization_target = target.finalization_target
+    if target.downloaded_size is None:
+        return stopped_download_body_result()
+
+    mismatch_detail = find_mismatch_detail(finalization_target)
+    if mismatch_detail:
+        return download_size_mismatch_result(mismatch_detail)
+
+    return complete_successful_download(finalization_target)
 
 
 def run_download_retry_loop(

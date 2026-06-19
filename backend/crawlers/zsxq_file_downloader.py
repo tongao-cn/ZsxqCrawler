@@ -29,6 +29,10 @@ from backend.crawlers.file_download_url import (
 from backend.crawlers.file_download_transfer import (
     DownloadAttemptResult,
     DownloadAttemptResultTarget,
+    DownloadBodyFinalizationDecisionTarget,
+    DownloadBodyFinalizationTarget,
+    DownloadBodyResult,
+    DownloadCompletionTarget,
     DownloadFailureDetail,
     DownloadFileTarget,
     DownloadRetryDecision,
@@ -37,14 +41,21 @@ from backend.crawlers.file_download_transfer import (
     DownloadRetryLoopAttemptTarget,
     DownloadRetryLoopFailureTarget,
     DownloadRetryState,
+    DownloadSizeMismatchTarget,
     apply_download_attempt_result,
     apply_download_retry_exception,
+    download_completion_target_for_finalization,
     download_retry_attempt_file,
     download_retry_decision_after_attempt_result,
     download_retry_state_after_exception_result,
     download_retry_state_after_attempt_result,
+    download_size_mismatch_result,
+    download_size_mismatch_target_for_finalization,
+    finalize_download_body_result_decision,
     initial_download_retry_state,
     run_download_retry_loop,
+    stopped_download_body_result,
+    successful_download_body_result,
 )
 from backend.crawlers.zsxq_file_downloader_helpers import (
     API_FAILURE_NON_RETRY,
@@ -469,36 +480,6 @@ class DownloadBodyResponseTarget(NamedTuple):
 class DownloadStopTarget(NamedTuple):
     file_id: int
     temp_path: str
-
-
-class DownloadCompletionTarget(NamedTuple):
-    file_id: int
-    safe_filename: str
-    file_path: str
-    temp_path: str
-
-
-class DownloadBodyFinalizationTarget(NamedTuple):
-    expected_size: int
-    temp_path: str
-    file_id: int
-    safe_filename: str
-    file_path: str
-
-
-class DownloadBodyFinalizationDecisionTarget(NamedTuple):
-    downloaded_size: Optional[int]
-    finalization_target: DownloadBodyFinalizationTarget
-
-
-class DownloadSizeMismatchTarget(NamedTuple):
-    expected_size: int
-    temp_path: str
-
-
-class DownloadBodyResult(NamedTuple):
-    success_result: Optional[bool]
-    failure_detail: Optional[DownloadFailureDetail]
 
 
 class DownloadAttemptTarget(NamedTuple):
@@ -3094,25 +3075,20 @@ class ZSXQFileDownloader:
         self,
         target: DownloadBodyFinalizationDecisionTarget,
     ) -> DownloadBodyResult:
-        downloaded_size = target.downloaded_size
-        finalization_target = target.finalization_target
-        if downloaded_size is None:
-            return self._stopped_download_body_result()
-
-        mismatch_detail = self._download_size_mismatch_detail_for_finalization(finalization_target)
-        if mismatch_detail:
-            return self._download_size_mismatch_result(mismatch_detail)
-
-        return self._successful_download_body_result_target(finalization_target)
+        return finalize_download_body_result_decision(
+            target,
+            find_mismatch_detail=self._download_size_mismatch_detail_for_finalization,
+            complete_successful_download=self._successful_download_body_result_target,
+        )
 
     def _stopped_download_body_result(self) -> DownloadBodyResult:
-        return DownloadBodyResult(False, None)
+        return stopped_download_body_result()
 
     def _download_size_mismatch_result(
         self,
         mismatch_detail: DownloadFailureDetail,
     ) -> DownloadBodyResult:
-        return DownloadBodyResult(None, mismatch_detail)
+        return download_size_mismatch_result(mismatch_detail)
 
     def _download_size_mismatch_detail_for_finalization(
         self,
@@ -3126,10 +3102,7 @@ class ZSXQFileDownloader:
         self,
         finalization_target: DownloadBodyFinalizationTarget,
     ) -> DownloadSizeMismatchTarget:
-        return DownloadSizeMismatchTarget(
-            finalization_target.expected_size,
-            finalization_target.temp_path,
-        )
+        return download_size_mismatch_target_for_finalization(finalization_target)
 
     def _successful_download_body_result_target(
         self,
@@ -3144,15 +3117,10 @@ class ZSXQFileDownloader:
         self,
         finalization_target: DownloadBodyFinalizationTarget,
     ) -> DownloadCompletionTarget:
-        return DownloadCompletionTarget(
-            finalization_target.file_id,
-            finalization_target.safe_filename,
-            finalization_target.file_path,
-            finalization_target.temp_path,
-        )
+        return download_completion_target_for_finalization(finalization_target)
 
     def _successful_download_body_result(self) -> DownloadBodyResult:
-        return DownloadBodyResult(True, None)
+        return successful_download_body_result()
 
     def _handle_download_size_mismatch(
         self,

@@ -64,6 +64,9 @@ from backend.crawlers.file_download_url import (
     run_download_url_retry_loop as run_download_url_loop,
 )
 from backend.crawlers.file_download_transfer import (
+    DownloadBodyFinalizationDecisionTarget as TransferDownloadBodyFinalizationDecisionTarget,
+    DownloadBodyFinalizationTarget as TransferDownloadBodyFinalizationTarget,
+    DownloadCompletionTarget as TransferDownloadCompletionTarget,
     DownloadFailureDetail as TransferDownloadFailureDetail,
     DownloadFileTarget as TransferDownloadFileTarget,
     DownloadRetryDecision as TransferDownloadRetryDecision,
@@ -71,7 +74,9 @@ from backend.crawlers.file_download_transfer import (
     DownloadRetryExceptionTarget as TransferDownloadRetryExceptionTarget,
     DownloadRetryState as TransferDownloadRetryState,
     apply_download_retry_exception as apply_transfer_download_retry_exception,
+    download_completion_target_for_finalization as transfer_download_completion_target_for_finalization,
     download_retry_state_after_exception_result as transfer_download_retry_state_after_exception_result,
+    finalize_download_body_result_decision as finalize_transfer_download_body_result_decision,
     run_download_retry_loop as run_download_transfer_retry_loop,
 )
 from backend.crawlers.zsxq_file_downloader_helpers import (
@@ -8703,6 +8708,81 @@ class FileDownloaderDownloadTests(unittest.TestCase):
         self.assertEqual(1, len(calls))
         self.assertIs(calls[0].retry_state, retry_state)
         self.assertEqual("socket down", str(calls[0].exc))
+
+    def test_download_transfer_body_finalization_stops_before_mismatch_or_completion(self):
+        finalization_target = TransferDownloadBodyFinalizationTarget(
+            4,
+            "C:\\Downloads\\memo.pdf.part",
+            101,
+            "memo.pdf",
+            "C:\\Downloads\\memo.pdf",
+        )
+
+        result = finalize_transfer_download_body_result_decision(
+            TransferDownloadBodyFinalizationDecisionTarget(None, finalization_target),
+            find_mismatch_detail=lambda target: self.fail("stop path should not inspect size mismatch"),
+            complete_successful_download=lambda target: self.fail("stop path should not complete download"),
+        )
+
+        self.assertEqual((False, None), result)
+
+    def test_download_transfer_body_finalization_returns_size_mismatch(self):
+        finalization_target = TransferDownloadBodyFinalizationTarget(
+            4,
+            "C:\\Downloads\\memo.pdf.part",
+            101,
+            "memo.pdf",
+            "C:\\Downloads\\memo.pdf",
+        )
+        mismatch_detail = TransferDownloadFailureDetail("size_mismatch", "bad size")
+        calls = []
+
+        def find_mismatch_detail(target):
+            calls.append(target)
+            return mismatch_detail
+
+        result = finalize_transfer_download_body_result_decision(
+            TransferDownloadBodyFinalizationDecisionTarget(3, finalization_target),
+            find_mismatch_detail=find_mismatch_detail,
+            complete_successful_download=lambda target: self.fail(
+                "mismatch path should not complete download"
+            ),
+        )
+
+        self.assertEqual((None, mismatch_detail), result)
+        self.assertEqual([finalization_target], calls)
+
+    def test_download_transfer_body_finalization_completes_success(self):
+        finalization_target = TransferDownloadBodyFinalizationTarget(
+            4,
+            "C:\\Downloads\\memo.pdf.part",
+            101,
+            "memo.pdf",
+            "C:\\Downloads\\memo.pdf",
+        )
+        calls = []
+
+        def complete_successful_download(target):
+            calls.append(target)
+            return (True, None)
+
+        result = finalize_transfer_download_body_result_decision(
+            TransferDownloadBodyFinalizationDecisionTarget(4, finalization_target),
+            find_mismatch_detail=lambda target: None,
+            complete_successful_download=complete_successful_download,
+        )
+
+        self.assertEqual((True, None), result)
+        self.assertEqual([finalization_target], calls)
+        self.assertEqual(
+            TransferDownloadCompletionTarget(
+                101,
+                "memo.pdf",
+                "C:\\Downloads\\memo.pdf",
+                "C:\\Downloads\\memo.pdf.part",
+            ),
+            transfer_download_completion_target_for_finalization(finalization_target),
+        )
 
     def _downloader_for_download(self, temp_dir, session):
         downloader = object.__new__(ZSXQFileDownloader)
