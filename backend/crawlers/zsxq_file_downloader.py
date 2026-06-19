@@ -1666,24 +1666,6 @@ class ZSXQFileDownloader:
             return DownloadUrlResponseDecision(None, False, True)
         return DownloadUrlResponseDecision(None, False, False)
 
-    def _handle_download_url_ok_response(
-        self,
-        response: Any,
-        file_id: int,
-        attempt: int,
-        max_retries: int,
-        headers: Dict[str, str],
-    ) -> DownloadUrlResponseDecision:
-        return self._handle_download_url_ok_response_target(
-            DownloadUrlOkResponseTarget(
-                response,
-                file_id,
-                attempt,
-                max_retries,
-                headers,
-            ),
-        )
-
     def _handle_download_url_ok_response_target(
         self,
         target: DownloadUrlOkResponseTarget,

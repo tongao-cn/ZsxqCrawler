@@ -34,6 +34,7 @@ from backend.crawlers.zsxq_file_downloader import (
     DownloadStopTarget,
     DownloadUrlApiFailureResponseTarget,
     DownloadUrlHttpFailureResponseTarget,
+    DownloadUrlOkResponseTarget,
     DownloadUrlRequestExceptionTarget,
     DownloadUrlResponseDecision,
     DownloadUrlRetryLoopTarget,
@@ -6740,18 +6741,20 @@ class FileDownloaderRetryHelperTests(unittest.TestCase):
                 ),
             )
 
-    def test_handle_download_url_ok_response_preserves_json_decode_retry_decision(self):
+    def test_handle_download_url_ok_response_target_preserves_json_decode_retry_decision(self):
         downloader = object.__new__(ZSXQFileDownloader)
         output = io.StringIO()
 
         with contextlib.redirect_stdout(output):
-            decision = ZSXQFileDownloader._handle_download_url_ok_response(
+            decision = ZSXQFileDownloader._handle_download_url_ok_response_target(
                 downloader,
-                FakeInvalidJsonResponse(),
-                101,
-                0,
-                2,
-                {"User-Agent": "unit-test-agent"},
+                DownloadUrlOkResponseTarget(
+                    FakeInvalidJsonResponse(),
+                    101,
+                    0,
+                    2,
+                    {"User-Agent": "unit-test-agent"},
+                ),
             )
 
         self.assertIsNone(decision.download_url)
@@ -6766,7 +6769,7 @@ class FileDownloaderRetryHelperTests(unittest.TestCase):
             output.getvalue().splitlines(),
         )
 
-    def test_handle_download_url_ok_response_preserves_empty_json_retry_without_missing_url_output(self):
+    def test_handle_download_url_ok_response_target_preserves_empty_json_retry_without_missing_url_output(self):
         class FakeEmptyJsonResponse:
             status_code = 200
             text = "{}"
@@ -6778,13 +6781,15 @@ class FileDownloaderRetryHelperTests(unittest.TestCase):
         output = io.StringIO()
 
         with contextlib.redirect_stdout(output):
-            decision = ZSXQFileDownloader._handle_download_url_ok_response(
+            decision = ZSXQFileDownloader._handle_download_url_ok_response_target(
                 downloader,
-                FakeEmptyJsonResponse(),
-                101,
-                0,
-                2,
-                {"User-Agent": "unit-test-agent"},
+                DownloadUrlOkResponseTarget(
+                    FakeEmptyJsonResponse(),
+                    101,
+                    0,
+                    2,
+                    {"User-Agent": "unit-test-agent"},
+                ),
             )
 
         self.assertIsNone(decision.download_url)
