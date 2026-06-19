@@ -149,7 +149,6 @@ FinishDownloadFailure = Callable[[DownloadRetryLoopFailureTarget], bool]
 RecordDownloadException = Callable[[DownloadExceptionTarget], DownloadFailureDetail]
 FindDownloadSizeMismatch = Callable[[DownloadSizeMismatchTarget], Optional[DownloadFailureDetail]]
 CompleteSuccessfulDownload = Callable[[DownloadCompletionTarget], None]
-HandleSuccessfulDownloadResponse = Callable[[DownloadResponseTarget], DownloadAttemptResult]
 WriteDownloadResponseBody = Callable[[DownloadBodyResponseTarget], Optional[int]]
 RecordDownloadHttpFailure = Callable[[int], DownloadFailureDetail]
 RemovePartialDownload = Callable[[str], bool]
@@ -400,11 +399,23 @@ def download_attempt_result_from_body_result(
 def download_attempt_result_for_response_status(
     target: DownloadResponseTarget,
     *,
-    handle_successful_response: HandleSuccessfulDownloadResponse,
+    remove_partial_download: RemovePartialDownload,
+    write_response_body: WriteDownloadResponseBody,
+    find_mismatch_detail: FindDownloadSizeMismatch,
+    complete_successful_download: CompleteSuccessfulDownload,
     record_http_failure: RecordDownloadHttpFailure,
 ) -> DownloadAttemptResult:
     if target.response.status_code == 200:
-        return handle_successful_response(target)
+        body_result = download_body_result_for_successful_response(
+            target,
+            remove_partial_download=remove_partial_download,
+            write_response_body=write_response_body,
+            find_mismatch_detail=find_mismatch_detail,
+            complete_successful_download=complete_successful_download,
+        )
+        return download_attempt_result_from_body_result(
+            DownloadBodyAttemptResultTarget(body_result, target.file_target),
+        )
 
     file_target = target.file_target
     failure_detail = record_http_failure(target.response.status_code)

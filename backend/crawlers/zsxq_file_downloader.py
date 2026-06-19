@@ -29,9 +29,7 @@ from backend.crawlers.file_download_url import (
 from backend.crawlers.file_download_transfer import (
     DownloadAttemptResult,
     DownloadAttemptResultTarget,
-    DownloadBodyAttemptResultTarget,
     DownloadBodyResponseTarget,
-    DownloadBodyResult,
     DownloadBodyWriteTarget,
     DownloadCompletionTarget,
     DownloadExceptionTarget,
@@ -48,8 +46,6 @@ from backend.crawlers.file_download_transfer import (
     apply_download_attempt_result,
     apply_download_retry_exception,
     download_attempt_result_for_response_status,
-    download_attempt_result_from_body_result,
-    download_body_result_for_successful_response,
     download_retry_attempt_file,
     download_retry_decision_after_attempt_result,
     download_retry_state_after_attempt_result,
@@ -2689,46 +2685,6 @@ class ZSXQFileDownloader:
             stream=True,
         )
 
-    def _successful_download_attempt_result(
-        self,
-        response: Any,
-        target: DownloadFileTarget,
-    ) -> DownloadAttemptResult:
-        return self._successful_download_attempt_result_target(
-            DownloadResponseTarget(response, target),
-        )
-
-    def _successful_download_attempt_result_target(
-        self,
-        target: DownloadResponseTarget,
-    ) -> DownloadAttemptResult:
-        file_target = target.file_target
-        body_result = self._handle_successful_download_response_result_target(
-            target,
-        )
-        return download_attempt_result_from_body_result(
-            DownloadBodyAttemptResultTarget(body_result, file_target),
-        )
-
-    def _download_attempt_result_for_response_status(
-        self,
-        response: Any,
-        target: DownloadFileTarget,
-    ) -> DownloadAttemptResult:
-        return self._download_attempt_result_for_response_status_target(
-            DownloadResponseTarget(response, target),
-        )
-
-    def _download_attempt_result_for_response_status_target(
-        self,
-        target: DownloadResponseTarget,
-    ) -> DownloadAttemptResult:
-        return download_attempt_result_for_response_status(
-            target,
-            handle_successful_response=self._successful_download_attempt_result_target,
-            record_http_failure=self._record_download_http_failure,
-        )
-
     def _download_target_for_response(
         self,
         response: Any,
@@ -2799,8 +2755,13 @@ class ZSXQFileDownloader:
                 target,
             )
 
-            return self._download_attempt_result_for_response_status_target(
+            return download_attempt_result_for_response_status(
                 DownloadResponseTarget(response, response_download_target),
+                remove_partial_download=remove_partial_download,
+                write_response_body=self._write_download_response_body_result_target,
+                find_mismatch_detail=self._handle_download_size_mismatch_target,
+                complete_successful_download=self._complete_successful_download_target,
+                record_http_failure=self._record_download_http_failure,
             )
         except Exception as exc:
             return self._download_response_exception_result(
@@ -2819,46 +2780,6 @@ class ZSXQFileDownloader:
                 response_download_target,
             ),
             record_exception=self._record_download_exception_target,
-        )
-
-    def _handle_successful_download_response(
-        self,
-        response,
-        file_id: int,
-        file_size: int,
-        safe_filename: str,
-        file_path: str,
-    ) -> DownloadBodyResult:
-        return self._handle_successful_download_response_target(
-            response,
-            DownloadFileTarget(
-                file_id,
-                safe_filename,
-                file_size,
-                safe_filename,
-                file_path,
-            ),
-        )
-
-    def _handle_successful_download_response_target(
-        self,
-        response: Any,
-        target: DownloadFileTarget,
-    ) -> DownloadBodyResult:
-        return self._handle_successful_download_response_result_target(
-            DownloadResponseTarget(response, target),
-        )
-
-    def _handle_successful_download_response_result_target(
-        self,
-        target: DownloadResponseTarget,
-    ) -> DownloadBodyResult:
-        return download_body_result_for_successful_response(
-            target,
-            remove_partial_download=remove_partial_download,
-            write_response_body=self._write_download_response_body_result_target,
-            find_mismatch_detail=self._handle_download_size_mismatch_target,
-            complete_successful_download=self._complete_successful_download_target,
         )
 
     def _handle_download_size_mismatch(

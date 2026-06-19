@@ -19,7 +19,6 @@ from backend.crawlers.zsxq_file_downloader import (
     DownloadAttemptResult,
     DownloadAttemptTarget,
     DownloadBodyResponseTarget,
-    DownloadBodyResult,
     DownloadBodyWriteTarget,
     DownloadCompletionTarget,
     DownloadExceptionTarget,
@@ -9016,7 +9015,7 @@ class FileDownloaderDownloadTests(unittest.TestCase):
             calls,
         )
 
-    def test_download_transfer_response_status_delegates_200_to_success_handler(self):
+    def test_download_transfer_response_status_builds_success_attempt_result(self):
         file_target = TransferDownloadFileTarget(
             101,
             "memo.pdf",
@@ -9024,22 +9023,64 @@ class FileDownloaderDownloadTests(unittest.TestCase):
             "memo.pdf",
             "C:\\Downloads\\memo.pdf",
         )
-        response = SimpleNamespace(status_code=200)
-        success_result = (True, None, "memo.pdf", "memo.pdf", "C:\\Downloads\\memo.pdf")
-        success_calls = []
+        response = SimpleNamespace(status_code=200, headers={"content-length": "8"})
+        calls = []
 
-        def handle_successful_response(target):
-            success_calls.append(target)
-            return success_result
+        def remove_partial_download(temp_path):
+            calls.append(("remove", temp_path))
+            return True
+
+        def write_response_body(target):
+            calls.append(("write", target))
+            return 4
+
+        def find_mismatch_detail(target):
+            calls.append(("mismatch", target))
+            return None
+
+        def complete_successful_download(target):
+            calls.append(("complete", target))
 
         result = transfer_download_attempt_result_for_response_status(
             TransferDownloadResponseTarget(response, file_target),
-            handle_successful_response=handle_successful_response,
+            remove_partial_download=remove_partial_download,
+            write_response_body=write_response_body,
+            find_mismatch_detail=find_mismatch_detail,
+            complete_successful_download=complete_successful_download,
             record_http_failure=lambda status_code: self.fail("200 path should not record HTTP failure"),
         )
 
-        self.assertEqual(success_result, result)
-        self.assertEqual([TransferDownloadResponseTarget(response, file_target)], success_calls)
+        self.assertEqual((True, None, "memo.pdf", "memo.pdf", "C:\\Downloads\\memo.pdf"), result)
+        self.assertEqual(
+            [
+                ("remove", "C:\\Downloads\\memo.pdf.part"),
+                (
+                    "write",
+                    TransferDownloadBodyResponseTarget(
+                        response,
+                        TransferDownloadBodyWriteTarget(
+                            "C:\\Downloads\\memo.pdf.part",
+                            8,
+                            101,
+                        ),
+                    ),
+                ),
+                (
+                    "mismatch",
+                    TransferDownloadSizeMismatchTarget(4, "C:\\Downloads\\memo.pdf.part"),
+                ),
+                (
+                    "complete",
+                    TransferDownloadCompletionTarget(
+                        101,
+                        "memo.pdf",
+                        "C:\\Downloads\\memo.pdf",
+                        "C:\\Downloads\\memo.pdf.part",
+                    ),
+                ),
+            ],
+            calls,
+        )
 
     def test_download_transfer_response_status_records_http_failure_result(self):
         file_target = TransferDownloadFileTarget(
@@ -9057,8 +9098,17 @@ class FileDownloaderDownloadTests(unittest.TestCase):
 
         result = transfer_download_attempt_result_for_response_status(
             TransferDownloadResponseTarget(SimpleNamespace(status_code=503), file_target),
-            handle_successful_response=lambda target: self.fail(
-                "HTTP failure path should not handle success"
+            remove_partial_download=lambda temp_path: self.fail(
+                "HTTP failure path should not prepare the body"
+            ),
+            write_response_body=lambda target: self.fail(
+                "HTTP failure path should not write the body"
+            ),
+            find_mismatch_detail=lambda target: self.fail(
+                "HTTP failure path should not check size mismatch"
+            ),
+            complete_successful_download=lambda target: self.fail(
+                "HTTP failure path should not complete the download"
             ),
             record_http_failure=record_http_failure,
         )
@@ -10162,49 +10212,6 @@ class FileDownloaderDownloadTests(unittest.TestCase):
         self.assertEqual([("https://download.test/target", 300, True)], session.get_calls)
         self.assertEqual(["   🚀 开始下载..."], downloader.logs)
 
-    def test_download_attempt_result_for_response_status_target_preserves_branches(self):
-        downloader = object.__new__(ZSXQFileDownloader)
-        downloader.logs = []
-        downloader.log = downloader.logs.append
-        file_target = DownloadFileTarget(
-            101,
-            "memo.pdf",
-            4,
-            "memo.pdf",
-            "C:\\Downloads\\memo.pdf",
-        )
-        success_response = FakeDownloadResponse(200, b"memo")
-        success_calls = []
-
-        def successful_download_attempt_result_target(target):
-            success_calls.append(target)
-            return DownloadAttemptResult(
-                True,
-                None,
-                "memo.pdf",
-                "memo.pdf",
-                "C:\\Downloads\\memo.pdf",
-            )
-
-        downloader._successful_download_attempt_result_target = successful_download_attempt_result_target
-
-        success = ZSXQFileDownloader._download_attempt_result_for_response_status_target(
-            downloader,
-            DownloadResponseTarget(success_response, file_target),
-        )
-        failure = ZSXQFileDownloader._download_attempt_result_for_response_status_target(
-            downloader,
-            DownloadResponseTarget(FakeDownloadResponse(503), file_target),
-        )
-
-        self.assertEqual((True, None, "memo.pdf", "memo.pdf", "C:\\Downloads\\memo.pdf"), success)
-        self.assertEqual([DownloadResponseTarget(success_response, file_target)], success_calls)
-        self.assertEqual(
-            (None, ("http_status", "HTTP 503"), "memo.pdf", "memo.pdf", "C:\\Downloads\\memo.pdf"),
-            failure,
-        )
-        self.assertEqual(["   ❌ 下载失败: HTTP 503"], downloader.logs)
-
     def test_handle_download_response_preserves_override_http_failure_and_success_paths(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             downloader = object.__new__(ZSXQFileDownloader)
@@ -10286,8 +10293,8 @@ class FileDownloaderDownloadTests(unittest.TestCase):
             calls.append(("target", target))
             return response_target
 
-        def download_attempt_result_for_response_status_target(target):
-            calls.append(("status", target))
+        def write_download_response_body_result_target(target):
+            calls.append(("write", target))
             raise failure_exc
 
         def record_download_exception_target(target):
@@ -10295,8 +10302,12 @@ class FileDownloaderDownloadTests(unittest.TestCase):
             return DownloadFailureDetail("download_exception", "body down")
 
         downloader._download_target_for_response_target = download_target_for_response_target
-        downloader._download_attempt_result_for_response_status_target = (
-            download_attempt_result_for_response_status_target
+        downloader._write_download_response_body_result_target = write_download_response_body_result_target
+        downloader._handle_download_size_mismatch_target = lambda target: self.fail(
+            "exception path should stop before size mismatch"
+        )
+        downloader._complete_successful_download_target = lambda target: self.fail(
+            "exception path should stop before completion"
         )
         downloader._record_download_exception_target = record_download_exception_target
 
@@ -10308,7 +10319,17 @@ class FileDownloaderDownloadTests(unittest.TestCase):
         self.assertEqual(
             [
                 ("target", DownloadResponseTarget(response, original_target)),
-                ("status", DownloadResponseTarget(response, response_target)),
+                (
+                    "write",
+                    DownloadBodyResponseTarget(
+                        response,
+                        DownloadBodyWriteTarget(
+                            "C:\\Downloads\\real.pdf.part",
+                            0,
+                            101,
+                        ),
+                    ),
+                ),
             ],
             calls,
         )
@@ -10319,156 +10340,6 @@ class FileDownloaderDownloadTests(unittest.TestCase):
         self.assertEqual(1, len(exception_targets))
         self.assertIs(failure_exc, exception_targets[0].exc)
         self.assertEqual("C:\\Downloads\\real.pdf", exception_targets[0].file_path)
-
-    def test_handle_successful_download_response_preserves_completion_retry_and_stop_paths(self):
-        with tempfile.TemporaryDirectory() as temp_dir:
-            file_path = Path(temp_dir) / "memo.pdf"
-            downloader = object.__new__(ZSXQFileDownloader)
-            downloader.file_db = FakeDownloadFileDb()
-            downloader.logs = []
-            downloader.log = downloader.logs.append
-            downloader.check_stop = lambda: False
-            downloader.download_count = 0
-            downloader.current_batch_count = 0
-            interval_snapshots = []
-            downloader._apply_download_intervals = lambda: interval_snapshots.append(
-                (downloader.download_count, downloader.current_batch_count)
-            )
-
-            completed = ZSXQFileDownloader._handle_successful_download_response(
-                downloader,
-                FakeDownloadResponse(200, b"memo"),
-                101,
-                4,
-                "memo.pdf",
-                str(file_path),
-            )
-
-            self.assertEqual((True, None), completed)
-            self.assertEqual(b"memo", file_path.read_bytes())
-            self.assertFalse(Path(f"{file_path}.part").exists())
-            self.assertEqual((101, "completed", str(file_path)), downloader.file_db.status_updates[-1][:3])
-            self.assertEqual((1, 1), (downloader.download_count, downloader.current_batch_count))
-            self.assertEqual([(1, 1)], interval_snapshots)
-
-            mismatch_path = Path(temp_dir) / "mismatch.pdf"
-            downloader.logs = []
-            downloader.log = downloader.logs.append
-            mismatch = ZSXQFileDownloader._handle_successful_download_response(
-                downloader,
-                FakeDownloadResponse(200, b"bad"),
-                102,
-                4,
-                "mismatch.pdf",
-                str(mismatch_path),
-            )
-
-            self.assertEqual((None, ("size_mismatch", "文件大小不匹配: 预期4, 实际3")), mismatch)
-            self.assertFalse(mismatch_path.exists())
-            self.assertFalse(Path(f"{mismatch_path}.part").exists())
-            self.assertEqual(
-                ["   📊 进度: 100.0% (3/3 bytes)", "   ⚠️ 文件大小不匹配: 预期4, 实际3"],
-                downloader.logs,
-            )
-
-            stopped_path = Path(temp_dir) / "stopped.pdf"
-            downloader.logs = []
-            downloader.log = downloader.logs.append
-            downloader.check_stop = lambda: True
-
-            with patch(
-                "backend.crawlers.zsxq_file_downloader.remove_partial_download",
-                return_value=True,
-            ) as remove_partial:
-                stopped = ZSXQFileDownloader._handle_successful_download_response(
-                    downloader,
-                    FakeDownloadResponse(200, b"stop"),
-                    103,
-                    4,
-                    "stopped.pdf",
-                    str(stopped_path),
-                )
-
-            self.assertEqual((False, None), stopped)
-            self.assertFalse(stopped_path.exists())
-            self.assertEqual(2, remove_partial.call_count)
-            remove_partial.assert_called_with(str(Path(f"{stopped_path}.part")))
-            self.assertEqual(
-                (103, "failed", None, "stopped", "下载过程中被停止"),
-                downloader.file_db.status_updates[-1],
-            )
-
-    def test_handle_successful_download_response_result_target_uses_transfer_pipeline(self):
-        downloader = object.__new__(ZSXQFileDownloader)
-        response = FakeDownloadResponse(200, b"memo", headers={"content-length": "8"})
-        file_target = DownloadFileTarget(
-            101,
-            "memo?.pdf",
-            4,
-            "memo.pdf",
-            "C:\\Downloads\\memo.pdf",
-        )
-        calls = []
-
-        def remove_partial(temp_path):
-            calls.append(("remove", temp_path))
-            return True
-
-        def write_download_response_body_result_target(target):
-            calls.append(("write", target))
-            return 4
-
-        def handle_download_size_mismatch_target(target):
-            calls.append(("mismatch", target))
-            return None
-
-        def complete_successful_download_target(target):
-            calls.append(("complete", target))
-
-        downloader._write_download_response_body_result_target = write_download_response_body_result_target
-        downloader._handle_download_size_mismatch_target = handle_download_size_mismatch_target
-        downloader._complete_successful_download_target = complete_successful_download_target
-
-        with patch(
-            "backend.crawlers.zsxq_file_downloader.remove_partial_download",
-            side_effect=remove_partial,
-        ):
-            result = ZSXQFileDownloader._handle_successful_download_response_result_target(
-                downloader,
-                DownloadResponseTarget(response, file_target),
-            )
-
-        self.assertEqual(DownloadBodyResult(True, None), result)
-        self.assertEqual(
-            [
-                ("remove", "C:\\Downloads\\memo.pdf.part"),
-                (
-                    "write",
-                    DownloadBodyResponseTarget(
-                        response,
-                        DownloadBodyWriteTarget(
-                            "C:\\Downloads\\memo.pdf.part",
-                            8,
-                            101,
-                        ),
-                    ),
-                ),
-                (
-                    "mismatch",
-                    DownloadSizeMismatchTarget(4, "C:\\Downloads\\memo.pdf.part"),
-                ),
-                (
-                    "complete",
-                    DownloadCompletionTarget(
-                        101,
-                        "memo.pdf",
-                        "C:\\Downloads\\memo.pdf",
-                        "C:\\Downloads\\memo.pdf.part",
-                    ),
-                ),
-            ],
-            calls,
-        )
 
     def test_write_download_response_body_preserves_progress_stop_and_empty_chunks(self):
         with tempfile.TemporaryDirectory() as temp_dir:
