@@ -32,7 +32,9 @@ from backend.crawlers.file_download_transfer import (
     DownloadBodyAttemptResultTarget,
     DownloadBodyFinalizationDecisionTarget,
     DownloadBodyFinalizationTarget,
+    DownloadBodyPreparationTarget,
     DownloadBodyResult,
+    DownloadBodyTarget,
     DownloadCompletionTarget,
     DownloadFailureDetail,
     DownloadFileTarget,
@@ -49,6 +51,7 @@ from backend.crawlers.file_download_transfer import (
     apply_download_retry_exception,
     download_attempt_result_for_response_status,
     download_attempt_result_from_body_result,
+    download_body_target_for_preparation,
     download_completion_target_for_finalization,
     download_http_failure_attempt_result,
     download_retry_attempt_file,
@@ -59,6 +62,7 @@ from backend.crawlers.file_download_transfer import (
     download_size_mismatch_target_for_finalization,
     finalize_download_body_result_decision,
     initial_download_retry_state,
+    prepare_download_body_target,
     run_download_retry_loop,
     stopped_download_body_result,
     successful_download_body_result,
@@ -102,7 +106,6 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     download_settings_display_lines,
     download_file_data,
     download_exception_detail,
-    download_expected_size,
     download_final_failure_detail,
     download_http_failure_detail,
     download_interval_plan,
@@ -112,7 +115,6 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     download_retry_wait,
     download_size_mismatch_detail,
     download_target_path,
-    download_total_size,
     download_url_api_failure_plan,
     download_url_failure_detail,
     download_url_from_response_data,
@@ -458,18 +460,6 @@ class DownloadFinalFailureTarget(NamedTuple):
     download_retries: int
     last_error_code: Optional[str]
     last_error: Optional[str]
-
-
-class DownloadBodyPreparationTarget(NamedTuple):
-    response_headers: Dict[str, Any]
-    file_size: int
-    file_path: str
-
-
-class DownloadBodyTarget(NamedTuple):
-    total_size: int
-    expected_size: int
-    temp_path: str
 
 
 class DownloadBodyWriteTarget(NamedTuple):
@@ -2911,18 +2901,16 @@ class ZSXQFileDownloader:
         self,
         target: DownloadBodyPreparationTarget,
     ) -> DownloadBodyTarget:
-        body_target = self._download_body_target_for_preparation(target)
-        remove_partial_download(body_target.temp_path)
-        return body_target
+        return prepare_download_body_target(
+            target,
+            remove_partial_download=remove_partial_download,
+        )
 
     def _download_body_target_for_preparation(
         self,
         target: DownloadBodyPreparationTarget,
     ) -> DownloadBodyTarget:
-        total_size = download_total_size(target.response_headers)
-        expected_size = download_expected_size(target.file_size, total_size)
-        temp_path = partial_download_path(target.file_path)
-        return DownloadBodyTarget(total_size, expected_size, temp_path)
+        return download_body_target_for_preparation(target)
 
     def _handle_successful_download_response(
         self,

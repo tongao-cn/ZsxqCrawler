@@ -65,9 +65,11 @@ from backend.crawlers.file_download_url import (
 )
 from backend.crawlers.file_download_transfer import (
     DownloadBodyAttemptResultTarget as TransferDownloadBodyAttemptResultTarget,
-    DownloadBodyResult as TransferDownloadBodyResult,
     DownloadBodyFinalizationDecisionTarget as TransferDownloadBodyFinalizationDecisionTarget,
     DownloadBodyFinalizationTarget as TransferDownloadBodyFinalizationTarget,
+    DownloadBodyPreparationTarget as TransferDownloadBodyPreparationTarget,
+    DownloadBodyResult as TransferDownloadBodyResult,
+    DownloadBodyTarget as TransferDownloadBodyTarget,
     DownloadCompletionTarget as TransferDownloadCompletionTarget,
     DownloadFailureDetail as TransferDownloadFailureDetail,
     DownloadFileTarget as TransferDownloadFileTarget,
@@ -79,9 +81,11 @@ from backend.crawlers.file_download_transfer import (
     apply_download_retry_exception as apply_transfer_download_retry_exception,
     download_attempt_result_for_response_status as transfer_download_attempt_result_for_response_status,
     download_attempt_result_from_body_result as transfer_download_attempt_result_from_body_result,
+    download_body_target_for_preparation as transfer_download_body_target_for_preparation,
     download_completion_target_for_finalization as transfer_download_completion_target_for_finalization,
     download_retry_state_after_exception_result as transfer_download_retry_state_after_exception_result,
     finalize_download_body_result_decision as finalize_transfer_download_body_result_decision,
+    prepare_download_body_target as prepare_transfer_download_body_target,
     run_download_retry_loop as run_download_transfer_retry_loop,
 )
 from backend.crawlers.zsxq_file_downloader_helpers import (
@@ -8746,6 +8750,43 @@ class FileDownloaderDownloadTests(unittest.TestCase):
         )
 
         self.assertEqual((True, None, "memo?.pdf", "memo.pdf", "C:\\Downloads\\memo.pdf"), result)
+
+    def test_download_transfer_body_target_preparation_derives_sizes_and_temp_path(self):
+        prepared = transfer_download_body_target_for_preparation(
+            TransferDownloadBodyPreparationTarget(
+                {"content-length": "8"},
+                4,
+                "C:\\Downloads\\memo.pdf",
+            ),
+        )
+        fallback_prepared = transfer_download_body_target_for_preparation(
+            TransferDownloadBodyPreparationTarget(
+                {"content-length": "8"},
+                0,
+                "C:\\Downloads\\unknown.bin",
+            ),
+        )
+
+        self.assertEqual(TransferDownloadBodyTarget(8, 4, "C:\\Downloads\\memo.pdf.part"), prepared)
+        self.assertEqual(
+            TransferDownloadBodyTarget(8, 8, "C:\\Downloads\\unknown.bin.part"),
+            fallback_prepared,
+        )
+
+    def test_download_transfer_prepare_body_target_removes_stale_partial(self):
+        calls = []
+
+        result = prepare_transfer_download_body_target(
+            TransferDownloadBodyPreparationTarget(
+                {"content-length": "8"},
+                4,
+                "C:\\Downloads\\memo.pdf",
+            ),
+            remove_partial_download=lambda temp_path: calls.append(temp_path) or True,
+        )
+
+        self.assertEqual(TransferDownloadBodyTarget(8, 4, "C:\\Downloads\\memo.pdf.part"), result)
+        self.assertEqual(["C:\\Downloads\\memo.pdf.part"], calls)
 
     def test_download_transfer_response_status_delegates_200_to_success_handler(self):
         file_target = TransferDownloadFileTarget(

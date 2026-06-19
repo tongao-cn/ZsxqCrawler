@@ -1,6 +1,12 @@
 from __future__ import annotations
 
-from typing import Any, Callable, NamedTuple, Optional
+from typing import Any, Callable, Dict, NamedTuple, Optional
+
+from backend.crawlers.zsxq_file_downloader_helpers import (
+    download_expected_size,
+    download_total_size,
+    partial_download_path,
+)
 
 
 class DownloadFailureDetail(NamedTuple):
@@ -77,6 +83,18 @@ class DownloadCompletionTarget(NamedTuple):
     temp_path: str
 
 
+class DownloadBodyPreparationTarget(NamedTuple):
+    response_headers: Dict[str, Any]
+    file_size: int
+    file_path: str
+
+
+class DownloadBodyTarget(NamedTuple):
+    total_size: int
+    expected_size: int
+    temp_path: str
+
+
 class DownloadBodyFinalizationTarget(NamedTuple):
     expected_size: int
     temp_path: str
@@ -117,6 +135,7 @@ FindDownloadSizeMismatch = Callable[[DownloadBodyFinalizationTarget], Optional[D
 CompleteSuccessfulDownloadBody = Callable[[DownloadBodyFinalizationTarget], DownloadBodyResult]
 HandleSuccessfulDownloadResponse = Callable[[DownloadResponseTarget], DownloadAttemptResult]
 RecordDownloadHttpFailure = Callable[[int], DownloadFailureDetail]
+RemovePartialDownload = Callable[[str], bool]
 
 
 def initial_download_retry_state(prepared_file: DownloadFileTarget) -> DownloadRetryState:
@@ -197,6 +216,23 @@ def download_size_mismatch_result(mismatch_detail: DownloadFailureDetail) -> Dow
 
 def successful_download_body_result() -> DownloadBodyResult:
     return DownloadBodyResult(True, None)
+
+
+def download_body_target_for_preparation(target: DownloadBodyPreparationTarget) -> DownloadBodyTarget:
+    total_size = download_total_size(target.response_headers)
+    expected_size = download_expected_size(target.file_size, total_size)
+    temp_path = partial_download_path(target.file_path)
+    return DownloadBodyTarget(total_size, expected_size, temp_path)
+
+
+def prepare_download_body_target(
+    target: DownloadBodyPreparationTarget,
+    *,
+    remove_partial_download: RemovePartialDownload,
+) -> DownloadBodyTarget:
+    body_target = download_body_target_for_preparation(target)
+    remove_partial_download(body_target.temp_path)
+    return body_target
 
 
 def download_attempt_result_from_body_result(
