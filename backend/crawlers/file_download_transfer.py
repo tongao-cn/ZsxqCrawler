@@ -144,11 +144,6 @@ class DownloadBodyAttemptResultTarget(NamedTuple):
     file_target: DownloadFileTarget
 
 
-class DownloadHttpFailureAttemptTarget(NamedTuple):
-    status_code: int
-    file_target: DownloadFileTarget
-
-
 RunDownloadAttempt = Callable[[DownloadRetryLoopAttemptTarget], DownloadRetryDecision]
 FinishDownloadFailure = Callable[[DownloadRetryLoopFailureTarget], bool]
 RecordDownloadException = Callable[[DownloadExceptionTarget], DownloadFailureDetail]
@@ -358,22 +353,6 @@ def download_attempt_result_from_body_result(
     )
 
 
-def download_http_failure_attempt_result(
-    target: DownloadHttpFailureAttemptTarget,
-    *,
-    record_http_failure: RecordDownloadHttpFailure,
-) -> DownloadAttemptResult:
-    file_target = target.file_target
-    failure_detail = record_http_failure(target.status_code)
-    return DownloadAttemptResult(
-        None,
-        failure_detail,
-        file_target.file_name,
-        file_target.safe_filename,
-        file_target.file_path,
-    )
-
-
 def download_attempt_result_for_response_status(
     target: DownloadResponseTarget,
     *,
@@ -383,9 +362,14 @@ def download_attempt_result_for_response_status(
     if target.response.status_code == 200:
         return handle_successful_response(target)
 
-    return download_http_failure_attempt_result(
-        DownloadHttpFailureAttemptTarget(target.response.status_code, target.file_target),
-        record_http_failure=record_http_failure,
+    file_target = target.file_target
+    failure_detail = record_http_failure(target.response.status_code)
+    return DownloadAttemptResult(
+        None,
+        failure_detail,
+        file_target.file_name,
+        file_target.safe_filename,
+        file_target.file_path,
     )
 
 

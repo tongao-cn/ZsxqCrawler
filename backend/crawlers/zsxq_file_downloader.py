@@ -41,7 +41,6 @@ from backend.crawlers.file_download_transfer import (
     DownloadExceptionTarget,
     DownloadFailureDetail,
     DownloadFileTarget,
-    DownloadHttpFailureAttemptTarget,
     DownloadRetryDecision,
     DownloadRetryExceptionTarget,
     DownloadRetryLoopAttemptTarget,
@@ -58,7 +57,6 @@ from backend.crawlers.file_download_transfer import (
     download_body_preparation_target_for_response,
     download_body_target_for_preparation,
     download_body_write_response_target,
-    download_http_failure_attempt_result,
     download_retry_attempt_file,
     download_retry_decision_after_attempt_result,
     download_retry_state_after_attempt_result,
@@ -2740,15 +2738,6 @@ class ZSXQFileDownloader:
         return download_attempt_result_for_response_status(
             target,
             handle_successful_response=self._successful_download_attempt_result_target,
-            record_http_failure=self._record_download_http_failure,
-        )
-
-    def _http_failure_download_attempt_result(
-        self,
-        target: DownloadResponseTarget,
-    ) -> DownloadAttemptResult:
-        return download_http_failure_attempt_result(
-            DownloadHttpFailureAttemptTarget(target.response.status_code, target.file_target),
             record_http_failure=self._record_download_http_failure,
         )
 
