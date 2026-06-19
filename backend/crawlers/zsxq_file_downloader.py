@@ -1531,24 +1531,6 @@ class ZSXQFileDownloader:
     ) -> FileListResponseDecision:
         return FileListResponseDecision(None, should_retry, False)
 
-    def _handle_download_url_success_response(
-        self,
-        data: Dict[str, Any],
-        file_id: int,
-        attempt: int,
-        headers: Dict[str, str],
-        http_status: int,
-    ) -> Optional[str]:
-        return self._handle_download_url_success_response_target(
-            DownloadUrlSuccessResponseTarget(
-                data,
-                file_id,
-                attempt,
-                headers,
-                http_status,
-            ),
-        )
-
     def _handle_download_url_success_response_target(
         self,
         target: DownloadUrlSuccessResponseTarget,

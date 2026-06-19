@@ -34,6 +34,7 @@ from backend.crawlers.zsxq_file_downloader import (
     DownloadStopTarget,
     DownloadUrlResponseDecision,
     DownloadUrlRetryLoopTarget,
+    DownloadUrlSuccessResponseTarget,
     DownloadUrlUnavailableTarget,
     ExistingDownloadTarget,
     FetchFileListTarget,
@@ -6640,44 +6641,48 @@ class FileDownloaderRetryHelperTests(unittest.TestCase):
             download_url_success_plan(2),
         )
 
-    def test_handle_download_url_success_response_preserves_missing_url_output(self):
+    def test_handle_download_url_success_response_target_preserves_missing_url_output(self):
         downloader = object.__new__(ZSXQFileDownloader)
         output = io.StringIO()
 
         with contextlib.redirect_stdout(output):
-            result = ZSXQFileDownloader._handle_download_url_success_response(
+            result = ZSXQFileDownloader._handle_download_url_success_response_target(
                 downloader,
-                {"succeeded": True, "resp_data": {}},
-                101,
-                0,
-                {"User-Agent": "unit-test-agent"},
-                200,
+                DownloadUrlSuccessResponseTarget(
+                    {"succeeded": True, "resp_data": {}},
+                    101,
+                    0,
+                    {"User-Agent": "unit-test-agent"},
+                    200,
+                ),
             )
 
         self.assertIsNone(result)
         self.assertEqual("   ❌ 响应中无下载链接字段\n", output.getvalue())
 
-    def test_handle_download_url_success_response_missing_url_does_not_record_risk_event(self):
+    def test_handle_download_url_success_response_target_missing_url_does_not_record_risk_event(self):
         downloader = object.__new__(ZSXQFileDownloader)
         events = []
         downloader._record_risk_event = lambda **kwargs: events.append(kwargs)
         output = io.StringIO()
 
         with contextlib.redirect_stdout(output):
-            result = ZSXQFileDownloader._handle_download_url_success_response(
+            result = ZSXQFileDownloader._handle_download_url_success_response_target(
                 downloader,
-                {"succeeded": True, "resp_data": {}},
-                101,
-                0,
-                {"User-Agent": "unit-test-agent"},
-                200,
+                DownloadUrlSuccessResponseTarget(
+                    {"succeeded": True, "resp_data": {}},
+                    101,
+                    0,
+                    {"User-Agent": "unit-test-agent"},
+                    200,
+                ),
             )
 
         self.assertIsNone(result)
         self.assertEqual([], events)
         self.assertEqual("   ❌ 响应中无下载链接字段\n", output.getvalue())
 
-    def test_handle_download_url_success_response_preserves_print_event_order(self):
+    def test_handle_download_url_success_response_target_preserves_print_event_order(self):
         downloader = object.__new__(ZSXQFileDownloader)
         operations = []
         downloader._record_risk_event = lambda **kwargs: operations.append(("event", kwargs))
@@ -6686,13 +6691,15 @@ class FileDownloaderRetryHelperTests(unittest.TestCase):
             "backend.crawlers.zsxq_file_downloader.print",
             lambda message: operations.append(("print", message)),
         ):
-            result = ZSXQFileDownloader._handle_download_url_success_response(
+            result = ZSXQFileDownloader._handle_download_url_success_response_target(
                 downloader,
-                {"succeeded": True, "resp_data": {"download_url": "https://files.example/signed-token"}},
-                101,
-                2,
-                {"User-Agent": "unit-test-agent"},
-                200,
+                DownloadUrlSuccessResponseTarget(
+                    {"succeeded": True, "resp_data": {"download_url": "https://files.example/signed-token"}},
+                    101,
+                    2,
+                    {"User-Agent": "unit-test-agent"},
+                    200,
+                ),
             )
 
         self.assertEqual("https://files.example/signed-token", result)
@@ -6714,17 +6721,19 @@ class FileDownloaderRetryHelperTests(unittest.TestCase):
             operations,
         )
 
-    def test_handle_download_url_success_response_preserves_resp_data_none_error(self):
+    def test_handle_download_url_success_response_target_preserves_resp_data_none_error(self):
         downloader = object.__new__(ZSXQFileDownloader)
 
         with self.assertRaises(AttributeError):
-            ZSXQFileDownloader._handle_download_url_success_response(
+            ZSXQFileDownloader._handle_download_url_success_response_target(
                 downloader,
-                {"succeeded": True, "resp_data": None},
-                101,
-                0,
-                {"User-Agent": "unit-test-agent"},
-                200,
+                DownloadUrlSuccessResponseTarget(
+                    {"succeeded": True, "resp_data": None},
+                    101,
+                    0,
+                    {"User-Agent": "unit-test-agent"},
+                    200,
+                ),
             )
 
     def test_handle_download_url_ok_response_preserves_json_decode_retry_decision(self):
