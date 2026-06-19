@@ -2145,20 +2145,6 @@ class ZSXQFileDownloader:
             file_path,
         )
 
-    def _skip_existing_download_if_complete(
-        self,
-        file_id: int,
-        file_path: str,
-        file_size: int,
-    ) -> Optional[str]:
-        return self._skip_existing_download_target(
-            ExistingDownloadTarget(
-                file_id,
-                file_path,
-                file_size,
-            ),
-        )
-
     def _skip_existing_download_target(
         self,
         target: ExistingDownloadTarget,
