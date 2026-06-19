@@ -140,6 +140,10 @@ class DownloadSizeMismatchTarget(NamedTuple):
     temp_path: str
 
 
+class DownloadHttpFailureTarget(NamedTuple):
+    status_code: int
+
+
 class DownloadBodyResult(NamedTuple):
     success_result: Optional[bool]
     failure_detail: Optional[DownloadFailureDetail]
@@ -157,7 +161,7 @@ RecordDownloadException = Callable[[DownloadExceptionTarget], DownloadFailureDet
 FindDownloadSizeMismatch = Callable[[DownloadSizeMismatchTarget], Optional[DownloadFailureDetail]]
 CompleteSuccessfulDownload = Callable[[DownloadCompletionTarget], None]
 WriteDownloadResponseBody = Callable[[DownloadBodyResponseTarget], Optional[int]]
-RecordDownloadHttpFailure = Callable[[int], DownloadFailureDetail]
+RecordDownloadHttpFailure = Callable[[DownloadHttpFailureTarget], DownloadFailureDetail]
 RemovePartialDownload = Callable[[str], bool]
 ResolveDownloadResponseTarget = Callable[[DownloadResponseTarget], DownloadFileTarget]
 
@@ -460,7 +464,9 @@ def download_attempt_result_for_response_status(
         )
 
     file_target = target.file_target
-    failure_detail = record_http_failure(target.response.status_code)
+    failure_detail = record_http_failure(
+        DownloadHttpFailureTarget(target.response.status_code),
+    )
     return DownloadAttemptResult(
         None,
         failure_detail,

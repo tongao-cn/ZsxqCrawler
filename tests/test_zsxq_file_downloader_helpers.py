@@ -25,7 +25,6 @@ from backend.crawlers.zsxq_file_downloader import (
     DownloadFileResponseRequestTarget,
     DownloadFinalFailureTarget,
     DownloadFileTarget,
-    DownloadHttpFailureTarget,
     DownloadIntervalPlanTarget,
     DownloadIntervalValues,
     DownloadResponseTarget,
@@ -72,6 +71,7 @@ from backend.crawlers.file_download_transfer import (
     DownloadExceptionTarget as TransferDownloadExceptionTarget,
     DownloadFailureDetail as TransferDownloadFailureDetail,
     DownloadFileTarget as TransferDownloadFileTarget,
+    DownloadHttpFailureTarget as TransferDownloadHttpFailureTarget,
     DownloadResponseExceptionTarget as TransferDownloadResponseExceptionTarget,
     DownloadResponseTarget as TransferDownloadResponseTarget,
     DownloadRetryDecision as TransferDownloadRetryDecision,
@@ -9128,9 +9128,12 @@ class FileDownloaderDownloadTests(unittest.TestCase):
         )
         calls = []
 
-        def record_http_failure(status_code):
-            calls.append(status_code)
-            return TransferDownloadFailureDetail("http_status", f"HTTP {status_code}")
+        def record_http_failure(target):
+            calls.append(target)
+            return TransferDownloadFailureDetail(
+                "http_status",
+                f"HTTP {target.status_code}",
+            )
 
         result = transfer_download_attempt_result_for_response_status(
             TransferDownloadResponseTarget(SimpleNamespace(status_code=503), file_target),
@@ -9153,7 +9156,7 @@ class FileDownloaderDownloadTests(unittest.TestCase):
             (None, ("http_status", "HTTP 503"), "memo.pdf", "memo.pdf", "C:\\Downloads\\memo.pdf"),
             result,
         )
-        self.assertEqual([503], calls)
+        self.assertEqual([TransferDownloadHttpFailureTarget(503)], calls)
 
     def test_download_transfer_response_records_exception_for_resolved_target(self):
         original_target = TransferDownloadFileTarget(
@@ -10180,21 +10183,6 @@ class FileDownloaderDownloadTests(unittest.TestCase):
         )
         self.assertEqual(["   📝 从响应头获取到真实文件名: real?.pdf"], downloader.logs)
 
-    def test_record_download_http_failure_preserves_error_detail_and_log(self):
-        downloader = object.__new__(ZSXQFileDownloader)
-        downloader.logs = []
-        downloader.log = downloader.logs.append
-
-        failure_500 = ZSXQFileDownloader._record_download_http_failure(downloader, 500)
-        failure_404 = ZSXQFileDownloader._record_download_http_failure(downloader, 404)
-
-        self.assertEqual(("http_status", "HTTP 500"), failure_500)
-        self.assertEqual(("http_status", "HTTP 404"), failure_404)
-        self.assertEqual(
-            ["   ❌ 下载失败: HTTP 500", "   ❌ 下载失败: HTTP 404"],
-            downloader.logs,
-        )
-
     def test_record_download_http_failure_target_uses_target_status(self):
         downloader = object.__new__(ZSXQFileDownloader)
         downloader.logs = []
@@ -10202,7 +10190,7 @@ class FileDownloaderDownloadTests(unittest.TestCase):
 
         failure = ZSXQFileDownloader._record_download_http_failure_target(
             downloader,
-            DownloadHttpFailureTarget(503),
+            TransferDownloadHttpFailureTarget(503),
         )
 
         self.assertEqual(("http_status", "HTTP 503"), failure)

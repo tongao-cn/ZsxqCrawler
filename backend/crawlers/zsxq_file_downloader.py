@@ -35,6 +35,7 @@ from backend.crawlers.file_download_transfer import (
     DownloadExceptionTarget,
     DownloadFailureDetail,
     DownloadFileTarget,
+    DownloadHttpFailureTarget,
     DownloadRetryDecision,
     DownloadRetryLoopAttemptTarget,
     DownloadRetryLoopFailureTarget,
@@ -417,10 +418,6 @@ class ResponseFilenameOverrideTarget(NamedTuple):
     file_name: str
     file_id: int
     response_headers: Dict[str, Any]
-
-
-class DownloadHttpFailureTarget(NamedTuple):
-    status_code: int
 
 
 class DownloadUrlUnavailableTarget(NamedTuple):
@@ -2420,11 +2417,6 @@ class ZSXQFileDownloader:
         self.log(f"   📝 从响应头获取到真实文件名: {real_filename}")
         return DownloadFilenameOverride(real_filename, safe_filename, file_path)
 
-    def _record_download_http_failure(self, status_code: int) -> DownloadFailureDetail:
-        return self._record_download_http_failure_target(
-            DownloadHttpFailureTarget(status_code),
-        )
-
     def _record_download_http_failure_target(
         self,
         target: DownloadHttpFailureTarget,
@@ -2528,7 +2520,7 @@ class ZSXQFileDownloader:
             write_response_body=self._write_download_response_body_result_target,
             find_mismatch_detail=self._handle_download_size_mismatch_target,
             complete_successful_download=self._complete_successful_download_target,
-            record_http_failure=self._record_download_http_failure,
+            record_http_failure=self._record_download_http_failure_target,
             record_exception=self._record_download_exception_target,
         )
 
