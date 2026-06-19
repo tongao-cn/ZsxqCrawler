@@ -86,6 +86,12 @@ class DownloadRetryLoopFailureTarget(NamedTuple):
     retry_state: DownloadRetryState
 
 
+class DownloadAttemptTarget(NamedTuple):
+    attempt: int
+    download_retries: int
+    file_target: DownloadFileTarget
+
+
 class DownloadCompletionTarget(NamedTuple):
     file_id: int
     safe_filename: str
@@ -145,6 +151,7 @@ class DownloadBodyAttemptResultTarget(NamedTuple):
 
 
 RunDownloadAttempt = Callable[[DownloadRetryLoopAttemptTarget], DownloadRetryDecision]
+RunDownloadFileAttempt = Callable[[DownloadAttemptTarget], DownloadAttemptResult]
 FinishDownloadFailure = Callable[[DownloadRetryLoopFailureTarget], bool]
 RecordDownloadException = Callable[[DownloadExceptionTarget], DownloadFailureDetail]
 FindDownloadSizeMismatch = Callable[[DownloadSizeMismatchTarget], Optional[DownloadFailureDetail]]
@@ -244,6 +251,30 @@ def apply_download_retry_exception(
         ),
         None,
     )
+
+
+def run_download_retry_loop_attempt(
+    target: DownloadRetryLoopAttemptTarget,
+    *,
+    run_download_attempt: RunDownloadFileAttempt,
+    record_exception: RecordDownloadException,
+) -> DownloadRetryDecision:
+    try:
+        attempt_result = run_download_attempt(
+            DownloadAttemptTarget(
+                target.attempt,
+                target.download_retries,
+                download_retry_attempt_file(target),
+            ),
+        )
+        return apply_download_attempt_result(
+            DownloadAttemptResultTarget(attempt_result, target.retry_state),
+        )
+    except Exception as exc:
+        return apply_download_retry_exception(
+            DownloadRetryExceptionTarget(exc, target.retry_state),
+            record_exception=record_exception,
+        )
 
 
 def download_response_exception_attempt_result(

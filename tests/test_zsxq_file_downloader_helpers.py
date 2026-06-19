@@ -17,7 +17,6 @@ from backend.crawlers.zsxq_file_downloader import (
     BatchDownloadResultTarget,
     BatchDownloadTarget,
     DownloadAttemptResult,
-    DownloadAttemptTarget,
     DownloadBodyResponseTarget,
     DownloadBodyWriteTarget,
     DownloadCompletionTarget,
@@ -59,6 +58,9 @@ from backend.crawlers.file_download_url import (
     run_download_url_retry_loop as run_download_url_loop,
 )
 from backend.crawlers.file_download_transfer import (
+    DownloadAttemptResult as TransferDownloadAttemptResult,
+    DownloadAttemptResultTarget as TransferDownloadAttemptResultTarget,
+    DownloadAttemptTarget as TransferDownloadAttemptTarget,
     DownloadBodyAttemptResultTarget as TransferDownloadBodyAttemptResultTarget,
     DownloadBodyFinalizationDecisionTarget as TransferDownloadBodyFinalizationDecisionTarget,
     DownloadBodyFinalizationTarget as TransferDownloadBodyFinalizationTarget,
@@ -76,8 +78,10 @@ from backend.crawlers.file_download_transfer import (
     DownloadRetryDecision as TransferDownloadRetryDecision,
     DownloadRetryExceptionResultTarget as TransferDownloadRetryExceptionResultTarget,
     DownloadRetryExceptionTarget as TransferDownloadRetryExceptionTarget,
+    DownloadRetryLoopAttemptTarget as TransferDownloadRetryLoopAttemptTarget,
     DownloadRetryState as TransferDownloadRetryState,
     DownloadSizeMismatchTarget as TransferDownloadSizeMismatchTarget,
+    apply_download_attempt_result as apply_transfer_download_attempt_result,
     apply_download_retry_exception as apply_transfer_download_retry_exception,
     download_attempt_result_for_response as transfer_download_attempt_result_for_response,
     download_attempt_result_for_response_status as transfer_download_attempt_result_for_response_status,
@@ -93,6 +97,7 @@ from backend.crawlers.file_download_transfer import (
     download_response_exception_attempt_result as transfer_download_response_exception_attempt_result,
     finalize_download_body_result_decision as finalize_transfer_download_body_result_decision,
     prepare_download_body_target as prepare_transfer_download_body_target,
+    run_download_retry_loop_attempt as run_download_transfer_retry_loop_attempt,
     run_download_retry_loop as run_download_transfer_retry_loop,
 )
 from backend.crawlers.zsxq_file_downloader_helpers import (
@@ -9440,24 +9445,103 @@ class FileDownloaderDownloadTests(unittest.TestCase):
             final_failures,
         )
 
-    def test_run_download_retry_loop_attempt_preserves_state_file_target_handoff(self):
+    def test_download_transfer_retry_loop_attempt_applies_success_result(self):
+        prepared_file = TransferDownloadFileTarget(
+            303,
+            "original.pdf",
+            4,
+            "original.pdf",
+            "C:\\Downloads\\original.pdf",
+        )
+        retry_state = TransferDownloadRetryState(
+            "renamed.pdf",
+            "renamed.pdf",
+            "C:\\Downloads\\renamed.pdf",
+            None,
+            None,
+        )
+        attempt_result = TransferDownloadAttemptResult(
+            True,
+            None,
+            "renamed.pdf",
+            "renamed.pdf",
+            "C:\\Downloads\\renamed.pdf",
+        )
+        calls = []
+
+        def run_download_attempt(target):
+            calls.append(("attempt", target.attempt, target.download_retries, target.file_target))
+            return attempt_result
+
+        decision = run_download_transfer_retry_loop_attempt(
+            TransferDownloadRetryLoopAttemptTarget(1, 3, prepared_file, retry_state),
+            run_download_attempt=run_download_attempt,
+            record_exception=lambda target: self.fail(
+                "successful attempt should not record an exception"
+            ),
+        )
+
+        self.assertEqual(TransferDownloadRetryDecision(retry_state, True), decision)
+        self.assertEqual(
+            [
+                (
+                    "attempt",
+                    1,
+                    3,
+                    TransferDownloadFileTarget(
+                        303,
+                        "renamed.pdf",
+                        4,
+                        "renamed.pdf",
+                        "C:\\Downloads\\renamed.pdf",
+                    ),
+                ),
+            ],
+            calls,
+        )
+
+    def test_download_transfer_retry_loop_attempt_records_exception_decision(self):
+        prepared_file = TransferDownloadFileTarget(404, "memo.pdf", 4, "memo.pdf", "C:\\Downloads\\memo.pdf")
+        retry_state = TransferDownloadRetryState("memo.pdf", "memo.pdf", "C:\\Downloads\\memo.pdf", None, None)
+        updated_state = retry_state._replace(last_error_code="download_exception", last_error="socket down")
+        calls = []
+        failure_exc = RuntimeError("socket down")
+
+        def run_download_attempt(target):
+            calls.append(("attempt", target.attempt, target.download_retries, target.file_target))
+            raise failure_exc
+
+        def record_exception(target):
+            calls.append(("exception", str(target.exc), target.file_path))
+            return TransferDownloadFailureDetail("download_exception", "socket down")
+
+        decision = run_download_transfer_retry_loop_attempt(
+            TransferDownloadRetryLoopAttemptTarget(2, 3, prepared_file, retry_state),
+            run_download_attempt=run_download_attempt,
+            record_exception=record_exception,
+        )
+
+        self.assertEqual(TransferDownloadRetryDecision(updated_state, None), decision)
+        self.assertEqual(
+            [
+                ("attempt", 2, 3, prepared_file),
+                ("exception", "socket down", "C:\\Downloads\\memo.pdf"),
+            ],
+            calls,
+        )
+
+    def test_run_download_retry_loop_attempt_delegates_to_transfer(self):
         downloader = object.__new__(ZSXQFileDownloader)
         prepared_file = DownloadFileTarget(303, "original.pdf", 4, "original.pdf", "C:\\Downloads\\original.pdf")
         retry_state = DownloadRetryState("renamed.pdf", "renamed.pdf", "C:\\Downloads\\renamed.pdf", None, None)
         attempt_result = DownloadAttemptResult(True, None, "renamed.pdf", "renamed.pdf", "C:\\Downloads\\renamed.pdf")
-        expected_decision = DownloadRetryDecision(retry_state, True)
         calls = []
 
         def run_download_attempt_target(target):
             calls.append(("attempt", target.attempt, target.download_retries, target.file_target))
             return attempt_result
 
-        def apply_download_attempt_result_target(target):
-            calls.append(("apply", target.attempt_result, target.retry_state))
-            return expected_decision
-
         downloader._run_download_attempt_target = run_download_attempt_target
-        downloader._apply_download_attempt_result_target = apply_download_attempt_result_target
         downloader._record_download_exception_target = lambda target: self.fail(
             "successful attempt should not record an exception"
         )
@@ -9467,7 +9551,7 @@ class FileDownloaderDownloadTests(unittest.TestCase):
             DownloadRetryLoopAttemptTarget(1, 3, prepared_file, retry_state),
         )
 
-        self.assertIs(expected_decision, decision)
+        self.assertEqual(DownloadRetryDecision(retry_state, True), decision)
         self.assertEqual(
             [
                 (
@@ -9476,92 +9560,83 @@ class FileDownloaderDownloadTests(unittest.TestCase):
                     3,
                     DownloadFileTarget(303, "renamed.pdf", 4, "renamed.pdf", "C:\\Downloads\\renamed.pdf"),
                 ),
-                ("apply", attempt_result, retry_state),
             ],
             calls,
         )
 
-    def test_run_download_retry_loop_attempt_preserves_exception_retry_decision(self):
-        downloader = object.__new__(ZSXQFileDownloader)
-        prepared_file = DownloadFileTarget(404, "memo.pdf", 4, "memo.pdf", "C:\\Downloads\\memo.pdf")
-        retry_state = DownloadRetryState("memo.pdf", "memo.pdf", "C:\\Downloads\\memo.pdf", None, None)
-        updated_state = retry_state._replace(last_error_code="download_exception", last_error="socket down")
-        calls = []
-
-        def run_download_attempt_target(target):
-            calls.append(("attempt", target.attempt, target.download_retries, target.file_target))
-            raise RuntimeError("socket down")
-
-        def record_download_exception_target(target):
-            calls.append(("exception", str(target.exc), target.file_path))
-            return DownloadFailureDetail("download_exception", "socket down")
-
-        downloader._run_download_attempt_target = run_download_attempt_target
-        downloader._apply_download_attempt_result_target = lambda target: self.fail(
-            "failed attempt should not apply a result"
+    def test_download_transfer_apply_attempt_result_preserves_false_retry_decision(self):
+        retry_state = TransferDownloadRetryState(
+            "old.pdf",
+            "old.pdf",
+            "C:\\Downloads\\old.pdf",
+            "old_code",
+            "old error",
         )
-        downloader._record_download_exception_target = record_download_exception_target
+        attempt_result = TransferDownloadAttemptResult(False, None, "new.pdf", "new.pdf", "C:\\Downloads\\new.pdf")
 
-        decision = ZSXQFileDownloader._run_download_retry_loop_attempt_target(
-            downloader,
-            DownloadRetryLoopAttemptTarget(2, 3, prepared_file, retry_state),
+        decision = apply_transfer_download_attempt_result(
+            TransferDownloadAttemptResultTarget(attempt_result, retry_state),
         )
-
-        self.assertEqual(DownloadRetryDecision(updated_state, None), decision)
-        self.assertEqual(
-            [
-                ("attempt", 2, 3, prepared_file),
-                ("exception", "socket down", "C:\\Downloads\\memo.pdf"),
-            ],
-            calls,
-        )
-
-    def test_apply_download_attempt_result_preserves_false_retry_decision(self):
-        downloader = object.__new__(ZSXQFileDownloader)
-        retry_state = DownloadRetryState("old.pdf", "old.pdf", "C:\\Downloads\\old.pdf", "old_code", "old error")
-        attempt_result = DownloadAttemptResult(False, None, "new.pdf", "new.pdf", "C:\\Downloads\\new.pdf")
-
-        decision = ZSXQFileDownloader._apply_download_attempt_result(downloader, attempt_result, retry_state)
 
         self.assertEqual(
-            DownloadRetryDecision(
-                DownloadRetryState("new.pdf", "new.pdf", "C:\\Downloads\\new.pdf", "old_code", "old error"),
+            TransferDownloadRetryDecision(
+                TransferDownloadRetryState("new.pdf", "new.pdf", "C:\\Downloads\\new.pdf", "old_code", "old error"),
                 False,
             ),
             decision,
         )
 
-    def test_apply_download_attempt_result_preserves_empty_failure_detail_as_success(self):
-        downloader = object.__new__(ZSXQFileDownloader)
-        retry_state = DownloadRetryState("old.pdf", "old.pdf", "C:\\Downloads\\old.pdf", "old_code", "old error")
-        attempt_result = DownloadAttemptResult(None, None, "new.pdf", "new.pdf", "C:\\Downloads\\new.pdf")
+    def test_download_transfer_apply_attempt_result_preserves_empty_failure_detail_as_success(self):
+        retry_state = TransferDownloadRetryState(
+            "old.pdf",
+            "old.pdf",
+            "C:\\Downloads\\old.pdf",
+            "old_code",
+            "old error",
+        )
+        attempt_result = TransferDownloadAttemptResult(None, None, "new.pdf", "new.pdf", "C:\\Downloads\\new.pdf")
 
-        decision = ZSXQFileDownloader._apply_download_attempt_result(downloader, attempt_result, retry_state)
+        decision = apply_transfer_download_attempt_result(
+            TransferDownloadAttemptResultTarget(attempt_result, retry_state),
+        )
 
         self.assertEqual(
-            DownloadRetryDecision(
-                DownloadRetryState("new.pdf", "new.pdf", "C:\\Downloads\\new.pdf", "old_code", "old error"),
+            TransferDownloadRetryDecision(
+                TransferDownloadRetryState("new.pdf", "new.pdf", "C:\\Downloads\\new.pdf", "old_code", "old error"),
                 True,
             ),
             decision,
         )
 
-    def test_apply_download_attempt_result_preserves_failure_detail_retry_state(self):
-        downloader = object.__new__(ZSXQFileDownloader)
-        retry_state = DownloadRetryState("old.pdf", "old.pdf", "C:\\Downloads\\old.pdf", "old_code", "old error")
-        attempt_result = DownloadAttemptResult(
+    def test_download_transfer_apply_attempt_result_preserves_failure_detail_retry_state(self):
+        retry_state = TransferDownloadRetryState(
+            "old.pdf",
+            "old.pdf",
+            "C:\\Downloads\\old.pdf",
+            "old_code",
+            "old error",
+        )
+        attempt_result = TransferDownloadAttemptResult(
             None,
-            DownloadFailureDetail("size_mismatch", "size mismatch"),
+            TransferDownloadFailureDetail("size_mismatch", "size mismatch"),
             "new.pdf",
             "new.pdf",
             "C:\\Downloads\\new.pdf",
         )
 
-        decision = ZSXQFileDownloader._apply_download_attempt_result(downloader, attempt_result, retry_state)
+        decision = apply_transfer_download_attempt_result(
+            TransferDownloadAttemptResultTarget(attempt_result, retry_state),
+        )
 
         self.assertEqual(
-            DownloadRetryDecision(
-                DownloadRetryState("new.pdf", "new.pdf", "C:\\Downloads\\new.pdf", "size_mismatch", "size mismatch"),
+            TransferDownloadRetryDecision(
+                TransferDownloadRetryState(
+                    "new.pdf",
+                    "new.pdf",
+                    "C:\\Downloads\\new.pdf",
+                    "size_mismatch",
+                    "size mismatch",
+                ),
                 None,
             ),
             decision,
@@ -9588,7 +9663,7 @@ class FileDownloaderDownloadTests(unittest.TestCase):
 
         result = ZSXQFileDownloader._run_download_attempt_target(
             downloader,
-            DownloadAttemptTarget(1, 3, file_target),
+            TransferDownloadAttemptTarget(1, 3, file_target),
         )
 
         self.assertEqual(
@@ -9623,7 +9698,7 @@ class FileDownloaderDownloadTests(unittest.TestCase):
 
         result = ZSXQFileDownloader._run_download_attempt_target(
             downloader,
-            DownloadAttemptTarget(0, 3, file_target),
+            TransferDownloadAttemptTarget(0, 3, file_target),
         )
 
         self.assertIs(expected_result, result)

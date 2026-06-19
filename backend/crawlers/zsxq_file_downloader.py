@@ -28,7 +28,7 @@ from backend.crawlers.file_download_url import (
 )
 from backend.crawlers.file_download_transfer import (
     DownloadAttemptResult,
-    DownloadAttemptResultTarget,
+    DownloadAttemptTarget,
     DownloadBodyResponseTarget,
     DownloadBodyWriteTarget,
     DownloadCompletionTarget,
@@ -36,19 +36,14 @@ from backend.crawlers.file_download_transfer import (
     DownloadFailureDetail,
     DownloadFileTarget,
     DownloadRetryDecision,
-    DownloadRetryExceptionTarget,
     DownloadRetryLoopAttemptTarget,
     DownloadRetryLoopFailureTarget,
     DownloadRetryState,
     DownloadResponseTarget,
     DownloadSizeMismatchTarget,
-    apply_download_attempt_result,
-    apply_download_retry_exception,
     download_attempt_result_for_response,
-    download_retry_attempt_file,
-    download_retry_decision_after_attempt_result,
-    download_retry_state_after_attempt_result,
     initial_download_retry_state,
+    run_download_retry_loop_attempt,
     run_download_retry_loop,
 )
 from backend.crawlers.zsxq_file_downloader_helpers import (
@@ -444,12 +439,6 @@ class DownloadFinalFailureTarget(NamedTuple):
 class DownloadStopTarget(NamedTuple):
     file_id: int
     temp_path: str
-
-
-class DownloadAttemptTarget(NamedTuple):
-    attempt: int
-    download_retries: int
-    file_target: DownloadFileTarget
 
 
 class DownloadAttemptResponseTarget(NamedTuple):
@@ -2093,63 +2082,11 @@ class ZSXQFileDownloader:
         self,
         target: DownloadRetryLoopAttemptTarget,
     ) -> DownloadRetryDecision:
-        try:
-            attempt_target = self._download_retry_attempt_file_target(target)
-            attempt_result = self._run_download_attempt_target(
-                DownloadAttemptTarget(
-                    target.attempt,
-                    target.download_retries,
-                    attempt_target,
-                ),
-            )
-            return self._apply_download_attempt_result_target(
-                DownloadAttemptResultTarget(attempt_result, target.retry_state),
-            )
-        except Exception as e:
-            return self._handle_download_retry_loop_attempt_exception(target, e)
-
-    def _download_retry_attempt_file_target(
-        self,
-        target: DownloadRetryLoopAttemptTarget,
-    ) -> DownloadFileTarget:
-        return download_retry_attempt_file(target)
-
-    def _handle_download_retry_loop_attempt_exception(
-        self,
-        target: DownloadRetryLoopAttemptTarget,
-        exc: Exception,
-    ) -> DownloadRetryDecision:
-        return apply_download_retry_exception(
-            DownloadRetryExceptionTarget(exc, target.retry_state),
+        return run_download_retry_loop_attempt(
+            target,
+            run_download_attempt=self._run_download_attempt_target,
             record_exception=self._record_download_exception_target,
         )
-
-    def _apply_download_attempt_result(
-        self,
-        attempt_result: DownloadAttemptResult,
-        retry_state: DownloadRetryState,
-    ) -> DownloadRetryDecision:
-        return self._apply_download_attempt_result_target(
-            DownloadAttemptResultTarget(attempt_result, retry_state),
-        )
-
-    def _apply_download_attempt_result_target(
-        self,
-        target: DownloadAttemptResultTarget,
-    ) -> DownloadRetryDecision:
-        return apply_download_attempt_result(target)
-
-    def _download_retry_state_after_attempt_result(
-        self,
-        target: DownloadAttemptResultTarget,
-    ) -> DownloadRetryState:
-        return download_retry_state_after_attempt_result(target)
-
-    def _download_retry_decision_after_attempt_result(
-        self,
-        target: DownloadAttemptResultTarget,
-    ) -> DownloadRetryDecision:
-        return download_retry_decision_after_attempt_result(target)
 
     def _run_download_attempt(
         self,
