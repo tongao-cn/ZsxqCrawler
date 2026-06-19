@@ -2582,9 +2582,6 @@ class ZSXQFileDownloader:
         self.log(f"   ⚠️ {mismatch_detail.error_message}")
         os.remove(target.temp_path)
 
-    def _handle_download_stop(self, file_id: int, temp_path: str) -> None:
-        self._handle_download_stop_target(DownloadStopTarget(file_id, temp_path))
-
     def _handle_download_stop_target(
         self,
         target: DownloadStopTarget,
