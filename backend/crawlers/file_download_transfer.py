@@ -152,7 +152,6 @@ class DownloadHttpFailureAttemptTarget(NamedTuple):
 RunDownloadAttempt = Callable[[DownloadRetryLoopAttemptTarget], DownloadRetryDecision]
 FinishDownloadFailure = Callable[[DownloadRetryLoopFailureTarget], bool]
 RecordDownloadException = Callable[[DownloadExceptionTarget], DownloadFailureDetail]
-RecordDownloadRetryException = Callable[[DownloadRetryExceptionTarget], DownloadRetryState]
 FindDownloadSizeMismatch = Callable[[DownloadBodyFinalizationTarget], Optional[DownloadFailureDetail]]
 CompleteSuccessfulDownloadBody = Callable[[DownloadBodyFinalizationTarget], DownloadBodyResult]
 HandleSuccessfulDownloadResponse = Callable[[DownloadResponseTarget], DownloadAttemptResult]
@@ -240,9 +239,15 @@ def download_retry_exception_state(
 def apply_download_retry_exception(
     target: DownloadRetryExceptionTarget,
     *,
-    record_exception: RecordDownloadRetryException,
+    record_exception: RecordDownloadException,
 ) -> DownloadRetryDecision:
-    return DownloadRetryDecision(record_exception(target), None)
+    return DownloadRetryDecision(
+        download_retry_exception_state(
+            target,
+            record_exception=record_exception,
+        ),
+        None,
+    )
 
 
 def download_response_exception_attempt_result(

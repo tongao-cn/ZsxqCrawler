@@ -8739,22 +8739,35 @@ class FileDownloaderDownloadTests(unittest.TestCase):
 
     def test_download_transfer_retry_exception_decision_records_state(self):
         retry_state = TransferDownloadRetryState("memo.pdf", "memo.pdf", "C:\\Downloads\\memo.pdf", None, None)
-        updated_state = retry_state._replace(last_error_code="download_exception", last_error="socket down")
+        failure_exc = RuntimeError("socket down")
         calls = []
 
         def record_exception(target):
             calls.append(target)
-            return updated_state
+            return TransferDownloadFailureDetail("download_exception", "socket down")
 
         decision = apply_transfer_download_retry_exception(
-            TransferDownloadRetryExceptionTarget(RuntimeError("socket down"), retry_state),
+            TransferDownloadRetryExceptionTarget(failure_exc, retry_state),
             record_exception=record_exception,
         )
 
-        self.assertEqual(TransferDownloadRetryDecision(updated_state, None), decision)
-        self.assertEqual(1, len(calls))
-        self.assertIs(calls[0].retry_state, retry_state)
-        self.assertEqual("socket down", str(calls[0].exc))
+        self.assertEqual(
+            TransferDownloadRetryDecision(
+                TransferDownloadRetryState(
+                    "memo.pdf",
+                    "memo.pdf",
+                    "C:\\Downloads\\memo.pdf",
+                    "download_exception",
+                    "socket down",
+                ),
+                None,
+            ),
+            decision,
+        )
+        self.assertEqual(
+            [TransferDownloadExceptionTarget(failure_exc, "C:\\Downloads\\memo.pdf")],
+            calls,
+        )
 
     def test_download_transfer_body_finalization_stops_before_mismatch_or_completion(self):
         finalization_target = TransferDownloadBodyFinalizationTarget(
@@ -9185,7 +9198,7 @@ class FileDownloaderDownloadTests(unittest.TestCase):
 
         downloader._run_download_attempt_target = run_download_attempt_target
         downloader._apply_download_attempt_result_target = apply_download_attempt_result_target
-        downloader._record_download_retry_exception_target = lambda target: self.fail(
+        downloader._record_download_exception_target = lambda target: self.fail(
             "successful attempt should not record an exception"
         )
 
@@ -9219,15 +9232,15 @@ class FileDownloaderDownloadTests(unittest.TestCase):
             calls.append(("attempt", target.attempt, target.download_retries, target.file_target))
             raise RuntimeError("socket down")
 
-        def record_download_retry_exception_target(target):
-            calls.append(("exception", str(target.exc), target.retry_state))
-            return updated_state
+        def record_download_exception_target(target):
+            calls.append(("exception", str(target.exc), target.file_path))
+            return DownloadFailureDetail("download_exception", "socket down")
 
         downloader._run_download_attempt_target = run_download_attempt_target
         downloader._apply_download_attempt_result_target = lambda target: self.fail(
             "failed attempt should not apply a result"
         )
-        downloader._record_download_retry_exception_target = record_download_retry_exception_target
+        downloader._record_download_exception_target = record_download_exception_target
 
         decision = ZSXQFileDownloader._run_download_retry_loop_attempt_target(
             downloader,
@@ -9238,7 +9251,7 @@ class FileDownloaderDownloadTests(unittest.TestCase):
         self.assertEqual(
             [
                 ("attempt", 2, 3, prepared_file),
-                ("exception", "socket down", retry_state),
+                ("exception", "socket down", "C:\\Downloads\\memo.pdf"),
             ],
             calls,
         )
