@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import queue
+import threading
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
@@ -28,11 +29,15 @@ class TaskRuntimeState:
         task_logs: Dict[str, List[str]],
         task_stop_flags: Dict[str, bool],
         sse_connections: Dict[str, List[queue.Queue[str]]],
+        runtime_task_threads: Dict[str, threading.Thread],
+        runtime_task_heartbeats: Dict[str, threading.Event],
     ) -> None:
         self._current_tasks = current_tasks
         self._task_logs = task_logs
         self._task_stop_flags = task_stop_flags
         self._sse_connections = sse_connections
+        self._runtime_task_threads = runtime_task_threads
+        self._runtime_task_heartbeats = runtime_task_heartbeats
 
     def initialize_task(self, task_id: str) -> None:
         self._task_logs[task_id] = []
@@ -89,6 +94,24 @@ class TaskRuntimeState:
 
     def clear_log_subscribers(self) -> None:
         self._sse_connections.clear()
+
+    def register_task_lock_heartbeat(self, task_id: str, stop_event: threading.Event) -> None:
+        self._runtime_task_heartbeats[task_id] = stop_event
+
+    def pop_task_lock_heartbeat(self, task_id: str) -> Optional[threading.Event]:
+        return self._runtime_task_heartbeats.pop(task_id, None)
+
+    def task_lock_heartbeat_ids(self) -> List[str]:
+        return list(self._runtime_task_heartbeats)
+
+    def register_runtime_task_thread(self, task_id: str, thread: threading.Thread) -> None:
+        self._runtime_task_threads[task_id] = thread
+
+    def forget_runtime_task_thread(self, task_id: str) -> None:
+        self._runtime_task_threads.pop(task_id, None)
+
+    def clear_runtime_task_threads(self) -> None:
+        self._runtime_task_threads.clear()
 
     def has_memory_task(self, task_id: str) -> bool:
         return has_memory_task(self._current_tasks, task_id)

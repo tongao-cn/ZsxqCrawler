@@ -37,14 +37,6 @@ from backend.services.task_runtime_status import (
     _task_created_at_sort_value,
 )
 from backend.services.task_runtime_state import TaskRuntimeState
-from backend.services.task_runtime_threads import (
-    clear_runtime_task_threads,
-    forget_runtime_task_thread,
-    pop_task_lock_heartbeat,
-    register_runtime_task_thread,
-    register_task_lock_heartbeat,
-    task_lock_heartbeat_ids,
-)
 from backend.services.workflow_registry import get_workflow_spec
 from backend.storage.task_store import TaskStore
 
@@ -82,7 +74,14 @@ crawler_instances: Dict[str, Any] = {}
 file_downloader_instances: Dict[str, Any] = {}
 runtime_task_threads: Dict[str, threading.Thread] = {}
 runtime_task_heartbeats: Dict[str, threading.Event] = {}
-_runtime_state = TaskRuntimeState(current_tasks, task_logs, task_stop_flags, sse_connections)
+_runtime_state = TaskRuntimeState(
+    current_tasks,
+    task_logs,
+    task_stop_flags,
+    sse_connections,
+    runtime_task_threads,
+    runtime_task_heartbeats,
+)
 
 def _initialize_task_tracking_locked(task_id: str) -> None:
     _runtime_state.initialize_task(task_id)
@@ -490,15 +489,15 @@ def _request_stop_for_task_resources(crawler: Any, downloader: Any) -> None:
 
 
 def _register_task_lock_heartbeat_locked(task_id: str, stop_event: threading.Event) -> None:
-    register_task_lock_heartbeat(runtime_task_heartbeats, task_id, stop_event)
+    _runtime_state.register_task_lock_heartbeat(task_id, stop_event)
 
 
 def _pop_task_lock_heartbeat_locked(task_id: str) -> Optional[threading.Event]:
-    return pop_task_lock_heartbeat(runtime_task_heartbeats, task_id)
+    return _runtime_state.pop_task_lock_heartbeat(task_id)
 
 
 def _task_lock_heartbeat_ids_locked() -> List[str]:
-    return task_lock_heartbeat_ids(runtime_task_heartbeats)
+    return _runtime_state.task_lock_heartbeat_ids()
 
 
 def _start_task_lock_heartbeat(task_id: str) -> None:
@@ -536,15 +535,15 @@ def _request_stop_for_resources(resources: List[Any]) -> None:
 
 
 def _register_runtime_task_thread_locked(task_id: str, thread: threading.Thread) -> None:
-    register_runtime_task_thread(runtime_task_threads, task_id, thread)
+    _runtime_state.register_runtime_task_thread(task_id, thread)
 
 
 def _forget_runtime_task_thread_locked(task_id: str) -> None:
-    forget_runtime_task_thread(runtime_task_threads, task_id)
+    _runtime_state.forget_runtime_task_thread(task_id)
 
 
 def _clear_runtime_task_threads_locked() -> None:
-    clear_runtime_task_threads(runtime_task_threads)
+    _runtime_state.clear_runtime_task_threads()
 
 
 def _run_runtime_task(
