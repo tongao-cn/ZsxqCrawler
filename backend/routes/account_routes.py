@@ -1,19 +1,21 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Any, Callable, Dict, Optional, Tuple
+from typing import Any, Callable, Dict, Optional
 
 import requests
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 from backend.core.account_context import (
-    build_stealth_headers,
     clear_account_detect_cache,
     get_account_summary_for_group_auto,
-    get_cookie_for_group,
 )
-from backend.storage.account_info_db import get_account_info_db
+from backend.services.account_self_info_service import (
+    AccountSelfInfoError,
+    get_account_self_info,
+    get_group_account_self_info,
+)
 from backend.storage.accounts_sql_manager import get_accounts_sql_manager
 
 router = APIRouter(prefix="/api", tags=["accounts"])
@@ -28,96 +30,8 @@ class AssignGroupAccountRequest(BaseModel):
     account_id: str = Field(..., description="账号ID")
 
 
-def _build_self_info(data: Dict[str, Any]) -> Dict[str, Any]:
-    rd = data.get("resp_data", {}) or {}
-    user = rd.get("user", {}) or {}
-    wechat = (rd.get("accounts", {}) or {}).get("wechat", {}) or {}
-    return {
-        "uid": user.get("uid"),
-        "name": user.get("name") or wechat.get("name"),
-        "avatar_url": user.get("avatar_url") or wechat.get("avatar_url"),
-        "location": user.get("location"),
-        "user_sid": user.get("user_sid"),
-        "grade": user.get("grade"),
-    }
-
-
-def _get_account_cookie_or_raise(account_id: str) -> str:
-    sql_mgr = get_accounts_sql_manager()
-    acc = sql_mgr.get_account_by_id(account_id, mask_cookie=False)
-    if not acc:
-        raise HTTPException(status_code=404, detail="Account does not exist")
-
-    cookie = acc.get("cookie", "")
-    if not cookie:
-        raise HTTPException(status_code=400, detail="Account has no configured Cookie")
-    return cookie
-
-
-def _get_group_account_context_or_raise(group_id: str) -> Tuple[str, str]:
-    summary = get_account_summary_for_group_auto(group_id)
-    cookie = get_cookie_for_group(group_id)
-    account_id = (summary or {}).get("id", "default")
-
-    if not cookie:
-        raise HTTPException(status_code=400, detail="未找到可用Cookie，请先配置账号或默认Cookie")
-    return account_id, cookie
-
-
-def _fetch_self_api_data(cookie: str, failure_detail: str) -> Dict[str, Any]:
-    headers = build_stealth_headers(cookie)
-    resp = requests.get("https://api.zsxq.com/v3/users/self", headers=headers, timeout=30)
-    resp.raise_for_status()
-    data = resp.json()
-    if not data.get("succeeded"):
-        raise HTTPException(status_code=400, detail=failure_detail)
-    return data
-
-
-def _save_self_info_response(db: Any, account_id: str, data: Dict[str, Any]) -> Dict[str, Any]:
-    self_info = _build_self_info(data)
-    db.upsert_self_info(account_id, self_info, raw_json=data)
-    return {"self": db.get_self_info(account_id)}
-
-
 def _account_route_error(message: str, error: Exception, *, status_code: int = 500) -> HTTPException:
     return HTTPException(status_code=status_code, detail=f"{message}: {str(error)}")
-
-
-def _get_account_self_response(account_id: str) -> Dict[str, Any]:
-    db = get_account_info_db()
-    info = db.get_self_info(account_id)
-    if info:
-        return {"self": info}
-
-    cookie = _get_account_cookie_or_raise(account_id)
-    data = _fetch_self_api_data(cookie, "API returned failure")
-    return _save_self_info_response(db, account_id, data)
-
-
-def _refresh_account_self_response(account_id: str) -> Dict[str, Any]:
-    cookie = _get_account_cookie_or_raise(account_id)
-    data = _fetch_self_api_data(cookie, "API returned failure")
-    db = get_account_info_db()
-    return _save_self_info_response(db, account_id, data)
-
-
-def _get_group_account_self_response(group_id: str) -> Dict[str, Any]:
-    account_id, cookie = _get_group_account_context_or_raise(group_id)
-    db = get_account_info_db()
-    info = db.get_self_info(account_id)
-    if info:
-        return {"self": info}
-
-    data = _fetch_self_api_data(cookie, "API返回失败")
-    return _save_self_info_response(db, account_id, data)
-
-
-def _refresh_group_account_self_response(group_id: str) -> Dict[str, Any]:
-    account_id, cookie = _get_group_account_context_or_raise(group_id)
-    data = _fetch_self_api_data(cookie, "API返回失败")
-    db = get_account_info_db()
-    return _save_self_info_response(db, account_id, data)
 
 
 def _get_group_account_response(group_id: str) -> Dict[str, Any]:
@@ -157,14 +71,17 @@ def _assign_account_to_group_response(group_id: str, request: AssignGroupAccount
 
 
 async def _run_self_response_route(
-    helper: Callable[[str], Dict[str, Any]],
+    helper: Callable[..., Dict[str, Any]],
     identifier: str,
     *,
+    refresh: bool,
     network_error_prefix: str,
     generic_error_prefix: str,
 ) -> Dict[str, Any]:
     try:
-        return await asyncio.to_thread(helper, identifier)
+        return await asyncio.to_thread(helper, identifier, refresh=refresh)
+    except AccountSelfInfoError as e:
+        raise HTTPException(status_code=e.status_code, detail=e.detail)
     except HTTPException:
         raise
     except requests.RequestException as e:
@@ -225,8 +142,9 @@ async def get_group_account(group_id: str):
 async def get_account_self(account_id: str):
     """获取并返回指定账号的已持久化自我信息；若无则尝试抓取并保存"""
     return await _run_self_response_route(
-        _get_account_self_response,
+        get_account_self_info,
         account_id,
+        refresh=False,
         network_error_prefix="Network request failed",
         generic_error_prefix="Failed to retrieve account info",
     )
@@ -236,8 +154,9 @@ async def get_account_self(account_id: str):
 async def refresh_account_self(account_id: str):
     """强制抓取 /v3/users/self 并更新持久化"""
     return await _run_self_response_route(
-        _refresh_account_self_response,
+        get_account_self_info,
         account_id,
+        refresh=True,
         network_error_prefix="Network request failed",
         generic_error_prefix="Failed to refresh account info",
     )
@@ -247,8 +166,9 @@ async def refresh_account_self(account_id: str):
 async def get_group_account_self(group_id: str):
     """获取群组当前使用账号的自我信息（若无则尝试抓取并保存）"""
     return await _run_self_response_route(
-        _get_group_account_self_response,
+        get_group_account_self_info,
         group_id,
+        refresh=False,
         network_error_prefix="网络请求失败",
         generic_error_prefix="获取群组账号信息失败",
     )
@@ -258,8 +178,9 @@ async def get_group_account_self(group_id: str):
 async def refresh_group_account_self(group_id: str):
     """强制抓取群组当前使用账号的自我信息并持久化"""
     return await _run_self_response_route(
-        _refresh_group_account_self_response,
+        get_group_account_self_info,
         group_id,
+        refresh=True,
         network_error_prefix="网络请求失败",
         generic_error_prefix="刷新群组账号信息失败",
     )
