@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from dataclasses import dataclass
 from datetime import date
 from typing import Any, Dict, Iterable, List
 
@@ -11,6 +12,12 @@ from backend.services.stock_topic_analysis_helpers import _build_stock_alias_ter
 from backend.services.stock_topic_analysis_payloads import require_topic_excerpt
 from backend.services.stock_topic_analysis_queries import build_question_topic_search_sql, build_topic_search_sql
 from backend.storage.db_compat import connect
+
+
+@dataclass(frozen=True)
+class StockTopicSearchSources:
+    processed_topic_ids: List[str]
+    rows: List[Any]
 
 
 def _normalize_text(value: Any) -> str:
@@ -186,6 +193,24 @@ def load_stock_recommendation_counts(
 
     by_date = {str(row["mention_date"]): int(row["count"] or 0) for row in rows}
     return sum(by_date.values()), by_date
+
+
+def load_stock_recommendation_counts_for_names(
+    group_id: str,
+    names: Iterable[Any],
+    *,
+    max_names: int = 10,
+) -> tuple[int, Dict[str, int]]:
+    conn = connect()
+    try:
+        return load_stock_recommendation_counts(
+            conn,
+            group_id,
+            names,
+            max_names=max_names,
+        )
+    finally:
+        conn.close()
 
 
 def _load_topic_excerpt_fallbacks(conn: Any, group_id: str, topic_ids: List[str], stock_name: str) -> Dict[str, str]:
@@ -410,6 +435,37 @@ def load_latest_processed_topic_ids(
     except Exception:
         conn.rollback()
         return []
+
+
+def load_stock_topic_search_sources(
+    group_id: str,
+    stock_name: str,
+    search_term: str,
+    *,
+    recent_cutoff: str,
+    processed_topic_statuses: set[str],
+    max_tracked_topic_ids: int,
+    max_candidate_topics: int,
+) -> StockTopicSearchSources:
+    conn = connect()
+    try:
+        processed_topic_ids = load_latest_processed_topic_ids(
+            conn,
+            group_id,
+            stock_name,
+            processed_topic_statuses=processed_topic_statuses,
+            max_tracked_topic_ids=max_tracked_topic_ids,
+        )
+        rows = load_stock_topic_search_rows(
+            conn,
+            group_id,
+            search_term,
+            recent_cutoff=recent_cutoff,
+            max_candidate_topics=max_candidate_topics,
+        )
+        return StockTopicSearchSources(processed_topic_ids=processed_topic_ids, rows=rows)
+    finally:
+        conn.close()
 
 
 def upsert_stock_topic_processed_states(

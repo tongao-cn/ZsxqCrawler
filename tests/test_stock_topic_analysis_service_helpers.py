@@ -400,37 +400,40 @@ class StockTopicAnalysisServiceHelperTests(unittest.TestCase):
 
     @unittest.skipUnless(HAS_SERVICE_DEPS, "stock topic analysis service dependencies are not installed")
     def test_search_stock_topics_returns_empty_result_without_rows(self):
+        from backend.services.stock_topic_analysis_store import StockTopicSearchSources
         from backend.services.stock_topic_analysis_service import search_stock_topics
 
-        conn = Mock()
-        state_cursor = Mock()
-        state_cursor.fetchall.return_value = []
-        search_cursor = Mock()
-        search_cursor.fetchall.return_value = []
-        latest_cursor = Mock()
-        latest_cursor.fetchone.return_value = None
-        conn.execute.side_effect = [state_cursor, latest_cursor, search_cursor]
-
-        with patch("backend.services.stock_topic_analysis_service.connect", return_value=conn):
+        with (
+            patch("backend.services.stock_topic_analysis_service._recent_topic_cutoff_text", return_value="2025-06-20"),
+            patch(
+                "backend.services.stock_topic_analysis_service.load_stock_topic_search_sources",
+                return_value=StockTopicSearchSources(processed_topic_ids=[], rows=[]),
+            ) as load_sources,
+            patch("backend.services.stock_topic_analysis_service.load_stock_recommendation_counts_for_names") as load_counts,
+        ):
             result = search_stock_topics("51111112855254", "宁德时代")
 
         self.assertEqual("51111112855254", result["group_id"])
         self.assertEqual("宁德时代", result["stock_name"])
         self.assertEqual([], result["topics"])
         self.assertEqual(0, result["recommendation_count"])
-        conn.close.assert_called_once()
+        load_sources.assert_called_once_with(
+            "51111112855254",
+            "宁德时代",
+            "宁德时代",
+            recent_cutoff="2025-06-20",
+            processed_topic_statuses={"analyzed", "skipped"},
+            max_tracked_topic_ids=5000,
+            max_candidate_topics=500,
+        )
+        load_counts.assert_not_called()
 
     @unittest.skipUnless(HAS_SERVICE_DEPS, "stock topic analysis service dependencies are not installed")
     def test_search_stock_topics_raises_without_stored_excerpt(self):
+        from backend.services.stock_topic_analysis_store import StockTopicSearchSources
         from backend.services.stock_topic_analysis_service import search_stock_topics
 
-        conn = Mock()
-        state_cursor = Mock()
-        state_cursor.fetchall.return_value = []
-        latest_cursor = Mock()
-        latest_cursor.fetchone.return_value = None
-        search_cursor = Mock()
-        search_cursor.fetchall.return_value = [
+        rows = [
             {
                 "topic_id": "101",
                 "title": "宁德时代业绩交流",
@@ -447,25 +450,25 @@ class StockTopicAnalysisServiceHelperTests(unittest.TestCase):
                 "confidence": 0,
             },
         ]
-        conn.execute.side_effect = [state_cursor, latest_cursor, search_cursor]
 
-        with patch("backend.services.stock_topic_analysis_service.connect", return_value=conn):
+        with (
+            patch(
+                "backend.services.stock_topic_analysis_service.load_stock_topic_search_sources",
+                return_value=StockTopicSearchSources(processed_topic_ids=[], rows=rows),
+            ),
+            patch("backend.services.stock_topic_analysis_service.load_stock_recommendation_counts_for_names") as load_counts,
+        ):
             with self.assertRaisesRegex(RuntimeError, "缺少 宁德时代 的 excerpt"):
                 search_stock_topics("51111112855254", "宁德时代")
 
-        conn.close.assert_called_once()
+        load_counts.assert_not_called()
 
     @unittest.skipUnless(HAS_SERVICE_DEPS, "stock topic analysis service dependencies are not installed")
     def test_search_stock_topics_prefers_stored_excerpt(self):
+        from backend.services.stock_topic_analysis_store import StockTopicSearchSources
         from backend.services.stock_topic_analysis_service import search_stock_topics
 
-        conn = Mock()
-        state_cursor = Mock()
-        state_cursor.fetchall.return_value = []
-        latest_cursor = Mock()
-        latest_cursor.fetchone.return_value = None
-        search_cursor = Mock()
-        search_cursor.fetchall.return_value = [
+        rows = [
             {
                 "topic_id": "101",
                 "title": "多公司交流",
@@ -482,11 +485,14 @@ class StockTopicAnalysisServiceHelperTests(unittest.TestCase):
                 "confidence": 0.8,
             },
         ]
-        counts_cursor = Mock()
-        counts_cursor.fetchall.return_value = []
-        conn.execute.side_effect = [state_cursor, latest_cursor, search_cursor, counts_cursor]
 
-        with patch("backend.services.stock_topic_analysis_service.connect", return_value=conn):
+        with (
+            patch(
+                "backend.services.stock_topic_analysis_service.load_stock_topic_search_sources",
+                return_value=StockTopicSearchSources(processed_topic_ids=[], rows=rows),
+            ),
+            patch("backend.services.stock_topic_analysis_service.load_stock_recommendation_counts_for_names", return_value=(0, {})),
+        ):
             result = search_stock_topics("51111112855254", "宁德时代")
 
         self.assertEqual(1, result["topic_count"])
@@ -498,15 +504,10 @@ class StockTopicAnalysisServiceHelperTests(unittest.TestCase):
 
     @unittest.skipUnless(HAS_SERVICE_DEPS, "stock topic analysis service dependencies are not installed")
     def test_search_stock_topics_keeps_requested_stock_name_for_alias_hit(self):
+        from backend.services.stock_topic_analysis_store import StockTopicSearchSources
         from backend.services.stock_topic_analysis_service import search_stock_topics
 
-        conn = Mock()
-        state_cursor = Mock()
-        state_cursor.fetchall.return_value = []
-        latest_cursor = Mock()
-        latest_cursor.fetchone.return_value = None
-        search_cursor = Mock()
-        search_cursor.fetchall.return_value = [
+        rows = [
             {
                 "topic_id": "101",
                 "title": "泽璟制药交流",
@@ -523,11 +524,14 @@ class StockTopicAnalysisServiceHelperTests(unittest.TestCase):
                 "confidence": 0.8,
             },
         ]
-        counts_cursor = Mock()
-        counts_cursor.fetchall.return_value = []
-        conn.execute.side_effect = [state_cursor, latest_cursor, search_cursor, counts_cursor]
 
-        with patch("backend.services.stock_topic_analysis_service.connect", return_value=conn):
+        with (
+            patch(
+                "backend.services.stock_topic_analysis_service.load_stock_topic_search_sources",
+                return_value=StockTopicSearchSources(processed_topic_ids=[], rows=rows),
+            ),
+            patch("backend.services.stock_topic_analysis_service.load_stock_recommendation_counts_for_names", return_value=(0, {})),
+        ):
             result = search_stock_topics("51111112855254", "泽璟制药")
 
         self.assertEqual("泽璟制药", result["stock_name"])
@@ -1084,6 +1088,32 @@ class StockTopicAnalysisServiceHelperTests(unittest.TestCase):
         self.assertIn("AND e.topic_date >=", sql)
         self.assertEqual(("%宁德时代%", "51111112855254", "2025-06-20", 25), params)
 
+    def test_load_stock_topic_search_sources_closes_connection(self):
+        from backend.services.stock_topic_analysis_store import load_stock_topic_search_sources
+
+        conn = Mock()
+        state_cursor = Mock()
+        state_cursor.fetchall.return_value = [{"topic_id": "102"}]
+        search_cursor = Mock()
+        search_cursor.fetchall.return_value = [{"topic_id": "101"}]
+        conn.execute.side_effect = [state_cursor, search_cursor]
+
+        with patch("backend.services.stock_topic_analysis_store.connect", return_value=conn):
+            sources = load_stock_topic_search_sources(
+                "51111112855254",
+                "宁德时代",
+                "宁德时代",
+                recent_cutoff="2025-06-20",
+                processed_topic_statuses={"analyzed", "skipped"},
+                max_tracked_topic_ids=5000,
+                max_candidate_topics=25,
+            )
+
+        self.assertEqual(["102"], sources.processed_topic_ids)
+        self.assertEqual([{"topic_id": "101"}], sources.rows)
+        self.assertEqual(2, conn.execute.call_count)
+        conn.close.assert_called_once()
+
     def test_load_stock_recommendation_counts_builds_scoped_query(self):
         from backend.services.stock_topic_analysis_store import load_stock_recommendation_counts
 
@@ -1106,6 +1136,22 @@ class StockTopicAnalysisServiceHelperTests(unittest.TestCase):
         self.assertIn("FROM zsxq_a_share_daily_mentions", sql)
         self.assertIn("company ILIKE ? OR company ILIKE ?", sql)
         self.assertEqual(["51111112855254", "%宁德时代%", "%CATL%"], params)
+
+    def test_load_stock_recommendation_counts_for_names_closes_connection(self):
+        from backend.services.stock_topic_analysis_store import load_stock_recommendation_counts_for_names
+
+        conn = Mock()
+        conn.execute.return_value.fetchall.return_value = [{"mention_date": "2026-05-10", "count": 2}]
+
+        with patch("backend.services.stock_topic_analysis_store.connect", return_value=conn):
+            total, by_date = load_stock_recommendation_counts_for_names(
+                "51111112855254",
+                ["宁德时代"],
+            )
+
+        self.assertEqual(2, total)
+        self.assertEqual({"2026-05-10": 2}, by_date)
+        conn.close.assert_called_once()
 
     @unittest.skipUnless(HAS_SERVICE_DEPS, "stock topic analysis service dependencies are not installed")
     def test_get_latest_stock_topic_analyses_returns_missing_rows(self):
