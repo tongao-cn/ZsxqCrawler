@@ -11,19 +11,11 @@ from backend.core import crawler_runtime
 from backend.services.a_share_analysis_service import normalize_group_id
 from backend.services.task_runtime_logs import (
     add_task_log_subscriber,
-    append_task_log,
-    has_task_logs,
     remove_task_log_subscriber,
     task_log_subscribers_snapshot,
-    task_logs_copy,
 )
 from backend.services.task_runtime_memory import (
-    has_memory_task,
-    memory_task_state,
-    memory_tasks_snapshot,
-    set_pending_memory_task,
     should_apply_task_update,
-    update_memory_task,
 )
 from backend.services.task_runtime_resources import (
     clear_runtime_resource_tracking,
@@ -47,6 +39,7 @@ from backend.services.task_runtime_status import (
     _normalize_task_status,
     _task_created_at_sort_value,
 )
+from backend.services.task_runtime_state import TaskRuntimeState
 from backend.services.task_runtime_threads import (
     clear_runtime_task_threads,
     forget_runtime_task_thread,
@@ -92,14 +85,14 @@ crawler_instances: Dict[str, Any] = {}
 file_downloader_instances: Dict[str, Any] = {}
 runtime_task_threads: Dict[str, threading.Thread] = {}
 runtime_task_heartbeats: Dict[str, threading.Event] = {}
+_runtime_state = TaskRuntimeState(current_tasks, task_logs, task_stop_flags)
 
 def _initialize_task_tracking_locked(task_id: str) -> None:
-    task_logs[task_id] = []
-    _set_task_stop_flag_locked(task_id, False)
+    _runtime_state.initialize_task(task_id)
 
 
 def _set_task_stop_flag_locked(task_id: str, stopped: bool) -> None:
-    task_stop_flags[task_id] = stopped
+    _runtime_state.set_task_stop_flag(task_id, stopped)
 
 
 def _persist_task_creation_tracking(task_id: str, description: str, store: Optional[TaskStore] = None) -> None:
@@ -108,9 +101,7 @@ def _persist_task_creation_tracking(task_id: str, description: str, store: Optio
 
 
 def _forget_task_tracking_locked(task_id: str) -> None:
-    current_tasks.pop(task_id, None)
-    task_logs.pop(task_id, None)
-    task_stop_flags.pop(task_id, None)
+    _runtime_state.forget_task(task_id)
     sse_connections.pop(task_id, None)
 
 
@@ -123,7 +114,7 @@ def list_tasks(limit: Optional[int] = None) -> List[Dict[str, Any]]:
 
 
 def _memory_task_state_locked(task_id: str) -> Optional[Dict[str, Any]]:
-    return memory_task_state(current_tasks, task_id)
+    return _runtime_state.memory_task_state(task_id)
 
 
 def _set_pending_memory_task_locked(
@@ -134,8 +125,7 @@ def _set_pending_memory_task_locked(
     metadata: Optional[Dict[str, Any]] = None,
     task: Optional[Dict[str, Any]] = None,
 ) -> None:
-    set_pending_memory_task(
-        current_tasks,
+    _runtime_state.set_pending_memory_task(
         task_id,
         task_type,
         description,
@@ -146,7 +136,7 @@ def _set_pending_memory_task_locked(
 
 
 def _memory_tasks_snapshot_locked() -> List[tuple[str, Dict[str, Any]]]:
-    return memory_tasks_snapshot(current_tasks)
+    return _runtime_state.memory_tasks_snapshot()
 
 
 def get_task_state(task_id: str) -> Optional[Dict[str, Any]]:
@@ -158,11 +148,11 @@ def get_task_state(task_id: str) -> Optional[Dict[str, Any]]:
 
 
 def _has_task_logs_locked(task_id: str) -> bool:
-    return has_task_logs(task_logs, task_id)
+    return _runtime_state.has_task_logs(task_id)
 
 
 def _task_logs_copy_locked(task_id: str) -> List[str]:
-    return task_logs_copy(task_logs, task_id)
+    return _runtime_state.task_logs_copy(task_id)
 
 
 def get_task_logs_state(task_id: str) -> Optional[List[str]]:
@@ -270,7 +260,7 @@ def create_ingestion_task(task_type: str, description: str, group_id: str) -> tu
 
 
 def _append_task_log_locked(task_id: str, formatted_log: str) -> None:
-    append_task_log(task_logs, task_id, formatted_log)
+    _runtime_state.append_task_log(task_id, formatted_log)
 
 
 def add_task_log(task_id: str, log_message: str) -> None:
@@ -325,7 +315,7 @@ def broadcast_log(task_id: str, log_message: str) -> None:
 
 
 def _has_memory_task_locked(task_id: str) -> bool:
-    return has_memory_task(current_tasks, task_id)
+    return _runtime_state.has_memory_task(task_id)
 
 
 def _update_memory_task_locked(
@@ -335,7 +325,7 @@ def _update_memory_task_locked(
     result: Optional[Dict[str, Any]],
     updated_at: datetime,
 ) -> None:
-    update_memory_task(current_tasks, task_id, status, message, result, updated_at)
+    _runtime_state.update_memory_task(task_id, status, message, result, updated_at)
 
 
 def update_task(
@@ -613,7 +603,7 @@ def request_runtime_shutdown() -> None:
 
 
 def _task_stop_flag_locked(task_id: str) -> bool:
-    return task_stop_flags.get(task_id, False)
+    return _runtime_state.task_stop_flag(task_id)
 
 
 def is_task_stopped(task_id: str) -> bool:
