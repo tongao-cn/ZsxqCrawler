@@ -24,6 +24,7 @@ from backend.services.file_ai_analysis_service import (
     analyze_group_file,
     get_group_file_analysis,
 )
+from backend.services.task_launch import TaskLaunchConflict, ingestion_conflict_detail
 from backend.services.file_workflow_service import (
     _check_local_file_status_response,
     _clear_file_database_response,
@@ -45,6 +46,8 @@ router = APIRouter(prefix="/api/files", tags=["files"])
 
 
 def _file_route_error(message: str, error: Exception) -> HTTPException:
+    if isinstance(error, TaskLaunchConflict):
+        return HTTPException(status_code=409, detail=ingestion_conflict_detail(error.existing))
     return HTTPException(status_code=500, detail=f"{message}: {str(error)}")
 
 

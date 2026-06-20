@@ -153,13 +153,10 @@ class FileRoutesHelperTests(unittest.TestCase):
     def test_enqueue_file_task_creates_task_and_schedules_callback(self):
         background_tasks = FakeBackgroundTasks()
 
-        with (
-            patch("backend.services.file_workflow_service.create_task", return_value="task-1") as create_task,
-            patch("backend.services.file_workflow_service.enqueue_runtime_task") as enqueue_runtime_task,
-        ):
+        with patch("backend.services.file_workflow_service.launch_task", return_value={"task_id": "task-1", "message": "已创建"}) as launch:
             response = _enqueue_file_task(
                 background_tasks,
-                "unit_file_task",
+                "analyze_files",
                 "测试文件任务",
                 fake_task,
                 "group-1",
@@ -167,18 +164,25 @@ class FileRoutesHelperTests(unittest.TestCase):
                 message="已创建",
             )
 
-        create_task.assert_called_once_with("unit_file_task", "测试文件任务")
+        launch.assert_called_once_with(
+            "analyze_files",
+            "测试文件任务",
+            fake_task,
+            "group-1",
+            123,
+            group_id=None,
+            message="已创建",
+        )
         self.assertEqual({"task_id": "task-1", "message": "已创建"}, response)
-        enqueue_runtime_task.assert_called_once_with(fake_task, "task-1", "group-1", 123)
         self.assertEqual([], background_tasks.calls)
 
     def test_enqueue_file_task_uses_ingestion_lock_when_requested(self):
         background_tasks = FakeBackgroundTasks()
 
-        with (
-            patch("backend.routes.ingestion_helpers.create_ingestion_task", return_value=("task-1", None)) as create_task,
-            patch("backend.services.file_workflow_service.enqueue_runtime_task") as enqueue_runtime_task,
-        ):
+        with patch(
+            "backend.services.file_workflow_service.launch_ingestion_task",
+            return_value={"task_id": "task-1", "message": "任务已创建，正在后台执行"},
+        ) as launch:
             response = _enqueue_file_task(
                 background_tasks,
                 "collect_files",
@@ -189,18 +193,26 @@ class FileRoutesHelperTests(unittest.TestCase):
                 ingestion_group_id="group-1",
             )
 
-        create_task.assert_called_once_with("collect_files", "收集文件列表", "group-1")
+        launch.assert_called_once_with(
+            "collect_files",
+            "收集文件列表",
+            fake_task,
+            "group-1",
+            "group-1",
+            "request",
+            message="任务已创建，正在后台执行",
+            prepend_group_id_to_args=False,
+        )
         self.assertEqual({"task_id": "task-1", "message": "任务已创建，正在后台执行"}, response)
-        enqueue_runtime_task.assert_called_once_with(fake_task, "task-1", "group-1", "request")
         self.assertEqual([], background_tasks.calls)
 
     def test_enqueue_file_task_can_attach_group_metadata(self):
         background_tasks = FakeBackgroundTasks()
 
-        with (
-            patch("backend.services.file_workflow_service.create_task", return_value="task-1") as create_task,
-            patch("backend.services.file_workflow_service.enqueue_runtime_task") as enqueue_runtime_task,
-        ):
+        with patch(
+            "backend.services.file_workflow_service.launch_task",
+            return_value={"task_id": "task-1", "message": "任务已创建，正在后台执行"},
+        ) as launch:
             response = _enqueue_file_task(
                 background_tasks,
                 "analyze_files",
@@ -211,9 +223,16 @@ class FileRoutesHelperTests(unittest.TestCase):
                 task_group_id="group-1",
             )
 
-        create_task.assert_called_once_with("analyze_files", "分析文件", metadata={"group_id": "group-1"})
+        launch.assert_called_once_with(
+            "analyze_files",
+            "分析文件",
+            fake_task,
+            "group-1",
+            [123],
+            group_id="group-1",
+            message="任务已创建，正在后台执行",
+        )
         self.assertEqual({"task_id": "task-1", "message": "任务已创建，正在后台执行"}, response)
-        enqueue_runtime_task.assert_called_once_with(fake_task, "task-1", "group-1", [123])
         self.assertEqual([], background_tasks.calls)
 
     def test_download_single_file_uses_group_ingestion_lock(self):
@@ -391,6 +410,26 @@ class FileRoutesHelperTests(unittest.TestCase):
 
         self.assertEqual(500, error.status_code)
         self.assertEqual("创建文件收集任务失败: boom", error.detail)
+
+    def test_file_route_error_maps_task_launch_conflict(self):
+        from backend.routes import file_routes
+        from backend.services.task_launch import TaskLaunchConflict
+
+        error = file_routes._file_route_error(
+            "创建文件收集任务失败",
+            TaskLaunchConflict({"task_id": "task-old", "type": "crawl_all", "status": "running"}),
+        )
+
+        self.assertEqual(409, error.status_code)
+        self.assertEqual(
+            {
+                "message": "该群组已有采集或同步任务正在运行",
+                "task_id": "task-old",
+                "type": "crawl_all",
+                "status": "running",
+            },
+            error.detail,
+        )
 
     def test_file_task_routes_preserve_wrapped_unexpected_errors(self):
         from backend.routes import file_routes
@@ -906,13 +945,13 @@ class FileRoutesHelperTests(unittest.TestCase):
         )
 
     def test_enqueue_file_task_rejects_ingestion_conflict(self):
-        from fastapi import HTTPException
+        from backend.services.task_launch import TaskLaunchConflict
 
         existing = {"task_id": "task-old", "type": "crawl_latest", "status": "running"}
         background_tasks = FakeBackgroundTasks()
 
-        with patch("backend.routes.ingestion_helpers.create_ingestion_task", return_value=(None, existing)):
-            with self.assertRaises(HTTPException) as raised:
+        with patch("backend.services.file_workflow_service.launch_ingestion_task", side_effect=TaskLaunchConflict(existing)):
+            with self.assertRaises(TaskLaunchConflict) as raised:
                 _enqueue_file_task(
                     background_tasks,
                     "collect_files",
@@ -922,7 +961,7 @@ class FileRoutesHelperTests(unittest.TestCase):
                     ingestion_group_id="group-1",
                 )
 
-        self.assertEqual(409, raised.exception.status_code)
+        self.assertEqual(existing, raised.exception.existing)
         self.assertEqual([], background_tasks.calls)
 
     def test_fail_file_task_logs_and_updates_failure(self):

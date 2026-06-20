@@ -42,6 +42,25 @@ class TaskLaunchTests(unittest.TestCase):
         enqueue_runtime_task.assert_called_once_with(fake_task, "task-1", "group-1", "request")
         self.assertEqual({"task_id": "task-1", "message": "已启动"}, response)
 
+    def test_launch_ingestion_task_can_keep_explicit_runtime_args(self):
+        from backend.services.task_launch import launch_ingestion_task
+
+        with (
+            patch("backend.services.task_launch.create_ingestion_task", return_value=("task-1", None)),
+            patch("backend.services.task_launch.enqueue_runtime_task") as enqueue_runtime_task,
+        ):
+            launch_ingestion_task(
+                "collect_files",
+                "收集文件列表",
+                fake_task,
+                "group-1",
+                "group-1",
+                "request",
+                prepend_group_id_to_args=False,
+            )
+
+        enqueue_runtime_task.assert_called_once_with(fake_task, "task-1", "group-1", "request")
+
     def test_launch_ingestion_task_raises_conflict_without_enqueuing(self):
         from backend.services.task_launch import TaskLaunchConflict, launch_ingestion_task
 

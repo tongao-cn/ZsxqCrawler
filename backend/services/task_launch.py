@@ -68,9 +68,11 @@ def launch_ingestion_task(
     group_id: str,
     *task_args: Any,
     message: str = TASK_CREATED_MESSAGE,
+    prepend_group_id_to_args: bool = True,
 ) -> Dict[str, str]:
     task_id = create_ingestion_task_or_raise(task_type, description, group_id)
-    enqueue_runtime_task(task_func, task_id, group_id, *task_args)
+    runtime_args = (group_id, *task_args) if prepend_group_id_to_args else task_args
+    enqueue_runtime_task(task_func, task_id, *runtime_args)
     return task_created_response(task_id, message)
 
 

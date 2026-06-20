@@ -4,12 +4,9 @@ import os
 from contextlib import contextmanager
 from typing import Any, Dict, Iterator, Optional, Sequence
 
-from fastapi import BackgroundTasks
-
 from backend.core.account_context import get_cookie_for_group
 from backend.core.db_path_manager import get_db_path_manager
 from backend.crawlers.zsxq_file_downloader import ZSXQFileDownloader
-from backend.routes.ingestion_helpers import create_ingestion_task_or_raise
 from backend.schemas.files import FileCollectRequest
 from backend.services.file_ai_analysis_service import (
     DEFAULT_FILE_ANALYSIS_API_BASE,
@@ -19,10 +16,9 @@ from backend.services.file_ai_analysis_service import (
     analyze_group_file,
     resolve_local_file_path,
 )
+from backend.services.task_launch import launch_ingestion_task, launch_task
 from backend.services.task_runtime import (
     add_task_log,
-    create_task,
-    enqueue_runtime_task,
     file_downloader_instances,
     is_task_stopped,
     update_task,
@@ -581,7 +577,7 @@ def _fail_file_task(
 
 
 def _enqueue_file_task(
-    background_tasks: BackgroundTasks,
+    _background_tasks: Any,
     task_type: str,
     description: str,
     task_func,
@@ -591,12 +587,23 @@ def _enqueue_file_task(
     task_group_id: Optional[str] = None,
 ) -> Dict[str, str]:
     if ingestion_group_id is not None:
-        task_id = create_ingestion_task_or_raise(task_type, description, ingestion_group_id)
-    else:
-        metadata = {"group_id": str(task_group_id)} if task_group_id is not None else None
-        task_id = create_task(task_type, description, metadata=metadata) if metadata else create_task(task_type, description)
-    enqueue_runtime_task(task_func, task_id, *args)
-    return {"task_id": task_id, "message": message}
+        return launch_ingestion_task(
+            task_type,
+            description,
+            task_func,
+            ingestion_group_id,
+            *args,
+            message=message,
+            prepend_group_id_to_args=False,
+        )
+    return launch_task(
+        task_type,
+        description,
+        task_func,
+        *args,
+        group_id=task_group_id,
+        message=message,
+    )
 
 
 def _collect_files_for_request(
