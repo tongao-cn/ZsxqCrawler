@@ -54,6 +54,14 @@ from backend.services.stock_topic_analysis_store import (
     upsert_stock_topic_analysis,
     upsert_stock_topic_processed_states,
 )
+from backend.services.stock_topic_analysis_runner import (
+    AnalyzeStockTopicsBatchRequest,
+    AnalyzeStockTopicsRequest,
+    AnswerStockQuestionRequest,
+    analyze_stock_topics as run_stock_topic_analysis,
+    analyze_stock_topics_batch as run_stock_topic_analysis_batch,
+    answer_stock_question as run_stock_question_answer,
+)
 from backend.services.daily_topic_analysis_topics import clip_text as _clip
 from backend.storage.db_compat import connect
 
@@ -859,7 +867,7 @@ def extract_stock_names_from_image(image_data_url: str) -> Dict[str, Any]:
     }
 
 
-def analyze_stock_topics(
+def _analyze_stock_topics_impl(
     group_id: str,
     stock_name: str,
     *,
@@ -1043,7 +1051,7 @@ def analyze_stock_topics(
     return result
 
 
-def analyze_stock_topics_batch(
+def _analyze_stock_topics_batch_impl(
     group_id: str,
     stock_names: Any,
     *,
@@ -1160,7 +1168,7 @@ def analyze_stock_topics_batch(
     }
 
 
-def answer_stock_question(
+def _answer_stock_question_impl(
     group_id: str,
     question: str,
     *,
@@ -1194,6 +1202,86 @@ def answer_stock_question(
         "model": model,
         "status": "completed",
     }
+
+
+class _StockTopicAnalysisOperations:
+    def analyze_stock_topics(self, request: AnalyzeStockTopicsRequest) -> Dict[str, Any]:
+        return _analyze_stock_topics_impl(
+            request.group_id,
+            request.stock_name,
+            limit=request.limit,
+            log_callback=request.log_callback,
+        )
+
+    def analyze_stock_topics_batch(self, request: AnalyzeStockTopicsBatchRequest) -> Dict[str, Any]:
+        return _analyze_stock_topics_batch_impl(
+            request.group_id,
+            request.stock_names,
+            log_callback=request.log_callback,
+            max_stocks=request.max_stocks,
+        )
+
+    def answer_stock_question(self, request: AnswerStockQuestionRequest) -> Dict[str, Any]:
+        return _answer_stock_question_impl(
+            request.group_id,
+            request.question,
+            log_callback=request.log_callback,
+        )
+
+
+_STOCK_TOPIC_ANALYSIS_OPERATIONS = _StockTopicAnalysisOperations()
+
+
+def analyze_stock_topics(
+    group_id: str,
+    stock_name: str,
+    *,
+    limit: int | None = None,
+    log_callback: Callable[[str], None] | None = None,
+) -> Dict[str, Any]:
+    return run_stock_topic_analysis(
+        _STOCK_TOPIC_ANALYSIS_OPERATIONS,
+        AnalyzeStockTopicsRequest(
+            group_id=group_id,
+            stock_name=stock_name,
+            limit=limit,
+            log_callback=log_callback,
+        ),
+    )
+
+
+def analyze_stock_topics_batch(
+    group_id: str,
+    stock_names: Any,
+    *,
+    log_callback: Callable[[str], None] | None = None,
+    max_stocks: int | None = None,
+) -> Dict[str, Any]:
+    return run_stock_topic_analysis_batch(
+        _STOCK_TOPIC_ANALYSIS_OPERATIONS,
+        AnalyzeStockTopicsBatchRequest(
+            group_id=group_id,
+            stock_names=stock_names,
+            log_callback=log_callback,
+            max_stocks=max_stocks,
+        ),
+    )
+
+
+def answer_stock_question(
+    group_id: str,
+    question: str,
+    *,
+    log_callback: Callable[[str], None] | None = None,
+) -> Dict[str, Any]:
+    return run_stock_question_answer(
+        _STOCK_TOPIC_ANALYSIS_OPERATIONS,
+        AnswerStockQuestionRequest(
+            group_id=group_id,
+            question=question,
+            log_callback=log_callback,
+        ),
+    )
 
 
 __all__ = [
