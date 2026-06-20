@@ -19,7 +19,7 @@ from backend.services.ai_client import (
     chat_json_schema_response_format,
     responses_json_schema_text_format,
 )
-from backend.services.ai_json_utils import extract_json_object
+from backend.services.ai_json_utils import JsonObjectParseError, extract_json_object, require_json_object
 from backend.services.a_share_analysis_db_storage import load_stock_basic_records, load_topic_stock_extractions
 from backend.services.topic_material import (
     DEFAULT_COMMENTS_PER_TOPIC,
@@ -168,6 +168,14 @@ def _parse_stock_concept_output(
     stock_lookup: Optional[Dict[str, Dict[str, str]]] = None,
 ) -> List[Dict[str, Any]]:
     payload = _extract_json_object(message)
+    return _parse_stock_concept_payload(payload, stock_lookup=stock_lookup)
+
+
+def _parse_stock_concept_payload(
+    payload: Dict[str, Any],
+    *,
+    stock_lookup: Optional[Dict[str, Dict[str, str]]] = None,
+) -> List[Dict[str, Any]]:
     raw_stocks = payload.get("stocks")
     if not isinstance(raw_stocks, list):
         return []
@@ -339,7 +347,12 @@ def _generate_stock_concepts_with_ai(prompt_payload: str, report_date: str) -> T
         )
     )
 
-    stocks = _parse_stock_concept_output(message)
+    try:
+        payload = require_json_object(message, label="AI 股票概念抽取结果")
+    except JsonObjectParseError as exc:
+        raise RuntimeError(f"AI 股票概念抽取结果不是合法 JSON: {message[:200]}") from exc
+
+    stocks = _parse_stock_concept_payload(payload)
     return stocks, model
 
 

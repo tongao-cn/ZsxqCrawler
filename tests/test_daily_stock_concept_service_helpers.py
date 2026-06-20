@@ -1,5 +1,6 @@
 import unittest
 from importlib.util import find_spec
+from unittest.mock import patch
 
 
 HAS_STOCK_CONCEPT_DEPS = find_spec("openai") is not None
@@ -70,6 +71,26 @@ class DailyStockConceptServiceHelperTests(unittest.TestCase):
         from backend.services.daily_stock_concept_service import _parse_stock_concept_output
 
         self.assertEqual([], _parse_stock_concept_output("not json", stock_lookup={}))
+
+    @unittest.skipUnless(HAS_STOCK_CONCEPT_DEPS, "daily stock concept service dependencies are not installed")
+    def test_generate_stock_concepts_with_ai_rejects_invalid_json(self):
+        from backend.services import daily_stock_concept_service as service
+
+        with (
+            patch.object(
+                service,
+                "get_openai_compatible_config",
+                return_value={
+                    "api_key": "test-key",
+                    "model": "test-model",
+                    "base_url": "http://test",
+                    "wire_api": "responses",
+                },
+            ),
+            patch.object(service, "call_ai_text", return_value="not json"),
+        ):
+            with self.assertRaisesRegex(RuntimeError, "AI 股票概念抽取结果不是合法 JSON"):
+                service._generate_stock_concepts_with_ai("topic payload", "2026-05-20")
 
     @unittest.skipUnless(HAS_STOCK_CONCEPT_DEPS, "daily stock concept service dependencies are not installed")
     def test_aggregate_topic_stock_extractions_merges_concepts_topics_and_confidence(self):
