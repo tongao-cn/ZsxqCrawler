@@ -6,7 +6,7 @@ from datetime import datetime
 from typing import Any, Optional
 
 from backend.core.ai_provider_config import has_openai_api_key
-from backend.schemas.crawl import CrawlSettingsRequest
+from backend.schemas.crawl import CrawlHistoricalRequest, CrawlSettingsRequest, CrawlTimeRangeRequest
 from backend.services.a_share_analysis_service import (
     DEFAULT_API_BASE as A_SHARE_DEFAULT_API_BASE,
     DEFAULT_CONCURRENCY as A_SHARE_DEFAULT_CONCURRENCY,
@@ -17,7 +17,13 @@ from backend.services.a_share_analysis_service import (
     run_analysis,
 )
 from backend.services.columns_fetch_task_service import run_columns_fetch_task
-from backend.services.crawl_service import run_crawl_latest_task
+from backend.services.crawl_service import (
+    run_crawl_all_task,
+    run_crawl_historical_task,
+    run_crawl_incremental_task,
+    run_crawl_latest_task,
+    run_crawl_time_range_task,
+)
 from backend.services.daily_stock_concept_service import extract_daily_stock_concepts
 from backend.services.daily_topic_analysis_service import analyze_daily_topics
 from backend.services.task_launch import (
@@ -41,11 +47,71 @@ COLUMNS_FETCH_CREATED_MESSAGE = "专栏采集任务已启动"
 COLUMNS_FETCH_RUNNING_MESSAGE = "正在采集专栏内容..."
 
 
-def launch_latest_crawl_task(group_id: str, request: CrawlSettingsRequest) -> dict[str, str]:
+def _launch_crawl_task(
+    task_type: str,
+    description: str,
+    task_func: Any,
+    group_id: str,
+    *task_args: Any,
+) -> dict[str, str]:
     return launch_ingestion_task(
+        task_type,
+        description,
+        task_func,
+        group_id,
+        *task_args,
+    )
+
+
+def create_historical_crawl_task(group_id: str, request: CrawlHistoricalRequest) -> dict[str, str]:
+    return _launch_crawl_task(
+        "crawl_historical",
+        f"爬取历史数据 {request.pages} 页 (群组: {group_id})",
+        run_crawl_historical_task,
+        group_id,
+        request.pages,
+        request.per_page,
+        request,
+    )
+
+
+def create_all_crawl_task(group_id: str, request: CrawlSettingsRequest) -> dict[str, str]:
+    return _launch_crawl_task(
+        "crawl_all",
+        f"全量爬取所有历史数据 (群组: {group_id})",
+        run_crawl_all_task,
+        group_id,
+        request,
+    )
+
+
+def create_incremental_crawl_task(group_id: str, request: CrawlHistoricalRequest) -> dict[str, str]:
+    return _launch_crawl_task(
+        "crawl_incremental",
+        f"增量爬取历史数据 {request.pages} 页 (群组: {group_id})",
+        run_crawl_incremental_task,
+        group_id,
+        request.pages,
+        request.per_page,
+        request,
+    )
+
+
+def launch_latest_crawl_task(group_id: str, request: CrawlSettingsRequest) -> dict[str, str]:
+    return _launch_crawl_task(
         "crawl_latest_until_complete",
         f"获取最新记录 (群组: {group_id})",
         run_crawl_latest_task,
+        group_id,
+        request,
+    )
+
+
+def create_time_range_crawl_task(group_id: str, request: CrawlTimeRangeRequest) -> dict[str, str]:
+    return _launch_crawl_task(
+        "crawl_time_range",
+        f"按时间区间爬取 (群组: {group_id})",
+        run_crawl_time_range_task,
         group_id,
         request,
     )

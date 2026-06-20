@@ -5,23 +5,97 @@ from unittest.mock import patch
 
 
 class WorkflowTaskLaunchTests(unittest.TestCase):
-    def test_launch_latest_crawl_task_uses_ingestion_workflow(self):
-        from backend.schemas.crawl import CrawlSettingsRequest
+    def test_crawl_launch_tasks_use_ingestion_workflow(self):
+        from backend.schemas.crawl import CrawlHistoricalRequest, CrawlSettingsRequest, CrawlTimeRangeRequest
         from backend.services import workflow_task_launch
 
-        request = CrawlSettingsRequest(pagesPerBatch=15)
+        group_id = "51111112855254"
+        historical_request = CrawlHistoricalRequest(pages=3, per_page=25)
+        incremental_request = CrawlHistoricalRequest(pages=4, per_page=30)
+        all_request = CrawlSettingsRequest(topicSource="official")
+        latest_request = CrawlSettingsRequest(pagesPerBatch=15)
+        range_request = CrawlTimeRangeRequest(lastDays=7, perPage=40)
 
-        with patch("backend.services.workflow_task_launch.launch_ingestion_task", return_value={"task_id": "task-1"}) as launch:
-            response = workflow_task_launch.launch_latest_crawl_task("51111112855254", request)
+        cases = [
+            (
+                "historical",
+                workflow_task_launch.create_historical_crawl_task,
+                historical_request,
+                "crawl_historical",
+                "爬取历史数据 3 页 (群组: 51111112855254)",
+                workflow_task_launch.run_crawl_historical_task,
+                (historical_request.pages, historical_request.per_page, historical_request),
+            ),
+            (
+                "all",
+                workflow_task_launch.create_all_crawl_task,
+                all_request,
+                "crawl_all",
+                "全量爬取所有历史数据 (群组: 51111112855254)",
+                workflow_task_launch.run_crawl_all_task,
+                (all_request,),
+            ),
+            (
+                "incremental",
+                workflow_task_launch.create_incremental_crawl_task,
+                incremental_request,
+                "crawl_incremental",
+                "增量爬取历史数据 4 页 (群组: 51111112855254)",
+                workflow_task_launch.run_crawl_incremental_task,
+                (incremental_request.pages, incremental_request.per_page, incremental_request),
+            ),
+            (
+                "latest",
+                workflow_task_launch.launch_latest_crawl_task,
+                latest_request,
+                "crawl_latest_until_complete",
+                "获取最新记录 (群组: 51111112855254)",
+                workflow_task_launch.run_crawl_latest_task,
+                (latest_request,),
+            ),
+            (
+                "range",
+                workflow_task_launch.create_time_range_crawl_task,
+                range_request,
+                "crawl_time_range",
+                "按时间区间爬取 (群组: 51111112855254)",
+                workflow_task_launch.run_crawl_time_range_task,
+                (range_request,),
+            ),
+        ]
 
-        self.assertEqual({"task_id": "task-1"}, response)
-        launch.assert_called_once_with(
-            "crawl_latest_until_complete",
-            "获取最新记录 (群组: 51111112855254)",
-            workflow_task_launch.run_crawl_latest_task,
-            "51111112855254",
-            request,
-        )
+        for case_name, launcher, request, task_type, description, task_func, task_args in cases:
+            with self.subTest(case_name=case_name):
+                with patch(
+                    "backend.services.workflow_task_launch.launch_ingestion_task",
+                    return_value={"task_id": f"task-{case_name}"},
+                ) as launch:
+                    response = launcher(group_id, request)
+
+            self.assertEqual({"task_id": f"task-{case_name}"}, response)
+            launch.assert_called_once_with(
+                task_type,
+                description,
+                task_func,
+                group_id,
+                *task_args,
+            )
+
+    def test_crawl_launch_tasks_preserve_ingestion_conflict(self):
+        from backend.schemas.crawl import CrawlHistoricalRequest
+        from backend.services import workflow_task_launch
+        from backend.services.task_launch import TaskLaunchConflict
+
+        existing = {"task_id": "task-old", "type": "crawl_historical", "status": "running"}
+
+        with patch(
+            "backend.services.workflow_task_launch.launch_ingestion_task",
+            side_effect=TaskLaunchConflict(existing),
+        ):
+            with self.assertRaises(TaskLaunchConflict) as raised:
+                workflow_task_launch.create_historical_crawl_task("group-1", CrawlHistoricalRequest())
+
+        self.assertEqual(existing, raised.exception.existing)
 
     def test_launch_or_reuse_latest_crawl_task_returns_existing_conflict_task(self):
         from backend.schemas.crawl import CrawlSettingsRequest

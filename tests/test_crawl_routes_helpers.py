@@ -76,11 +76,6 @@ class LatestCrawler:
     def crawl_latest_until_complete(self):
         return {"new_topics": 1, "updated_topics": 2}
 
-
-def fake_task_func(*args):
-    return args
-
-
 class CrawlRoutesHelperTests(unittest.TestCase):
     @unittest.skipUnless(HAS_CRAWL_ROUTE_DEPS, "crawl route dependencies are not installed")
     def test_crawl_interval_kwargs_maps_request_fields(self):
@@ -817,7 +812,7 @@ class CrawlRoutesHelperTests(unittest.TestCase):
         )
 
     @unittest.skipUnless(HAS_CRAWL_ROUTE_DEPS, "crawl route dependencies are not installed")
-    def test_crawl_route_task_responses_preserve_contracts(self):
+    def test_crawl_route_task_responses_delegate_to_launch_module(self):
         import asyncio
 
         from backend.routes import crawl_routes
@@ -835,70 +830,44 @@ class CrawlRoutesHelperTests(unittest.TestCase):
                 "historical",
                 crawl_routes.crawl_historical,
                 historical_request,
-                "crawl_historical",
-                "爬取历史数据 3 页 (群组: group-1)",
-                crawl_routes.run_crawl_historical_task,
-                (historical_request.pages, historical_request.per_page, historical_request),
+                "create_historical_crawl_task",
             ),
             (
                 "all",
                 crawl_routes.crawl_all,
                 all_request,
-                "crawl_all",
-                "全量爬取所有历史数据 (群组: group-1)",
-                crawl_routes.run_crawl_all_task,
-                (all_request,),
+                "create_all_crawl_task",
             ),
             (
                 "incremental",
                 crawl_routes.crawl_incremental,
                 incremental_request,
-                "crawl_incremental",
-                "增量爬取历史数据 4 页 (群组: group-1)",
-                crawl_routes.run_crawl_incremental_task,
-                (
-                    incremental_request.pages,
-                    incremental_request.per_page,
-                    incremental_request,
-                ),
+                "create_incremental_crawl_task",
             ),
             (
                 "latest",
                 crawl_routes.crawl_latest_until_complete,
                 latest_request,
-                "crawl_latest_until_complete",
-                "获取最新记录 (群组: group-1)",
-                crawl_routes.run_crawl_latest_task,
-                (latest_request,),
+                "launch_latest_crawl_task",
             ),
             (
                 "range",
                 crawl_routes.crawl_by_time_range,
                 range_request,
-                "crawl_time_range",
-                "按时间区间爬取 (群组: group-1)",
-                crawl_routes.run_crawl_time_range_task,
-                (range_request,),
+                "create_time_range_crawl_task",
             ),
         ]
 
-        for case_name, route, request, task_type, description, task_func, task_args in cases:
+        for case_name, route, request, launcher_name in cases:
             with self.subTest(case_name=case_name):
                 with patch(
-                    "backend.routes.crawl_routes._create_crawl_task_response",
+                    f"backend.routes.crawl_routes.{launcher_name}",
                     return_value=response_payload,
-                ) as create_response:
+                ) as create_task:
                     response = asyncio.run(route("group-1", request, background_tasks))
 
                 self.assertEqual(response_payload, response)
-                create_response.assert_called_once_with(
-                    background_tasks,
-                    task_type,
-                    description,
-                    task_func,
-                    "group-1",
-                    *task_args,
-                )
+                create_task.assert_called_once_with("group-1", request)
 
         self.assertEqual([], background_tasks.tasks)
 
@@ -927,42 +896,42 @@ class CrawlRoutesHelperTests(unittest.TestCase):
                 "historical",
                 crawl_routes.crawl_historical,
                 historical_request,
-                "_create_historical_crawl_task_response",
+                "create_historical_crawl_task",
                 "创建爬取任务失败: boom",
             ),
             (
                 "all",
                 crawl_routes.crawl_all,
                 settings_request,
-                "_create_all_crawl_task_response",
+                "create_all_crawl_task",
                 "创建全量爬取任务失败: boom",
             ),
             (
                 "incremental",
                 crawl_routes.crawl_incremental,
                 historical_request,
-                "_create_incremental_crawl_task_response",
+                "create_incremental_crawl_task",
                 "创建增量爬取任务失败: boom",
             ),
             (
                 "latest",
                 crawl_routes.crawl_latest_until_complete,
                 settings_request,
-                "_create_latest_crawl_task_response",
+                "launch_latest_crawl_task",
                 "创建获取最新记录任务失败: boom",
             ),
             (
                 "range",
                 crawl_routes.crawl_by_time_range,
                 range_request,
-                "_create_time_range_crawl_task_response",
+                "create_time_range_crawl_task",
                 "创建时间区间爬取任务失败: boom",
             ),
         ]
 
-        for case_name, route, request, helper_name, expected_detail in cases:
+        for case_name, route, request, launcher_name, expected_detail in cases:
             with self.subTest(case_name=case_name), patch(
-                f"backend.routes.crawl_routes.{helper_name}",
+                f"backend.routes.crawl_routes.{launcher_name}",
                 side_effect=RuntimeError("boom"),
             ):
                 with self.assertRaises(crawl_routes.HTTPException) as raised:
@@ -986,16 +955,16 @@ class CrawlRoutesHelperTests(unittest.TestCase):
         original_error = crawl_routes.HTTPException(status_code=409, detail="conflict")
 
         cases = [
-            (crawl_routes.crawl_historical, historical_request, "_create_historical_crawl_task_response"),
-            (crawl_routes.crawl_all, settings_request, "_create_all_crawl_task_response"),
-            (crawl_routes.crawl_incremental, historical_request, "_create_incremental_crawl_task_response"),
-            (crawl_routes.crawl_latest_until_complete, settings_request, "_create_latest_crawl_task_response"),
-            (crawl_routes.crawl_by_time_range, range_request, "_create_time_range_crawl_task_response"),
+            (crawl_routes.crawl_historical, historical_request, "create_historical_crawl_task"),
+            (crawl_routes.crawl_all, settings_request, "create_all_crawl_task"),
+            (crawl_routes.crawl_incremental, historical_request, "create_incremental_crawl_task"),
+            (crawl_routes.crawl_latest_until_complete, settings_request, "launch_latest_crawl_task"),
+            (crawl_routes.crawl_by_time_range, range_request, "create_time_range_crawl_task"),
         ]
 
-        for route, request, helper_name in cases:
-            with self.subTest(helper=helper_name), patch(
-                f"backend.routes.crawl_routes.{helper_name}",
+        for route, request, launcher_name in cases:
+            with self.subTest(launcher=launcher_name), patch(
+                f"backend.routes.crawl_routes.{launcher_name}",
                 side_effect=original_error,
             ):
                 with self.assertRaises(crawl_routes.HTTPException) as raised:
@@ -1005,57 +974,6 @@ class CrawlRoutesHelperTests(unittest.TestCase):
                 self.assertEqual(409, raised.exception.status_code)
                 self.assertEqual("conflict", raised.exception.detail)
 
-        self.assertEqual([], background_tasks.tasks)
-
-    @unittest.skipUnless(HAS_CRAWL_ROUTE_DEPS, "crawl route dependencies are not installed")
-    def test_create_crawl_task_response_creates_and_enqueues_task(self):
-        from backend.routes.crawl_routes import _create_crawl_task_response
-
-        background_tasks = FakeBackgroundTasks()
-
-        with patch(
-            "backend.routes.crawl_routes.launch_ingestion_task",
-            return_value={"task_id": "task-1", "message": "任务已创建，正在后台执行"},
-        ) as launch_task:
-            response = _create_crawl_task_response(
-                background_tasks,
-                "crawl_latest",
-                "latest description",
-                fake_task_func,
-                "group-1",
-                "request",
-            )
-
-        launch_task.assert_called_once_with(
-            "crawl_latest",
-            "latest description",
-            fake_task_func,
-            "group-1",
-            "request",
-        )
-        self.assertEqual({"task_id": "task-1", "message": "任务已创建，正在后台执行"}, response)
-        self.assertEqual([], background_tasks.tasks)
-
-    @unittest.skipUnless(HAS_CRAWL_ROUTE_DEPS, "crawl route dependencies are not installed")
-    def test_create_crawl_task_response_rejects_same_group_ingestion_conflict(self):
-        from backend.services.task_launch import TaskLaunchConflict
-        from backend.routes.crawl_routes import _create_crawl_task_response
-
-        background_tasks = FakeBackgroundTasks()
-        existing = {"task_id": "task-old", "type": "crawl_latest", "status": "running"}
-
-        with patch("backend.routes.crawl_routes.launch_ingestion_task", side_effect=TaskLaunchConflict(existing)):
-            with self.assertRaises(TaskLaunchConflict) as raised:
-                _create_crawl_task_response(
-                    background_tasks,
-                    "crawl_latest",
-                    "latest description",
-                    fake_task_func,
-                    "group-1",
-                    "request",
-                )
-
-        self.assertEqual(existing, raised.exception.existing)
         self.assertEqual([], background_tasks.tasks)
 
     @unittest.skipUnless(HAS_CRAWL_ROUTE_DEPS, "crawl route dependencies are not installed")

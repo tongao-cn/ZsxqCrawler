@@ -1,116 +1,18 @@
 from __future__ import annotations
 
-from typing import Any, Callable
-
 from fastapi import APIRouter, BackgroundTasks, HTTPException
 
 from backend.schemas.crawl import CrawlHistoricalRequest, CrawlSettingsRequest, CrawlTimeRangeRequest
-from backend.services.crawl_service import (
-    run_crawl_all_task,
-    run_crawl_historical_task,
-    run_crawl_incremental_task,
-    run_crawl_latest_task,
-    run_crawl_time_range_task,
+from backend.services.workflow_task_launch import (
+    create_all_crawl_task,
+    create_historical_crawl_task,
+    create_incremental_crawl_task,
+    create_time_range_crawl_task,
+    launch_latest_crawl_task,
 )
-from backend.services.task_launch import TaskLaunchConflict, ingestion_conflict_detail, launch_ingestion_task
+from backend.services.task_launch import TaskLaunchConflict, ingestion_conflict_detail
 
 router = APIRouter(prefix="/api/crawl", tags=["crawl"])
-
-
-def _create_crawl_task_response(
-    _background_tasks: BackgroundTasks,
-    task_type: str,
-    description: str,
-    task_func: Callable[..., Any],
-    group_id: str,
-    *task_args: Any,
-) -> dict[str, str]:
-    return launch_ingestion_task(
-        task_type,
-        description,
-        task_func,
-        group_id,
-        *task_args,
-    )
-
-
-def _create_historical_crawl_task_response(
-    background_tasks: BackgroundTasks,
-    group_id: str,
-    request: CrawlHistoricalRequest,
-) -> dict[str, str]:
-    return _create_crawl_task_response(
-        background_tasks,
-        "crawl_historical",
-        f"爬取历史数据 {request.pages} 页 (群组: {group_id})",
-        run_crawl_historical_task,
-        group_id,
-        request.pages,
-        request.per_page,
-        request,
-    )
-
-
-def _create_all_crawl_task_response(
-    background_tasks: BackgroundTasks,
-    group_id: str,
-    request: CrawlSettingsRequest,
-) -> dict[str, str]:
-    return _create_crawl_task_response(
-        background_tasks,
-        "crawl_all",
-        f"全量爬取所有历史数据 (群组: {group_id})",
-        run_crawl_all_task,
-        group_id,
-        request,
-    )
-
-
-def _create_incremental_crawl_task_response(
-    background_tasks: BackgroundTasks,
-    group_id: str,
-    request: CrawlHistoricalRequest,
-) -> dict[str, str]:
-    return _create_crawl_task_response(
-        background_tasks,
-        "crawl_incremental",
-        f"增量爬取历史数据 {request.pages} 页 (群组: {group_id})",
-        run_crawl_incremental_task,
-        group_id,
-        request.pages,
-        request.per_page,
-        request,
-    )
-
-
-def _create_latest_crawl_task_response(
-    background_tasks: BackgroundTasks,
-    group_id: str,
-    request: CrawlSettingsRequest,
-) -> dict[str, str]:
-    return _create_crawl_task_response(
-        background_tasks,
-        "crawl_latest_until_complete",
-        f"获取最新记录 (群组: {group_id})",
-        run_crawl_latest_task,
-        group_id,
-        request,
-    )
-
-
-def _create_time_range_crawl_task_response(
-    background_tasks: BackgroundTasks,
-    group_id: str,
-    request: CrawlTimeRangeRequest,
-) -> dict[str, str]:
-    return _create_crawl_task_response(
-        background_tasks,
-        "crawl_time_range",
-        f"按时间区间爬取 (群组: {group_id})",
-        run_crawl_time_range_task,
-        group_id,
-        request,
-    )
 
 
 def _crawl_route_error(message: str, error: Exception) -> HTTPException:
@@ -123,7 +25,7 @@ def _crawl_route_error(message: str, error: Exception) -> HTTPException:
 async def crawl_historical(group_id: str, request: CrawlHistoricalRequest, background_tasks: BackgroundTasks):
     """爬取历史数据"""
     try:
-        return _create_historical_crawl_task_response(background_tasks, group_id, request)
+        return create_historical_crawl_task(group_id, request)
     except HTTPException:
         raise
     except Exception as e:
@@ -134,7 +36,7 @@ async def crawl_historical(group_id: str, request: CrawlHistoricalRequest, backg
 async def crawl_all(group_id: str, request: CrawlSettingsRequest, background_tasks: BackgroundTasks):
     """全量爬取所有历史数据"""
     try:
-        return _create_all_crawl_task_response(background_tasks, group_id, request)
+        return create_all_crawl_task(group_id, request)
     except HTTPException:
         raise
     except Exception as e:
@@ -145,7 +47,7 @@ async def crawl_all(group_id: str, request: CrawlSettingsRequest, background_tas
 async def crawl_incremental(group_id: str, request: CrawlHistoricalRequest, background_tasks: BackgroundTasks):
     """增量爬取历史数据"""
     try:
-        return _create_incremental_crawl_task_response(background_tasks, group_id, request)
+        return create_incremental_crawl_task(group_id, request)
     except HTTPException:
         raise
     except Exception as e:
@@ -156,7 +58,7 @@ async def crawl_incremental(group_id: str, request: CrawlHistoricalRequest, back
 async def crawl_latest_until_complete(group_id: str, request: CrawlSettingsRequest, background_tasks: BackgroundTasks):
     """获取最新记录：智能增量更新"""
     try:
-        return _create_latest_crawl_task_response(background_tasks, group_id, request)
+        return launch_latest_crawl_task(group_id, request)
     except HTTPException:
         raise
     except Exception as e:
@@ -167,7 +69,7 @@ async def crawl_latest_until_complete(group_id: str, request: CrawlSettingsReque
 async def crawl_by_time_range(group_id: str, request: CrawlTimeRangeRequest, background_tasks: BackgroundTasks):
     """按时间区间爬取话题（支持最近N天或自定义开始/结束时间）"""
     try:
-        return _create_time_range_crawl_task_response(background_tasks, group_id, request)
+        return create_time_range_crawl_task(group_id, request)
     except HTTPException:
         raise
     except Exception as e:
