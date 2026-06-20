@@ -991,7 +991,7 @@ class FileRoutesHelperTests(unittest.TestCase):
         update_task.assert_not_called()
 
     def test_get_download_file_status_handles_missing_file(self):
-        with patch("backend.services.file_workflow_service.get_db_path_manager") as mocked_manager:
+        with patch("backend.services.file_status_service.get_db_path_manager") as mocked_manager:
             mocked_manager.return_value.get_group_dir.return_value = r"C:\tmp\group-1"
 
             status = _get_download_file_status("group-1", "missing.pdf", 123, "fallback.pdf")
@@ -1003,7 +1003,7 @@ class FileRoutesHelperTests(unittest.TestCase):
         self.assertFalse(status["is_complete"])
 
     def test_resolve_download_record_status_marks_existing_file_completed(self):
-        with patch("backend.services.file_workflow_service.resolve_local_file_path") as mocked_resolve:
+        with patch("backend.services.file_status_service.resolve_local_file_path") as mocked_resolve:
             mocked_resolve.return_value = r"C:\tmp\group-1\downloads\file.pdf"
 
             status = _resolve_download_record_status(
@@ -1090,9 +1090,9 @@ class FileRoutesHelperTests(unittest.TestCase):
         fake_db = FakeFileDb()
 
         with (
-            patch("backend.services.file_workflow_service._file_db", return_value=fake_db),
+            patch("backend.services.file_status_service._file_db", return_value=fake_db),
             patch(
-                "backend.services.file_workflow_service._get_download_file_status",
+                "backend.services.file_status_service._get_download_file_status",
                 return_value=local_status,
             ) as get_download_file_status,
         ):
@@ -1142,8 +1142,8 @@ class FileRoutesHelperTests(unittest.TestCase):
 
         fake_db = FakeFileDb()
         with (
-            patch("backend.services.file_workflow_service._file_db", return_value=fake_db),
-            patch("backend.services.file_workflow_service._get_download_file_status") as get_download_file_status,
+            patch("backend.services.file_status_service._file_db", return_value=fake_db),
+            patch("backend.services.file_status_service._get_download_file_status") as get_download_file_status,
         ):
             response = _get_file_status_response("group-1", 123)
 
@@ -1261,7 +1261,7 @@ class FileRoutesHelperTests(unittest.TestCase):
                 return False
 
         fake_db = FakeFileDb()
-        with patch("backend.services.file_workflow_service._file_db", return_value=fake_db):
+        with patch("backend.services.file_status_service._file_db", return_value=fake_db):
             response = file_workflow_service._get_file_stats_response("123")
 
         query, params = fake_db.cursor.executed[0]
@@ -1307,7 +1307,7 @@ class FileRoutesHelperTests(unittest.TestCase):
                 return False
 
         fake_db = FakeFileDb()
-        with patch("backend.services.file_workflow_service._file_db", return_value=fake_db):
+        with patch("backend.services.file_status_service._file_db", return_value=fake_db):
             response = file_workflow_service._get_file_stats_response("group-1")
 
         self.assertEqual(("group-1",), fake_db.cursor.executed[0][1])
@@ -1356,7 +1356,7 @@ class FileRoutesHelperTests(unittest.TestCase):
                 return False
 
         fake_db = FakeFileDb()
-        with patch("backend.services.file_workflow_service._file_db", return_value=fake_db):
+        with patch("backend.services.file_status_service._file_db", return_value=fake_db):
             response = file_workflow_service._get_file_stats_response("123")
 
         self.assertEqual(
@@ -1676,7 +1676,7 @@ class FileRoutesHelperTests(unittest.TestCase):
         with (
             patch("backend.services.file_workflow_service._file_db", return_value=fake_db),
             patch(
-                "backend.services.file_workflow_service.resolve_local_file_path",
+                "backend.services.file_status_service.resolve_local_file_path",
                 return_value=r"C:\resolved\Report.PDF",
             ),
         ):
