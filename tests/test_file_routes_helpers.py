@@ -621,9 +621,8 @@ class FileRoutesHelperTests(unittest.TestCase):
         background_tasks = FakeBackgroundTasks()
 
         with (
-            patch("backend.routes.file_routes.has_openai_api_key", return_value=True),
             patch(
-                "backend.routes.file_routes.create_file_ai_analysis_workflow_task",
+                "backend.routes.file_routes.create_file_analysis_task_response",
                 return_value={"task_id": "task-1", "message": "ok"},
             ) as create_task,
         ):
@@ -648,9 +647,8 @@ class FileRoutesHelperTests(unittest.TestCase):
         request = FileAIAnalysisBatchRequest(file_ids=[123, 456], force=False)
 
         with (
-            patch("backend.routes.file_routes.has_openai_api_key", return_value=True),
             patch(
-                "backend.routes.file_routes.create_selected_file_ai_analysis_workflow_task",
+                "backend.routes.file_routes.create_selected_file_analysis_task_response",
                 return_value={"task_id": "task-1", "message": "ok"},
             ) as create_task,
         ):
@@ -712,60 +710,52 @@ class FileRoutesHelperTests(unittest.TestCase):
                 ("group-1", FileCollectRequest(), background_tasks),
                 {},
                 "创建文件收集任务失败: boom",
-                False,
             ),
             (
                 file_routes.download_files,
                 ("group-1", FileDownloadRequest(), background_tasks),
                 {},
                 "创建文件下载任务失败: boom",
-                False,
             ),
             (
                 file_routes.download_single_file,
                 ("group-1", 123, background_tasks),
                 {"file_name": "file.pdf", "file_size": 456},
                 "创建单个文件下载任务失败: boom",
-                False,
             ),
             (
                 file_routes.download_selected_files,
                 ("group-1", FileIdListRequest(file_ids=[123, 456]), background_tasks),
                 {},
                 "创建选中文件下载任务失败: boom",
-                False,
             ),
             (
                 file_routes.download_filtered_files,
                 ("group-1", FileFilteredDownloadRequest(status="failed", search="pdf"), background_tasks),
                 {},
                 "创建筛选结果下载任务失败: boom",
-                False,
             ),
             (
                 file_routes.create_file_analysis_task,
                 ("group-1", 123, FileAIAnalysisRequest(force=True), background_tasks),
                 {},
                 "创建文件 AI 分析任务失败: boom",
-                True,
             ),
             (
                 file_routes.create_selected_file_analysis_task,
                 ("group-1", FileAIAnalysisBatchRequest(file_ids=[123, 456]), background_tasks),
                 {},
                 "创建批量文件 AI 分析任务失败: boom",
-                True,
             ),
             (
                 file_routes.sync_files_from_topics,
                 ("group-1", background_tasks),
                 {},
                 "创建同步文件记录任务失败: boom",
-                False,
             ),
         ]
 
-        for route, route_args, route_kwargs, expected_detail, needs_api_key in cases:
+        for route, route_args, route_kwargs, expected_detail in cases:
             with self.subTest(route=route.__name__):
                 with ExitStack() as stack:
                     launch_patch_targets = {
@@ -774,11 +764,9 @@ class FileRoutesHelperTests(unittest.TestCase):
                         file_routes.download_single_file: "backend.routes.file_routes.create_single_file_download_task",
                         file_routes.download_selected_files: "backend.routes.file_routes.create_selected_file_download_task",
                         file_routes.download_filtered_files: "backend.routes.file_routes.create_filtered_file_download_task",
-                        file_routes.create_file_analysis_task: (
-                            "backend.routes.file_routes.create_file_ai_analysis_workflow_task"
-                        ),
+                        file_routes.create_file_analysis_task: "backend.routes.file_routes.create_file_analysis_task_response",
                         file_routes.create_selected_file_analysis_task: (
-                            "backend.routes.file_routes.create_selected_file_ai_analysis_workflow_task"
+                            "backend.routes.file_routes.create_selected_file_analysis_task_response"
                         ),
                         file_routes.sync_files_from_topics: "backend.routes.file_routes.create_sync_files_from_topics_task",
                     }
@@ -789,9 +777,6 @@ class FileRoutesHelperTests(unittest.TestCase):
                     stack.enter_context(
                         patch(patch_target, side_effect=RuntimeError("boom"))
                     )
-                    if needs_api_key:
-                        stack.enter_context(patch("backend.routes.file_routes.has_openai_api_key", return_value=True))
-
                     with self.assertRaises(file_routes.HTTPException) as raised:
                         self._run_async(route(*route_args, **route_kwargs))
 
@@ -813,42 +798,37 @@ class FileRoutesHelperTests(unittest.TestCase):
 
         background_tasks = FakeBackgroundTasks()
         cases = [
-            (file_routes.collect_files, ("group-1", FileCollectRequest(), background_tasks), {}, False),
-            (file_routes.download_files, ("group-1", FileDownloadRequest(), background_tasks), {}, False),
+            (file_routes.collect_files, ("group-1", FileCollectRequest(), background_tasks), {}),
+            (file_routes.download_files, ("group-1", FileDownloadRequest(), background_tasks), {}),
             (
                 file_routes.download_single_file,
                 ("group-1", 123, background_tasks),
                 {"file_name": "file.pdf", "file_size": 456},
-                False,
             ),
             (
                 file_routes.download_selected_files,
                 ("group-1", FileIdListRequest(file_ids=[123, 456]), background_tasks),
                 {},
-                False,
             ),
             (
                 file_routes.download_filtered_files,
                 ("group-1", FileFilteredDownloadRequest(status="failed", search="pdf"), background_tasks),
                 {},
-                False,
             ),
             (
                 file_routes.create_file_analysis_task,
                 ("group-1", 123, FileAIAnalysisRequest(force=True), background_tasks),
                 {},
-                True,
             ),
             (
                 file_routes.create_selected_file_analysis_task,
                 ("group-1", FileAIAnalysisBatchRequest(file_ids=[123, 456]), background_tasks),
                 {},
-                True,
             ),
-            (file_routes.sync_files_from_topics, ("group-1", background_tasks), {}, False),
+            (file_routes.sync_files_from_topics, ("group-1", background_tasks), {}),
         ]
 
-        for route, route_args, route_kwargs, needs_api_key in cases:
+        for route, route_args, route_kwargs in cases:
             original_error = file_routes.HTTPException(status_code=409, detail="conflict")
             with self.subTest(route=route.__name__):
                 with ExitStack() as stack:
@@ -858,11 +838,9 @@ class FileRoutesHelperTests(unittest.TestCase):
                         file_routes.download_single_file: "backend.routes.file_routes.create_single_file_download_task",
                         file_routes.download_selected_files: "backend.routes.file_routes.create_selected_file_download_task",
                         file_routes.download_filtered_files: "backend.routes.file_routes.create_filtered_file_download_task",
-                        file_routes.create_file_analysis_task: (
-                            "backend.routes.file_routes.create_file_ai_analysis_workflow_task"
-                        ),
+                        file_routes.create_file_analysis_task: "backend.routes.file_routes.create_file_analysis_task_response",
                         file_routes.create_selected_file_analysis_task: (
-                            "backend.routes.file_routes.create_selected_file_ai_analysis_workflow_task"
+                            "backend.routes.file_routes.create_selected_file_analysis_task_response"
                         ),
                         file_routes.sync_files_from_topics: "backend.routes.file_routes.create_sync_files_from_topics_task",
                     }
@@ -871,9 +849,6 @@ class FileRoutesHelperTests(unittest.TestCase):
                         "backend.routes.file_routes._enqueue_file_task",
                     )
                     stack.enter_context(patch(patch_target, side_effect=original_error))
-                    if needs_api_key:
-                        stack.enter_context(patch("backend.routes.file_routes.has_openai_api_key", return_value=True))
-
                     with self.assertRaises(file_routes.HTTPException) as raised:
                         self._run_async(route(*route_args, **route_kwargs))
 
@@ -895,7 +870,6 @@ class FileRoutesHelperTests(unittest.TestCase):
 
         with (
             patch("backend.routes.file_routes.asyncio.to_thread", side_effect=fake_to_thread),
-            patch("backend.routes.file_routes.has_openai_api_key", return_value=True),
         ):
             cached = self._run_async(file_routes.get_file_analysis("group-1", 123))
             created = self._run_async(
@@ -904,39 +878,17 @@ class FileRoutesHelperTests(unittest.TestCase):
 
         self.assertEqual(
             [
-                (file_routes.get_group_file_analysis, ("group-1", 123), {}),
-                (
-                    file_routes.analyze_group_file,
-                    ("group-1", 456),
-                    {
-                        "force": True,
-                        "model": file_routes.A_SHARE_DEFAULT_MODEL,
-                        "api_base": file_routes.A_SHARE_DEFAULT_API_BASE,
-                        "wire_api": file_routes.A_SHARE_DEFAULT_WIRE_API,
-                        "reasoning_effort": file_routes.DEFAULT_FILE_ANALYSIS_REASONING_EFFORT,
-                    },
-                ),
+                (file_routes.get_file_analysis_response, ("group-1", 123), {}),
+                (file_routes.create_file_analysis_response, ("group-1", 456, True), {}),
             ],
             calls,
         )
         self.assertEqual(
-            {"analysis": {"called": "get_group_file_analysis", "args": ("group-1", 123), "kwargs": {}}},
+            {"called": "get_file_analysis_response", "args": ("group-1", 123), "kwargs": {}},
             cached,
         )
         self.assertEqual(
-            {
-                "analysis": {
-                    "called": "analyze_group_file",
-                    "args": ("group-1", 456),
-                    "kwargs": {
-                        "force": True,
-                        "model": file_routes.A_SHARE_DEFAULT_MODEL,
-                        "api_base": file_routes.A_SHARE_DEFAULT_API_BASE,
-                        "wire_api": file_routes.A_SHARE_DEFAULT_WIRE_API,
-                        "reasoning_effort": file_routes.DEFAULT_FILE_ANALYSIS_REASONING_EFFORT,
-                    },
-                }
-            },
+            {"called": "create_file_analysis_response", "args": ("group-1", 456, True), "kwargs": {}},
             created,
         )
 
@@ -955,39 +907,17 @@ class FileRoutesHelperTests(unittest.TestCase):
 
         self.assertEqual(
             [
-                (file_routes.get_group_file_analysis, ("group-1", 123), {}),
-                (
-                    file_routes.analyze_group_file,
-                    ("group-1", 456),
-                    {
-                        "force": True,
-                        "model": file_routes.A_SHARE_DEFAULT_MODEL,
-                        "api_base": file_routes.A_SHARE_DEFAULT_API_BASE,
-                        "wire_api": file_routes.A_SHARE_DEFAULT_WIRE_API,
-                        "reasoning_effort": file_routes.DEFAULT_FILE_ANALYSIS_REASONING_EFFORT,
-                    },
-                ),
+                (file_routes.get_file_analysis_response, ("group-1", 123), {}),
+                (file_routes.create_file_analysis_response, ("group-1", 456, True), {}),
             ],
             calls,
         )
         self.assertEqual(
-            {"analysis": {"called": "get_group_file_analysis", "args": ("group-1", 123), "kwargs": {}}},
+            {"called": "get_file_analysis_response", "args": ("group-1", 123), "kwargs": {}},
             cached,
         )
         self.assertEqual(
-            {
-                "analysis": {
-                    "called": "analyze_group_file",
-                    "args": ("group-1", 456),
-                    "kwargs": {
-                        "force": True,
-                        "model": file_routes.A_SHARE_DEFAULT_MODEL,
-                        "api_base": file_routes.A_SHARE_DEFAULT_API_BASE,
-                        "wire_api": file_routes.A_SHARE_DEFAULT_WIRE_API,
-                        "reasoning_effort": file_routes.DEFAULT_FILE_ANALYSIS_REASONING_EFFORT,
-                    },
-                }
-            },
+            {"called": "create_file_analysis_response", "args": ("group-1", 456, True), "kwargs": {}},
             created,
         )
 
@@ -996,10 +926,13 @@ class FileRoutesHelperTests(unittest.TestCase):
         from backend.schemas.files import FileAIAnalysisRequest
         from fastapi import HTTPException
 
-        with (
-            patch("backend.routes.file_routes.has_openai_api_key", return_value=False),
-            patch("backend.routes.file_routes.asyncio.to_thread") as to_thread,
-        ):
+        with patch(
+            "backend.routes.file_routes._created_file_analysis",
+            side_effect=file_routes.FileAIAnalysisEntryError(
+                400,
+                "未配置 OpenAI API Key，请设置环境变量 OPENAI_API_KEY 或 config.toml [ai].api_key",
+            ),
+        ) as create_analysis:
             with self.assertRaises(HTTPException) as raised:
                 self._run_async(file_routes.create_file_analysis("group-1", 456, FileAIAnalysisRequest(force=True)))
 
@@ -1008,30 +941,21 @@ class FileRoutesHelperTests(unittest.TestCase):
             "文件 AI 分析失败: 400: 未配置 OpenAI API Key，请设置环境变量 OPENAI_API_KEY 或 config.toml [ai].api_key",
             raised.exception.detail,
         )
-        to_thread.assert_not_called()
+        create_analysis.assert_called_once_with("group-1", 456, True)
 
     def test_create_file_analysis_preserves_service_error_mapping(self):
         from backend.routes import file_routes
         from backend.schemas.files import FileAIAnalysisRequest
         from fastapi import HTTPException
 
-        async def raise_value_error(*_args, **_kwargs):
-            raise ValueError("bad value")
-
-        async def raise_runtime_error(*_args, **_kwargs):
-            raise RuntimeError("bad runtime")
-
         cases = [
-            (raise_value_error, "bad value"),
-            (raise_runtime_error, "bad runtime"),
+            (ValueError("bad value"), "bad value"),
+            (RuntimeError("bad runtime"), "bad runtime"),
         ]
 
-        for side_effect, detail in cases:
+        for error, detail in cases:
             with self.subTest(detail=detail):
-                with (
-                    patch("backend.routes.file_routes.has_openai_api_key", return_value=True),
-                    patch("backend.routes.file_routes.asyncio.to_thread", side_effect=side_effect),
-                ):
+                with patch("backend.routes.file_routes._created_file_analysis", side_effect=error):
                     with self.assertRaises(HTTPException) as raised:
                         self._run_async(
                             file_routes.create_file_analysis(
@@ -1048,10 +972,7 @@ class FileRoutesHelperTests(unittest.TestCase):
         from backend.routes import file_routes
         from backend.schemas.files import FileAIAnalysisRequest
 
-        with (
-            patch("backend.routes.file_routes.has_openai_api_key", return_value=True),
-            patch("backend.routes.file_routes._created_file_analysis", side_effect=Exception("boom")),
-        ):
+        with patch("backend.routes.file_routes._created_file_analysis", side_effect=Exception("boom")):
             with self.assertRaises(file_routes.HTTPException) as raised:
                 self._run_async(
                     file_routes.create_file_analysis(
@@ -1070,10 +991,7 @@ class FileRoutesHelperTests(unittest.TestCase):
 
         original_error = file_routes.HTTPException(status_code=409, detail="conflict")
 
-        with (
-            patch("backend.routes.file_routes.has_openai_api_key", return_value=True),
-            patch("backend.routes.file_routes._created_file_analysis", side_effect=original_error),
-        ):
+        with patch("backend.routes.file_routes._created_file_analysis", side_effect=original_error):
             with self.assertRaises(file_routes.HTTPException) as raised:
                 self._run_async(
                     file_routes.create_file_analysis(

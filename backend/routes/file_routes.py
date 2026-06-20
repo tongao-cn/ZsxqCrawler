@@ -5,12 +5,6 @@ from typing import Optional
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException
 
-from backend.services.a_share_analysis_service import (
-    DEFAULT_API_BASE as A_SHARE_DEFAULT_API_BASE,
-    DEFAULT_MODEL as A_SHARE_DEFAULT_MODEL,
-    DEFAULT_WIRE_API as A_SHARE_DEFAULT_WIRE_API,
-)
-from backend.core.ai_provider_config import has_openai_api_key
 from backend.schemas.files import (
     FileAIAnalysisBatchRequest,
     FileAIAnalysisRequest,
@@ -19,10 +13,12 @@ from backend.schemas.files import (
     FileFilteredDownloadRequest,
     FileIdListRequest,
 )
-from backend.services.file_ai_analysis_service import (
-    DEFAULT_FILE_ANALYSIS_REASONING_EFFORT,
-    analyze_group_file,
-    get_group_file_analysis,
+from backend.services.file_ai_analysis_entry import (
+    FileAIAnalysisEntryError,
+    create_file_analysis_response,
+    create_file_analysis_task_response,
+    create_selected_file_analysis_task_response,
+    get_file_analysis_response,
 )
 from backend.services.task_launch import TaskLaunchConflict, ingestion_conflict_detail
 from backend.services.file_workflow_service import (
@@ -33,11 +29,9 @@ from backend.services.file_workflow_service import (
     _get_files_response,
     _log_file_route_event,
     create_filtered_file_download_task,
-    create_file_ai_analysis_task as create_file_ai_analysis_workflow_task,
     create_file_collect_task,
     create_file_download_task,
     create_selected_file_download_task,
-    create_selected_file_ai_analysis_task as create_selected_file_ai_analysis_workflow_task,
     create_single_file_download_task,
     create_sync_files_from_topics_task,
 )
@@ -49,6 +43,10 @@ def _file_route_error(message: str, error: Exception) -> HTTPException:
     if isinstance(error, TaskLaunchConflict):
         return HTTPException(status_code=409, detail=ingestion_conflict_detail(error.existing))
     return HTTPException(status_code=500, detail=f"{message}: {str(error)}")
+
+
+def _file_analysis_entry_http_error(error: FileAIAnalysisEntryError) -> HTTPException:
+    return HTTPException(status_code=error.status_code, detail=error.detail)
 
 
 async def _file_status(group_id: str, file_id: int) -> dict:
@@ -79,22 +77,11 @@ async def _files_page(
 
 
 async def _file_analysis(group_id: str, file_id: int) -> dict:
-    result = await asyncio.to_thread(get_group_file_analysis, group_id, file_id)
-    return {"analysis": result}
+    return await asyncio.to_thread(get_file_analysis_response, group_id, file_id)
 
 
 async def _created_file_analysis(group_id: str, file_id: int, force: bool) -> dict:
-    result = await asyncio.to_thread(
-        analyze_group_file,
-        group_id,
-        file_id,
-        force=force,
-        model=A_SHARE_DEFAULT_MODEL,
-        api_base=A_SHARE_DEFAULT_API_BASE,
-        wire_api=A_SHARE_DEFAULT_WIRE_API,
-        reasoning_effort=DEFAULT_FILE_ANALYSIS_REASONING_EFFORT,
-    )
-    return {"analysis": result}
+    return await asyncio.to_thread(create_file_analysis_response, group_id, file_id, force)
 
 
 @router.post("/collect/{group_id}")
@@ -193,12 +180,6 @@ async def get_file_analysis(group_id: str, file_id: int):
 async def create_file_analysis(group_id: str, file_id: int, request: FileAIAnalysisRequest):
     """分析文件内容并生成 AI 摘要"""
     try:
-        if not has_openai_api_key():
-            raise HTTPException(
-                status_code=400,
-                detail="未配置 OpenAI API Key，请设置环境变量 OPENAI_API_KEY 或 config.toml [ai].api_key",
-            )
-
         return await _created_file_analysis(group_id, file_id, request.force)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -217,12 +198,9 @@ async def create_file_analysis_task(
 ):
     """创建单文件 AI 分析后台任务。"""
     try:
-        if not has_openai_api_key():
-            raise HTTPException(
-                status_code=400,
-                detail="未配置 OpenAI API Key，请设置环境变量 OPENAI_API_KEY 或 config.toml [ai].api_key",
-            )
-        return create_file_ai_analysis_workflow_task(group_id, file_id, request.force)
+        return create_file_analysis_task_response(group_id, file_id, request.force)
+    except FileAIAnalysisEntryError as e:
+        raise _file_analysis_entry_http_error(e)
     except HTTPException:
         raise
     except Exception as e:
@@ -237,12 +215,9 @@ async def create_selected_file_analysis_task(
 ):
     """创建批量文件 AI 分析后台任务。"""
     try:
-        if not has_openai_api_key():
-            raise HTTPException(
-                status_code=400,
-                detail="未配置 OpenAI API Key，请设置环境变量 OPENAI_API_KEY 或 config.toml [ai].api_key",
-            )
-        return create_selected_file_ai_analysis_workflow_task(group_id, request)
+        return create_selected_file_analysis_task_response(group_id, request)
+    except FileAIAnalysisEntryError as e:
+        raise _file_analysis_entry_http_error(e)
     except HTTPException:
         raise
     except Exception as e:
