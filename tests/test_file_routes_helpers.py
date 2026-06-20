@@ -2783,7 +2783,7 @@ class FileRoutesHelperTests(unittest.TestCase):
         from backend.services.file_workflow_service import _clear_file_database_response
 
         with (
-            patch("backend.services.file_workflow_service._clear_group_file_data", return_value={"files": 0}) as clear_data,
+            patch("backend.services.file_clear_workflow._clear_group_file_data", return_value={"files": 0}) as clear_data,
             patch("backend.core.crawler_runtime.get_crawler_for_group", side_effect=AssertionError("legacy crawler used")),
         ):
             response = _clear_file_database_response("group-1")
@@ -2797,10 +2797,10 @@ class FileRoutesHelperTests(unittest.TestCase):
         cache_manager = FakeImageCacheManager((True, "已删除 2 个缓存文件"))
 
         with (
-            patch("backend.services.file_workflow_service._clear_group_file_data", return_value={"files": 1}),
+            patch("backend.services.file_clear_workflow._clear_group_file_data", return_value={"files": 1}),
             patch("backend.core.image_cache_manager.get_image_cache_manager", return_value=cache_manager) as get_cache,
             patch("backend.core.image_cache_manager.clear_group_cache_manager") as clear_group_cache,
-            patch("backend.services.file_workflow_service._log_file_route_event") as log_file_route_event,
+            patch("backend.services.file_clear_workflow._log_file_route_event") as log_file_route_event,
         ):
             response = _clear_file_database_response("group-1")
 
@@ -2816,10 +2816,10 @@ class FileRoutesHelperTests(unittest.TestCase):
         cache_manager = FakeImageCacheManager((False, "permission denied"))
 
         with (
-            patch("backend.services.file_workflow_service._clear_group_file_data", return_value={"files": 1}),
+            patch("backend.services.file_clear_workflow._clear_group_file_data", return_value={"files": 1}),
             patch("backend.core.image_cache_manager.get_image_cache_manager", return_value=cache_manager),
             patch("backend.core.image_cache_manager.clear_group_cache_manager") as clear_group_cache,
-            patch("backend.services.file_workflow_service._log_file_route_event") as log_file_route_event,
+            patch("backend.services.file_clear_workflow._log_file_route_event") as log_file_route_event,
         ):
             response = _clear_file_database_response("group-1")
 
@@ -2832,10 +2832,10 @@ class FileRoutesHelperTests(unittest.TestCase):
         from backend.services.file_workflow_service import _clear_file_database_response
 
         with (
-            patch("backend.services.file_workflow_service._clear_group_file_data", return_value={"files": 1}),
+            patch("backend.services.file_clear_workflow._clear_group_file_data", return_value={"files": 1}),
             patch("backend.core.image_cache_manager.get_image_cache_manager", side_effect=RuntimeError("cache boom")),
             patch("backend.core.image_cache_manager.clear_group_cache_manager") as clear_group_cache,
-            patch("backend.services.file_workflow_service._log_file_route_event") as log_file_route_event,
+            patch("backend.services.file_clear_workflow._log_file_route_event") as log_file_route_event,
         ):
             response = _clear_file_database_response("group-1")
 
