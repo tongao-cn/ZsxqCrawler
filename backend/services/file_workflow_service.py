@@ -291,6 +291,44 @@ def create_filtered_file_download_task(group_id: str, request: Any) -> Dict[str,
     )
 
 
+def create_file_ai_analysis_task(group_id: str, file_id: int, force: bool) -> Dict[str, str]:
+    return launch_task(
+        "analyze_file",
+        f"分析文件 (ID: {file_id})",
+        run_file_analysis_task,
+        group_id,
+        [file_id],
+        force,
+        group_id=group_id,
+        message="文件 AI 分析任务已创建",
+    )
+
+
+def create_selected_file_ai_analysis_task(group_id: str, request: Any) -> Dict[str, str]:
+    return launch_task(
+        "analyze_files",
+        f"批量分析文件 ({len(request.file_ids)} 个)",
+        run_file_analysis_task,
+        group_id,
+        request.file_ids,
+        request.force,
+        group_id=group_id,
+        message="批量文件 AI 分析任务已创建",
+    )
+
+
+def create_sync_files_from_topics_task(group_id: str) -> Dict[str, str]:
+    return launch_ingestion_task(
+        "sync_files_from_topics",
+        f"从话题同步文件记录 (群组: {group_id})",
+        run_sync_files_from_topics_task,
+        group_id,
+        group_id,
+        message="从话题同步文件记录任务已创建",
+        prepend_group_id_to_args=False,
+    )
+
+
 def _file_task_stopped_after_init(task_id: str) -> bool:
     return _file_task_stopped_after_init_impl(
         task_id,

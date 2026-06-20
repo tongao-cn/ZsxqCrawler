@@ -28,18 +28,18 @@ from backend.services.task_launch import TaskLaunchConflict, ingestion_conflict_
 from backend.services.file_workflow_service import (
     _check_local_file_status_response,
     _clear_file_database_response,
-    _enqueue_file_task,
     _get_file_stats_response,
     _get_file_status_response,
     _get_files_response,
     _log_file_route_event,
     create_filtered_file_download_task,
+    create_file_ai_analysis_task as create_file_ai_analysis_workflow_task,
     create_file_collect_task,
     create_file_download_task,
     create_selected_file_download_task,
+    create_selected_file_ai_analysis_task as create_selected_file_ai_analysis_workflow_task,
     create_single_file_download_task,
-    run_file_analysis_task,
-    run_sync_files_from_topics_task,
+    create_sync_files_from_topics_task,
 )
 
 router = APIRouter(prefix="/api/files", tags=["files"])
@@ -222,17 +222,7 @@ async def create_file_analysis_task(
                 status_code=400,
                 detail="未配置 OpenAI API Key，请设置环境变量 OPENAI_API_KEY 或 config.toml [ai].api_key",
             )
-        return _enqueue_file_task(
-            background_tasks,
-            "analyze_file",
-            f"分析文件 (ID: {file_id})",
-            run_file_analysis_task,
-            group_id,
-            [file_id],
-            request.force,
-            message="文件 AI 分析任务已创建",
-            task_group_id=group_id,
-        )
+        return create_file_ai_analysis_workflow_task(group_id, file_id, request.force)
     except HTTPException:
         raise
     except Exception as e:
@@ -252,17 +242,7 @@ async def create_selected_file_analysis_task(
                 status_code=400,
                 detail="未配置 OpenAI API Key，请设置环境变量 OPENAI_API_KEY 或 config.toml [ai].api_key",
             )
-        return _enqueue_file_task(
-            background_tasks,
-            "analyze_files",
-            f"批量分析文件 ({len(request.file_ids)} 个)",
-            run_file_analysis_task,
-            group_id,
-            request.file_ids,
-            request.force,
-            message="批量文件 AI 分析任务已创建",
-            task_group_id=group_id,
-        )
+        return create_selected_file_ai_analysis_workflow_task(group_id, request)
     except HTTPException:
         raise
     except Exception as e:
@@ -294,15 +274,7 @@ async def clear_file_database(group_id: str):
 async def sync_files_from_topics(group_id: str, background_tasks: BackgroundTasks):
     """从话题库 topic_files 回填/重建文件库记录。"""
     try:
-        return _enqueue_file_task(
-            background_tasks,
-            "sync_files_from_topics",
-            f"从话题同步文件记录 (群组: {group_id})",
-            run_sync_files_from_topics_task,
-            group_id,
-            message="从话题同步文件记录任务已创建",
-            ingestion_group_id=group_id,
-        )
+        return create_sync_files_from_topics_task(group_id)
     except HTTPException:
         raise
     except Exception as e:

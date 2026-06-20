@@ -29,15 +29,20 @@ from backend.services.file_workflow_service import (
     _get_file_status_response,
     _resolve_download_record_status,
     create_filtered_file_download_task,
+    create_file_ai_analysis_task,
     create_file_collect_task,
     create_file_download_task,
     create_selected_file_download_task,
+    create_selected_file_ai_analysis_task,
     create_single_file_download_task,
+    create_sync_files_from_topics_task,
     run_collect_files_task,
     run_filtered_file_download_task,
+    run_file_analysis_task,
     run_file_download_task,
     run_selected_file_download_task,
     run_single_file_download_task_with_info,
+    run_sync_files_from_topics_task,
 )
 from backend.storage.zsxq_file_database import (
     DownloadFileRecord,
@@ -402,6 +407,66 @@ class FileRoutesHelperTests(unittest.TestCase):
         )
         self.assertEqual({"task_id": "task-1", "message": "筛选结果下载任务已创建"}, response)
 
+    def test_create_file_ai_analysis_task_uses_group_metadata_launch_recipe(self):
+        with patch(
+            "backend.services.file_workflow_service.launch_task",
+            return_value={"task_id": "task-1", "message": "文件 AI 分析任务已创建"},
+        ) as launch:
+            response = create_file_ai_analysis_task("group-1", 123, True)
+
+        launch.assert_called_once_with(
+            "analyze_file",
+            "分析文件 (ID: 123)",
+            run_file_analysis_task,
+            "group-1",
+            [123],
+            True,
+            group_id="group-1",
+            message="文件 AI 分析任务已创建",
+        )
+        self.assertEqual({"task_id": "task-1", "message": "文件 AI 分析任务已创建"}, response)
+
+    def test_create_selected_file_ai_analysis_task_uses_group_metadata_launch_recipe(self):
+        from backend.schemas.files import FileAIAnalysisBatchRequest
+
+        request = FileAIAnalysisBatchRequest(file_ids=[123, 456], force=False)
+
+        with patch(
+            "backend.services.file_workflow_service.launch_task",
+            return_value={"task_id": "task-1", "message": "批量文件 AI 分析任务已创建"},
+        ) as launch:
+            response = create_selected_file_ai_analysis_task("group-1", request)
+
+        launch.assert_called_once_with(
+            "analyze_files",
+            "批量分析文件 (2 个)",
+            run_file_analysis_task,
+            "group-1",
+            [123, 456],
+            False,
+            group_id="group-1",
+            message="批量文件 AI 分析任务已创建",
+        )
+        self.assertEqual({"task_id": "task-1", "message": "批量文件 AI 分析任务已创建"}, response)
+
+    def test_create_sync_files_from_topics_task_uses_ingestion_launch_recipe(self):
+        with patch(
+            "backend.services.file_workflow_service.launch_ingestion_task",
+            return_value={"task_id": "task-1", "message": "从话题同步文件记录任务已创建"},
+        ) as launch:
+            response = create_sync_files_from_topics_task("group-1")
+
+        launch.assert_called_once_with(
+            "sync_files_from_topics",
+            "从话题同步文件记录 (群组: group-1)",
+            run_sync_files_from_topics_task,
+            "group-1",
+            "group-1",
+            message="从话题同步文件记录任务已创建",
+            prepend_group_id_to_args=False,
+        )
+        self.assertEqual({"task_id": "task-1", "message": "从话题同步文件记录任务已创建"}, response)
+
     def test_enqueue_file_task_can_attach_group_metadata(self):
         background_tasks = FakeBackgroundTasks()
 
@@ -535,33 +600,32 @@ class FileRoutesHelperTests(unittest.TestCase):
         self.assertEqual([], background_tasks.calls)
 
     def test_sync_files_from_topics_is_enqueued(self):
-        from backend.routes.file_routes import sync_files_from_topics, run_sync_files_from_topics_task
+        from backend.routes.file_routes import sync_files_from_topics
 
         background_tasks = FakeBackgroundTasks()
 
-        with patch("backend.routes.file_routes._enqueue_file_task", return_value={"task_id": "task-1", "message": "ok"}) as enqueue:
+        with patch(
+            "backend.routes.file_routes.create_sync_files_from_topics_task",
+            return_value={"task_id": "task-1", "message": "ok"},
+        ) as create_task:
             response = self._run_async(sync_files_from_topics("group-1", background_tasks))
 
         self.assertEqual({"task_id": "task-1", "message": "ok"}, response)
-        enqueue.assert_called_once_with(
-            background_tasks,
-            "sync_files_from_topics",
-            "从话题同步文件记录 (群组: group-1)",
-            run_sync_files_from_topics_task,
-            "group-1",
-            message="从话题同步文件记录任务已创建",
-            ingestion_group_id="group-1",
-        )
+        create_task.assert_called_once_with("group-1")
+        self.assertEqual([], background_tasks.calls)
 
     def test_file_analysis_task_attaches_group_metadata(self):
-        from backend.routes.file_routes import create_file_analysis_task, run_file_analysis_task
+        from backend.routes.file_routes import create_file_analysis_task
         from backend.schemas.files import FileAIAnalysisRequest
 
         background_tasks = FakeBackgroundTasks()
 
         with (
             patch("backend.routes.file_routes.has_openai_api_key", return_value=True),
-            patch("backend.routes.file_routes._enqueue_file_task", return_value={"task_id": "task-1", "message": "ok"}) as enqueue,
+            patch(
+                "backend.routes.file_routes.create_file_ai_analysis_workflow_task",
+                return_value={"task_id": "task-1", "message": "ok"},
+            ) as create_task,
         ):
             response = self._run_async(
                 create_file_analysis_task(
@@ -573,48 +637,34 @@ class FileRoutesHelperTests(unittest.TestCase):
             )
 
         self.assertEqual({"task_id": "task-1", "message": "ok"}, response)
-        enqueue.assert_called_once_with(
-            background_tasks,
-            "analyze_file",
-            "分析文件 (ID: 123)",
-            run_file_analysis_task,
-            "group-1",
-            [123],
-            True,
-            message="文件 AI 分析任务已创建",
-            task_group_id="group-1",
-        )
+        create_task.assert_called_once_with("group-1", 123, True)
+        self.assertEqual([], background_tasks.calls)
 
     def test_selected_file_analysis_task_attaches_group_metadata(self):
-        from backend.routes.file_routes import create_selected_file_analysis_task, run_file_analysis_task
+        from backend.routes.file_routes import create_selected_file_analysis_task
         from backend.schemas.files import FileAIAnalysisBatchRequest
 
         background_tasks = FakeBackgroundTasks()
+        request = FileAIAnalysisBatchRequest(file_ids=[123, 456], force=False)
 
         with (
             patch("backend.routes.file_routes.has_openai_api_key", return_value=True),
-            patch("backend.routes.file_routes._enqueue_file_task", return_value={"task_id": "task-1", "message": "ok"}) as enqueue,
+            patch(
+                "backend.routes.file_routes.create_selected_file_ai_analysis_workflow_task",
+                return_value={"task_id": "task-1", "message": "ok"},
+            ) as create_task,
         ):
             response = self._run_async(
                 create_selected_file_analysis_task(
                     "group-1",
-                    FileAIAnalysisBatchRequest(file_ids=[123, 456], force=False),
+                    request,
                     background_tasks,
                 )
             )
 
         self.assertEqual({"task_id": "task-1", "message": "ok"}, response)
-        enqueue.assert_called_once_with(
-            background_tasks,
-            "analyze_files",
-            "批量分析文件 (2 个)",
-            run_file_analysis_task,
-            "group-1",
-            [123, 456],
-            False,
-            message="批量文件 AI 分析任务已创建",
-            task_group_id="group-1",
-        )
+        create_task.assert_called_once_with("group-1", request)
+        self.assertEqual([], background_tasks.calls)
 
     def test_file_route_error_preserves_status_and_detail_format(self):
         from backend.routes import file_routes
@@ -724,6 +774,13 @@ class FileRoutesHelperTests(unittest.TestCase):
                         file_routes.download_single_file: "backend.routes.file_routes.create_single_file_download_task",
                         file_routes.download_selected_files: "backend.routes.file_routes.create_selected_file_download_task",
                         file_routes.download_filtered_files: "backend.routes.file_routes.create_filtered_file_download_task",
+                        file_routes.create_file_analysis_task: (
+                            "backend.routes.file_routes.create_file_ai_analysis_workflow_task"
+                        ),
+                        file_routes.create_selected_file_analysis_task: (
+                            "backend.routes.file_routes.create_selected_file_ai_analysis_workflow_task"
+                        ),
+                        file_routes.sync_files_from_topics: "backend.routes.file_routes.create_sync_files_from_topics_task",
                     }
                     patch_target = launch_patch_targets.get(
                         route,
@@ -801,6 +858,13 @@ class FileRoutesHelperTests(unittest.TestCase):
                         file_routes.download_single_file: "backend.routes.file_routes.create_single_file_download_task",
                         file_routes.download_selected_files: "backend.routes.file_routes.create_selected_file_download_task",
                         file_routes.download_filtered_files: "backend.routes.file_routes.create_filtered_file_download_task",
+                        file_routes.create_file_analysis_task: (
+                            "backend.routes.file_routes.create_file_ai_analysis_workflow_task"
+                        ),
+                        file_routes.create_selected_file_analysis_task: (
+                            "backend.routes.file_routes.create_selected_file_ai_analysis_workflow_task"
+                        ),
+                        file_routes.sync_files_from_topics: "backend.routes.file_routes.create_sync_files_from_topics_task",
                     }
                     patch_target = launch_patch_targets.get(
                         route,
