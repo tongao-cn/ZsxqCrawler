@@ -6,8 +6,6 @@ import json
 from datetime import datetime
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
-from openai import OpenAI
-
 from backend.core.ai_provider_config import (
     get_default_base_url,
     get_default_model,
@@ -15,13 +13,18 @@ from backend.core.ai_provider_config import (
     get_extraction_reasoning_effort,
     get_openai_compatible_config,
 )
+from backend.services.ai_client import (
+    AITextRequest,
+    call_ai_text,
+    chat_json_schema_response_format,
+    responses_json_schema_text_format,
+)
 from backend.services.ai_json_utils import extract_json_object
 from backend.services.a_share_analysis_db_storage import load_stock_basic_records, load_topic_stock_extractions
 from backend.services.daily_topic_analysis_service import (
     DEFAULT_COMMENTS_PER_TOPIC,
     _build_prompt_payload,
     _connect_topics_db,
-    _extract_response_text,
     _fetch_topics_for_date,
     _parse_report_date,
 )
@@ -280,25 +283,11 @@ def _aggregate_topic_stock_extractions(
 
 
 def _get_responses_json_schema_text_format() -> Dict[str, Any]:
-    return {
-        "format": {
-            "type": "json_schema",
-            "name": "daily_stock_concepts",
-            "strict": True,
-            "schema": STOCK_CONCEPT_SCHEMA,
-        },
-    }
+    return responses_json_schema_text_format("daily_stock_concepts", STOCK_CONCEPT_SCHEMA)
 
 
 def _get_chat_json_schema_response_format() -> Dict[str, Any]:
-    return {
-        "type": "json_schema",
-        "json_schema": {
-            "name": "daily_stock_concepts",
-            "strict": True,
-            "schema": STOCK_CONCEPT_SCHEMA,
-        },
-    }
+    return chat_json_schema_response_format("daily_stock_concepts", STOCK_CONCEPT_SCHEMA)
 
 
 def _generate_stock_concepts_with_ai(prompt_payload: str, report_date: str) -> Tuple[List[Dict[str, Any]], str]:
@@ -336,23 +325,19 @@ def _generate_stock_concepts_with_ai(prompt_payload: str, report_date: str) -> T
         },
     ]
 
-    client = OpenAI(api_key=api_key, base_url=api_base, timeout=180)
-    if wire_api.strip().lower() == "responses":
-        response = client.responses.create(
+    message = call_ai_text(
+        AITextRequest(
+            api_key=api_key,
             model=model,
-            input=messages,
-            reasoning={"effort": reasoning_effort},
-            text=_get_responses_json_schema_text_format(),
-        )
-        message = _extract_response_text(response)
-    else:
-        response = client.chat.completions.create(
-            model=model,
+            api_base=api_base,
             messages=messages,
-            stream=False,
-            response_format=_get_chat_json_schema_response_format(),
+            wire_api=wire_api,
+            reasoning_effort=reasoning_effort,
+            timeout=180,
+            responses_text_format=_get_responses_json_schema_text_format(),
+            chat_response_format=_get_chat_json_schema_response_format(),
         )
-        message = response.choices[0].message.content or ""
+    )
 
     stocks = _parse_stock_concept_output(message)
     return stocks, model

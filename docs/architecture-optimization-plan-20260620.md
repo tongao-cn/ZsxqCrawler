@@ -106,3 +106,4 @@ uv run python -m unittest discover -s tests
 ## 进度记录
 
 - 2026-06-20：创建本计划，准备实施 P1 AI 兼容调用模块。
+- 2026-06-20：完成 P1。新增 `backend/services/ai_client.py`，集中 Responses / Chat Completions 调用、响应文本提取、JSON schema format 和 retry 分类；迁移每日话题、文件 AI、每日股票概念、A 股推荐池抽取、个股话题分析调用点；新增 `tests/test_ai_client.py`，focused AI tests 通过。

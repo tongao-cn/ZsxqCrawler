@@ -7,14 +7,13 @@ from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from datetime import date, timedelta
 from typing import Any, Callable, Dict, Iterable, List, Tuple
 
-from openai import OpenAI
-
 from backend.core.ai_provider_config import (
     get_default_base_url,
     get_default_model,
     get_openai_compatible_config,
     get_summary_reasoning_effort,
 )
+from backend.services.ai_client import AITextRequest, call_ai_text
 from backend.services.ai_json_utils import extract_json_object
 from backend.services.stock_topic_analysis_ai_prompts import (
     build_image_stock_extraction_input,
@@ -55,7 +54,7 @@ from backend.services.stock_topic_analysis_store import (
     upsert_stock_topic_analysis,
     upsert_stock_topic_processed_states,
 )
-from backend.services.daily_topic_analysis_service import _clip, _extract_response_text
+from backend.services.daily_topic_analysis_service import _clip
 from backend.storage.db_compat import connect
 
 
@@ -738,13 +737,20 @@ def _call_stock_analysis_ai(prompt_payload: str, *, incremental: bool = False) -
     reasoning_effort = get_summary_reasoning_effort()
     messages = build_stock_analysis_messages(prompt_payload)
 
-    client = OpenAI(api_key=api_key, base_url=api_base, timeout=180)
-    response = client.responses.create(
-        model=model,
-        input=messages,
-        reasoning={"effort": reasoning_effort},
+    return (
+        call_ai_text(
+            AITextRequest(
+                api_key=api_key,
+                model=model,
+                api_base=api_base,
+                messages=messages,
+                wire_api="responses",
+                reasoning_effort=reasoning_effort,
+                timeout=180,
+            )
+        ).strip(),
+        model,
     )
-    return _extract_response_text(response).strip(), model
 
 
 def _extract_json_object(text: str) -> Dict[str, Any]:
@@ -762,13 +768,17 @@ def _call_question_keyword_ai(question: str) -> Tuple[List[str], str]:
     reasoning_effort = get_summary_reasoning_effort()
     messages = build_question_keyword_messages(question)
 
-    client = OpenAI(api_key=api_key, base_url=api_base, timeout=120)
-    response = client.responses.create(
-        model=model,
-        input=messages,
-        reasoning={"effort": reasoning_effort},
+    text = call_ai_text(
+        AITextRequest(
+            api_key=api_key,
+            model=model,
+            api_base=api_base,
+            messages=messages,
+            wire_api="responses",
+            reasoning_effort=reasoning_effort,
+            timeout=120,
+        )
     )
-    text = _extract_response_text(response)
 
     parsed = _extract_json_object(text)
     keywords = _normalize_question_keywords(parsed.get("keywords") or parsed.get("keyword") or [])
@@ -788,13 +798,20 @@ def _call_question_analysis_ai(question: str, prompt_payload: str) -> Tuple[str,
     reasoning_effort = get_summary_reasoning_effort()
     messages = build_question_analysis_messages(question, prompt_payload)
 
-    client = OpenAI(api_key=api_key, base_url=api_base, timeout=180)
-    response = client.responses.create(
-        model=model,
-        input=messages,
-        reasoning={"effort": reasoning_effort},
+    return (
+        call_ai_text(
+            AITextRequest(
+                api_key=api_key,
+                model=model,
+                api_base=api_base,
+                messages=messages,
+                wire_api="responses",
+                reasoning_effort=reasoning_effort,
+                timeout=180,
+            )
+        ).strip(),
+        model,
     )
-    return _extract_response_text(response).strip(), model
 
 
 def extract_stock_names_from_image(image_data_url: str) -> Dict[str, Any]:
@@ -815,13 +832,17 @@ def extract_stock_names_from_image(image_data_url: str) -> Dict[str, Any]:
         "要求：保留图片里的股票中文简称，去重，最多 50 个。"
     )
 
-    client = OpenAI(api_key=api_key, base_url=api_base, timeout=120)
-    response = client.responses.create(
-        model=model,
-        input=build_image_stock_extraction_input(prompt, normalized_data_url),
-        reasoning={"effort": reasoning_effort},
+    text = call_ai_text(
+        AITextRequest(
+            api_key=api_key,
+            model=model,
+            api_base=api_base,
+            messages=build_image_stock_extraction_input(prompt, normalized_data_url),
+            wire_api="responses",
+            reasoning_effort=reasoning_effort,
+            timeout=120,
+        )
     )
-    text = _extract_response_text(response)
 
     parsed = _extract_json_object(text)
     if parsed:

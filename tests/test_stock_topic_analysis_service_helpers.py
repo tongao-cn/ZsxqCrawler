@@ -207,7 +207,7 @@ class StockTopicAnalysisServiceHelperTests(unittest.TestCase):
                 self.responses = FakeResponses()
 
         with (
-            patch("backend.services.stock_topic_analysis_service.OpenAI", FakeClient),
+            patch("backend.services.ai_client.OpenAI", FakeClient),
             patch("backend.services.stock_topic_analysis_service.get_openai_compatible_config", return_value={"api_key": "test-key", "model": "test-model", "base_url": "http://test"}),
         ):
             keywords, model = _call_question_keyword_ai("商业航天板块最近怎么样，推荐吗")
@@ -251,7 +251,7 @@ class StockTopicAnalysisServiceHelperTests(unittest.TestCase):
 
         encoded = base64.b64encode(b"image-bytes").decode("ascii")
         with (
-            patch("backend.services.stock_topic_analysis_service.OpenAI", FakeClient),
+            patch("backend.services.ai_client.OpenAI", FakeClient),
             patch("backend.services.stock_topic_analysis_service.get_openai_compatible_config", return_value={"api_key": "test-key", "model": "test-model", "base_url": "http://test"}),
         ):
             result = extract_stock_names_from_image(f"data:image/png;base64,{encoded}")
@@ -277,7 +277,7 @@ class StockTopicAnalysisServiceHelperTests(unittest.TestCase):
 
         encoded = base64.b64encode(b"image-bytes").decode("ascii")
         with (
-            patch("backend.services.stock_topic_analysis_service.OpenAI", FakeClient),
+            patch("backend.services.ai_client.OpenAI", FakeClient),
             patch("backend.services.stock_topic_analysis_service.get_openai_compatible_config", return_value={"api_key": "test-key", "model": "test-model", "base_url": "http://test"}),
         ):
             with self.assertRaises(ValueError) as raised:
@@ -1278,7 +1278,7 @@ class StockTopicAnalysisServiceHelperTests(unittest.TestCase):
                     return type("Response", (), {"output_text": "summary"})()
 
         with (
-            patch("backend.services.stock_topic_analysis_service.OpenAI", FakeClient),
+            patch("backend.services.ai_client.OpenAI", FakeClient),
             patch("backend.services.stock_topic_analysis_service.get_openai_compatible_config", return_value={"api_key": "test-key", "model": "test-model", "base_url": "http://test"}),
         ):
             _call_stock_analysis_ai('{"new_topics":[]}')

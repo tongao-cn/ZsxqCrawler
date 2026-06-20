@@ -15,8 +15,6 @@ import zipfile
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
 
-from openai import OpenAI
-
 from backend.core.ai_provider_config import (
     get_default_base_url,
     get_default_model,
@@ -25,6 +23,7 @@ from backend.core.ai_provider_config import (
     get_summary_reasoning_effort,
 )
 from backend.core.db_path_manager import get_db_path_manager
+from backend.services.ai_client import AITextRequest, call_ai_text, extract_response_text
 from backend.storage.zsxq_file_database import ZSXQFileDatabase
 
 
@@ -173,18 +172,7 @@ def extract_file_text(path: Path) -> Tuple[str, str]:
 
 
 def _extract_response_text(response: Any) -> str:
-    text_value = getattr(response, "output_text", None)
-    if text_value:
-        return str(text_value)
-
-    outputs = getattr(response, "output", []) or []
-    chunks = []
-    for output in outputs:
-        for content in getattr(output, "content", []) or []:
-            chunk_text = getattr(content, "text", None)
-            if chunk_text:
-                chunks.append(str(chunk_text))
-    return "\n".join(chunks)
+    return extract_response_text(response)
 
 
 def _build_deep_summary_prompt(file_name: str) -> str:
@@ -239,17 +227,17 @@ def _summarize_text_with_ai(
         },
     ]
 
-    client = OpenAI(api_key=api_key, base_url=api_base, timeout=120)
-    if str(wire_api or "").strip().lower() == "responses":
-        response = client.responses.create(
+    return call_ai_text(
+        AITextRequest(
+            api_key=api_key,
             model=model,
-            input=messages,
-            reasoning={"effort": reasoning_effort},
+            api_base=api_base,
+            messages=messages,
+            wire_api=wire_api,
+            reasoning_effort=reasoning_effort,
+            timeout=120,
         )
-        return _extract_response_text(response).strip()
-
-    response = client.chat.completions.create(model=model, messages=messages, stream=False)
-    return str(response.choices[0].message.content or "").strip()
+    ).strip()
 
 
 def _summarize_pdf_with_ai(
@@ -276,10 +264,12 @@ def _summarize_pdf_with_ai(
         raise RuntimeError("OPENAI_API_KEY not set and config.toml [ai].api_key is empty")
 
     base64_string = base64.b64encode(path.read_bytes()).decode("utf-8")
-    client = OpenAI(api_key=api_key, base_url=api_base, timeout=180)
-    response = client.responses.create(
-        model=model,
-        input=[
+    return call_ai_text(
+        AITextRequest(
+            api_key=api_key,
+            model=model,
+            api_base=api_base,
+            messages=[
             {
                 "role": "user",
                 "content": [
@@ -297,10 +287,12 @@ def _summarize_pdf_with_ai(
                     },
                 ],
             }
-        ],
-        reasoning={"effort": reasoning_effort},
-    )
-    return _extract_response_text(response).strip()
+            ],
+            wire_api=wire_api,
+            reasoning_effort=reasoning_effort,
+            timeout=180,
+        )
+    ).strip()
 
 
 def _get_faster_whisper_model():

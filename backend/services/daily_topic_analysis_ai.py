@@ -6,8 +6,6 @@ import base64
 import mimetypes
 from typing import Any, Dict, List, Optional, Tuple
 
-from openai import OpenAI
-
 from backend.core.ai_provider_config import (
     get_default_base_url,
     get_default_model,
@@ -16,6 +14,7 @@ from backend.core.ai_provider_config import (
     get_summary_reasoning_effort,
 )
 from backend.core.image_cache_manager import get_image_cache_manager
+from backend.services.ai_client import AITextRequest, call_ai_text, extract_response_text
 
 
 def build_image_content_parts(
@@ -48,21 +47,6 @@ def build_image_content_parts(
     return content_parts
 
 
-def extract_response_text(response: Any) -> str:
-    text_value = getattr(response, "output_text", None)
-    if text_value:
-        return str(text_value)
-
-    outputs = getattr(response, "output", []) or []
-    chunks = []
-    for output in outputs:
-        for content in getattr(output, "content", []) or []:
-            chunk_text = getattr(content, "text", None)
-            if chunk_text:
-                chunks.append(str(chunk_text))
-    return "\n".join(chunks)
-
-
 def call_report_ai(
     user_prompt: str,
     *,
@@ -92,21 +76,40 @@ def call_report_ai(
         },
     ]
 
-    client = OpenAI(api_key=api_key, base_url=api_base, timeout=180)
     if wire_api.strip().lower() == "responses":
         user_content: List[Dict[str, Any]] = [{"type": "input_text", "text": user_prompt}]
         user_content.extend(build_image_content_parts(group_id, image_inputs, max_image_bytes=max_image_bytes))
         messages.append({"role": "user", "content": user_content})
-        response = client.responses.create(
-            model=model,
-            input=messages,
-            reasoning={"effort": reasoning_effort},
+        return (
+            call_ai_text(
+                AITextRequest(
+                    api_key=api_key,
+                    model=model,
+                    api_base=api_base,
+                    messages=messages,
+                    wire_api=wire_api,
+                    reasoning_effort=reasoning_effort,
+                    timeout=180,
+                )
+            ).strip(),
+            model,
         )
-        return extract_response_text(response).strip(), model
 
     user_content = [{"type": "text", "text": user_prompt}]
     for image_part in build_image_content_parts(group_id, image_inputs, max_image_bytes=max_image_bytes):
         user_content.append({"type": "image_url", "image_url": {"url": image_part["image_url"]}})
     messages.append({"role": "user", "content": user_content if len(user_content) > 1 else user_prompt})
-    response = client.chat.completions.create(model=model, messages=messages, stream=False)
-    return str(response.choices[0].message.content or "").strip(), model
+    return (
+        call_ai_text(
+            AITextRequest(
+                api_key=api_key,
+                model=model,
+                api_base=api_base,
+                messages=messages,
+                wire_api=wire_api,
+                reasoning_effort=reasoning_effort,
+                timeout=180,
+            )
+        ).strip(),
+        model,
+    )

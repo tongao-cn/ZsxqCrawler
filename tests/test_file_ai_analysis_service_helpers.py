@@ -74,7 +74,7 @@ class FileAIAnalysisServiceHelperTests(unittest.TestCase):
                 "backend.services.file_ai_analysis_service.get_openai_compatible_config",
                 return_value={"api_key": "sk-test"},
             ),
-            patch("backend.services.file_ai_analysis_service.OpenAI", return_value=fake_client),
+            patch("backend.services.ai_client.OpenAI", return_value=fake_client),
         ):
             summary = _summarize_text_with_ai(
                 "正文内容",
@@ -126,7 +126,7 @@ class FileAIAnalysisServiceHelperTests(unittest.TestCase):
                     "backend.services.file_ai_analysis_service.get_openai_compatible_config",
                     return_value={"api_key": "sk-test"},
                 ),
-                patch("backend.services.file_ai_analysis_service.OpenAI", return_value=fake_client),
+                patch("backend.services.ai_client.OpenAI", return_value=fake_client),
             ):
                 summary = _summarize_pdf_with_ai(
                     pdf_path,

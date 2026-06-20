@@ -11,6 +11,14 @@ from backend.core.ai_provider_config import (
     get_extraction_reasoning_effort,
 )
 from backend.core.logger_config import log_debug, log_warning
+from backend.services.ai_client import (
+    AITextRequest,
+    call_ai_text,
+    chat_json_schema_response_format,
+    extract_response_text,
+    is_retryable_ai_error,
+    responses_json_schema_text_format,
+)
 from backend.services.ai_json_utils import extract_json_object
 from backend.services.stock_concept_taxonomy import normalize_stock_concept_term
 
@@ -72,24 +80,7 @@ def _emit_log(
 
 
 def _extract_response_text(response: Any) -> str:
-    text_value = getattr(response, "output_text", None)
-    if text_value:
-        return str(text_value)
-
-    try:
-        outputs = getattr(response, "output", []) or []
-        chunks: List[str] = []
-        for output in outputs:
-            for content in getattr(output, "content", []) or []:
-                chunk_text = getattr(content, "text", None)
-                if chunk_text:
-                    chunks.append(str(chunk_text))
-        if chunks:
-            return "\n".join(chunks)
-    except Exception:
-        pass
-
-    return ""
+    return extract_response_text(response)
 
 
 def _extract_json_object(text: str) -> Dict[str, Any]:
@@ -216,41 +207,15 @@ def _parse_company_extraction_output(message: str) -> List[str]:
 
 
 def _get_chat_json_schema_response_format() -> Dict[str, Any]:
-    return {
-        "type": "json_schema",
-        "json_schema": {
-            "name": "a_share_company_extraction",
-            "strict": True,
-            "schema": A_SHARE_COMPANY_EXTRACTION_SCHEMA,
-        },
-    }
+    return chat_json_schema_response_format("a_share_company_extraction", A_SHARE_COMPANY_EXTRACTION_SCHEMA)
 
 
 def _get_responses_json_schema_text_format() -> Dict[str, Any]:
-    return {
-        "format": {
-            "type": "json_schema",
-            "name": "a_share_company_extraction",
-            "strict": True,
-            "schema": A_SHARE_COMPANY_EXTRACTION_SCHEMA,
-        },
-    }
+    return responses_json_schema_text_format("a_share_company_extraction", A_SHARE_COMPANY_EXTRACTION_SCHEMA)
 
 
 def _is_retryable_openai_error(exc: Exception) -> bool:
-    try:
-        from openai import APIConnectionError, APIStatusError, APITimeoutError, InternalServerError, RateLimitError
-    except Exception:
-        return False
-
-    if isinstance(exc, (RateLimitError, APIConnectionError, APITimeoutError, InternalServerError)):
-        return True
-
-    if isinstance(exc, APIStatusError):
-        status_code = int(getattr(exc, "status_code", 0) or 0)
-        return status_code == 408 or status_code == 409 or status_code == 429 or status_code >= 500
-
-    return False
+    return is_retryable_ai_error(exc)
 
 
 def _build_topic_stock_extraction_prompt() -> str:
@@ -301,11 +266,6 @@ def call_openai_extract_topic_stocks(
         debug_logger("skip topic stock extraction because content is empty or shorter than 20 chars")
         return []
 
-    try:
-        from openai import OpenAI
-    except ImportError as exc:
-        raise RuntimeError("缺少 openai 依赖，请先安装后再运行分析") from exc
-
     prompt = _build_topic_stock_extraction_prompt()
     content = content if len(content) <= 8000 else content[:8000]
     messages = [
@@ -320,7 +280,6 @@ def call_openai_extract_topic_stocks(
         {"role": "user", "content": prompt + "\n\n" + content},
     ]
 
-    client = OpenAI(api_key=api_key, base_url=(api_base or DEFAULT_API_BASE), timeout=timeout)
     normalized_wire_api = str(wire_api or DEFAULT_WIRE_API).strip().lower()
 
     last_error: Optional[Exception] = None
@@ -328,22 +287,19 @@ def call_openai_extract_topic_stocks(
     message = ""
     for attempt in range(1, attempts + 1):
         try:
-            if normalized_wire_api == "responses":
-                response = client.responses.create(
+            message = call_ai_text(
+                AITextRequest(
+                    api_key=api_key,
                     model=model,
-                    input=messages,
-                    reasoning={"effort": str(reasoning_effort or DEFAULT_REASONING_EFFORT).strip() or DEFAULT_REASONING_EFFORT},
-                    text=_get_responses_json_schema_text_format(),
-                )
-                message = _extract_response_text(response)
-            else:
-                response = client.chat.completions.create(
-                    model=model,
+                    api_base=(api_base or DEFAULT_API_BASE),
                     messages=messages,
-                    stream=False,
-                    response_format=_get_chat_json_schema_response_format(),
+                    wire_api=normalized_wire_api,
+                    reasoning_effort=str(reasoning_effort or DEFAULT_REASONING_EFFORT).strip() or DEFAULT_REASONING_EFFORT,
+                    timeout=timeout,
+                    responses_text_format=_get_responses_json_schema_text_format(),
+                    chat_response_format=_get_chat_json_schema_response_format(),
                 )
-                message = response.choices[0].message.content or ""
+            )
             last_error = None
             break
         except Exception as exc:

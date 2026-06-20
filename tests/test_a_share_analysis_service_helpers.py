@@ -374,7 +374,7 @@ class AShareAnalysisServiceHelperTests(unittest.TestCase):
 
         _FakeOpenAIClient.recorder = {}
 
-        with patch("openai.OpenAI", _FakeOpenAIClient):
+        with patch("backend.services.ai_client.OpenAI", _FakeOpenAIClient):
             self.assertEqual(
                 [],
                 service.call_openai_extract_topic_stocks(
@@ -399,7 +399,7 @@ class AShareAnalysisServiceHelperTests(unittest.TestCase):
     def test_call_openai_extract_topic_stocks_skips_empty_or_too_short_content(self):
         from backend.services import a_share_analysis_service as service
 
-        with patch.object(service, "log_debug") as log_debug, patch("openai.OpenAI") as openai_client:
+        with patch.object(service, "log_debug") as log_debug, patch("backend.services.ai_client.OpenAI") as openai_client:
             self.assertEqual(
                 [],
                 service.call_openai_extract_topic_stocks(
