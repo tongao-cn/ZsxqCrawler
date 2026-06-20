@@ -55,6 +55,7 @@ from backend.services.task_runtime_threads import (
     register_task_lock_heartbeat,
     task_lock_heartbeat_ids,
 )
+from backend.services.workflow_registry import get_workflow_spec
 from backend.storage.task_store import TaskStore
 
 
@@ -452,12 +453,21 @@ def _prepare_task_stop_resources_locked(task_id: str) -> tuple[Any, Any]:
     return _task_crawler_locked(task_id), _task_file_downloader_locked(task_id)
 
 
+def is_task_cancellable(task: Dict[str, Any]) -> bool:
+    spec = get_workflow_spec(str(task.get("type") or ""))
+    return spec is None or spec.cancellable
+
+
 def stop_task(task_id: str) -> bool:
     task = get_task_state(task_id)
     if not task:
         return False
 
     if not _is_active_task_status(task["status"]):
+        return False
+
+    if not is_task_cancellable(task):
+        add_task_log(task_id, "⚠️ 该任务类型不支持停止请求")
         return False
 
     with _state_lock:

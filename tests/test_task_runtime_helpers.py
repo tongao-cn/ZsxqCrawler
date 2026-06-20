@@ -457,6 +457,45 @@ class TaskRuntimeHelperTests(unittest.TestCase):
         self.assertEqual("cancelled", store.tasks["task-1"]["status"])
         self.assertEqual([("task-1", "cancelled")], store.released_locks)
 
+    def test_is_task_cancellable_uses_workflow_spec(self):
+        from backend.services import task_runtime
+
+        self.assertFalse(task_runtime.is_task_cancellable({"type": "a_share_analysis"}))
+        self.assertTrue(task_runtime.is_task_cancellable({"type": "download_selected_files"}))
+        self.assertTrue(task_runtime.is_task_cancellable({"type": "legacy_task"}))
+
+    def test_stop_task_refuses_non_cancellable_workflow(self):
+        from backend.services import task_runtime
+
+        store = FakeTaskStore()
+        store.tasks["task-1"] = {
+            "task_id": "task-1",
+            "type": "a_share_analysis",
+            "status": "running",
+            "message": "running",
+        }
+        crawler = Stoppable()
+        downloader = Stoppable()
+
+        with patch("backend.services.task_runtime.get_task_store", return_value=store):
+            try:
+                task_runtime.register_task_crawler("task-1", crawler)
+                task_runtime.file_downloader_instances["task-1"] = downloader
+
+                stopped = task_runtime.stop_task("task-1")
+            finally:
+                task_runtime.unregister_task_crawler("task-1")
+                task_runtime.file_downloader_instances.pop("task-1", None)
+                task_runtime.task_stop_flags.pop("task-1", None)
+
+        self.assertFalse(stopped)
+        self.assertFalse(crawler.stopped)
+        self.assertFalse(downloader.stopped)
+        self.assertNotIn("task-1", store.stop_flags)
+        self.assertEqual("running", store.tasks["task-1"]["status"])
+        self.assertEqual([], store.released_locks)
+        self.assertEqual([("task-1", "⚠️ 该任务类型不支持停止请求")], store.logs)
+
     def test_unregister_task_crawler_removes_registered_crawler_and_is_idempotent(self):
         from backend.services import task_runtime
 
