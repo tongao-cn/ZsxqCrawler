@@ -550,19 +550,6 @@ class TopicRoutesHelperTests(unittest.TestCase):
         self.assertTrue(db.closed)
 
     @unittest.skipUnless(HAS_TOPIC_ROUTE_DEPS, "topic route dependencies are not installed")
-    def test_fetch_and_import_topic_comments_imports_comments(self):
-        from backend.routes.topic_routes import _fetch_and_import_topic_comments
-
-        comments = [{"comment_id": 1}]
-        db = FakeTopicDb()
-
-        fetched = _fetch_and_import_topic_comments(db, 10, 1, FakeCommentClient(comments))
-
-        self.assertEqual(1, fetched)
-        self.assertEqual([(10, comments)], db.imported_comments)
-        self.assertTrue(db.committed)
-
-    @unittest.skipUnless(HAS_TOPIC_ROUTE_DEPS, "topic route dependencies are not installed")
     def test_build_refresh_topic_success_defaults_missing_counts(self):
         from backend.services.topic_workflow_service import _build_refresh_topic_success
 
@@ -584,14 +571,14 @@ class TopicRoutesHelperTests(unittest.TestCase):
 
     @unittest.skipUnless(HAS_TOPIC_ROUTE_DEPS, "topic route dependencies are not installed")
     def test_should_fetch_more_comments_uses_existing_threshold(self):
-        from backend.routes.topic_routes import _should_fetch_more_comments
+        from backend.services.topic_workflow_service import _should_fetch_more_comments
 
         self.assertFalse(_should_fetch_more_comments(8))
         self.assertTrue(_should_fetch_more_comments(9))
 
     @unittest.skipUnless(HAS_TOPIC_ROUTE_DEPS, "topic route dependencies are not installed")
     def test_build_fetch_comments_skip_response_matches_endpoint_shape(self):
-        from backend.routes.topic_routes import _build_fetch_comments_skip_response
+        from backend.services.topic_workflow_service import _build_fetch_comments_skip_response
 
         self.assertEqual(
             {
@@ -604,7 +591,7 @@ class TopicRoutesHelperTests(unittest.TestCase):
 
     @unittest.skipUnless(HAS_TOPIC_ROUTE_DEPS, "topic route dependencies are not installed")
     def test_import_more_comments_returns_zero_when_fetch_empty(self):
-        from backend.routes.topic_routes import _import_more_comments
+        from backend.services.topic_workflow_service import _import_more_comments
 
         db = FakeTopicDb()
 
@@ -616,7 +603,7 @@ class TopicRoutesHelperTests(unittest.TestCase):
 
     @unittest.skipUnless(HAS_TOPIC_ROUTE_DEPS, "topic route dependencies are not installed")
     def test_import_more_comments_imports_and_commits(self):
-        from backend.routes.topic_routes import _import_more_comments
+        from backend.services.topic_workflow_service import _import_more_comments
 
         comments = [{"comment_id": 1}, {"comment_id": 2}]
         db = FakeTopicDb()
@@ -626,6 +613,92 @@ class TopicRoutesHelperTests(unittest.TestCase):
         self.assertEqual(2, fetched)
         self.assertEqual([(10, comments)], db.imported_comments)
         self.assertTrue(db.committed)
+
+    @unittest.skipUnless(HAS_TOPIC_ROUTE_DEPS, "topic route dependencies are not installed")
+    def test_fetch_more_comments_workflow_rejects_missing_topic(self):
+        from backend.services.topic_workflow_service import TopicWorkflowError, fetch_more_comments
+
+        class FakeCommentsDb(FakeDb):
+            def get_topic_detail(self, topic_id):
+                return None
+
+        db = FakeCommentsDb()
+
+        with patch("backend.services.topic_workflow_service.ZSXQDatabase", return_value=db):
+            with self.assertRaises(TopicWorkflowError) as ctx:
+                fetch_more_comments(10, "group-1")
+
+        self.assertEqual(404, ctx.exception.status_code)
+        self.assertEqual("话题不存在", ctx.exception.detail)
+        self.assertTrue(db.closed)
+
+    @unittest.skipUnless(HAS_TOPIC_ROUTE_DEPS, "topic route dependencies are not installed")
+    def test_fetch_more_comments_workflow_skips_small_comment_counts(self):
+        from backend.services.topic_workflow_service import fetch_more_comments
+
+        class FakeCommentsDb(FakeDb):
+            def get_topic_detail(self, topic_id):
+                return {"comments_count": 8}
+
+        db = FakeCommentsDb()
+
+        with patch("backend.services.topic_workflow_service.ZSXQDatabase", return_value=db):
+            response = fetch_more_comments(10, "group-1")
+
+        self.assertEqual(
+            {"success": True, "message": "话题只有 8 条评论，无需获取更多", "comments_fetched": 0},
+            response,
+        )
+        self.assertFalse(db.committed)
+        self.assertTrue(db.closed)
+
+    @unittest.skipUnless(HAS_TOPIC_ROUTE_DEPS, "topic route dependencies are not installed")
+    def test_fetch_more_comments_workflow_imports_comments(self):
+        from backend.services.topic_workflow_service import fetch_more_comments
+
+        class FakeCommentsDb(FakeTopicDb):
+            def get_topic_detail(self, topic_id):
+                return {"comments_count": 9}
+
+        comments = [{"comment_id": 1}, {"comment_id": 2}]
+        db = FakeCommentsDb()
+
+        with (
+            patch("backend.services.topic_workflow_service.ZSXQDatabase", return_value=db),
+            patch("backend.services.topic_workflow_service.OfficialTopicClient", return_value=FakeCommentClient(comments)),
+        ):
+            response = fetch_more_comments(10, "group-1")
+
+        self.assertEqual({"success": True, "message": "成功获取并导入 2 条评论", "comments_fetched": 2}, response)
+        self.assertEqual([(10, comments)], db.imported_comments)
+        self.assertTrue(db.committed)
+        self.assertTrue(db.closed)
+
+    @unittest.skipUnless(HAS_TOPIC_ROUTE_DEPS, "topic route dependencies are not installed")
+    def test_fetch_more_comments_workflow_returns_failure_payload_on_import_error(self):
+        from backend.services.topic_workflow_service import fetch_more_comments
+
+        class FakeCommentsDb(FakeDb):
+            def get_topic_detail(self, topic_id):
+                return {"comments_count": 9}
+
+            def import_additional_comments(self, topic_id, comments):
+                raise RuntimeError("boom")
+
+        db = FakeCommentsDb()
+
+        with (
+            patch("backend.services.topic_workflow_service.ZSXQDatabase", return_value=db),
+            patch(
+                "backend.services.topic_workflow_service.OfficialTopicClient",
+                return_value=FakeCommentClient([{"comment_id": 1}]),
+            ),
+        ):
+            response = fetch_more_comments(10, "group-1")
+
+        self.assertEqual({"success": False, "message": "获取评论时出错: boom", "comments_fetched": 0}, response)
+        self.assertTrue(db.rolled_back)
+        self.assertTrue(db.closed)
 
     @unittest.skipUnless(HAS_TOPIC_ROUTE_DEPS, "topic route dependencies are not installed")
     def test_format_group_topic_row_maps_author_for_talk(self):
@@ -795,7 +868,7 @@ class TopicRoutesHelperTests(unittest.TestCase):
             [
                 (topic_routes._clear_topic_database_response, ("group-1",)),
                 (topic_routes.refresh_topic_stats_workflow, (11, "group-1")),
-                (topic_routes._fetch_more_comments_response, (12, "group-1")),
+                (topic_routes.fetch_more_comments_workflow, (12, "group-1")),
                 (topic_routes._delete_single_topic_response, (13, 123)),
                 (topic_routes.fetch_single_topic_workflow, ("123", 14, False)),
                 (topic_routes._get_group_tags_response, ("123",)),
@@ -806,7 +879,7 @@ class TopicRoutesHelperTests(unittest.TestCase):
         )
         self.assertEqual({"called": "_clear_topic_database_response", "args": ("group-1",)}, clear_result)
         self.assertEqual({"called": "refresh_topic_stats", "args": (11, "group-1")}, refresh_result)
-        self.assertEqual({"called": "_fetch_more_comments_response", "args": (12, "group-1")}, comments_result)
+        self.assertEqual({"called": "fetch_more_comments", "args": (12, "group-1")}, comments_result)
         self.assertEqual({"called": "_delete_single_topic_response", "args": (13, 123)}, delete_result)
         self.assertEqual({"called": "fetch_single_topic", "args": ("123", 14, False)}, fetch_single_result)
         self.assertEqual({"called": "_get_group_tags_response", "args": ("123",)}, tags_result)
@@ -953,7 +1026,7 @@ class TopicRoutesHelperTests(unittest.TestCase):
             [
                 (topic_routes._clear_topic_database_response, ("group-1",)),
                 (topic_routes.refresh_topic_stats_workflow, (11, "group-1")),
-                (topic_routes._fetch_more_comments_response, (12, "group-1")),
+                (topic_routes.fetch_more_comments_workflow, (12, "group-1")),
                 (topic_routes._delete_single_topic_response, (13, 123)),
                 (topic_routes.fetch_single_topic_workflow, ("123", 14, False)),
                 (topic_routes._get_group_tags_response, ("123",)),
@@ -964,7 +1037,7 @@ class TopicRoutesHelperTests(unittest.TestCase):
         )
         self.assertEqual({"called": "_clear_topic_database_response", "args": ("group-1",)}, clear_result)
         self.assertEqual({"called": "refresh_topic_stats", "args": (11, "group-1")}, refresh_result)
-        self.assertEqual({"called": "_fetch_more_comments_response", "args": (12, "group-1")}, comments_result)
+        self.assertEqual({"called": "fetch_more_comments", "args": (12, "group-1")}, comments_result)
         self.assertEqual({"called": "_delete_single_topic_response", "args": (13, 123)}, delete_result)
         self.assertEqual({"called": "fetch_single_topic", "args": ("123", 14, False)}, fetch_single_result)
         self.assertEqual({"called": "_get_group_tags_response", "args": ("123",)}, tags_result)
@@ -984,6 +1057,20 @@ class TopicRoutesHelperTests(unittest.TestCase):
 
         self.assertEqual(400, ctx.exception.status_code)
         self.assertEqual("wrong group", ctx.exception.detail)
+
+    @unittest.skipUnless(HAS_TOPIC_ROUTE_DEPS, "topic route dependencies are not installed")
+    def test_more_comments_maps_workflow_error_to_http_exception(self):
+        from backend.routes import topic_routes
+
+        async def fake_to_thread(func, *args):
+            raise topic_routes.TopicWorkflowError(404, "missing topic")
+
+        with patch("backend.routes.topic_routes.asyncio.to_thread", side_effect=fake_to_thread):
+            with self.assertRaises(topic_routes.HTTPException) as ctx:
+                self._run_async(topic_routes._more_comments(12, "group-1"))
+
+        self.assertEqual(404, ctx.exception.status_code)
+        self.assertEqual("missing topic", ctx.exception.detail)
 
     @unittest.skipUnless(HAS_TOPIC_ROUTE_DEPS, "topic route dependencies are not installed")
     def test_fetched_single_topic_maps_workflow_error_to_http_exception(self):

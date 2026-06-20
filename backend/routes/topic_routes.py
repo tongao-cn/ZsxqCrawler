@@ -5,10 +5,10 @@ from typing import Optional
 
 from fastapi import APIRouter, HTTPException
 
-from backend.crawlers.official_topic_client import OfficialTopicClient
 from backend.services.topic_workflow_service import (
     TopicWorkflowError,
     _clear_group_topic_data,
+    fetch_more_comments as fetch_more_comments_workflow,
     fetch_single_topic as fetch_single_topic_workflow,
     refresh_topic_stats as refresh_topic_stats_workflow,
 )
@@ -43,52 +43,6 @@ def _rollback_topic_db(db) -> None:
 
 def _query_group_id(group_id: int | str) -> int | str:
     return int(group_id) if str(group_id).isdigit() else str(group_id)
-
-
-def _fetch_and_import_topic_comments(db, topic_id: int, comments_count: int, client: Optional[OfficialTopicClient] = None) -> int:
-    if comments_count <= 0:
-        return 0
-
-    try:
-        additional_comments = (client or OfficialTopicClient()).get_topic_comments(topic_id)
-        if additional_comments:
-            db.import_additional_comments(topic_id, additional_comments)
-            db.conn.commit()
-            return len(additional_comments)
-    except Exception as e:
-        _log_topic_event("WARN", f"单话题评论获取失败: {e}")
-
-    return 0
-
-
-def _should_fetch_more_comments(comments_count: int) -> bool:
-    return comments_count > 8
-
-
-def _build_fetch_comments_response(success: bool, message: str, comments_fetched: int) -> dict:
-    return {
-        "success": success,
-        "message": message,
-        "comments_fetched": comments_fetched,
-    }
-
-
-def _build_fetch_comments_skip_response(comments_count: int) -> dict:
-    return _build_fetch_comments_response(
-        True,
-        f"话题只有 {comments_count} 条评论，无需获取更多",
-        0,
-    )
-
-
-def _import_more_comments(db, topic_id: int, comments_count: int, client: Optional[OfficialTopicClient] = None) -> int:
-    additional_comments = (client or OfficialTopicClient()).get_topic_comments(topic_id)
-    if not additional_comments:
-        return 0
-
-    db.import_additional_comments(topic_id, additional_comments)
-    db.conn.commit()
-    return len(additional_comments)
 
 
 def _get_topics_response(page: int = 1, per_page: int = 20, search: Optional[str] = None) -> dict:
@@ -139,33 +93,6 @@ def _clear_topic_database_response(group_id: str) -> dict:
         _log_topic_event("WARN", f"清空图片缓存时出错: {cache_error}")
 
     return {"message": f"群组 {group_id} 的话题数据和图片缓存已删除", "deleted": deleted_counts}
-
-
-def _fetch_more_comments_response(topic_id: int, group_id: str) -> dict:
-    db = None
-    try:
-        db = ZSXQDatabase(group_id)
-        topic_detail = db.get_topic_detail(topic_id)
-        if not topic_detail:
-            raise HTTPException(status_code=404, detail="话题不存在")
-
-        comments_count = topic_detail.get("comments_count", 0)
-        if not _should_fetch_more_comments(comments_count):
-            return _build_fetch_comments_skip_response(comments_count)
-
-        try:
-            comments_fetched = _import_more_comments(db, topic_id, comments_count)
-            if comments_fetched:
-                return _build_fetch_comments_response(
-                    True,
-                    f"成功获取并导入 {comments_fetched} 条评论",
-                    comments_fetched,
-                )
-            return _build_fetch_comments_response(False, "获取评论失败，可能是权限限制或网络问题", 0)
-        except Exception as e:
-            return _build_fetch_comments_response(False, f"获取评论时出错: {str(e)}", 0)
-    finally:
-        _close_topic_db(db)
 
 
 def _delete_single_topic_response(topic_id: int, group_id: int) -> dict:
@@ -256,7 +183,10 @@ async def _refreshed_topic(topic_id: int, group_id: str) -> dict:
 
 
 async def _more_comments(topic_id: int, group_id: str) -> dict:
-    return await asyncio.to_thread(_fetch_more_comments_response, topic_id, group_id)
+    try:
+        return await asyncio.to_thread(fetch_more_comments_workflow, topic_id, group_id)
+    except TopicWorkflowError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail)
 
 
 async def _deleted_single_topic(topic_id: int, group_id: int) -> dict:

@@ -53,6 +53,26 @@ def _build_refresh_topic_success(topic_data: dict) -> dict:
     }
 
 
+def _should_fetch_more_comments(comments_count: int) -> bool:
+    return comments_count > 8
+
+
+def _build_fetch_comments_response(success: bool, message: str, comments_fetched: int) -> dict:
+    return {
+        "success": success,
+        "message": message,
+        "comments_fetched": comments_fetched,
+    }
+
+
+def _build_fetch_comments_skip_response(comments_count: int) -> dict:
+    return _build_fetch_comments_response(
+        True,
+        f"话题只有 {comments_count} 条评论，无需获取更多",
+        0,
+    )
+
+
 def _validate_topic_group(topic: dict, group_id: str) -> None:
     topic_group_id = str((topic.get("group") or {}).get("group_id", ""))
     if topic_group_id and topic_group_id != str(group_id):
@@ -98,6 +118,45 @@ def refresh_topic_stats(topic_id: int, group_id: str) -> dict:
     except Exception:
         _rollback_topic_db(db)
         raise
+    finally:
+        if db:
+            db.close()
+
+
+def _import_more_comments(db, topic_id: int, comments_count: int, client: Optional[OfficialTopicClient] = None) -> int:
+    additional_comments = (client or OfficialTopicClient()).get_topic_comments(topic_id)
+    if not additional_comments:
+        return 0
+
+    db.import_additional_comments(topic_id, additional_comments)
+    db.conn.commit()
+    return len(additional_comments)
+
+
+def fetch_more_comments(topic_id: int, group_id: str) -> dict:
+    db = None
+    try:
+        db = ZSXQDatabase(group_id)
+        topic_detail = db.get_topic_detail(topic_id)
+        if not topic_detail:
+            raise TopicWorkflowError(404, "话题不存在")
+
+        comments_count = topic_detail.get("comments_count", 0)
+        if not _should_fetch_more_comments(comments_count):
+            return _build_fetch_comments_skip_response(comments_count)
+
+        try:
+            comments_fetched = _import_more_comments(db, topic_id, comments_count)
+            if comments_fetched:
+                return _build_fetch_comments_response(
+                    True,
+                    f"成功获取并导入 {comments_fetched} 条评论",
+                    comments_fetched,
+                )
+            return _build_fetch_comments_response(False, "获取评论失败，可能是权限限制或网络问题", 0)
+        except Exception as exc:
+            _rollback_topic_db(db)
+            return _build_fetch_comments_response(False, f"获取评论时出错: {str(exc)}", 0)
     finally:
         if db:
             db.close()
