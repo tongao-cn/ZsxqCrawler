@@ -958,7 +958,7 @@ class StockTopicAnalysisServiceHelperTests(unittest.TestCase):
     def test_load_question_topic_payload_skips_database_without_topics(self):
         from backend.services.stock_topic_question_payload import load_question_topic_payload
 
-        with patch("backend.services.stock_topic_question_payload.connect") as connect:
+        with patch("backend.services.stock_topic_question_payload.load_question_topic_rows") as load_rows:
             result = load_question_topic_payload(
                 {"topics": []},
                 max_analysis_topics=30,
@@ -966,14 +966,12 @@ class StockTopicAnalysisServiceHelperTests(unittest.TestCase):
             )
 
         self.assertEqual([], result)
-        connect.assert_not_called()
+        load_rows.assert_not_called()
 
     def test_load_question_topic_payload_limits_topics_and_delegates_builder(self):
         from backend.services.stock_topic_question_payload import load_question_topic_payload
 
         rows = [{"topic_id": "101"}]
-        conn = Mock()
-        conn.execute.return_value.fetchall.return_value = rows
         search_result = {
             "group_id": "51111112855254",
             "keywords": ["固态电池"],
@@ -981,7 +979,7 @@ class StockTopicAnalysisServiceHelperTests(unittest.TestCase):
         }
 
         with (
-            patch("backend.services.stock_topic_question_payload.connect", return_value=conn),
+            patch("backend.services.stock_topic_question_payload.load_question_topic_rows", return_value=rows) as load_rows,
             patch(
                 "backend.services.stock_topic_question_payload.build_question_topic_payload",
                 return_value=[{"topic_id": "101"}],
@@ -994,11 +992,33 @@ class StockTopicAnalysisServiceHelperTests(unittest.TestCase):
             )
 
         self.assertEqual([{"topic_id": "101"}], result)
-        sql, params = conn.execute.call_args.args
+        load_rows.assert_called_once_with("51111112855254", ["101", "102"])
+        build_payload.assert_called_once_with(rows, keywords=["固态电池"], max_topic_text_chars=120)
+
+    def test_question_topic_rows_query_preserves_scope_and_placeholders(self):
+        from backend.services.stock_topic_analysis_store import question_topic_rows_query
+
+        sql, params = question_topic_rows_query(" 51111112855254 ", ["101", "102"])
+
         self.assertIn("FROM topics t", sql)
+        self.assertIn("t.group_id::text = ?", sql)
         self.assertIn("IN (?,?)", sql)
         self.assertEqual(["51111112855254", "101", "102"], params)
-        build_payload.assert_called_once_with(rows, keywords=["固态电池"], max_topic_text_chars=120)
+
+    def test_load_question_topic_rows_closes_connection(self):
+        from backend.services.stock_topic_analysis_store import load_question_topic_rows
+
+        rows = [{"topic_id": "101"}]
+        conn = Mock()
+        conn.execute.return_value.fetchall.return_value = rows
+
+        with patch("backend.services.stock_topic_analysis_store.connect", return_value=conn):
+            result = load_question_topic_rows("51111112855254", ["101", 102])
+
+        self.assertEqual(rows, result)
+        sql, params = conn.execute.call_args.args
+        self.assertIn("FROM topics t", sql)
+        self.assertEqual(["51111112855254", "101", "102"], params)
         conn.close.assert_called_once()
 
     @unittest.skipUnless(HAS_SERVICE_DEPS, "stock topic analysis service dependencies are not installed")

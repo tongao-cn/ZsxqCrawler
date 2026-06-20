@@ -6,6 +6,8 @@ import json
 from datetime import date
 from typing import Any, Dict, Iterable, List
 
+from backend.storage.db_compat import connect
+
 
 def _normalize_text(value: Any) -> str:
     return str(value or "").strip()
@@ -52,6 +54,45 @@ def parse_json_list(value: Any) -> List[str]:
 
 def serialize_json_list(values: Iterable[Any], *, max_tracked_topic_ids: int) -> str:
     return json.dumps(_ordered_unique(values, limit=max_tracked_topic_ids), ensure_ascii=False)
+
+
+def question_topic_rows_query(group_id: str, topic_ids: List[str]) -> tuple[str, List[Any]]:
+    placeholders = ",".join("?" for _ in topic_ids)
+    return (
+        f"""
+        SELECT
+            t.topic_id,
+            t.title,
+            t.create_time,
+            t.likes_count,
+            t.comments_count,
+            t.reading_count,
+            tk.text AS talk_text,
+            q.text AS question_text,
+            a.text AS answer_text
+        FROM topics t
+        LEFT JOIN talks tk ON t.topic_id = tk.topic_id
+        LEFT JOIN questions q ON t.topic_id = q.topic_id
+        LEFT JOIN answers a ON t.topic_id = a.topic_id
+        WHERE t.group_id::text = ?
+          AND t.topic_id::text IN ({placeholders})
+        ORDER BY t.create_time DESC
+        """,
+        [_normalize_text(group_id), *topic_ids],
+    )
+
+
+def load_question_topic_rows(group_id: str, topic_ids: Iterable[Any]) -> List[Any]:
+    normalized_topic_ids = [str(topic_id or "") for topic_id in topic_ids]
+    if not normalized_topic_ids:
+        return []
+
+    conn = connect()
+    try:
+        sql, params = question_topic_rows_query(_normalize_text(group_id), normalized_topic_ids)
+        return conn.execute(sql, params).fetchall()
+    finally:
+        conn.close()
 
 
 def load_stock_topic_processed_state_ids(
