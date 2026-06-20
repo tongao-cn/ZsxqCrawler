@@ -9,7 +9,7 @@ from typing import Any, Dict, Iterable, List
 from backend.services.daily_topic_analysis_topics import clip_text as _clip
 from backend.services.stock_topic_analysis_helpers import _build_stock_alias_terms
 from backend.services.stock_topic_analysis_payloads import require_topic_excerpt
-from backend.services.stock_topic_analysis_queries import build_question_topic_search_sql
+from backend.services.stock_topic_analysis_queries import build_question_topic_search_sql, build_topic_search_sql
 from backend.storage.db_compat import connect
 
 
@@ -137,6 +137,25 @@ def load_question_topic_search_rows(
         return conn.execute(sql, params).fetchall()
     finally:
         conn.close()
+
+
+def load_stock_topic_search_rows(
+    conn: Any,
+    group_id: str,
+    search_term: str,
+    *,
+    recent_cutoff: str,
+    max_candidate_topics: int,
+) -> List[Any]:
+    return conn.execute(
+        build_topic_search_sql(recent_cutoff=recent_cutoff),
+        (
+            f"%{search_term}%",
+            _normalize_text(group_id),
+            recent_cutoff,
+            max(1, int(max_candidate_topics)),
+        ),
+    ).fetchall()
 
 
 def _load_topic_excerpt_fallbacks(conn: Any, group_id: str, topic_ids: List[str], stock_name: str) -> Dict[str, str]:

@@ -1058,6 +1058,26 @@ class StockTopicAnalysisServiceHelperTests(unittest.TestCase):
         )
         conn.close.assert_called_once()
 
+    def test_load_stock_topic_search_rows_builds_scoped_query(self):
+        from backend.services.stock_topic_analysis_store import load_stock_topic_search_rows
+
+        conn = Mock()
+        conn.execute.return_value.fetchall.return_value = [{"topic_id": "101"}]
+
+        result = load_stock_topic_search_rows(
+            conn,
+            " 51111112855254 ",
+            "宁德时代",
+            recent_cutoff="2025-06-20",
+            max_candidate_topics=25,
+        )
+
+        self.assertEqual([{"topic_id": "101"}], result)
+        sql, params = conn.execute.call_args.args
+        self.assertIn("FROM zsxq_a_share_topic_stock_extractions e", sql)
+        self.assertIn("AND e.topic_date >=", sql)
+        self.assertEqual(("%宁德时代%", "51111112855254", "2025-06-20", 25), params)
+
     @unittest.skipUnless(HAS_SERVICE_DEPS, "stock topic analysis service dependencies are not installed")
     def test_get_latest_stock_topic_analyses_returns_missing_rows(self):
         from backend.services.stock_topic_analysis_service import get_latest_stock_topic_analyses

@@ -42,13 +42,13 @@ from backend.services.stock_topic_analysis_payloads import (
     build_stock_analysis_prompt,
     require_topic_excerpt,
 )
-from backend.services.stock_topic_analysis_queries import build_topic_search_sql
 from backend.services.stock_topic_analysis_store import (
     insert_stock_topic_analysis_version,
     load_latest_processed_topic_ids,
     load_question_topic_search_rows,
     load_saved_stock_topic_analysis,
     load_stock_topic_processed_state_ids,
+    load_stock_topic_search_rows,
     upsert_stock_topic_analysis,
     upsert_stock_topic_processed_states,
 )
@@ -253,10 +253,6 @@ def _upsert_stock_topic_processed_states(
     )
 
 
-def _build_topic_search_sql(*, recent_cutoff: str | None = None) -> str:
-    return build_topic_search_sql(recent_cutoff=recent_cutoff)
-
-
 def _load_recommendation_counts(conn: Any, group_id: str, names: List[str]) -> Tuple[int, Dict[str, int]]:
     names = _ordered_unique([name for name in names if name], limit=10)
     if not names:
@@ -360,16 +356,18 @@ def search_stock_topics(group_id: str, stock_name: str, *, limit: int | None = N
     group_id_text = _normalize_text(group_id)
     alias_terms = _build_stock_alias_terms(stock_name)
     search_term = alias_terms[0] if alias_terms else query
-    like = f"%{search_term}%"
     recent_cutoff = _recent_topic_cutoff_text()
     conn = connect()
     try:
         processed_topic_ids = _load_latest_processed_topic_ids(conn, group_id_text, query)
         processed_topic_id_set = set(processed_topic_ids)
-        rows = conn.execute(
-            _build_topic_search_sql(recent_cutoff=recent_cutoff),
-            (like, group_id_text, recent_cutoff, MAX_SEARCH_CANDIDATE_TOPICS),
-        ).fetchall()
+        rows = load_stock_topic_search_rows(
+            conn,
+            group_id_text,
+            search_term,
+            recent_cutoff=recent_cutoff,
+            max_candidate_topics=MAX_SEARCH_CANDIDATE_TOPICS,
+        )
         if not rows:
             empty_result = _empty_search_result(group_id_text, query)
             empty_result["processed_topic_ids"] = processed_topic_ids
