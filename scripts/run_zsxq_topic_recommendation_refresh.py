@@ -11,26 +11,22 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
-from fastapi import BackgroundTasks, HTTPException
-
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from backend.routes.a_share_routes import (
-    AShareAnalysisExportTdxRequest,
-    AShareAnalysisRunRequest,
-    export_a_share_analysis_to_tdx,
-    start_a_share_analysis,
-)
-from backend.routes.crawl_routes import crawl_latest_until_complete
-from backend.routes.daily_analysis_routes import DailyAnalysisRequest, create_daily_report
-from backend.routes.daily_stock_concept_routes import DailyStockConceptRequest, create_daily_stock_concepts
 from backend.schemas.crawl import CrawlSettingsRequest
 from backend.services.a_share_analysis_service import build_chart_payload, normalize_group_id
 from backend.services.a_share_research_return_smoke_service import load_knowaction_trade_dates
 from backend.services.task_runtime import get_task_logs_state, get_task_state, request_runtime_shutdown
 from backend.services.tdx_a_share_export_service import DEFAULT_TDX_EXPORT_SPECS
+from backend.services.workflow_task_launch import (
+    create_a_share_analysis_task,
+    create_daily_stock_concept_task,
+    create_daily_topic_analysis_task,
+    export_a_share_analysis_to_tdx,
+    launch_latest_crawl_task,
+)
 
 
 TERMINAL_STATUSES = {"completed", "failed", "cancelled"}
@@ -152,7 +148,7 @@ def _wait_task(task_id: str, *, poll_seconds: float, timeout_seconds: int, log_t
 
 
 async def _create_crawl_task(group_id: str) -> str:
-    response = await crawl_latest_until_complete(
+    response = launch_latest_crawl_task(
         group_id,
         CrawlSettingsRequest(
             topicSource="official",
@@ -162,41 +158,27 @@ async def _create_crawl_task(group_id: str) -> str:
             longSleepIntervalMax=300,
             pagesPerBatch=15,
         ),
-        BackgroundTasks(),
     )
     return response["task_id"]
 
 
 async def _create_a_share_task(group_id: str, days: int, concurrency: int) -> str:
-    response = await start_a_share_analysis(
-        AShareAnalysisRunRequest(group_id=group_id, days=days, concurrency=concurrency),
-        BackgroundTasks(),
-    )
+    response = create_a_share_analysis_task(group_id=group_id, days=days, concurrency=concurrency)
     return response["task_id"]
 
 
 async def _create_daily_stock_concept_task(group_id: str, comments_per_topic: int) -> str:
-    response = await create_daily_stock_concepts(
-        group_id,
-        DailyStockConceptRequest(commentsPerTopic=comments_per_topic),
-        BackgroundTasks(),
-    )
+    response = create_daily_stock_concept_task(group_id, comments_per_topic=comments_per_topic)
     return response["task_id"]
 
 
 async def _create_daily_topic_report_task(group_id: str, comments_per_topic: int) -> str:
-    response = await create_daily_report(
-        group_id,
-        DailyAnalysisRequest(commentsPerTopic=comments_per_topic),
-        BackgroundTasks(),
-    )
+    response = create_daily_topic_analysis_task(group_id, comments_per_topic=comments_per_topic)
     return response["task_id"]
 
 
 async def _export_tdx(group_id: str, group_name: str | None) -> dict[str, Any]:
-    return await export_a_share_analysis_to_tdx(
-        AShareAnalysisExportTdxRequest(group_id=group_id, group_name=group_name)
-    )
+    return await export_a_share_analysis_to_tdx(group_id=group_id, group_name=group_name)
 
 
 def _build_tdx_preview(group_id: str, group_name: str | None) -> dict[str, Any]:
@@ -543,9 +525,6 @@ def main() -> None:
 
     try:
         asyncio.run(_run(args))
-    except HTTPException as exc:
-        _safe_print(f"HTTP {exc.status_code}: {exc.detail}", file=sys.stderr)
-        sys.exit(1)
     except KeyboardInterrupt:
         request_runtime_shutdown()
         raise

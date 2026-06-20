@@ -10,13 +10,10 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
-from fastapi import BackgroundTasks, HTTPException
-
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from backend.routes.crawl_routes import crawl_latest_until_complete
 from backend.schemas.crawl import CrawlSettingsRequest
 from backend.services.daily_review_topic_export_service import (
     DEFAULT_GROUP_IDS,
@@ -28,6 +25,7 @@ from backend.services.daily_review_topic_export_service import (
     write_review_topic_export,
 )
 from backend.services.task_runtime import get_task_logs_state, get_task_state, request_runtime_shutdown
+from backend.services.workflow_task_launch import launch_or_reuse_latest_crawl_task
 
 
 TERMINAL_STATUSES = {"completed", "failed", "cancelled"}
@@ -95,32 +93,25 @@ def _wait_task(task_id: str, *, poll_seconds: float, timeout_seconds: int, log_t
         time.sleep(poll_seconds)
 
 
-async def _create_or_reuse_crawl_task(group_id: str) -> tuple[str, str]:
-    try:
-        response = await crawl_latest_until_complete(
-            group_id,
-            CrawlSettingsRequest(
-                topicSource="official",
-                crawlIntervalMin=2,
-                crawlIntervalMax=5,
-                longSleepIntervalMin=180,
-                longSleepIntervalMax=300,
-                pagesPerBatch=15,
-            ),
-            BackgroundTasks(),
-        )
-        return response["task_id"], "created"
-    except HTTPException as exc:
-        detail = exc.detail
-        if exc.status_code == 409 and isinstance(detail, dict) and detail.get("task_id"):
-            return str(detail["task_id"]), "existing"
-        raise
+def _create_or_reuse_crawl_task(group_id: str) -> tuple[str, str]:
+    response, source = launch_or_reuse_latest_crawl_task(
+        group_id,
+        CrawlSettingsRequest(
+            topicSource="official",
+            crawlIntervalMin=2,
+            crawlIntervalMax=5,
+            longSleepIntervalMin=180,
+            longSleepIntervalMax=300,
+            pagesPerBatch=15,
+        ),
+    )
+    return response["task_id"], source
 
 
 async def _pull_latest_topics(group_ids: list[str], args: argparse.Namespace) -> list[dict[str, Any]]:
     crawl_results: list[dict[str, Any]] = []
     for group_id in group_ids:
-        task_id, source = await _create_or_reuse_crawl_task(group_id)
+        task_id, source = _create_or_reuse_crawl_task(group_id)
         _safe_print(f"crawl_group={group_id}, task_id={task_id}, source={source}")
         task = _wait_task(
             task_id,
@@ -236,9 +227,6 @@ def main(argv: list[str] | None = None) -> None:
     args = parser.parse_args(argv)
     try:
         payload = asyncio.run(_run(args))
-    except HTTPException as exc:
-        _safe_print(f"HTTP {exc.status_code}: {exc.detail}", file=sys.stderr)
-        sys.exit(1)
     except KeyboardInterrupt:
         request_runtime_shutdown()
         raise

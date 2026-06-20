@@ -110,3 +110,4 @@ uv run python -m unittest discover -s tests
 - 2026-06-20：完成 P2。新增 `file_download_transfer.write_download_response_body_stream`，将下载响应体流式写入、进度回调和停止检查从 `ZSXQFileDownloader` 中抽到 transfer helper；下载器保留兼容入口；`FileDownloaderDownloadTests` 通过。
 - 2026-06-20：完成 P3。新增 `backend/services/topic_material.py`，集中每日 topic material 日期解析、连接、读取和 prompt payload；每日股票概念改依赖该接口；个股话题 payload/服务改直接依赖底层 `clip_text`，不再 import 每日话题 service 私有 wrapper；focused material/stock tests 通过。
 - 2026-06-20：完成 P4。新增 `frontend/src/hooks/useTaskLauncher.ts`，集中 task 创建成功 toast/callback 和 task 冲突错误处理；迁移 crawl/download action hooks；`npm --prefix frontend run build` 通过。
+- 2026-06-20：完成 P5。新增 `backend/services/workflow_task_launch.py`，脚本改通过 service-level task launch/orchestration 启动 crawl、A 股分析、每日股票概念、每日话题报告和 TDX 导出；两个脚本不再依赖 `backend.routes.*` 或 FastAPI `BackgroundTasks`；新增 `tests/test_workflow_task_launch.py`，P5 focused tests 通过。
