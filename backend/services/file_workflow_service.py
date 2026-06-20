@@ -56,7 +56,6 @@ from backend.services.file_topic_sync_workflow import (
 )
 from backend.services.task_launch import (
     TaskLaunchRecipe,
-    launch_ingestion_task,
     launch_task,
     launch_task_recipe,
 )
@@ -127,37 +126,41 @@ def _enqueue_file_task(
 
 
 def create_file_collect_task(group_id: str, request: Any) -> Dict[str, str]:
-    return launch_ingestion_task(
-        "collect_files",
-        "收集文件列表",
-        run_collect_files_task,
-        group_id,
-        group_id,
-        request,
-        prepend_group_id_to_args=False,
+    return launch_task_recipe(
+        TaskLaunchRecipe.ingestion(
+            "collect_files",
+            "收集文件列表",
+            run_collect_files_task,
+            group_id,
+            group_id,
+            request,
+            prepend_group_id_to_args=False,
+        )
     )
 
 
 def create_file_download_task(group_id: str, request: Any) -> Dict[str, str]:
-    return launch_ingestion_task(
-        "download_files",
-        f"下载文件 (排序: {request.sort_by})",
-        run_file_download_task,
-        group_id,
-        group_id,
-        request.max_files,
-        request.sort_by,
-        request.start_time,
-        request.end_time,
-        request.last_days,
-        request.download_interval,
-        request.long_sleep_interval,
-        request.files_per_batch,
-        request.download_interval_min,
-        request.download_interval_max,
-        request.long_sleep_interval_min,
-        request.long_sleep_interval_max,
-        prepend_group_id_to_args=False,
+    return launch_task_recipe(
+        TaskLaunchRecipe.ingestion(
+            "download_files",
+            f"下载文件 (排序: {request.sort_by})",
+            run_file_download_task,
+            group_id,
+            group_id,
+            request.max_files,
+            request.sort_by,
+            request.start_time,
+            request.end_time,
+            request.last_days,
+            request.download_interval,
+            request.long_sleep_interval,
+            request.files_per_batch,
+            request.download_interval_min,
+            request.download_interval_max,
+            request.long_sleep_interval_min,
+            request.long_sleep_interval_max,
+            prepend_group_id_to_args=False,
+        )
     )
 
 
@@ -167,45 +170,51 @@ def create_single_file_download_task(
     file_name: Optional[str] = None,
     file_size: Optional[int] = None,
 ) -> Dict[str, str]:
-    return launch_ingestion_task(
-        "download_single_file",
-        f"下载单个文件 (ID: {file_id})",
-        run_single_file_download_task_with_info,
-        group_id,
-        group_id,
-        file_id,
-        file_name,
-        file_size,
-        message="单个文件下载任务已创建",
-        prepend_group_id_to_args=False,
+    return launch_task_recipe(
+        TaskLaunchRecipe.ingestion(
+            "download_single_file",
+            f"下载单个文件 (ID: {file_id})",
+            run_single_file_download_task_with_info,
+            group_id,
+            group_id,
+            file_id,
+            file_name,
+            file_size,
+            message="单个文件下载任务已创建",
+            prepend_group_id_to_args=False,
+        )
     )
 
 
 def create_selected_file_download_task(group_id: str, request: Any) -> Dict[str, str]:
-    return launch_ingestion_task(
-        "download_selected_files",
-        f"下载选中文件 ({len(request.file_ids)} 个)",
-        run_selected_file_download_task,
-        group_id,
-        group_id,
-        request.file_ids,
-        message="选中文件下载任务已创建",
-        prepend_group_id_to_args=False,
+    return launch_task_recipe(
+        TaskLaunchRecipe.ingestion(
+            "download_selected_files",
+            f"下载选中文件 ({len(request.file_ids)} 个)",
+            run_selected_file_download_task,
+            group_id,
+            group_id,
+            request.file_ids,
+            message="选中文件下载任务已创建",
+            prepend_group_id_to_args=False,
+        )
     )
 
 
 def create_filtered_file_download_task(group_id: str, request: Any) -> Dict[str, str]:
-    return launch_ingestion_task(
-        "download_filtered_files",
-        "下载筛选结果",
-        run_filtered_file_download_task,
-        group_id,
-        group_id,
-        request.status,
-        request.search,
-        request.max_files,
-        message="筛选结果下载任务已创建",
-        prepend_group_id_to_args=False,
+    return launch_task_recipe(
+        TaskLaunchRecipe.ingestion(
+            "download_filtered_files",
+            "下载筛选结果",
+            run_filtered_file_download_task,
+            group_id,
+            group_id,
+            request.status,
+            request.search,
+            request.max_files,
+            message="筛选结果下载任务已创建",
+            prepend_group_id_to_args=False,
+        )
     )
 
 
@@ -236,14 +245,16 @@ def create_selected_file_ai_analysis_task(group_id: str, request: Any) -> Dict[s
 
 
 def create_sync_files_from_topics_task(group_id: str) -> Dict[str, str]:
-    return launch_ingestion_task(
-        "sync_files_from_topics",
-        f"从话题同步文件记录 (群组: {group_id})",
-        run_sync_files_from_topics_task,
-        group_id,
-        group_id,
-        message="从话题同步文件记录任务已创建",
-        prepend_group_id_to_args=False,
+    return launch_task_recipe(
+        TaskLaunchRecipe.ingestion(
+            "sync_files_from_topics",
+            f"从话题同步文件记录 (群组: {group_id})",
+            run_sync_files_from_topics_task,
+            group_id,
+            group_id,
+            message="从话题同步文件记录任务已创建",
+            prepend_group_id_to_args=False,
+        )
     )
 
 

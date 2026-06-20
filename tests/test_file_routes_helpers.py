@@ -279,20 +279,19 @@ class FileRoutesHelperTests(unittest.TestCase):
 
     def test_create_file_collect_task_uses_ingestion_launch_recipe(self):
         with patch(
-            "backend.services.file_workflow_service.launch_ingestion_task",
+            "backend.services.file_workflow_service.launch_task_recipe",
             return_value={"task_id": "task-1", "message": "任务已创建，正在后台执行"},
         ) as launch:
             response = create_file_collect_task("group-1", "request")
 
-        launch.assert_called_once_with(
-            "collect_files",
-            "收集文件列表",
-            run_collect_files_task,
-            "group-1",
-            "group-1",
-            "request",
-            prepend_group_id_to_args=False,
-        )
+        launch.assert_called_once()
+        recipe = launch.call_args.args[0]
+        self.assertEqual("collect_files", recipe.task_type)
+        self.assertEqual("收集文件列表", recipe.description)
+        self.assertEqual(run_collect_files_task, recipe.task_func)
+        self.assertEqual("group-1", recipe.ingestion_group_id)
+        self.assertEqual(("group-1", "request"), recipe.args)
+        self.assertFalse(recipe.prepend_group_id_to_args)
         self.assertEqual({"task_id": "task-1", "message": "任务已创建，正在后台执行"}, response)
 
     def test_create_file_download_task_uses_ingestion_launch_recipe(self):
@@ -314,52 +313,54 @@ class FileRoutesHelperTests(unittest.TestCase):
         )
 
         with patch(
-            "backend.services.file_workflow_service.launch_ingestion_task",
+            "backend.services.file_workflow_service.launch_task_recipe",
             return_value={"task_id": "task-1", "message": "任务已创建，正在后台执行"},
         ) as launch:
             response = create_file_download_task("group-1", request)
 
-        launch.assert_called_once_with(
-            "download_files",
-            "下载文件 (排序: time)",
-            run_file_download_task,
-            "group-1",
-            "group-1",
-            12,
-            "time",
-            "2026-06-01",
-            "2026-06-02",
-            7,
-            2.5,
-            30.0,
-            5,
-            1.0,
-            3.0,
-            10.0,
-            60.0,
-            prepend_group_id_to_args=False,
+        launch.assert_called_once()
+        recipe = launch.call_args.args[0]
+        self.assertEqual("download_files", recipe.task_type)
+        self.assertEqual("下载文件 (排序: time)", recipe.description)
+        self.assertEqual(run_file_download_task, recipe.task_func)
+        self.assertEqual("group-1", recipe.ingestion_group_id)
+        self.assertEqual(
+            (
+                "group-1",
+                12,
+                "time",
+                "2026-06-01",
+                "2026-06-02",
+                7,
+                2.5,
+                30.0,
+                5,
+                1.0,
+                3.0,
+                10.0,
+                60.0,
+            ),
+            recipe.args,
         )
+        self.assertFalse(recipe.prepend_group_id_to_args)
         self.assertEqual({"task_id": "task-1", "message": "任务已创建，正在后台执行"}, response)
 
     def test_create_single_file_download_task_uses_ingestion_launch_recipe(self):
         with patch(
-            "backend.services.file_workflow_service.launch_ingestion_task",
+            "backend.services.file_workflow_service.launch_task_recipe",
             return_value={"task_id": "task-1", "message": "单个文件下载任务已创建"},
         ) as launch:
             response = create_single_file_download_task("group-1", 123, "file.pdf", 456)
 
-        launch.assert_called_once_with(
-            "download_single_file",
-            "下载单个文件 (ID: 123)",
-            run_single_file_download_task_with_info,
-            "group-1",
-            "group-1",
-            123,
-            "file.pdf",
-            456,
-            message="单个文件下载任务已创建",
-            prepend_group_id_to_args=False,
-        )
+        launch.assert_called_once()
+        recipe = launch.call_args.args[0]
+        self.assertEqual("download_single_file", recipe.task_type)
+        self.assertEqual("下载单个文件 (ID: 123)", recipe.description)
+        self.assertEqual(run_single_file_download_task_with_info, recipe.task_func)
+        self.assertEqual("group-1", recipe.ingestion_group_id)
+        self.assertEqual(("group-1", 123, "file.pdf", 456), recipe.args)
+        self.assertEqual("单个文件下载任务已创建", recipe.message)
+        self.assertFalse(recipe.prepend_group_id_to_args)
         self.assertEqual({"task_id": "task-1", "message": "单个文件下载任务已创建"}, response)
 
     def test_create_selected_file_download_task_uses_ingestion_launch_recipe(self):
@@ -368,21 +369,20 @@ class FileRoutesHelperTests(unittest.TestCase):
         request = FileIdListRequest(file_ids=[123, 456])
 
         with patch(
-            "backend.services.file_workflow_service.launch_ingestion_task",
+            "backend.services.file_workflow_service.launch_task_recipe",
             return_value={"task_id": "task-1", "message": "选中文件下载任务已创建"},
         ) as launch:
             response = create_selected_file_download_task("group-1", request)
 
-        launch.assert_called_once_with(
-            "download_selected_files",
-            "下载选中文件 (2 个)",
-            run_selected_file_download_task,
-            "group-1",
-            "group-1",
-            [123, 456],
-            message="选中文件下载任务已创建",
-            prepend_group_id_to_args=False,
-        )
+        launch.assert_called_once()
+        recipe = launch.call_args.args[0]
+        self.assertEqual("download_selected_files", recipe.task_type)
+        self.assertEqual("下载选中文件 (2 个)", recipe.description)
+        self.assertEqual(run_selected_file_download_task, recipe.task_func)
+        self.assertEqual("group-1", recipe.ingestion_group_id)
+        self.assertEqual(("group-1", [123, 456]), recipe.args)
+        self.assertEqual("选中文件下载任务已创建", recipe.message)
+        self.assertFalse(recipe.prepend_group_id_to_args)
         self.assertEqual({"task_id": "task-1", "message": "选中文件下载任务已创建"}, response)
 
     def test_create_filtered_file_download_task_uses_ingestion_launch_recipe(self):
@@ -391,23 +391,20 @@ class FileRoutesHelperTests(unittest.TestCase):
         request = FileFilteredDownloadRequest(status="failed", search="pdf", max_files=20)
 
         with patch(
-            "backend.services.file_workflow_service.launch_ingestion_task",
+            "backend.services.file_workflow_service.launch_task_recipe",
             return_value={"task_id": "task-1", "message": "筛选结果下载任务已创建"},
         ) as launch:
             response = create_filtered_file_download_task("group-1", request)
 
-        launch.assert_called_once_with(
-            "download_filtered_files",
-            "下载筛选结果",
-            run_filtered_file_download_task,
-            "group-1",
-            "group-1",
-            "failed",
-            "pdf",
-            20,
-            message="筛选结果下载任务已创建",
-            prepend_group_id_to_args=False,
-        )
+        launch.assert_called_once()
+        recipe = launch.call_args.args[0]
+        self.assertEqual("download_filtered_files", recipe.task_type)
+        self.assertEqual("下载筛选结果", recipe.description)
+        self.assertEqual(run_filtered_file_download_task, recipe.task_func)
+        self.assertEqual("group-1", recipe.ingestion_group_id)
+        self.assertEqual(("group-1", "failed", "pdf", 20), recipe.args)
+        self.assertEqual("筛选结果下载任务已创建", recipe.message)
+        self.assertFalse(recipe.prepend_group_id_to_args)
         self.assertEqual({"task_id": "task-1", "message": "筛选结果下载任务已创建"}, response)
 
     def test_create_file_ai_analysis_task_uses_group_metadata_launch_recipe(self):
@@ -454,20 +451,20 @@ class FileRoutesHelperTests(unittest.TestCase):
 
     def test_create_sync_files_from_topics_task_uses_ingestion_launch_recipe(self):
         with patch(
-            "backend.services.file_workflow_service.launch_ingestion_task",
+            "backend.services.file_workflow_service.launch_task_recipe",
             return_value={"task_id": "task-1", "message": "从话题同步文件记录任务已创建"},
         ) as launch:
             response = create_sync_files_from_topics_task("group-1")
 
-        launch.assert_called_once_with(
-            "sync_files_from_topics",
-            "从话题同步文件记录 (群组: group-1)",
-            run_sync_files_from_topics_task,
-            "group-1",
-            "group-1",
-            message="从话题同步文件记录任务已创建",
-            prepend_group_id_to_args=False,
-        )
+        launch.assert_called_once()
+        recipe = launch.call_args.args[0]
+        self.assertEqual("sync_files_from_topics", recipe.task_type)
+        self.assertEqual("从话题同步文件记录 (群组: group-1)", recipe.description)
+        self.assertEqual(run_sync_files_from_topics_task, recipe.task_func)
+        self.assertEqual("group-1", recipe.ingestion_group_id)
+        self.assertEqual(("group-1",), recipe.args)
+        self.assertEqual("从话题同步文件记录任务已创建", recipe.message)
+        self.assertFalse(recipe.prepend_group_id_to_args)
         self.assertEqual({"task_id": "task-1", "message": "从话题同步文件记录任务已创建"}, response)
 
     def test_enqueue_file_task_can_attach_group_metadata(self):
