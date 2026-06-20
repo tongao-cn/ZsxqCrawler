@@ -7,8 +7,6 @@ import requests
 from fastapi import APIRouter, BackgroundTasks, HTTPException
 from pydantic import BaseModel, Field
 
-from backend.core.ai_provider_config import has_openai_api_key
-from backend.services.a_share_analysis_db_storage import get_storage_health
 from backend.services.a_share_analysis_service import (
     DEFAULT_API_BASE as A_SHARE_DEFAULT_API_BASE,
     DEFAULT_CONCURRENCY as A_SHARE_DEFAULT_CONCURRENCY,
@@ -17,13 +15,11 @@ from backend.services.a_share_analysis_service import (
     DEFAULT_RANKING_WINDOWS as A_SHARE_DEFAULT_RANKING_WINDOWS,
     DEFAULT_WIRE_API as A_SHARE_DEFAULT_WIRE_API,
     build_chart_payload,
-    get_analysis_summary,
     normalize_group_id,
     reset_analysis_range,
 )
-from backend.services.tdx_a_share_export_service import get_latest_tdx_export
+from backend.services.a_share_analysis_status_service import get_a_share_analysis_status_payload
 from backend.services.task_launch import TASK_CREATED_MESSAGE as _TASK_CREATED_MESSAGE
-from backend.services.task_runtime import get_latest_task_by_type
 from backend.services.workflow_task_launch import (
     A_SHARE_MISSING_API_KEY_MESSAGE,
     create_a_share_analysis_task,
@@ -70,18 +66,6 @@ class AShareAnalysisExportTdxRequest(BaseModel):
     end_date: Optional[str] = Field(default=None, description="图表筛选结束日期 YYYY-MM-DD")
 
 
-def _analysis_defaults_payload() -> dict:
-    return {
-        "days": 21,
-        "concurrency": A_SHARE_DEFAULT_CONCURRENCY,
-        "model": A_SHARE_DEFAULT_MODEL,
-        "api_base": A_SHARE_DEFAULT_API_BASE,
-        "wire_api": A_SHARE_DEFAULT_WIRE_API,
-        "reasoning_effort": A_SHARE_DEFAULT_REASONING_EFFORT,
-        "ranking_windows": list(A_SHARE_DEFAULT_RANKING_WINDOWS),
-    }
-
-
 def _bounded_chart_top_n(top_n: int) -> int:
     return max(1, min(top_n, 100))
 
@@ -104,67 +88,6 @@ def _create_a_share_analysis_task_response(request: AShareAnalysisRunRequest) ->
         reset_start_date=request.reset_start_date,
         reset_end_date=request.reset_end_date,
     )
-
-
-def _a_share_file_fallback_storage_status(summary: dict, storage_error: Exception) -> dict:
-    return {
-        "enabled": False,
-        "mode": "file_fallback",
-        "label": f"本地文件降级（PostgreSQL 不可用: {storage_error}）",
-        "daily_rows": summary.get("rows_count") or 0,
-        "processed_rows": summary.get("processed_items") or 0,
-    }
-
-
-async def _a_share_storage_status(summary: dict, normalized_group_id: Optional[str]) -> dict:
-    try:
-        return await asyncio.to_thread(get_storage_health, group_id=normalized_group_id)
-    except Exception as storage_error:
-        return _a_share_file_fallback_storage_status(summary, storage_error)
-
-
-async def _latest_a_share_tdx_export(normalized_group_id: Optional[str]) -> Optional[dict]:
-    try:
-        return await asyncio.to_thread(get_latest_tdx_export, normalized_group_id)
-    except Exception:
-        return None
-
-
-async def _a_share_analysis_summary(normalized_group_id: Optional[str]) -> dict:
-    return await asyncio.to_thread(get_analysis_summary, group_id=normalized_group_id)
-
-
-def _a_share_status_tasks(normalized_group_id: Optional[str]) -> tuple[Optional[dict], Optional[dict]]:
-    latest_task = get_latest_task_by_type(
-        "a_share_analysis",
-        group_id=normalized_group_id,
-    )
-    running_task = get_latest_task_by_type(
-        "a_share_analysis",
-        status="running",
-        group_id=normalized_group_id,
-    )
-    return latest_task, running_task
-
-
-def _a_share_status_payload(
-    normalized_group_id: Optional[str],
-    summary: dict,
-    latest_task: Optional[dict],
-    running_task: Optional[dict],
-    storage: dict,
-    latest_tdx_export: Optional[dict],
-) -> dict:
-    return {
-        "summary": summary,
-        "group_id": normalized_group_id,
-        "defaults": _analysis_defaults_payload(),
-        "api_key_configured": has_openai_api_key(),
-        "latest_task": latest_task,
-        "running_task": running_task,
-        "storage": storage,
-        "latest_tdx_export": latest_tdx_export,
-    }
 
 
 async def _a_share_chart_payload(
@@ -205,21 +128,7 @@ async def _export_a_share_analysis_to_tdx(request: AShareAnalysisExportTdxReques
 async def get_a_share_analysis_status(group_id: Optional[str] = None):
     """获取A股分析状态和文件摘要"""
     try:
-        normalized_group_id = normalize_group_id(group_id)
-        summary = await _a_share_analysis_summary(normalized_group_id)
-        latest_task, running_task = _a_share_status_tasks(normalized_group_id)
-        storage = await _a_share_storage_status(summary, normalized_group_id)
-
-        latest_tdx_export = await _latest_a_share_tdx_export(normalized_group_id)
-
-        return _a_share_status_payload(
-            normalized_group_id,
-            summary,
-            latest_task,
-            running_task,
-            storage,
-            latest_tdx_export,
-        )
+        return await get_a_share_analysis_status_payload(group_id)
     except Exception as e:
         raise _a_share_route_error("获取A股分析状态失败", e)
 

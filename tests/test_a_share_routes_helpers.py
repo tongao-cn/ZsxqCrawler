@@ -98,23 +98,6 @@ class AShareRoutesHelperTests(unittest.TestCase):
         self.assertEqual("创建A股分析任务失败: boom", raised.exception.detail)
 
     @unittest.skipUnless(HAS_A_SHARE_ROUTE_DEPS, "a-share route dependencies are not installed")
-    def test_analysis_defaults_payload_matches_endpoint_shape(self):
-        from backend.routes import a_share_routes
-
-        self.assertEqual(
-            {
-                "days": 21,
-                "concurrency": a_share_routes.A_SHARE_DEFAULT_CONCURRENCY,
-                "model": a_share_routes.A_SHARE_DEFAULT_MODEL,
-                "api_base": a_share_routes.A_SHARE_DEFAULT_API_BASE,
-                "wire_api": a_share_routes.A_SHARE_DEFAULT_WIRE_API,
-                "reasoning_effort": a_share_routes.A_SHARE_DEFAULT_REASONING_EFFORT,
-                "ranking_windows": list(a_share_routes.A_SHARE_DEFAULT_RANKING_WINDOWS),
-            },
-            a_share_routes._analysis_defaults_payload(),
-        )
-
-    @unittest.skipUnless(HAS_A_SHARE_ROUTE_DEPS, "a-share route dependencies are not installed")
     def test_bounded_chart_top_n_clamps_to_existing_range(self):
         from backend.routes.a_share_routes import _bounded_chart_top_n
 
@@ -123,44 +106,33 @@ class AShareRoutesHelperTests(unittest.TestCase):
         self.assertEqual(100, _bounded_chart_top_n(999))
 
     @unittest.skipUnless(HAS_A_SHARE_ROUTE_DEPS, "a-share route dependencies are not installed")
-    def test_get_a_share_analysis_status_preserves_success_payload_shape(self):
+    def test_get_a_share_analysis_status_delegates_to_status_service(self):
         import asyncio
 
         from backend.routes import a_share_routes
 
-        summary = {"rows_count": 7, "processed_items": 5}
-        latest_task = {"id": "latest"}
-        running_task = {"id": "running"}
-        storage = {"enabled": True, "mode": "postgres"}
-        latest_export = {"total_written": 3}
+        payload = {"summary": {"rows_count": 7}}
 
-        with (
-            patch.object(a_share_routes, "get_analysis_summary", return_value=summary) as get_summary,
-            patch.object(a_share_routes, "_a_share_status_tasks", return_value=(latest_task, running_task)) as get_tasks,
-            patch.object(a_share_routes, "_a_share_storage_status", return_value=storage) as get_storage_status,
-            patch.object(a_share_routes, "_latest_a_share_tdx_export", return_value=latest_export) as get_latest_export,
-            patch.object(a_share_routes, "has_openai_api_key", return_value=True) as has_api_key,
-        ):
+        with patch.object(a_share_routes, "get_a_share_analysis_status_payload", return_value=payload) as get_status:
             result = asyncio.run(a_share_routes.get_a_share_analysis_status(" 51111112855254 "))
 
-        self.assertEqual(
-            {
-                "summary": summary,
-                "group_id": "51111112855254",
-                "defaults": a_share_routes._analysis_defaults_payload(),
-                "api_key_configured": True,
-                "latest_task": latest_task,
-                "running_task": running_task,
-                "storage": storage,
-                "latest_tdx_export": latest_export,
-            },
-            result,
-        )
-        get_summary.assert_called_once_with(group_id="51111112855254")
-        get_tasks.assert_called_once_with("51111112855254")
-        get_storage_status.assert_awaited_once_with(summary, "51111112855254")
-        get_latest_export.assert_awaited_once_with("51111112855254")
-        has_api_key.assert_called_once_with()
+        self.assertEqual(payload, result)
+        get_status.assert_awaited_once_with(" 51111112855254 ")
+
+    @unittest.skipUnless(HAS_A_SHARE_ROUTE_DEPS, "a-share route dependencies are not installed")
+    def test_get_a_share_analysis_status_preserves_wrapped_unexpected_error(self):
+        import asyncio
+
+        from fastapi import HTTPException
+
+        from backend.routes import a_share_routes
+
+        with patch.object(a_share_routes, "get_a_share_analysis_status_payload", side_effect=RuntimeError("boom")):
+            with self.assertRaises(HTTPException) as raised:
+                asyncio.run(a_share_routes.get_a_share_analysis_status("51111112855254"))
+
+        self.assertEqual(500, raised.exception.status_code)
+        self.assertEqual("获取A股分析状态失败: boom", raised.exception.detail)
 
     @unittest.skipUnless(HAS_A_SHARE_ROUTE_DEPS, "a-share route dependencies are not installed")
     def test_a_share_chart_payload_preserves_service_arguments(self):
