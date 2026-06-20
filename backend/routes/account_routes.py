@@ -7,16 +7,19 @@ import requests
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
-from backend.core.account_context import (
-    clear_account_detect_cache,
-    get_account_summary_for_group_auto,
+from backend.services.account_management_service import (
+    AccountManagementError,
+    assign_account_to_group_response,
+    create_account_response,
+    get_group_account_response,
+    list_accounts_response,
+    remove_account_response,
 )
 from backend.services.account_self_info_service import (
     AccountSelfInfoError,
     get_account_self_info,
     get_group_account_self_info,
 )
-from backend.storage.accounts_sql_manager import get_accounts_sql_manager
 
 router = APIRouter(prefix="/api", tags=["accounts"])
 
@@ -34,40 +37,34 @@ def _account_route_error(message: str, error: Exception, *, status_code: int = 5
     return HTTPException(status_code=status_code, detail=f"{message}: {str(error)}")
 
 
+def _account_management_http_error(error: AccountManagementError) -> HTTPException:
+    return HTTPException(status_code=error.status_code, detail=error.detail)
+
+
 def _get_group_account_response(group_id: str) -> Dict[str, Any]:
-    summary = get_account_summary_for_group_auto(group_id)
-    return {"account": summary}
+    return get_group_account_response(group_id)
 
 
 def _list_accounts_response() -> Dict[str, Any]:
-    sql_mgr = get_accounts_sql_manager()
-    accounts = sql_mgr.get_accounts(mask_cookie=True)
-    return {"accounts": accounts}
+    return list_accounts_response()
 
 
 def _create_account_response(request: AccountCreateRequest) -> Dict[str, Any]:
-    sql_mgr = get_accounts_sql_manager()
-    acc = sql_mgr.add_account(request.cookie, request.name)
-    safe_acc = sql_mgr.get_account_by_id(acc.get("id"), mask_cookie=True)
-    clear_account_detect_cache()
-    return {"account": safe_acc}
+    return create_account_response(request.cookie, request.name)
 
 
 def _remove_account_response(account_id: str) -> Dict[str, Any]:
-    sql_mgr = get_accounts_sql_manager()
-    ok = sql_mgr.delete_account(account_id)
-    if not ok:
-        raise HTTPException(status_code=404, detail="Account does not exist")
-    clear_account_detect_cache()
-    return {"success": True}
+    try:
+        return remove_account_response(account_id)
+    except AccountManagementError as e:
+        raise _account_management_http_error(e)
 
 
 def _assign_account_to_group_response(group_id: str, request: AssignGroupAccountRequest) -> Dict[str, Any]:
-    sql_mgr = get_accounts_sql_manager()
-    ok, msg = sql_mgr.assign_group_account(group_id, request.account_id)
-    if not ok:
-        raise HTTPException(status_code=400, detail=msg)
-    return {"success": True, "message": msg}
+    try:
+        return assign_account_to_group_response(group_id, request.account_id)
+    except AccountManagementError as e:
+        raise _account_management_http_error(e)
 
 
 async def _run_self_response_route(
