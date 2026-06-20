@@ -9,20 +9,24 @@ try:
     from backend.core.image_cache_manager import ImageCacheManager
     from backend.core.image_cache_manager import validate_remote_image_url
     from backend.routes.media_routes import (
-        _build_cached_image_response,
-        _build_proxy_image_request_headers,
-        _existing_local_media_path,
-        _guess_content_type,
-        _is_blocked_proxy_ip,
+        _media_bytes_response,
         _media_route_error,
-        _read_file_bytes,
-        _resolve_safe_child_path,
-        _validate_proxy_image_url,
         clear_image_cache,
         get_image_cache_info,
         get_local_image,
         get_local_video,
         proxy_image,
+    )
+    from backend.services.media_service import (
+        MediaServiceError,
+        _build_proxy_image_request_headers,
+        _cached_image_media,
+        _existing_local_media_path,
+        _guess_content_type,
+        _is_blocked_proxy_ip,
+        _read_file_bytes,
+        _resolve_safe_child_path,
+        _validate_proxy_image_url,
     )
 
     HAS_MEDIA_ROUTE_DEPS = True
@@ -54,7 +58,7 @@ class MediaRoutesHelperTests(unittest.TestCase):
             file_path = Path(tmp) / "sample.jpg"
             file_path.write_bytes(b"image-data")
 
-            response = _build_cached_image_response(file_path, "HIT")
+            response = _media_bytes_response(_cached_image_media(file_path, "HIT"))
 
         self.assertEqual(b"image-data", response.body)
         self.assertEqual("image/jpeg", response.media_type)
@@ -73,7 +77,7 @@ class MediaRoutesHelperTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             base_dir = Path(tmp) / "images"
 
-            with self.assertRaises(HTTPException) as ctx:
+            with self.assertRaises(MediaServiceError) as ctx:
                 _resolve_safe_child_path(base_dir, "../outside.jpg")
 
         self.assertEqual(403, ctx.exception.status_code)
@@ -95,7 +99,7 @@ class MediaRoutesHelperTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             base_dir = Path(tmp) / "videos"
 
-            with self.assertRaises(HTTPException) as ctx:
+            with self.assertRaises(MediaServiceError) as ctx:
                 _existing_local_media_path(base_dir, "missing.mp4", "视频不存在")
 
         self.assertEqual(404, ctx.exception.status_code)
@@ -105,20 +109,20 @@ class MediaRoutesHelperTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             base_dir = Path(tmp) / "images"
 
-            with self.assertRaises(HTTPException) as ctx:
+            with self.assertRaises(MediaServiceError) as ctx:
                 _existing_local_media_path(base_dir, "../outside.jpg", "图片不存在")
 
         self.assertEqual(403, ctx.exception.status_code)
         self.assertEqual("禁止访问该路径", ctx.exception.detail)
 
     def test_validate_proxy_image_url_rejects_unsafe_schemes(self):
-        with self.assertRaises(HTTPException) as ctx:
+        with self.assertRaises(MediaServiceError) as ctx:
             _validate_proxy_image_url("javascript:alert(1)")
 
         self.assertEqual(400, ctx.exception.status_code)
 
     def test_validate_proxy_image_url_rejects_private_ips(self):
-        with self.assertRaises(HTTPException) as ctx:
+        with self.assertRaises(MediaServiceError) as ctx:
             _validate_proxy_image_url("http://127.0.0.1/avatar.png")
 
         self.assertEqual(403, ctx.exception.status_code)
@@ -142,12 +146,12 @@ class MediaRoutesHelperTests(unittest.TestCase):
             image_cache_manager.socket.getaddrinfo = original_getaddrinfo
 
     def test_build_proxy_image_request_headers_uses_group_cookie(self):
-        from backend.routes import media_routes
+        from backend.services import media_service
 
-        original = media_routes.get_cookie_for_group
-        try:
-            media_routes.get_cookie_for_group = lambda group_id: "zsxq_access_token=secret" if group_id == "123" else None
+        def fake_cookie(group_id):
+            return "zsxq_access_token=secret" if group_id == "123" else None
 
+        with patch.object(media_service, "get_cookie_for_group", side_effect=fake_cookie):
             self.assertEqual(
                 {"Cookie": "zsxq_access_token=secret"},
                 _build_proxy_image_request_headers("123", "https://images.zsxq.com/a.jpg"),
@@ -155,13 +159,61 @@ class MediaRoutesHelperTests(unittest.TestCase):
             self.assertEqual({}, _build_proxy_image_request_headers("123", "https://example.com/a.jpg"))
             self.assertEqual({}, _build_proxy_image_request_headers("456", "https://images.zsxq.com/a.jpg"))
             self.assertEqual({}, _build_proxy_image_request_headers(None, "https://images.zsxq.com/a.jpg"))
-        finally:
-            media_routes.get_cookie_for_group = original
 
     def test_is_blocked_proxy_ip_identifies_private_ranges(self):
         self.assertTrue(_is_blocked_proxy_ip("10.0.0.1"))
         self.assertTrue(_is_blocked_proxy_ip("::1"))
         self.assertFalse(_is_blocked_proxy_ip("8.8.8.8"))
+
+    def test_get_proxy_image_returns_cached_hit_media(self):
+        from backend.services.media_service import get_proxy_image
+
+        class FakeCacheManager:
+            def __init__(self, cached_path):
+                self.cached_path = cached_path
+
+            def is_cached(self, url):
+                return True
+
+            def get_cached_path(self, url):
+                return self.cached_path
+
+            def download_and_cache(self, url, request_headers=None):
+                raise AssertionError("download should not run for cache hit")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            cached_path = Path(tmp) / "cached.jpg"
+            cached_path.write_bytes(b"cached-image")
+
+            with patch("backend.services.media_service._validate_proxy_image_url", return_value="https://images.zsxq.com/a.jpg"), patch(
+                "backend.services.media_service.get_image_cache_manager",
+                return_value=FakeCacheManager(cached_path),
+            ):
+                media = get_proxy_image("https://images.zsxq.com/a.jpg", "123")
+
+        self.assertEqual(b"cached-image", media.content)
+        self.assertEqual("image/jpeg", media.media_type)
+        self.assertEqual("HIT", media.headers["X-Cache-Status"])
+
+    def test_get_proxy_image_maps_download_failure_to_404(self):
+        from backend.services.media_service import get_proxy_image
+
+        class FakeCacheManager:
+            def is_cached(self, url):
+                return False
+
+            def download_and_cache(self, url, request_headers=None):
+                return False, None, "not found"
+
+        with patch("backend.services.media_service._validate_proxy_image_url", return_value="https://images.zsxq.com/a.jpg"), patch(
+            "backend.services.media_service.get_image_cache_manager",
+            return_value=FakeCacheManager(),
+        ):
+            with self.assertRaises(MediaServiceError) as ctx:
+                get_proxy_image("https://images.zsxq.com/a.jpg", "123")
+
+        self.assertEqual(404, ctx.exception.status_code)
+        self.assertEqual("图片加载失败: not found", ctx.exception.detail)
 
     def test_download_and_cache_rejects_large_content_length(self):
         class FakeResponse:
@@ -194,17 +246,30 @@ class MediaRoutesHelperTests(unittest.TestCase):
     def test_proxy_image_route_preserves_wrapped_unexpected_error(self):
         import asyncio
 
-        with patch("backend.routes.media_routes._validate_proxy_image_url", side_effect=RuntimeError("boom")):
+        with patch("backend.routes.media_routes.get_proxy_image", side_effect=RuntimeError("boom")):
             with self.assertRaises(HTTPException) as ctx:
                 asyncio.run(proxy_image("https://images.zsxq.com/a.jpg"))
 
         self.assertEqual(500, ctx.exception.status_code)
         self.assertEqual("代理图片失败: boom", ctx.exception.detail)
 
+    def test_proxy_image_route_preserves_service_error_details(self):
+        import asyncio
+
+        with patch(
+            "backend.routes.media_routes.get_proxy_image",
+            side_effect=MediaServiceError(403, "禁止代理内网或本机图片 URL"),
+        ):
+            with self.assertRaises(HTTPException) as ctx:
+                asyncio.run(proxy_image("http://127.0.0.1/a.jpg"))
+
+        self.assertEqual(403, ctx.exception.status_code)
+        self.assertEqual("禁止代理内网或本机图片 URL", ctx.exception.detail)
+
     def test_get_image_cache_info_route_preserves_wrapped_unexpected_error(self):
         import asyncio
 
-        with patch("backend.routes.media_routes.get_image_cache_manager", side_effect=RuntimeError("boom")):
+        with patch("backend.routes.media_routes.get_image_cache_info_response", side_effect=RuntimeError("boom")):
             with self.assertRaises(HTTPException) as ctx:
                 asyncio.run(get_image_cache_info("123"))
 
@@ -214,17 +279,30 @@ class MediaRoutesHelperTests(unittest.TestCase):
     def test_clear_image_cache_route_preserves_wrapped_unexpected_error(self):
         import asyncio
 
-        with patch("backend.routes.media_routes.get_image_cache_manager", side_effect=RuntimeError("boom")):
+        with patch("backend.routes.media_routes.clear_image_cache_response", side_effect=RuntimeError("boom")):
             with self.assertRaises(HTTPException) as ctx:
                 asyncio.run(clear_image_cache("123"))
 
         self.assertEqual(500, ctx.exception.status_code)
         self.assertEqual("清空缓存失败: boom", ctx.exception.detail)
 
+    def test_clear_image_cache_route_preserves_service_failure_wrapping(self):
+        import asyncio
+
+        with patch(
+            "backend.routes.media_routes.clear_image_cache_response",
+            side_effect=MediaServiceError(500, "permission denied"),
+        ):
+            with self.assertRaises(HTTPException) as ctx:
+                asyncio.run(clear_image_cache("123"))
+
+        self.assertEqual(500, ctx.exception.status_code)
+        self.assertEqual("清空缓存失败: 500: permission denied", ctx.exception.detail)
+
     def test_get_local_image_route_preserves_wrapped_unexpected_error(self):
         import asyncio
 
-        with patch("backend.routes.media_routes.get_db_path_manager", side_effect=RuntimeError("boom")):
+        with patch("backend.routes.media_routes.get_local_image_media", side_effect=RuntimeError("boom")):
             with self.assertRaises(HTTPException) as ctx:
                 asyncio.run(get_local_image("123", "avatar.jpg"))
 
@@ -234,7 +312,7 @@ class MediaRoutesHelperTests(unittest.TestCase):
     def test_get_local_video_route_preserves_wrapped_unexpected_error(self):
         import asyncio
 
-        with patch("backend.routes.media_routes.get_db_path_manager", side_effect=RuntimeError("boom")):
+        with patch("backend.routes.media_routes.get_local_video_file", side_effect=RuntimeError("boom")):
             with self.assertRaises(HTTPException) as ctx:
                 asyncio.run(get_local_video("123", "clip.mp4"))
 
