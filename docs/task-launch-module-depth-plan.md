@@ -88,3 +88,10 @@ uv run python -m unittest discover -s tests
 ## 进度记录
 
 - 2026-06-20：创建计划文档，准备进入服务层实现。
+- 2026-06-20：新增 `backend/services/task_launch.py`，迁移 ingestion helper、文件工作流入口和主要路由任务入口。
+- 2026-06-20：保留既有任务响应、群组 metadata、采集锁冲突 409 详情和 columns 创建后标记 running 的行为。
+- 2026-06-20：验证通过：
+  - `uv run python -m py_compile backend\services\task_launch.py backend\routes\daily_stock_concept_routes.py backend\routes\daily_analysis_routes.py backend\routes\stock_topic_analysis_routes.py backend\routes\a_share_routes.py backend\routes\columns_routes.py backend\routes\crawl_routes.py`
+  - `uv run python -m unittest tests.test_task_launch tests.test_ingestion_helpers tests.test_file_routes_helpers tests.test_daily_stock_concept_routes_helpers tests.test_daily_analysis_routes_helpers tests.test_stock_topic_analysis_routes_helpers tests.test_a_share_routes_helpers tests.test_columns_routes_helpers tests.test_crawl_routes_helpers -v`
+  - `uv run python scripts\scan_postgres_compat_debt.py`
+  - `uv run python -m unittest discover -s tests`
