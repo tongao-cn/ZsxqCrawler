@@ -11,7 +11,11 @@ from backend.services.stock_topic_analysis_service import (
     analyze_stock_topics,
     analyze_stock_topics_batch,
 )
-from backend.services.task_launch import TASK_CREATED_MESSAGE, launch_task
+from backend.services.task_launch import (
+    TASK_CREATED_MESSAGE,
+    TaskLaunchRecipe,
+    launch_task_recipe,
+)
 from backend.services.task_runtime import add_task_log, build_task_log_callback, run_workflow
 
 
@@ -45,7 +49,15 @@ def _create_stock_task_response(
     group_id: str,
     request,
 ) -> dict[str, str]:
-    return launch_task(task_type, description, task_func, group_id, request, metadata=metadata)
+    return launch_task_recipe(
+        TaskLaunchRecipe(
+            task_type=task_type,
+            description=description,
+            task_func=task_func,
+            args=(group_id, request),
+            metadata=metadata,
+        )
+    )
 
 
 def _stock_topic_batch_completed_message(result: dict[str, Any]) -> str:

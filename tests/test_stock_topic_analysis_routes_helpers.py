@@ -28,9 +28,9 @@ class StockTopicAnalysisRoutesHelperTests(unittest.IsolatedAsyncioTestCase):
         request = StockQuestionTaskRequest(question="固态电池怎么看")
 
         with patch(
-            "backend.services.stock_topic_analysis_workflow.launch_task",
+            "backend.services.stock_topic_analysis_workflow.launch_task_recipe",
             return_value={"task_id": "task-qa", "message": TASK_CREATED_MESSAGE},
-        ) as launch_task:
+        ) as launch_task_recipe:
             response = _create_stock_task_response(
                 "stock_question_analysis",
                 "A股问答 (群组: 51111112855254)",
@@ -40,14 +40,13 @@ class StockTopicAnalysisRoutesHelperTests(unittest.IsolatedAsyncioTestCase):
                 request,
             )
 
-        launch_task.assert_called_once_with(
-            "stock_question_analysis",
-            "A股问答 (群组: 51111112855254)",
-            run_stock_question_task,
-            "51111112855254",
-            request,
-            metadata={"group_id": "51111112855254", "question": "固态电池怎么看"},
-        )
+        launch_task_recipe.assert_called_once()
+        recipe = launch_task_recipe.call_args.args[0]
+        self.assertEqual("stock_question_analysis", recipe.task_type)
+        self.assertEqual("A股问答 (群组: 51111112855254)", recipe.description)
+        self.assertEqual(run_stock_question_task, recipe.task_func)
+        self.assertEqual(("51111112855254", request), recipe.args)
+        self.assertEqual({"group_id": "51111112855254", "question": "固态电池怎么看"}, recipe.metadata)
         self.assertEqual({"task_id": "task-qa", "message": TASK_CREATED_MESSAGE}, response)
 
     @unittest.skipUnless(HAS_ROUTE_DEPS, "stock topic analysis route dependencies are not installed")
@@ -183,23 +182,25 @@ class StockTopicAnalysisRoutesHelperTests(unittest.IsolatedAsyncioTestCase):
         )
 
         with patch(
-            "backend.services.stock_topic_analysis_workflow.launch_task",
+            "backend.services.stock_topic_analysis_workflow.launch_task_recipe",
             return_value={"task_id": "task-qa", "message": "任务已创建，正在后台执行"},
-        ) as launch_task:
+        ) as launch_task_recipe:
             result = await create_stock_question_analysis(
                 "51111112855254",
                 StockQuestionRequest(question="固态电池怎么看"),
         )
 
         self.assertEqual("task-qa", result["task_id"])
-        launch_task.assert_called_once_with(
-            "stock_question_analysis",
-            "A股问答 (群组: 51111112855254)",
-            run_stock_question_task,
-            "51111112855254",
-            StockQuestionTaskRequest(question="固态电池怎么看"),
-            metadata={"group_id": "51111112855254", "question": "固态电池怎么看"},
+        launch_task_recipe.assert_called_once()
+        recipe = launch_task_recipe.call_args.args[0]
+        self.assertEqual("stock_question_analysis", recipe.task_type)
+        self.assertEqual("A股问答 (群组: 51111112855254)", recipe.description)
+        self.assertEqual(run_stock_question_task, recipe.task_func)
+        self.assertEqual(
+            ("51111112855254", StockQuestionTaskRequest(question="固态电池怎么看")),
+            recipe.args,
         )
+        self.assertEqual({"group_id": "51111112855254", "question": "固态电池怎么看"}, recipe.metadata)
 
     @unittest.skipUnless(HAS_ROUTE_DEPS, "stock topic analysis route dependencies are not installed")
     async def test_create_stock_question_task_response_preserves_task_contract(self):
@@ -367,23 +368,25 @@ class StockTopicAnalysisRoutesHelperTests(unittest.IsolatedAsyncioTestCase):
         )
 
         with patch(
-            "backend.services.stock_topic_analysis_workflow.launch_task",
+            "backend.services.stock_topic_analysis_workflow.launch_task_recipe",
             return_value={"task_id": "task-1", "message": "任务已创建，正在后台执行"},
-        ) as launch_task:
+        ) as launch_task_recipe:
             result = await create_stock_topic_analysis(
                 "51111112855254",
                 StockTopicAnalysisRequest(stockName="宁德时代"),
             )
 
         self.assertEqual("task-1", result["task_id"])
-        launch_task.assert_called_once_with(
-            "stock_topic_analysis",
-            "个股话题分析 (群组: 51111112855254, 股票: 宁德时代)",
-            run_stock_topic_analysis_task,
-            "51111112855254",
-            StockTopicAnalysisTaskRequest(stock_name="宁德时代"),
-            metadata={"group_id": "51111112855254", "stock_name": "宁德时代"},
+        launch_task_recipe.assert_called_once()
+        recipe = launch_task_recipe.call_args.args[0]
+        self.assertEqual("stock_topic_analysis", recipe.task_type)
+        self.assertEqual("个股话题分析 (群组: 51111112855254, 股票: 宁德时代)", recipe.description)
+        self.assertEqual(run_stock_topic_analysis_task, recipe.task_func)
+        self.assertEqual(
+            ("51111112855254", StockTopicAnalysisTaskRequest(stock_name="宁德时代")),
+            recipe.args,
         )
+        self.assertEqual({"group_id": "51111112855254", "stock_name": "宁德时代"}, recipe.metadata)
 
     @unittest.skipUnless(HAS_ROUTE_DEPS, "stock topic analysis route dependencies are not installed")
     async def test_create_stock_topic_task_response_preserves_task_contract(self):
@@ -416,23 +419,25 @@ class StockTopicAnalysisRoutesHelperTests(unittest.IsolatedAsyncioTestCase):
         )
 
         with patch(
-            "backend.services.stock_topic_analysis_workflow.launch_task",
+            "backend.services.stock_topic_analysis_workflow.launch_task_recipe",
             return_value={"task_id": "task-2", "message": "任务已创建，正在后台执行"},
-        ) as launch_task:
+        ) as launch_task_recipe:
             result = await create_stock_topic_analysis_batch(
                 "51111112855254",
                 StockTopicAnalysisBatchRequest(stockNames=["宁德时代", "德龙激光", "宁德时代"]),
             )
 
         self.assertEqual("task-2", result["task_id"])
-        launch_task.assert_called_once_with(
-            "stock_topic_analysis_batch",
-            "批量个股话题分析 (群组: 51111112855254, 股票数: 2)",
-            run_stock_topic_analysis_batch_task,
-            "51111112855254",
-            StockTopicAnalysisBatchTaskRequest(stock_names=["宁德时代", "德龙激光"]),
-            metadata={"group_id": "51111112855254", "stock_names": ["宁德时代", "德龙激光"]},
+        launch_task_recipe.assert_called_once()
+        recipe = launch_task_recipe.call_args.args[0]
+        self.assertEqual("stock_topic_analysis_batch", recipe.task_type)
+        self.assertEqual("批量个股话题分析 (群组: 51111112855254, 股票数: 2)", recipe.description)
+        self.assertEqual(run_stock_topic_analysis_batch_task, recipe.task_func)
+        self.assertEqual(
+            ("51111112855254", StockTopicAnalysisBatchTaskRequest(stock_names=["宁德时代", "德龙激光"])),
+            recipe.args,
         )
+        self.assertEqual({"group_id": "51111112855254", "stock_names": ["宁德时代", "德龙激光"]}, recipe.metadata)
 
     @unittest.skipUnless(HAS_ROUTE_DEPS, "stock topic analysis route dependencies are not installed")
     async def test_create_stock_topic_batch_task_response_preserves_task_contract(self):
