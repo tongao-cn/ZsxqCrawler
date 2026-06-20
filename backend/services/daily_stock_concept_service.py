@@ -23,9 +23,8 @@ from backend.services.ai_json_utils import JsonObjectParseError, extract_json_ob
 from backend.services.a_share_analysis_db_storage import load_stock_basic_records, load_topic_stock_extractions
 from backend.services.topic_material import (
     DEFAULT_COMMENTS_PER_TOPIC,
-    build_daily_topic_material_payload,
     connect_topic_material_db,
-    fetch_daily_topic_material,
+    load_daily_topic_material,
     parse_topic_material_date,
 )
 from backend.services.stock_concept_taxonomy import normalize_stock_concept_term
@@ -463,14 +462,13 @@ def extract_daily_stock_concepts(
 
     try:
         _log(log_callback, f"📚 读取 {report_date_text} 的话题数据...")
-        topics = fetch_daily_topic_material(
-            conn,
-            group_id=group_id,
+        material = load_daily_topic_material(
+            group_id,
             report_date=parsed_date,
             comments_per_topic=comments_per_topic,
         )
-        _log(log_callback, f"📊 当天话题数量: {len(topics)}")
-        if not topics:
+        _log(log_callback, f"📊 当天话题数量: {material.topic_count}")
+        if material.topic_count == 0:
             stocks: List[Dict[str, Any]] = []
             model = ""
         else:
@@ -489,9 +487,8 @@ def extract_daily_stock_concepts(
                 model_values = [str(item.get("model") or "") for item in topic_extractions if item.get("model")]
                 model = model_values[0] if model_values else ""
             else:
-                prompt_payload = build_daily_topic_material_payload(group_id, report_date_text, topics)
                 _log(log_callback, "🤖 未找到话题级明细，回退为按天 AI 提取股票概念...")
-                stocks, model = _generate_stock_concepts_with_ai(prompt_payload, report_date_text)
+                stocks, model = _generate_stock_concepts_with_ai(material.prompt_payload, report_date_text)
 
         _save_stock_concepts(
             conn,

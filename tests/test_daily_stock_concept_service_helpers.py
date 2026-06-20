@@ -150,6 +150,58 @@ class DailyStockConceptServiceHelperTests(unittest.TestCase):
         self.assertEqual(["PCB", "涨价/供需", "未知细分"], stocks[0]["concepts"])
         self.assertEqual(["201"], stocks[0]["topic_ids"])
 
+    @unittest.skipUnless(HAS_STOCK_CONCEPT_DEPS, "daily stock concept service dependencies are not installed")
+    def test_extract_daily_stock_concepts_uses_material_snapshot_payload_for_ai_fallback(self):
+        from datetime import date
+        from types import SimpleNamespace
+        from unittest.mock import Mock
+
+        from backend.services import daily_stock_concept_service as service
+
+        conn = Mock()
+        material = SimpleNamespace(
+            topics=[{"topic_id": "101", "talk_text": "body"}],
+            topic_count=1,
+            prompt_payload="snapshot payload",
+        )
+        stocks = [
+            {
+                "stock_name": "宁德时代",
+                "stock_code": "300750",
+                "market": "SZ",
+                "concepts": ["储能"],
+                "reason": "topic 101",
+                "topic_ids": ["101"],
+                "confidence": 0.8,
+            }
+        ]
+
+        with (
+            patch.object(service, "connect_topic_material_db", return_value=conn),
+            patch.object(service, "load_daily_topic_material", return_value=material) as load_material,
+            patch.object(service, "load_topic_stock_extractions", return_value=[]),
+            patch.object(service, "_generate_stock_concepts_with_ai", return_value=(stocks, "model-a")) as generate,
+            patch.object(service, "_save_stock_concepts") as save_stock_concepts,
+        ):
+            result = service.extract_daily_stock_concepts("303", "2026-05-07", comments_per_topic=5)
+
+        load_material.assert_called_once_with(
+            "303",
+            report_date=date(2026, 5, 7),
+            comments_per_topic=5,
+        )
+        generate.assert_called_once_with("snapshot payload", "2026-05-07")
+        save_stock_concepts.assert_called_once_with(
+            conn,
+            group_id="303",
+            report_date="2026-05-07",
+            stocks=stocks,
+            model="model-a",
+            status="completed",
+        )
+        conn.close.assert_called_once_with()
+        self.assertEqual(stocks, result["stocks"])
+
 
 if __name__ == "__main__":
     unittest.main()

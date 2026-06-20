@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from datetime import date, datetime, timedelta, timezone
+from datetime import date
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from backend.core.ai_provider_config import get_openai_compatible_config
@@ -16,7 +16,6 @@ from backend.services.daily_topic_analysis_prompts import (
     build_chunk_summary_user_prompt,
     build_empty_report_summary,
     build_final_report_user_prompt,
-    build_prompt_payload,
     build_prompt_payload_unclipped,
     build_report_metadata,
     build_report_user_prompt,
@@ -35,8 +34,12 @@ from backend.services.daily_topic_analysis_store import (
 from backend.services.daily_topic_analysis_topics import (
     clip_text,
     date_bounds,
-    fetch_topics_for_date,
     image_row_to_payload,
+)
+from backend.services.topic_material import (
+    DailyTopicMaterialSnapshot,
+    load_daily_topic_material,
+    parse_topic_material_date,
 )
 
 
@@ -51,7 +54,6 @@ MAX_IMAGES_PER_TOPIC = 2
 MAX_IMAGE_BYTES = 4 * 1024 * 1024
 DEFAULT_COMMENTS_PER_TOPIC = 8
 PROMPT_VERSION = "daily-topic-report-v1"
-BJ_TZ = timezone(timedelta(hours=8))
 
 
 def _log(log_callback: Optional[Callable[[str], None]], message: str) -> None:
@@ -60,12 +62,7 @@ def _log(log_callback: Optional[Callable[[str], None]], message: str) -> None:
 
 
 def _parse_report_date(value: Optional[str]) -> date:
-    if not value:
-        return datetime.now(BJ_TZ).date()
-    try:
-        return datetime.strptime(value.strip(), "%Y-%m-%d").date()
-    except Exception as exc:
-        raise ValueError("date 必须是 YYYY-MM-DD 格式") from exc
+    return parse_topic_material_date(value)
 
 
 def _date_bounds(report_date: date) -> Tuple[str, str]:
@@ -114,25 +111,20 @@ def _upsert_report(
     )
 
 
-def _fetch_topics_for_date(
-    conn: Any,
-    *,
+def _load_daily_topic_material(
     group_id: str,
+    *,
     report_date: date,
     comments_per_topic: int,
-) -> List[Dict[str, Any]]:
-    return fetch_topics_for_date(
-        conn,
-        group_id=group_id,
+) -> DailyTopicMaterialSnapshot:
+    return load_daily_topic_material(
+        group_id,
         report_date=report_date,
         comments_per_topic=comments_per_topic,
         max_topic_chars=MAX_TOPIC_CHARS,
         max_images_per_topic=MAX_IMAGES_PER_TOPIC,
+        max_prompt_chars=MAX_PROMPT_CHARS,
     )
-
-
-def _build_prompt_payload(group_id: str, report_date: str, topics: List[Dict[str, Any]]) -> str:
-    return build_prompt_payload(group_id, report_date, topics, max_prompt_chars=MAX_PROMPT_CHARS)
 
 
 def _build_prompt_payload_unclipped(group_id: str, report_date: str, topics: List[Dict[str, Any]]) -> str:
@@ -355,9 +347,11 @@ def _generate_daily_report_summary(
     group_id: str,
     report_date: str,
     topics: List[Dict[str, Any]],
+    full_prompt_payload: Optional[str] = None,
     log_callback: Optional[Callable[[str], None]] = None,
 ) -> Tuple[str, str, Dict[str, Any]]:
-    full_prompt_payload = _build_prompt_payload_unclipped(group_id, report_date, topics)
+    if full_prompt_payload is None:
+        full_prompt_payload = _build_prompt_payload_unclipped(group_id, report_date, topics)
     if len(full_prompt_payload) <= MAX_PROMPT_CHARS:
         image_inputs = _collect_report_images(topics)
         if image_inputs:
@@ -432,13 +426,13 @@ def analyze_daily_topics(
 
     try:
         _log(log_callback, f"📚 读取 {report_date_text} 的话题数据...")
-        topics = _fetch_topics_for_date(
-            conn,
-            group_id=group_id,
+        material = _load_daily_topic_material(
+            group_id,
             report_date=parsed_date,
             comments_per_topic=comments_per_topic,
         )
-        topic_count = len(topics)
+        topics = material.topics
+        topic_count = material.topic_count
         _log(log_callback, f"📊 当天话题数量: {topic_count}")
 
         if topic_count == 0:
@@ -450,6 +444,7 @@ def analyze_daily_topics(
                 group_id=group_id,
                 report_date=report_date_text,
                 topics=topics,
+                full_prompt_payload=material.prompt_payload_unclipped,
                 log_callback=log_callback,
             )
             if not summary:

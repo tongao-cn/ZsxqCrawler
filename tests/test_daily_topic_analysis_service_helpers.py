@@ -228,60 +228,57 @@ class DailyTopicAnalysisServiceHelperTests(unittest.TestCase):
         self.assertEqual(2, workers)
 
     @unittest.skipUnless(HAS_DAILY_SERVICE_DEPS, "daily topic analysis service dependencies are not installed")
-    def test_fetch_topics_for_date_scopes_child_queries_by_group(self):
+    def test_analyze_daily_topics_uses_material_snapshot(self):
         from datetime import date
+        from types import SimpleNamespace
+        from unittest.mock import Mock, patch
 
-        from backend.services.daily_topic_analysis_service import _fetch_topics_for_date
+        from backend.services import daily_topic_analysis_service as service
 
-        class FakeResult:
-            def __init__(self, rows):
-                self.rows = rows
+        conn = Mock()
+        material = SimpleNamespace(
+            topics=[{"topic_id": "101", "talk_text": "body", "images": [], "comments": []}],
+            topic_count=1,
+            prompt_payload_unclipped="snapshot payload",
+        )
 
-            def fetchall(self):
-                return self.rows
+        with (
+            patch.object(service, "_connect_topics_db", return_value=conn),
+            patch.object(service, "_load_daily_topic_material", return_value=material) as load_material,
+            patch.object(
+                service,
+                "_generate_daily_report_summary",
+                return_value=("# report", "model-a", {"generation_mode": "single"}),
+            ) as generate_summary,
+            patch.object(service, "_write_report_file", return_value="report.md") as write_report,
+            patch.object(service, "_build_report_metadata", return_value={"topic_ids": ["101"]}) as build_metadata,
+            patch.object(service, "_upsert_report") as upsert_report,
+        ):
+            result = service.analyze_daily_topics("303", "2026-05-07", comments_per_topic=5)
 
-        class FakeConn:
-            def __init__(self):
-                self.calls = []
-
-            def execute(self, sql, params=()):
-                normalized = " ".join(sql.split())
-                self.calls.append((normalized, tuple(params)))
-                if "FROM topics t" in normalized:
-                    return FakeResult(
-                        [
-                            {
-                                "topic_id": 101,
-                                "group_id": "303",
-                                "type": "talk",
-                                "title": "topic",
-                                "create_time": "2026-05-07T10:00:00.000+0800",
-                                "likes_count": 1,
-                                "comments_count": 2,
-                                "reading_count": 3,
-                                "readers_count": 4,
-                                "digested": 0,
-                                "sticky": 0,
-                                "talk_text": "body",
-                                "talk_owner_name": "owner",
-                                "question_text": None,
-                                "question_owner_name": None,
-                                "answer_text": None,
-                                "answer_owner_name": None,
-                            }
-                        ]
-                    )
-                return FakeResult([])
-
-        conn = FakeConn()
-        topics = _fetch_topics_for_date(conn, group_id="303", report_date=date(2026, 5, 7), comments_per_topic=5)
-
-        self.assertEqual(1, len(topics))
-        child_sql = "\n".join(sql for sql, _params in conn.calls[1:])
-        self.assertIn("c.group_id = ?", child_sql)
-        self.assertIn("tt.topic_id IN (SELECT topic_id FROM topics WHERE group_id = ?)", child_sql)
-        self.assertIn("topic_id IN (SELECT topic_id FROM topics WHERE group_id = ?)", child_sql)
-        self.assertIn((101, "303", 5), [params for _sql, params in conn.calls])
+        load_material.assert_called_once_with(
+            "303",
+            report_date=date(2026, 5, 7),
+            comments_per_topic=5,
+        )
+        generate_summary.assert_called_once_with(
+            group_id="303",
+            report_date="2026-05-07",
+            topics=material.topics,
+            full_prompt_payload="snapshot payload",
+            log_callback=None,
+        )
+        write_report.assert_called_once_with("303", "2026-05-07", "# report")
+        build_metadata.assert_called_once_with(
+            group_id="303",
+            report_date="2026-05-07",
+            topics=material.topics,
+            report_path="report.md",
+        )
+        upsert_report.assert_called_once()
+        conn.close.assert_called_once_with()
+        self.assertEqual(1, result["topic_count"])
+        self.assertEqual("# report", result["summary_markdown"])
 
 
 if __name__ == "__main__":
