@@ -139,6 +139,64 @@ class TaskLaunchTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             launch_task("missing_task_type", "missing", fake_task)
 
+    def test_launch_task_recipe_launches_ingestion_recipe(self):
+        from backend.services.task_launch import TaskLaunchRecipe, launch_task_recipe
+
+        recipe = TaskLaunchRecipe.ingestion(
+            "crawl_all",
+            "全量爬取",
+            fake_task,
+            "group-1",
+            "request",
+        )
+
+        with patch(
+            "backend.services.task_launch.launch_ingestion_task",
+            return_value={"task_id": "task-1"},
+        ) as launch_ingestion_task:
+            response = launch_task_recipe(recipe)
+
+        self.assertEqual({"task_id": "task-1"}, response)
+        launch_ingestion_task.assert_called_once_with(
+            "crawl_all",
+            "全量爬取",
+            fake_task,
+            "group-1",
+            "request",
+            message="任务已创建，正在后台执行",
+            prepend_group_id_to_args=True,
+            on_created=None,
+        )
+
+    def test_launch_task_recipe_launches_runtime_recipe(self):
+        from backend.services.task_launch import TaskLaunchRecipe, launch_task_recipe
+
+        recipe = TaskLaunchRecipe(
+            task_type="daily_topic_analysis",
+            description="生成日报",
+            task_func=fake_task,
+            args=("group-1", "request"),
+            group_id="group-1",
+            metadata={"report_date": "2026-06-20"},
+            message="已创建",
+        )
+
+        with patch("backend.services.task_launch.launch_task", return_value={"task_id": "task-2"}) as launch:
+            response = launch_task_recipe(recipe)
+
+        self.assertEqual({"task_id": "task-2"}, response)
+        launch.assert_called_once_with(
+            "daily_topic_analysis",
+            "生成日报",
+            fake_task,
+            "group-1",
+            "request",
+            metadata={"report_date": "2026-06-20"},
+            group_id="group-1",
+            message="已创建",
+            on_created=None,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

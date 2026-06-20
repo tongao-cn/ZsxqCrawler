@@ -67,19 +67,19 @@ class WorkflowTaskLaunchTests(unittest.TestCase):
         for case_name, launcher, request, task_type, description, task_func, task_args in cases:
             with self.subTest(case_name=case_name):
                 with patch(
-                    "backend.services.workflow_task_launch.launch_ingestion_task",
+                    "backend.services.workflow_task_launch.launch_task_recipe",
                     return_value={"task_id": f"task-{case_name}"},
                 ) as launch:
                     response = launcher(group_id, request)
 
             self.assertEqual({"task_id": f"task-{case_name}"}, response)
-            launch.assert_called_once_with(
-                task_type,
-                description,
-                task_func,
-                group_id,
-                *task_args,
-            )
+            launch.assert_called_once()
+            recipe = launch.call_args.args[0]
+            self.assertEqual(task_type, recipe.task_type)
+            self.assertEqual(description, recipe.description)
+            self.assertEqual(task_func, recipe.task_func)
+            self.assertEqual(group_id, recipe.ingestion_group_id)
+            self.assertEqual(task_args, recipe.args)
 
     def test_crawl_launch_tasks_preserve_ingestion_conflict(self):
         from backend.schemas.crawl import CrawlHistoricalRequest
@@ -89,7 +89,7 @@ class WorkflowTaskLaunchTests(unittest.TestCase):
         existing = {"task_id": "task-old", "type": "crawl_historical", "status": "running"}
 
         with patch(
-            "backend.services.workflow_task_launch.launch_ingestion_task",
+            "backend.services.workflow_task_launch.launch_task_recipe",
             side_effect=TaskLaunchConflict(existing),
         ):
             with self.assertRaises(TaskLaunchConflict) as raised:

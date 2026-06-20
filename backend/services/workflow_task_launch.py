@@ -28,8 +28,10 @@ from backend.services.daily_stock_concept_service import extract_daily_stock_con
 from backend.services.daily_topic_analysis_service import analyze_daily_topics
 from backend.services.task_launch import (
     TaskLaunchConflict,
+    TaskLaunchRecipe,
     launch_ingestion_task,
     launch_task,
+    launch_task_recipe,
 )
 from backend.services.task_runtime import (
     add_task_log,
@@ -54,12 +56,14 @@ def _launch_crawl_task(
     group_id: str,
     *task_args: Any,
 ) -> dict[str, str]:
-    return launch_ingestion_task(
-        task_type,
-        description,
-        task_func,
-        group_id,
-        *task_args,
+    return launch_task_recipe(
+        TaskLaunchRecipe.ingestion(
+            task_type,
+            description,
+            task_func,
+            group_id,
+            *task_args,
+        )
     )
 
 

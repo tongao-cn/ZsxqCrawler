@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import Any, Callable, Dict, Optional
+from dataclasses import dataclass
+from typing import Any, Callable, Dict, Optional, Tuple
 
 from backend.services.task_runtime import (
     create_ingestion_task,
@@ -38,6 +39,43 @@ def group_task_metadata(group_id: Any, extra: Optional[Dict[str, Any]] = None) -
     if extra:
         metadata.update(extra)
     return metadata
+
+
+@dataclass(frozen=True)
+class TaskLaunchRecipe:
+    task_type: str
+    description: str
+    task_func: Callable[..., Any]
+    args: Tuple[Any, ...] = ()
+    group_id: Optional[Any] = None
+    metadata: Optional[Dict[str, Any]] = None
+    message: str = TASK_CREATED_MESSAGE
+    ingestion_group_id: Optional[str] = None
+    prepend_group_id_to_args: bool = True
+    on_created: Optional[Callable[[str], None]] = None
+
+    @classmethod
+    def ingestion(
+        cls,
+        task_type: str,
+        description: str,
+        task_func: Callable[..., Any],
+        group_id: str,
+        *args: Any,
+        message: str = TASK_CREATED_MESSAGE,
+        prepend_group_id_to_args: bool = True,
+        on_created: Optional[Callable[[str], None]] = None,
+    ) -> "TaskLaunchRecipe":
+        return cls(
+            task_type=task_type,
+            description=description,
+            task_func=task_func,
+            args=args,
+            ingestion_group_id=group_id,
+            message=message,
+            prepend_group_id_to_args=prepend_group_id_to_args,
+            on_created=on_created,
+        )
 
 
 def _require_workflow(task_type: str):
@@ -102,3 +140,27 @@ def launch_task(
         on_created(task_id)
     enqueue_runtime_task(task_func, task_id, *task_args)
     return task_created_response(task_id, message)
+
+
+def launch_task_recipe(recipe: TaskLaunchRecipe) -> Dict[str, str]:
+    if recipe.ingestion_group_id is not None:
+        return launch_ingestion_task(
+            recipe.task_type,
+            recipe.description,
+            recipe.task_func,
+            recipe.ingestion_group_id,
+            *recipe.args,
+            message=recipe.message,
+            prepend_group_id_to_args=recipe.prepend_group_id_to_args,
+            on_created=recipe.on_created,
+        )
+    return launch_task(
+        recipe.task_type,
+        recipe.description,
+        recipe.task_func,
+        *recipe.args,
+        metadata=recipe.metadata,
+        group_id=recipe.group_id,
+        message=recipe.message,
+        on_created=recipe.on_created,
+    )
