@@ -3,7 +3,8 @@
 import { useCallback, useState } from 'react';
 import { toast } from 'sonner';
 
-import { apiClient, getTaskConflictDetail } from '@/lib/api';
+import { apiClient } from '@/lib/api';
+import { useTaskLauncher } from '@/hooks/useTaskLauncher';
 import type {
   DownloadSettingsValue,
   GroupDownloadOption,
@@ -40,6 +41,10 @@ export function useDownloadActions({
   const [downloadQuickLastDays, setDownloadQuickLastDays] = useState<number>(30);
   const [downloadRangeStartDate, setDownloadRangeStartDate] = useState<string>('');
   const [downloadRangeEndDate, setDownloadRangeEndDate] = useState<string>('');
+  const { handleTaskCreateError, notifyTaskCreated } = useTaskLauncher({
+    onTaskCreated,
+    onTaskConflict,
+  });
 
   const canDownloadFiles = useCallback(() => {
     if (localFileCount === 0) {
@@ -48,16 +53,6 @@ export function useDownloadActions({
     }
     return true;
   }, [localFileCount]);
-
-  const handleTaskCreateError = useCallback((error: unknown, fallback: string) => {
-    const conflict = getTaskConflictDetail(error);
-    if (conflict?.task_id) {
-      toast.error(`已有任务 ${conflict.task_id} 正在运行`);
-      onTaskConflict?.(conflict.task_id);
-      return;
-    }
-    toast.error(`${fallback}: ${error instanceof Error ? error.message : '未知错误'}`);
-  }, [onTaskConflict]);
 
   const handleDownloadByTime = useCallback(async () => {
     if (!canDownloadFiles()) {
@@ -85,8 +80,7 @@ export function useDownloadActions({
 
       const response = await apiClient.downloadFilesByTimeRange(groupId, params);
       const taskId = (response as any).task_id;
-      toast.success(`文件下载任务已创建: ${taskId}`);
-      onTaskCreated(taskId);
+      notifyTaskCreated(taskId, `文件下载任务已创建: ${taskId}`);
       setDownloadDialogOpen(false);
     } catch (error) {
       handleTaskCreateError(error, '文件下载失败');
@@ -107,7 +101,7 @@ export function useDownloadActions({
     longSleepInterval,
     longSleepIntervalMax,
     longSleepIntervalMin,
-    onTaskCreated,
+    notifyTaskCreated,
     useRandomInterval,
   ]);
 
@@ -131,8 +125,7 @@ export function useDownloadActions({
         useRandomInterval ? longSleepIntervalMax : undefined,
       );
       const taskId = (response as any).task_id;
-      toast.success(`文件下载任务已创建: ${taskId}`);
-      onTaskCreated(taskId);
+      notifyTaskCreated(taskId, `文件下载任务已创建: ${taskId}`);
     } catch (error) {
       handleTaskCreateError(error, '文件下载失败');
     } finally {
@@ -149,7 +142,7 @@ export function useDownloadActions({
     longSleepInterval,
     longSleepIntervalMax,
     longSleepIntervalMin,
-    onTaskCreated,
+    notifyTaskCreated,
     useRandomInterval,
   ]);
 
