@@ -79,3 +79,4 @@ npm --prefix frontend run build
 - P2 已完成：数据库文件下载 runner 已抽到 `backend/crawlers/file_database_download_runner.py`，`ZSXQFileDownloader.download_files_from_database` 保持 facade；focused database download tests 15 个通过，相关模块 py_compile 通过。
 - P3 已完成：新增 `useTaskStream` 统一 SSE、状态 fallback polling、日志恢复和 terminal callback；`useTaskStatus` 与 `TaskLogViewer` 已复用该 hook；`npm --prefix frontend run build` 通过且无 lint/type 警告。
 - P4 已完成：新增 `stock_topic_analysis_runner.py`，为单股分析、批量分析、问答三条工作流提供 typed request runner interface；service public API 保持 wrapper 兼容；focused stock topic service tests 45 个通过，相关模块 py_compile 通过。
+- P5 已完成：新增 scratch artifact path helper 与根目录 scratch 回潮检查脚本；已将 78 个根目录 `tmp_stock_analysis_*` ignored 临时文件移动到 `output/scratch/root-stock-analysis-temp-archive/20260620_112144/`；helper tests 4 个通过，`uv run python scripts\check_scratch_artifacts.py` 通过。
