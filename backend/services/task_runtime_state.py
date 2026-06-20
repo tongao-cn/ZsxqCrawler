@@ -1,9 +1,17 @@
 from __future__ import annotations
 
+import queue
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from backend.services.task_runtime_logs import append_task_log, has_task_logs, task_logs_copy
+from backend.services.task_runtime_logs import (
+    add_task_log_subscriber,
+    append_task_log,
+    has_task_logs,
+    remove_task_log_subscriber,
+    task_log_subscribers_snapshot,
+    task_logs_copy,
+)
 from backend.services.task_runtime_memory import (
     has_memory_task,
     memory_task_state,
@@ -19,10 +27,12 @@ class TaskRuntimeState:
         current_tasks: Dict[str, Dict[str, Any]],
         task_logs: Dict[str, List[str]],
         task_stop_flags: Dict[str, bool],
+        sse_connections: Dict[str, List[queue.Queue[str]]],
     ) -> None:
         self._current_tasks = current_tasks
         self._task_logs = task_logs
         self._task_stop_flags = task_stop_flags
+        self._sse_connections = sse_connections
 
     def initialize_task(self, task_id: str) -> None:
         self._task_logs[task_id] = []
@@ -32,6 +42,7 @@ class TaskRuntimeState:
         self._current_tasks.pop(task_id, None)
         self._task_logs.pop(task_id, None)
         self._task_stop_flags.pop(task_id, None)
+        self._sse_connections.pop(task_id, None)
 
     def memory_task_state(self, task_id: str) -> Optional[Dict[str, Any]]:
         return memory_task_state(self._current_tasks, task_id)
@@ -66,6 +77,18 @@ class TaskRuntimeState:
 
     def append_task_log(self, task_id: str, formatted_log: str) -> None:
         append_task_log(self._task_logs, task_id, formatted_log)
+
+    def add_log_subscriber(self, task_id: str, subscriber: queue.Queue[str]) -> None:
+        add_task_log_subscriber(self._sse_connections, task_id, subscriber)
+
+    def remove_log_subscriber(self, task_id: str, subscriber: queue.Queue[str]) -> None:
+        remove_task_log_subscriber(self._sse_connections, task_id, subscriber)
+
+    def log_subscribers_snapshot(self, task_id: str) -> List[queue.Queue[str]]:
+        return task_log_subscribers_snapshot(self._sse_connections, task_id)
+
+    def clear_log_subscribers(self) -> None:
+        self._sse_connections.clear()
 
     def has_memory_task(self, task_id: str) -> bool:
         return has_memory_task(self._current_tasks, task_id)

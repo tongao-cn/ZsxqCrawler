@@ -9,11 +9,6 @@ from typing import Any, Callable, Dict, List, Optional
 
 from backend.core import crawler_runtime
 from backend.services.a_share_analysis_service import normalize_group_id
-from backend.services.task_runtime_logs import (
-    add_task_log_subscriber,
-    remove_task_log_subscriber,
-    task_log_subscribers_snapshot,
-)
 from backend.services.task_runtime_memory import (
     should_apply_task_update,
 )
@@ -85,7 +80,7 @@ crawler_instances: Dict[str, Any] = {}
 file_downloader_instances: Dict[str, Any] = {}
 runtime_task_threads: Dict[str, threading.Thread] = {}
 runtime_task_heartbeats: Dict[str, threading.Event] = {}
-_runtime_state = TaskRuntimeState(current_tasks, task_logs, task_stop_flags)
+_runtime_state = TaskRuntimeState(current_tasks, task_logs, task_stop_flags, sse_connections)
 
 def _initialize_task_tracking_locked(task_id: str) -> None:
     _runtime_state.initialize_task(task_id)
@@ -102,7 +97,6 @@ def _persist_task_creation_tracking(task_id: str, description: str, store: Optio
 
 def _forget_task_tracking_locked(task_id: str) -> None:
     _runtime_state.forget_task(task_id)
-    sse_connections.pop(task_id, None)
 
 
 def list_tasks(limit: Optional[int] = None) -> List[Dict[str, Any]]:
@@ -281,11 +275,11 @@ def build_task_log_callback(
 
 
 def _add_task_log_subscriber_locked(task_id: str, subscriber: queue.Queue[str]) -> None:
-    add_task_log_subscriber(sse_connections, task_id, subscriber)
+    _runtime_state.add_log_subscriber(task_id, subscriber)
 
 
 def _remove_task_log_subscriber_locked(task_id: str, subscriber: queue.Queue[str]) -> None:
-    remove_task_log_subscriber(sse_connections, task_id, subscriber)
+    _runtime_state.remove_log_subscriber(task_id, subscriber)
 
 
 def subscribe_task_logs(task_id: str) -> queue.Queue[str]:
@@ -301,7 +295,7 @@ def unsubscribe_task_logs(task_id: str, subscriber: queue.Queue[str]) -> None:
 
 
 def _task_log_subscribers_snapshot_locked(task_id: str) -> List[queue.Queue[str]]:
-    return task_log_subscribers_snapshot(sse_connections, task_id)
+    return _runtime_state.log_subscribers_snapshot(task_id)
 
 
 def broadcast_log(task_id: str, log_message: str) -> None:
@@ -575,7 +569,7 @@ def _prepare_runtime_shutdown_snapshot_locked() -> tuple[List[tuple[str, Dict[st
 
 def _clear_runtime_shutdown_tracking_locked() -> List[str]:
     _clear_runtime_resource_tracking_locked()
-    sse_connections.clear()
+    _runtime_state.clear_log_subscribers()
     return _task_lock_heartbeat_ids_locked()
 
 
