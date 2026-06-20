@@ -108,6 +108,7 @@ from backend.crawlers.file_download_transfer import (
     prepare_download_body_target as prepare_transfer_download_body_target,
     run_download_retry_loop_attempt as run_download_transfer_retry_loop_attempt,
     run_download_retry_loop as run_download_transfer_retry_loop,
+    write_download_response_body_stream as transfer_write_download_response_body_stream,
 )
 from backend.crawlers.zsxq_file_downloader_helpers import (
     API_FAILURE_NON_RETRY,
@@ -10157,6 +10158,42 @@ class FileDownloaderDownloadTests(unittest.TestCase):
                 ["   📊 已下载: 4 bytes", "🛑 下载过程中被停止"],
                 downloader.logs,
             )
+
+    def test_transfer_write_download_response_body_stream_handles_progress_and_stop(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir) / "memo.pdf.part"
+            response = FakeChunkedDownloadResponse([b"ab", b"", b"cd"])
+            events = []
+
+            downloaded_size = transfer_write_download_response_body_stream(
+                TransferDownloadBodyResponseTarget(
+                    response,
+                    TransferDownloadBodyWriteTarget(str(temp_path), 4, 101),
+                ),
+                log_progress=lambda downloaded, total: events.append(("progress", downloaded, total)),
+                stop_requested=lambda _target: False,
+            )
+
+            self.assertEqual(4, downloaded_size)
+            self.assertEqual(b"abcd", temp_path.read_bytes())
+            self.assertEqual([("progress", 2, 4), ("progress", 4, 4)], events)
+
+            stopping_path = Path(temp_dir) / "stop.pdf.part"
+            stopping_response = FakeChunkedDownloadResponse([b"stop", b"next"])
+            stop_calls = []
+
+            stopped_size = transfer_write_download_response_body_stream(
+                TransferDownloadBodyResponseTarget(
+                    stopping_response,
+                    TransferDownloadBodyWriteTarget(str(stopping_path), 0, 102),
+                ),
+                log_progress=lambda downloaded, total: events.append(("stopping", downloaded, total)),
+                stop_requested=lambda target: stop_calls.append(target.file_id) or True,
+            )
+
+            self.assertIsNone(stopped_size)
+            self.assertEqual(b"stop", stopping_path.read_bytes())
+            self.assertEqual([102], stop_calls)
 
     def test_write_download_response_body_result_target_preserves_chunk_order(self):
         class RecordingChunkResponse:

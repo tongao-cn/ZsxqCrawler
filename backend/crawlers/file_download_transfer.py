@@ -164,6 +164,8 @@ WriteDownloadResponseBody = Callable[[DownloadBodyResponseTarget], Optional[int]
 RecordDownloadHttpFailure = Callable[[DownloadHttpFailureTarget], DownloadFailureDetail]
 RemovePartialDownload = Callable[[str], bool]
 ResolveDownloadResponseTarget = Callable[[DownloadResponseTarget], DownloadFileTarget]
+LogDownloadBodyProgress = Callable[[int, int], None]
+StopDownloadBody = Callable[[DownloadBodyWriteTarget], bool]
 
 
 def initial_download_retry_state(prepared_file: DownloadFileTarget) -> DownloadRetryState:
@@ -395,6 +397,29 @@ def download_body_result_for_response(
         find_mismatch_detail=find_mismatch_detail,
         complete_successful_download=complete_successful_download,
     )
+
+
+def write_download_response_body_stream(
+    target: DownloadBodyResponseTarget,
+    *,
+    log_progress: LogDownloadBodyProgress,
+    stop_requested: StopDownloadBody,
+    chunk_size: int = 8192,
+) -> Optional[int]:
+    body_target = target.body_target
+    downloaded_size = 0
+    with open(body_target.temp_path, "wb") as file_obj:
+        for chunk in target.response.iter_content(chunk_size=chunk_size):
+            if not chunk:
+                continue
+
+            file_obj.write(chunk)
+            downloaded_size += len(chunk)
+            log_progress(downloaded_size, body_target.total_size)
+            if stop_requested(body_target):
+                return None
+
+    return downloaded_size
 
 
 def download_body_result_for_successful_response(

@@ -107,3 +107,4 @@ uv run python -m unittest discover -s tests
 
 - 2026-06-20：创建本计划，准备实施 P1 AI 兼容调用模块。
 - 2026-06-20：完成 P1。新增 `backend/services/ai_client.py`，集中 Responses / Chat Completions 调用、响应文本提取、JSON schema format 和 retry 分类；迁移每日话题、文件 AI、每日股票概念、A 股推荐池抽取、个股话题分析调用点；新增 `tests/test_ai_client.py`，focused AI tests 通过。
+- 2026-06-20：完成 P2。新增 `file_download_transfer.write_download_response_body_stream`，将下载响应体流式写入、进度回调和停止检查从 `ZSXQFileDownloader` 中抽到 transfer helper；下载器保留兼容入口；`FileDownloaderDownloadTests` 通过。

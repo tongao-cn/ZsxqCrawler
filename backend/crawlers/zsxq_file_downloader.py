@@ -45,6 +45,7 @@ from backend.crawlers.file_download_transfer import (
     download_attempt_result_for_response,
     run_download_retry_loop_attempt,
     run_download_retry_loop,
+    write_download_response_body_stream,
 )
 from backend.crawlers.zsxq_file_downloader_helpers import (
     API_FAILURE_NON_RETRY,
@@ -2156,9 +2157,10 @@ class ZSXQFileDownloader:
         self,
         target: DownloadBodyResponseTarget,
     ) -> Optional[int]:
-        return self._write_download_body_response_stream(
-            target.response,
-            target.body_target,
+        return write_download_response_body_stream(
+            target,
+            log_progress=self._log_download_body_progress,
+            stop_requested=self._stop_download_body_if_requested,
         )
 
     def _write_download_body_response_stream(
@@ -2166,21 +2168,11 @@ class ZSXQFileDownloader:
         response: Any,
         body_target: DownloadBodyWriteTarget,
     ) -> Optional[int]:
-        downloaded_size = 0
-        with open(body_target.temp_path, 'wb') as f:
-            for chunk in response.iter_content(chunk_size=8192):
-                if chunk:
-                    chunk_result = self._write_download_body_content_chunk(
-                        f,
-                        chunk,
-                        downloaded_size,
-                        body_target,
-                    )
-                    if chunk_result is None:
-                        return None
-                    downloaded_size = chunk_result
-
-        return downloaded_size
+        return write_download_response_body_stream(
+            DownloadBodyResponseTarget(response, body_target),
+            log_progress=self._log_download_body_progress,
+            stop_requested=self._stop_download_body_if_requested,
+        )
 
     def _write_download_body_content_chunk(
         self,
