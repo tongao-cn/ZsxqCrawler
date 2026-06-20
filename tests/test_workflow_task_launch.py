@@ -145,7 +145,10 @@ class WorkflowTaskLaunchTests(unittest.TestCase):
     def test_create_daily_topic_analysis_task_uses_service_runner_and_metadata(self):
         from backend.services import workflow_task_launch
 
-        with patch("backend.services.workflow_task_launch.launch_task", return_value={"task_id": "task-daily"}) as launch:
+        with patch(
+            "backend.services.workflow_task_launch.launch_task_recipe",
+            return_value={"task_id": "task-daily"},
+        ) as launch:
             response = workflow_task_launch.create_daily_topic_analysis_task(
                 "51111112855254",
                 date="2026-06-20",
@@ -153,14 +156,14 @@ class WorkflowTaskLaunchTests(unittest.TestCase):
             )
 
         self.assertEqual({"task_id": "task-daily"}, response)
-        task_args = launch.call_args.args
-        task_kwargs = launch.call_args.kwargs
-        self.assertEqual("daily_topic_analysis", task_args[0])
-        self.assertEqual(workflow_task_launch.run_daily_topic_analysis_task, task_args[2])
-        self.assertEqual("51111112855254", task_args[3])
-        self.assertEqual("2026-06-20", task_args[4].date)
-        self.assertEqual(2, task_args[4].comments_per_topic)
-        self.assertEqual({"group_id": "51111112855254", "report_date": "2026-06-20"}, task_kwargs["metadata"])
+        recipe = launch.call_args.args[0]
+        self.assertEqual("daily_topic_analysis", recipe.task_type)
+        self.assertEqual("生成每日话题 AI 报告 (群组: 51111112855254)", recipe.description)
+        self.assertEqual(workflow_task_launch.run_daily_topic_analysis_task, recipe.task_func)
+        self.assertEqual("51111112855254", recipe.args[0])
+        self.assertEqual("2026-06-20", recipe.args[1].date)
+        self.assertEqual(2, recipe.args[1].comments_per_topic)
+        self.assertEqual({"group_id": "51111112855254", "report_date": "2026-06-20"}, recipe.metadata)
 
     def test_create_daily_topic_crawl_and_analysis_task_uses_service_runner_and_metadata(self):
         from backend.schemas.crawl import CrawlSettingsRequest
@@ -168,7 +171,10 @@ class WorkflowTaskLaunchTests(unittest.TestCase):
 
         crawl_settings = CrawlSettingsRequest(pagesPerBatch=15)
 
-        with patch("backend.services.workflow_task_launch.launch_task", return_value={"task_id": "task-today"}) as launch:
+        with patch(
+            "backend.services.workflow_task_launch.launch_task_recipe",
+            return_value={"task_id": "task-today"},
+        ) as launch:
             response = workflow_task_launch.create_daily_topic_crawl_and_analysis_task(
                 "51111112855254",
                 date="2026-06-20",
@@ -178,16 +184,16 @@ class WorkflowTaskLaunchTests(unittest.TestCase):
             )
 
         self.assertEqual({"task_id": "task-today"}, response)
-        task_args = launch.call_args.args
-        task_kwargs = launch.call_args.kwargs
-        self.assertEqual("daily_topic_crawl_and_analysis", task_args[0])
-        self.assertEqual(workflow_task_launch.run_daily_topic_crawl_and_analysis_task, task_args[2])
-        self.assertEqual("51111112855254", task_args[3])
-        self.assertEqual("2026-06-20", task_args[4].date)
-        self.assertEqual(2, task_args[4].comments_per_topic)
-        self.assertFalse(task_args[4].crawl_latest_first)
-        self.assertEqual(crawl_settings, task_args[4].crawl_settings)
-        self.assertEqual({"group_id": "51111112855254", "report_date": "2026-06-20"}, task_kwargs["metadata"])
+        recipe = launch.call_args.args[0]
+        self.assertEqual("daily_topic_crawl_and_analysis", recipe.task_type)
+        self.assertEqual("每日抓取与 AI 分析 (群组: 51111112855254)", recipe.description)
+        self.assertEqual(workflow_task_launch.run_daily_topic_crawl_and_analysis_task, recipe.task_func)
+        self.assertEqual("51111112855254", recipe.args[0])
+        self.assertEqual("2026-06-20", recipe.args[1].date)
+        self.assertEqual(2, recipe.args[1].comments_per_topic)
+        self.assertFalse(recipe.args[1].crawl_latest_first)
+        self.assertEqual(crawl_settings, recipe.args[1].crawl_settings)
+        self.assertEqual({"group_id": "51111112855254", "report_date": "2026-06-20"}, recipe.metadata)
 
     def test_run_daily_topic_crawl_and_analysis_task_skips_crawl_when_disabled(self):
         from backend.services import workflow_task_launch
@@ -218,7 +224,10 @@ class WorkflowTaskLaunchTests(unittest.TestCase):
     def test_create_daily_stock_concept_task_uses_service_runner_and_metadata(self):
         from backend.services import workflow_task_launch
 
-        with patch("backend.services.workflow_task_launch.launch_task", return_value={"task_id": "task-stock"}) as launch:
+        with patch(
+            "backend.services.workflow_task_launch.launch_task_recipe",
+            return_value={"task_id": "task-stock"},
+        ) as launch:
             response = workflow_task_launch.create_daily_stock_concept_task(
                 "51111112855254",
                 date="2026-06-20",
@@ -226,14 +235,14 @@ class WorkflowTaskLaunchTests(unittest.TestCase):
             )
 
         self.assertEqual({"task_id": "task-stock"}, response)
-        task_args = launch.call_args.args
-        task_kwargs = launch.call_args.kwargs
-        self.assertEqual("daily_stock_concepts", task_args[0])
-        self.assertEqual(workflow_task_launch.run_daily_stock_concept_task, task_args[2])
-        self.assertEqual("51111112855254", task_args[3])
-        self.assertEqual("2026-06-20", task_args[4].date)
-        self.assertEqual(3, task_args[4].comments_per_topic)
-        self.assertEqual({"group_id": "51111112855254", "report_date": "2026-06-20"}, task_kwargs["metadata"])
+        recipe = launch.call_args.args[0]
+        self.assertEqual("daily_stock_concepts", recipe.task_type)
+        self.assertEqual("提取每日股票概念 (群组: 51111112855254)", recipe.description)
+        self.assertEqual(workflow_task_launch.run_daily_stock_concept_task, recipe.task_func)
+        self.assertEqual("51111112855254", recipe.args[0])
+        self.assertEqual("2026-06-20", recipe.args[1].date)
+        self.assertEqual(3, recipe.args[1].comments_per_topic)
+        self.assertEqual({"group_id": "51111112855254", "report_date": "2026-06-20"}, recipe.metadata)
 
     def test_create_a_share_analysis_task_requires_api_key(self):
         from backend.services import workflow_task_launch
@@ -246,7 +255,7 @@ class WorkflowTaskLaunchTests(unittest.TestCase):
         from backend.services import workflow_task_launch
 
         with patch("backend.services.workflow_task_launch.has_openai_api_key", return_value=True), patch(
-            "backend.services.workflow_task_launch.launch_task",
+            "backend.services.workflow_task_launch.launch_task_recipe",
             return_value={"task_id": "task-a-share"},
         ) as launch:
             response = workflow_task_launch.create_a_share_analysis_task(
@@ -264,22 +273,23 @@ class WorkflowTaskLaunchTests(unittest.TestCase):
             )
 
         self.assertEqual({"task_id": "task-a-share"}, response)
-        task_args = launch.call_args.args
-        task_kwargs = launch.call_args.kwargs
-        self.assertEqual("a_share_analysis", task_args[0])
-        self.assertEqual(workflow_task_launch.run_a_share_analysis_task, task_args[2])
-        self.assertEqual("51111112855254", task_args[3].group_id)
-        self.assertEqual(14, task_args[3].days)
-        self.assertEqual(2, task_args[3].concurrency)
-        self.assertEqual("test-model", task_args[3].model)
-        self.assertEqual("https://example.test/v1", task_args[3].api_base)
-        self.assertEqual("chat_completions", task_args[3].wire_api)
-        self.assertEqual("low", task_args[3].reasoning_effort)
-        self.assertEqual("2026-05-01", task_args[3].start_date)
-        self.assertEqual("2026-05-07", task_args[3].end_date)
-        self.assertEqual("2026-05-01", task_args[3].reset_start_date)
-        self.assertEqual("2026-05-02", task_args[3].reset_end_date)
-        self.assertEqual({"group_id": "51111112855254"}, task_kwargs["metadata"])
+        recipe = launch.call_args.args[0]
+        request = recipe.args[0]
+        self.assertEqual("a_share_analysis", recipe.task_type)
+        self.assertEqual("A股公司分析（群组 51111112855254，2026-05-01 ~ 2026-05-07）", recipe.description)
+        self.assertEqual(workflow_task_launch.run_a_share_analysis_task, recipe.task_func)
+        self.assertEqual("51111112855254", request.group_id)
+        self.assertEqual(14, request.days)
+        self.assertEqual(2, request.concurrency)
+        self.assertEqual("test-model", request.model)
+        self.assertEqual("https://example.test/v1", request.api_base)
+        self.assertEqual("chat_completions", request.wire_api)
+        self.assertEqual("low", request.reasoning_effort)
+        self.assertEqual("2026-05-01", request.start_date)
+        self.assertEqual("2026-05-07", request.end_date)
+        self.assertEqual("2026-05-01", request.reset_start_date)
+        self.assertEqual("2026-05-02", request.reset_end_date)
+        self.assertEqual({"group_id": "51111112855254"}, recipe.metadata)
 
     def test_run_a_share_analysis_task_fails_fast_without_api_key(self):
         from backend.services import workflow_task_launch

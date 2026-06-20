@@ -29,7 +29,6 @@ from backend.services.daily_topic_analysis_service import analyze_daily_topics
 from backend.services.task_launch import (
     TaskLaunchConflict,
     TaskLaunchRecipe,
-    launch_task,
     launch_task_recipe,
 )
 from backend.services.task_runtime import (
@@ -216,13 +215,14 @@ def create_daily_topic_analysis_task(
     comments_per_topic: int = 0,
 ) -> dict[str, str]:
     request = DailyTopicAnalysisTaskRequest(date=date, comments_per_topic=comments_per_topic)
-    return launch_task(
-        "daily_topic_analysis",
-        f"生成每日话题 AI 报告 (群组: {group_id})",
-        run_daily_topic_analysis_task,
-        group_id,
-        request,
-        metadata=_daily_task_metadata(group_id, request.date),
+    return launch_task_recipe(
+        TaskLaunchRecipe(
+            task_type="daily_topic_analysis",
+            description=f"生成每日话题 AI 报告 (群组: {group_id})",
+            task_func=run_daily_topic_analysis_task,
+            args=(group_id, request),
+            metadata=_daily_task_metadata(group_id, request.date),
+        )
     )
 
 
@@ -300,13 +300,14 @@ def create_daily_topic_crawl_and_analysis_task(
         crawl_latest_first=crawl_latest_first,
         crawl_settings=crawl_settings,
     )
-    return launch_task(
-        "daily_topic_crawl_and_analysis",
-        f"每日抓取与 AI 分析 (群组: {group_id})",
-        run_daily_topic_crawl_and_analysis_task,
-        group_id,
-        request,
-        metadata=_daily_task_metadata(group_id, request.date),
+    return launch_task_recipe(
+        TaskLaunchRecipe(
+            task_type="daily_topic_crawl_and_analysis",
+            description=f"每日抓取与 AI 分析 (群组: {group_id})",
+            task_func=run_daily_topic_crawl_and_analysis_task,
+            args=(group_id, request),
+            metadata=_daily_task_metadata(group_id, request.date),
+        )
     )
 
 
@@ -339,13 +340,14 @@ def create_daily_stock_concept_task(
     comments_per_topic: int = 0,
 ) -> dict[str, str]:
     request = DailyStockConceptTaskRequest(date=date, comments_per_topic=comments_per_topic)
-    return launch_task(
-        "daily_stock_concepts",
-        f"提取每日股票概念 (群组: {group_id})",
-        run_daily_stock_concept_task,
-        group_id,
-        request,
-        metadata=_daily_task_metadata(group_id, request.date),
+    return launch_task_recipe(
+        TaskLaunchRecipe(
+            task_type="daily_stock_concepts",
+            description=f"提取每日股票概念 (群组: {group_id})",
+            task_func=run_daily_stock_concept_task,
+            args=(group_id, request),
+            metadata=_daily_task_metadata(group_id, request.date),
+        )
     )
 
 
@@ -528,12 +530,14 @@ def create_a_share_analysis_task(
         reset_end_date=reset_end_date,
     )
     normalized_group_id, scope_text, run_range_text = _a_share_analysis_task_context(request)
-    return launch_task(
-        "a_share_analysis",
-        f"A股公司分析（{scope_text}，{run_range_text}）",
-        run_a_share_analysis_task,
-        request,
-        metadata=_a_share_task_metadata(normalized_group_id),
+    return launch_task_recipe(
+        TaskLaunchRecipe(
+            task_type="a_share_analysis",
+            description=f"A股公司分析（{scope_text}，{run_range_text}）",
+            task_func=run_a_share_analysis_task,
+            args=(request,),
+            metadata=_a_share_task_metadata(normalized_group_id),
+        )
     )
 
 
