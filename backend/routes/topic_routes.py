@@ -11,7 +11,7 @@ from backend.crawlers.official_topic_client import (
     official_payload_topic,
 )
 from backend.services.topic_workflow_service import _clear_group_topic_data
-from backend.storage.zsxq_database import ZSXQDatabase
+from backend.storage.zsxq_database import TagNotFoundInGroupError, ZSXQDatabase
 
 router = APIRouter(prefix="/api", tags=["topics"])
 
@@ -295,16 +295,10 @@ def _get_topics_by_tag_response(group_id: int, tag_id: int, page: int = 1, per_p
     db = None
     try:
         db = ZSXQDatabase(str(group_id))
-        db.cursor.execute(
-            "SELECT COUNT(*) FROM tags WHERE tag_id = ? AND group_id = ?",
-            (tag_id, group_id),
-        )
-        tag_count = db.cursor.fetchone()[0]
-
-        if tag_count == 0:
+        try:
+            return db.get_group_topics_by_tag(group_id, tag_id, page, per_page)
+        except TagNotFoundInGroupError:
             raise HTTPException(status_code=404, detail="标签在该群组中不存在")
-
-        return db.get_topics_by_tag(tag_id, page, per_page)
     finally:
         _close_topic_db(db)
 

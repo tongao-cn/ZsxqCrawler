@@ -366,6 +366,50 @@ class TopicRoutesHelperTests(unittest.TestCase):
         self.assertTrue(missing_db.closed)
 
     @unittest.skipUnless(HAS_TOPIC_ROUTE_DEPS, "topic route dependencies are not installed")
+    def test_get_topics_by_tag_response_delegates_group_scope_to_storage(self):
+        from backend.routes.topic_routes import _get_topics_by_tag_response
+
+        class FakeTaggedTopicsDb(FakeDb):
+            def __init__(self):
+                super().__init__()
+                self.calls = []
+
+            def get_group_topics_by_tag(self, group_id, tag_id, page, per_page):
+                self.calls.append((group_id, tag_id, page, per_page))
+                return {"topics": [{"topic_id": 202}], "pagination": {"page": page}}
+
+        db = FakeTaggedTopicsDb()
+
+        with patch("backend.routes.topic_routes.ZSXQDatabase", return_value=db) as database:
+            response = _get_topics_by_tag_response(123, 9, page=2, per_page=5)
+
+        database.assert_called_once_with("123")
+        self.assertEqual({"topics": [{"topic_id": 202}], "pagination": {"page": 2}}, response)
+        self.assertEqual([(123, 9, 2, 5)], db.calls)
+        self.assertTrue(db.closed)
+
+    @unittest.skipUnless(HAS_TOPIC_ROUTE_DEPS, "topic route dependencies are not installed")
+    def test_get_topics_by_tag_response_maps_missing_tag_to_404(self):
+        from fastapi import HTTPException
+
+        from backend.routes.topic_routes import _get_topics_by_tag_response
+        from backend.storage.zsxq_database import TagNotFoundInGroupError
+
+        class FakeTaggedTopicsDb(FakeDb):
+            def get_group_topics_by_tag(self, group_id, tag_id, page, per_page):
+                raise TagNotFoundInGroupError
+
+        db = FakeTaggedTopicsDb()
+
+        with patch("backend.routes.topic_routes.ZSXQDatabase", return_value=db):
+            with self.assertRaises(HTTPException) as ctx:
+                _get_topics_by_tag_response(123, 9, page=2, per_page=5)
+
+        self.assertEqual(404, ctx.exception.status_code)
+        self.assertEqual("标签在该群组中不存在", ctx.exception.detail)
+        self.assertTrue(db.closed)
+
+    @unittest.skipUnless(HAS_TOPIC_ROUTE_DEPS, "topic route dependencies are not installed")
     def test_fetch_and_import_topic_comments_imports_comments(self):
         from backend.routes.topic_routes import _fetch_and_import_topic_comments
 

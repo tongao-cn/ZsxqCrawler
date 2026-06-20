@@ -246,6 +246,49 @@ def topic_count_by_tag_query(tag_id: int) -> tuple[str, tuple[Any, ...]]:
     )
 
 
+def tag_exists_in_group_query(group_id: Any, tag_id: int) -> tuple[str, tuple[Any, ...]]:
+    return (
+        "SELECT 1 FROM tags WHERE tag_id = ? AND group_id = ? LIMIT 1",
+        (tag_id, group_id),
+    )
+
+
+def group_topics_by_tag_query(group_id: Any, tag_id: int, per_page: int, offset: int) -> tuple[str, tuple[Any, ...]]:
+    return (
+        """
+                SELECT
+                    t.topic_id, t.title, t.create_time, t.likes_count, t.comments_count,
+                    t.reading_count, t.type, t.digested, t.sticky,
+                    q.text as question_text,
+                    a.text as answer_text,
+                    tk.text as talk_text,
+                    u.user_id, u.name, u.avatar_url
+                FROM topics t
+                INNER JOIN topic_tags tt ON t.topic_id = tt.topic_id
+                LEFT JOIN questions q ON t.topic_id = q.topic_id
+                LEFT JOIN answers a ON t.topic_id = a.topic_id
+                LEFT JOIN talks tk ON t.topic_id = tk.topic_id
+                LEFT JOIN users u ON tk.owner_user_id = u.user_id
+                WHERE tt.tag_id = ? AND t.group_id = ?
+                ORDER BY t.create_time DESC
+                LIMIT ? OFFSET ?
+            """,
+        (tag_id, group_id, per_page, offset),
+    )
+
+
+def group_topic_count_by_tag_query(group_id: Any, tag_id: int) -> tuple[str, tuple[Any, ...]]:
+    return (
+        """
+                SELECT COUNT(DISTINCT t.topic_id)
+                FROM topics t
+                INNER JOIN topic_tags tt ON t.topic_id = tt.topic_id
+                WHERE tt.tag_id = ? AND t.group_id = ?
+            """,
+        (tag_id, group_id),
+    )
+
+
 def group_topics_query(group_id: Any, per_page: int, offset: int, search: Optional[str]) -> tuple[str, tuple[Any, ...]]:
     base_select = """
                 SELECT

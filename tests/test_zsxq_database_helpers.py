@@ -15,6 +15,8 @@ from backend.storage.zsxq_database import (
     _format_tag_row,
     _format_tag_topic_row,
     _format_topic_row,
+    _group_topic_count_by_tag_query,
+    _group_topics_by_tag_query,
     _group_topics_count_query,
     _group_topics_query,
     _group_id_param,
@@ -39,6 +41,7 @@ from backend.storage.zsxq_database import (
     _question_insert_statement,
     _refresh_tag_topic_count_statement,
     _replace_file_topic_relation,
+    _tag_exists_in_group_query,
     _talk_insert_statement,
     _tag_id_by_name_query,
     _tags_by_group_query,
@@ -136,13 +139,22 @@ class FakeFailingExecuteCursor(FakeCursor):
 
 
 class FakeTagReadCursor(FakeCursor):
-    def __init__(self, tag_rows=None, topic_rows=None, total=0, raises=False, raises_on_count=False):
+    def __init__(
+        self,
+        tag_rows=None,
+        topic_rows=None,
+        total=0,
+        raises=False,
+        raises_on_count=False,
+        tag_exists=True,
+    ):
         super().__init__()
         self.tag_rows = list(tag_rows or [])
         self.topic_rows = list(topic_rows or [])
         self.total = total
         self.raises = raises
         self.raises_on_count = raises_on_count
+        self.tag_exists = tag_exists
         self.last_query = ""
 
     def execute(self, query, params=()):
@@ -150,7 +162,10 @@ class FakeTagReadCursor(FakeCursor):
         super().execute(query, params)
         if self.raises:
             raise RuntimeError("temporary tag read failure")
-        if self.raises_on_count and "SELECT COUNT(*) FROM topic_tags" in self.last_query:
+        if self.raises_on_count and (
+            "SELECT COUNT(*) FROM topic_tags" in self.last_query
+            or "SELECT COUNT(DISTINCT t.topic_id)" in self.last_query
+        ):
             raise RuntimeError("temporary tag count failure")
         return self
 
@@ -162,6 +177,8 @@ class FakeTagReadCursor(FakeCursor):
         return []
 
     def fetchone(self):
+        if "SELECT 1 FROM tags" in self.last_query:
+            return (1,) if self.tag_exists else None
         return (self.total,)
 
 
@@ -875,6 +892,25 @@ class ZSXQDatabaseHelperTests(unittest.TestCase):
             " ".join(count_sql.split()),
         )
         self.assertEqual((7,), count_params)
+
+        tag_exists_sql, tag_exists_params = _tag_exists_in_group_query(303, 7)
+        self.assertEqual("SELECT 1 FROM tags WHERE tag_id = ? AND group_id = ? LIMIT 1", tag_exists_sql)
+        self.assertEqual((7, 303), tag_exists_params)
+
+        scoped_topics_sql, scoped_topics_params = _group_topics_by_tag_query(303, 7, 5, 10)
+        self.assertIn(
+            "WHERE tt.tag_id = ? AND t.group_id = ? ORDER BY t.create_time DESC LIMIT ? OFFSET ?",
+            " ".join(scoped_topics_sql.split()),
+        )
+        self.assertEqual((7, 303, 5, 10), scoped_topics_params)
+
+        scoped_count_sql, scoped_count_params = _group_topic_count_by_tag_query(303, 7)
+        self.assertEqual(
+            "SELECT COUNT(DISTINCT t.topic_id) FROM topics t INNER JOIN topic_tags tt ON t.topic_id = tt.topic_id "
+            "WHERE tt.tag_id = ? AND t.group_id = ?",
+            " ".join(scoped_count_sql.split()),
+        )
+        self.assertEqual((7, 303), scoped_count_params)
 
     def test_group_topic_read_query_helpers_use_matching_search_predicates(self):
         topics_sql, topics_params = _group_topics_query(303, 5, 10, "alpha")
@@ -3741,6 +3777,108 @@ class ZSXQDatabaseHelperTests(unittest.TestCase):
         self.assertIn("FROM topics t", db.cursor.calls[0][0])
         self.assertEqual((303, "%offer%", "%offer%", "%offer%"), db.cursor.calls[1][1])
         self.assertIn("COUNT(DISTINCT t.topic_id)", db.cursor.calls[1][0])
+
+    def test_get_group_topics_by_tag_scopes_tag_and_topics_to_group(self):
+        from backend.storage.zsxq_database import ZSXQDatabase
+
+        db = object.__new__(ZSXQDatabase)
+        db.cursor = FakeTagReadCursor(
+            topic_rows=[
+                (
+                    202,
+                    "title",
+                    "2026-05-07",
+                    1,
+                    2,
+                    3,
+                    "talk",
+                    0,
+                    1,
+                    None,
+                    None,
+                    "body",
+                    901,
+                    "Alice",
+                    "a.png",
+                )
+            ],
+            total=12,
+        )
+
+        self.assertEqual(
+            {
+                "topics": [
+                    {
+                        "topic_id": 202,
+                        "title": "title",
+                        "create_time": "2026-05-07",
+                        "likes_count": 1,
+                        "comments_count": 2,
+                        "reading_count": 3,
+                        "type": "talk",
+                        "digested": False,
+                        "sticky": True,
+                        "talk_text": "body",
+                        "author": {"user_id": 901, "name": "Alice", "avatar_url": "a.png"},
+                    }
+                ],
+                "pagination": {"page": 2, "per_page": 5, "total": 12, "pages": 3},
+            },
+            ZSXQDatabase.get_group_topics_by_tag(db, 303, 7, page=2, per_page=5),
+        )
+        self.assertEqual(("SELECT 1 FROM tags WHERE tag_id = ? AND group_id = ? LIMIT 1", (7, 303)), db.cursor.calls[0])
+        self.assertEqual((7, 303, 5, 5), db.cursor.calls[1][1])
+        self.assertIn("WHERE tt.tag_id = ? AND t.group_id = ?", db.cursor.calls[1][0])
+        self.assertEqual((7, 303), db.cursor.calls[2][1])
+        self.assertIn("COUNT(DISTINCT t.topic_id)", db.cursor.calls[2][0])
+
+    def test_get_group_topics_by_tag_raises_when_tag_missing_from_group(self):
+        from backend.storage.zsxq_database import TagNotFoundInGroupError, ZSXQDatabase
+
+        db = object.__new__(ZSXQDatabase)
+        db.cursor = FakeTagReadCursor(tag_exists=False)
+
+        with self.assertRaises(TagNotFoundInGroupError):
+            ZSXQDatabase.get_group_topics_by_tag(db, 303, 7, page=2, per_page=5)
+
+        self.assertEqual([("SELECT 1 FROM tags WHERE tag_id = ? AND group_id = ? LIMIT 1", (7, 303))], db.cursor.calls)
+
+    def test_get_group_topics_by_tag_preserves_count_failure_fallback_shape(self):
+        from backend.storage.zsxq_database import ZSXQDatabase
+
+        db = object.__new__(ZSXQDatabase)
+        db.cursor = FakeTagReadCursor(
+            topic_rows=[
+                (
+                    202,
+                    "title",
+                    "2026-05-07",
+                    1,
+                    2,
+                    3,
+                    "talk",
+                    0,
+                    1,
+                    None,
+                    None,
+                    "body",
+                    901,
+                    "Alice",
+                    "a.png",
+                )
+            ],
+            total=12,
+            raises_on_count=True,
+        )
+
+        with patch("builtins.print") as mocked_print:
+            result = ZSXQDatabase.get_group_topics_by_tag(db, 303, 7, page=2, per_page=5)
+
+        self.assertEqual({"topics": [], "pagination": {"page": 2, "per_page": 5, "total": 0, "pages": 0}}, result)
+        mocked_print.assert_called_once()
+        self.assertEqual(3, len(db.cursor.calls))
+        self.assertIn("WHERE tt.tag_id = ? AND t.group_id = ?", db.cursor.calls[1][0])
+        self.assertIn("COUNT(DISTINCT t.topic_id)", db.cursor.calls[2][0])
 
     def test_get_topics_by_tag_uses_helper_queries_and_preserves_pagination(self):
         from backend.storage.zsxq_database import ZSXQDatabase

@@ -18,6 +18,8 @@ from backend.storage.zsxq_database_helpers import (
     format_tag_row,
     format_tag_topic_row,
     format_topic_row,
+    group_topic_count_by_tag_query,
+    group_topics_by_tag_query,
     group_topics_count_query,
     group_topics_query,
     group_id_param,
@@ -48,6 +50,7 @@ from backend.storage.zsxq_database_helpers import (
     question_insert_statement,
     refresh_tag_topic_count_statement,
     replace_file_topic_relation,
+    tag_exists_in_group_query,
     tag_id_by_name_query,
     talk_insert_statement,
     tags_by_group_query,
@@ -86,6 +89,10 @@ class TopicImportResult(NamedTuple):
     @property
     def succeeded(self) -> bool:
         return self.status != "error"
+
+
+class TagNotFoundInGroupError(Exception):
+    pass
 
 
 _DATABASE_STATS_TABLES = (
@@ -194,6 +201,18 @@ def _topics_by_tag_query(tag_id: int, per_page: int, offset: int) -> tuple[str, 
 
 def _topic_count_by_tag_query(tag_id: int) -> tuple[str, tuple[Any, ...]]:
     return topic_count_by_tag_query(tag_id)
+
+
+def _tag_exists_in_group_query(group_id: Any, tag_id: int) -> tuple[str, tuple[Any, ...]]:
+    return tag_exists_in_group_query(group_id, tag_id)
+
+
+def _group_topics_by_tag_query(group_id: Any, tag_id: int, per_page: int, offset: int) -> tuple[str, tuple[Any, ...]]:
+    return group_topics_by_tag_query(group_id, tag_id, per_page, offset)
+
+
+def _group_topic_count_by_tag_query(group_id: Any, tag_id: int) -> tuple[str, tuple[Any, ...]]:
+    return group_topic_count_by_tag_query(group_id, tag_id)
 
 
 def _group_topics_query(group_id: Any, per_page: int, offset: int, search: Optional[str]) -> tuple[str, tuple[Any, ...]]:
@@ -1226,6 +1245,47 @@ class ZSXQDatabase:
 
     def _fetch_topic_count_by_tag(self, tag_id: int) -> int:
         sql, params = _topic_count_by_tag_query(tag_id)
+        return self._fetch_first_column(sql, params)
+
+    def get_group_topics_by_tag(
+        self,
+        group_id: Any,
+        tag_id: int,
+        page: int = 1,
+        per_page: int = 20,
+    ) -> Dict[str, Any]:
+        scoped_group_id = group_id_param(group_id)
+        if not self.tag_exists_in_group(scoped_group_id, tag_id):
+            raise TagNotFoundInGroupError
+
+        try:
+            offset = (page - 1) * per_page
+            topics = self._fetch_group_topics_by_tag(scoped_group_id, tag_id, per_page, offset)
+            total = self._fetch_group_topic_count_by_tag(scoped_group_id, tag_id)
+            return {
+                "topics": topics,
+                "pagination": _build_pagination(page, per_page, total),
+            }
+        except Exception as e:
+            print(f"根据标签获取话题失败: {e}")
+            return {"topics": [], "pagination": _build_pagination(page, per_page, 0)}
+
+    def tag_exists_in_group(self, group_id: Any, tag_id: int) -> bool:
+        sql, params = _tag_exists_in_group_query(group_id, tag_id)
+        return self._fetch_row_exists(sql, params)
+
+    def _fetch_group_topics_by_tag(
+        self,
+        group_id: Any,
+        tag_id: int,
+        per_page: int,
+        offset: int,
+    ) -> List[Dict[str, Any]]:
+        sql, params = _group_topics_by_tag_query(group_id, tag_id, per_page, offset)
+        return self._fetch_mapped_rows(sql, params, _format_tag_topic_row)
+
+    def _fetch_group_topic_count_by_tag(self, group_id: Any, tag_id: int) -> int:
+        sql, params = _group_topic_count_by_tag_query(group_id, tag_id)
         return self._fetch_first_column(sql, params)
 
     def get_topics(self, page: int = 1, per_page: int = 20, search: Optional[str] = None) -> Dict[str, Any]:
