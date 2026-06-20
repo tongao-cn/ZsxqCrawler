@@ -220,6 +220,77 @@ def create_file_collect_task(group_id: str, request: Any) -> Dict[str, str]:
     )
 
 
+def create_file_download_task(group_id: str, request: Any) -> Dict[str, str]:
+    return launch_ingestion_task(
+        "download_files",
+        f"下载文件 (排序: {request.sort_by})",
+        run_file_download_task,
+        group_id,
+        group_id,
+        request.max_files,
+        request.sort_by,
+        request.start_time,
+        request.end_time,
+        request.last_days,
+        request.download_interval,
+        request.long_sleep_interval,
+        request.files_per_batch,
+        request.download_interval_min,
+        request.download_interval_max,
+        request.long_sleep_interval_min,
+        request.long_sleep_interval_max,
+        prepend_group_id_to_args=False,
+    )
+
+
+def create_single_file_download_task(
+    group_id: str,
+    file_id: int,
+    file_name: Optional[str] = None,
+    file_size: Optional[int] = None,
+) -> Dict[str, str]:
+    return launch_ingestion_task(
+        "download_single_file",
+        f"下载单个文件 (ID: {file_id})",
+        run_single_file_download_task_with_info,
+        group_id,
+        group_id,
+        file_id,
+        file_name,
+        file_size,
+        message="单个文件下载任务已创建",
+        prepend_group_id_to_args=False,
+    )
+
+
+def create_selected_file_download_task(group_id: str, request: Any) -> Dict[str, str]:
+    return launch_ingestion_task(
+        "download_selected_files",
+        f"下载选中文件 ({len(request.file_ids)} 个)",
+        run_selected_file_download_task,
+        group_id,
+        group_id,
+        request.file_ids,
+        message="选中文件下载任务已创建",
+        prepend_group_id_to_args=False,
+    )
+
+
+def create_filtered_file_download_task(group_id: str, request: Any) -> Dict[str, str]:
+    return launch_ingestion_task(
+        "download_filtered_files",
+        "下载筛选结果",
+        run_filtered_file_download_task,
+        group_id,
+        group_id,
+        request.status,
+        request.search,
+        request.max_files,
+        message="筛选结果下载任务已创建",
+        prepend_group_id_to_args=False,
+    )
+
+
 def _file_task_stopped_after_init(task_id: str) -> bool:
     return _file_task_stopped_after_init_impl(
         task_id,

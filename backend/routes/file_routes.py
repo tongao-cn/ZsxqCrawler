@@ -33,12 +33,12 @@ from backend.services.file_workflow_service import (
     _get_file_status_response,
     _get_files_response,
     _log_file_route_event,
+    create_filtered_file_download_task,
     create_file_collect_task,
-    run_filtered_file_download_task,
+    create_file_download_task,
+    create_selected_file_download_task,
+    create_single_file_download_task,
     run_file_analysis_task,
-    run_file_download_task,
-    run_selected_file_download_task,
-    run_single_file_download_task_with_info,
     run_sync_files_from_topics_task,
 )
 
@@ -112,26 +112,7 @@ async def collect_files(group_id: str, request: FileCollectRequest, background_t
 async def download_files(group_id: str, request: FileDownloadRequest, background_tasks: BackgroundTasks):
     """下载文件"""
     try:
-        return _enqueue_file_task(
-            background_tasks,
-            "download_files",
-            f"下载文件 (排序: {request.sort_by})",
-            run_file_download_task,
-            group_id,
-            request.max_files,
-            request.sort_by,
-            request.start_time,
-            request.end_time,
-            request.last_days,
-            request.download_interval,
-            request.long_sleep_interval,
-            request.files_per_batch,
-            request.download_interval_min,
-            request.download_interval_max,
-            request.long_sleep_interval_min,
-            request.long_sleep_interval_max,
-            ingestion_group_id=group_id,
-        )
+        return create_file_download_task(group_id, request)
     except HTTPException:
         raise
     except Exception as e:
@@ -148,18 +129,7 @@ async def download_single_file(
 ):
     """下载单个文件"""
     try:
-        return _enqueue_file_task(
-            background_tasks,
-            "download_single_file",
-            f"下载单个文件 (ID: {file_id})",
-            run_single_file_download_task_with_info,
-            group_id,
-            file_id,
-            file_name,
-            file_size,
-            message="单个文件下载任务已创建",
-            ingestion_group_id=group_id,
-        )
+        return create_single_file_download_task(group_id, file_id, file_name, file_size)
     except HTTPException:
         raise
     except Exception as e:
@@ -170,16 +140,7 @@ async def download_single_file(
 async def download_selected_files(group_id: str, request: FileIdListRequest, background_tasks: BackgroundTasks):
     """下载指定文件列表。"""
     try:
-        return _enqueue_file_task(
-            background_tasks,
-            "download_selected_files",
-            f"下载选中文件 ({len(request.file_ids)} 个)",
-            run_selected_file_download_task,
-            group_id,
-            request.file_ids,
-            message="选中文件下载任务已创建",
-            ingestion_group_id=group_id,
-        )
+        return create_selected_file_download_task(group_id, request)
     except HTTPException:
         raise
     except Exception as e:
@@ -194,18 +155,7 @@ async def download_filtered_files(
 ):
     """下载当前筛选条件匹配的文件。"""
     try:
-        return _enqueue_file_task(
-            background_tasks,
-            "download_filtered_files",
-            "下载筛选结果",
-            run_filtered_file_download_task,
-            group_id,
-            request.status,
-            request.search,
-            request.max_files,
-            message="筛选结果下载任务已创建",
-            ingestion_group_id=group_id,
-        )
+        return create_filtered_file_download_task(group_id, request)
     except HTTPException:
         raise
     except Exception as e:
