@@ -838,6 +838,52 @@ def topic_count_query(group_id: Optional[str]) -> tuple[str, tuple[Any, ...]]:
     )
 
 
+def group_stats_queries(group_id: Optional[str]) -> tuple[tuple[str, str, tuple[Any, ...]], ...]:
+    scoped_group_id = group_id_param(group_id)
+    return (
+        (
+            "topics_count",
+            "SELECT COUNT(*) FROM topics WHERE group_id = ?",
+            (scoped_group_id,),
+        ),
+        (
+            "users_count",
+            """
+            SELECT COUNT(DISTINCT t.owner_user_id)
+            FROM talks t
+            JOIN topics tp ON t.topic_id = tp.topic_id
+            WHERE tp.group_id = ?
+            """,
+            (scoped_group_id,),
+        ),
+        (
+            "latest_topic_time",
+            "SELECT MAX(create_time) FROM topics WHERE group_id = ?",
+            (scoped_group_id,),
+        ),
+        (
+            "earliest_topic_time",
+            "SELECT MIN(create_time) FROM topics WHERE group_id = ?",
+            (scoped_group_id,),
+        ),
+        (
+            "total_likes",
+            "SELECT SUM(likes_count) FROM topics WHERE group_id = ?",
+            (scoped_group_id,),
+        ),
+        (
+            "total_comments",
+            "SELECT SUM(comments_count) FROM topics WHERE group_id = ?",
+            (scoped_group_id,),
+        ),
+        (
+            "total_readings",
+            "SELECT SUM(reading_count) FROM topics WHERE group_id = ?",
+            (scoped_group_id,),
+        ),
+    )
+
+
 def database_stats_count_query(table: str, group_id: Optional[str]) -> tuple[str, tuple[Any, ...]]:
     if group_id is None:
         return f"SELECT COUNT(*) FROM {table}", ()

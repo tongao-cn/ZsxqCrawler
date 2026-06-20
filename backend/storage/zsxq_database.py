@@ -18,6 +18,7 @@ from backend.storage.zsxq_database_helpers import (
     format_tag_topic_row,
     group_id_param,
     group_insert_statement,
+    group_stats_queries,
     image_insert_statement,
     insert_tag_statement,
     insert_topic_tag_statement,
@@ -398,6 +399,10 @@ def _topic_count_query(group_id: Optional[str]) -> tuple[str, tuple[Any, ...]]:
     return topic_count_query(group_id)
 
 
+def _group_stats_queries(group_id: Optional[str]) -> tuple[tuple[str, str, tuple[Any, ...]], ...]:
+    return group_stats_queries(group_id)
+
+
 def _database_stats_count_query(table: str, group_id: Optional[str]) -> tuple[str, tuple[Any, ...]]:
     return database_stats_count_query(table, group_id)
 
@@ -644,6 +649,16 @@ class ZSXQDatabase:
     def _fetch_database_stat(self, table: str) -> Any:
         sql, params = _database_stats_count_query(table, self.group_id)
         return self._fetch_first_column(sql, params)
+
+    def get_group_stats_summary(self) -> Dict[str, Any]:
+        """Return aggregate topic stats for this database's group scope."""
+        summary = {"group_id": _group_id_param(self.group_id)}
+        for name, sql, params in _group_stats_queries(self.group_id):
+            value = self._fetch_first_column(sql, params)
+            if name in {"total_likes", "total_comments", "total_readings"}:
+                value = value or 0
+            summary[name] = value
+        return summary
     
     def get_timestamp_range_info(self) -> Dict[str, Any]:
         """获取话题时间戳范围信息"""

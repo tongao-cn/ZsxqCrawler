@@ -79,6 +79,30 @@ class FakeScopedFileDb(FakeFileDb):
         self.group_id = group_id
 
 
+class FakeStatsDb:
+    last_instance = None
+
+    def __init__(self, group_id=None):
+        self.group_id = group_id
+        self.closed = False
+        FakeStatsDb.last_instance = self
+
+    def get_group_stats_summary(self):
+        return {
+            "group_id": int(self.group_id),
+            "topics_count": 12,
+            "users_count": 4,
+            "latest_topic_time": "2024-02-01T00:00:00Z",
+            "earliest_topic_time": "2024-01-01T00:00:00Z",
+            "total_likes": 0,
+            "total_comments": 5,
+            "total_readings": 9,
+        }
+
+    def close(self):
+        self.closed = True
+
+
 @unittest.skipUnless(HAS_GROUP_ROUTE_DEPS, "group route dependencies are not installed")
 class GroupRoutesHelperTests(unittest.TestCase):
     def _run_async(self, coro):
@@ -229,6 +253,26 @@ class GroupRoutesHelperTests(unittest.TestCase):
         )
         self.assertEqual(file_db.group_id, "123")
         self.assertTrue(file_db.closed)
+
+    def test_get_group_stats_response_uses_storage_summary(self):
+        with patch.object(group_routes, "ZSXQDatabase", FakeStatsDb):
+            result = group_routes._get_group_stats_response(123)
+
+        self.assertEqual(
+            {
+                "group_id": 123,
+                "topics_count": 12,
+                "users_count": 4,
+                "latest_topic_time": "2024-02-01T00:00:00Z",
+                "earliest_topic_time": "2024-01-01T00:00:00Z",
+                "total_likes": 0,
+                "total_comments": 5,
+                "total_readings": 9,
+            },
+            result,
+        )
+        self.assertEqual("123", FakeStatsDb.last_instance.group_id)
+        self.assertTrue(FakeStatsDb.last_instance.closed)
 
     def test_build_official_group_entry_maps_supported_fields(self):
         entry = group_routes._build_official_group_entry(

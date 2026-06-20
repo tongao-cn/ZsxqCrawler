@@ -15,6 +15,7 @@ from backend.storage.zsxq_database import (
     _format_tag_topic_row,
     _group_id_param,
     _group_insert_statement,
+    _group_stats_queries,
     _image_insert_statement,
     _insert_tag_statement,
     _insert_topic_tag_statement,
@@ -1797,6 +1798,60 @@ class ZSXQDatabaseHelperTests(unittest.TestCase):
         self.assertEqual("SELECT COUNT(*) FROM topics WHERE (? IS NULL OR group_id = ?)", count_sql)
         self.assertEqual((303, 303), count_params)
         self.assertEqual((None, None), _topic_count_query(None)[1])
+
+    def test_group_stats_queries_preserve_metric_names_and_scope(self):
+        queries = _group_stats_queries("303")
+
+        self.assertEqual(
+            [
+                "topics_count",
+                "users_count",
+                "latest_topic_time",
+                "earliest_topic_time",
+                "total_likes",
+                "total_comments",
+                "total_readings",
+            ],
+            [name for name, _sql, _params in queries],
+        )
+        self.assertEqual(("SELECT COUNT(*) FROM topics WHERE group_id = ?", (303,)), queries[0][1:])
+        self.assertIn("COUNT(DISTINCT t.owner_user_id)", " ".join(queries[1][1].split()))
+        self.assertEqual((303,), queries[1][2])
+        self.assertEqual(("SELECT SUM(reading_count) FROM topics WHERE group_id = ?", (303,)), queries[-1][1:])
+
+    def test_get_group_stats_summary_preserves_response_shape_and_null_totals(self):
+        from backend.storage.zsxq_database import ZSXQDatabase
+
+        db = object.__new__(ZSXQDatabase)
+        db.cursor = FakeTimestampCursor(
+            [
+                (12,),
+                (4,),
+                ("2024-02-01T00:00:00Z",),
+                ("2024-01-01T00:00:00Z",),
+                (None,),
+                (5,),
+                (9,),
+            ]
+        )
+        db.group_id = "303"
+
+        self.assertEqual(
+            {
+                "group_id": 303,
+                "topics_count": 12,
+                "users_count": 4,
+                "latest_topic_time": "2024-02-01T00:00:00Z",
+                "earliest_topic_time": "2024-01-01T00:00:00Z",
+                "total_likes": 0,
+                "total_comments": 5,
+                "total_readings": 9,
+            },
+            ZSXQDatabase.get_group_stats_summary(db),
+        )
+        self.assertEqual(7, len(db.cursor.calls))
+        self.assertEqual(("SELECT COUNT(*) FROM topics WHERE group_id = ?", (303,)), db.cursor.calls[0])
+        self.assertEqual(("SELECT SUM(reading_count) FROM topics WHERE group_id = ?", (303,)), db.cursor.calls[-1])
 
     def test_database_stats_count_query_preserves_branch_shapes(self):
         self.assertEqual(("SELECT COUNT(*) FROM groups", ()), _database_stats_count_query("groups", None))

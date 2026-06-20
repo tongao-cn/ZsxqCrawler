@@ -355,47 +355,7 @@ def _get_group_info_response(group_id: str) -> Dict[str, Any]:
 
 def _get_group_stats_response(group_id: int) -> Dict[str, Any]:
     with closing(ZSXQDatabase(str(group_id))) as db:
-        cursor = db.cursor
-
-        cursor.execute("SELECT COUNT(*) FROM topics WHERE group_id = ?", (group_id,))
-        topics_count = cursor.fetchone()[0]
-
-        cursor.execute(
-            """
-            SELECT COUNT(DISTINCT t.owner_user_id)
-            FROM talks t
-            JOIN topics tp ON t.topic_id = tp.topic_id
-            WHERE tp.group_id = ?
-        """,
-            (group_id,),
-        )
-        users_count = cursor.fetchone()[0]
-
-        cursor.execute("SELECT MAX(create_time) FROM topics WHERE group_id = ?", (group_id,))
-        latest_topic_time = cursor.fetchone()[0]
-
-        cursor.execute("SELECT MIN(create_time) FROM topics WHERE group_id = ?", (group_id,))
-        earliest_topic_time = cursor.fetchone()[0]
-
-        cursor.execute("SELECT SUM(likes_count) FROM topics WHERE group_id = ?", (group_id,))
-        total_likes = cursor.fetchone()[0] or 0
-
-        cursor.execute("SELECT SUM(comments_count) FROM topics WHERE group_id = ?", (group_id,))
-        total_comments = cursor.fetchone()[0] or 0
-
-        cursor.execute("SELECT SUM(reading_count) FROM topics WHERE group_id = ?", (group_id,))
-        total_readings = cursor.fetchone()[0] or 0
-
-    return {
-        "group_id": group_id,
-        "topics_count": topics_count,
-        "users_count": users_count,
-        "latest_topic_time": latest_topic_time,
-        "earliest_topic_time": earliest_topic_time,
-        "total_likes": total_likes,
-        "total_comments": total_comments,
-        "total_readings": total_readings,
-    }
+        return db.get_group_stats_summary()
 
 
 def _get_group_database_info_response(group_id: int) -> Dict[str, Any]:
