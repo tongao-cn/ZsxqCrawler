@@ -7,21 +7,7 @@ from datetime import date
 from typing import Any, Dict, List, Sequence
 
 from backend.services.daily_topic_analysis_topics import clip_text as _clip
-
-
-def _normalize_text(value: Any) -> str:
-    return str(value or "").strip()
-
-
-def _normalize_company_name(value: Any) -> str:
-    return (
-        _normalize_text(value)
-        .replace(" ", "")
-        .replace("股份有限公司", "")
-        .replace("有限责任公司", "")
-        .replace("有限公司", "")
-        .replace("集团", "")
-    )
+from backend.services.stock_topic_analysis_helpers import _normalize_company_name, _normalize_text
 
 
 def _topic_content(row: Any) -> str:
