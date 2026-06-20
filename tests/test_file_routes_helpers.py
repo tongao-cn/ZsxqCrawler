@@ -2441,10 +2441,10 @@ class FileRoutesHelperTests(unittest.TestCase):
         topics_db = FakeSyncFilesTopicsDb()
 
         with (
-            patch("backend.services.file_workflow_service.ZSXQDatabase", return_value=topics_db) as create_db,
-            patch("backend.services.file_workflow_service.update_task") as update_task,
-            patch("backend.services.file_workflow_service.add_task_log"),
-            patch("backend.services.file_workflow_service.is_task_stopped", return_value=False),
+            patch("backend.services.file_topic_sync_workflow.ZSXQDatabase", return_value=topics_db) as create_db,
+            patch("backend.services.file_topic_sync_workflow.update_task") as update_task,
+            patch("backend.services.file_topic_sync_workflow.add_task_log"),
+            patch("backend.services.file_topic_sync_workflow.is_task_stopped", return_value=False),
         ):
             run_sync_files_from_topics_task("task-1", "123")
 
@@ -2463,10 +2463,10 @@ class FileRoutesHelperTests(unittest.TestCase):
         from backend.services.file_workflow_service import run_sync_files_from_topics_task
 
         with (
-            patch("backend.services.file_workflow_service.ZSXQDatabase") as create_db,
-            patch("backend.services.file_workflow_service.update_task") as update_task,
-            patch("backend.services.file_workflow_service.add_task_log") as add_task_log,
-            patch("backend.services.file_workflow_service.is_task_stopped", return_value=True),
+            patch("backend.services.file_topic_sync_workflow.ZSXQDatabase") as create_db,
+            patch("backend.services.file_topic_sync_workflow.update_task") as update_task,
+            patch("backend.services.file_topic_sync_workflow.add_task_log") as add_task_log,
+            patch("backend.services.file_topic_sync_workflow.is_task_stopped", return_value=True),
         ):
             run_sync_files_from_topics_task("task-1", "123")
 
@@ -2483,10 +2483,10 @@ class FileRoutesHelperTests(unittest.TestCase):
         topics_db = FakeSyncFilesTopicsDb()
 
         with (
-            patch("backend.services.file_workflow_service.ZSXQDatabase", return_value=topics_db),
-            patch("backend.services.file_workflow_service.update_task") as update_task,
-            patch("backend.services.file_workflow_service.add_task_log"),
-            patch("backend.services.file_workflow_service.is_task_stopped", side_effect=[False, True]),
+            patch("backend.services.file_topic_sync_workflow.ZSXQDatabase", return_value=topics_db),
+            patch("backend.services.file_topic_sync_workflow.update_task") as update_task,
+            patch("backend.services.file_topic_sync_workflow.add_task_log"),
+            patch("backend.services.file_topic_sync_workflow.is_task_stopped", side_effect=[False, True]),
         ):
             run_sync_files_from_topics_task("task-1", "123")
 

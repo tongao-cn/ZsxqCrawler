@@ -31,7 +31,6 @@ from backend.services.file_download_records_workflow import (
     run_selected_file_download_task,
 )
 from backend.services.file_downloader_runtime import (
-    _close_quietly,
     _create_file_downloader,
     _safe_remove_file_downloader,
 )
@@ -47,6 +46,10 @@ from backend.services.file_single_download_workflow import (
     _single_file_download_local_path,
     run_single_file_download_task_with_info,
 )
+from backend.services.file_topic_sync_workflow import (
+    _complete_sync_files_from_topics_task,
+    run_sync_files_from_topics_task,
+)
 from backend.services.task_launch import launch_ingestion_task, launch_task
 from backend.services.task_runtime import (
     add_task_log,
@@ -54,7 +57,6 @@ from backend.services.task_runtime import (
     update_task,
 )
 from backend.storage.db_compat import connect
-from backend.storage.zsxq_database import ZSXQDatabase
 from backend.storage.zsxq_file_database import ZSXQFileDatabase
 
 
@@ -760,26 +762,3 @@ def run_file_download_task(
         _fail_file_task(task_id, f"文件下载失败: {e}", f"文件下载失败: {e}")
     finally:
         _safe_remove_file_downloader(task_id)
-
-
-def _complete_sync_files_from_topics_task(task_id: str, stats: Dict[str, Any]) -> None:
-    update_task(task_id, "completed", "从话题同步文件记录完成", stats)
-
-
-def run_sync_files_from_topics_task(task_id: str, group_id: str):
-    topics_db = None
-    try:
-        update_task(task_id, "running", "开始从话题同步文件记录...")
-        if _file_task_stopped_after_init(task_id):
-            return
-
-        topics_db = ZSXQDatabase(group_id)
-        stats = topics_db.backfill_topic_files_to_file_database()
-        if is_task_stopped(task_id):
-            return
-
-        _complete_sync_files_from_topics_task(task_id, stats)
-    except Exception as e:
-        _fail_file_task(task_id, f"从话题同步文件记录失败: {e}", f"从话题同步文件记录失败: {e}")
-    finally:
-        _close_quietly(topics_db)
