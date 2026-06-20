@@ -3,12 +3,23 @@ from __future__ import annotations
 from typing import Any, Dict
 
 from backend.core.console_output import safe_console_print as print
+from backend.storage.zsxq_database import TopicImportResult
 
 
 def _query_group_id(group_id: str):
     value = str(group_id or "").strip()
     return int(value) if value.isdigit() else value
 
+
+def _add_topic_import_result(stats: Dict[str, int], result: TopicImportResult) -> bool:
+    if result.status == "created":
+        stats["new_topics"] += 1
+        return True
+    if result.status == "existing":
+        stats["updated_topics"] += 1
+        return True
+    stats["errors"] += 1
+    return False
 
 
 class TopicIngestionMixin:
@@ -38,16 +49,9 @@ class TopicIngestionMixin:
             try:
                 topic_id = topic_data.get('topic_id')
 
-                # 检查是否已存在
-                self.db.cursor.execute(
-                    'SELECT topic_id FROM topics WHERE topic_id = ? AND group_id = ?',
-                    (topic_id, _query_group_id(self.group_id)),
-                )
-                exists = self.db.cursor.fetchone()
-
                 # 导入数据
-                if not self.db.import_topic_data(topic_data):
-                    stats['errors'] += 1
+                import_result = self.db.import_topic_data_with_result(topic_data)
+                if not _add_topic_import_result(stats, import_result):
                     self.log(f"⚠️ 话题 {topic_id} 导入失败，已回滚该话题写入")
                     continue
 
@@ -65,11 +69,6 @@ class TopicIngestionMixin:
                     except Exception as e:
                         self.log(f"⚠️ 话题 {topic_id} 获取评论时出错: {e}")
                         # 不影响话题本身的导入
-
-                if exists:
-                    stats['updated_topics'] += 1
-                else:
-                    stats['new_topics'] += 1
 
             except Exception as e:
                 stats['errors'] += 1
