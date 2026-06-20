@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from backend.storage.db_compat import connect
+from backend.storage.zsxq_file_database import ZSXQFileDatabase
 
 
 def _log_file_route_event(level: str, message: str) -> None:
@@ -10,42 +10,11 @@ def _log_file_route_event(level: str, message: str) -> None:
 
 
 def _clear_group_file_data(group_id: str) -> dict:
-    conn = connect()
+    file_db = ZSXQFileDatabase(group_id)
     try:
-        cursor = conn.cursor()
-        deleted_counts = {}
-        topic_ids_sql = "SELECT topic_id FROM topics WHERE group_id = ?"
-        file_ids_sql = f"""
-            SELECT file_id FROM files WHERE group_id = ?
-            UNION
-            SELECT file_id FROM file_topic_relations WHERE topic_id IN ({topic_ids_sql})
-            UNION
-            SELECT file_id FROM topic_files WHERE topic_id IN ({topic_ids_sql})
-        """
-        cursor.execute(
-            f"DELETE FROM file_ai_analyses WHERE file_id IN ({file_ids_sql})",
-            (group_id, group_id, group_id),
-        )
-        deleted_counts["file_ai_analyses"] = cursor.rowcount
-        cursor.execute(
-            f"DELETE FROM files WHERE file_id IN ({file_ids_sql})",
-            (group_id, group_id, group_id),
-        )
-        deleted_counts["files"] = cursor.rowcount
-        cursor.execute(
-            f"DELETE FROM file_topic_relations WHERE topic_id IN ({topic_ids_sql})",
-            (group_id,),
-        )
-        deleted_counts["file_topic_relations"] = cursor.rowcount
-        cursor.execute(
-            f"DELETE FROM topic_files WHERE topic_id IN ({topic_ids_sql})",
-            (group_id,),
-        )
-        deleted_counts["topic_files"] = cursor.rowcount
-        conn.commit()
-        return deleted_counts
+        return file_db.clear_group_file_records()
     finally:
-        conn.close()
+        file_db.close()
 
 
 def _clear_group_image_cache(group_id: str) -> None:

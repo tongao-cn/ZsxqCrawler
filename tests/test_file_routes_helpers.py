@@ -2732,6 +2732,33 @@ class FileRoutesHelperTests(unittest.TestCase):
         self.assertTrue(crawler.downloader.file_db.closed)
         self.assertTrue(crawler.db.closed)
 
+    def test_clear_group_file_data_uses_storage_interface(self):
+        from backend.services import file_clear_workflow
+
+        class FakeFileDb:
+            last_instance = None
+
+            def __init__(self, group_id):
+                self.group_id = group_id
+                self.clear_calls = 0
+                self.closed = False
+                FakeFileDb.last_instance = self
+
+            def clear_group_file_records(self):
+                self.clear_calls += 1
+                return {"files": 2}
+
+            def close(self):
+                self.closed = True
+
+        with patch("backend.services.file_clear_workflow.ZSXQFileDatabase", FakeFileDb):
+            result = file_clear_workflow._clear_group_file_data("group-1")
+
+        self.assertEqual({"files": 2}, result)
+        self.assertEqual("group-1", FakeFileDb.last_instance.group_id)
+        self.assertEqual(1, FakeFileDb.last_instance.clear_calls)
+        self.assertTrue(FakeFileDb.last_instance.closed)
+
     def test_clear_file_database_does_not_construct_legacy_crawler(self):
         from backend.services.file_workflow_service import _clear_file_database_response
 

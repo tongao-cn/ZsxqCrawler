@@ -81,6 +81,17 @@ class FakeListPageCursor:
         return (self.total,)
 
 
+class FakeClearFileRecordsCursor:
+    def __init__(self, rowcounts):
+        self.rowcounts = list(rowcounts)
+        self.executed = []
+        self.rowcount = 0
+
+    def execute(self, sql, params=()):
+        self.executed.append((" ".join(sql.split()), params))
+        self.rowcount = self.rowcounts.pop(0)
+
+
 class FakeConnection:
     def __init__(self):
         self.closed = False
@@ -671,6 +682,38 @@ class ZSXQFileDatabaseHelperTests(unittest.TestCase):
         self.assertTrue(any("faa.updated_at IS NULL" in sql for sql, _params in db.cursor.executed))
         self.assertEqual(("group-1", 20, 0), db.cursor.executed[0][1])
         self.assertEqual(("group-1",), db.cursor.executed[1][1])
+
+    def test_clear_group_file_records_deletes_scoped_file_tables_and_commits(self):
+        from backend.storage.zsxq_file_database import ZSXQFileDatabase
+
+        db = object.__new__(ZSXQFileDatabase)
+        db.cursor = FakeClearFileRecordsCursor([5, 4, 3, 2])
+        db.conn = FakeAnalysisConnection()
+        db.group_id = "303"
+
+        deleted = ZSXQFileDatabase.clear_group_file_records(db)
+
+        self.assertEqual(
+            {
+                "file_ai_analyses": 5,
+                "files": 4,
+                "file_topic_relations": 3,
+                "topic_files": 2,
+            },
+            deleted,
+        )
+        self.assertEqual(1, db.conn.commits)
+        self.assertEqual(4, len(db.cursor.executed))
+        self.assertIn("DELETE FROM file_ai_analyses WHERE file_id IN", db.cursor.executed[0][0])
+        self.assertIn("UNION SELECT file_id FROM file_topic_relations", db.cursor.executed[0][0])
+        self.assertIn("UNION SELECT file_id FROM topic_files", db.cursor.executed[0][0])
+        self.assertIn("DELETE FROM files WHERE file_id IN", db.cursor.executed[1][0])
+        self.assertIn("DELETE FROM file_topic_relations WHERE topic_id IN", db.cursor.executed[2][0])
+        self.assertIn("DELETE FROM topic_files WHERE topic_id IN", db.cursor.executed[3][0])
+        self.assertEqual((303, 303, 303), db.cursor.executed[0][1])
+        self.assertEqual((303, 303, 303), db.cursor.executed[1][1])
+        self.assertEqual((303,), db.cursor.executed[2][1])
+        self.assertEqual((303,), db.cursor.executed[3][1])
 
     def test_close_connection_ignores_none_and_closes_connection(self):
         _close_connection(None)

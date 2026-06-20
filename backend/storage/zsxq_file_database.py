@@ -575,6 +575,42 @@ class ZSXQFileDatabase:
         row = self.cursor.fetchone()
         total = (row[0] or 0) if row else 0
         return FileListPage(records, total)
+
+    def clear_group_file_records(self, group_id: Optional[Any] = None) -> Dict[str, Any]:
+        scoped_group_id = self.group_id if group_id is None else group_id
+        group_param = _query_group_id(scoped_group_id)
+        deleted_counts = {}
+        topic_ids_sql = "SELECT topic_id FROM topics WHERE group_id = ?"
+        file_ids_sql = f"""
+            SELECT file_id FROM files WHERE group_id = ?
+            UNION
+            SELECT file_id FROM file_topic_relations WHERE topic_id IN ({topic_ids_sql})
+            UNION
+            SELECT file_id FROM topic_files WHERE topic_id IN ({topic_ids_sql})
+        """
+
+        self.cursor.execute(
+            f"DELETE FROM file_ai_analyses WHERE file_id IN ({file_ids_sql})",
+            (group_param, group_param, group_param),
+        )
+        deleted_counts["file_ai_analyses"] = self.cursor.rowcount
+        self.cursor.execute(
+            f"DELETE FROM files WHERE file_id IN ({file_ids_sql})",
+            (group_param, group_param, group_param),
+        )
+        deleted_counts["files"] = self.cursor.rowcount
+        self.cursor.execute(
+            f"DELETE FROM file_topic_relations WHERE topic_id IN ({topic_ids_sql})",
+            (group_param,),
+        )
+        deleted_counts["file_topic_relations"] = self.cursor.rowcount
+        self.cursor.execute(
+            f"DELETE FROM topic_files WHERE topic_id IN ({topic_ids_sql})",
+            (group_param,),
+        )
+        deleted_counts["topic_files"] = self.cursor.rowcount
+        self.conn.commit()
+        return deleted_counts
     
     def insert_talk(self, topic_id: int, talk_data: Dict[str, Any]):
         """插入话题内容"""
