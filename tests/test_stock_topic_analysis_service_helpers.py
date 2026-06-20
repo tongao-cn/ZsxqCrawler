@@ -27,7 +27,7 @@ class StockTopicAnalysisServiceHelperTests(unittest.TestCase):
 
     @unittest.skipUnless(HAS_SERVICE_DEPS, "stock topic analysis service dependencies are not installed")
     def test_parse_stock_names_splits_dedupes_and_limits(self):
-        from backend.services.stock_topic_analysis_service import parse_stock_names
+        from backend.services.stock_topic_analysis_helpers import parse_stock_names
 
         names = parse_stock_names("宁德时代、德龙激光\n宁德时代 贵州茅台，中际旭创")
         self.assertEqual(["宁德时代", "德龙激光", "贵州茅台", "中际旭创"], names)
@@ -35,7 +35,7 @@ class StockTopicAnalysisServiceHelperTests(unittest.TestCase):
 
     @unittest.skipUnless(HAS_SERVICE_DEPS, "stock topic analysis service dependencies are not installed")
     def test_parse_stock_names_preserves_group_suffix(self):
-        from backend.services.stock_topic_analysis_service import parse_stock_names
+        from backend.services.stock_topic_analysis_helpers import parse_stock_names
 
         self.assertEqual(["朗新集团", "君正集团"], parse_stock_names("朗新集团、君正集团"))
 

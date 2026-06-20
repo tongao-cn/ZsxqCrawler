@@ -3,7 +3,11 @@
 from __future__ import annotations
 
 import json
+import re
 from typing import Any, Dict, Iterable, List, Optional
+
+
+DEFAULT_STOCK_NAME_LIMIT = 50
 
 
 def _normalize_text(value: Any) -> str:
@@ -47,6 +51,19 @@ def _ordered_unique(values: Iterable[Any], *, limit: int = 50) -> List[str]:
         if len(result) >= limit:
             break
     return result
+
+
+def parse_stock_names(values: Any, *, limit: int | None = None) -> List[str]:
+    if isinstance(values, str):
+        raw_values = re.split(r"[\s,，、;；]+", values)
+    elif isinstance(values, Iterable):
+        raw_values = []
+        for value in values:
+            raw_values.extend(re.split(r"[\s,，、;；]+", _normalize_text(value)))
+    else:
+        raw_values = []
+    max_limit = DEFAULT_STOCK_NAME_LIMIT if limit is None else max(1, int(limit))
+    return _ordered_unique((_normalize_text(value) for value in raw_values), limit=max_limit)
 
 
 def _safe_float(value: Any) -> float:

@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any, Dict, Iterable, List, Optional
 
 from backend.services.stock_external_summary_store import RECOMMENDATION_WINDOWS, load_external_stock_summary_sources
-from backend.services.stock_topic_analysis_service import parse_stock_names
+from backend.services.stock_topic_analysis_helpers import parse_stock_names
 
 
 def _normalize_text(value: Any) -> str:

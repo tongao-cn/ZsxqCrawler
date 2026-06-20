@@ -5,11 +5,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Callable
 
+from backend.services.stock_topic_analysis_helpers import parse_stock_names
 from backend.services.stock_topic_analysis_service import (
     answer_stock_question,
     analyze_stock_topics,
     analyze_stock_topics_batch,
-    parse_stock_names,
 )
 from backend.services.task_launch import TASK_CREATED_MESSAGE, launch_task
 from backend.services.task_runtime import add_task_log, build_task_log_callback, run_workflow

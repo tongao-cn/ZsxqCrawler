@@ -35,6 +35,7 @@ from backend.services.stock_topic_analysis_helpers import (
     _safe_float,
     _stock_analysis_mode,
     _topic_ids_from_result,
+    parse_stock_names,
 )
 from backend.services.stock_topic_analysis_payloads import (
     build_analysis_topic_payload,
@@ -72,7 +73,6 @@ MAX_ANALYSIS_TOPICS_PER_CALL = 10
 MAX_TRACKED_TOPIC_IDS = 5000
 MAX_TOPIC_TEXT_CHARS = 1800
 MAX_ANALYSIS_PROMPT_CHARS = 50000
-MAX_BATCH_STOCKS = 50
 MAX_BATCH_STOCK_ANALYSIS_WORKERS = 10
 MAX_BATCH_TRANSIENT_FAILURES = 5
 MAX_QUESTION_KEYWORDS = 8
@@ -98,19 +98,6 @@ def _log(log_callback: Callable[[str], None] | None, message: str) -> None:
 def _is_transient_batch_error(message: str) -> bool:
     normalized = _normalize_text(message).lower()
     return any(marker in normalized for marker in TRANSIENT_BATCH_ERROR_MARKERS)
-
-
-def parse_stock_names(values: Any, *, limit: int | None = None) -> List[str]:
-    if isinstance(values, str):
-        raw_values = re.split(r"[\s,，、;；]+", values)
-    elif isinstance(values, Iterable):
-        raw_values = []
-        for value in values:
-            raw_values.extend(re.split(r"[\s,，、;；]+", _normalize_text(value)))
-    else:
-        raw_values = []
-    max_limit = MAX_BATCH_STOCKS if limit is None else max(1, int(limit))
-    return _ordered_unique((_normalize_text(value) for value in raw_values), limit=max_limit)
 
 
 def _normalize_question_keywords(values: Any, *, limit: int = MAX_QUESTION_KEYWORDS) -> List[str]:
