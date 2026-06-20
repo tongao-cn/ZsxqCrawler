@@ -3,8 +3,9 @@ from __future__ import annotations
 from contextlib import closing
 from typing import Any, Dict
 
-from backend.core.account_context import is_configured
+from backend.core.account_context import get_account_summary_for_group_auto, is_configured
 from backend.core.db_path_manager import get_db_path_manager
+from backend.services.group_workflow_service import fetch_official_groups
 from backend.storage.zsxq_database import ZSXQDatabase
 from backend.storage.zsxq_file_database import ZSXQFileDatabase
 
@@ -25,6 +26,70 @@ def empty_database_stats_response(configured: bool) -> Dict[str, Any]:
             "stats": {},
         },
     }
+
+
+def coerce_group_id(group_id: str) -> int | str:
+    try:
+        return int(group_id)
+    except Exception:
+        return group_id
+
+
+def count_group_files(group_id: str) -> int:
+    try:
+        with closing(ZSXQFileDatabase(group_id)) as files_db:
+            return files_db.count_files()
+    except Exception:
+        return 0
+
+
+def build_group_info_fallback(
+    group_id: str,
+    account: Any,
+    files_count: int,
+    source: str = "fallback",
+    note: str | None = None,
+) -> Dict[str, Any]:
+    result = {
+        "group_id": coerce_group_id(group_id),
+        "name": f"群组 {group_id}",
+        "description": "",
+        "statistics": {"files": {"count": files_count}},
+        "background_url": None,
+        "account": account,
+        "source": source,
+    }
+    if note:
+        result["note"] = note
+    return result
+
+
+def get_group_info_read_model(group_id: str) -> Dict[str, Any]:
+    def build_fallback(source: str = "fallback", note: str | None = None) -> dict:
+        return build_group_info_fallback(
+            group_id,
+            account=get_account_summary_for_group_auto(group_id),
+            files_count=count_group_files(group_id),
+            source=source,
+            note=note,
+        )
+
+    try:
+        for group_data in fetch_official_groups():
+            if str(group_data.get("group_id")) == str(group_id):
+                return {
+                    "group_id": group_data.get("group_id"),
+                    "name": group_data.get("name"),
+                    "description": group_data.get("description"),
+                    "statistics": group_data.get("statistics", {}),
+                    "background_url": group_data.get("background_url"),
+                    "account": get_account_summary_for_group_auto(group_id),
+                    "source": "official",
+                }
+
+        return build_fallback(note="official_group_not_found")
+    except Exception:
+        return build_fallback(note="exception_fallback")
 
 
 def get_group_stats_read_model(group_id: int) -> Dict[str, Any]:

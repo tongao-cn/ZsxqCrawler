@@ -1,26 +1,23 @@
 from __future__ import annotations
 
 import asyncio
-from contextlib import closing
 from typing import Any, Dict
 
 from fastapi import APIRouter, HTTPException
 
-from backend.core.account_context import get_account_summary_for_group_auto
 from backend.core.local_group_runtime import (
     get_cached_local_group_ids,
     delete_group_local as delete_group_local_data,
     scan_local_groups,
 )
 from backend.services.group_workflow_service import (
-    fetch_official_groups as _fetch_official_groups,
     get_groups_response as _get_groups_response,
 )
 from backend.services.group_read_model import (
     get_group_database_info_read_model,
+    get_group_info_read_model,
     get_group_stats_read_model,
 )
-from backend.storage.zsxq_file_database import ZSXQFileDatabase
 
 router = APIRouter(prefix="/api", tags=["groups"])
 
@@ -39,68 +36,8 @@ async def refresh_local_groups():
         return {"success": False, "count": len(cached), "groups": sorted(list(cached)), "error": str(e)}
 
 
-def _coerce_group_id(group_id: str) -> int | str:
-    try:
-        return int(group_id)
-    except Exception:
-        return group_id
-
-
-def _count_group_files(group_id: str) -> int:
-    try:
-        with closing(ZSXQFileDatabase(group_id)) as files_db:
-            return files_db.count_files()
-    except Exception:
-        return 0
-
-
-def _build_group_info_fallback(
-    group_id: str,
-    account: Any,
-    files_count: int,
-    source: str = "fallback",
-    note: str | None = None,
-) -> Dict[str, Any]:
-    result = {
-        "group_id": _coerce_group_id(group_id),
-        "name": f"群组 {group_id}",
-        "description": "",
-        "statistics": {"files": {"count": files_count}},
-        "background_url": None,
-        "account": account,
-        "source": source,
-    }
-    if note:
-        result["note"] = note
-    return result
-
-
 def _get_group_info_response(group_id: str) -> Dict[str, Any]:
-    def build_fallback(source: str = "fallback", note: str = None) -> dict:
-        return _build_group_info_fallback(
-            group_id,
-            account=get_account_summary_for_group_auto(group_id),
-            files_count=_count_group_files(group_id),
-            source=source,
-            note=note,
-        )
-
-    try:
-        for group_data in _fetch_official_groups():
-            if str(group_data.get("group_id")) == str(group_id):
-                return {
-                    "group_id": group_data.get("group_id"),
-                    "name": group_data.get("name"),
-                    "description": group_data.get("description"),
-                    "statistics": group_data.get("statistics", {}),
-                    "background_url": group_data.get("background_url"),
-                    "account": get_account_summary_for_group_auto(group_id),
-                    "source": "official",
-                }
-
-        return build_fallback(note="official_group_not_found")
-    except Exception:
-        return build_fallback(note="exception_fallback")
+    return get_group_info_read_model(group_id)
 
 
 def _get_group_stats_response(group_id: int) -> Dict[str, Any]:

@@ -56,6 +56,23 @@ class FakeDatabaseInfoFileDb:
         self.closed = True
 
 
+class FakeCountFileDb:
+    last_instance = None
+
+    def __init__(self, group_id=None):
+        self.group_id = group_id
+        self.count_calls = 0
+        self.closed = False
+        FakeCountFileDb.last_instance = self
+
+    def count_files(self):
+        self.count_calls += 1
+        return 7
+
+    def close(self):
+        self.closed = True
+
+
 class FakeGlobalTopicDb:
     last_instance = None
 
@@ -122,6 +139,116 @@ class GroupReadModelHelperTests(unittest.TestCase):
             empty_database_stats_response(False),
         )
         self.assertTrue(empty_database_stats_response(True)["configured"])
+
+    def test_build_group_info_fallback_coerces_numeric_id_and_adds_note(self):
+        from backend.services.group_read_model import build_group_info_fallback
+
+        result = build_group_info_fallback(
+            "123",
+            account={"id": "a1"},
+            files_count=5,
+            note="no_cookie",
+        )
+
+        self.assertEqual(result["group_id"], 123)
+        self.assertEqual(result["statistics"], {"files": {"count": 5}})
+        self.assertEqual(result["account"], {"id": "a1"})
+        self.assertEqual(result["source"], "fallback")
+        self.assertEqual(result["note"], "no_cookie")
+
+    def test_build_group_info_fallback_keeps_non_numeric_id(self):
+        from backend.services.group_read_model import build_group_info_fallback
+
+        result = build_group_info_fallback("abc", account=None, files_count=0)
+
+        self.assertEqual(result["group_id"], "abc")
+        self.assertNotIn("note", result)
+
+    def test_count_group_files_returns_zero_when_storage_fails(self):
+        from backend.services import group_read_model
+
+        with patch.object(group_read_model, "ZSXQFileDatabase", side_effect=RuntimeError("boom")):
+            self.assertEqual(0, group_read_model.count_group_files("123"))
+
+    def test_count_group_files_filters_by_group_id(self):
+        from backend.services import group_read_model
+
+        with patch.object(group_read_model, "ZSXQFileDatabase", FakeCountFileDb):
+            self.assertEqual(7, group_read_model.count_group_files("123"))
+
+        file_db = FakeCountFileDb.last_instance
+
+        self.assertEqual(1, file_db.count_calls)
+        self.assertEqual("123", file_db.group_id)
+        self.assertTrue(file_db.closed)
+
+    def test_group_info_read_model_returns_official_match(self):
+        from backend.services import group_read_model
+
+        with (
+            patch.object(
+                group_read_model,
+                "fetch_official_groups",
+                return_value=[
+                    {
+                        "group_id": "123",
+                        "name": "官方群",
+                        "description": "desc",
+                        "statistics": {"topics_count": 2},
+                        "background_url": "bg.png",
+                    }
+                ],
+            ) as fetch_groups,
+            patch.object(group_read_model, "get_account_summary_for_group_auto", return_value={"id": "acc"}) as account,
+        ):
+            result = group_read_model.get_group_info_read_model("123")
+
+        self.assertEqual(
+            {
+                "group_id": "123",
+                "name": "官方群",
+                "description": "desc",
+                "statistics": {"topics_count": 2},
+                "background_url": "bg.png",
+                "account": {"id": "acc"},
+                "source": "official",
+            },
+            result,
+        )
+        fetch_groups.assert_called_once_with()
+        account.assert_called_once_with("123")
+
+    def test_group_info_read_model_returns_not_found_fallback(self):
+        from backend.services import group_read_model
+
+        with (
+            patch.object(group_read_model, "fetch_official_groups", return_value=[]),
+            patch.object(group_read_model, "get_account_summary_for_group_auto", return_value={"id": "acc"}) as account,
+            patch.object(group_read_model, "count_group_files", return_value=5) as count_files,
+        ):
+            result = group_read_model.get_group_info_read_model("123")
+
+        self.assertEqual(123, result["group_id"])
+        self.assertEqual("群组 123", result["name"])
+        self.assertEqual({"files": {"count": 5}}, result["statistics"])
+        self.assertEqual({"id": "acc"}, result["account"])
+        self.assertEqual("fallback", result["source"])
+        self.assertEqual("official_group_not_found", result["note"])
+        account.assert_called_once_with("123")
+        count_files.assert_called_once_with("123")
+
+    def test_group_info_read_model_returns_exception_fallback(self):
+        from backend.services import group_read_model
+
+        with (
+            patch.object(group_read_model, "fetch_official_groups", side_effect=RuntimeError("official down")),
+            patch.object(group_read_model, "get_account_summary_for_group_auto", return_value=None),
+            patch.object(group_read_model, "count_group_files", return_value=0),
+        ):
+            result = group_read_model.get_group_info_read_model("abc")
+
+        self.assertEqual("abc", result["group_id"])
+        self.assertEqual("exception_fallback", result["note"])
 
     def test_group_stats_read_model_uses_storage_summary(self):
         from backend.services import group_read_model

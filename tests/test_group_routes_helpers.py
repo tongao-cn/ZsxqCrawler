@@ -69,41 +69,6 @@ class FakeDb:
         self.closed = True
 
 
-class FakeFileCursor:
-    def __init__(self):
-        self.calls = []
-
-    def execute(self, query, params=()):
-        self.calls.append((" ".join(query.split()), params))
-
-    def fetchone(self):
-        return (7,)
-
-
-class FakeFileDb:
-    last_instance = None
-
-    def __init__(self):
-        self.group_id = None
-        self.cursor = FakeFileCursor()
-        self.count_calls = 0
-        self.closed = False
-        FakeFileDb.last_instance = self
-
-    def count_files(self):
-        self.count_calls += 1
-        return 7
-
-    def close(self):
-        self.closed = True
-
-
-class FakeScopedFileDb(FakeFileDb):
-    def __init__(self, group_id=None):
-        super().__init__()
-        self.group_id = group_id
-
-
 @unittest.skipUnless(HAS_GROUP_ROUTE_DEPS, "group route dependencies are not installed")
 class GroupRoutesHelperTests(unittest.TestCase):
     def _run_async(self, coro):
@@ -222,40 +187,12 @@ class GroupRoutesHelperTests(unittest.TestCase):
         self.assertEqual(FakeDb.last_instance.group_id, "123")
         self.assertEqual([fields], FakeDb.last_instance.calls)
 
-    def test_build_group_info_fallback_coerces_numeric_id_and_adds_note(self):
-        result = group_routes._build_group_info_fallback(
-            "123",
-            account={"id": "a1"},
-            files_count=5,
-            note="no_cookie",
-        )
+    def test_get_group_info_response_delegates_to_read_model(self):
+        with patch.object(group_routes, "get_group_info_read_model", return_value={"group_id": 123}) as get_info:
+            result = group_routes._get_group_info_response("123")
 
-        self.assertEqual(result["group_id"], 123)
-        self.assertEqual(result["statistics"], {"files": {"count": 5}})
-        self.assertEqual(result["account"], {"id": "a1"})
-        self.assertEqual(result["source"], "fallback")
-        self.assertEqual(result["note"], "no_cookie")
-
-    def test_build_group_info_fallback_keeps_non_numeric_id(self):
-        result = group_routes._build_group_info_fallback("abc", account=None, files_count=0)
-
-        self.assertEqual(result["group_id"], "abc")
-        self.assertNotIn("note", result)
-
-    def test_count_group_files_returns_zero_when_crawler_fails(self):
-        with patch.object(group_routes, "ZSXQFileDatabase", side_effect=RuntimeError("boom")):
-            self.assertEqual(group_routes._count_group_files("123"), 0)
-
-    def test_count_group_files_filters_by_group_id(self):
-        with patch.object(group_routes, "ZSXQFileDatabase", FakeScopedFileDb):
-            self.assertEqual(group_routes._count_group_files("123"), 7)
-
-        file_db = FakeScopedFileDb.last_instance
-
-        self.assertEqual(1, file_db.count_calls)
-        self.assertEqual([], file_db.cursor.calls)
-        self.assertEqual(file_db.group_id, "123")
-        self.assertTrue(file_db.closed)
+        self.assertEqual({"group_id": 123}, result)
+        get_info.assert_called_once_with("123")
 
     def test_get_group_stats_response_delegates_to_read_model(self):
         with patch.object(group_routes, "get_group_stats_read_model", return_value={"topics_count": 12}) as get_stats:
