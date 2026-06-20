@@ -6,11 +6,15 @@ from typing import Any, Dict, Iterator, Optional, Sequence
 
 from backend.core.db_path_manager import get_db_path_manager
 from backend.crawlers.zsxq_file_downloader import ZSXQFileDownloader
-from backend.schemas.files import FileCollectRequest
 from backend.services.file_ai_analysis_service import (
     resolve_local_file_path,
 )
 from backend.services.file_analysis_workflow import run_file_analysis_task
+from backend.services.file_collect_workflow import (
+    _collect_files_for_request,
+    _complete_collect_files_task,
+    run_collect_files_task,
+)
 from backend.services.file_download_records_workflow import (
     _add_file_download_status_condition,
     _add_file_search_condition,
@@ -493,58 +497,11 @@ def _enqueue_file_task(
     )
 
 
-def _collect_files_for_request(
-    task_id: str,
-    downloader: ZSXQFileDownloader,
-    request: FileCollectRequest,
-) -> Any:
-    add_task_log(task_id, "📍 阶段一：收集文件列表")
-    if request.start_time or request.end_time or request.last_days:
-        add_task_log(
-            task_id,
-            f"📅 收集范围: {request.start_time or '-'} ~ {request.end_time or '-'}"
-            if (request.start_time or request.end_time)
-            else f"📅 收集最近天数: {request.last_days}天",
-        )
-        return downloader.collect_files_for_date_range(
-            start_date=request.start_time,
-            end_date=request.end_time,
-            last_days=request.last_days,
-        )
-    return downloader.collect_incremental_files()
-
-
-def _complete_collect_files_task(task_id: str, result: Any) -> None:
-    add_task_log(task_id, "✅ 文件列表收集完成！")
-    update_task(task_id, "completed", "文件列表收集完成", result)
-
-
 def _file_task_stopped_after_init(task_id: str) -> bool:
     if is_task_stopped(task_id):
         add_task_log(task_id, "🛑 任务在初始化过程中被停止")
         return True
     return False
-
-
-def run_collect_files_task(task_id: str, group_id: str, request: FileCollectRequest):
-    try:
-        update_task(task_id, "running", "开始收集文件列表...")
-        downloader = _create_file_downloader(task_id, group_id)
-
-        if _file_task_stopped_after_init(task_id):
-            return
-
-        add_task_log(task_id, "📡 连接到知识星球API...")
-        result = _collect_files_for_request(task_id, downloader, request)
-
-        if is_task_stopped(task_id):
-            return
-
-        _complete_collect_files_task(task_id, result)
-    except Exception as e:
-        _fail_file_task(task_id, f"文件列表收集失败: {e}", f"文件列表收集失败: {e}")
-    finally:
-        _safe_remove_file_downloader(task_id)
 
 
 def _build_file_download_range_log(

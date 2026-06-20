@@ -1732,11 +1732,11 @@ class FileRoutesHelperTests(unittest.TestCase):
         downloader = FakeFileDownloadTaskDownloader(existing_count=0)
 
         with (
-            patch("backend.services.file_workflow_service._create_file_downloader", return_value=downloader),
-            patch("backend.services.file_workflow_service.update_task") as update_task,
-            patch("backend.services.file_workflow_service.add_task_log") as add_task_log,
-            patch("backend.services.file_workflow_service.is_task_stopped", return_value=False),
-            patch("backend.services.file_workflow_service._safe_remove_file_downloader") as safe_remove,
+            patch("backend.services.file_collect_workflow._create_file_downloader", return_value=downloader),
+            patch("backend.services.file_collect_workflow.update_task") as update_task,
+            patch("backend.services.file_collect_workflow.add_task_log") as add_task_log,
+            patch("backend.services.file_collect_workflow.is_task_stopped", return_value=False),
+            patch("backend.services.file_collect_workflow._safe_remove_file_downloader") as safe_remove,
         ):
             run_collect_files_task(
                 "task-1",
@@ -1770,11 +1770,11 @@ class FileRoutesHelperTests(unittest.TestCase):
         downloader = FakeFileDownloadTaskDownloader(existing_count=0)
 
         with (
-            patch("backend.services.file_workflow_service._create_file_downloader", return_value=downloader),
-            patch("backend.services.file_workflow_service.update_task") as update_task,
-            patch("backend.services.file_workflow_service.add_task_log") as add_task_log,
-            patch("backend.services.file_workflow_service.is_task_stopped", return_value=False),
-            patch("backend.services.file_workflow_service._safe_remove_file_downloader") as safe_remove,
+            patch("backend.services.file_collect_workflow._create_file_downloader", return_value=downloader),
+            patch("backend.services.file_collect_workflow.update_task") as update_task,
+            patch("backend.services.file_collect_workflow.add_task_log") as add_task_log,
+            patch("backend.services.file_collect_workflow.is_task_stopped", return_value=False),
+            patch("backend.services.file_collect_workflow._safe_remove_file_downloader") as safe_remove,
         ):
             run_collect_files_task("task-1", "123", FileCollectRequest())
 
@@ -1794,11 +1794,11 @@ class FileRoutesHelperTests(unittest.TestCase):
         downloader = FakeFileDownloadTaskDownloader(existing_count=0)
 
         with (
-            patch("backend.services.file_workflow_service._create_file_downloader", return_value=downloader) as create_downloader,
-            patch("backend.services.file_workflow_service.update_task") as update_task,
-            patch("backend.services.file_workflow_service.add_task_log") as add_task_log,
-            patch("backend.services.file_workflow_service.is_task_stopped", return_value=True),
-            patch("backend.services.file_workflow_service._safe_remove_file_downloader") as safe_remove,
+            patch("backend.services.file_collect_workflow._create_file_downloader", return_value=downloader) as create_downloader,
+            patch("backend.services.file_collect_workflow.update_task") as update_task,
+            patch("backend.services.file_collect_workflow.add_task_log") as add_task_log,
+            patch("backend.services.file_collect_workflow.is_task_stopped", return_value=True),
+            patch("backend.services.file_collect_workflow._safe_remove_file_downloader") as safe_remove,
         ):
             run_collect_files_task("task-1", "123", FileCollectRequest())
 
@@ -1818,11 +1818,11 @@ class FileRoutesHelperTests(unittest.TestCase):
         downloader = FakeFileDownloadTaskDownloader(existing_count=0)
 
         with (
-            patch("backend.services.file_workflow_service._create_file_downloader", return_value=downloader),
-            patch("backend.services.file_workflow_service.update_task") as update_task,
-            patch("backend.services.file_workflow_service.add_task_log") as add_task_log,
-            patch("backend.services.file_workflow_service.is_task_stopped", return_value=False),
-            patch("backend.services.file_workflow_service._safe_remove_file_downloader") as safe_remove,
+            patch("backend.services.file_collect_workflow._create_file_downloader", return_value=downloader),
+            patch("backend.services.file_collect_workflow.update_task") as update_task,
+            patch("backend.services.file_collect_workflow.add_task_log") as add_task_log,
+            patch("backend.services.file_collect_workflow.is_task_stopped", return_value=False),
+            patch("backend.services.file_collect_workflow._safe_remove_file_downloader") as safe_remove,
         ):
             run_collect_files_task("task-1", "123", FileCollectRequest(last_days=7))
 
