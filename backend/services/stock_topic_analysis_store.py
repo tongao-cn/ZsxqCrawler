@@ -6,6 +6,9 @@ import json
 from datetime import date
 from typing import Any, Dict, Iterable, List
 
+from backend.services.daily_topic_analysis_topics import clip_text as _clip
+from backend.services.stock_topic_analysis_helpers import _build_stock_alias_terms
+from backend.services.stock_topic_analysis_payloads import require_topic_excerpt
 from backend.storage.db_compat import connect
 
 
@@ -91,6 +94,155 @@ def load_question_topic_rows(group_id: str, topic_ids: Iterable[Any]) -> List[An
     try:
         sql, params = question_topic_rows_query(_normalize_text(group_id), normalized_topic_ids)
         return conn.execute(sql, params).fetchall()
+    finally:
+        conn.close()
+
+
+def _load_topic_excerpt_fallbacks(conn: Any, group_id: str, topic_ids: List[str], stock_name: str) -> Dict[str, str]:
+    alias_terms = _build_stock_alias_terms(stock_name)
+    if not topic_ids or not alias_terms:
+        return {}
+    topic_placeholders = ",".join("?" for _ in topic_ids)
+    alias_conditions = " OR ".join("stock_name ILIKE ?" for _ in alias_terms)
+    rows = conn.execute(
+        f"""
+        SELECT topic_id, excerpt
+        FROM zsxq_a_share_topic_stock_extractions
+        WHERE group_id = ?
+          AND topic_id IN ({topic_placeholders})
+          AND COALESCE(TRIM(excerpt), '') <> ''
+          AND ({alias_conditions})
+        ORDER BY topic_date DESC, topic_id DESC
+        """,
+        [group_id, *topic_ids, *(f"%{term}%" for term in alias_terms)],
+    ).fetchall()
+    excerpts: Dict[str, str] = {}
+    for row in rows:
+        topic_id = str(row["topic_id"])
+        if topic_id not in excerpts:
+            excerpts[topic_id] = _normalize_text(row["excerpt"])
+    return excerpts
+
+
+def _empty_topic_summary(topic_id: Any) -> Dict[str, Any]:
+    return {
+        "topic_id": _normalize_text(topic_id),
+        "title": "",
+        "create_time": "",
+        "likes_count": 0,
+        "comments_count": 0,
+        "reading_count": 0,
+        "content_preview": "",
+        "concepts": [],
+        "reasons": [],
+        "excerpt": "",
+        "confidence": 0.0,
+        "recommendation_count": 0,
+    }
+
+
+def load_saved_topic_summaries(conn: Any, group_id: str, topic_ids: List[str], stock_name: str = "") -> List[Dict[str, Any]]:
+    if not topic_ids:
+        return []
+    fallback_excerpts = _load_topic_excerpt_fallbacks(conn, group_id, topic_ids, stock_name)
+    placeholders = ",".join("?" for _ in topic_ids)
+    rows = conn.execute(
+        f"""
+        SELECT
+            t.topic_id,
+            t.title,
+            t.create_time,
+            t.likes_count,
+            t.comments_count,
+            t.reading_count,
+            tk.text AS talk_text,
+            q.text AS question_text,
+            a.text AS answer_text,
+            e.excerpt
+        FROM topics t
+        LEFT JOIN talks tk ON t.topic_id = tk.topic_id
+        LEFT JOIN questions q ON t.topic_id = q.topic_id
+        LEFT JOIN answers a ON t.topic_id = a.topic_id
+        LEFT JOIN zsxq_a_share_topic_stock_extractions e
+          ON e.group_id = t.group_id::text
+         AND e.topic_id = t.topic_id::text
+         AND e.stock_name = ?
+        WHERE t.group_id::text = ?
+          AND t.topic_id::text IN ({placeholders})
+        ORDER BY t.create_time DESC
+        """,
+        [_normalize_text(stock_name), group_id, *topic_ids],
+    ).fetchall()
+    summaries: List[Dict[str, Any]] = []
+    for row in rows:
+        topic_id = str(row["topic_id"])
+        excerpt = require_topic_excerpt(
+            row["excerpt"] or fallback_excerpts.get(topic_id),
+            topic_id=topic_id,
+            stock_name=stock_name,
+        )
+        summaries.append(
+            {
+                "topic_id": topic_id,
+                "title": row["title"] or "",
+                "create_time": row["create_time"] or "",
+                "likes_count": int(row["likes_count"] or 0),
+                "comments_count": int(row["comments_count"] or 0),
+                "reading_count": int(row["reading_count"] or 0),
+                "excerpt": excerpt,
+                "content_preview": _clip(excerpt, 260),
+                "concepts": [],
+                "reasons": [],
+                "confidence": 0.0,
+                "recommendation_count": 0,
+            }
+        )
+    found = {item["topic_id"] for item in summaries}
+    summaries.extend(_empty_topic_summary(topic_id) for topic_id in topic_ids if str(topic_id) not in found)
+    return summaries
+
+
+def load_saved_stock_topic_analysis(group_id: str, stock_name: str) -> Dict[str, Any] | None:
+    query = _normalize_text(stock_name)
+    conn = connect()
+    try:
+        row = conn.execute(
+            """
+            SELECT group_id, stock_name, stock_code, market, topic_ids_json,
+                   concepts_json, recommendation_count, summary_markdown,
+                   model, status, error, created_at, updated_at
+            FROM stock_topic_analyses
+            WHERE group_id = ?
+              AND stock_name = ?
+            ORDER BY updated_at DESC
+            LIMIT 1
+            """,
+            (_normalize_text(group_id), query),
+        ).fetchone()
+        if not row:
+            return None
+        topic_ids = parse_json_list(row["topic_ids_json"])
+        topics = load_saved_topic_summaries(conn, _normalize_text(row["group_id"]), topic_ids, row["stock_name"])
+        return {
+            "group_id": row["group_id"],
+            "stock_name": row["stock_name"],
+            "stock_code": row["stock_code"] or "",
+            "market": row["market"] or "",
+            "topics": topics,
+            "concepts": parse_json_list(row["concepts_json"]),
+            "topic_count": len(topic_ids),
+            "recommendation_count": int(row["recommendation_count"] or 0),
+            "summary_markdown": row["summary_markdown"] or "",
+            "model": row["model"] or "",
+            "status": row["status"] or "",
+            "error": row["error"] or "",
+            "created_at": row["created_at"],
+            "updated_at": row["updated_at"],
+            "processed_topic_ids": topic_ids,
+            "analyzed_topic_ids": topic_ids,
+            "new_topic_count": 0,
+            "analysis_mode": "saved",
+        }
     finally:
         conn.close()
 

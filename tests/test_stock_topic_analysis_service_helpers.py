@@ -767,8 +767,8 @@ class StockTopicAnalysisServiceHelperTests(unittest.TestCase):
         conn.commit.assert_called_once()
 
     @unittest.skipUnless(HAS_SERVICE_DEPS, "stock topic analysis service dependencies are not installed")
-    def test_get_latest_stock_topic_analysis_parses_saved_json_lists(self):
-        from backend.services.stock_topic_analysis_service import get_latest_stock_topic_analysis
+    def test_load_saved_stock_topic_analysis_parses_saved_json_lists(self):
+        from backend.services.stock_topic_analysis_store import load_saved_stock_topic_analysis
 
         row = {
             "group_id": "51111112855254",
@@ -819,8 +819,8 @@ class StockTopicAnalysisServiceHelperTests(unittest.TestCase):
         conn = Mock()
         conn.execute.side_effect = [latest_cursor, fallback_cursor, topics_cursor]
 
-        with patch("backend.services.stock_topic_analysis_service.connect", return_value=conn):
-            result = get_latest_stock_topic_analysis("51111112855254", "宁德时代")
+        with patch("backend.services.stock_topic_analysis_store.connect", return_value=conn):
+            result = load_saved_stock_topic_analysis("51111112855254", "宁德时代")
 
         self.assertIsNotNone(result)
         self.assertEqual(["固态电池"], result["concepts"])
@@ -830,10 +830,11 @@ class StockTopicAnalysisServiceHelperTests(unittest.TestCase):
         self.assertEqual(2, len(result["topics"]))
         self.assertEqual("excerpt 101", result["topics"][0]["excerpt"])
         self.assertEqual("excerpt 101", result["topics"][0]["content_preview"])
+        conn.close.assert_called_once()
 
     @unittest.skipUnless(HAS_SERVICE_DEPS, "stock topic analysis service dependencies are not installed")
-    def test_get_latest_stock_topic_analysis_raises_without_excerpt(self):
-        from backend.services.stock_topic_analysis_service import get_latest_stock_topic_analysis
+    def test_load_saved_stock_topic_analysis_raises_without_excerpt(self):
+        from backend.services.stock_topic_analysis_store import load_saved_stock_topic_analysis
 
         row = {
             "group_id": "51111112855254",
@@ -872,13 +873,14 @@ class StockTopicAnalysisServiceHelperTests(unittest.TestCase):
         conn = Mock()
         conn.execute.side_effect = [latest_cursor, fallback_cursor, topics_cursor]
 
-        with patch("backend.services.stock_topic_analysis_service.connect", return_value=conn):
+        with patch("backend.services.stock_topic_analysis_store.connect", return_value=conn):
             with self.assertRaisesRegex(RuntimeError, "缺少 宁德时代 的 excerpt"):
-                get_latest_stock_topic_analysis("51111112855254", "宁德时代")
+                load_saved_stock_topic_analysis("51111112855254", "宁德时代")
+        conn.close.assert_called_once()
 
     @unittest.skipUnless(HAS_SERVICE_DEPS, "stock topic analysis service dependencies are not installed")
-    def test_get_latest_stock_topic_analysis_uses_alias_excerpt_fallback(self):
-        from backend.services.stock_topic_analysis_service import get_latest_stock_topic_analysis
+    def test_load_saved_stock_topic_analysis_uses_alias_excerpt_fallback(self):
+        from backend.services.stock_topic_analysis_store import load_saved_stock_topic_analysis
 
         row = {
             "group_id": "51111112855254",
@@ -922,11 +924,12 @@ class StockTopicAnalysisServiceHelperTests(unittest.TestCase):
         conn = Mock()
         conn.execute.side_effect = [latest_cursor, fallback_cursor, topics_cursor]
 
-        with patch("backend.services.stock_topic_analysis_service.connect", return_value=conn):
-            result = get_latest_stock_topic_analysis("51111112855254", "信科移动")
+        with patch("backend.services.stock_topic_analysis_store.connect", return_value=conn):
+            result = load_saved_stock_topic_analysis("51111112855254", "信科移动")
 
         self.assertEqual("信科移动U 商业航天相关摘录。", result["topics"][0]["excerpt"])
         self.assertEqual("信科移动U 商业航天相关摘录。", result["topics"][0]["content_preview"])
+        conn.close.assert_called_once()
 
     @unittest.skipUnless(HAS_SERVICE_DEPS, "stock topic analysis service dependencies are not installed")
     def test_build_analysis_topic_payload_uses_search_result_excerpt(self):
