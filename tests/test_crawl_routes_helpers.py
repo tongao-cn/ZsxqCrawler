@@ -1013,10 +1013,10 @@ class CrawlRoutesHelperTests(unittest.TestCase):
 
         background_tasks = FakeBackgroundTasks()
 
-        with (
-            patch("backend.routes.ingestion_helpers.create_ingestion_task", return_value=("task-1", None)) as create_task,
-            patch("backend.routes.ingestion_helpers.enqueue_runtime_task") as enqueue_runtime_task,
-        ):
+        with patch(
+            "backend.routes.crawl_routes.launch_ingestion_task",
+            return_value={"task_id": "task-1", "message": "任务已创建，正在后台执行"},
+        ) as launch_task:
             response = _create_crawl_task_response(
                 background_tasks,
                 "crawl_latest",
@@ -1026,21 +1026,26 @@ class CrawlRoutesHelperTests(unittest.TestCase):
                 "request",
             )
 
-        create_task.assert_called_once_with("crawl_latest", "latest description", "group-1")
+        launch_task.assert_called_once_with(
+            "crawl_latest",
+            "latest description",
+            fake_task_func,
+            "group-1",
+            "request",
+        )
         self.assertEqual({"task_id": "task-1", "message": "任务已创建，正在后台执行"}, response)
-        enqueue_runtime_task.assert_called_once_with(fake_task_func, "task-1", "group-1", "request")
         self.assertEqual([], background_tasks.tasks)
 
     @unittest.skipUnless(HAS_CRAWL_ROUTE_DEPS, "crawl route dependencies are not installed")
     def test_create_crawl_task_response_rejects_same_group_ingestion_conflict(self):
-        from fastapi import HTTPException
+        from backend.services.task_launch import TaskLaunchConflict
         from backend.routes.crawl_routes import _create_crawl_task_response
 
         background_tasks = FakeBackgroundTasks()
         existing = {"task_id": "task-old", "type": "crawl_latest", "status": "running"}
 
-        with patch("backend.routes.ingestion_helpers.create_ingestion_task", return_value=(None, existing)):
-            with self.assertRaises(HTTPException) as raised:
+        with patch("backend.routes.crawl_routes.launch_ingestion_task", side_effect=TaskLaunchConflict(existing)):
+            with self.assertRaises(TaskLaunchConflict) as raised:
                 _create_crawl_task_response(
                     background_tasks,
                     "crawl_latest",
@@ -1050,7 +1055,7 @@ class CrawlRoutesHelperTests(unittest.TestCase):
                     "request",
                 )
 
-        self.assertEqual(409, raised.exception.status_code)
+        self.assertEqual(existing, raised.exception.existing)
         self.assertEqual([], background_tasks.tasks)
 
     @unittest.skipUnless(HAS_CRAWL_ROUTE_DEPS, "crawl route dependencies are not installed")

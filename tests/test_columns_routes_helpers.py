@@ -62,9 +62,9 @@ class ColumnsRoutesHelperTests(unittest.TestCase):
         request = ColumnsSettingsRequest()
 
         with (
-            patch("backend.routes.columns_routes.create_ingestion_task_or_raise", return_value="task-1") as create_task,
+            patch("backend.services.task_launch.create_ingestion_task", return_value=("task-1", None)) as create_task,
             patch("backend.routes.columns_routes.update_task") as update_task,
-            patch("backend.routes.columns_routes.enqueue_runtime_task") as enqueue_runtime_task,
+            patch("backend.services.task_launch.enqueue_runtime_task") as enqueue_runtime_task,
         ):
             response = _create_columns_fetch_task_response("123", request)
 
@@ -79,39 +79,47 @@ class ColumnsRoutesHelperTests(unittest.TestCase):
 
     @unittest.skipUnless(HAS_COLUMNS_ROUTE_DEPS, "columns route dependencies are not installed")
     def test_create_columns_fetch_task_response_rejects_ingestion_conflict(self):
-        from fastapi import HTTPException
+        from backend.services.task_launch import TaskLaunchConflict
         from backend.routes.columns_routes import ColumnsSettingsRequest, _create_columns_fetch_task_response
 
         background_tasks = FakeBackgroundTasks()
-        conflict = HTTPException(
-            status_code=409,
-            detail={
-                "message": "该群组已有采集或同步任务正在运行",
-                "task_id": "task-old",
-                "type": "crawl_latest_until_complete",
-                "status": "running",
-            },
-        )
+        existing = {
+            "task_id": "task-old",
+            "type": "crawl_latest_until_complete",
+            "status": "running",
+        }
 
         with (
-            patch("backend.routes.columns_routes.create_ingestion_task_or_raise", side_effect=conflict),
+            patch("backend.services.task_launch.create_ingestion_task", return_value=(None, existing)),
             patch("backend.routes.columns_routes.update_task") as update_task,
         ):
-            with self.assertRaises(HTTPException) as raised:
+            with self.assertRaises(TaskLaunchConflict) as raised:
                 _create_columns_fetch_task_response("123", ColumnsSettingsRequest())
 
-        self.assertEqual(409, raised.exception.status_code)
+        self.assertEqual(existing, raised.exception.existing)
+        self.assertEqual([], background_tasks.tasks)
+        update_task.assert_not_called()
+
+    @unittest.skipUnless(HAS_COLUMNS_ROUTE_DEPS, "columns route dependencies are not installed")
+    def test_columns_route_error_maps_task_launch_conflict(self):
+        from backend.routes.columns_routes import _columns_route_error
+        from backend.services.task_launch import TaskLaunchConflict
+
+        error = _columns_route_error(
+            "启动专栏采集失败",
+            TaskLaunchConflict({"task_id": "task-old", "type": "crawl_all", "status": "running"}),
+        )
+
+        self.assertEqual(409, error.status_code)
         self.assertEqual(
             {
                 "message": "该群组已有采集或同步任务正在运行",
                 "task_id": "task-old",
-                "type": "crawl_latest_until_complete",
+                "type": "crawl_all",
                 "status": "running",
             },
-            raised.exception.detail,
+            error.detail,
         )
-        self.assertEqual([], background_tasks.tasks)
-        update_task.assert_not_called()
 
     @unittest.skipUnless(HAS_COLUMNS_ROUTE_DEPS, "columns route dependencies are not installed")
     def test_columns_read_routes_preserve_success_payloads(self):

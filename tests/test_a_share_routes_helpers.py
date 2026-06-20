@@ -38,10 +38,10 @@ class AShareRoutesHelperTests(unittest.TestCase):
 
         request = AShareAnalysisRunRequest(group_id="51111112855254", days=21)
 
-        with (
-            patch("backend.routes.a_share_routes.create_task", return_value="task-a-share") as create_task,
-            patch("backend.routes.a_share_routes.enqueue_runtime_task") as enqueue_runtime_task,
-        ):
+        with patch(
+            "backend.routes.a_share_routes.launch_task",
+            return_value={"task_id": "task-a-share", "message": TASK_CREATED_MESSAGE},
+        ) as launch_task:
             response = _create_a_share_analysis_task_response(
                 request,
                 "51111112855254",
@@ -49,12 +49,13 @@ class AShareRoutesHelperTests(unittest.TestCase):
                 "最近 21 天",
             )
 
-        create_task.assert_called_once_with(
+        launch_task.assert_called_once_with(
             "a_share_analysis",
             "A股公司分析（群组 51111112855254，最近 21 天）",
+            run_a_share_analysis_task,
+            request,
             metadata={"group_id": "51111112855254"},
         )
-        enqueue_runtime_task.assert_called_once_with(run_a_share_analysis_task, "task-a-share", request)
         self.assertEqual({"task_id": "task-a-share", "message": TASK_CREATED_MESSAGE}, response)
 
     @unittest.skipUnless(HAS_A_SHARE_ROUTE_DEPS, "a-share route dependencies are not installed")
@@ -164,25 +165,19 @@ class AShareRoutesHelperTests(unittest.TestCase):
                 return_value=True,
             ) as has_api_key,
             patch(
-                "backend.routes.a_share_routes.create_task",
-                return_value="task-a-share",
-            ) as create_task,
-            patch(
-                "backend.routes.a_share_routes.enqueue_runtime_task"
-            ) as enqueue_runtime_task,
+                "backend.routes.a_share_routes.launch_task",
+                return_value={"task_id": "task-a-share", "message": "任务已创建，正在后台执行"},
+            ) as launch_task,
         ):
             response = asyncio.run(start_a_share_analysis(request, None))
 
         has_api_key.assert_called_once_with()
-        create_task.assert_called_once_with(
+        launch_task.assert_called_once_with(
             "a_share_analysis",
             "A股公司分析（群组 51111112855254，最近 21 天）",
-            metadata={"group_id": "51111112855254"},
-        )
-        enqueue_runtime_task.assert_called_once_with(
             run_a_share_analysis_task,
-            "task-a-share",
             request,
+            metadata={"group_id": "51111112855254"},
         )
         self.assertEqual(
             {"task_id": "task-a-share", "message": "任务已创建，正在后台执行"},

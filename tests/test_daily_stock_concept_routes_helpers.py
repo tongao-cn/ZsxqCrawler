@@ -48,22 +48,19 @@ class DailyStockConceptRoutesHelperTests(unittest.TestCase):
 
         request = DailyStockConceptRequest(date="2026-06-13", commentsPerTopic=3)
 
-        with (
-            patch("backend.routes.daily_stock_concept_routes.create_task", return_value="task-concept") as create_task,
-            patch("backend.routes.daily_stock_concept_routes.enqueue_runtime_task") as enqueue_runtime_task,
-        ):
+        with patch(
+            "backend.routes.daily_stock_concept_routes.launch_task",
+            return_value={"task_id": "task-concept", "message": TASK_CREATED_MESSAGE},
+        ) as launch_task:
             response = _create_daily_stock_concept_task_response("51111112855254", request)
 
-        create_task.assert_called_once_with(
+        launch_task.assert_called_once_with(
             "daily_stock_concepts",
             "提取每日股票概念 (群组: 51111112855254)",
-            {"group_id": "51111112855254", "report_date": "2026-06-13"},
-        )
-        enqueue_runtime_task.assert_called_once_with(
             run_daily_stock_concept_task,
-            "task-concept",
             "51111112855254",
             request,
+            metadata={"group_id": "51111112855254", "report_date": "2026-06-13"},
         )
         self.assertEqual({"task_id": "task-concept", "message": TASK_CREATED_MESSAGE}, response)
 

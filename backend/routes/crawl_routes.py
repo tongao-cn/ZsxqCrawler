@@ -4,7 +4,6 @@ from typing import Any, Callable
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException
 
-from backend.routes.ingestion_helpers import enqueue_ingestion_task
 from backend.schemas.crawl import CrawlHistoricalRequest, CrawlSettingsRequest, CrawlTimeRangeRequest
 from backend.services.crawl_service import (
     run_crawl_all_task,
@@ -13,20 +12,20 @@ from backend.services.crawl_service import (
     run_crawl_latest_task,
     run_crawl_time_range_task,
 )
+from backend.services.task_launch import TaskLaunchConflict, ingestion_conflict_detail, launch_ingestion_task
 
 router = APIRouter(prefix="/api/crawl", tags=["crawl"])
 
 
 def _create_crawl_task_response(
-    background_tasks: BackgroundTasks,
+    _background_tasks: BackgroundTasks,
     task_type: str,
     description: str,
     task_func: Callable[..., Any],
     group_id: str,
     *task_args: Any,
 ) -> dict[str, str]:
-    return enqueue_ingestion_task(
-        background_tasks,
+    return launch_ingestion_task(
         task_type,
         description,
         task_func,
@@ -115,6 +114,8 @@ def _create_time_range_crawl_task_response(
 
 
 def _crawl_route_error(message: str, error: Exception) -> HTTPException:
+    if isinstance(error, TaskLaunchConflict):
+        return HTTPException(status_code=409, detail=ingestion_conflict_detail(error.existing))
     return HTTPException(status_code=500, detail=f"{message}: {str(error)}")
 
 

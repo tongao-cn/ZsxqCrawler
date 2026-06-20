@@ -8,12 +8,11 @@ from pydantic import BaseModel, Field
 from backend.schemas.crawl import CrawlSettingsRequest
 from backend.services.crawl_service import run_crawl_latest_task
 from backend.services.daily_topic_analysis_service import analyze_daily_topics, get_daily_report
+from backend.services.task_launch import TASK_CREATED_MESSAGE as _TASK_CREATED_MESSAGE, launch_task
 from backend.services.task_runtime import (
     add_task_log,
     build_task_log_callback,
-    create_task,
     current_tasks,
-    enqueue_runtime_task,
     is_task_stopped,
     run_workflow,
     update_task,
@@ -21,7 +20,7 @@ from backend.services.task_runtime import (
 
 
 router = APIRouter(prefix="/api/analysis/daily", tags=["daily-analysis"])
-TASK_CREATED_MESSAGE = "任务已创建，正在后台执行"
+TASK_CREATED_MESSAGE = _TASK_CREATED_MESSAGE
 
 
 class DailyAnalysisRequest(BaseModel):
@@ -68,9 +67,7 @@ def _create_daily_task_response(
     task_func: Callable[..., Any],
     *task_args: Any,
 ) -> dict[str, str]:
-    task_id = create_task(task_type, description, metadata)
-    enqueue_runtime_task(task_func, task_id, *task_args)
-    return {"task_id": task_id, "message": TASK_CREATED_MESSAGE}
+    return launch_task(task_type, description, task_func, *task_args, metadata=metadata)
 
 
 def _create_daily_report_task_response(

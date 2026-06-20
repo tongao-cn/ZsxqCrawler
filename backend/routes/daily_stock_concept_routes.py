@@ -12,14 +12,13 @@ from backend.services.daily_stock_concept_service import (
 from backend.services.task_runtime import (
     add_task_log,
     build_task_log_callback,
-    create_task,
-    enqueue_runtime_task,
     run_workflow,
 )
+from backend.services.task_launch import TASK_CREATED_MESSAGE as _TASK_CREATED_MESSAGE, launch_task
 
 
 router = APIRouter(prefix="/api/analysis/daily-stock-concepts", tags=["daily-stock-concepts"])
-TASK_CREATED_MESSAGE = "任务已创建，正在后台执行"
+TASK_CREATED_MESSAGE = _TASK_CREATED_MESSAGE
 
 
 class DailyStockConceptRequest(BaseModel):
@@ -42,13 +41,14 @@ def _create_daily_stock_concept_task_response(
     group_id: str,
     request: DailyStockConceptRequest,
 ) -> dict[str, str]:
-    task_id = create_task(
+    return launch_task(
         "daily_stock_concepts",
         f"提取每日股票概念 (群组: {group_id})",
-        _stock_concept_task_metadata(group_id, request.date),
+        run_daily_stock_concept_task,
+        group_id,
+        request,
+        metadata=_stock_concept_task_metadata(group_id, request.date),
     )
-    enqueue_runtime_task(run_daily_stock_concept_task, task_id, group_id, request)
-    return {"task_id": task_id, "message": TASK_CREATED_MESSAGE}
 
 
 def _daily_stock_concept_route_error(message: str, error: Exception) -> HTTPException:

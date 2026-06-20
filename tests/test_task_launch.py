@@ -61,6 +61,32 @@ class TaskLaunchTests(unittest.TestCase):
 
         enqueue_runtime_task.assert_called_once_with(fake_task, "task-1", "group-1", "request")
 
+    def test_launch_ingestion_task_runs_on_created_before_enqueue(self):
+        from backend.services.task_launch import launch_ingestion_task
+
+        events = []
+
+        def on_created(task_id):
+            events.append(("created", task_id))
+
+        def enqueue_task(*args):
+            events.append(("enqueue", args[1]))
+
+        with (
+            patch("backend.services.task_launch.create_ingestion_task", return_value=("task-1", None)),
+            patch("backend.services.task_launch.enqueue_runtime_task", side_effect=enqueue_task),
+        ):
+            launch_ingestion_task(
+                "columns_fetch",
+                "采集专栏内容",
+                fake_task,
+                "group-1",
+                "request",
+                on_created=on_created,
+            )
+
+        self.assertEqual([("created", "task-1"), ("enqueue", "task-1")], events)
+
     def test_launch_ingestion_task_raises_conflict_without_enqueuing(self):
         from backend.services.task_launch import TaskLaunchConflict, launch_ingestion_task
 

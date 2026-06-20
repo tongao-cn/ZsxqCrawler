@@ -36,10 +36,10 @@ class DailyAnalysisRoutesHelperTests(unittest.TestCase):
         background_tasks = FakeBackgroundTasks()
         metadata = {"group_id": "group-1", "report_date": "2026-05-07"}
 
-        with (
-            patch("backend.routes.daily_analysis_routes.create_task", return_value="task-1") as create_task,
-            patch("backend.routes.daily_analysis_routes.enqueue_runtime_task") as enqueue_runtime_task,
-        ):
+        with patch(
+            "backend.routes.daily_analysis_routes.launch_task",
+            return_value={"task_id": "task-1", "message": "任务已创建，正在后台执行"},
+        ) as launch_task:
             response = _create_daily_task_response(
                 background_tasks,
                 "daily_topic_analysis",
@@ -50,13 +50,15 @@ class DailyAnalysisRoutesHelperTests(unittest.TestCase):
                 "request",
             )
 
-        create_task.assert_called_once_with(
+        launch_task.assert_called_once_with(
             "daily_topic_analysis",
             "生成每日话题 AI 报告 (群组: group-1)",
-            metadata,
+            fake_task,
+            "group-1",
+            "request",
+            metadata=metadata,
         )
         self.assertEqual({"task_id": "task-1", "message": "任务已创建，正在后台执行"}, response)
-        enqueue_runtime_task.assert_called_once_with(fake_task, "task-1", "group-1", "request")
         self.assertEqual([], background_tasks.tasks)
 
     @unittest.skipUnless(HAS_DAILY_ROUTE_DEPS, "daily analysis route dependencies are not installed")
@@ -69,23 +71,20 @@ class DailyAnalysisRoutesHelperTests(unittest.TestCase):
 
         background_tasks = FakeBackgroundTasks()
         request = DailyAnalysisRequest(date="2026-06-13", commentsPerTopic=2)
-        with (
-            patch("backend.routes.daily_analysis_routes.create_task", return_value="task-daily") as create_task,
-            patch("backend.routes.daily_analysis_routes.enqueue_runtime_task") as enqueue_runtime_task,
-        ):
+        with patch(
+            "backend.routes.daily_analysis_routes.launch_task",
+            return_value={"task_id": "task-daily", "message": "任务已创建，正在后台执行"},
+        ) as launch_task:
             result = asyncio.run(create_daily_report("51111112855254", request, background_tasks))
 
         self.assertEqual({"task_id": "task-daily", "message": "任务已创建，正在后台执行"}, result)
-        create_task.assert_called_once_with(
+        launch_task.assert_called_once_with(
             "daily_topic_analysis",
             "生成每日话题 AI 报告 (群组: 51111112855254)",
-            {"group_id": "51111112855254", "report_date": "2026-06-13"},
-        )
-        enqueue_runtime_task.assert_called_once_with(
             run_daily_analysis_task,
-            "task-daily",
             "51111112855254",
             request,
+            metadata={"group_id": "51111112855254", "report_date": "2026-06-13"},
         )
         self.assertEqual([], background_tasks.tasks)
 
@@ -158,23 +157,20 @@ class DailyAnalysisRoutesHelperTests(unittest.TestCase):
             commentsPerTopic=2,
             crawlLatestFirst=False,
         )
-        with (
-            patch("backend.routes.daily_analysis_routes.create_task", return_value="task-today") as create_task,
-            patch("backend.routes.daily_analysis_routes.enqueue_runtime_task") as enqueue_runtime_task,
-        ):
+        with patch(
+            "backend.routes.daily_analysis_routes.launch_task",
+            return_value={"task_id": "task-today", "message": "任务已创建，正在后台执行"},
+        ) as launch_task:
             result = asyncio.run(run_today_report("51111112855254", request, background_tasks))
 
         self.assertEqual({"task_id": "task-today", "message": "任务已创建，正在后台执行"}, result)
-        create_task.assert_called_once_with(
+        launch_task.assert_called_once_with(
             "daily_topic_crawl_and_analysis",
             "每日抓取与 AI 分析 (群组: 51111112855254)",
-            {"group_id": "51111112855254", "report_date": "2026-06-13"},
-        )
-        enqueue_runtime_task.assert_called_once_with(
             run_daily_today_task,
-            "task-today",
             "51111112855254",
             request,
+            metadata={"group_id": "51111112855254", "report_date": "2026-06-13"},
         )
         self.assertEqual([], background_tasks.tasks)
 

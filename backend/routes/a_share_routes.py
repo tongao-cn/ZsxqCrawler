@@ -24,18 +24,17 @@ from backend.services.a_share_analysis_service import (
 )
 from backend.core.ai_provider_config import has_openai_api_key
 from backend.services.tdx_a_share_export_service import export_a_share_rankings_to_tdx, get_latest_tdx_export
+from backend.services.task_launch import TASK_CREATED_MESSAGE as _TASK_CREATED_MESSAGE, launch_task
 from backend.services.task_runtime import (
     add_task_log,
     build_task_log_callback,
-    create_task,
-    enqueue_runtime_task,
     get_latest_task_by_type,
     is_task_stopped,
     update_task,
 )
 
 router = APIRouter(prefix="/api/analytics/a-share", tags=["a-share"])
-TASK_CREATED_MESSAGE = "任务已创建，正在后台执行"
+TASK_CREATED_MESSAGE = _TASK_CREATED_MESSAGE
 A_SHARE_MISSING_API_KEY_MESSAGE = "未配置 OpenAI API Key，请设置环境变量 OPENAI_API_KEY 或 config.toml [ai].api_key"
 
 
@@ -133,13 +132,13 @@ def _create_a_share_analysis_task_response(
     scope_text: str,
     run_range_text: str,
 ) -> dict[str, str]:
-    task_id = create_task(
+    return launch_task(
         "a_share_analysis",
         f"A股公司分析（{scope_text}，{run_range_text}）",
+        run_a_share_analysis_task,
+        request,
         metadata=_a_share_task_metadata(normalized_group_id),
     )
-    enqueue_runtime_task(run_a_share_analysis_task, task_id, request)
-    return {"task_id": task_id, "message": TASK_CREATED_MESSAGE}
 
 
 def _start_a_share_analysis_task(

@@ -7,7 +7,6 @@ from fastapi import APIRouter, BackgroundTasks, HTTPException
 from pydantic import BaseModel, Field
 
 from backend.core.logger_config import log_exception
-from backend.routes.ingestion_helpers import create_ingestion_task_or_raise
 from backend.services.columns_comment_service import fetch_column_topic_full_comments
 from backend.services.columns_fetch_task_service import (
     delete_all_columns_response,
@@ -18,7 +17,8 @@ from backend.services.columns_fetch_task_service import (
     run_columns_fetch_task,
 )
 from backend.services.columns_summary_service import get_columns_summary
-from backend.services.task_runtime import enqueue_runtime_task, update_task
+from backend.services.task_launch import TaskLaunchConflict, ingestion_conflict_detail, launch_ingestion_task
+from backend.services.task_runtime import update_task
 
 router = APIRouter(prefix="/api", tags=["columns"])
 _fetch_columns_task = run_columns_fetch_task
@@ -41,21 +41,21 @@ def _create_columns_fetch_task_response(
     group_id: str,
     request: ColumnsSettingsRequest,
 ) -> Dict[str, Any]:
-    task_id = create_ingestion_task_or_raise(
+    response = launch_ingestion_task(
         "columns_fetch",
         f"采集专栏内容 (群组: {group_id})",
+        _fetch_columns_task,
         group_id,
+        request,
+        message="专栏采集任务已启动",
+        on_created=lambda task_id: update_task(task_id, "running", "正在采集专栏内容..."),
     )
-    update_task(task_id, "running", "正在采集专栏内容...")
-    enqueue_runtime_task(_fetch_columns_task, task_id, group_id, request)
-    return {
-        "success": True,
-        "task_id": task_id,
-        "message": "专栏采集任务已启动",
-    }
+    return {"success": True, **response}
 
 
 def _columns_route_error(message: str, error: Exception) -> HTTPException:
+    if isinstance(error, TaskLaunchConflict):
+        return HTTPException(status_code=409, detail=ingestion_conflict_detail(error.existing))
     return HTTPException(status_code=500, detail=f"{message}: {str(error)}")
 
 

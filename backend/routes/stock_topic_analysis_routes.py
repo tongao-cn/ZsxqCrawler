@@ -17,17 +17,16 @@ from backend.services.stock_topic_analysis_service import (
     search_stock_question_topics,
     search_stock_topics,
 )
+from backend.services.task_launch import TASK_CREATED_MESSAGE as _TASK_CREATED_MESSAGE, launch_task
 from backend.services.task_runtime import (
     add_task_log,
     build_task_log_callback,
-    create_task,
-    enqueue_runtime_task,
     run_workflow,
 )
 
 
 router = APIRouter(prefix="/api/analysis/stock-topics", tags=["stock-topic-analysis"])
-TASK_CREATED_MESSAGE = "任务已创建，正在后台执行"
+TASK_CREATED_MESSAGE = _TASK_CREATED_MESSAGE
 
 
 def _stock_topic_route_error(message: str, error: Exception) -> HTTPException:
@@ -70,9 +69,7 @@ def _create_stock_task_response(
     group_id: str,
     request,
 ) -> dict[str, str]:
-    task_id = create_task(task_type, description, metadata)
-    enqueue_runtime_task(task_func, task_id, group_id, request)
-    return {"task_id": task_id, "message": TASK_CREATED_MESSAGE}
+    return launch_task(task_type, description, task_func, group_id, request, metadata=metadata)
 
 
 def _stock_topic_batch_completed_message(result: dict) -> str:

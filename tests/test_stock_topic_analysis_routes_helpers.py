@@ -27,10 +27,10 @@ class StockTopicAnalysisRoutesHelperTests(unittest.IsolatedAsyncioTestCase):
 
         request = StockQuestionRequest(question="固态电池怎么看")
 
-        with (
-            patch("backend.routes.stock_topic_analysis_routes.create_task", return_value="task-qa") as create_task,
-            patch("backend.routes.stock_topic_analysis_routes.enqueue_runtime_task") as enqueue_runtime_task,
-        ):
+        with patch(
+            "backend.routes.stock_topic_analysis_routes.launch_task",
+            return_value={"task_id": "task-qa", "message": TASK_CREATED_MESSAGE},
+        ) as launch_task:
             response = _create_stock_task_response(
                 "stock_question_analysis",
                 "A股问答 (群组: 51111112855254)",
@@ -40,16 +40,13 @@ class StockTopicAnalysisRoutesHelperTests(unittest.IsolatedAsyncioTestCase):
                 request,
             )
 
-        create_task.assert_called_once_with(
+        launch_task.assert_called_once_with(
             "stock_question_analysis",
             "A股问答 (群组: 51111112855254)",
-            {"group_id": "51111112855254", "question": "固态电池怎么看"},
-        )
-        enqueue_runtime_task.assert_called_once_with(
             run_stock_question_task,
-            "task-qa",
             "51111112855254",
             request,
+            metadata={"group_id": "51111112855254", "question": "固态电池怎么看"},
         )
         self.assertEqual({"task_id": "task-qa", "message": TASK_CREATED_MESSAGE}, response)
 
@@ -182,26 +179,23 @@ class StockTopicAnalysisRoutesHelperTests(unittest.IsolatedAsyncioTestCase):
             run_stock_question_task,
         )
 
-        with (
-            patch("backend.routes.stock_topic_analysis_routes.create_task", return_value="task-qa") as create_task,
-            patch("backend.routes.stock_topic_analysis_routes.enqueue_runtime_task") as enqueue_runtime_task,
-        ):
+        with patch(
+            "backend.routes.stock_topic_analysis_routes.launch_task",
+            return_value={"task_id": "task-qa", "message": "任务已创建，正在后台执行"},
+        ) as launch_task:
             result = await create_stock_question_analysis(
                 "51111112855254",
                 StockQuestionRequest(question="固态电池怎么看"),
         )
 
         self.assertEqual("task-qa", result["task_id"])
-        create_task.assert_called_once_with(
+        launch_task.assert_called_once_with(
             "stock_question_analysis",
             "A股问答 (群组: 51111112855254)",
-            {"group_id": "51111112855254", "question": "固态电池怎么看"},
-        )
-        enqueue_runtime_task.assert_called_once_with(
             run_stock_question_task,
-            "task-qa",
             "51111112855254",
             StockQuestionRequest(question="固态电池怎么看"),
+            metadata={"group_id": "51111112855254", "question": "固态电池怎么看"},
         )
 
     @unittest.skipUnless(HAS_ROUTE_DEPS, "stock topic analysis route dependencies are not installed")
@@ -370,26 +364,23 @@ class StockTopicAnalysisRoutesHelperTests(unittest.IsolatedAsyncioTestCase):
             run_stock_topic_analysis_task,
         )
 
-        with (
-            patch("backend.routes.stock_topic_analysis_routes.create_task", return_value="task-1") as create_task,
-            patch("backend.routes.stock_topic_analysis_routes.enqueue_runtime_task") as enqueue_runtime_task,
-        ):
+        with patch(
+            "backend.routes.stock_topic_analysis_routes.launch_task",
+            return_value={"task_id": "task-1", "message": "任务已创建，正在后台执行"},
+        ) as launch_task:
             result = await create_stock_topic_analysis(
                 "51111112855254",
                 StockTopicAnalysisRequest(stockName="宁德时代"),
             )
 
         self.assertEqual("task-1", result["task_id"])
-        create_task.assert_called_once_with(
+        launch_task.assert_called_once_with(
             "stock_topic_analysis",
             "个股话题分析 (群组: 51111112855254, 股票: 宁德时代)",
-            {"group_id": "51111112855254", "stock_name": "宁德时代"},
-        )
-        enqueue_runtime_task.assert_called_once_with(
             run_stock_topic_analysis_task,
-            "task-1",
             "51111112855254",
             StockTopicAnalysisRequest(stockName="宁德时代"),
+            metadata={"group_id": "51111112855254", "stock_name": "宁德时代"},
         )
 
     @unittest.skipUnless(HAS_ROUTE_DEPS, "stock topic analysis route dependencies are not installed")
@@ -426,26 +417,23 @@ class StockTopicAnalysisRoutesHelperTests(unittest.IsolatedAsyncioTestCase):
             run_stock_topic_analysis_batch_task,
         )
 
-        with (
-            patch("backend.routes.stock_topic_analysis_routes.create_task", return_value="task-2") as create_task,
-            patch("backend.routes.stock_topic_analysis_routes.enqueue_runtime_task") as enqueue_runtime_task,
-        ):
+        with patch(
+            "backend.routes.stock_topic_analysis_routes.launch_task",
+            return_value={"task_id": "task-2", "message": "任务已创建，正在后台执行"},
+        ) as launch_task:
             result = await create_stock_topic_analysis_batch(
                 "51111112855254",
                 StockTopicAnalysisBatchRequest(stockNames=["宁德时代", "德龙激光", "宁德时代"]),
             )
 
         self.assertEqual("task-2", result["task_id"])
-        create_task.assert_called_once_with(
+        launch_task.assert_called_once_with(
             "stock_topic_analysis_batch",
             "批量个股话题分析 (群组: 51111112855254, 股票数: 2)",
-            {"group_id": "51111112855254", "stock_names": ["宁德时代", "德龙激光"]},
-        )
-        enqueue_runtime_task.assert_called_once_with(
             run_stock_topic_analysis_batch_task,
-            "task-2",
             "51111112855254",
             StockTopicAnalysisBatchRequest(stockNames=["宁德时代", "德龙激光"]),
+            metadata={"group_id": "51111112855254", "stock_names": ["宁德时代", "德龙激光"]},
         )
 
     @unittest.skipUnless(HAS_ROUTE_DEPS, "stock topic analysis route dependencies are not installed")
