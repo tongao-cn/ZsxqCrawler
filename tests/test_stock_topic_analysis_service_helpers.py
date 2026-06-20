@@ -560,8 +560,8 @@ class StockTopicAnalysisServiceHelperTests(unittest.TestCase):
         self.assertEqual(["51111112855254", "宁德时代", "analyzed", "skipped"], conn.execute.call_args.args[1])
 
     @unittest.skipUnless(HAS_SERVICE_DEPS, "stock topic analysis service dependencies are not installed")
-    def test_upsert_stock_topic_analysis_records_processed_state(self):
-        from backend.services.stock_topic_analysis_service import _upsert_stock_topic_analysis
+    def test_save_stock_topic_analysis_checkpoint_records_processed_state(self):
+        from backend.services.stock_topic_analysis_store import CHECKPOINT_ANALYZED_BATCH, save_stock_topic_analysis_checkpoint
 
         conn = Mock()
         result = {
@@ -576,15 +576,15 @@ class StockTopicAnalysisServiceHelperTests(unittest.TestCase):
             "model": "test-model",
         }
 
-        _upsert_stock_topic_analysis(
-            conn,
-            result=result,
-            status="completed",
-            analyzed_topic_ids=["101", "102"],
-            processed_state_topic_ids=["102"],
-            processed_topic_status="analyzed",
-            extract_mode="snippet",
-        )
+        with patch("backend.services.stock_topic_analysis_store.connect", return_value=conn):
+            save_stock_topic_analysis_checkpoint(
+                result=result,
+                phase=CHECKPOINT_ANALYZED_BATCH,
+                max_tracked_topic_ids=5000,
+                analyzed_topic_ids=["101", "102"],
+                processed_state_topic_ids=["102"],
+                extract_mode="snippet",
+            )
 
         state_calls = [
             call.args
@@ -615,10 +615,11 @@ class StockTopicAnalysisServiceHelperTests(unittest.TestCase):
         )
         self.assertIn("INSERT INTO stock_topic_analyses", conn.execute.call_args_list[-1].args[0])
         conn.commit.assert_called_once()
+        conn.close.assert_called_once()
 
     @unittest.skipUnless(HAS_SERVICE_DEPS, "stock topic analysis service dependencies are not installed")
-    def test_upsert_stock_topic_analysis_can_skip_processed_state_write(self):
-        from backend.services.stock_topic_analysis_service import _upsert_stock_topic_analysis
+    def test_save_stock_topic_analysis_checkpoint_completed_snapshot_skips_processed_state_write(self):
+        from backend.services.stock_topic_analysis_store import CHECKPOINT_COMPLETED_SNAPSHOT, save_stock_topic_analysis_checkpoint
 
         conn = Mock()
         result = {
@@ -633,21 +634,24 @@ class StockTopicAnalysisServiceHelperTests(unittest.TestCase):
             "model": "test-model",
         }
 
-        _upsert_stock_topic_analysis(
-            conn,
-            result=result,
-            status="completed",
-            analyzed_topic_ids=["101", "102"],
-            write_processed_state=False,
-        )
+        with patch("backend.services.stock_topic_analysis_store.connect", return_value=conn):
+            save_stock_topic_analysis_checkpoint(
+                result=result,
+                phase=CHECKPOINT_COMPLETED_SNAPSHOT,
+                max_tracked_topic_ids=5000,
+                analyzed_topic_ids=["101", "102"],
+            )
 
-        conn.executemany.assert_not_called()
-        self.assertIn("INSERT INTO stock_topic_analyses", conn.execute.call_args.args[0])
+        executed_sql = "\n".join(call.args[0] for call in conn.execute.call_args_list)
+        self.assertNotIn("INSERT INTO stock_topic_processed_states", executed_sql)
+        self.assertIn("INSERT INTO stock_topic_analyses", executed_sql)
+        self.assertIn("INSERT INTO stock_topic_analysis_versions", executed_sql)
         conn.commit.assert_called_once()
+        conn.close.assert_called_once()
 
     @unittest.skipUnless(HAS_SERVICE_DEPS, "stock topic analysis service dependencies are not installed")
-    def test_upsert_stock_topic_analysis_can_defer_commit(self):
-        from backend.services.stock_topic_analysis_service import _upsert_stock_topic_analysis
+    def test_save_stock_topic_analysis_checkpoint_writes_version_snapshot(self):
+        from backend.services.stock_topic_analysis_store import CHECKPOINT_COMPLETED_SNAPSHOT, save_stock_topic_analysis_checkpoint
 
         conn = Mock()
         result = {
@@ -660,23 +664,27 @@ class StockTopicAnalysisServiceHelperTests(unittest.TestCase):
             "recommendation_count": 0,
             "summary_markdown": "summary",
             "model": "test-model",
+            "analysis_mode": "incremental",
+            "new_topic_count": 1,
         }
 
-        _upsert_stock_topic_analysis(
-            conn,
-            result=result,
-            status="completed",
-            analyzed_topic_ids=["101"],
-            write_processed_state=False,
-            commit=False,
-        )
+        with patch("backend.services.stock_topic_analysis_store.connect", return_value=conn):
+            save_stock_topic_analysis_checkpoint(
+                result=result,
+                phase=CHECKPOINT_COMPLETED_SNAPSHOT,
+                max_tracked_topic_ids=5000,
+                analyzed_topic_ids=["101"],
+            )
 
-        self.assertIn("INSERT INTO stock_topic_analyses", conn.execute.call_args.args[0])
-        conn.commit.assert_not_called()
+        executed_sql = "\n".join(call.args[0] for call in conn.execute.call_args_list)
+        self.assertIn("INSERT INTO stock_topic_analyses", executed_sql)
+        self.assertIn("INSERT INTO stock_topic_analysis_versions", executed_sql)
+        conn.commit.assert_called_once()
+        conn.close.assert_called_once()
 
     @unittest.skipUnless(HAS_SERVICE_DEPS, "stock topic analysis service dependencies are not installed")
     def test_insert_stock_topic_analysis_version_records_snapshot(self):
-        from backend.services.stock_topic_analysis_service import _insert_stock_topic_analysis_version
+        from backend.services.stock_topic_analysis_store import insert_stock_topic_analysis_version
 
         conn = Mock()
         result = {
@@ -692,11 +700,12 @@ class StockTopicAnalysisServiceHelperTests(unittest.TestCase):
             "new_topic_count": 1,
         }
 
-        _insert_stock_topic_analysis_version(
+        insert_stock_topic_analysis_version(
             conn,
             result=result,
             status="completed",
-            analyzed_topic_ids=["101", "102"],
+            topic_ids=["101", "102"],
+            max_tracked_topic_ids=5000,
         )
 
         self.assertIn("INSERT INTO stock_topic_analysis_versions", conn.execute.call_args.args[0])
@@ -804,7 +813,7 @@ class StockTopicAnalysisServiceHelperTests(unittest.TestCase):
             patch("backend.services.stock_topic_analysis_service.search_stock_topics", return_value=search_result),
             patch("backend.services.stock_topic_analysis_service.get_latest_stock_topic_analysis", return_value=None),
             patch("backend.services.stock_topic_analysis_service._build_analysis_topic_payload", return_value=[]),
-            patch("backend.services.stock_topic_analysis_service.connect", return_value=conn),
+            patch("backend.services.stock_topic_analysis_store.connect", return_value=conn),
         ):
             result = analyze_stock_topics("51111112855254", "宁德时代")
 
@@ -1373,7 +1382,7 @@ class StockTopicAnalysisServiceHelperTests(unittest.TestCase):
             patch("backend.services.stock_topic_analysis_service.get_latest_stock_topic_analysis", return_value=latest),
             patch("backend.services.stock_topic_analysis_service._build_analysis_topic_payload") as build_payload,
             patch("backend.services.stock_topic_analysis_service._call_stock_analysis_ai") as call_ai,
-            patch("backend.services.stock_topic_analysis_service.connect", return_value=conn),
+            patch("backend.services.stock_topic_analysis_store.connect", return_value=conn),
         ):
             result = analyze_stock_topics("51111112855254", "宁德时代")
 
@@ -1419,7 +1428,7 @@ class StockTopicAnalysisServiceHelperTests(unittest.TestCase):
             patch("backend.services.stock_topic_analysis_service.get_latest_stock_topic_analysis", return_value=latest),
             patch("backend.services.stock_topic_analysis_service._build_analysis_topic_payload") as build_payload,
             patch("backend.services.stock_topic_analysis_service._call_stock_analysis_ai") as call_ai,
-            patch("backend.services.stock_topic_analysis_service.connect", return_value=conn),
+            patch("backend.services.stock_topic_analysis_store.connect", return_value=conn),
         ):
             result = analyze_stock_topics("51111112855254", "宁德时代")
 
@@ -1475,7 +1484,7 @@ class StockTopicAnalysisServiceHelperTests(unittest.TestCase):
             patch("backend.services.stock_topic_analysis_service.get_latest_stock_topic_analysis", return_value=latest),
             patch("backend.services.stock_topic_analysis_service._build_analysis_topic_payload", return_value=payload_topics),
             patch("backend.services.stock_topic_analysis_service._call_stock_analysis_ai", return_value=("updated summary", "new-model")) as call_ai,
-            patch("backend.services.stock_topic_analysis_service.connect", return_value=conn),
+            patch("backend.services.stock_topic_analysis_store.connect", return_value=conn),
         ):
             result = analyze_stock_topics("51111112855254", "宁德时代")
 
@@ -1533,7 +1542,7 @@ class StockTopicAnalysisServiceHelperTests(unittest.TestCase):
             patch("backend.services.stock_topic_analysis_service.get_latest_stock_topic_analysis", return_value=None),
             patch("backend.services.stock_topic_analysis_service._build_analysis_topic_payload", return_value=payload_topics),
             patch("backend.services.stock_topic_analysis_service._call_stock_analysis_ai", side_effect=fake_ai) as call_ai,
-            patch("backend.services.stock_topic_analysis_service.connect", return_value=conn),
+            patch("backend.services.stock_topic_analysis_store.connect", return_value=conn),
         ):
             result = analyze_stock_topics("51111112855254", "宁德时代")
 
@@ -1590,7 +1599,7 @@ class StockTopicAnalysisServiceHelperTests(unittest.TestCase):
             patch("backend.services.stock_topic_analysis_service.get_latest_stock_topic_analysis", return_value=None),
             patch("backend.services.stock_topic_analysis_service._build_analysis_topic_payload", return_value=payload_topics),
             patch("backend.services.stock_topic_analysis_service._call_stock_analysis_ai", side_effect=fake_ai),
-            patch("backend.services.stock_topic_analysis_service.connect", return_value=conn),
+            patch("backend.services.stock_topic_analysis_store.connect", return_value=conn),
             self.assertRaises(RuntimeError),
         ):
             analyze_stock_topics("51111112855254", "宁德时代")

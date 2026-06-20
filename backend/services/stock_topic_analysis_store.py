@@ -8,7 +8,7 @@ from datetime import date
 from typing import Any, Dict, Iterable, List
 
 from backend.services.daily_topic_analysis_topics import clip_text as _clip
-from backend.services.stock_topic_analysis_helpers import _build_stock_alias_terms
+from backend.services.stock_topic_analysis_helpers import _build_stock_alias_terms, _topic_ids_from_result
 from backend.services.stock_topic_analysis_payloads import require_topic_excerpt
 from backend.services.stock_topic_analysis_queries import build_question_topic_search_sql, build_topic_search_sql
 from backend.storage.db_compat import connect
@@ -18,6 +18,12 @@ from backend.storage.db_compat import connect
 class StockTopicSearchSources:
     processed_topic_ids: List[str]
     rows: List[Any]
+
+
+CHECKPOINT_ANALYZED_BATCH = "analyzed_batch"
+CHECKPOINT_COMPLETED_SNAPSHOT = "completed_snapshot"
+CHECKPOINT_FAILED_BATCH = "failed_batch"
+CHECKPOINT_SKIPPED_ONLY = "skipped_only"
 
 
 def _normalize_text(value: Any) -> str:
@@ -616,3 +622,72 @@ def insert_stock_topic_analysis_version(
             date.today().isoformat(),
         ),
     )
+
+
+def save_stock_topic_analysis_checkpoint(
+    *,
+    result: Dict[str, Any],
+    phase: str,
+    max_tracked_topic_ids: int,
+    error: str = "",
+    analyzed_topic_ids: Iterable[Any] | None = None,
+    processed_state_topic_ids: Iterable[Any] | None = None,
+    extract_mode: str = "",
+) -> None:
+    phase_config = {
+        CHECKPOINT_ANALYZED_BATCH: {
+            "status": _normalize_text(result.get("status")) or "completed",
+            "processed_topic_status": "analyzed",
+            "write_processed_state": True,
+            "write_version": False,
+        },
+        CHECKPOINT_COMPLETED_SNAPSHOT: {
+            "status": "completed",
+            "processed_topic_status": "analyzed",
+            "write_processed_state": False,
+            "write_version": True,
+        },
+        CHECKPOINT_FAILED_BATCH: {
+            "status": "failed",
+            "processed_topic_status": "failed",
+            "write_processed_state": True,
+            "write_version": False,
+        },
+        CHECKPOINT_SKIPPED_ONLY: {
+            "status": "completed",
+            "processed_topic_status": "skipped",
+            "write_processed_state": True,
+            "write_version": False,
+        },
+    }
+    if phase not in phase_config:
+        raise ValueError(f"Unknown stock topic analysis checkpoint phase: {phase}")
+    config = phase_config[phase]
+    topic_ids = list(analyzed_topic_ids) if analyzed_topic_ids is not None else _topic_ids_from_result(result)
+    conn = connect()
+    try:
+        upsert_stock_topic_analysis(
+            conn,
+            result=result,
+            status=config["status"],
+            topic_ids=topic_ids,
+            max_tracked_topic_ids=max_tracked_topic_ids,
+            error=error,
+            processed_state_topic_ids=processed_state_topic_ids,
+            processed_topic_status=config["processed_topic_status"],
+            extract_mode=extract_mode,
+            write_processed_state=config["write_processed_state"],
+            commit=not config["write_version"],
+        )
+        if config["write_version"]:
+            insert_stock_topic_analysis_version(
+                conn,
+                result=result,
+                status=config["status"],
+                topic_ids=topic_ids,
+                max_tracked_topic_ids=max_tracked_topic_ids,
+                error=error,
+            )
+            conn.commit()
+    finally:
+        conn.close()

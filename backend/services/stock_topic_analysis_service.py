@@ -34,7 +34,6 @@ from backend.services.stock_topic_analysis_helpers import (
     _reconcile_processed_topic_ids,
     _safe_float,
     _stock_analysis_mode,
-    _topic_ids_from_result,
     parse_stock_names,
 )
 from backend.services.stock_topic_analysis_payloads import (
@@ -44,12 +43,15 @@ from backend.services.stock_topic_analysis_payloads import (
     require_topic_excerpt,
 )
 from backend.services.stock_topic_analysis_store import (
-    insert_stock_topic_analysis_version,
+    CHECKPOINT_ANALYZED_BATCH,
+    CHECKPOINT_COMPLETED_SNAPSHOT,
+    CHECKPOINT_FAILED_BATCH,
+    CHECKPOINT_SKIPPED_ONLY,
     load_question_topic_search_rows,
     load_saved_stock_topic_analysis,
     load_stock_recommendation_counts_for_names,
     load_stock_topic_search_sources,
-    upsert_stock_topic_analysis,
+    save_stock_topic_analysis_checkpoint,
 )
 from backend.services.stock_topic_analysis_runner import (
     AnalyzeStockTopicsBatchRequest,
@@ -192,54 +194,6 @@ def _score_relevant_topic(extracted_content: str, mode: str, matched_terms: Iter
     if confidence > 0:
         score += min(int(confidence * 10), 10)
     return score
-
-
-def _upsert_stock_topic_analysis(
-    conn: Any,
-    *,
-    result: Dict[str, Any],
-    status: str,
-    error: str = "",
-    analyzed_topic_ids: Iterable[Any] | None = None,
-    processed_state_topic_ids: Iterable[Any] | None = None,
-    processed_topic_status: str = "analyzed",
-    extract_mode: str = "",
-    write_processed_state: bool = True,
-    commit: bool = True,
-) -> None:
-    topic_ids = list(analyzed_topic_ids) if analyzed_topic_ids is not None else _topic_ids_from_result(result)
-    upsert_stock_topic_analysis(
-        conn,
-        result=result,
-        status=status,
-        topic_ids=topic_ids,
-        max_tracked_topic_ids=MAX_TRACKED_TOPIC_IDS,
-        error=error,
-        processed_state_topic_ids=processed_state_topic_ids,
-        processed_topic_status=processed_topic_status,
-        extract_mode=extract_mode,
-        write_processed_state=write_processed_state,
-        commit=commit,
-    )
-
-
-def _insert_stock_topic_analysis_version(
-    conn: Any,
-    *,
-    result: Dict[str, Any],
-    status: str,
-    error: str = "",
-    analyzed_topic_ids: Iterable[Any] | None = None,
-) -> None:
-    topic_ids = list(analyzed_topic_ids) if analyzed_topic_ids is not None else _topic_ids_from_result(result)
-    insert_stock_topic_analysis_version(
-        conn,
-        result=result,
-        status=status,
-        topic_ids=topic_ids,
-        max_tracked_topic_ids=MAX_TRACKED_TOPIC_IDS,
-        error=error,
-    )
 
 
 def get_latest_stock_topic_analysis(group_id: str, stock_name: str) -> Dict[str, Any] | None:
@@ -658,18 +612,13 @@ def _analyze_stock_topics_impl(
             analyzed_topic_ids=saved_topic_ids,
         )
         if has_new_processed_topic_ids:
-            conn = connect()
-            try:
-                _upsert_stock_topic_analysis(
-                    conn,
-                    result=result,
-                    status="completed",
-                    analyzed_topic_ids=processed_topic_ids,
-                    processed_state_topic_ids=new_skipped_topic_ids,
-                    processed_topic_status="skipped",
-                )
-            finally:
-                conn.close()
+            save_stock_topic_analysis_checkpoint(
+                result=result,
+                phase=CHECKPOINT_SKIPPED_ONLY,
+                max_tracked_topic_ids=MAX_TRACKED_TOPIC_IDS,
+                analyzed_topic_ids=processed_topic_ids,
+                processed_state_topic_ids=new_skipped_topic_ids,
+            )
         _log(log_callback, "✅ 没有新话题，沿用已保存的个股分析结果")
         return result
 
@@ -693,18 +642,13 @@ def _analyze_stock_topics_impl(
                 has_topics_to_analyze=False,
             ),
         )
-        conn = connect()
-        try:
-            _upsert_stock_topic_analysis(
-                conn,
-                result=result,
-                status="completed",
-                analyzed_topic_ids=processed_topic_ids,
-                processed_state_topic_ids=new_skipped_topic_ids,
-                processed_topic_status="skipped",
-            )
-        finally:
-            conn.close()
+        save_stock_topic_analysis_checkpoint(
+            result=result,
+            phase=CHECKPOINT_SKIPPED_ONLY,
+            max_tracked_topic_ids=MAX_TRACKED_TOPIC_IDS,
+            analyzed_topic_ids=processed_topic_ids,
+            processed_state_topic_ids=new_skipped_topic_ids,
+        )
         return result
 
     analysis_mode = _stock_analysis_mode(
@@ -742,18 +686,13 @@ def _analyze_stock_topics_impl(
                 new_topic_count=len(topics),
                 analysis_mode=analysis_mode,
             )
-            conn = connect()
-            try:
-                _upsert_stock_topic_analysis(
-                    conn,
-                    result=checkpoint_result,
-                    status=checkpoint_result["status"],
-                    analyzed_topic_ids=processed_topic_ids,
-                    processed_state_topic_ids=current_batch_topic_ids,
-                    processed_topic_status="analyzed",
-                )
-            finally:
-                conn.close()
+            save_stock_topic_analysis_checkpoint(
+                result=checkpoint_result,
+                phase=CHECKPOINT_ANALYZED_BATCH,
+                max_tracked_topic_ids=MAX_TRACKED_TOPIC_IDS,
+                analyzed_topic_ids=processed_topic_ids,
+                processed_state_topic_ids=current_batch_topic_ids,
+            )
     except Exception as exc:
         failed_topic_ids = current_batch_topic_ids or new_topic_ids
         failed_result = _build_stock_analysis_result(
@@ -766,19 +705,14 @@ def _analyze_stock_topics_impl(
             new_topic_count=len(topics),
             analysis_mode=analysis_mode,
         )
-        conn = connect()
-        try:
-            _upsert_stock_topic_analysis(
-                conn,
-                result=failed_result,
-                status="failed",
-                error=str(exc),
-                analyzed_topic_ids=processed_topic_ids,
-                processed_state_topic_ids=failed_topic_ids,
-                processed_topic_status="failed",
-            )
-        finally:
-            conn.close()
+        save_stock_topic_analysis_checkpoint(
+            result=failed_result,
+            phase=CHECKPOINT_FAILED_BATCH,
+            max_tracked_topic_ids=MAX_TRACKED_TOPIC_IDS,
+            error=str(exc),
+            analyzed_topic_ids=processed_topic_ids,
+            processed_state_topic_ids=failed_topic_ids,
+        )
         raise
     processed_topic_ids = _merge_topic_ids(processed_topic_ids, (topic.get("topic_id") for topic in topics))
     result = _build_stock_analysis_result(
@@ -791,25 +725,12 @@ def _analyze_stock_topics_impl(
         new_topic_count=len(topics),
         analysis_mode=analysis_mode,
     )
-    conn = connect()
-    try:
-        _upsert_stock_topic_analysis(
-            conn,
-            result=result,
-            status="completed",
-            analyzed_topic_ids=processed_topic_ids,
-            write_processed_state=False,
-            commit=False,
-        )
-        _insert_stock_topic_analysis_version(
-            conn,
-            result=result,
-            status="completed",
-            analyzed_topic_ids=processed_topic_ids,
-        )
-        conn.commit()
-    finally:
-        conn.close()
+    save_stock_topic_analysis_checkpoint(
+        result=result,
+        phase=CHECKPOINT_COMPLETED_SNAPSHOT,
+        max_tracked_topic_ids=MAX_TRACKED_TOPIC_IDS,
+        analyzed_topic_ids=processed_topic_ids,
+    )
     _log(log_callback, "✅ 个股分析结果已保存")
     return result
 
