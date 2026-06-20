@@ -58,7 +58,7 @@ class StockTopicAnalysisServiceHelperTests(unittest.TestCase):
         self.assertEqual(["1", "2"], _merge_topic_ids([1, 2, 3], limit=2))
 
     def test_reconcile_processed_topic_ids_prefers_processed_ids(self):
-        from backend.services.stock_topic_analysis_helpers import _reconcile_processed_topic_ids
+        from backend.services.stock_topic_analysis_helpers import StockTopicProgress, _reconcile_processed_topic_ids
 
         latest = {"processed_topic_ids": ["101", "102"], "analyzed_topic_ids": ["old"]}
         search_result = {
@@ -69,12 +69,14 @@ class StockTopicAnalysisServiceHelperTests(unittest.TestCase):
 
         result = _reconcile_processed_topic_ids(latest, search_result)
 
-        self.assertEqual(["101", "102"], result["saved_topic_ids"])
-        self.assertEqual(["102", "103", "104"], result["current_topic_ids"])
-        self.assertEqual(["103", "104"], result["new_topic_ids"])
-        self.assertEqual(["104", "105"], result["new_skipped_topic_ids"])
-        self.assertEqual(["101", "102", "103", "104", "105"], result["processed_topic_ids"])
-        self.assertTrue(result["has_new_processed_topic_ids"])
+        self.assertIsInstance(result, StockTopicProgress)
+        self.assertEqual(["101", "102"], result.saved_topic_ids)
+        self.assertEqual(["102", "103", "104"], result.current_topic_ids)
+        self.assertEqual(["103", "104"], result.new_topic_ids)
+        self.assertEqual(["104", "105"], result.new_skipped_topic_ids)
+        self.assertEqual(["101", "102", "103", "104", "105"], result.processed_topic_ids)
+        self.assertTrue(result.has_new_topics)
+        self.assertTrue(result.has_new_processed_topic_ids)
 
     def test_reconcile_processed_topic_ids_falls_back_to_analyzed_ids(self):
         from backend.services.stock_topic_analysis_helpers import _reconcile_processed_topic_ids
@@ -88,11 +90,12 @@ class StockTopicAnalysisServiceHelperTests(unittest.TestCase):
 
         result = _reconcile_processed_topic_ids(latest, search_result)
 
-        self.assertEqual(["101"], result["saved_topic_ids"])
-        self.assertEqual([], result["new_topic_ids"])
-        self.assertEqual([], result["new_skipped_topic_ids"])
-        self.assertEqual(["101"], result["processed_topic_ids"])
-        self.assertFalse(result["has_new_processed_topic_ids"])
+        self.assertEqual(["101"], result.saved_topic_ids)
+        self.assertEqual([], result.new_topic_ids)
+        self.assertEqual([], result.new_skipped_topic_ids)
+        self.assertEqual(["101"], result.processed_topic_ids)
+        self.assertFalse(result.has_new_topics)
+        self.assertFalse(result.has_new_processed_topic_ids)
 
     def test_reconcile_processed_topic_ids_handles_empty_latest(self):
         from backend.services.stock_topic_analysis_helpers import _reconcile_processed_topic_ids
@@ -104,12 +107,33 @@ class StockTopicAnalysisServiceHelperTests(unittest.TestCase):
 
         result = _reconcile_processed_topic_ids(None, search_result)
 
-        self.assertEqual([], result["saved_topic_ids"])
-        self.assertEqual(["101", "102"], result["current_topic_ids"])
-        self.assertEqual(["101", "102"], result["new_topic_ids"])
-        self.assertEqual([], result["new_skipped_topic_ids"])
-        self.assertEqual(["101"], result["processed_topic_ids"])
-        self.assertTrue(result["has_new_processed_topic_ids"])
+        self.assertEqual([], result.saved_topic_ids)
+        self.assertEqual(["101", "102"], result.current_topic_ids)
+        self.assertEqual(["101", "102"], result.new_topic_ids)
+        self.assertEqual([], result.new_skipped_topic_ids)
+        self.assertEqual(["101"], result.processed_topic_ids)
+        self.assertTrue(result.has_new_processed_topic_ids)
+
+    def test_stock_topic_progress_filters_and_merges_topic_ids(self):
+        from backend.services.stock_topic_analysis_helpers import StockTopicProgress
+
+        progress = StockTopicProgress(
+            saved_topic_ids=["101"],
+            current_topic_ids=["101", "102", "103"],
+            new_topic_ids=["102"],
+            new_skipped_topic_ids=["103"],
+            processed_topic_ids=["101", "103"],
+        )
+
+        topics = [
+            {"topic_id": "101", "excerpt": "old"},
+            {"topic_id": 102, "excerpt": "new"},
+            {"topic_id": "103", "excerpt": "skipped"},
+        ]
+
+        self.assertEqual([topics[1]], progress.topics_to_analyze(topics))
+        self.assertEqual(["101", "103", "102"], progress.with_processed_topics(["102"]))
+        self.assertEqual(["101", "103", "102"], progress.with_current_topics_processed())
 
     def test_build_saved_stock_analysis_result_keeps_saved_metadata(self):
         from backend.services.stock_topic_analysis_helpers import _build_saved_stock_analysis_result

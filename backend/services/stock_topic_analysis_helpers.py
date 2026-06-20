@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import re
+from dataclasses import dataclass
 from typing import Any, Dict, Iterable, List, Optional
 
 
@@ -108,22 +109,50 @@ def _exclude_topic_ids(values: Iterable[Any], excluded: Iterable[Any], *, limit:
     return _ordered_unique((value for value in values if str(value) not in excluded_set), limit=limit)
 
 
-def _reconcile_processed_topic_ids(latest: Dict[str, Any] | None, search_result: Dict[str, Any]) -> Dict[str, Any]:
+@dataclass(frozen=True)
+class StockTopicProgress:
+    saved_topic_ids: List[str]
+    current_topic_ids: List[str]
+    new_topic_ids: List[str]
+    new_skipped_topic_ids: List[str]
+    processed_topic_ids: List[str]
+
+    @property
+    def has_new_topics(self) -> bool:
+        return bool(self.new_topic_ids)
+
+    @property
+    def has_new_processed_topic_ids(self) -> bool:
+        return len(_topic_id_set(self.processed_topic_ids)) > len(_topic_id_set(self.saved_topic_ids))
+
+    def topics_to_analyze(self, topics: Iterable[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        topic_list = list(topics)
+        if not self.new_topic_ids:
+            return topic_list
+        new_topic_id_set = set(self.new_topic_ids)
+        return [topic for topic in topic_list if str(topic.get("topic_id") or "") in new_topic_id_set]
+
+    def with_current_topics_processed(self) -> List[str]:
+        return self.with_processed_topics(self.current_topic_ids)
+
+    def with_processed_topics(self, topic_ids: Iterable[Any]) -> List[str]:
+        return _merge_topic_ids(self.processed_topic_ids, topic_ids)
+
+
+def _reconcile_processed_topic_ids(latest: Dict[str, Any] | None, search_result: Dict[str, Any]) -> StockTopicProgress:
     saved_topic_ids = list((latest or {}).get("processed_topic_ids") or (latest or {}).get("analyzed_topic_ids") or [])
     current_topic_ids = _topic_ids_from_result(search_result)
     saved_topic_id_set = _topic_id_set(saved_topic_ids)
     new_topic_ids = [topic_id for topic_id in current_topic_ids if topic_id not in saved_topic_id_set]
     new_skipped_topic_ids = _exclude_topic_ids(search_result.get("skipped_topic_ids") or [], saved_topic_ids)
     processed_topic_ids = _merge_topic_ids(saved_topic_ids, search_result.get("processed_topic_ids") or [], new_skipped_topic_ids)
-    has_new_processed_topic_ids = len(_topic_id_set(processed_topic_ids)) > len(saved_topic_id_set)
-    return {
-        "saved_topic_ids": saved_topic_ids,
-        "current_topic_ids": current_topic_ids,
-        "new_topic_ids": new_topic_ids,
-        "new_skipped_topic_ids": new_skipped_topic_ids,
-        "processed_topic_ids": processed_topic_ids,
-        "has_new_processed_topic_ids": has_new_processed_topic_ids,
-    }
+    return StockTopicProgress(
+        saved_topic_ids=saved_topic_ids,
+        current_topic_ids=current_topic_ids,
+        new_topic_ids=new_topic_ids,
+        new_skipped_topic_ids=new_skipped_topic_ids,
+        processed_topic_ids=processed_topic_ids,
+    )
 
 
 def _build_saved_stock_analysis_result(

@@ -596,46 +596,37 @@ def _analyze_stock_topics_impl(
     _log(log_callback, f"📊 命中话题: {search_result['topic_count']}，推荐次数: {search_result['recommendation_count']}")
     latest = get_latest_stock_topic_analysis(group_id, stock_name)
     topic_progress = _reconcile_processed_topic_ids(latest, search_result)
-    saved_topic_ids = topic_progress["saved_topic_ids"]
-    current_topic_ids = topic_progress["current_topic_ids"]
-    new_topic_ids = topic_progress["new_topic_ids"]
-    new_skipped_topic_ids = topic_progress["new_skipped_topic_ids"]
-    processed_topic_ids = topic_progress["processed_topic_ids"]
-    has_new_processed_topic_ids = topic_progress["has_new_processed_topic_ids"]
     has_existing_summary = bool((latest or {}).get("summary_markdown"))
 
-    if has_existing_summary and not new_topic_ids:
+    if has_existing_summary and not topic_progress.has_new_topics:
         result = _build_saved_stock_analysis_result(
             search_result,
             latest,
-            processed_topic_ids=processed_topic_ids,
-            analyzed_topic_ids=saved_topic_ids,
+            processed_topic_ids=topic_progress.processed_topic_ids,
+            analyzed_topic_ids=topic_progress.saved_topic_ids,
         )
-        if has_new_processed_topic_ids:
+        if topic_progress.has_new_processed_topic_ids:
             save_stock_topic_analysis_checkpoint(
                 result=result,
                 phase=CHECKPOINT_SKIPPED_ONLY,
                 max_tracked_topic_ids=MAX_TRACKED_TOPIC_IDS,
-                analyzed_topic_ids=processed_topic_ids,
-                processed_state_topic_ids=new_skipped_topic_ids,
+                analyzed_topic_ids=topic_progress.processed_topic_ids,
+                processed_state_topic_ids=topic_progress.new_skipped_topic_ids,
             )
         _log(log_callback, "✅ 没有新话题，沿用已保存的个股分析结果")
         return result
 
-    topics = _build_analysis_topic_payload(search_result)
-    if new_topic_ids:
-        new_topic_id_set = set(new_topic_ids)
-        topics = [topic for topic in topics if topic.get("topic_id") in new_topic_id_set]
+    topics = topic_progress.topics_to_analyze(_build_analysis_topic_payload(search_result))
 
     if not topics:
-        processed_topic_ids = _merge_topic_ids(processed_topic_ids, current_topic_ids)
+        processed_topic_ids = topic_progress.with_current_topics_processed()
         result = _build_stock_analysis_result(
             search_result,
             summary_markdown=(latest or {}).get("summary_markdown") or "没有找到可分析的话题内容。",
             model=(latest or {}).get("model", ""),
             status="completed",
             processed_topic_ids=processed_topic_ids,
-            analyzed_topic_ids=saved_topic_ids,
+            analyzed_topic_ids=topic_progress.saved_topic_ids,
             new_topic_count=0,
             analysis_mode=_stock_analysis_mode(
                 has_existing_summary=has_existing_summary,
@@ -647,7 +638,7 @@ def _analyze_stock_topics_impl(
             phase=CHECKPOINT_SKIPPED_ONLY,
             max_tracked_topic_ids=MAX_TRACKED_TOPIC_IDS,
             analyzed_topic_ids=processed_topic_ids,
-            processed_state_topic_ids=new_skipped_topic_ids,
+            processed_state_topic_ids=topic_progress.new_skipped_topic_ids,
         )
         return result
 
@@ -663,7 +654,7 @@ def _analyze_stock_topics_impl(
     try:
         summary = (latest or {}).get("summary_markdown") or ""
         model = (latest or {}).get("model") or ""
-        processed_topic_ids = list(processed_topic_ids)
+        processed_topic_ids = list(topic_progress.processed_topic_ids)
         current_batch_topic_ids: List[str] = []
         for batch_index, topic_batch in enumerate(topic_batches, start=1):
             _log(log_callback, f"🤖 AI 分析批次 {batch_index}/{len(topic_batches)}，话题 {len(topic_batch)} 条")
@@ -694,7 +685,7 @@ def _analyze_stock_topics_impl(
                 processed_state_topic_ids=current_batch_topic_ids,
             )
     except Exception as exc:
-        failed_topic_ids = current_batch_topic_ids or new_topic_ids
+        failed_topic_ids = current_batch_topic_ids or topic_progress.new_topic_ids
         failed_result = _build_stock_analysis_result(
             search_result,
             topics=search_result["topics"][: len(topics)],
