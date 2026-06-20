@@ -18,16 +18,18 @@ from backend.services.file_download_records_workflow import (
     _run_download_records,
 )
 from backend.services.file_single_download_workflow import _complete_successful_single_file_download
-from backend.services.file_workflow_service import (
+from backend.services.file_status_service import (
     _build_check_local_file_status_response,
     _build_file_status_response,
     _build_sync_files_response,
-    _close_crawler_file_databases,
-    _enqueue_file_task,
-    _fail_file_task,
     _get_download_file_status,
     _get_file_status_response,
     _resolve_download_record_status,
+)
+from backend.services.file_workflow_service import (
+    _close_crawler_file_databases,
+    _enqueue_file_task,
+    _fail_file_task,
     create_filtered_file_download_task,
     create_file_ai_analysis_task,
     create_file_collect_task,
@@ -1529,7 +1531,7 @@ class FileRoutesHelperTests(unittest.TestCase):
         self.assertEqual("failed", _download_result_stat_key(None))
 
     def test_get_file_stats_response_uses_storage_download_stats(self):
-        from backend.services import file_workflow_service
+        from backend.services import file_read_model
 
         class FakeFileDb:
             def __init__(self):
@@ -1550,7 +1552,7 @@ class FileRoutesHelperTests(unittest.TestCase):
 
         fake_db = FakeFileDb()
         with patch("backend.services.file_status_service._file_db", return_value=fake_db):
-            response = file_workflow_service._get_file_stats_response("123")
+            response = file_read_model.get_file_stats_response("123")
 
         self.assertEqual(1, fake_db.download_stats_calls)
         self.assertEqual(
@@ -1567,7 +1569,7 @@ class FileRoutesHelperTests(unittest.TestCase):
         )
 
     def test_get_file_stats_response_defaults_missing_download_stats_to_zero(self):
-        from backend.services import file_workflow_service
+        from backend.services import file_read_model
 
         class FakeFileDb:
             def __init__(self):
@@ -1588,7 +1590,7 @@ class FileRoutesHelperTests(unittest.TestCase):
 
         fake_db = FakeFileDb()
         with patch("backend.services.file_status_service._file_db", return_value=fake_db):
-            response = file_workflow_service._get_file_stats_response("group-1")
+            response = file_read_model.get_file_stats_response("group-1")
 
         self.assertEqual(1, fake_db.download_stats_calls)
         self.assertEqual(
@@ -1605,7 +1607,7 @@ class FileRoutesHelperTests(unittest.TestCase):
         )
 
     def test_get_file_stats_response_reads_database_stats_before_download_stats(self):
-        from backend.services import file_workflow_service
+        from backend.services import file_read_model
 
         events = []
 
@@ -1626,7 +1628,7 @@ class FileRoutesHelperTests(unittest.TestCase):
 
         fake_db = FakeFileDb()
         with patch("backend.services.file_status_service._file_db", return_value=fake_db):
-            response = file_workflow_service._get_file_stats_response("123")
+            response = file_read_model.get_file_stats_response("123")
 
         self.assertEqual(
             ["database_stats", "download_stats"],
@@ -1650,15 +1652,15 @@ class FileRoutesHelperTests(unittest.TestCase):
 
         self.assertEqual(
             [
-                (file_routes._get_file_status_response, ("group-1", 123)),
-                (file_routes._check_local_file_status_response, ("group-1", "file.pdf", 456)),
-                (file_routes._get_file_stats_response, ("group-1",)),
+                (file_routes.get_file_status_response, ("group-1", 123)),
+                (file_routes.check_local_file_status_response, ("group-1", "file.pdf", 456)),
+                (file_routes.get_file_stats_response, ("group-1",)),
             ],
             calls,
         )
-        self.assertEqual({"called": "_get_file_status_response", "args": ("group-1", 123)}, file_status)
-        self.assertEqual({"called": "_check_local_file_status_response", "args": ("group-1", "file.pdf", 456)}, local_status)
-        self.assertEqual({"called": "_get_file_stats_response", "args": ("group-1",)}, stats)
+        self.assertEqual({"called": "get_file_status_response", "args": ("group-1", 123)}, file_status)
+        self.assertEqual({"called": "check_local_file_status_response", "args": ("group-1", "file.pdf", 456)}, local_status)
+        self.assertEqual({"called": "get_file_stats_response", "args": ("group-1",)}, stats)
 
     def test_file_read_routes_preserve_wrapped_unexpected_errors(self):
         from backend.routes import file_routes
@@ -1738,7 +1740,7 @@ class FileRoutesHelperTests(unittest.TestCase):
         with patch("backend.routes.file_routes.asyncio.to_thread", side_effect=fake_to_thread):
             response = self._run_async(file_routes.clear_file_database("group-1"))
 
-        self.assertEqual([(file_routes._clear_file_database_response, ("group-1",))], calls)
+        self.assertEqual([(file_routes.clear_file_database_response, ("group-1",))], calls)
         self.assertEqual({"message": "ok", "deleted": {"files": 1}}, response)
 
     def test_get_files_offloads_sync_work_to_thread(self):
@@ -1762,7 +1764,7 @@ class FileRoutesHelperTests(unittest.TestCase):
                 )
             )
 
-        self.assertEqual([(file_routes._get_files_response, ("group-1", 2, 5, "completed", "pdf", "pending"))], calls)
+        self.assertEqual([(file_routes.get_files_response, ("group-1", 2, 5, "completed", "pdf", "pending"))], calls)
         self.assertEqual({"files": [], "pagination": {"page": 2, "per_page": 5, "total": 0, "pages": 0}}, response)
 
     def test_file_read_helpers_preserve_service_call_shapes(self):
@@ -1792,26 +1794,26 @@ class FileRoutesHelperTests(unittest.TestCase):
 
         self.assertEqual(
             [
-                (file_routes._get_file_status_response, ("group-1", 123)),
-                (file_routes._check_local_file_status_response, ("group-1", "file.pdf", 456)),
-                (file_routes._get_file_stats_response, ("group-1",)),
-                (file_routes._clear_file_database_response, ("group-1",)),
-                (file_routes._get_files_response, ("group-1", 2, 5, "completed", "pdf", "pending")),
+                (file_routes.get_file_status_response, ("group-1", 123)),
+                (file_routes.check_local_file_status_response, ("group-1", "file.pdf", 456)),
+                (file_routes.get_file_stats_response, ("group-1",)),
+                (file_routes.clear_file_database_response, ("group-1",)),
+                (file_routes.get_files_response, ("group-1", 2, 5, "completed", "pdf", "pending")),
             ],
             calls,
         )
-        self.assertEqual({"called": "_get_file_status_response", "args": ("group-1", 123)}, file_status)
-        self.assertEqual({"called": "_check_local_file_status_response", "args": ("group-1", "file.pdf", 456)}, local_status)
-        self.assertEqual({"called": "_get_file_stats_response", "args": ("group-1",)}, stats)
-        self.assertEqual({"called": "_clear_file_database_response", "args": ("group-1",)}, clear_response)
-        self.assertEqual({"called": "_get_files_response", "args": ("group-1", 2, 5, "completed", "pdf", "pending")}, files)
+        self.assertEqual({"called": "get_file_status_response", "args": ("group-1", 123)}, file_status)
+        self.assertEqual({"called": "check_local_file_status_response", "args": ("group-1", "file.pdf", 456)}, local_status)
+        self.assertEqual({"called": "get_file_stats_response", "args": ("group-1",)}, stats)
+        self.assertEqual({"called": "clear_file_database_response", "args": ("group-1",)}, clear_response)
+        self.assertEqual({"called": "get_files_response", "args": ("group-1", 2, 5, "completed", "pdf", "pending")}, files)
 
     def test_get_files_response_passes_analysis_status_to_storage(self):
-        from backend.services import file_workflow_service
+        from backend.services import file_read_model
 
         fake_db = FakeFileListDb()
-        with patch("backend.services.file_workflow_service._file_db", return_value=fake_db):
-            response = file_workflow_service._get_files_response("group-1", analysis_status="analyzed")
+        with patch("backend.services.file_read_model._file_db", return_value=fake_db):
+            response = file_read_model.get_files_response("group-1", analysis_status="analyzed")
 
         self.assertEqual([], response["files"])
         self.assertEqual(
@@ -1820,8 +1822,8 @@ class FileRoutesHelperTests(unittest.TestCase):
         )
 
         fake_db = FakeFileListDb()
-        with patch("backend.services.file_workflow_service._file_db", return_value=fake_db):
-            file_workflow_service._get_files_response("group-1", analysis_status="pending")
+        with patch("backend.services.file_read_model._file_db", return_value=fake_db):
+            file_read_model.get_files_response("group-1", analysis_status="pending")
 
         self.assertEqual(
             [{"page": 1, "per_page": 20, "status": None, "search": None, "analysis_status": "pending"}],
@@ -1829,11 +1831,11 @@ class FileRoutesHelperTests(unittest.TestCase):
         )
 
     def test_get_files_response_passes_empty_status_to_storage(self):
-        from backend.services import file_workflow_service
+        from backend.services import file_read_model
 
         fake_db = FakeFileListDb()
-        with patch("backend.services.file_workflow_service._file_db", return_value=fake_db):
-            response = file_workflow_service._get_files_response("123")
+        with patch("backend.services.file_read_model._file_db", return_value=fake_db):
+            response = file_read_model.get_files_response("123")
 
         self.assertEqual([], response["files"])
         self.assertEqual(
@@ -1842,7 +1844,7 @@ class FileRoutesHelperTests(unittest.TestCase):
         )
 
     def test_get_files_response_keeps_completed_search_and_pagination_shape(self):
-        from backend.services import file_workflow_service
+        from backend.services import file_read_model
 
         fake_db = FakeFileListDb(
             records=[
@@ -1863,13 +1865,13 @@ class FileRoutesHelperTests(unittest.TestCase):
             total=21,
         )
         with (
-            patch("backend.services.file_workflow_service._file_db", return_value=fake_db),
+            patch("backend.services.file_read_model._file_db", return_value=fake_db),
             patch(
                 "backend.services.file_status_service.resolve_local_file_path",
                 return_value=r"C:\resolved\Report.PDF",
             ),
         ):
-            response = file_workflow_service._get_files_response(
+            response = file_read_model.get_files_response(
                 "123",
                 page=2,
                 per_page=5,
@@ -2996,19 +2998,19 @@ class FileRoutesHelperTests(unittest.TestCase):
         self.assertTrue(FakeFileDb.last_instance.closed)
 
     def test_clear_file_database_does_not_construct_legacy_crawler(self):
-        from backend.services.file_workflow_service import _clear_file_database_response
+        from backend.services.file_read_model import clear_file_database_response
 
         with (
             patch("backend.services.file_clear_workflow._clear_group_file_data", return_value={"files": 0}) as clear_data,
             patch("backend.core.crawler_runtime.get_crawler_for_group", side_effect=AssertionError("legacy crawler used")),
         ):
-            response = _clear_file_database_response("group-1")
+            response = clear_file_database_response("group-1")
 
         clear_data.assert_called_once_with("group-1")
         self.assertEqual({"message": "群组 group-1 的文件数据和图片缓存已删除", "deleted": {"files": 0}}, response)
 
     def test_clear_file_database_clears_image_cache_and_logs_success(self):
-        from backend.services.file_workflow_service import _clear_file_database_response
+        from backend.services.file_read_model import clear_file_database_response
 
         cache_manager = FakeImageCacheManager((True, "已删除 2 个缓存文件"))
 
@@ -3018,7 +3020,7 @@ class FileRoutesHelperTests(unittest.TestCase):
             patch("backend.core.image_cache_manager.clear_group_cache_manager") as clear_group_cache,
             patch("backend.services.file_clear_workflow._log_file_route_event") as log_file_route_event,
         ):
-            response = _clear_file_database_response("group-1")
+            response = clear_file_database_response("group-1")
 
         get_cache.assert_called_once_with("group-1")
         self.assertEqual(1, cache_manager.clear_calls)
@@ -3027,7 +3029,7 @@ class FileRoutesHelperTests(unittest.TestCase):
         self.assertEqual({"message": "群组 group-1 的文件数据和图片缓存已删除", "deleted": {"files": 1}}, response)
 
     def test_clear_file_database_logs_image_cache_clear_failure_but_keeps_response(self):
-        from backend.services.file_workflow_service import _clear_file_database_response
+        from backend.services.file_read_model import clear_file_database_response
 
         cache_manager = FakeImageCacheManager((False, "permission denied"))
 
@@ -3037,7 +3039,7 @@ class FileRoutesHelperTests(unittest.TestCase):
             patch("backend.core.image_cache_manager.clear_group_cache_manager") as clear_group_cache,
             patch("backend.services.file_clear_workflow._log_file_route_event") as log_file_route_event,
         ):
-            response = _clear_file_database_response("group-1")
+            response = clear_file_database_response("group-1")
 
         self.assertEqual(1, cache_manager.clear_calls)
         clear_group_cache.assert_called_once_with("group-1")
@@ -3045,7 +3047,7 @@ class FileRoutesHelperTests(unittest.TestCase):
         self.assertEqual({"message": "群组 group-1 的文件数据和图片缓存已删除", "deleted": {"files": 1}}, response)
 
     def test_clear_file_database_logs_image_cache_exception_but_keeps_response(self):
-        from backend.services.file_workflow_service import _clear_file_database_response
+        from backend.services.file_read_model import clear_file_database_response
 
         with (
             patch("backend.services.file_clear_workflow._clear_group_file_data", return_value={"files": 1}),
@@ -3053,7 +3055,7 @@ class FileRoutesHelperTests(unittest.TestCase):
             patch("backend.core.image_cache_manager.clear_group_cache_manager") as clear_group_cache,
             patch("backend.services.file_clear_workflow._log_file_route_event") as log_file_route_event,
         ):
-            response = _clear_file_database_response("group-1")
+            response = clear_file_database_response("group-1")
 
         clear_group_cache.assert_not_called()
         log_file_route_event.assert_called_once_with("WARN", "清空图片缓存时出错: cache boom")

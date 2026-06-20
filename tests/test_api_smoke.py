@@ -84,7 +84,7 @@ class ApiSmokeTests(unittest.TestCase):
 
         with (
             patch(
-                "backend.routes.file_routes._clear_file_database_response",
+                "backend.routes.file_routes.clear_file_database_response",
                 return_value={"message": "群组 group-1 的文件数据和图片缓存已删除", "deleted": {"files": 0}},
             ),
             patch("builtins.print", side_effect=gbk_print),

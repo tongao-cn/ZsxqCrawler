@@ -20,14 +20,15 @@ from backend.services.file_ai_analysis_entry import (
     create_selected_file_analysis_task_response,
     get_file_analysis_response,
 )
+from backend.services.file_read_model import (
+    check_local_file_status_response,
+    clear_file_database_response,
+    get_file_stats_response,
+    get_file_status_response,
+    get_files_response,
+)
 from backend.services.task_launch import TaskLaunchConflict, ingestion_conflict_detail
 from backend.services.file_workflow_service import (
-    _check_local_file_status_response,
-    _clear_file_database_response,
-    _get_file_stats_response,
-    _get_file_status_response,
-    _get_files_response,
-    _log_file_route_event,
     create_filtered_file_download_task,
     create_file_collect_task,
     create_file_download_task,
@@ -49,20 +50,24 @@ def _file_analysis_entry_http_error(error: FileAIAnalysisEntryError) -> HTTPExce
     return HTTPException(status_code=error.status_code, detail=error.detail)
 
 
+def _log_file_route_event(level: str, message: str) -> None:
+    print(f"[{level}] {message}")
+
+
 async def _file_status(group_id: str, file_id: int) -> dict:
-    return await asyncio.to_thread(_get_file_status_response, group_id, file_id)
+    return await asyncio.to_thread(get_file_status_response, group_id, file_id)
 
 
 async def _local_file_status(group_id: str, file_name: str, file_size: int) -> dict:
-    return await asyncio.to_thread(_check_local_file_status_response, group_id, file_name, file_size)
+    return await asyncio.to_thread(check_local_file_status_response, group_id, file_name, file_size)
 
 
 async def _file_stats(group_id: str) -> dict:
-    return await asyncio.to_thread(_get_file_stats_response, group_id)
+    return await asyncio.to_thread(get_file_stats_response, group_id)
 
 
 async def _clear_file_database(group_id: str) -> dict:
-    return await asyncio.to_thread(_clear_file_database_response, group_id)
+    return await asyncio.to_thread(clear_file_database_response, group_id)
 
 
 async def _files_page(
@@ -73,7 +78,7 @@ async def _files_page(
     search: Optional[str],
     analysis_status: Optional[str],
 ) -> dict:
-    return await asyncio.to_thread(_get_files_response, group_id, page, per_page, status, search, analysis_status)
+    return await asyncio.to_thread(get_files_response, group_id, page, per_page, status, search, analysis_status)
 
 
 async def _file_analysis(group_id: str, file_id: int) -> dict:
