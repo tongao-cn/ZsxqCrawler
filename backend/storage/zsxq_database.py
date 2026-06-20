@@ -44,6 +44,7 @@ from backend.storage.zsxq_database_helpers import (
     load_topic_detail_likes_detail,
     load_topic_detail_qa,
     load_topic_detail_talk_payload,
+    local_group_ids_query,
     local_group_record_query,
     local_group_topic_count_query,
     local_group_topic_time_range_query,
@@ -487,6 +488,10 @@ def _local_group_topic_count_query(group_id: Optional[str]) -> tuple[str, tuple[
     return local_group_topic_count_query(group_id)
 
 
+def _local_group_ids_query(limit: int) -> tuple[str, tuple[Any, ...]]:
+    return local_group_ids_query(limit)
+
+
 def _upsert_core_file(cursor, group_id: Optional[int], topic_id: int, file_data: Dict[str, Any]) -> Optional[int]:
     return upsert_core_file(cursor, group_id, topic_id, file_data)
 
@@ -825,6 +830,18 @@ class ZSXQDatabase:
     def _fetch_local_group_topic_count(self) -> Any:
         sql, params = _local_group_topic_count_query(self.group_id)
         return self._fetch_first_column(sql, params)
+
+    def get_local_group_ids(self, limit: int) -> set[int]:
+        sql, params = _local_group_ids_query(limit)
+        ids: set[int] = set()
+        for row in self._fetch_all_rows(sql, params):
+            try:
+                group_id = int(row[0])
+                if group_id > 0:
+                    ids.add(group_id)
+            except Exception:
+                continue
+        return ids
     
     def get_timestamp_range_info(self) -> Dict[str, Any]:
         """获取话题时间戳范围信息"""

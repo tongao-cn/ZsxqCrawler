@@ -22,6 +22,7 @@ from backend.storage.zsxq_database import (
     _group_id_param,
     _group_insert_statement,
     _group_stats_queries,
+    _local_group_ids_query,
     _local_group_record_query,
     _local_group_topic_count_query,
     _local_group_topic_time_range_query,
@@ -99,6 +100,15 @@ class FakeTimestampCursor(FakeCursor):
         if self.rows:
             return self.rows.pop(0)
         return None
+
+
+class FakeRowsCursor(FakeCursor):
+    def __init__(self, rows):
+        super().__init__()
+        self.rows = list(rows)
+
+    def fetchall(self):
+        return self.rows
 
 
 class FakeTimestampCountFailureCursor(FakeTimestampCursor):
@@ -1982,6 +1992,8 @@ class ZSXQDatabaseHelperTests(unittest.TestCase):
         self.assertEqual(("SELECT SUM(reading_count) FROM topics WHERE group_id = ?", (303,)), queries[-1][1:])
 
     def test_local_group_db_field_queries_preserve_route_fallback_scope(self):
+        self.assertEqual(("SELECT group_id FROM groups LIMIT ?", (50,)), _local_group_ids_query(50))
+
         self.assertEqual(
             (
                 "SELECT name, type, background_url FROM groups WHERE group_id = ? LIMIT 1",
@@ -2087,6 +2099,15 @@ class ZSXQDatabaseHelperTests(unittest.TestCase):
             db.cursor.calls[0],
         )
         self.assertEqual(("SELECT COUNT(*) FROM topics WHERE group_id = ?", (303,)), db.cursor.calls[-1])
+
+    def test_get_local_group_ids_filters_invalid_group_rows(self):
+        from backend.storage.zsxq_database import ZSXQDatabase
+
+        db = object.__new__(ZSXQDatabase)
+        db.cursor = FakeRowsCursor([(303,), ("bad",), (0,), (-1,), (404,)])
+
+        self.assertEqual({303, 404}, ZSXQDatabase.get_local_group_ids(db, 50))
+        self.assertEqual([("SELECT group_id FROM groups LIMIT ?", (50,))], db.cursor.calls)
 
     def test_load_local_group_db_fields_skips_queries_when_fields_are_complete(self):
         from backend.storage.zsxq_database import ZSXQDatabase

@@ -1066,6 +1066,10 @@ def local_group_topic_count_query(group_id: Optional[str]) -> tuple[str, tuple[A
     )
 
 
+def local_group_ids_query(limit: int) -> tuple[str, tuple[Any, ...]]:
+    return "SELECT group_id FROM groups LIMIT ?", (int(limit),)
+
+
 def database_stats_count_query(table: str, group_id: Optional[str]) -> tuple[str, tuple[Any, ...]]:
     if group_id is None:
         return f"SELECT COUNT(*) FROM {table}", ()

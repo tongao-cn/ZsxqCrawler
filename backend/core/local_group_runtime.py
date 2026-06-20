@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import time
+from contextlib import closing
 from typing import Any, Dict, Optional
 
 from fastapi import HTTPException
@@ -9,7 +10,7 @@ from fastapi import HTTPException
 from backend.core.console_output import safe_console_print
 from backend.core.db_path_manager import get_db_path_manager
 from backend.core.image_cache_manager import clear_group_cache_manager, get_image_cache_manager
-from backend.storage.db_compat import connect
+from backend.storage.zsxq_database import ZSXQDatabase
 
 
 print = safe_console_print
@@ -75,20 +76,8 @@ def _collect_numeric_dirs(base: str, limit: int) -> set:
 
 def _collect_postgres_group_ids(limit: int) -> set:
     try:
-        conn = connect()
-        try:
-            rows = conn.execute("SELECT group_id FROM groups LIMIT ?", (limit,)).fetchall()
-        finally:
-            conn.close()
-        ids = set()
-        for row in rows:
-            try:
-                gid = int(row[0])
-                if gid > 0:
-                    ids.add(gid)
-            except Exception:
-                continue
-        return ids
+        with closing(ZSXQDatabase()) as db:
+            return db.get_local_group_ids(limit)
     except Exception:
         return set()
 
