@@ -47,7 +47,7 @@ export type {
   TopicDetail,
   TopicOwner,
 } from './groupTypes';
-export type { ApiErrorDetail, Task, TaskCreateResponse } from './taskTypes';
+export type { ApiErrorDetail, Task, TaskCreateResponse, TaskLogsResponse } from './taskTypes';
 
 export interface ApiResponse<T = any> {
   data?: T;

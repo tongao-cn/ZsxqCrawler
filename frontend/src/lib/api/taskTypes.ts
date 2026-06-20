@@ -15,6 +15,11 @@ export interface TaskCreateResponse {
   message: string;
 }
 
+export interface TaskLogsResponse {
+  task_id: string;
+  logs: string[];
+}
+
 export interface ApiErrorDetail {
   message?: string;
   error?: string;

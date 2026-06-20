@@ -1,5 +1,5 @@
 import { CoreApiClient } from './core';
-import type { Task } from './taskTypes';
+import type { Task, TaskLogsResponse } from './taskTypes';
 
 export class TasksApiClient extends CoreApiClient {
   async getTasks(groupId?: string | number | null, taskType?: string): Promise<Task[]> {
@@ -16,6 +16,10 @@ export class TasksApiClient extends CoreApiClient {
 
   async getTask(taskId: string): Promise<Task> {
     return this.request(`/api/tasks/${taskId}`);
+  }
+
+  async getTaskLogs(taskId: string): Promise<TaskLogsResponse> {
+    return this.request(`/api/tasks/${taskId}/logs`);
   }
 
   async stopTask(taskId: string) {

@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { X, Minimize2, Maximize2, Terminal, MessageSquare, Square, AlertTriangle } from 'lucide-react';
-import { API_BASE_URL } from '@/lib/api';
+import { useTaskStream } from '@/hooks/useTaskStream';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -26,18 +26,7 @@ interface TaskLogViewerProps {
   onTaskStop?: () => void;
 }
 
-interface LogMessage {
-  type: 'log' | 'status' | 'heartbeat';
-  message?: string;
-  status?: string;
-}
-
 const MAX_VISIBLE_LOGS = 2000;
-const TERMINAL_STATUSES = new Set(['completed', 'failed', 'cancelled']);
-
-function isTerminalStatus(status: string) {
-  return TERMINAL_STATUSES.has(status);
-}
 
 export default function TaskLogViewer({
   taskId,
@@ -47,89 +36,27 @@ export default function TaskLogViewer({
   inline = false,
   onTaskStop
 }: TaskLogViewerProps) {
-  const [logs, setLogs] = useState<string[]>([]);
-  const [status, setStatus] = useState<string>('pending');
-  const [isConnected, setIsConnected] = useState(false);
   const [stopping, setStopping] = useState(false);
   const [showExpiredDialog, setShowExpiredDialog] = useState(false);
   const [expiredMessage, setExpiredMessage] = useState('');
   const scrollAreaRef = useRef<HTMLDivElement>(null);
-  const eventSourceRef = useRef<EventSource | null>(null);
-  const onTaskStopRef = useRef(onTaskStop);
-
-  useEffect(() => {
-    onTaskStopRef.current = onTaskStop;
-  }, [onTaskStop]);
-
-  useEffect(() => {
-    setLogs([]);
-    setStatus('pending');
-    setIsConnected(false);
-    setStopping(false);
-
-    if (!taskId) return;
-
-    const eventSource = new EventSource(`${API_BASE_URL}/api/tasks/${taskId}/stream`);
-    eventSourceRef.current = eventSource;
-
-    eventSource.onopen = () => {
-      setIsConnected(true);
-    };
-
-    eventSource.onmessage = (event) => {
-      try {
-        const data: LogMessage = JSON.parse(event.data);
-        
-        if (data.type === 'log' && data.message) {
-          setLogs(prev => {
-            const nextLogs = [...prev, data.message!];
-            return nextLogs.length > MAX_VISIBLE_LOGS ? nextLogs.slice(-MAX_VISIBLE_LOGS) : nextLogs;
-          });
-
-          // 检测过期相关的日志消息
-          if (data.message.includes('会员已过期') || data.message.includes('成员体验已到期')) {
-            setExpiredMessage(data.message);
-            setShowExpiredDialog(true);
-          }
-        } else if (data.type === 'status' && data.status) {
-          setStatus(data.status);
-          // 不再将状态信息添加到日志中，只更新状态
-
-          // 如果任务完成或失败，关闭SSE连接
-          if (isTerminalStatus(data.status)) {
-            eventSource.close();
-            setIsConnected(false);
-
-            // 调用任务停止回调
-            if (onTaskStopRef.current) {
-              onTaskStopRef.current();
-            }
-          }
-        }
-        // heartbeat 不需要处理
-      } catch {
-        // Ignore malformed SSE payloads and wait for the next update.
+  const { connected: isConnected, logs, status } = useTaskStream(taskId, {
+    collectLogs: true,
+    maxLogs: MAX_VISIBLE_LOGS,
+    onLog: (message) => {
+      if (message.includes('会员已过期') || message.includes('成员体验已到期')) {
+        setExpiredMessage(message);
+        setShowExpiredDialog(true);
       }
-    };
+    },
+    onTerminal: () => {
+      onTaskStop?.();
+    },
+  });
 
-    eventSource.onerror = () => {
-      setIsConnected(false);
-    };
-
-    return () => {
-      eventSource.close();
-      eventSourceRef.current = null;
-    };
-  }, [taskId]);
-
-  // 监听状态变化，确保任务完成时关闭连接
   useEffect(() => {
-    if (isTerminalStatus(status) && eventSourceRef.current) {
-      eventSourceRef.current.close();
-      eventSourceRef.current = null;
-      setIsConnected(false);
-    }
-  }, [status]);
+    setStopping(false);
+  }, [taskId]);
 
   // 自动滚动到底部
   useEffect(() => {
