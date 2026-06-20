@@ -62,7 +62,7 @@ class ApiSmokeTests(unittest.TestCase):
             " ".join(str(arg) for arg in args).encode("gbk")
 
         with (
-            patch("backend.routes.topic_routes._clear_group_topic_data", return_value={"topics": 0}),
+            patch("backend.services.topic_local_service._clear_group_topic_data", return_value={"topics": 0}),
             patch("builtins.print", side_effect=gbk_print),
         ):
             response = TestClient(create_app()).post("/api/topics/clear/group-1")

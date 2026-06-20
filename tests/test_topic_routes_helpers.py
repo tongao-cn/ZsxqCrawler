@@ -94,6 +94,16 @@ class FakeSingleTopicClient:
         return self.comments
 
 
+class FakeImageCacheManager:
+    def __init__(self, result):
+        self.result = result
+        self.clear_calls = 0
+
+    def clear_cache(self):
+        self.clear_calls += 1
+        return self.result
+
+
 class TopicRoutesHelperTests(unittest.TestCase):
     def _run_async(self, coro):
         import asyncio
@@ -102,7 +112,7 @@ class TopicRoutesHelperTests(unittest.TestCase):
 
     @unittest.skipUnless(HAS_TOPIC_ROUTE_DEPS, "topic route dependencies are not installed")
     def test_close_topic_db_closes_database(self):
-        from backend.routes.topic_routes import _close_topic_db
+        from backend.services.topic_local_service import _close_topic_db
 
         db = FakeDb()
 
@@ -112,7 +122,7 @@ class TopicRoutesHelperTests(unittest.TestCase):
 
     @unittest.skipUnless(HAS_TOPIC_ROUTE_DEPS, "topic route dependencies are not installed")
     def test_rollback_topic_db_rolls_back_when_available(self):
-        from backend.routes.topic_routes import _rollback_topic_db
+        from backend.services.topic_local_service import _rollback_topic_db
 
         db = FakeDb()
 
@@ -122,7 +132,7 @@ class TopicRoutesHelperTests(unittest.TestCase):
 
     @unittest.skipUnless(HAS_TOPIC_ROUTE_DEPS, "topic route dependencies are not installed")
     def test_rollback_topic_db_allows_missing_db(self):
-        from backend.routes.topic_routes import _rollback_topic_db
+        from backend.services.topic_local_service import _rollback_topic_db
 
         _rollback_topic_db(None)
 
@@ -420,7 +430,7 @@ class TopicRoutesHelperTests(unittest.TestCase):
 
     @unittest.skipUnless(HAS_TOPIC_ROUTE_DEPS, "topic route dependencies are not installed")
     def test_delete_single_topic_response_uses_storage_topic_exists(self):
-        from backend.routes.topic_routes import _delete_single_topic_response
+        from backend.services.topic_local_service import delete_single_topic_response
 
         class FakeDeleteTopicDb(FakeDb):
             def __init__(self, existing):
@@ -440,8 +450,8 @@ class TopicRoutesHelperTests(unittest.TestCase):
         existing_db = FakeDeleteTopicDb(existing=True)
         missing_db = FakeDeleteTopicDb(existing=False)
 
-        with patch("backend.routes.topic_routes.ZSXQDatabase", return_value=existing_db):
-            response = _delete_single_topic_response(14, 123)
+        with patch("backend.services.topic_local_service.ZSXQDatabase", return_value=existing_db):
+            response = delete_single_topic_response(14, 123)
 
         self.assertEqual({"success": True, "deleted_topic_id": 14, "deleted": True}, response)
         self.assertEqual([14], existing_db.topic_exists_calls)
@@ -449,8 +459,8 @@ class TopicRoutesHelperTests(unittest.TestCase):
         self.assertTrue(existing_db.committed)
         self.assertTrue(existing_db.closed)
 
-        with patch("backend.routes.topic_routes.ZSXQDatabase", return_value=missing_db):
-            response = _delete_single_topic_response(15, 123)
+        with patch("backend.services.topic_local_service.ZSXQDatabase", return_value=missing_db):
+            response = delete_single_topic_response(15, 123)
 
         self.assertEqual({"success": False, "message": "话题不存在"}, response)
         self.assertEqual([15], missing_db.topic_exists_calls)
@@ -460,7 +470,7 @@ class TopicRoutesHelperTests(unittest.TestCase):
 
     @unittest.skipUnless(HAS_TOPIC_ROUTE_DEPS, "topic route dependencies are not installed")
     def test_delete_group_topics_response_uses_storage_count_and_delete(self):
-        from backend.routes.topic_routes import _delete_group_topics_response
+        from backend.services.topic_local_service import delete_group_topics_response
 
         class FakeDeleteGroupDb(FakeDb):
             def __init__(self, topics_count):
@@ -480,8 +490,8 @@ class TopicRoutesHelperTests(unittest.TestCase):
         existing_db = FakeDeleteGroupDb(topics_count=2)
         missing_db = FakeDeleteGroupDb(topics_count=0)
 
-        with patch("backend.routes.topic_routes.ZSXQDatabase", return_value=existing_db):
-            response = _delete_group_topics_response(123)
+        with patch("backend.services.topic_local_service.ZSXQDatabase", return_value=existing_db):
+            response = delete_group_topics_response(123)
 
         self.assertEqual(
             {
@@ -496,8 +506,8 @@ class TopicRoutesHelperTests(unittest.TestCase):
         self.assertTrue(existing_db.committed)
         self.assertTrue(existing_db.closed)
 
-        with patch("backend.routes.topic_routes.ZSXQDatabase", return_value=missing_db):
-            response = _delete_group_topics_response(123)
+        with patch("backend.services.topic_local_service.ZSXQDatabase", return_value=missing_db):
+            response = delete_group_topics_response(123)
 
         self.assertEqual({"message": "该群组没有话题数据", "deleted_count": 0}, response)
         self.assertEqual([123], missing_db.count_topic_calls)
@@ -507,7 +517,7 @@ class TopicRoutesHelperTests(unittest.TestCase):
 
     @unittest.skipUnless(HAS_TOPIC_ROUTE_DEPS, "topic route dependencies are not installed")
     def test_get_topics_by_tag_response_delegates_group_scope_to_storage(self):
-        from backend.routes.topic_routes import _get_topics_by_tag_response
+        from backend.services.topic_local_service import get_topics_by_tag_response
 
         class FakeTaggedTopicsDb(FakeDb):
             def __init__(self):
@@ -520,8 +530,8 @@ class TopicRoutesHelperTests(unittest.TestCase):
 
         db = FakeTaggedTopicsDb()
 
-        with patch("backend.routes.topic_routes.ZSXQDatabase", return_value=db) as database:
-            response = _get_topics_by_tag_response(123, 9, page=2, per_page=5)
+        with patch("backend.services.topic_local_service.ZSXQDatabase", return_value=db) as database:
+            response = get_topics_by_tag_response(123, 9, page=2, per_page=5)
 
         database.assert_called_once_with("123")
         self.assertEqual({"topics": [{"topic_id": 202}], "pagination": {"page": 2}}, response)
@@ -530,9 +540,8 @@ class TopicRoutesHelperTests(unittest.TestCase):
 
     @unittest.skipUnless(HAS_TOPIC_ROUTE_DEPS, "topic route dependencies are not installed")
     def test_get_topics_by_tag_response_maps_missing_tag_to_404(self):
-        from fastapi import HTTPException
-
-        from backend.routes.topic_routes import _get_topics_by_tag_response
+        from backend.services.topic_local_service import get_topics_by_tag_response
+        from backend.services.topic_workflow_service import TopicWorkflowError
         from backend.storage.zsxq_database import TagNotFoundInGroupError
 
         class FakeTaggedTopicsDb(FakeDb):
@@ -541,13 +550,87 @@ class TopicRoutesHelperTests(unittest.TestCase):
 
         db = FakeTaggedTopicsDb()
 
-        with patch("backend.routes.topic_routes.ZSXQDatabase", return_value=db):
-            with self.assertRaises(HTTPException) as ctx:
-                _get_topics_by_tag_response(123, 9, page=2, per_page=5)
+        with patch("backend.services.topic_local_service.ZSXQDatabase", return_value=db):
+            with self.assertRaises(TopicWorkflowError) as ctx:
+                get_topics_by_tag_response(123, 9, page=2, per_page=5)
 
         self.assertEqual(404, ctx.exception.status_code)
         self.assertEqual("标签在该群组中不存在", ctx.exception.detail)
         self.assertTrue(db.closed)
+
+    @unittest.skipUnless(HAS_TOPIC_ROUTE_DEPS, "topic route dependencies are not installed")
+    def test_get_topic_detail_response_maps_missing_topic_to_404(self):
+        from backend.services.topic_local_service import get_topic_detail_response
+        from backend.services.topic_workflow_service import TopicWorkflowError
+
+        class FakeDetailDb(FakeDb):
+            def get_topic_detail(self, topic_id):
+                return None
+
+        db = FakeDetailDb()
+
+        with patch("backend.services.topic_local_service.ZSXQDatabase", return_value=db):
+            with self.assertRaises(TopicWorkflowError) as ctx:
+                get_topic_detail_response(14, "123")
+
+        self.assertEqual(404, ctx.exception.status_code)
+        self.assertEqual("话题不存在", ctx.exception.detail)
+        self.assertTrue(db.closed)
+
+    @unittest.skipUnless(HAS_TOPIC_ROUTE_DEPS, "topic route dependencies are not installed")
+    def test_clear_topic_database_response_clears_image_cache_and_logs_success(self):
+        from backend.services.topic_local_service import clear_topic_database_response
+
+        cache_manager = FakeImageCacheManager((True, "已删除 2 个缓存文件"))
+
+        with (
+            patch("backend.services.topic_local_service._clear_group_topic_data", return_value={"topics": 2}),
+            patch("backend.services.topic_local_service.get_image_cache_manager", return_value=cache_manager) as get_cache,
+            patch("backend.services.topic_local_service.clear_group_cache_manager") as clear_group_cache,
+            patch("backend.services.topic_local_service._log_topic_event") as log_topic_event,
+        ):
+            response = clear_topic_database_response("group-1")
+
+        self.assertEqual({"message": "群组 group-1 的话题数据和图片缓存已删除", "deleted": {"topics": 2}}, response)
+        get_cache.assert_called_once_with("group-1")
+        self.assertEqual(1, cache_manager.clear_calls)
+        clear_group_cache.assert_called_once_with("group-1")
+        log_topic_event.assert_called_once_with("INFO", "图片缓存已清空: 已删除 2 个缓存文件")
+
+    @unittest.skipUnless(HAS_TOPIC_ROUTE_DEPS, "topic route dependencies are not installed")
+    def test_clear_topic_database_response_logs_image_cache_clear_failure_but_keeps_response(self):
+        from backend.services.topic_local_service import clear_topic_database_response
+
+        cache_manager = FakeImageCacheManager((False, "permission denied"))
+
+        with (
+            patch("backend.services.topic_local_service._clear_group_topic_data", return_value={"topics": 2}),
+            patch("backend.services.topic_local_service.get_image_cache_manager", return_value=cache_manager),
+            patch("backend.services.topic_local_service.clear_group_cache_manager") as clear_group_cache,
+            patch("backend.services.topic_local_service._log_topic_event") as log_topic_event,
+        ):
+            response = clear_topic_database_response("group-1")
+
+        self.assertEqual({"message": "群组 group-1 的话题数据和图片缓存已删除", "deleted": {"topics": 2}}, response)
+        self.assertEqual(1, cache_manager.clear_calls)
+        clear_group_cache.assert_called_once_with("group-1")
+        log_topic_event.assert_called_once_with("WARN", "清空图片缓存失败: permission denied")
+
+    @unittest.skipUnless(HAS_TOPIC_ROUTE_DEPS, "topic route dependencies are not installed")
+    def test_clear_topic_database_response_logs_image_cache_exception_but_keeps_response(self):
+        from backend.services.topic_local_service import clear_topic_database_response
+
+        with (
+            patch("backend.services.topic_local_service._clear_group_topic_data", return_value={"topics": 2}),
+            patch("backend.services.topic_local_service.get_image_cache_manager", side_effect=RuntimeError("cache boom")),
+            patch("backend.services.topic_local_service.clear_group_cache_manager") as clear_group_cache,
+            patch("backend.services.topic_local_service._log_topic_event") as log_topic_event,
+        ):
+            response = clear_topic_database_response("group-1")
+
+        self.assertEqual({"message": "群组 group-1 的话题数据和图片缓存已删除", "deleted": {"topics": 2}}, response)
+        clear_group_cache.assert_not_called()
+        log_topic_event.assert_called_once_with("WARN", "清空图片缓存时出错: cache boom")
 
     @unittest.skipUnless(HAS_TOPIC_ROUTE_DEPS, "topic route dependencies are not installed")
     def test_build_refresh_topic_success_defaults_missing_counts(self):
@@ -746,7 +829,7 @@ class TopicRoutesHelperTests(unittest.TestCase):
 
     @unittest.skipUnless(HAS_TOPIC_ROUTE_DEPS, "topic route dependencies are not installed")
     def test_get_topics_response_delegates_to_storage(self):
-        from backend.routes.topic_routes import _get_topics_response
+        from backend.services.topic_local_service import get_topics_response
 
         class FakeTopicsDb(FakeDb):
             def __init__(self):
@@ -759,8 +842,8 @@ class TopicRoutesHelperTests(unittest.TestCase):
 
         db = FakeTopicsDb()
 
-        with patch("backend.routes.topic_routes.ZSXQDatabase", return_value=db) as database:
-            response = _get_topics_response(page=2, per_page=5, search="offer")
+        with patch("backend.services.topic_local_service.ZSXQDatabase", return_value=db) as database:
+            response = get_topics_response(page=2, per_page=5, search="offer")
 
         database.assert_called_once_with()
         self.assertEqual({"topics": [{"topic_id": 202}], "pagination": {"page": 2}}, response)
@@ -769,7 +852,7 @@ class TopicRoutesHelperTests(unittest.TestCase):
 
     @unittest.skipUnless(HAS_TOPIC_ROUTE_DEPS, "topic route dependencies are not installed")
     def test_get_group_topics_response_delegates_to_storage(self):
-        from backend.routes.topic_routes import _get_group_topics_response
+        from backend.services.topic_local_service import get_group_topics_response
 
         class FakeGroupTopicsDb(FakeDb):
             def __init__(self):
@@ -782,8 +865,8 @@ class TopicRoutesHelperTests(unittest.TestCase):
 
         db = FakeGroupTopicsDb()
 
-        with patch("backend.routes.topic_routes.ZSXQDatabase", return_value=db) as database:
-            response = _get_group_topics_response(123, page=2, per_page=5, search="offer")
+        with patch("backend.services.topic_local_service.ZSXQDatabase", return_value=db) as database:
+            response = get_group_topics_response(123, page=2, per_page=5, search="offer")
 
         database.assert_called_once_with("123")
         self.assertEqual({"topics": [{"topic_id": "202"}], "pagination": {"page": 2}}, response)
@@ -813,9 +896,9 @@ class TopicRoutesHelperTests(unittest.TestCase):
             ],
             calls,
         )
-        self.assertEqual({"called": "_get_topics_response", "args": (2, 5, "offer")}, topics)
-        self.assertEqual({"called": "_get_group_topics_response", "args": (123, 3, 10, "alpha")}, group_topics)
-        self.assertEqual({"called": "_get_topic_detail_response", "args": (99, "123")}, detail)
+        self.assertEqual({"called": "get_topics_response", "args": (2, 5, "offer")}, topics)
+        self.assertEqual({"called": "get_group_topics_response", "args": (123, 3, 10, "alpha")}, group_topics)
+        self.assertEqual({"called": "get_topic_detail_response", "args": (99, "123")}, detail)
 
     @unittest.skipUnless(HAS_TOPIC_ROUTE_DEPS, "topic route dependencies are not installed")
     def test_read_helpers_preserve_service_call_shapes(self):
@@ -840,9 +923,9 @@ class TopicRoutesHelperTests(unittest.TestCase):
             ],
             calls,
         )
-        self.assertEqual({"called": "_get_topics_response", "args": (2, 5, "offer")}, topics)
-        self.assertEqual({"called": "_get_group_topics_response", "args": (123, 3, 10, "alpha")}, group_topics)
-        self.assertEqual({"called": "_get_topic_detail_response", "args": (99, "123")}, detail)
+        self.assertEqual({"called": "get_topics_response", "args": (2, 5, "offer")}, topics)
+        self.assertEqual({"called": "get_group_topics_response", "args": (123, 3, 10, "alpha")}, group_topics)
+        self.assertEqual({"called": "get_topic_detail_response", "args": (99, "123")}, detail)
 
     @unittest.skipUnless(HAS_TOPIC_ROUTE_DEPS, "topic route dependencies are not installed")
     def test_operation_routes_offload_sync_work_to_thread(self):
@@ -877,14 +960,14 @@ class TopicRoutesHelperTests(unittest.TestCase):
             ],
             calls,
         )
-        self.assertEqual({"called": "_clear_topic_database_response", "args": ("group-1",)}, clear_result)
+        self.assertEqual({"called": "clear_topic_database_response", "args": ("group-1",)}, clear_result)
         self.assertEqual({"called": "refresh_topic_stats", "args": (11, "group-1")}, refresh_result)
         self.assertEqual({"called": "fetch_more_comments", "args": (12, "group-1")}, comments_result)
-        self.assertEqual({"called": "_delete_single_topic_response", "args": (13, 123)}, delete_result)
+        self.assertEqual({"called": "delete_single_topic_response", "args": (13, 123)}, delete_result)
         self.assertEqual({"called": "fetch_single_topic", "args": ("123", 14, False)}, fetch_single_result)
-        self.assertEqual({"called": "_get_group_tags_response", "args": ("123",)}, tags_result)
-        self.assertEqual({"called": "_get_topics_by_tag_response", "args": (123, 9, 2, 5)}, tag_topics_result)
-        self.assertEqual({"called": "_delete_group_topics_response", "args": (123,)}, delete_group_result)
+        self.assertEqual({"called": "get_group_tags_response", "args": ("123",)}, tags_result)
+        self.assertEqual({"called": "get_topics_by_tag_response", "args": (123, 9, 2, 5)}, tag_topics_result)
+        self.assertEqual({"called": "delete_group_topics_response", "args": (123,)}, delete_group_result)
 
     @unittest.skipUnless(HAS_TOPIC_ROUTE_DEPS, "topic route dependencies are not installed")
     def test_topic_route_error_preserves_status_and_detail_format(self):
@@ -1035,14 +1118,14 @@ class TopicRoutesHelperTests(unittest.TestCase):
             ],
             calls,
         )
-        self.assertEqual({"called": "_clear_topic_database_response", "args": ("group-1",)}, clear_result)
+        self.assertEqual({"called": "clear_topic_database_response", "args": ("group-1",)}, clear_result)
         self.assertEqual({"called": "refresh_topic_stats", "args": (11, "group-1")}, refresh_result)
         self.assertEqual({"called": "fetch_more_comments", "args": (12, "group-1")}, comments_result)
-        self.assertEqual({"called": "_delete_single_topic_response", "args": (13, 123)}, delete_result)
+        self.assertEqual({"called": "delete_single_topic_response", "args": (13, 123)}, delete_result)
         self.assertEqual({"called": "fetch_single_topic", "args": ("123", 14, False)}, fetch_single_result)
-        self.assertEqual({"called": "_get_group_tags_response", "args": ("123",)}, tags_result)
-        self.assertEqual({"called": "_get_topics_by_tag_response", "args": (123, 9, 2, 5)}, tag_topics_result)
-        self.assertEqual({"called": "_delete_group_topics_response", "args": (123,)}, delete_group_result)
+        self.assertEqual({"called": "get_group_tags_response", "args": ("123",)}, tags_result)
+        self.assertEqual({"called": "get_topics_by_tag_response", "args": (123, 9, 2, 5)}, tag_topics_result)
+        self.assertEqual({"called": "delete_group_topics_response", "args": (123,)}, delete_group_result)
 
     @unittest.skipUnless(HAS_TOPIC_ROUTE_DEPS, "topic route dependencies are not installed")
     def test_refreshed_topic_maps_workflow_error_to_http_exception(self):
@@ -1085,6 +1168,34 @@ class TopicRoutesHelperTests(unittest.TestCase):
 
         self.assertEqual(404, ctx.exception.status_code)
         self.assertEqual("missing", ctx.exception.detail)
+
+    @unittest.skipUnless(HAS_TOPIC_ROUTE_DEPS, "topic route dependencies are not installed")
+    def test_topic_detail_maps_local_service_error_to_http_exception(self):
+        from backend.routes import topic_routes
+
+        async def fake_to_thread(func, *args):
+            raise topic_routes.TopicWorkflowError(404, "话题不存在")
+
+        with patch("backend.routes.topic_routes.asyncio.to_thread", side_effect=fake_to_thread):
+            with self.assertRaises(topic_routes.HTTPException) as ctx:
+                self._run_async(topic_routes._topic_detail(14, "123"))
+
+        self.assertEqual(404, ctx.exception.status_code)
+        self.assertEqual("话题不存在", ctx.exception.detail)
+
+    @unittest.skipUnless(HAS_TOPIC_ROUTE_DEPS, "topic route dependencies are not installed")
+    def test_tagged_topics_maps_local_service_error_to_http_exception(self):
+        from backend.routes import topic_routes
+
+        async def fake_to_thread(func, *args):
+            raise topic_routes.TopicWorkflowError(404, "标签在该群组中不存在")
+
+        with patch("backend.routes.topic_routes.asyncio.to_thread", side_effect=fake_to_thread):
+            with self.assertRaises(topic_routes.HTTPException) as ctx:
+                self._run_async(topic_routes._tagged_topics(123, 9, 2, 5))
+
+        self.assertEqual(404, ctx.exception.status_code)
+        self.assertEqual("标签在该群组中不存在", ctx.exception.detail)
 
 
 if __name__ == "__main__":

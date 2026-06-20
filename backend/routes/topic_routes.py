@@ -5,14 +5,22 @@ from typing import Optional
 
 from fastapi import APIRouter, HTTPException
 
+from backend.services.topic_local_service import (
+    clear_topic_database_response as _clear_topic_database_response,
+    delete_group_topics_response as _delete_group_topics_response,
+    delete_single_topic_response as _delete_single_topic_response,
+    get_group_tags_response as _get_group_tags_response,
+    get_group_topics_response as _get_group_topics_response,
+    get_topic_detail_response as _get_topic_detail_response,
+    get_topics_by_tag_response as _get_topics_by_tag_response,
+    get_topics_response as _get_topics_response,
+)
 from backend.services.topic_workflow_service import (
     TopicWorkflowError,
-    _clear_group_topic_data,
     fetch_more_comments as fetch_more_comments_workflow,
     fetch_single_topic as fetch_single_topic_workflow,
     refresh_topic_stats as refresh_topic_stats_workflow,
 )
-from backend.storage.zsxq_database import TagNotFoundInGroupError, ZSXQDatabase
 
 router = APIRouter(prefix="/api", tags=["topics"])
 
@@ -25,140 +33,6 @@ def _topic_route_error(message: str, error: Exception) -> HTTPException:
     return HTTPException(status_code=500, detail=f"{message}: {str(error)}")
 
 
-def _close_topic_db(db) -> None:
-    try:
-        if db:
-            db.close()
-    except Exception:
-        pass
-
-
-def _rollback_topic_db(db) -> None:
-    try:
-        if db and getattr(db, "conn", None):
-            db.conn.rollback()
-    except Exception:
-        pass
-
-
-def _query_group_id(group_id: int | str) -> int | str:
-    return int(group_id) if str(group_id).isdigit() else str(group_id)
-
-
-def _get_topics_response(page: int = 1, per_page: int = 20, search: Optional[str] = None) -> dict:
-    db = None
-    try:
-        db = ZSXQDatabase()
-        return db.get_topics(page, per_page, search)
-    finally:
-        _close_topic_db(db)
-
-
-def _get_group_topics_response(group_id: int, page: int = 1, per_page: int = 20, search: Optional[str] = None) -> dict:
-    db = None
-    try:
-        db = ZSXQDatabase(str(group_id))
-        return db.get_group_topics(group_id, page, per_page, search)
-    finally:
-        _close_topic_db(db)
-
-
-def _get_topic_detail_response(topic_id: int, group_id: str) -> dict:
-    db = None
-    try:
-        db = ZSXQDatabase(group_id)
-        topic_detail = db.get_topic_detail(topic_id)
-
-        if not topic_detail:
-            raise HTTPException(status_code=404, detail="话题不存在")
-
-        return topic_detail
-    finally:
-        _close_topic_db(db)
-
-
-def _clear_topic_database_response(group_id: str) -> dict:
-    deleted_counts = _clear_group_topic_data(group_id)
-    try:
-        from backend.core.image_cache_manager import clear_group_cache_manager, get_image_cache_manager
-
-        cache_manager = get_image_cache_manager(group_id)
-        success, message = cache_manager.clear_cache()
-        if success:
-            _log_topic_event("INFO", f"图片缓存已清空: {message}")
-        else:
-            _log_topic_event("WARN", f"清空图片缓存失败: {message}")
-        clear_group_cache_manager(group_id)
-    except Exception as cache_error:
-        _log_topic_event("WARN", f"清空图片缓存时出错: {cache_error}")
-
-    return {"message": f"群组 {group_id} 的话题数据和图片缓存已删除", "deleted": deleted_counts}
-
-
-def _delete_single_topic_response(topic_id: int, group_id: int) -> dict:
-    db = None
-    try:
-        db = ZSXQDatabase(str(group_id))
-        if not db.topic_exists(topic_id):
-            return {"success": False, "message": "话题不存在"}
-
-        deleted = db.delete_single_topic_records(topic_id, group_id)
-        db.conn.commit()
-
-        return {"success": True, "deleted_topic_id": topic_id, "deleted": deleted}
-    except Exception:
-        _rollback_topic_db(db)
-        raise
-    finally:
-        _close_topic_db(db)
-
-
-def _get_group_tags_response(group_id: str) -> dict:
-    db = None
-    try:
-        db = ZSXQDatabase(group_id)
-        tags = db.get_tags_by_group(int(group_id))
-        return {"tags": tags, "total": len(tags)}
-    finally:
-        _close_topic_db(db)
-
-
-def _get_topics_by_tag_response(group_id: int, tag_id: int, page: int = 1, per_page: int = 20) -> dict:
-    db = None
-    try:
-        db = ZSXQDatabase(str(group_id))
-        try:
-            return db.get_group_topics_by_tag(group_id, tag_id, page, per_page)
-        except TagNotFoundInGroupError:
-            raise HTTPException(status_code=404, detail="标签在该群组中不存在")
-    finally:
-        _close_topic_db(db)
-
-
-def _delete_group_topics_response(group_id: int) -> dict:
-    db = None
-    try:
-        db = ZSXQDatabase(str(group_id))
-        topics_count = db.count_topics(group_id)
-
-        if topics_count == 0:
-            return {"message": "该群组没有话题数据", "deleted_count": 0}
-
-        deleted_counts = db.delete_group_topic_records(group_id)
-        db.conn.commit()
-
-        return {
-            "message": f"成功删除群组 {group_id} 的所有话题数据",
-            "deleted_topics_count": topics_count,
-            "deleted_details": deleted_counts,
-        }
-    except Exception:
-        _rollback_topic_db(db)
-        raise
-    finally:
-        _close_topic_db(db)
-
-
 async def _topics_page(page: int, per_page: int, search: Optional[str]) -> dict:
     return await asyncio.to_thread(_get_topics_response, page, per_page, search)
 
@@ -168,7 +42,10 @@ async def _group_topics_page(group_id: int, page: int, per_page: int, search: Op
 
 
 async def _topic_detail(topic_id: int, group_id: str) -> dict:
-    return await asyncio.to_thread(_get_topic_detail_response, topic_id, group_id)
+    try:
+        return await asyncio.to_thread(_get_topic_detail_response, topic_id, group_id)
+    except TopicWorkflowError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail)
 
 
 async def _cleared_topic_database(group_id: str) -> dict:
@@ -205,7 +82,10 @@ async def _group_tags(group_id: str) -> dict:
 
 
 async def _tagged_topics(group_id: int, tag_id: int, page: int, per_page: int) -> dict:
-    return await asyncio.to_thread(_get_topics_by_tag_response, group_id, tag_id, page, per_page)
+    try:
+        return await asyncio.to_thread(_get_topics_by_tag_response, group_id, tag_id, page, per_page)
+    except TopicWorkflowError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail)
 
 
 async def _deleted_group_topics(group_id: int) -> dict:
