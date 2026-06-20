@@ -29,7 +29,6 @@ from backend.services.daily_topic_analysis_service import analyze_daily_topics
 from backend.services.task_launch import (
     TaskLaunchConflict,
     TaskLaunchRecipe,
-    launch_ingestion_task,
     launch_task,
     launch_task_recipe,
 )
@@ -132,14 +131,16 @@ def launch_or_reuse_latest_crawl_task(group_id: str, request: CrawlSettingsReque
 
 
 def create_columns_fetch_task(group_id: str, request: Any) -> dict[str, Any]:
-    response = launch_ingestion_task(
-        "columns_fetch",
-        f"采集专栏内容 (群组: {group_id})",
-        run_columns_fetch_task,
-        group_id,
-        request,
-        message=COLUMNS_FETCH_CREATED_MESSAGE,
-        on_created=lambda task_id: update_task(task_id, "running", COLUMNS_FETCH_RUNNING_MESSAGE),
+    response = launch_task_recipe(
+        TaskLaunchRecipe.ingestion(
+            "columns_fetch",
+            f"采集专栏内容 (群组: {group_id})",
+            run_columns_fetch_task,
+            group_id,
+            request,
+            message=COLUMNS_FETCH_CREATED_MESSAGE,
+            on_created=lambda task_id: update_task(task_id, "running", COLUMNS_FETCH_RUNNING_MESSAGE),
+        )
     )
     return {"success": True, **response}
 
