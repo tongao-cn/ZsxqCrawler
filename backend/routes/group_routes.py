@@ -123,58 +123,12 @@ def _apply_local_group_meta(fields: Dict[str, Any], meta: Dict[str, Any]) -> Dic
 
 
 def _load_local_group_db_fields(group_id: int, fields: Dict[str, Any]) -> Dict[str, Any]:
-    result = dict(fields)
     try:
         with closing(ZSXQDatabase(str(group_id))) as db:
-            cur = db.cursor
-            if not result["local_bg"] or result["local_name"].startswith("本地群（"):
-                cur.execute(
-                    "SELECT name, type, background_url FROM groups WHERE group_id = ? LIMIT 1",
-                    (group_id,),
-                )
-                row = cur.fetchone()
-                if row:
-                    if row[0]:
-                        result["local_name"] = row[0]
-                    if row[1]:
-                        result["local_type"] = row[1]
-                    if row[2]:
-                        result["local_bg"] = row[2]
-
-            if not result["join_time"] or not result["expiry_time"]:
-                cur.execute(
-                    """
-                    SELECT MIN(create_time), MAX(create_time)
-                    FROM topics
-                    WHERE group_id = ? AND create_time IS NOT NULL AND create_time != ''
-                    """,
-                    (group_id,),
-                )
-                trow = cur.fetchone()
-                if trow:
-                    if not result["join_time"]:
-                        result["join_time"] = trow[0]
-                    if not result["expiry_time"]:
-                        result["expiry_time"] = trow[1]
-                    if not result["last_active_time"]:
-                        result["last_active_time"] = trow[1]
-
-            if not result["statistics"]:
-                cur.execute(
-                    "SELECT COUNT(*) FROM topics WHERE group_id = ?",
-                    (group_id,),
-                )
-                topics_count = cur.fetchone()[0] or 0
-                result["statistics"] = {
-                    "topics": {
-                        "topics_count": topics_count,
-                        "answers_count": 0,
-                        "digests_count": 0,
-                    }
-                }
+            return db.load_local_group_db_fields(fields)
     except Exception as e:
         _warn(f"读取本地群组 {group_id} 元数据失败: {e}")
-    return result
+    return dict(fields)
 
 
 def _build_local_group_entry(group_id: int, fields: Dict[str, Any]) -> Dict[str, Any]:

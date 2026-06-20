@@ -22,6 +22,9 @@ from backend.storage.zsxq_database import (
     _group_id_param,
     _group_insert_statement,
     _group_stats_queries,
+    _local_group_record_query,
+    _local_group_topic_count_query,
+    _local_group_topic_time_range_query,
     _image_insert_statement,
     _insert_tag_statement,
     _insert_topic_tag_statement,
@@ -1978,6 +1981,28 @@ class ZSXQDatabaseHelperTests(unittest.TestCase):
         self.assertEqual((303,), queries[1][2])
         self.assertEqual(("SELECT SUM(reading_count) FROM topics WHERE group_id = ?", (303,)), queries[-1][1:])
 
+    def test_local_group_db_field_queries_preserve_route_fallback_scope(self):
+        self.assertEqual(
+            (
+                "SELECT name, type, background_url FROM groups WHERE group_id = ? LIMIT 1",
+                (303,),
+            ),
+            _local_group_record_query("303"),
+        )
+
+        time_sql, time_params = _local_group_topic_time_range_query("303")
+        self.assertEqual(
+            "SELECT MIN(create_time), MAX(create_time) FROM topics "
+            "WHERE group_id = ? AND create_time IS NOT NULL AND create_time != ''",
+            " ".join(time_sql.split()),
+        )
+        self.assertEqual((303,), time_params)
+
+        self.assertEqual(
+            ("SELECT COUNT(*) FROM topics WHERE group_id = ?", (303,)),
+            _local_group_topic_count_query("303"),
+        )
+
     def test_get_group_stats_summary_preserves_response_shape_and_null_totals(self):
         from backend.storage.zsxq_database import ZSXQDatabase
 
@@ -2011,6 +2036,78 @@ class ZSXQDatabaseHelperTests(unittest.TestCase):
         self.assertEqual(7, len(db.cursor.calls))
         self.assertEqual(("SELECT COUNT(*) FROM topics WHERE group_id = ?", (303,)), db.cursor.calls[0])
         self.assertEqual(("SELECT SUM(reading_count) FROM topics WHERE group_id = ?", (303,)), db.cursor.calls[-1])
+
+    def test_load_local_group_db_fields_preserves_previous_fallback_shape(self):
+        from backend.storage.zsxq_database import ZSXQDatabase
+
+        db = object.__new__(ZSXQDatabase)
+        db.cursor = FakeTimestampCursor(
+            [
+                ("数据库群", "paid", "https://example.com/bg.png"),
+                ("2024-01-01T00:00:00Z", "2024-02-01T00:00:00Z"),
+                (12,),
+            ]
+        )
+        db.group_id = "303"
+        fields = {
+            "local_name": "本地群（303）",
+            "local_type": "local",
+            "local_bg": "",
+            "owner": {},
+            "join_time": None,
+            "expiry_time": None,
+            "last_active_time": None,
+            "description": "",
+            "statistics": {},
+        }
+
+        self.assertEqual(
+            {
+                "local_name": "数据库群",
+                "local_type": "paid",
+                "local_bg": "https://example.com/bg.png",
+                "owner": {},
+                "join_time": "2024-01-01T00:00:00Z",
+                "expiry_time": "2024-02-01T00:00:00Z",
+                "last_active_time": "2024-02-01T00:00:00Z",
+                "description": "",
+                "statistics": {
+                    "topics": {
+                        "topics_count": 12,
+                        "answers_count": 0,
+                        "digests_count": 0,
+                    }
+                },
+            },
+            ZSXQDatabase.load_local_group_db_fields(db, fields),
+        )
+        self.assertEqual(3, len(db.cursor.calls))
+        self.assertEqual(
+            ("SELECT name, type, background_url FROM groups WHERE group_id = ? LIMIT 1", (303,)),
+            db.cursor.calls[0],
+        )
+        self.assertEqual(("SELECT COUNT(*) FROM topics WHERE group_id = ?", (303,)), db.cursor.calls[-1])
+
+    def test_load_local_group_db_fields_skips_queries_when_fields_are_complete(self):
+        from backend.storage.zsxq_database import ZSXQDatabase
+
+        db = object.__new__(ZSXQDatabase)
+        db.cursor = FakeTimestampCursor([])
+        db.group_id = "303"
+        fields = {
+            "local_name": "Meta 群",
+            "local_type": "paid",
+            "local_bg": "https://example.com/meta.png",
+            "owner": {},
+            "join_time": "2024-01-01",
+            "expiry_time": "2024-02-01",
+            "last_active_time": "2024-02-01",
+            "description": "",
+            "statistics": {"topics": {"topics_count": 3}},
+        }
+
+        self.assertEqual(fields, ZSXQDatabase.load_local_group_db_fields(db, fields))
+        self.assertEqual([], db.cursor.calls)
 
     def test_database_stats_count_query_preserves_branch_shapes(self):
         self.assertEqual(("SELECT COUNT(*) FROM groups", ()), _database_stats_count_query("groups", None))

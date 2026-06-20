@@ -42,8 +42,27 @@ class FakeDb:
     def __init__(self, group_id=None):
         self.group_id = group_id
         self.cursor = FakeCursor()
+        self.calls = []
         self.closed = False
         FakeDb.last_instance = self
+
+    def load_local_group_db_fields(self, fields):
+        self.calls.append(dict(fields))
+        result = dict(fields)
+        result["local_name"] = "数据库群"
+        result["local_type"] = "paid"
+        result["local_bg"] = "https://example.com/bg.png"
+        result["join_time"] = "2024-01-01T00:00:00Z"
+        result["expiry_time"] = "2024-02-01T00:00:00Z"
+        result["last_active_time"] = "2024-02-01T00:00:00Z"
+        result["statistics"] = {
+            "topics": {
+                "topics_count": 12,
+                "answers_count": 0,
+                "digests_count": 0,
+            }
+        }
+        return result
 
     def close(self):
         self.closed = True
@@ -220,7 +239,7 @@ class GroupRoutesHelperTests(unittest.TestCase):
         self.assertEqual(updated["statistics"]["topics"]["topics_count"], 12)
         self.assertTrue(FakeDb.last_instance.closed)
         self.assertEqual(FakeDb.last_instance.group_id, "123")
-        self.assertEqual(len(FakeDb.last_instance.cursor.calls), 3)
+        self.assertEqual([fields], FakeDb.last_instance.calls)
 
     def test_build_group_info_fallback_coerces_numeric_id_and_adds_note(self):
         result = group_routes._build_group_info_fallback(

@@ -44,6 +44,9 @@ from backend.storage.zsxq_database_helpers import (
     load_topic_detail_likes_detail,
     load_topic_detail_qa,
     load_topic_detail_talk_payload,
+    local_group_record_query,
+    local_group_topic_count_query,
+    local_group_topic_time_range_query,
     newest_topic_create_time_query,
     nullable_group_id_param,
     oldest_topic_create_time_query,
@@ -472,6 +475,18 @@ def _database_stats_count_query(table: str, group_id: Optional[str]) -> tuple[st
     return database_stats_count_query(table, group_id)
 
 
+def _local_group_record_query(group_id: Optional[str]) -> tuple[str, tuple[Any, ...]]:
+    return local_group_record_query(group_id)
+
+
+def _local_group_topic_time_range_query(group_id: Optional[str]) -> tuple[str, tuple[Any, ...]]:
+    return local_group_topic_time_range_query(group_id)
+
+
+def _local_group_topic_count_query(group_id: Optional[str]) -> tuple[str, tuple[Any, ...]]:
+    return local_group_topic_count_query(group_id)
+
+
 def _upsert_core_file(cursor, group_id: Optional[int], topic_id: int, file_data: Dict[str, Any]) -> Optional[int]:
     return upsert_core_file(cursor, group_id, topic_id, file_data)
 
@@ -761,6 +776,55 @@ class ZSXQDatabase:
                 value = value or 0
             summary[name] = value
         return summary
+
+    def load_local_group_db_fields(self, fields: Dict[str, Any]) -> Dict[str, Any]:
+        """Fill local group API fields from the scoped topic database when missing."""
+        result = dict(fields)
+        try:
+            if not result["local_bg"] or result["local_name"].startswith("本地群（"):
+                row = self._fetch_local_group_record()
+                if row:
+                    if row[0]:
+                        result["local_name"] = row[0]
+                    if row[1]:
+                        result["local_type"] = row[1]
+                    if row[2]:
+                        result["local_bg"] = row[2]
+
+            if not result["join_time"] or not result["expiry_time"]:
+                row = self._fetch_local_group_topic_time_range()
+                if row:
+                    if not result["join_time"]:
+                        result["join_time"] = row[0]
+                    if not result["expiry_time"]:
+                        result["expiry_time"] = row[1]
+                    if not result["last_active_time"]:
+                        result["last_active_time"] = row[1]
+
+            if not result["statistics"]:
+                topics_count = self._fetch_local_group_topic_count() or 0
+                result["statistics"] = {
+                    "topics": {
+                        "topics_count": topics_count,
+                        "answers_count": 0,
+                        "digests_count": 0,
+                    }
+                }
+        except Exception as e:
+            print(f"读取本地群组 {self.group_id} 元数据失败: {e}")
+        return result
+
+    def _fetch_local_group_record(self) -> Any:
+        sql, params = _local_group_record_query(self.group_id)
+        return self._fetch_one_row(sql, params)
+
+    def _fetch_local_group_topic_time_range(self) -> Any:
+        sql, params = _local_group_topic_time_range_query(self.group_id)
+        return self._fetch_one_row(sql, params)
+
+    def _fetch_local_group_topic_count(self) -> Any:
+        sql, params = _local_group_topic_count_query(self.group_id)
+        return self._fetch_first_column(sql, params)
     
     def get_timestamp_range_info(self) -> Dict[str, Any]:
         """获取话题时间戳范围信息"""

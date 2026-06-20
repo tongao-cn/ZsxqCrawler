@@ -1041,6 +1041,31 @@ def group_stats_queries(group_id: Optional[str]) -> tuple[tuple[str, str, tuple[
     )
 
 
+def local_group_record_query(group_id: Optional[str]) -> tuple[str, tuple[Any, ...]]:
+    return (
+        "SELECT name, type, background_url FROM groups WHERE group_id = ? LIMIT 1",
+        (group_id_param(group_id),),
+    )
+
+
+def local_group_topic_time_range_query(group_id: Optional[str]) -> tuple[str, tuple[Any, ...]]:
+    return (
+        """
+        SELECT MIN(create_time), MAX(create_time)
+        FROM topics
+        WHERE group_id = ? AND create_time IS NOT NULL AND create_time != ''
+        """,
+        (group_id_param(group_id),),
+    )
+
+
+def local_group_topic_count_query(group_id: Optional[str]) -> tuple[str, tuple[Any, ...]]:
+    return (
+        "SELECT COUNT(*) FROM topics WHERE group_id = ?",
+        (group_id_param(group_id),),
+    )
+
+
 def database_stats_count_query(table: str, group_id: Optional[str]) -> tuple[str, tuple[Any, ...]]:
     if group_id is None:
         return f"SELECT COUNT(*) FROM {table}", ()
