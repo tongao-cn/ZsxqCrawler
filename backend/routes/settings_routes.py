@@ -3,137 +3,20 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
-from backend.core.crawler_runtime import get_crawler_safe
+from backend.services.settings_service import (
+    get_crawl_settings_response as _get_crawl_settings_response,
+    get_crawler_settings_response as _get_crawler_settings_response,
+    get_downloader_settings_response as _get_downloader_settings_response,
+    update_crawl_settings_response as _update_crawl_settings_response,
+    update_crawler_settings_response as _update_crawler_settings_response,
+    update_downloader_settings_response as _update_downloader_settings_response,
+)
 
 router = APIRouter(prefix="/api", tags=["settings"])
-
-_CRAWLER_SETTING_FIELDS = (
-    "min_delay",
-    "max_delay",
-    "long_delay_interval",
-    "timestamp_offset_ms",
-    "debug_mode",
-)
-
-_DOWNLOADER_SETTING_FIELDS = (
-    "download_interval_min",
-    "download_interval_max",
-    "long_delay_interval",
-    "long_delay_min",
-    "long_delay_max",
-)
-
-
-def _default_crawl_settings() -> dict:
-    return {
-        "crawl_interval_min": 2.0,
-        "crawl_interval_max": 5.0,
-        "long_sleep_interval_min": 180.0,
-        "long_sleep_interval_max": 300.0,
-        "pages_per_batch": 15,
-    }
-
-
-def _default_crawler_settings() -> dict:
-    return {
-        "min_delay": 2.0,
-        "max_delay": 5.0,
-        "long_delay_interval": 15,
-        "timestamp_offset_ms": 1,
-        "debug_mode": False,
-    }
-
-
-def _default_downloader_settings() -> dict:
-    return {
-        "download_interval_min": 30,
-        "download_interval_max": 60,
-        "long_delay_interval": 10,
-        "long_delay_min": 300,
-        "long_delay_max": 600,
-    }
-
-
-def _settings_from_attrs(source, fields: tuple[str, ...]) -> dict:
-    return {field: getattr(source, field) for field in fields}
-
-
-def _apply_settings(target, request, fields: tuple[str, ...]) -> None:
-    for field in fields:
-        setattr(target, field, getattr(request, field))
-
-
-def _settings_update_response(message: str, settings: dict) -> dict:
-    return {
-        "message": message,
-        "settings": settings,
-    }
 
 
 def _settings_route_error(message: str, error: Exception) -> HTTPException:
     return HTTPException(status_code=500, detail=f"{message}: {str(error)}")
-
-
-def _get_crawl_settings_response() -> dict:
-    return _default_crawl_settings()
-
-
-def _update_crawl_settings_response(settings: dict) -> dict:
-    return {"success": True, "message": "爬取设置已更新"}
-
-
-def _get_crawler_settings_response() -> dict:
-    crawler = get_crawler_safe()
-    if not crawler:
-        return _default_crawler_settings()
-
-    return _settings_from_attrs(crawler, _CRAWLER_SETTING_FIELDS)
-
-
-def _update_crawler_settings_response(request: "CrawlerSettingsRequest") -> dict:
-    crawler = get_crawler_safe()
-    if not crawler:
-        raise HTTPException(status_code=404, detail="爬虫未初始化")
-
-    if request.min_delay >= request.max_delay:
-        raise HTTPException(status_code=400, detail="最小延迟必须小于最大延迟")
-
-    _apply_settings(crawler, request, _CRAWLER_SETTING_FIELDS)
-
-    return _settings_update_response(
-        "爬虫设置已更新",
-        _settings_from_attrs(crawler, _CRAWLER_SETTING_FIELDS),
-    )
-
-
-def _get_downloader_settings_response() -> dict:
-    crawler = get_crawler_safe()
-    if not crawler:
-        return _default_downloader_settings()
-
-    downloader = crawler.get_file_downloader()
-    return _settings_from_attrs(downloader, _DOWNLOADER_SETTING_FIELDS)
-
-
-def _update_downloader_settings_response(request: "DownloaderSettingsRequest") -> dict:
-    crawler = get_crawler_safe()
-    if not crawler:
-        raise HTTPException(status_code=404, detail="爬虫未初始化")
-
-    if request.download_interval_min >= request.download_interval_max:
-        raise HTTPException(status_code=400, detail="最小下载间隔必须小于最大下载间隔")
-
-    if request.long_delay_min >= request.long_delay_max:
-        raise HTTPException(status_code=400, detail="最小长休眠时间必须小于最大长休眠时间")
-
-    downloader = crawler.get_file_downloader()
-
-    _apply_settings(downloader, request, _DOWNLOADER_SETTING_FIELDS)
-
-    return _settings_update_response(
-        "下载器设置已更新",
-        _settings_from_attrs(downloader, _DOWNLOADER_SETTING_FIELDS),
-    )
 
 
 class CrawlerSettingsRequest(BaseModel):

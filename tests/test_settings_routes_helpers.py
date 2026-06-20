@@ -5,21 +5,7 @@ from unittest.mock import Mock, patch
 from fastapi import HTTPException
 
 from backend.routes.settings_routes import (
-    _CRAWLER_SETTING_FIELDS,
-    _DOWNLOADER_SETTING_FIELDS,
-    _apply_settings,
-    _default_crawl_settings,
-    _default_crawler_settings,
-    _default_downloader_settings,
-    _get_crawl_settings_response,
-    _get_crawler_settings_response,
-    _get_downloader_settings_response,
     _settings_route_error,
-    _settings_from_attrs,
-    _settings_update_response,
-    _update_crawl_settings_response,
-    _update_crawler_settings_response,
-    _update_downloader_settings_response,
     CrawlerSettingsRequest,
     DownloaderSettingsRequest,
     get_crawl_settings,
@@ -28,6 +14,23 @@ from backend.routes.settings_routes import (
     update_crawl_settings,
     update_crawler_settings,
     update_downloader_settings,
+)
+from backend.services.settings_service import (
+    CRAWLER_SETTING_FIELDS as _CRAWLER_SETTING_FIELDS,
+    DOWNLOADER_SETTING_FIELDS as _DOWNLOADER_SETTING_FIELDS,
+    SettingsServiceError,
+    apply_settings as _apply_settings,
+    default_crawl_settings as _default_crawl_settings,
+    default_crawler_settings as _default_crawler_settings,
+    default_downloader_settings as _default_downloader_settings,
+    get_crawl_settings_response as _get_crawl_settings_response,
+    get_crawler_settings_response as _get_crawler_settings_response,
+    get_downloader_settings_response as _get_downloader_settings_response,
+    settings_from_attrs as _settings_from_attrs,
+    settings_update_response as _settings_update_response,
+    update_crawl_settings_response as _update_crawl_settings_response,
+    update_crawler_settings_response as _update_crawler_settings_response,
+    update_downloader_settings_response as _update_downloader_settings_response,
 )
 
 
@@ -159,7 +162,7 @@ class SettingsRoutesHelpersTest(unittest.TestCase):
     def test_get_crawler_settings_route_preserves_default_when_uninitialized(self):
         import asyncio
 
-        with patch("backend.routes.settings_routes.get_crawler_safe", return_value=None) as get_crawler:
+        with patch("backend.services.settings_service.get_crawler_safe", return_value=None) as get_crawler:
             result = asyncio.run(get_crawler_settings())
 
         self.assertEqual(result, _default_crawler_settings())
@@ -176,7 +179,7 @@ class SettingsRoutesHelpersTest(unittest.TestCase):
             debug_mode=True,
         )
 
-        with patch("backend.routes.settings_routes.get_crawler_safe", return_value=crawler) as get_crawler:
+        with patch("backend.services.settings_service.get_crawler_safe", return_value=crawler) as get_crawler:
             result = asyncio.run(get_crawler_settings())
 
         self.assertEqual(
@@ -192,7 +195,7 @@ class SettingsRoutesHelpersTest(unittest.TestCase):
         get_crawler.assert_called_once_with()
 
     def test_get_crawler_settings_response_preserves_default_when_uninitialized(self):
-        with patch("backend.routes.settings_routes.get_crawler_safe", return_value=None) as get_crawler:
+        with patch("backend.services.settings_service.get_crawler_safe", return_value=None) as get_crawler:
             result = _get_crawler_settings_response()
 
         self.assertEqual(result, _default_crawler_settings())
@@ -207,7 +210,7 @@ class SettingsRoutesHelpersTest(unittest.TestCase):
             debug_mode=True,
         )
 
-        with patch("backend.routes.settings_routes.get_crawler_safe", return_value=crawler) as get_crawler:
+        with patch("backend.services.settings_service.get_crawler_safe", return_value=crawler) as get_crawler:
             result = _get_crawler_settings_response()
 
         self.assertEqual(
@@ -240,7 +243,7 @@ class SettingsRoutesHelpersTest(unittest.TestCase):
             debug_mode=True,
         )
 
-        with patch("backend.routes.settings_routes.get_crawler_safe", return_value=crawler) as get_crawler:
+        with patch("backend.services.settings_service.get_crawler_safe", return_value=crawler) as get_crawler:
             result = asyncio.run(update_crawler_settings(request))
 
         expected_settings = {
@@ -257,7 +260,7 @@ class SettingsRoutesHelpersTest(unittest.TestCase):
     def test_update_crawler_settings_route_preserves_wrapped_missing_crawler_error(self):
         import asyncio
 
-        with patch("backend.routes.settings_routes.get_crawler_safe", return_value=None):
+        with patch("backend.services.settings_service.get_crawler_safe", return_value=None):
             with self.assertRaises(HTTPException) as caught:
                 asyncio.run(update_crawler_settings(CrawlerSettingsRequest()))
 
@@ -276,7 +279,7 @@ class SettingsRoutesHelpersTest(unittest.TestCase):
         )
         request = CrawlerSettingsRequest(min_delay=6.0, max_delay=6.0)
 
-        with patch("backend.routes.settings_routes.get_crawler_safe", return_value=crawler):
+        with patch("backend.services.settings_service.get_crawler_safe", return_value=crawler):
             with self.assertRaises(HTTPException) as caught:
                 asyncio.run(update_crawler_settings(request))
 
@@ -300,7 +303,7 @@ class SettingsRoutesHelpersTest(unittest.TestCase):
             debug_mode=True,
         )
 
-        with patch("backend.routes.settings_routes.get_crawler_safe", return_value=crawler) as get_crawler:
+        with patch("backend.services.settings_service.get_crawler_safe", return_value=crawler) as get_crawler:
             result = _update_crawler_settings_response(request)
 
         expected_settings = {
@@ -315,8 +318,8 @@ class SettingsRoutesHelpersTest(unittest.TestCase):
         get_crawler.assert_called_once_with()
 
     def test_update_crawler_settings_response_preserves_missing_crawler_error(self):
-        with patch("backend.routes.settings_routes.get_crawler_safe", return_value=None):
-            with self.assertRaises(HTTPException) as caught:
+        with patch("backend.services.settings_service.get_crawler_safe", return_value=None):
+            with self.assertRaises(SettingsServiceError) as caught:
                 _update_crawler_settings_response(CrawlerSettingsRequest())
 
         self.assertEqual(caught.exception.status_code, 404)
@@ -332,8 +335,8 @@ class SettingsRoutesHelpersTest(unittest.TestCase):
         )
         request = CrawlerSettingsRequest(min_delay=6.0, max_delay=6.0)
 
-        with patch("backend.routes.settings_routes.get_crawler_safe", return_value=crawler):
-            with self.assertRaises(HTTPException) as caught:
+        with patch("backend.services.settings_service.get_crawler_safe", return_value=crawler):
+            with self.assertRaises(SettingsServiceError) as caught:
                 _update_crawler_settings_response(request)
 
         self.assertEqual(caught.exception.status_code, 400)
@@ -343,7 +346,7 @@ class SettingsRoutesHelpersTest(unittest.TestCase):
     def test_get_downloader_settings_route_preserves_default_when_uninitialized(self):
         import asyncio
 
-        with patch("backend.routes.settings_routes.get_crawler_safe", return_value=None) as get_crawler:
+        with patch("backend.services.settings_service.get_crawler_safe", return_value=None) as get_crawler:
             result = asyncio.run(get_downloader_settings())
 
         self.assertEqual(result, _default_downloader_settings())
@@ -361,7 +364,7 @@ class SettingsRoutesHelpersTest(unittest.TestCase):
         )
         crawler = SimpleNamespace(get_file_downloader=Mock(return_value=downloader))
 
-        with patch("backend.routes.settings_routes.get_crawler_safe", return_value=crawler) as get_crawler:
+        with patch("backend.services.settings_service.get_crawler_safe", return_value=crawler) as get_crawler:
             result = asyncio.run(get_downloader_settings())
 
         self.assertEqual(
@@ -378,7 +381,7 @@ class SettingsRoutesHelpersTest(unittest.TestCase):
         crawler.get_file_downloader.assert_called_once_with()
 
     def test_get_downloader_settings_response_preserves_default_when_uninitialized(self):
-        with patch("backend.routes.settings_routes.get_crawler_safe", return_value=None) as get_crawler:
+        with patch("backend.services.settings_service.get_crawler_safe", return_value=None) as get_crawler:
             result = _get_downloader_settings_response()
 
         self.assertEqual(result, _default_downloader_settings())
@@ -394,7 +397,7 @@ class SettingsRoutesHelpersTest(unittest.TestCase):
         )
         crawler = SimpleNamespace(get_file_downloader=Mock(return_value=downloader))
 
-        with patch("backend.routes.settings_routes.get_crawler_safe", return_value=crawler) as get_crawler:
+        with patch("backend.services.settings_service.get_crawler_safe", return_value=crawler) as get_crawler:
             result = _get_downloader_settings_response()
 
         self.assertEqual(
@@ -430,7 +433,7 @@ class SettingsRoutesHelpersTest(unittest.TestCase):
             long_delay_max=360,
         )
 
-        with patch("backend.routes.settings_routes.get_crawler_safe", return_value=crawler) as get_crawler:
+        with patch("backend.services.settings_service.get_crawler_safe", return_value=crawler) as get_crawler:
             result = asyncio.run(update_downloader_settings(request))
 
         expected_settings = {
@@ -449,7 +452,7 @@ class SettingsRoutesHelpersTest(unittest.TestCase):
     def test_update_downloader_settings_route_preserves_wrapped_missing_crawler_error(self):
         import asyncio
 
-        with patch("backend.routes.settings_routes.get_crawler_safe", return_value=None):
+        with patch("backend.services.settings_service.get_crawler_safe", return_value=None):
             with self.assertRaises(HTTPException) as caught:
                 asyncio.run(update_downloader_settings(DownloaderSettingsRequest()))
 
@@ -462,7 +465,7 @@ class SettingsRoutesHelpersTest(unittest.TestCase):
         crawler = SimpleNamespace(get_file_downloader=Mock())
         request = DownloaderSettingsRequest(download_interval_min=60, download_interval_max=60)
 
-        with patch("backend.routes.settings_routes.get_crawler_safe", return_value=crawler):
+        with patch("backend.services.settings_service.get_crawler_safe", return_value=crawler):
             with self.assertRaises(HTTPException) as caught:
                 asyncio.run(update_downloader_settings(request))
 
@@ -481,7 +484,7 @@ class SettingsRoutesHelpersTest(unittest.TestCase):
             long_delay_max=300,
         )
 
-        with patch("backend.routes.settings_routes.get_crawler_safe", return_value=crawler):
+        with patch("backend.services.settings_service.get_crawler_safe", return_value=crawler):
             with self.assertRaises(HTTPException) as caught:
                 asyncio.run(update_downloader_settings(request))
 
@@ -507,7 +510,7 @@ class SettingsRoutesHelpersTest(unittest.TestCase):
             long_delay_max=360,
         )
 
-        with patch("backend.routes.settings_routes.get_crawler_safe", return_value=crawler) as get_crawler:
+        with patch("backend.services.settings_service.get_crawler_safe", return_value=crawler) as get_crawler:
             result = _update_downloader_settings_response(request)
 
         expected_settings = {
@@ -524,8 +527,8 @@ class SettingsRoutesHelpersTest(unittest.TestCase):
         crawler.get_file_downloader.assert_called_once_with()
 
     def test_update_downloader_settings_response_preserves_missing_crawler_error(self):
-        with patch("backend.routes.settings_routes.get_crawler_safe", return_value=None):
-            with self.assertRaises(HTTPException) as caught:
+        with patch("backend.services.settings_service.get_crawler_safe", return_value=None):
+            with self.assertRaises(SettingsServiceError) as caught:
                 _update_downloader_settings_response(DownloaderSettingsRequest())
 
         self.assertEqual(caught.exception.status_code, 404)
@@ -535,8 +538,8 @@ class SettingsRoutesHelpersTest(unittest.TestCase):
         crawler = SimpleNamespace(get_file_downloader=Mock())
         request = DownloaderSettingsRequest(download_interval_min=60, download_interval_max=60)
 
-        with patch("backend.routes.settings_routes.get_crawler_safe", return_value=crawler):
-            with self.assertRaises(HTTPException) as caught:
+        with patch("backend.services.settings_service.get_crawler_safe", return_value=crawler):
+            with self.assertRaises(SettingsServiceError) as caught:
                 _update_downloader_settings_response(request)
 
         self.assertEqual(caught.exception.status_code, 400)
@@ -552,8 +555,8 @@ class SettingsRoutesHelpersTest(unittest.TestCase):
             long_delay_max=300,
         )
 
-        with patch("backend.routes.settings_routes.get_crawler_safe", return_value=crawler):
-            with self.assertRaises(HTTPException) as caught:
+        with patch("backend.services.settings_service.get_crawler_safe", return_value=crawler):
+            with self.assertRaises(SettingsServiceError) as caught:
                 _update_downloader_settings_response(request)
 
         self.assertEqual(caught.exception.status_code, 400)
