@@ -39,6 +39,37 @@ class WorkflowTaskLaunchTests(unittest.TestCase):
         self.assertEqual("existing", source)
         self.assertEqual("task-existing", response["task_id"])
 
+    def test_create_columns_fetch_task_uses_ingestion_launcher_and_running_status(self):
+        from backend.services import workflow_task_launch
+
+        request = object()
+
+        with (
+            patch(
+                "backend.services.workflow_task_launch.launch_ingestion_task",
+                return_value={"task_id": "task-1", "message": workflow_task_launch.COLUMNS_FETCH_CREATED_MESSAGE},
+            ) as launch,
+            patch("backend.services.workflow_task_launch.update_task") as update_task,
+        ):
+            response = workflow_task_launch.create_columns_fetch_task("123", request)
+            on_created = launch.call_args.kwargs["on_created"]
+            on_created("task-1")
+
+        self.assertEqual(
+            {"success": True, "task_id": "task-1", "message": workflow_task_launch.COLUMNS_FETCH_CREATED_MESSAGE},
+            response,
+        )
+        launch.assert_called_once()
+        task_args = launch.call_args.args
+        task_kwargs = launch.call_args.kwargs
+        self.assertEqual("columns_fetch", task_args[0])
+        self.assertEqual("采集专栏内容 (群组: 123)", task_args[1])
+        self.assertEqual(workflow_task_launch.run_columns_fetch_task, task_args[2])
+        self.assertEqual("123", task_args[3])
+        self.assertEqual(request, task_args[4])
+        self.assertEqual(workflow_task_launch.COLUMNS_FETCH_CREATED_MESSAGE, task_kwargs["message"])
+        update_task.assert_called_once_with("task-1", "running", workflow_task_launch.COLUMNS_FETCH_RUNNING_MESSAGE)
+
     def test_create_daily_topic_analysis_task_uses_service_runner_and_metadata(self):
         from backend.services import workflow_task_launch
 

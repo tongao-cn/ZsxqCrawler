@@ -16,6 +16,7 @@ from backend.services.a_share_analysis_service import (
     normalize_group_id,
     run_analysis,
 )
+from backend.services.columns_fetch_task_service import run_columns_fetch_task
 from backend.services.crawl_service import run_crawl_latest_task
 from backend.services.daily_stock_concept_service import extract_daily_stock_concepts
 from backend.services.daily_topic_analysis_service import analyze_daily_topics
@@ -36,6 +37,8 @@ from backend.services.tdx_a_share_export_service import export_a_share_rankings_
 
 
 A_SHARE_MISSING_API_KEY_MESSAGE = "未配置 OpenAI API Key，请设置环境变量 OPENAI_API_KEY 或 config.toml [ai].api_key"
+COLUMNS_FETCH_CREATED_MESSAGE = "专栏采集任务已启动"
+COLUMNS_FETCH_RUNNING_MESSAGE = "正在采集专栏内容..."
 
 
 def launch_latest_crawl_task(group_id: str, request: CrawlSettingsRequest) -> dict[str, str]:
@@ -56,6 +59,19 @@ def launch_or_reuse_latest_crawl_task(group_id: str, request: CrawlSettingsReque
         if not task_id:
             raise
         return {"task_id": task_id, "message": str(exc)}, "existing"
+
+
+def create_columns_fetch_task(group_id: str, request: Any) -> dict[str, Any]:
+    response = launch_ingestion_task(
+        "columns_fetch",
+        f"采集专栏内容 (群组: {group_id})",
+        run_columns_fetch_task,
+        group_id,
+        request,
+        message=COLUMNS_FETCH_CREATED_MESSAGE,
+        on_created=lambda task_id: update_task(task_id, "running", COLUMNS_FETCH_RUNNING_MESSAGE),
+    )
+    return {"success": True, **response}
 
 
 def _validate_comments_per_topic(value: int) -> int:

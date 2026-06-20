@@ -56,25 +56,22 @@ class ColumnsRoutesHelperTests(unittest.TestCase):
 
     @unittest.skipUnless(HAS_COLUMNS_ROUTE_DEPS, "columns route dependencies are not installed")
     def test_create_columns_fetch_task_response_creates_ingestion_task(self):
-        from backend.routes.columns_routes import ColumnsSettingsRequest, _create_columns_fetch_task_response, _fetch_columns_task
+        from backend.routes.columns_routes import ColumnsSettingsRequest, _create_columns_fetch_task_response
 
         background_tasks = FakeBackgroundTasks()
         request = ColumnsSettingsRequest()
 
-        with (
-            patch("backend.services.task_launch.create_ingestion_task", return_value=("task-1", None)) as create_task,
-            patch("backend.routes.columns_routes.update_task") as update_task,
-            patch("backend.services.task_launch.enqueue_runtime_task") as enqueue_runtime_task,
-        ):
+        with patch(
+            "backend.routes.columns_routes.create_columns_fetch_task",
+            return_value={"success": True, "task_id": "task-1", "message": "专栏采集任务已启动"},
+        ) as create_task:
             response = _create_columns_fetch_task_response("123", request)
 
-        create_task.assert_called_once_with("columns_fetch", "采集专栏内容 (群组: 123)", "123")
-        update_task.assert_called_once_with("task-1", "running", "正在采集专栏内容...")
+        create_task.assert_called_once_with("123", request)
         self.assertEqual(
             {"success": True, "task_id": "task-1", "message": "专栏采集任务已启动"},
             response,
         )
-        enqueue_runtime_task.assert_called_once_with(_fetch_columns_task, "task-1", "123", request)
         self.assertEqual([], background_tasks.tasks)
 
     @unittest.skipUnless(HAS_COLUMNS_ROUTE_DEPS, "columns route dependencies are not installed")
@@ -89,16 +86,16 @@ class ColumnsRoutesHelperTests(unittest.TestCase):
             "status": "running",
         }
 
-        with (
-            patch("backend.services.task_launch.create_ingestion_task", return_value=(None, existing)),
-            patch("backend.routes.columns_routes.update_task") as update_task,
-        ):
+        with patch(
+            "backend.routes.columns_routes.create_columns_fetch_task",
+            side_effect=TaskLaunchConflict(existing),
+        ) as create_task:
             with self.assertRaises(TaskLaunchConflict) as raised:
                 _create_columns_fetch_task_response("123", ColumnsSettingsRequest())
 
+        create_task.assert_called_once()
         self.assertEqual(existing, raised.exception.existing)
         self.assertEqual([], background_tasks.tasks)
-        update_task.assert_not_called()
 
     @unittest.skipUnless(HAS_COLUMNS_ROUTE_DEPS, "columns route dependencies are not installed")
     def test_columns_route_error_maps_task_launch_conflict(self):

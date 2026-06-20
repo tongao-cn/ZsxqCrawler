@@ -14,14 +14,12 @@ from backend.services.columns_fetch_task_service import (
     get_column_topics_response,
     get_columns_stats_response,
     get_group_columns_response,
-    run_columns_fetch_task,
 )
 from backend.services.columns_summary_service import get_columns_summary
-from backend.services.task_launch import TaskLaunchConflict, ingestion_conflict_detail, launch_ingestion_task
-from backend.services.task_runtime import update_task
+from backend.services.task_launch import TaskLaunchConflict, ingestion_conflict_detail
+from backend.services.workflow_task_launch import create_columns_fetch_task
 
 router = APIRouter(prefix="/api", tags=["columns"])
-_fetch_columns_task = run_columns_fetch_task
 
 
 class ColumnsSettingsRequest(BaseModel):
@@ -41,16 +39,7 @@ def _create_columns_fetch_task_response(
     group_id: str,
     request: ColumnsSettingsRequest,
 ) -> Dict[str, Any]:
-    response = launch_ingestion_task(
-        "columns_fetch",
-        f"采集专栏内容 (群组: {group_id})",
-        _fetch_columns_task,
-        group_id,
-        request,
-        message="专栏采集任务已启动",
-        on_created=lambda task_id: update_task(task_id, "running", "正在采集专栏内容..."),
-    )
-    return {"success": True, **response}
+    return create_columns_fetch_task(group_id, request)
 
 
 def _columns_route_error(message: str, error: Exception) -> HTTPException:
