@@ -42,13 +42,11 @@ from backend.services.stock_topic_analysis_payloads import (
     build_stock_analysis_prompt,
     require_topic_excerpt,
 )
-from backend.services.stock_topic_analysis_queries import (
-    build_question_topic_search_sql,
-    build_topic_search_sql,
-)
+from backend.services.stock_topic_analysis_queries import build_topic_search_sql
 from backend.services.stock_topic_analysis_store import (
     insert_stock_topic_analysis_version,
     load_latest_processed_topic_ids,
+    load_question_topic_search_rows,
     load_saved_stock_topic_analysis,
     load_stock_topic_processed_state_ids,
     upsert_stock_topic_analysis,
@@ -257,10 +255,6 @@ def _upsert_stock_topic_processed_states(
 
 def _build_topic_search_sql(*, recent_cutoff: str | None = None) -> str:
     return build_topic_search_sql(recent_cutoff=recent_cutoff)
-
-
-def _build_question_topic_search_sql(keyword_count: int, *, recent_cutoff: str | None = None) -> str:
-    return build_question_topic_search_sql(keyword_count, recent_cutoff=recent_cutoff)
 
 
 def _load_recommendation_counts(conn: Any, group_id: str, names: List[str]) -> Tuple[int, Dict[str, int]]:
@@ -481,22 +475,13 @@ def search_stock_question_topics(group_id: str, question: str, *, limit: int = M
         raise ValueError("无法从问题中提取关键词")
 
     group_id_text = _normalize_text(group_id)
-    params: List[Any] = [group_id_text]
-    for keyword in keywords:
-        like = f"%{keyword}%"
-        params.extend([like, like, like, like])
     recent_cutoff = _recent_topic_cutoff_text()
-    params.append(recent_cutoff)
-    params.append(max(1, min(int(limit), MAX_QUESTION_TOPICS)))
-
-    conn = connect()
-    try:
-        rows = conn.execute(
-            _build_question_topic_search_sql(len(keywords), recent_cutoff=recent_cutoff),
-            params,
-        ).fetchall()
-    finally:
-        conn.close()
+    rows = load_question_topic_search_rows(
+        group_id_text,
+        keywords,
+        recent_cutoff=recent_cutoff,
+        limit=max(1, min(int(limit), MAX_QUESTION_TOPICS)),
+    )
 
     topics_by_id: Dict[str, Dict[str, Any]] = {}
     for row in rows:

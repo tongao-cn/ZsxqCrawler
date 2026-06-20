@@ -9,6 +9,7 @@ from typing import Any, Dict, Iterable, List
 from backend.services.daily_topic_analysis_topics import clip_text as _clip
 from backend.services.stock_topic_analysis_helpers import _build_stock_alias_terms
 from backend.services.stock_topic_analysis_payloads import require_topic_excerpt
+from backend.services.stock_topic_analysis_queries import build_question_topic_search_sql
 from backend.storage.db_compat import connect
 
 
@@ -85,6 +86,22 @@ def question_topic_rows_query(group_id: str, topic_ids: List[str]) -> tuple[str,
     )
 
 
+def question_topic_search_query(
+    group_id: str,
+    keywords: List[str],
+    *,
+    recent_cutoff: str,
+    limit: int,
+) -> tuple[str, List[Any]]:
+    params: List[Any] = [_normalize_text(group_id)]
+    for keyword in keywords:
+        like = f"%{keyword}%"
+        params.extend([like, like, like, like])
+    params.append(recent_cutoff)
+    params.append(max(1, int(limit)))
+    return build_question_topic_search_sql(len(keywords), recent_cutoff=recent_cutoff), params
+
+
 def load_question_topic_rows(group_id: str, topic_ids: Iterable[Any]) -> List[Any]:
     normalized_topic_ids = [str(topic_id or "") for topic_id in topic_ids]
     if not normalized_topic_ids:
@@ -93,6 +110,30 @@ def load_question_topic_rows(group_id: str, topic_ids: Iterable[Any]) -> List[An
     conn = connect()
     try:
         sql, params = question_topic_rows_query(_normalize_text(group_id), normalized_topic_ids)
+        return conn.execute(sql, params).fetchall()
+    finally:
+        conn.close()
+
+
+def load_question_topic_search_rows(
+    group_id: str,
+    keywords: Iterable[str],
+    *,
+    recent_cutoff: str,
+    limit: int,
+) -> List[Any]:
+    normalized_keywords = [_normalize_text(keyword) for keyword in keywords]
+    if not normalized_keywords:
+        return []
+
+    conn = connect()
+    try:
+        sql, params = question_topic_search_query(
+            _normalize_text(group_id),
+            normalized_keywords,
+            recent_cutoff=recent_cutoff,
+            limit=limit,
+        )
         return conn.execute(sql, params).fetchall()
     finally:
         conn.close()

@@ -698,15 +698,13 @@ class StockTopicAnalysisServiceHelperTests(unittest.TestCase):
         self.assertEqual(1, params[12])
 
     @unittest.skipUnless(HAS_SERVICE_DEPS, "stock topic analysis service dependencies are not installed")
-    def test_search_stock_question_topics_builds_keyword_query(self):
+    def test_search_stock_question_topics_delegates_keyword_search(self):
         from backend.services.stock_topic_analysis_service import search_stock_question_topics
-
-        conn = Mock()
-        conn.execute.return_value.fetchall.return_value = []
 
         with (
             patch("backend.services.stock_topic_analysis_service._call_question_keyword_ai", return_value=(["商业航天"], "test-model")),
-            patch("backend.services.stock_topic_analysis_service.connect", return_value=conn),
+            patch("backend.services.stock_topic_analysis_service._recent_topic_cutoff_text", return_value="2025-06-20"),
+            patch("backend.services.stock_topic_analysis_service.load_question_topic_search_rows", return_value=[]) as load_rows,
         ):
             result = search_stock_question_topics("51111112855254", "商业航天板块最近怎么样，推荐吗")
 
@@ -714,8 +712,12 @@ class StockTopicAnalysisServiceHelperTests(unittest.TestCase):
         self.assertEqual(["商业航天"], result["keywords"])
         self.assertEqual("test-model", result["keyword_model"])
         self.assertEqual([], result["topics"])
-        self.assertIn("FROM topics t", conn.execute.call_args.args[0])
-        conn.close.assert_called_once()
+        load_rows.assert_called_once_with(
+            "51111112855254",
+            ["商业航天"],
+            recent_cutoff="2025-06-20",
+            limit=60,
+        )
 
     @unittest.skipUnless(HAS_SERVICE_DEPS, "stock topic analysis service dependencies are not installed")
     def test_answer_stock_question_returns_empty_answer_without_topics(self):
@@ -1022,6 +1024,38 @@ class StockTopicAnalysisServiceHelperTests(unittest.TestCase):
         sql, params = conn.execute.call_args.args
         self.assertIn("FROM topics t", sql)
         self.assertEqual(["51111112855254", "101", "102"], params)
+        conn.close.assert_called_once()
+
+    def test_load_question_topic_search_rows_closes_connection(self):
+        from backend.services.stock_topic_analysis_store import load_question_topic_search_rows
+
+        conn = Mock()
+        conn.execute.return_value.fetchall.return_value = []
+
+        with patch("backend.services.stock_topic_analysis_store.connect", return_value=conn):
+            result = load_question_topic_search_rows(
+                "51111112855254",
+                ["商业航天"],
+                recent_cutoff="2025-06-20",
+                limit=12,
+            )
+
+        self.assertEqual([], result)
+        sql, params = conn.execute.call_args.args
+        self.assertIn("FROM topics t", sql)
+        self.assertIn("AND t.create_time >=", sql)
+        self.assertEqual(
+            [
+                "51111112855254",
+                "%商业航天%",
+                "%商业航天%",
+                "%商业航天%",
+                "%商业航天%",
+                "2025-06-20",
+                12,
+            ],
+            params,
+        )
         conn.close.assert_called_once()
 
     @unittest.skipUnless(HAS_SERVICE_DEPS, "stock topic analysis service dependencies are not installed")
