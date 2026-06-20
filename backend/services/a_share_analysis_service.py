@@ -5,7 +5,6 @@ from datetime import datetime, timedelta
 from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Set, Tuple
 
 from backend.core.local_group_runtime import get_cached_local_group_ids
-from backend.storage.db_compat import connect
 from backend.core.ai_provider_config import (
     get_default_model,
     get_openai_compatible_config,
@@ -78,6 +77,7 @@ from backend.services.a_share_analysis_topics import (
     parse_time as _parse_time,
     read_topics_in_time_range as _read_topics_in_time_range,
 )
+from backend.services.a_share_analysis_source_store import load_source_topics_summary
 
 try:
     from backend.core.logger_config import (
@@ -235,7 +235,6 @@ def read_topics_in_time_range(
         start,
         end,
         range_label,
-        connect_func=connect,
         debug_logger=log_debug,
         emit_log=_emit_log,
         log_callback=log_callback,
@@ -538,22 +537,7 @@ def get_source_topics_summary(group_id: Optional[str] = None) -> Dict[str, Any]:
             "latest_topic_time": None,
         }
 
-    conn = connect()
-    try:
-        cur = conn.cursor()
-        cur.execute(
-            "SELECT COUNT(*), MIN(create_time), MAX(create_time) FROM topics WHERE group_id = ?",
-            (int(normalized_group_id) if normalized_group_id.isdigit() else normalized_group_id,),
-        )
-        topics_count, oldest_topic_time, latest_topic_time = cur.fetchone()
-        return {
-            "topics_db_exists": True,
-            "topics_count": int(topics_count or 0),
-            "oldest_topic_time": oldest_topic_time,
-            "latest_topic_time": latest_topic_time,
-        }
-    finally:
-        conn.close()
+    return load_source_topics_summary(normalized_group_id)
 
 
 def get_analysis_summary(

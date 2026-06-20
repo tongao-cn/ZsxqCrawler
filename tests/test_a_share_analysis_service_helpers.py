@@ -700,23 +700,23 @@ class AShareAnalysisServiceHelperTests(unittest.TestCase):
     def test_read_topics_last_days_filters_topics_and_talks_by_group_scope(self):
         from backend.services import a_share_analysis_service as service
 
-        fake_conn = _FakeAShareConnection()
+        topic_rows = [
+            (1001, "topic title", "2026-05-07T10:00:00+0800"),
+            (1002, "fallback title", "2026-05-07T11:00:00+0800"),
+        ]
 
-        with patch.object(service, "connect", return_value=fake_conn), patch.object(
+        with patch("backend.services.a_share_analysis_topics.load_source_topic_rows", return_value=topic_rows) as load_topics, patch(
+            "backend.services.a_share_analysis_topics.load_source_talk_texts",
+            return_value={1001: "talk body"},
+        ) as load_talks, patch.object(
             service,
             "get_last_days_range",
             return_value=(datetime(2026, 5, 1), datetime(2026, 5, 8, 23, 59, 59)),
         ):
             items = service.read_topics_last_days("51111112855254", 21)
 
-        topic_sql, topic_params = fake_conn.cursor_obj.calls[0]
-        talk_sql, talk_params = fake_conn.cursor_obj.calls[1]
-
-        self.assertIn("WHERE t.group_id = ?", topic_sql)
-        self.assertEqual((51111112855254,), topic_params)
-        self.assertIn("WHERE topic_id IN (?, ?)", talk_sql)
-        self.assertEqual((1001, 1002), talk_params)
-        self.assertTrue(fake_conn.closed)
+        load_topics.assert_called_once_with("51111112855254")
+        load_talks.assert_called_once_with([1001, 1002])
         self.assertEqual(
             [
                 {
@@ -744,20 +744,43 @@ class AShareAnalysisServiceHelperTests(unittest.TestCase):
     def test_read_topics_in_date_range_filters_topics_and_talks_by_group_scope(self):
         from backend.services import a_share_analysis_service as service
 
-        fake_conn = _FakeAShareConnection()
+        topic_rows = [
+            (1001, "topic title", "2026-05-07T10:00:00+0800"),
+            (1002, "fallback title", "2026-05-07T11:00:00+0800"),
+        ]
 
-        with patch.object(service, "connect", return_value=fake_conn):
+        with patch("backend.services.a_share_analysis_topics.load_source_topic_rows", return_value=topic_rows) as load_topics, patch(
+            "backend.services.a_share_analysis_topics.load_source_talk_texts",
+            return_value={1001: "talk body"},
+        ) as load_talks:
             items = service.read_topics_in_date_range("51111112855254", "2026-05-07", "2026-05-07")
 
-        topic_sql, topic_params = fake_conn.cursor_obj.calls[0]
-        talk_sql, talk_params = fake_conn.cursor_obj.calls[1]
+        load_topics.assert_called_once_with("51111112855254")
+        load_talks.assert_called_once_with([1001, 1002])
+        self.assertEqual(["2026-05-07", "2026-05-07"], [item["day"] for item in items])
 
+    def test_source_topic_store_loads_rows_and_talks_by_group_scope(self):
+        from backend.services import a_share_analysis_source_store as source_store
+
+        fake_conn = _FakeAShareConnection()
+        with patch.object(source_store, "connect", return_value=fake_conn):
+            rows = source_store.load_source_topic_rows("51111112855254")
+
+        topic_sql, topic_params = fake_conn.cursor_obj.calls[0]
         self.assertIn("WHERE t.group_id = ?", topic_sql)
         self.assertEqual((51111112855254,), topic_params)
+        self.assertTrue(fake_conn.closed)
+        self.assertEqual(2, len(rows))
+
+        fake_conn = _FakeAShareConnection()
+        with patch.object(source_store, "connect", return_value=fake_conn):
+            talk_texts = source_store.load_source_talk_texts([1001, 1002])
+
+        talk_sql, talk_params = fake_conn.cursor_obj.calls[0]
         self.assertIn("WHERE topic_id IN (?, ?)", talk_sql)
         self.assertEqual((1001, 1002), talk_params)
         self.assertTrue(fake_conn.closed)
-        self.assertEqual(["2026-05-07", "2026-05-07"], [item["day"] for item in items])
+        self.assertEqual({1001: "talk body"}, talk_texts)
 
     def test_run_analysis_uses_explicit_date_range_when_provided(self):
         from backend.services import a_share_analysis_service as service
@@ -844,11 +867,25 @@ class AShareAnalysisServiceHelperTests(unittest.TestCase):
         self.assertEqual(6, result["removed_stock_topic_analyses"])
         self.assertEqual(7, result["removed_stock_topic_analysis_versions"])
 
-    def test_get_source_topics_summary_filters_by_group_scope(self):
+    def test_get_source_topics_summary_delegates_to_source_store(self):
         from backend.services import a_share_analysis_service as service
 
+        expected = {
+            "topics_db_exists": True,
+            "topics_count": 2,
+            "oldest_topic_time": "2026-05-01T10:00:00+0800",
+            "latest_topic_time": "2026-05-07T10:00:00+0800",
+        }
+        with patch.object(service, "load_source_topics_summary", return_value=expected) as load_summary:
+            summary = service.get_source_topics_summary("51111112855254")
+
+        load_summary.assert_called_once_with("51111112855254")
+        self.assertEqual(expected, summary)
+
+    def test_source_topics_summary_store_filters_by_group_scope(self):
+        from backend.services import a_share_analysis_source_store as source_store
+
         fake_conn = _FakeAShareConnection()
-        fake_conn.cursor_obj._rows = [(2, "2026-05-01T10:00:00+0800", "2026-05-07T10:00:00+0800")]
 
         def execute(sql, params=None):
             fake_conn.cursor_obj.calls.append((sql, params))
@@ -856,8 +893,8 @@ class AShareAnalysisServiceHelperTests(unittest.TestCase):
 
         fake_conn.cursor_obj.execute = execute
 
-        with patch.object(service, "connect", return_value=fake_conn):
-            summary = service.get_source_topics_summary("51111112855254")
+        with patch.object(source_store, "connect", return_value=fake_conn):
+            summary = source_store.load_source_topics_summary("51111112855254")
 
         sql, params = fake_conn.cursor_obj.calls[0]
         self.assertIn("WHERE group_id = ?", sql)
