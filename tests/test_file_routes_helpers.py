@@ -6,27 +6,29 @@ from backend.services.file_analysis_workflow import (
     _build_file_analysis_stats,
     _run_file_analysis_items,
 )
-from backend.services.file_workflow_service import (
+from backend.services.file_download_records_workflow import (
     _add_file_search_condition,
-    _build_check_local_file_status_response,
     _build_download_file_info,
     _build_download_task_stats,
+    _complete_download_records_task,
+    _download_result_stat_key,
+    _load_download_file_records,
+    _load_filtered_download_file_records,
+    _query_group_id,
+    _run_download_records,
+    _unique_int_file_ids,
+)
+from backend.services.file_workflow_service import (
+    _build_check_local_file_status_response,
     _build_file_status_response,
     _build_sync_files_response,
     _close_crawler_file_databases,
-    _complete_download_records_task,
     _complete_successful_single_file_download,
-    _download_result_stat_key,
     _enqueue_file_task,
     _fail_file_task,
     _get_download_file_status,
     _get_file_status_response,
-    _load_download_file_records,
-    _load_filtered_download_file_records,
-    _query_group_id,
     _resolve_download_record_status,
-    _run_download_records,
-    _unique_int_file_ids,
 )
 
 
@@ -2124,13 +2126,13 @@ class FileRoutesHelperTests(unittest.TestCase):
         downloader = object()
 
         with (
-            patch("backend.services.file_workflow_service._create_file_downloader", return_value=downloader) as create_downloader,
-            patch("backend.services.file_workflow_service._load_download_file_records") as load_records,
-            patch("backend.services.file_workflow_service._run_download_records") as run_download_records,
-            patch("backend.services.file_workflow_service.update_task") as update_task,
-            patch("backend.services.file_workflow_service.add_task_log") as add_task_log,
-            patch("backend.services.file_workflow_service.is_task_stopped", return_value=True),
-            patch("backend.services.file_workflow_service._safe_remove_file_downloader") as safe_remove,
+            patch("backend.services.file_download_records_workflow._create_file_downloader", return_value=downloader) as create_downloader,
+            patch("backend.services.file_download_records_workflow._load_download_file_records") as load_records,
+            patch("backend.services.file_download_records_workflow._run_download_records") as run_download_records,
+            patch("backend.services.file_download_records_workflow.update_task") as update_task,
+            patch("backend.services.file_download_records_workflow.add_task_log") as add_task_log,
+            patch("backend.services.file_download_records_workflow.is_task_stopped", return_value=True),
+            patch("backend.services.file_download_records_workflow._safe_remove_file_downloader") as safe_remove,
         ):
             run_selected_file_download_task("task-1", "123", [101, 102])
 
@@ -2150,13 +2152,13 @@ class FileRoutesHelperTests(unittest.TestCase):
         downloader = object()
 
         with (
-            patch("backend.services.file_workflow_service._create_file_downloader", return_value=downloader) as create_downloader,
-            patch("backend.services.file_workflow_service._load_filtered_download_file_records") as load_records,
-            patch("backend.services.file_workflow_service._run_download_records") as run_download_records,
-            patch("backend.services.file_workflow_service.update_task") as update_task,
-            patch("backend.services.file_workflow_service.add_task_log") as add_task_log,
-            patch("backend.services.file_workflow_service.is_task_stopped", return_value=True),
-            patch("backend.services.file_workflow_service._safe_remove_file_downloader") as safe_remove,
+            patch("backend.services.file_download_records_workflow._create_file_downloader", return_value=downloader) as create_downloader,
+            patch("backend.services.file_download_records_workflow._load_filtered_download_file_records") as load_records,
+            patch("backend.services.file_download_records_workflow._run_download_records") as run_download_records,
+            patch("backend.services.file_download_records_workflow.update_task") as update_task,
+            patch("backend.services.file_download_records_workflow.add_task_log") as add_task_log,
+            patch("backend.services.file_download_records_workflow.is_task_stopped", return_value=True),
+            patch("backend.services.file_download_records_workflow._safe_remove_file_downloader") as safe_remove,
         ):
             run_filtered_file_download_task("task-1", "123", status="pending", search="pdf", max_files=1)
 
@@ -2177,13 +2179,13 @@ class FileRoutesHelperTests(unittest.TestCase):
         records = [(101, "Report.pdf", 123, 7)]
 
         with (
-            patch("backend.services.file_workflow_service._create_file_downloader", return_value=downloader),
-            patch("backend.services.file_workflow_service._load_download_file_records", return_value=(records, [])),
-            patch("backend.services.file_workflow_service._run_download_records") as run_download_records,
-            patch("backend.services.file_workflow_service.update_task") as update_task,
-            patch("backend.services.file_workflow_service.add_task_log"),
-            patch("backend.services.file_workflow_service.is_task_stopped", side_effect=[False, True]),
-            patch("backend.services.file_workflow_service._safe_remove_file_downloader") as safe_remove,
+            patch("backend.services.file_download_records_workflow._create_file_downloader", return_value=downloader),
+            patch("backend.services.file_download_records_workflow._load_download_file_records", return_value=(records, [])),
+            patch("backend.services.file_download_records_workflow._run_download_records") as run_download_records,
+            patch("backend.services.file_download_records_workflow.update_task") as update_task,
+            patch("backend.services.file_download_records_workflow.add_task_log"),
+            patch("backend.services.file_download_records_workflow.is_task_stopped", side_effect=[False, True]),
+            patch("backend.services.file_download_records_workflow._safe_remove_file_downloader") as safe_remove,
         ):
             run_selected_file_download_task("task-1", "123", [101])
 
@@ -2203,13 +2205,13 @@ class FileRoutesHelperTests(unittest.TestCase):
         records = [(101, "Report.pdf", 123, 7)]
 
         with (
-            patch("backend.services.file_workflow_service._create_file_downloader", return_value=downloader),
-            patch("backend.services.file_workflow_service._load_filtered_download_file_records", return_value=records),
-            patch("backend.services.file_workflow_service._run_download_records") as run_download_records,
-            patch("backend.services.file_workflow_service.update_task") as update_task,
-            patch("backend.services.file_workflow_service.add_task_log"),
-            patch("backend.services.file_workflow_service.is_task_stopped", side_effect=[False, True]),
-            patch("backend.services.file_workflow_service._safe_remove_file_downloader") as safe_remove,
+            patch("backend.services.file_download_records_workflow._create_file_downloader", return_value=downloader),
+            patch("backend.services.file_download_records_workflow._load_filtered_download_file_records", return_value=records),
+            patch("backend.services.file_download_records_workflow._run_download_records") as run_download_records,
+            patch("backend.services.file_download_records_workflow.update_task") as update_task,
+            patch("backend.services.file_download_records_workflow.add_task_log"),
+            patch("backend.services.file_download_records_workflow.is_task_stopped", side_effect=[False, True]),
+            patch("backend.services.file_download_records_workflow._safe_remove_file_downloader") as safe_remove,
         ):
             run_filtered_file_download_task("task-1", "123", status="pending", search="pdf", max_files=1)
 
@@ -2228,13 +2230,13 @@ class FileRoutesHelperTests(unittest.TestCase):
         downloader = object()
 
         with (
-            patch("backend.services.file_workflow_service._create_file_downloader", return_value=downloader),
-            patch("backend.services.file_workflow_service._load_download_file_records", return_value=([], [101, 102])),
-            patch("backend.services.file_workflow_service._run_download_records") as run_download_records,
-            patch("backend.services.file_workflow_service.update_task") as update_task,
-            patch("backend.services.file_workflow_service.add_task_log") as add_task_log,
-            patch("backend.services.file_workflow_service.is_task_stopped", return_value=False),
-            patch("backend.services.file_workflow_service._safe_remove_file_downloader") as safe_remove,
+            patch("backend.services.file_download_records_workflow._create_file_downloader", return_value=downloader),
+            patch("backend.services.file_download_records_workflow._load_download_file_records", return_value=([], [101, 102])),
+            patch("backend.services.file_download_records_workflow._run_download_records") as run_download_records,
+            patch("backend.services.file_download_records_workflow.update_task") as update_task,
+            patch("backend.services.file_download_records_workflow.add_task_log") as add_task_log,
+            patch("backend.services.file_download_records_workflow.is_task_stopped", return_value=False),
+            patch("backend.services.file_download_records_workflow._safe_remove_file_downloader") as safe_remove,
         ):
             run_selected_file_download_task("task-1", "123", [101, 102, 101])
 
@@ -2269,13 +2271,13 @@ class FileRoutesHelperTests(unittest.TestCase):
         downloader = object()
 
         with (
-            patch("backend.services.file_workflow_service._create_file_downloader", return_value=downloader),
-            patch("backend.services.file_workflow_service._load_filtered_download_file_records", return_value=[]),
-            patch("backend.services.file_workflow_service._run_download_records") as run_download_records,
-            patch("backend.services.file_workflow_service.update_task") as update_task,
-            patch("backend.services.file_workflow_service.add_task_log") as add_task_log,
-            patch("backend.services.file_workflow_service.is_task_stopped", return_value=False),
-            patch("backend.services.file_workflow_service._safe_remove_file_downloader") as safe_remove,
+            patch("backend.services.file_download_records_workflow._create_file_downloader", return_value=downloader),
+            patch("backend.services.file_download_records_workflow._load_filtered_download_file_records", return_value=[]),
+            patch("backend.services.file_download_records_workflow._run_download_records") as run_download_records,
+            patch("backend.services.file_download_records_workflow.update_task") as update_task,
+            patch("backend.services.file_download_records_workflow.add_task_log") as add_task_log,
+            patch("backend.services.file_download_records_workflow.is_task_stopped", return_value=False),
+            patch("backend.services.file_download_records_workflow._safe_remove_file_downloader") as safe_remove,
         ):
             run_filtered_file_download_task("task-1", "123", status="pending", search="pdf", max_files=1)
 
@@ -2310,9 +2312,9 @@ class FileRoutesHelperTests(unittest.TestCase):
         stats = _build_download_task_stats(total_files=1, found=1)
 
         with (
-            patch("backend.services.file_workflow_service._run_download_records") as run_download_records,
-            patch("backend.services.file_workflow_service.is_task_stopped", return_value=False),
-            patch("backend.services.file_workflow_service.update_task") as update_task,
+            patch("backend.services.file_download_records_workflow._run_download_records") as run_download_records,
+            patch("backend.services.file_download_records_workflow.is_task_stopped", return_value=False),
+            patch("backend.services.file_download_records_workflow.update_task") as update_task,
         ):
             _complete_download_records_task("task-1", downloader, records, stats, "下载完成")
 
@@ -2325,9 +2327,9 @@ class FileRoutesHelperTests(unittest.TestCase):
         stats = _build_download_task_stats(total_files=1, found=1)
 
         with (
-            patch("backend.services.file_workflow_service._run_download_records") as run_download_records,
-            patch("backend.services.file_workflow_service.is_task_stopped", return_value=True),
-            patch("backend.services.file_workflow_service.update_task") as update_task,
+            patch("backend.services.file_download_records_workflow._run_download_records") as run_download_records,
+            patch("backend.services.file_download_records_workflow.is_task_stopped", return_value=True),
+            patch("backend.services.file_download_records_workflow.update_task") as update_task,
         ):
             _complete_download_records_task("task-1", downloader, records, stats, "下载完成")
 
@@ -2353,8 +2355,8 @@ class FileRoutesHelperTests(unittest.TestCase):
         stats = _build_download_task_stats(total_files=3, found=3)
 
         with (
-            patch("backend.services.file_workflow_service.is_task_stopped", return_value=False),
-            patch("backend.services.file_workflow_service.add_task_log") as add_task_log,
+            patch("backend.services.file_download_records_workflow.is_task_stopped", return_value=False),
+            patch("backend.services.file_download_records_workflow.add_task_log") as add_task_log,
         ):
             result = _run_download_records("task-1", downloader, records, stats)
 
@@ -2404,8 +2406,8 @@ class FileRoutesHelperTests(unittest.TestCase):
         stats = _build_download_task_stats(total_files=2, found=2)
 
         with (
-            patch("backend.services.file_workflow_service.is_task_stopped", side_effect=[False, True]),
-            patch("backend.services.file_workflow_service.add_task_log") as add_task_log,
+            patch("backend.services.file_download_records_workflow.is_task_stopped", side_effect=[False, True]),
+            patch("backend.services.file_download_records_workflow.add_task_log") as add_task_log,
         ):
             result = _run_download_records("task-1", downloader, records, stats)
 
