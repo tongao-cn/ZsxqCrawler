@@ -467,7 +467,7 @@ class TopicRoutesHelperTests(unittest.TestCase):
 
     @unittest.skipUnless(HAS_TOPIC_ROUTE_DEPS, "topic route dependencies are not installed")
     def test_format_group_topic_row_maps_author_for_talk(self):
-        from backend.routes.topic_routes import _format_group_topic_row
+        from backend.storage.zsxq_database import _format_group_topic_row
 
         row = (
             10,
@@ -508,15 +508,17 @@ class TopicRoutesHelperTests(unittest.TestCase):
         self.assertEqual(("%offer%",), count_params)
 
     @unittest.skipUnless(HAS_TOPIC_ROUTE_DEPS, "topic route dependencies are not installed")
-    def test_build_group_topics_query_with_search_uses_all_text_filters(self):
-        from backend.routes.topic_routes import _build_group_topics_query
+    def test_group_topics_query_with_search_uses_matching_text_filters(self):
+        from backend.storage.zsxq_database import _group_topics_count_query, _group_topics_query
 
-        query, params, count_query, count_params = _build_group_topics_query(123, 2, 10, "offer")
+        query, params = _group_topics_query(123, 10, 10, "offer")
+        count_query, count_params = _group_topics_count_query(123, "offer")
 
         self.assertIn("t.title LIKE ? OR q.text LIKE ? OR tk.text LIKE ?", query)
         self.assertEqual((123, "%offer%", "%offer%", "%offer%", 10, 10), params)
-        self.assertEqual("SELECT COUNT(*) FROM topics WHERE group_id = ? AND title LIKE ?", count_query)
-        self.assertEqual((123, "%offer%"), count_params)
+        self.assertIn("COUNT(DISTINCT t.topic_id)", count_query)
+        self.assertIn("t.title LIKE ? OR q.text LIKE ? OR tk.text LIKE ?", count_query)
+        self.assertEqual((123, "%offer%", "%offer%", "%offer%"), count_params)
 
     @unittest.skipUnless(HAS_TOPIC_ROUTE_DEPS, "topic route dependencies are not installed")
     def test_fetch_rows_and_total_executes_data_and_count_queries(self):
@@ -555,6 +557,29 @@ class TopicRoutesHelperTests(unittest.TestCase):
             response,
         )
         self.assertEqual([("SELECT rows", ("p",)), ("SELECT count", ("c",))], cursor.calls)
+
+    @unittest.skipUnless(HAS_TOPIC_ROUTE_DEPS, "topic route dependencies are not installed")
+    def test_get_group_topics_response_delegates_to_storage(self):
+        from backend.routes.topic_routes import _get_group_topics_response
+
+        class FakeGroupTopicsDb(FakeDb):
+            def __init__(self):
+                super().__init__()
+                self.group_topic_calls = []
+
+            def get_group_topics(self, group_id, page, per_page, search):
+                self.group_topic_calls.append((group_id, page, per_page, search))
+                return {"topics": [{"topic_id": "202"}], "pagination": {"page": page}}
+
+        db = FakeGroupTopicsDb()
+
+        with patch("backend.routes.topic_routes.ZSXQDatabase", return_value=db) as database:
+            response = _get_group_topics_response(123, page=2, per_page=5, search="offer")
+
+        database.assert_called_once_with("123")
+        self.assertEqual({"topics": [{"topic_id": "202"}], "pagination": {"page": 2}}, response)
+        self.assertEqual([(123, 2, 5, "offer")], db.group_topic_calls)
+        self.assertTrue(db.closed)
 
     @unittest.skipUnless(HAS_TOPIC_ROUTE_DEPS, "topic route dependencies are not installed")
     def test_read_routes_offload_sync_db_work_to_thread(self):

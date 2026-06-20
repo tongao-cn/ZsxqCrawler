@@ -141,6 +141,13 @@ def format_tag_topic_row(topic) -> Dict[str, Any]:
     return topic_data
 
 
+def format_group_topic_row(topic) -> Dict[str, Any]:
+    topic_data = format_tag_topic_row(topic)
+    topic_data["topic_id"] = str(topic[0]) if topic[0] is not None else None
+    topic_data["imported_at"] = topic[15] if len(topic) > 15 else None
+    return topic_data
+
+
 def topic_tags_from_data(topic_data: Dict[str, Any]) -> set[tuple[str, str]]:
     text_contents = []
 
@@ -225,6 +232,69 @@ def topic_count_by_tag_query(tag_id: int) -> tuple[str, tuple[Any, ...]]:
                 WHERE tag_id = ?
             """,
         (tag_id,),
+    )
+
+
+def group_topics_query(group_id: Any, per_page: int, offset: int, search: Optional[str]) -> tuple[str, tuple[Any, ...]]:
+    base_select = """
+                SELECT
+                    t.topic_id, t.title, t.create_time, t.likes_count, t.comments_count,
+                    t.reading_count, t.type, t.digested, t.sticky,
+                    q.text as question_text,
+                    a.text as answer_text,
+                    tk.text as talk_text,
+                    u.user_id, u.name, u.avatar_url, t.imported_at
+                FROM topics t
+                LEFT JOIN questions q ON t.topic_id = q.topic_id
+                LEFT JOIN answers a ON t.topic_id = a.topic_id
+                LEFT JOIN talks tk ON t.topic_id = tk.topic_id
+                LEFT JOIN users u ON tk.owner_user_id = u.user_id
+            """
+
+    if search:
+        search_param = f"%{search}%"
+        return (
+            f"""
+                {base_select}
+                WHERE t.group_id = ? AND (t.title LIKE ? OR q.text LIKE ? OR tk.text LIKE ?)
+                ORDER BY t.create_time DESC
+                LIMIT ? OFFSET ?
+            """,
+            (group_id, search_param, search_param, search_param, per_page, offset),
+        )
+
+    return (
+        f"""
+                {base_select}
+                WHERE t.group_id = ?
+                ORDER BY t.create_time DESC
+                LIMIT ? OFFSET ?
+            """,
+        (group_id, per_page, offset),
+    )
+
+
+def group_topics_count_query(group_id: Any, search: Optional[str]) -> tuple[str, tuple[Any, ...]]:
+    if search:
+        search_param = f"%{search}%"
+        return (
+            """
+                SELECT COUNT(DISTINCT t.topic_id)
+                FROM topics t
+                LEFT JOIN questions q ON t.topic_id = q.topic_id
+                LEFT JOIN talks tk ON t.topic_id = tk.topic_id
+                WHERE t.group_id = ? AND (t.title LIKE ? OR q.text LIKE ? OR tk.text LIKE ?)
+            """,
+            (group_id, search_param, search_param, search_param),
+        )
+
+    return (
+        """
+                SELECT COUNT(*)
+                FROM topics
+                WHERE group_id = ?
+            """,
+        (group_id,),
     )
 
 

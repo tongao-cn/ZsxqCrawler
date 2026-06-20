@@ -11,8 +11,11 @@ from backend.storage.zsxq_database import (
     _database_stats_count_query,
     _delete_latest_likes_statement,
     _file_exists_query,
+    _format_group_topic_row,
     _format_tag_row,
     _format_tag_topic_row,
+    _group_topics_count_query,
+    _group_topics_query,
     _group_id_param,
     _group_insert_statement,
     _group_stats_queries,
@@ -741,6 +744,33 @@ class ZSXQDatabaseHelperTests(unittest.TestCase):
         self.assertFalse(topic["digested"])
         self.assertFalse(topic["sticky"])
 
+    def test_format_group_topic_row_maps_imported_at_and_string_topic_id(self):
+        row = (
+            12,
+            "title",
+            "2026-01-01",
+            1,
+            2,
+            3,
+            "talk",
+            0,
+            1,
+            None,
+            None,
+            "body",
+            99,
+            "author",
+            "avatar.png",
+            "2026-01-02",
+        )
+
+        topic = _format_group_topic_row(row)
+
+        self.assertEqual("12", topic["topic_id"])
+        self.assertEqual("2026-01-02", topic["imported_at"])
+        self.assertEqual("body", topic["talk_text"])
+        self.assertEqual({"user_id": 99, "name": "author", "avatar_url": "avatar.png"}, topic["author"])
+
     def test_topic_tags_from_data_preserves_sources_decode_dedupe_and_empty_title_skip(self):
         tags = _topic_tags_from_data(
             {
@@ -829,6 +859,26 @@ class ZSXQDatabaseHelperTests(unittest.TestCase):
             " ".join(count_sql.split()),
         )
         self.assertEqual((7,), count_params)
+
+    def test_group_topic_read_query_helpers_use_matching_search_predicates(self):
+        topics_sql, topics_params = _group_topics_query(303, 5, 10, "alpha")
+        count_sql, count_params = _group_topics_count_query(303, "alpha")
+
+        self.assertIn(
+            "WHERE t.group_id = ? AND (t.title LIKE ? OR q.text LIKE ? OR tk.text LIKE ?)",
+            " ".join(topics_sql.split()),
+        )
+        self.assertEqual((303, "%alpha%", "%alpha%", "%alpha%", 5, 10), topics_params)
+        self.assertIn(
+            "WHERE t.group_id = ? AND (t.title LIKE ? OR q.text LIKE ? OR tk.text LIKE ?)",
+            " ".join(count_sql.split()),
+        )
+        self.assertIn("SELECT COUNT(DISTINCT t.topic_id)", " ".join(count_sql.split()))
+        self.assertEqual((303, "%alpha%", "%alpha%", "%alpha%"), count_params)
+
+        unfiltered_sql, unfiltered_params = _group_topics_count_query(303, None)
+        self.assertEqual("SELECT COUNT(*) FROM topics WHERE group_id = ?", " ".join(unfiltered_sql.split()))
+        self.assertEqual((303,), unfiltered_params)
 
     def test_group_and_user_insert_statement_helpers_preserve_sql_shape_and_params(self):
         group_sql, group_params = _group_insert_statement(
@@ -3566,6 +3616,62 @@ class ZSXQDatabaseHelperTests(unittest.TestCase):
             ],
             db.cursor.calls,
         )
+
+    def test_get_group_topics_uses_matching_queries_and_preserves_pagination(self):
+        from backend.storage.zsxq_database import ZSXQDatabase
+
+        db = object.__new__(ZSXQDatabase)
+        db.cursor = FakeTagReadCursor(
+            topic_rows=[
+                (
+                    202,
+                    "title",
+                    "2026-05-07",
+                    1,
+                    2,
+                    3,
+                    "talk",
+                    0,
+                    1,
+                    None,
+                    None,
+                    "body",
+                    901,
+                    "Alice",
+                    "a.png",
+                    "2026-05-08",
+                )
+            ],
+            total=12,
+        )
+        db.group_id = "303"
+
+        self.assertEqual(
+            {
+                "topics": [
+                    {
+                        "topic_id": "202",
+                        "title": "title",
+                        "create_time": "2026-05-07",
+                        "likes_count": 1,
+                        "comments_count": 2,
+                        "reading_count": 3,
+                        "type": "talk",
+                        "digested": False,
+                        "sticky": True,
+                        "talk_text": "body",
+                        "author": {"user_id": 901, "name": "Alice", "avatar_url": "a.png"},
+                        "imported_at": "2026-05-08",
+                    }
+                ],
+                "pagination": {"page": 2, "per_page": 5, "total": 12, "pages": 3},
+            },
+            ZSXQDatabase.get_group_topics(db, page=2, per_page=5, search="offer"),
+        )
+        self.assertEqual((303, "%offer%", "%offer%", "%offer%", 5, 5), db.cursor.calls[0][1])
+        self.assertIn("FROM topics t", db.cursor.calls[0][0])
+        self.assertEqual((303, "%offer%", "%offer%", "%offer%"), db.cursor.calls[1][1])
+        self.assertIn("COUNT(DISTINCT t.topic_id)", db.cursor.calls[1][0])
 
     def test_get_topics_by_tag_uses_helper_queries_and_preserves_pagination(self):
         from backend.storage.zsxq_database import ZSXQDatabase

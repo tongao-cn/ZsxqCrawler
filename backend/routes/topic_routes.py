@@ -146,35 +146,6 @@ def _format_topic_row(topic) -> dict:
     }
 
 
-def _format_group_topic_row(topic) -> dict:
-    topic_data = {
-        "topic_id": str(topic[0]) if topic[0] is not None else None,
-        "title": topic[1],
-        "create_time": topic[2],
-        "likes_count": topic[3],
-        "comments_count": topic[4],
-        "reading_count": topic[5],
-        "type": topic[6],
-        "digested": bool(topic[7]) if topic[7] is not None else False,
-        "sticky": bool(topic[8]) if topic[8] is not None else False,
-        "imported_at": topic[15] if len(topic) > 15 else None,
-    }
-
-    if topic[6] == "q&a":
-        topic_data["question_text"] = topic[9] if topic[9] else ""
-        topic_data["answer_text"] = topic[10] if topic[10] else ""
-    else:
-        topic_data["talk_text"] = topic[11] if topic[11] else ""
-        if topic[12]:
-            topic_data["author"] = {
-                "user_id": topic[12],
-                "name": topic[13],
-                "avatar_url": topic[14],
-            }
-
-    return topic_data
-
-
 def _build_topics_query(page: int, per_page: int, search: Optional[str]) -> tuple[str, tuple, str, tuple]:
     offset = (page - 1) * per_page
     if search:
@@ -202,50 +173,6 @@ def _build_topics_query(page: int, per_page: int, search: Optional[str]) -> tupl
         (per_page, offset),
         "SELECT COUNT(*) FROM topics",
         (),
-    )
-
-
-def _build_group_topics_query(group_id: int, page: int, per_page: int, search: Optional[str]) -> tuple[str, tuple, str, tuple]:
-    offset = (page - 1) * per_page
-    base_select = """
-        SELECT
-            t.topic_id, t.title, t.create_time, t.likes_count, t.comments_count,
-            t.reading_count, t.type, t.digested, t.sticky,
-            q.text as question_text,
-            a.text as answer_text,
-            tk.text as talk_text,
-            u.user_id, u.name, u.avatar_url, t.imported_at
-        FROM topics t
-        LEFT JOIN questions q ON t.topic_id = q.topic_id
-        LEFT JOIN answers a ON t.topic_id = a.topic_id
-        LEFT JOIN talks tk ON t.topic_id = tk.topic_id
-        LEFT JOIN users u ON tk.owner_user_id = u.user_id
-    """
-
-    if search:
-        search_param = f"%{search}%"
-        return (
-            f"""
-            {base_select}
-            WHERE t.group_id = ? AND (t.title LIKE ? OR q.text LIKE ? OR tk.text LIKE ?)
-            ORDER BY t.create_time DESC
-            LIMIT ? OFFSET ?
-            """,
-            (group_id, search_param, search_param, search_param, per_page, offset),
-            "SELECT COUNT(*) FROM topics WHERE group_id = ? AND title LIKE ?",
-            (group_id, search_param),
-        )
-
-    return (
-        f"""
-        {base_select}
-        WHERE t.group_id = ?
-        ORDER BY t.create_time DESC
-        LIMIT ? OFFSET ?
-        """,
-        (group_id, per_page, offset),
-        "SELECT COUNT(*) FROM topics WHERE group_id = ?",
-        (group_id,),
     )
 
 
@@ -300,18 +227,7 @@ def _get_group_topics_response(group_id: int, page: int = 1, per_page: int = 20,
     db = None
     try:
         db = ZSXQDatabase(str(group_id))
-
-        query, params, count_query, count_params = _build_group_topics_query(group_id, page, per_page, search)
-        return _build_topic_page_response(
-            db.cursor,
-            query,
-            params,
-            count_query,
-            count_params,
-            _format_group_topic_row,
-            page,
-            per_page,
-        )
+        return db.get_group_topics(group_id, page, per_page, search)
     finally:
         _close_topic_db(db)
 
