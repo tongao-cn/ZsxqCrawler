@@ -399,24 +399,21 @@ def analyze_group_file(
         if cached_result is not None:
             return cached_result
 
-        db.cursor.execute(
-            """
-            SELECT file_id, name, size, download_status, local_path
-            FROM files
-            WHERE file_id = ? AND group_id = ?
-            """,
-            (file_id, int(str(group_id)) if str(group_id).isdigit() else str(group_id)),
-        )
-        row = db.cursor.fetchone()
-        if not row:
+        source_record = db.get_file_analysis_source_record(file_id)
+        if source_record is None:
             raise ValueError("文件不存在，请先收集文件列表")
         file_exists = True
 
-        resolved_path = resolve_local_file_path(group_id, int(row[0]), str(row[1] or ""), row[4])
+        resolved_path = resolve_local_file_path(
+            group_id,
+            source_record.file_id,
+            source_record.name,
+            source_record.local_path,
+        )
         if resolved_path is None:
             raise ValueError("本地文件不存在，请先下载该文件后再进行 AI 分析")
 
-        file_name = str(row[1] or f"file_{file_id}")
+        file_name = source_record.name
         if resolved_path.suffix.lower() == ".pdf":
             summary = _summarize_pdf_with_ai(
                 resolved_path,

@@ -102,6 +102,19 @@ class FileStatusRecord(NamedTuple):
         return cls(row[0], row[1], row[2])
 
 
+class FileAnalysisSourceRecord(NamedTuple):
+    file_id: int
+    name: str
+    size: Any
+    download_status: Optional[str]
+    local_path: Optional[str]
+
+    @classmethod
+    def from_row(cls, row: Sequence[Any]) -> "FileAnalysisSourceRecord":
+        file_id = int(row[0])
+        return cls(file_id, str(row[1] or f"file_{file_id}"), row[2], row[3], row[4])
+
+
 class FileDownloadStats(NamedTuple):
     total_files: int
     downloaded: int
@@ -499,6 +512,23 @@ class ZSXQFileDatabase:
         )
         row = self.cursor.fetchone()
         return FileStatusRecord.from_row(row) if row else None
+
+    def get_file_analysis_source_record(
+        self,
+        file_id: int,
+        group_id: Optional[Any] = None,
+    ) -> Optional[FileAnalysisSourceRecord]:
+        scoped_group_id = self.group_id if group_id is None else group_id
+        self.cursor.execute(
+            """
+            SELECT file_id, name, size, download_status, local_path
+            FROM files
+            WHERE file_id = ? AND group_id = ?
+            """,
+            (file_id, _query_group_id(scoped_group_id)),
+        )
+        row = self.cursor.fetchone()
+        return FileAnalysisSourceRecord.from_row(row) if row else None
 
     def get_file_download_stats(self, group_id: Optional[Any] = None) -> FileDownloadStats:
         scoped_group_id = self.group_id if group_id is None else group_id

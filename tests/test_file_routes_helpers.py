@@ -1,5 +1,7 @@
 import unittest
 from contextlib import ExitStack
+from pathlib import Path
+from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
 from backend.services.file_analysis_workflow import (
@@ -31,7 +33,12 @@ from backend.services.file_workflow_service import (
     _get_file_status_response,
     _resolve_download_record_status,
 )
-from backend.storage.zsxq_file_database import FileListPage, FileListRecord, ZSXQFileDatabase
+from backend.storage.zsxq_file_database import (
+    FileAnalysisSourceRecord,
+    FileListPage,
+    FileListRecord,
+    ZSXQFileDatabase,
+)
 
 
 class FakeBackgroundTasks:
@@ -832,6 +839,62 @@ class FileRoutesHelperTests(unittest.TestCase):
         self.assertIsNot(original_error, raised.exception)
         self.assertEqual(500, raised.exception.status_code)
         self.assertEqual("文件 AI 分析失败: 409: conflict", raised.exception.detail)
+
+    def test_analyze_group_file_uses_storage_source_record(self):
+        from backend.services import file_ai_analysis_service
+
+        class NoCursor:
+            def execute(self, *_args, **_kwargs):
+                raise AssertionError("analyze_group_file should not execute SQL directly")
+
+        class FakeFileDb:
+            def __init__(self):
+                self.cursor = NoCursor()
+                self.analysis_reads = 0
+                self.source_calls = []
+                self.upserts = []
+                self.closed = False
+
+            def get_file_ai_analysis(self, file_id):
+                self.analysis_reads += 1
+                if self.analysis_reads == 1:
+                    return None
+                return {"file_id": file_id, "status": "completed", "summary": "summary"}
+
+            def get_file_analysis_source_record(self, file_id):
+                self.source_calls.append(file_id)
+                return FileAnalysisSourceRecord(file_id, "note.txt", 12, "completed", None)
+
+            def upsert_file_ai_analysis(self, file_id, **kwargs):
+                self.upserts.append((file_id, kwargs))
+
+            def close(self):
+                self.closed = True
+
+        fake_db = FakeFileDb()
+        with TemporaryDirectory() as temp_dir:
+            source_path = Path(temp_dir) / "note.txt"
+            source_path.write_text("content", encoding="utf-8")
+
+            with (
+                patch("backend.services.file_ai_analysis_service._get_file_db", return_value=fake_db),
+                patch("backend.services.file_ai_analysis_service.resolve_local_file_path", return_value=source_path) as resolve,
+                patch(
+                    "backend.services.file_ai_analysis_service._extract_file_content_for_analysis",
+                    return_value=("正文", "text/plain"),
+                ),
+                patch("backend.services.file_ai_analysis_service._summarize_text_with_ai", return_value="summary"),
+            ):
+                result = file_ai_analysis_service.analyze_group_file("group-1", 456, force=True)
+
+        self.assertEqual({"file_id": 456, "status": "completed", "summary": "summary", "cached": False}, result)
+        self.assertEqual([456], fake_db.source_calls)
+        resolve.assert_called_once_with("group-1", 456, "note.txt", None)
+        self.assertEqual(1, len(fake_db.upserts))
+        self.assertEqual(456, fake_db.upserts[0][0])
+        self.assertEqual(str(source_path), fake_db.upserts[0][1]["source_path"])
+        self.assertEqual("summary", fake_db.upserts[0][1]["summary"])
+        self.assertTrue(fake_db.closed)
 
     def test_run_file_analysis_task_dedupes_ids_and_preserves_mixed_stats(self):
         from backend.services import file_analysis_workflow

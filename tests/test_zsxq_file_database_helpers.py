@@ -1012,6 +1012,27 @@ class ZSXQFileDatabaseHelperTests(unittest.TestCase):
         self.assertIn("file_id, group_id, status", insert_sql)
         self.assertEqual((101, 303, "completed"), insert_params[:3])
 
+    def test_get_file_analysis_source_record_scopes_and_normalizes_row(self):
+        from backend.storage.zsxq_file_database import ZSXQFileDatabase
+
+        db = object.__new__(ZSXQFileDatabase)
+        cursor = FakeAnalysisCursor()
+        cursor.row = (101, "", 2048, "completed", "C:/downloads/report.pdf")
+        db.cursor = cursor
+        db.group_id = "303"
+
+        record = ZSXQFileDatabase.get_file_analysis_source_record(db, 101)
+
+        select_sql, select_params = cursor.calls[-1]
+        self.assertIn("SELECT file_id, name, size, download_status, local_path", select_sql)
+        self.assertIn("WHERE file_id = ? AND group_id = ?", select_sql)
+        self.assertEqual((101, 303), select_params)
+        self.assertEqual(101, record.file_id)
+        self.assertEqual("file_101", record.name)
+        self.assertEqual(2048, record.size)
+        self.assertEqual("completed", record.download_status)
+        self.assertEqual("C:/downloads/report.pdf", record.local_path)
+
     def test_insert_comments_uses_record_params_and_skips_missing_ids(self):
         from backend.storage.zsxq_file_database import ZSXQFileDatabase
 
