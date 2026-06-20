@@ -7,6 +7,7 @@ from backend.services.file_analysis_workflow import (
     _run_file_analysis_items,
 )
 from backend.services.file_download_records_workflow import (
+    DownloadFileRecord,
     _add_file_search_condition,
     _build_download_file_info,
     _build_download_task_stats,
@@ -1227,6 +1228,18 @@ class FileRoutesHelperTests(unittest.TestCase):
             payload,
         )
 
+    def test_download_file_record_builds_downloader_payload(self):
+        record = DownloadFileRecord.from_row((123, "", None, None))
+
+        self.assertEqual(123, record.file_id)
+        self.assertEqual("file_123", record.name)
+        self.assertEqual(0, record.size)
+        self.assertEqual(0, record.download_count)
+        self.assertEqual(
+            _build_download_file_info(123, "file_123", 0, 0),
+            record.to_downloader_payload(),
+        )
+
     def test_download_result_stat_key_preserves_existing_counts(self):
         self.assertEqual("skipped", _download_result_stat_key("skipped"))
         self.assertEqual("downloaded", _download_result_stat_key(True))
@@ -2176,7 +2189,7 @@ class FileRoutesHelperTests(unittest.TestCase):
         from backend.services.file_workflow_service import run_selected_file_download_task
 
         downloader = object()
-        records = [(101, "Report.pdf", 123, 7)]
+        records = [DownloadFileRecord(101, "Report.pdf", 123, 7)]
 
         with (
             patch("backend.services.file_download_records_workflow._create_file_downloader", return_value=downloader),
@@ -2202,7 +2215,7 @@ class FileRoutesHelperTests(unittest.TestCase):
         from backend.services.file_workflow_service import run_filtered_file_download_task
 
         downloader = object()
-        records = [(101, "Report.pdf", 123, 7)]
+        records = [DownloadFileRecord(101, "Report.pdf", 123, 7)]
 
         with (
             patch("backend.services.file_download_records_workflow._create_file_downloader", return_value=downloader),
@@ -2308,7 +2321,7 @@ class FileRoutesHelperTests(unittest.TestCase):
 
     def test_complete_download_records_task_updates_completion_when_running(self):
         downloader = object()
-        records = [(101, "Report.pdf", 123, 7)]
+        records = [DownloadFileRecord(101, "Report.pdf", 123, 7)]
         stats = _build_download_task_stats(total_files=1, found=1)
 
         with (
@@ -2323,7 +2336,7 @@ class FileRoutesHelperTests(unittest.TestCase):
 
     def test_complete_download_records_task_skips_completion_when_stopped_after_records(self):
         downloader = object()
-        records = [(101, "Report.pdf", 123, 7)]
+        records = [DownloadFileRecord(101, "Report.pdf", 123, 7)]
         stats = _build_download_task_stats(total_files=1, found=1)
 
         with (
@@ -2348,9 +2361,9 @@ class FileRoutesHelperTests(unittest.TestCase):
 
         downloader = FakeDownloader()
         records = [
-            (101, "First.pdf", 123, 7),
-            (102, "Second.pdf", 456, 0),
-            (103, "Third.pdf", 789, 2),
+            DownloadFileRecord(101, "First.pdf", 123, 7),
+            DownloadFileRecord(102, "Second.pdf", 456, 0),
+            DownloadFileRecord(103, "Third.pdf", 789, 2),
         ]
         stats = _build_download_task_stats(total_files=3, found=3)
 
@@ -2400,8 +2413,8 @@ class FileRoutesHelperTests(unittest.TestCase):
 
         downloader = FakeDownloader()
         records = [
-            (101, "First.pdf", 123, 7),
-            (102, "Second.pdf", 456, 0),
+            DownloadFileRecord(101, "First.pdf", 123, 7),
+            DownloadFileRecord(102, "Second.pdf", 456, 0),
         ]
         stats = _build_download_task_stats(total_files=2, found=2)
 

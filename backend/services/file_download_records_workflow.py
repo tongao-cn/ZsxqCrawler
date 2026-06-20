@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, Optional, Sequence
+from typing import Any, Dict, NamedTuple, Optional, Sequence
 
 from backend.crawlers.zsxq_file_downloader import ZSXQFileDownloader
 from backend.services.file_downloader_runtime import (
@@ -76,6 +76,31 @@ def _build_download_file_info(
             "download_count": download_count,
         }
     }
+
+
+class DownloadFileRecord(NamedTuple):
+    file_id: int
+    name: str
+    size: int
+    download_count: int = 0
+
+    @classmethod
+    def from_row(cls, row: Sequence[Any]) -> "DownloadFileRecord":
+        file_id = int(row[0])
+        return cls(
+            file_id=file_id,
+            name=str(row[1] or f"file_{file_id}"),
+            size=int(row[2] or 0),
+            download_count=int(row[3] or 0),
+        )
+
+    def to_downloader_payload(self) -> Dict[str, Dict[str, Any]]:
+        return _build_download_file_info(
+            self.file_id,
+            self.name,
+            self.size,
+            self.download_count,
+        )
 
 
 def _download_result_stat_key(result: Any) -> str:
@@ -170,7 +195,7 @@ def _load_download_file_records(
     downloader: ZSXQFileDownloader,
     group_id: str,
     file_ids: Sequence[int],
-) -> tuple[list[tuple[int, str, int, int]], list[int]]:
+) -> tuple[list[DownloadFileRecord], list[int]]:
     ordered_ids = _unique_int_file_ids(file_ids)
     query, params = _build_selected_download_file_records_query(
         group_id,
@@ -186,14 +211,8 @@ def _load_download_file_records(
     return records, missing
 
 
-def _normalize_download_file_record(row: Sequence[Any]) -> tuple[int, str, int, int]:
-    file_id = int(row[0])
-    return (
-        file_id,
-        str(row[1] or f"file_{file_id}"),
-        int(row[2] or 0),
-        int(row[3] or 0),
-    )
+def _normalize_download_file_record(row: Sequence[Any]) -> DownloadFileRecord:
+    return DownloadFileRecord.from_row(row)
 
 
 def _add_file_search_condition(conditions: list[str], params: list[Any], search: Optional[str]) -> None:
@@ -247,7 +266,7 @@ def _load_filtered_download_file_records(
     status: Optional[str] = None,
     search: Optional[str] = None,
     max_files: Optional[int] = None,
-) -> list[tuple[int, str, int, int]]:
+) -> list[DownloadFileRecord]:
     query, params = _build_filtered_download_file_records_query(
         group_id,
         status,
@@ -261,7 +280,7 @@ def _load_filtered_download_file_records(
 def _run_download_records(
     task_id: str,
     downloader: ZSXQFileDownloader,
-    records: Sequence[tuple[int, str, int, int]],
+    records: Sequence[DownloadFileRecord],
     stats: Dict[str, int],
 ) -> Dict[str, int]:
     total_records = len(records)
@@ -277,16 +296,13 @@ def _run_download_records(
 def _download_record_for_task(
     task_id: str,
     downloader: ZSXQFileDownloader,
-    record: tuple[int, str, int, int],
+    record: DownloadFileRecord,
     index: int,
     total_records: int,
     stats: Dict[str, int],
 ) -> None:
-    file_id, file_name, file_size, download_count = record
-    add_task_log(task_id, f"【{index}/{total_records}】{file_name}")
-    result = downloader.download_file(
-        _build_download_file_info(file_id, file_name, file_size, download_count)
-    )
+    add_task_log(task_id, f"【{index}/{total_records}】{record.name}")
+    result = downloader.download_file(record.to_downloader_payload())
     stats[_download_result_stat_key(result)] += 1
 
 
@@ -303,7 +319,7 @@ def _complete_download_records_if_running(
 def _complete_download_records_task(
     task_id: str,
     downloader: ZSXQFileDownloader,
-    records: Sequence[tuple[int, str, int, int]],
+    records: Sequence[DownloadFileRecord],
     stats: Dict[str, int],
     completed_message: str,
 ) -> None:
