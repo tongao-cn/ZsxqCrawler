@@ -18,17 +18,17 @@ class StockTopicAnalysisRoutesHelperTests(unittest.IsolatedAsyncioTestCase):
 
     @unittest.skipUnless(HAS_ROUTE_DEPS, "stock topic analysis route dependencies are not installed")
     async def test_create_stock_task_response_preserves_task_creation_contract(self):
-        from backend.routes.stock_topic_analysis_routes import (
+        from backend.services.stock_topic_analysis_workflow import (
             TASK_CREATED_MESSAGE,
-            StockQuestionRequest,
+            StockQuestionTaskRequest,
             _create_stock_task_response,
             run_stock_question_task,
         )
 
-        request = StockQuestionRequest(question="固态电池怎么看")
+        request = StockQuestionTaskRequest(question="固态电池怎么看")
 
         with patch(
-            "backend.routes.stock_topic_analysis_routes.launch_task",
+            "backend.services.stock_topic_analysis_workflow.launch_task",
             return_value={"task_id": "task-qa", "message": TASK_CREATED_MESSAGE},
         ) as launch_task:
             response = _create_stock_task_response(
@@ -176,11 +176,14 @@ class StockTopicAnalysisRoutesHelperTests(unittest.IsolatedAsyncioTestCase):
         from backend.routes.stock_topic_analysis_routes import (
             StockQuestionRequest,
             create_stock_question_analysis,
+        )
+        from backend.services.stock_topic_analysis_workflow import (
+            StockQuestionTaskRequest,
             run_stock_question_task,
         )
 
         with patch(
-            "backend.routes.stock_topic_analysis_routes.launch_task",
+            "backend.services.stock_topic_analysis_workflow.launch_task",
             return_value={"task_id": "task-qa", "message": "任务已创建，正在后台执行"},
         ) as launch_task:
             result = await create_stock_question_analysis(
@@ -194,48 +197,41 @@ class StockTopicAnalysisRoutesHelperTests(unittest.IsolatedAsyncioTestCase):
             "A股问答 (群组: 51111112855254)",
             run_stock_question_task,
             "51111112855254",
-            StockQuestionRequest(question="固态电池怎么看"),
+            StockQuestionTaskRequest(question="固态电池怎么看"),
             metadata={"group_id": "51111112855254", "question": "固态电池怎么看"},
         )
 
     @unittest.skipUnless(HAS_ROUTE_DEPS, "stock topic analysis route dependencies are not installed")
     async def test_create_stock_question_task_response_preserves_task_contract(self):
         from backend.routes import stock_topic_analysis_routes
-        from backend.routes.stock_topic_analysis_routes import StockQuestionRequest, run_stock_question_task
+        from backend.routes.stock_topic_analysis_routes import StockQuestionRequest
 
         request = StockQuestionRequest(question="固态电池怎么看")
         expected = {"task_id": "task-qa", "message": "任务已创建，正在后台执行"}
         with patch(
-            "backend.routes.stock_topic_analysis_routes._create_stock_task_response",
+            "backend.routes.stock_topic_analysis_routes.create_stock_question_task",
             return_value=expected,
-        ) as create_response:
+        ) as create_task:
             result = stock_topic_analysis_routes._create_stock_question_task_response(
                 "51111112855254",
                 request,
             )
 
         self.assertEqual(expected, result)
-        create_response.assert_called_once_with(
-            "stock_question_analysis",
-            "A股问答 (群组: 51111112855254)",
-            {"group_id": "51111112855254", "question": "固态电池怎么看"},
-            run_stock_question_task,
-            "51111112855254",
-            request,
-        )
+        create_task.assert_called_once_with("51111112855254", "固态电池怎么看")
 
     @unittest.skipUnless(HAS_ROUTE_DEPS, "stock topic analysis route dependencies are not installed")
     async def test_run_stock_question_task_uses_runtime_workflow_lifecycle(self):
-        from backend.routes.stock_topic_analysis_routes import StockQuestionRequest, run_stock_question_task
+        from backend.services.stock_topic_analysis_workflow import StockQuestionTaskRequest, run_stock_question_task
 
-        request = StockQuestionRequest(question="固态电池怎么看")
+        request = StockQuestionTaskRequest(question="固态电池怎么看")
         with (
-            patch("backend.routes.stock_topic_analysis_routes.run_workflow") as run_workflow,
+            patch("backend.services.stock_topic_analysis_workflow.run_workflow") as run_workflow,
             patch(
-                "backend.routes.stock_topic_analysis_routes.answer_stock_question",
+                "backend.services.stock_topic_analysis_workflow.answer_stock_question",
                 return_value={"answer": "ok"},
             ) as answer_stock_question,
-            patch("backend.routes.stock_topic_analysis_routes.add_task_log") as add_task_log,
+            patch("backend.services.stock_topic_analysis_workflow.add_task_log") as add_task_log,
         ):
             run_stock_question_task("task-qa", "51111112855254", request)
 
@@ -256,16 +252,16 @@ class StockTopicAnalysisRoutesHelperTests(unittest.IsolatedAsyncioTestCase):
 
     @unittest.skipUnless(HAS_ROUTE_DEPS, "stock topic analysis route dependencies are not installed")
     async def test_run_stock_topic_analysis_task_uses_runtime_workflow_lifecycle(self):
-        from backend.routes.stock_topic_analysis_routes import StockTopicAnalysisRequest, run_stock_topic_analysis_task
+        from backend.services.stock_topic_analysis_workflow import StockTopicAnalysisTaskRequest, run_stock_topic_analysis_task
 
-        request = StockTopicAnalysisRequest(stockName="宁德时代")
+        request = StockTopicAnalysisTaskRequest(stock_name="宁德时代")
         with (
-            patch("backend.routes.stock_topic_analysis_routes.run_workflow") as run_workflow,
+            patch("backend.services.stock_topic_analysis_workflow.run_workflow") as run_workflow,
             patch(
-                "backend.routes.stock_topic_analysis_routes.analyze_stock_topics",
+                "backend.services.stock_topic_analysis_workflow.analyze_stock_topics",
                 return_value={"summary": "ok"},
             ) as analyze_stock_topics,
-            patch("backend.routes.stock_topic_analysis_routes.add_task_log") as add_task_log,
+            patch("backend.services.stock_topic_analysis_workflow.add_task_log") as add_task_log,
         ):
             run_stock_topic_analysis_task("task-1", "51111112855254", request)
 
@@ -286,7 +282,7 @@ class StockTopicAnalysisRoutesHelperTests(unittest.IsolatedAsyncioTestCase):
 
     @unittest.skipUnless(HAS_ROUTE_DEPS, "stock topic analysis route dependencies are not installed")
     async def test_stock_topic_batch_completed_message_preserves_summary_defaults(self):
-        from backend.routes.stock_topic_analysis_routes import _stock_topic_batch_completed_message
+        from backend.services.stock_topic_analysis_workflow import _stock_topic_batch_completed_message
 
         self.assertEqual(
             "批量个股话题分析完成：成功 2，失败 1，无话题 3",
@@ -303,16 +299,19 @@ class StockTopicAnalysisRoutesHelperTests(unittest.IsolatedAsyncioTestCase):
 
     @unittest.skipUnless(HAS_ROUTE_DEPS, "stock topic analysis route dependencies are not installed")
     async def test_stock_topic_batch_running_message_preserves_count_format(self):
-        from backend.routes.stock_topic_analysis_routes import _stock_topic_batch_running_message
+        from backend.services.stock_topic_analysis_workflow import _stock_topic_batch_running_message
 
         self.assertEqual("开始批量个股话题分析，共 2 只股票...", _stock_topic_batch_running_message(2))
         self.assertEqual("开始批量个股话题分析，共 0 只股票...", _stock_topic_batch_running_message(0))
 
     @unittest.skipUnless(HAS_ROUTE_DEPS, "stock topic analysis route dependencies are not installed")
     async def test_run_stock_topic_analysis_batch_task_uses_runtime_workflow_lifecycle(self):
-        from backend.routes.stock_topic_analysis_routes import StockTopicAnalysisBatchRequest, run_stock_topic_analysis_batch_task
+        from backend.services.stock_topic_analysis_workflow import (
+            StockTopicAnalysisBatchTaskRequest,
+            run_stock_topic_analysis_batch_task,
+        )
 
-        request = StockTopicAnalysisBatchRequest(stockNames=["宁德时代", "德龙激光", "宁德时代"])
+        request = StockTopicAnalysisBatchTaskRequest(stock_names=["宁德时代", "德龙激光", "宁德时代"])
         events = []
 
         def parse_stock_names(stock_names):
@@ -325,13 +324,13 @@ class StockTopicAnalysisRoutesHelperTests(unittest.IsolatedAsyncioTestCase):
             return {"summary": {"success": 2, "failed": 0, "no_topics": 0}}
 
         with (
-            patch("backend.routes.stock_topic_analysis_routes.run_workflow") as run_workflow,
-            patch("backend.routes.stock_topic_analysis_routes.parse_stock_names", side_effect=parse_stock_names),
+            patch("backend.services.stock_topic_analysis_workflow.run_workflow") as run_workflow,
+            patch("backend.services.stock_topic_analysis_workflow.parse_stock_names", side_effect=parse_stock_names),
             patch(
-                "backend.routes.stock_topic_analysis_routes.analyze_stock_topics_batch",
+                "backend.services.stock_topic_analysis_workflow.analyze_stock_topics_batch",
                 side_effect=analyze_stock_topics_batch,
             ),
-            patch("backend.routes.stock_topic_analysis_routes.add_task_log") as add_task_log,
+            patch("backend.services.stock_topic_analysis_workflow.add_task_log") as add_task_log,
         ):
             run_stock_topic_analysis_batch_task("task-batch", "51111112855254", request)
 
@@ -361,11 +360,14 @@ class StockTopicAnalysisRoutesHelperTests(unittest.IsolatedAsyncioTestCase):
         from backend.routes.stock_topic_analysis_routes import (
             StockTopicAnalysisRequest,
             create_stock_topic_analysis,
+        )
+        from backend.services.stock_topic_analysis_workflow import (
+            StockTopicAnalysisTaskRequest,
             run_stock_topic_analysis_task,
         )
 
         with patch(
-            "backend.routes.stock_topic_analysis_routes.launch_task",
+            "backend.services.stock_topic_analysis_workflow.launch_task",
             return_value={"task_id": "task-1", "message": "任务已创建，正在后台执行"},
         ) as launch_task:
             result = await create_stock_topic_analysis(
@@ -379,46 +381,42 @@ class StockTopicAnalysisRoutesHelperTests(unittest.IsolatedAsyncioTestCase):
             "个股话题分析 (群组: 51111112855254, 股票: 宁德时代)",
             run_stock_topic_analysis_task,
             "51111112855254",
-            StockTopicAnalysisRequest(stockName="宁德时代"),
+            StockTopicAnalysisTaskRequest(stock_name="宁德时代"),
             metadata={"group_id": "51111112855254", "stock_name": "宁德时代"},
         )
 
     @unittest.skipUnless(HAS_ROUTE_DEPS, "stock topic analysis route dependencies are not installed")
     async def test_create_stock_topic_task_response_preserves_task_contract(self):
         from backend.routes import stock_topic_analysis_routes
-        from backend.routes.stock_topic_analysis_routes import StockTopicAnalysisRequest, run_stock_topic_analysis_task
+        from backend.routes.stock_topic_analysis_routes import StockTopicAnalysisRequest
 
         request = StockTopicAnalysisRequest(stockName="宁德时代")
         expected = {"task_id": "task-1", "message": "任务已创建，正在后台执行"}
         with patch(
-            "backend.routes.stock_topic_analysis_routes._create_stock_task_response",
+            "backend.routes.stock_topic_analysis_routes.create_stock_topic_task",
             return_value=expected,
-        ) as create_response:
+        ) as create_task:
             result = stock_topic_analysis_routes._create_stock_topic_task_response(
                 "51111112855254",
                 request,
             )
 
         self.assertEqual(expected, result)
-        create_response.assert_called_once_with(
-            "stock_topic_analysis",
-            "个股话题分析 (群组: 51111112855254, 股票: 宁德时代)",
-            {"group_id": "51111112855254", "stock_name": "宁德时代"},
-            run_stock_topic_analysis_task,
-            "51111112855254",
-            request,
-        )
+        create_task.assert_called_once_with("51111112855254", "宁德时代")
 
     @unittest.skipUnless(HAS_ROUTE_DEPS, "stock topic analysis route dependencies are not installed")
     async def test_create_stock_topic_analysis_batch_enqueues_runtime_task(self):
         from backend.routes.stock_topic_analysis_routes import (
             StockTopicAnalysisBatchRequest,
             create_stock_topic_analysis_batch,
+        )
+        from backend.services.stock_topic_analysis_workflow import (
+            StockTopicAnalysisBatchTaskRequest,
             run_stock_topic_analysis_batch_task,
         )
 
         with patch(
-            "backend.routes.stock_topic_analysis_routes.launch_task",
+            "backend.services.stock_topic_analysis_workflow.launch_task",
             return_value={"task_id": "task-2", "message": "任务已创建，正在后台执行"},
         ) as launch_task:
             result = await create_stock_topic_analysis_batch(
@@ -432,38 +430,27 @@ class StockTopicAnalysisRoutesHelperTests(unittest.IsolatedAsyncioTestCase):
             "批量个股话题分析 (群组: 51111112855254, 股票数: 2)",
             run_stock_topic_analysis_batch_task,
             "51111112855254",
-            StockTopicAnalysisBatchRequest(stockNames=["宁德时代", "德龙激光"]),
+            StockTopicAnalysisBatchTaskRequest(stock_names=["宁德时代", "德龙激光"]),
             metadata={"group_id": "51111112855254", "stock_names": ["宁德时代", "德龙激光"]},
         )
 
     @unittest.skipUnless(HAS_ROUTE_DEPS, "stock topic analysis route dependencies are not installed")
     async def test_create_stock_topic_batch_task_response_preserves_task_contract(self):
         from backend.routes import stock_topic_analysis_routes
-        from backend.routes.stock_topic_analysis_routes import (
-            StockTopicAnalysisBatchRequest,
-            run_stock_topic_analysis_batch_task,
-        )
 
         stock_names = ["宁德时代", "德龙激光"]
         expected = {"task_id": "task-2", "message": "任务已创建，正在后台执行"}
         with patch(
-            "backend.routes.stock_topic_analysis_routes._create_stock_task_response",
+            "backend.routes.stock_topic_analysis_routes.create_stock_topic_batch_task",
             return_value=expected,
-        ) as create_response:
+        ) as create_task:
             result = stock_topic_analysis_routes._create_stock_topic_batch_task_response(
                 "51111112855254",
                 stock_names,
             )
 
         self.assertEqual(expected, result)
-        create_response.assert_called_once_with(
-            "stock_topic_analysis_batch",
-            "批量个股话题分析 (群组: 51111112855254, 股票数: 2)",
-            {"group_id": "51111112855254", "stock_names": ["宁德时代", "德龙激光"]},
-            run_stock_topic_analysis_batch_task,
-            "51111112855254",
-            StockTopicAnalysisBatchRequest(stockNames=["宁德时代", "德龙激光"]),
-        )
+        create_task.assert_called_once_with("51111112855254", ["宁德时代", "德龙激光"])
 
     @unittest.skipUnless(HAS_ROUTE_DEPS, "stock topic analysis route dependencies are not installed")
     async def test_read_latest_stock_topic_analysis_returns_service_result(self):
@@ -651,7 +638,7 @@ class StockTopicAnalysisRoutesHelperTests(unittest.IsolatedAsyncioTestCase):
                 "51111112855254",
                 StockTopicAnalysisBatchRequest(stockNames=["宁德时代"]),
             ),
-            "backend.routes.stock_topic_analysis_routes.parse_stock_names",
+            "backend.routes.stock_topic_analysis_routes._create_stock_topic_batch_task_response",
             "创建批量个股话题分析任务失败: route boom",
         )
         await assert_wrapped_error(

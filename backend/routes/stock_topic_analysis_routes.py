@@ -1,32 +1,28 @@
 from __future__ import annotations
 
-from typing import Callable
-
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from backend.services.stock_external_summary_service import get_external_stock_summaries
 from backend.services.stock_topic_analysis_service import (
-    answer_stock_question,
-    analyze_stock_topics,
-    analyze_stock_topics_batch,
     extract_stock_names_from_image,
     get_latest_stock_topic_analysis,
     get_latest_stock_topic_analyses,
-    parse_stock_names,
     search_stock_question_topics,
     search_stock_topics,
 )
-from backend.services.task_launch import TASK_CREATED_MESSAGE as _TASK_CREATED_MESSAGE, launch_task
-from backend.services.task_runtime import (
-    add_task_log,
-    build_task_log_callback,
-    run_workflow,
+from backend.services.stock_topic_analysis_workflow import (
+    TASK_CREATED_MESSAGE,
+    create_stock_question_task,
+    create_stock_topic_batch_task,
+    create_stock_topic_task,
+    run_stock_question_task,
+    run_stock_topic_analysis_batch_task,
+    run_stock_topic_analysis_task,
 )
 
 
 router = APIRouter(prefix="/api/analysis/stock-topics", tags=["stock-topic-analysis"])
-TASK_CREATED_MESSAGE = _TASK_CREATED_MESSAGE
 
 
 def _stock_topic_route_error(message: str, error: Exception) -> HTTPException:
@@ -52,92 +48,6 @@ class StockTopicImageExtractRequest(BaseModel):
 
 class StockQuestionRequest(BaseModel):
     question: str = Field(..., min_length=1, description="A股问题")
-
-
-def _build_stock_topic_log_callback(task_id: str) -> Callable[[str], None]:
-    return build_task_log_callback(
-        task_id,
-        lambda current_task_id, message: add_task_log(current_task_id, message),
-    )
-
-
-def _create_stock_task_response(
-    task_type: str,
-    description: str,
-    metadata: dict,
-    task_func,
-    group_id: str,
-    request,
-) -> dict[str, str]:
-    return launch_task(task_type, description, task_func, group_id, request, metadata=metadata)
-
-
-def _stock_topic_batch_completed_message(result: dict) -> str:
-    summary = result.get("summary") or {}
-    return (
-        f"批量个股话题分析完成：成功 {summary.get('success', 0)}，"
-        f"失败 {summary.get('failed', 0)}，无话题 {summary.get('no_topics', 0)}"
-    )
-
-
-def _stock_topic_batch_running_message(stock_count: int) -> str:
-    return f"开始批量个股话题分析，共 {stock_count} 只股票..."
-
-
-def run_stock_topic_analysis_task(task_id: str, group_id: str, request: StockTopicAnalysisRequest) -> None:
-    def work() -> dict:
-        log_callback = _build_stock_topic_log_callback(task_id)
-        log_callback(f"🔎 股票名称: {request.stockName}")
-        return analyze_stock_topics(group_id, request.stockName, log_callback=log_callback)
-
-    run_workflow(
-        task_id,
-        running_message="开始个股话题分析...",
-        completed_message="个股话题分析完成",
-        failure_label="个股话题分析",
-        work=work,
-    )
-
-
-def run_stock_question_task(task_id: str, group_id: str, request: StockQuestionRequest) -> None:
-    def work() -> dict:
-        log_callback = _build_stock_topic_log_callback(task_id)
-        log_callback(f"❓ 问题: {request.question}")
-        return answer_stock_question(group_id, request.question, log_callback=log_callback)
-
-    run_workflow(
-        task_id,
-        running_message="开始A股问答分析...",
-        completed_message="A股问答分析完成",
-        failure_label="A股问答",
-        work=work,
-    )
-
-
-def run_stock_topic_analysis_batch_task(task_id: str, group_id: str, request: StockTopicAnalysisBatchRequest) -> None:
-    workflow_state = {}
-
-    def running_message() -> str:
-        log_callback = _build_stock_topic_log_callback(task_id)
-        stock_names = parse_stock_names(request.stockNames)
-        workflow_state["log_callback"] = log_callback
-        workflow_state["stock_names"] = stock_names
-        return _stock_topic_batch_running_message(len(stock_names))
-
-    def work() -> dict:
-        return analyze_stock_topics_batch(
-            group_id,
-            workflow_state["stock_names"],
-            log_callback=workflow_state["log_callback"],
-        )
-
-    run_workflow(
-        task_id,
-        running_message=running_message,
-        completed_message=_stock_topic_batch_completed_message,
-        failure_label="个股话题分析",
-        work=work,
-    )
 
 
 def _latest_stock_topic_analysis_or_404(group_id: str, stock_name: str) -> dict:
@@ -168,37 +78,15 @@ def _stock_names_from_image(request: StockTopicImageExtractRequest) -> dict:
 
 
 def _create_stock_question_task_response(group_id: str, request: StockQuestionRequest) -> dict[str, str]:
-    return _create_stock_task_response(
-        "stock_question_analysis",
-        f"A股问答 (群组: {group_id})",
-        {"group_id": str(group_id), "question": request.question},
-        run_stock_question_task,
-        group_id,
-        request,
-    )
+    return create_stock_question_task(group_id, request.question)
 
 
 def _create_stock_topic_task_response(group_id: str, request: StockTopicAnalysisRequest) -> dict[str, str]:
-    return _create_stock_task_response(
-        "stock_topic_analysis",
-        f"个股话题分析 (群组: {group_id}, 股票: {request.stockName})",
-        {"group_id": str(group_id), "stock_name": request.stockName},
-        run_stock_topic_analysis_task,
-        group_id,
-        request,
-    )
+    return create_stock_topic_task(group_id, request.stockName)
 
 
 def _create_stock_topic_batch_task_response(group_id: str, stock_names: list[str]) -> dict[str, str]:
-    normalized_request = StockTopicAnalysisBatchRequest(stockNames=stock_names)
-    return _create_stock_task_response(
-        "stock_topic_analysis_batch",
-        f"批量个股话题分析 (群组: {group_id}, 股票数: {len(stock_names)})",
-        {"group_id": str(group_id), "stock_names": stock_names},
-        run_stock_topic_analysis_batch_task,
-        group_id,
-        normalized_request,
-    )
+    return create_stock_topic_batch_task(group_id, stock_names)
 
 
 @router.get("/{group_id}/questions")
@@ -273,10 +161,7 @@ async def create_stock_topic_analysis_batch(
     request: StockTopicAnalysisBatchRequest,
 ):
     try:
-        stock_names = parse_stock_names(request.stockNames)
-        if not stock_names:
-            raise ValueError("stock_names 不能为空")
-        return _create_stock_topic_batch_task_response(group_id, stock_names)
+        return _create_stock_topic_batch_task_response(group_id, request.stockNames)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     except Exception as exc:
