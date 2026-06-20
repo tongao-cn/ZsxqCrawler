@@ -199,14 +199,9 @@ class StockTopicAnalysisServiceHelperTests(unittest.TestCase):
             _stock_analysis_mode(has_existing_summary=True, has_topics_to_analyze=True),
         )
 
-    def test_stock_topic_analysis_runner_delegates_typed_requests(self):
+    def test_stock_topic_analysis_engine_delegates_typed_requests(self):
         from backend.services.stock_topic_analysis_runner import (
-            AnalyzeStockTopicsBatchRequest,
-            AnalyzeStockTopicsRequest,
-            AnswerStockQuestionRequest,
-            analyze_stock_topics,
-            analyze_stock_topics_batch,
-            answer_stock_question,
+            StockTopicAnalysisEngine,
         )
 
         class Operations:
@@ -226,28 +221,20 @@ class StockTopicAnalysisServiceHelperTests(unittest.TestCase):
                 return {"kind": "question"}
 
         operations = Operations()
+        engine = StockTopicAnalysisEngine(operations)
         log_callback = lambda message: None
 
         self.assertEqual(
             {"kind": "one"},
-            analyze_stock_topics(
-                operations,
-                AnalyzeStockTopicsRequest("group-1", "宁德时代", limit=3, log_callback=log_callback),
-            ),
+            engine.analyze_stock_topics("group-1", "宁德时代", limit=3, log_callback=log_callback),
         )
         self.assertEqual(
             {"kind": "batch"},
-            analyze_stock_topics_batch(
-                operations,
-                AnalyzeStockTopicsBatchRequest("group-1", ["宁德时代"], log_callback=log_callback, max_stocks=1),
-            ),
+            engine.analyze_stock_topics_batch("group-1", ["宁德时代"], log_callback=log_callback, max_stocks=1),
         )
         self.assertEqual(
             {"kind": "question"},
-            answer_stock_question(
-                operations,
-                AnswerStockQuestionRequest("group-1", "固态电池怎么看", log_callback=log_callback),
-            ),
+            engine.answer_stock_question("group-1", "固态电池怎么看", log_callback=log_callback),
         )
         self.assertEqual(["one", "batch", "question"], [kind for kind, _request in operations.calls])
         self.assertIs(log_callback, operations.calls[0][1].log_callback)
@@ -256,37 +243,39 @@ class StockTopicAnalysisServiceHelperTests(unittest.TestCase):
         self.assertEqual("固态电池怎么看", operations.calls[2][1].question)
 
     @unittest.skipUnless(HAS_SERVICE_DEPS, "stock topic analysis service dependencies are not installed")
-    def test_stock_topic_service_wrappers_delegate_to_runner_requests(self):
+    def test_stock_topic_service_wrappers_delegate_to_engine(self):
         from backend.services import stock_topic_analysis_service as service
 
         log_callback = lambda message: None
 
-        with patch.object(service, "run_stock_topic_analysis", return_value={"kind": "one"}) as run_one:
+        with patch.object(service._STOCK_TOPIC_ANALYSIS_ENGINE, "analyze_stock_topics", return_value={"kind": "one"}) as run_one:
             self.assertEqual(
                 {"kind": "one"},
                 service.analyze_stock_topics("group-1", "宁德时代", limit=2, log_callback=log_callback),
             )
-        run_one.assert_called_once()
-        self.assertIs(service._STOCK_TOPIC_ANALYSIS_OPERATIONS, run_one.call_args.args[0])
-        self.assertEqual("group-1", run_one.call_args.args[1].group_id)
-        self.assertEqual("宁德时代", run_one.call_args.args[1].stock_name)
-        self.assertEqual(2, run_one.call_args.args[1].limit)
-        self.assertIs(log_callback, run_one.call_args.args[1].log_callback)
+        run_one.assert_called_once_with("group-1", "宁德时代", limit=2, log_callback=log_callback)
 
-        with patch.object(service, "run_stock_topic_analysis_batch", return_value={"kind": "batch"}) as run_batch:
+        with patch.object(
+            service._STOCK_TOPIC_ANALYSIS_ENGINE,
+            "analyze_stock_topics_batch",
+            return_value={"kind": "batch"},
+        ) as run_batch:
             self.assertEqual(
                 {"kind": "batch"},
                 service.analyze_stock_topics_batch("group-1", ["宁德时代"], log_callback=log_callback, max_stocks=1),
             )
-        self.assertEqual(["宁德时代"], run_batch.call_args.args[1].stock_names)
-        self.assertEqual(1, run_batch.call_args.args[1].max_stocks)
+        run_batch.assert_called_once_with("group-1", ["宁德时代"], log_callback=log_callback, max_stocks=1)
 
-        with patch.object(service, "run_stock_question_answer", return_value={"kind": "question"}) as run_question:
+        with patch.object(
+            service._STOCK_TOPIC_ANALYSIS_ENGINE,
+            "answer_stock_question",
+            return_value={"kind": "question"},
+        ) as run_question:
             self.assertEqual(
                 {"kind": "question"},
                 service.answer_stock_question("group-1", "固态电池怎么看", log_callback=log_callback),
             )
-        self.assertEqual("固态电池怎么看", run_question.call_args.args[1].question)
+        run_question.assert_called_once_with("group-1", "固态电池怎么看", log_callback=log_callback)
 
     def test_chunks_splits_without_reordering(self):
         from backend.services.stock_topic_analysis_helpers import _chunks

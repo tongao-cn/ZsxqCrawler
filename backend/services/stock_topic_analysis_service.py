@@ -57,9 +57,7 @@ from backend.services.stock_topic_analysis_runner import (
     AnalyzeStockTopicsBatchRequest,
     AnalyzeStockTopicsRequest,
     AnswerStockQuestionRequest,
-    analyze_stock_topics as run_stock_topic_analysis,
-    analyze_stock_topics_batch as run_stock_topic_analysis_batch,
-    answer_stock_question as run_stock_question_answer,
+    StockTopicAnalysisEngine,
 )
 from backend.services.daily_topic_analysis_topics import clip_text as _clip
 from backend.services.stock_topic_question_payload import build_question_topic_payload_from_rows, load_question_topic_payload
@@ -905,6 +903,7 @@ class _StockTopicAnalysisOperations:
 
 
 _STOCK_TOPIC_ANALYSIS_OPERATIONS = _StockTopicAnalysisOperations()
+_STOCK_TOPIC_ANALYSIS_ENGINE = StockTopicAnalysisEngine(_STOCK_TOPIC_ANALYSIS_OPERATIONS)
 
 
 def analyze_stock_topics(
@@ -914,14 +913,11 @@ def analyze_stock_topics(
     limit: int | None = None,
     log_callback: Callable[[str], None] | None = None,
 ) -> Dict[str, Any]:
-    return run_stock_topic_analysis(
-        _STOCK_TOPIC_ANALYSIS_OPERATIONS,
-        AnalyzeStockTopicsRequest(
-            group_id=group_id,
-            stock_name=stock_name,
-            limit=limit,
-            log_callback=log_callback,
-        ),
+    return _STOCK_TOPIC_ANALYSIS_ENGINE.analyze_stock_topics(
+        group_id,
+        stock_name,
+        limit=limit,
+        log_callback=log_callback,
     )
 
 
@@ -932,14 +928,11 @@ def analyze_stock_topics_batch(
     log_callback: Callable[[str], None] | None = None,
     max_stocks: int | None = None,
 ) -> Dict[str, Any]:
-    return run_stock_topic_analysis_batch(
-        _STOCK_TOPIC_ANALYSIS_OPERATIONS,
-        AnalyzeStockTopicsBatchRequest(
-            group_id=group_id,
-            stock_names=stock_names,
-            log_callback=log_callback,
-            max_stocks=max_stocks,
-        ),
+    return _STOCK_TOPIC_ANALYSIS_ENGINE.analyze_stock_topics_batch(
+        group_id,
+        stock_names,
+        log_callback=log_callback,
+        max_stocks=max_stocks,
     )
 
 
@@ -949,13 +942,10 @@ def answer_stock_question(
     *,
     log_callback: Callable[[str], None] | None = None,
 ) -> Dict[str, Any]:
-    return run_stock_question_answer(
-        _STOCK_TOPIC_ANALYSIS_OPERATIONS,
-        AnswerStockQuestionRequest(
-            group_id=group_id,
-            question=question,
-            log_callback=log_callback,
-        ),
+    return _STOCK_TOPIC_ANALYSIS_ENGINE.answer_stock_question(
+        group_id,
+        question,
+        log_callback=log_callback,
     )
 
 
