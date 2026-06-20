@@ -7,15 +7,11 @@ from typing import Any, Dict
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
-from backend.services.a_share_analysis_service import (
-    DEFAULT_API_BASE as A_SHARE_DEFAULT_API_BASE,
-    DEFAULT_MODEL as A_SHARE_DEFAULT_MODEL,
-    DEFAULT_REASONING_EFFORT as A_SHARE_DEFAULT_REASONING_EFFORT,
-    DEFAULT_WIRE_API as A_SHARE_DEFAULT_WIRE_API,
+from backend.services.core_config_service import (
+    get_public_config,
+    masked_config_cookie,
+    update_auth_config,
 )
-from backend.core.crawler_runtime import clear_crawler_instance
-from backend.core.account_context import is_configured
-from backend.core.app_config import load_config
 from backend.services.group_read_model import (
     empty_database_stats_response,
     get_global_database_stats_read_model,
@@ -29,7 +25,7 @@ def _empty_database_stats_response(configured: bool) -> Dict[str, Any]:
 
 
 def _masked_config_cookie(cookie: str) -> str:
-    return "***" if cookie and cookie != "your_cookie_here" else "未配置"
+    return masked_config_cookie(cookie)
 
 
 def _core_route_error(message: str, error: Exception) -> HTTPException:
@@ -56,20 +52,7 @@ async def health_check():
 async def get_config():
     """获取当前配置"""
     try:
-        config = load_config()
-        auth_config = (config or {}).get("auth", {}) if config else {}
-        cookie = auth_config.get("cookie", "") if auth_config else ""
-
-        configured = is_configured()
-
-        return {
-            "configured": configured,
-            "auth": {
-                "cookie": _masked_config_cookie(cookie),
-            },
-            "database": config.get("database", {}) if config else {},
-            "download": config.get("download", {}) if config else {},
-        }
+        return get_public_config()
     except Exception as e:
         raise _core_route_error("获取配置失败", e)
 
@@ -78,41 +61,7 @@ async def get_config():
 async def update_config(config: ConfigModel):
     """更新配置"""
     try:
-        existing_config = load_config() or {}
-        ai_config = existing_config.get("ai", {}) if isinstance(existing_config.get("ai"), dict) else {}
-        ai_model = str(ai_config.get("model") or A_SHARE_DEFAULT_MODEL)
-        ai_api_base = str(ai_config.get("api_base") or A_SHARE_DEFAULT_API_BASE)
-        ai_wire_api = str(ai_config.get("wire_api") or A_SHARE_DEFAULT_WIRE_API)
-        ai_reasoning_effort = str(ai_config.get("reasoning_effort") or A_SHARE_DEFAULT_REASONING_EFFORT)
-
-        config_content = f"""# 知识星球数据采集器配置文件
-# 通过Web界面自动生成
-
-[auth]
-# 知识星球登录Cookie
-cookie = "{config.cookie}"
-
-[download]
-# 下载目录
-dir = "downloads"
-
-[ai]
-# OpenAI 兼容模型配置（仅从项目内 config.toml 读取）
-model = "{ai_model}"
-api_base = "{ai_api_base}"
-wire_api = "{ai_wire_api}"
-reasoning_effort = "{ai_reasoning_effort}"
-# API Key 请通过环境变量 OPENAI_API_KEY 提供，避免写入明文配置
-api_key = ""
-"""
-
-        config_path = "config.toml"
-        with open(config_path, "w", encoding="utf-8") as f:
-            f.write(config_content)
-
-        clear_crawler_instance()
-
-        return {"message": "配置更新成功", "success": True}
+        return update_auth_config(config.cookie)
     except Exception as e:
         raise _core_route_error("更新配置失败", e)
 

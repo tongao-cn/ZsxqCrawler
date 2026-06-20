@@ -56,7 +56,7 @@ class CoreRoutesHelperTests(unittest.TestCase):
 
         from backend.routes.core_routes import get_config
 
-        with patch("backend.routes.core_routes.load_config", side_effect=RuntimeError("boom")):
+        with patch("backend.routes.core_routes.get_public_config", side_effect=RuntimeError("boom")):
             with self.assertRaises(HTTPException) as caught:
                 asyncio.run(get_config())
 
@@ -71,12 +71,30 @@ class CoreRoutesHelperTests(unittest.TestCase):
 
         from backend.routes.core_routes import ConfigModel, update_config
 
-        with patch("backend.routes.core_routes.load_config", side_effect=RuntimeError("boom")):
+        with patch("backend.routes.core_routes.update_auth_config", side_effect=RuntimeError("boom")):
             with self.assertRaises(HTTPException) as caught:
                 asyncio.run(update_config(ConfigModel(cookie="zsxq_access_token=secret")))
 
         self.assertEqual(caught.exception.status_code, 500)
         self.assertEqual(caught.exception.detail, "更新配置失败: boom")
+
+    @unittest.skipUnless(HAS_CORE_ROUTE_DEPS, "core route dependencies are not installed")
+    def test_config_routes_delegate_to_service(self):
+        import asyncio
+
+        from backend.routes import core_routes
+
+        with patch.object(core_routes, "get_public_config", return_value={"configured": True}) as get_public:
+            result = asyncio.run(core_routes.get_config())
+
+        self.assertEqual({"configured": True}, result)
+        get_public.assert_called_once_with()
+
+        with patch.object(core_routes, "update_auth_config", return_value={"success": True}) as update_auth:
+            result = asyncio.run(core_routes.update_config(core_routes.ConfigModel(cookie="cookie-1")))
+
+        self.assertEqual({"success": True}, result)
+        update_auth.assert_called_once_with("cookie-1")
 
     @unittest.skipUnless(HAS_CORE_ROUTE_DEPS, "core route dependencies are not installed")
     def test_get_database_stats_route_preserves_wrapped_unexpected_error(self):
