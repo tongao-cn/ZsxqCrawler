@@ -65,6 +65,10 @@ from backend.services.file_status_service import (
     _resolve_download_record_status,
     _safe_filename,
 )
+from backend.services.file_task_lifecycle import (
+    fail_file_task as _fail_file_task_impl,
+    file_task_stopped_after_init as _file_task_stopped_after_init_impl,
+)
 from backend.services.file_topic_sync_workflow import (
     _complete_sync_files_from_topics_task,
     run_sync_files_from_topics_task,
@@ -163,16 +167,15 @@ def _fail_file_task(
     task_message: str,
     result: Optional[Dict[str, Any]] = None,
 ) -> None:
-    try:
-        if is_task_stopped(task_id):
-            return
-        add_task_log(task_id, f"❌ {log_message}")
-        if result is None:
-            update_task(task_id, "failed", task_message)
-        else:
-            update_task(task_id, "failed", task_message, result)
-    except Exception:
-        pass
+    _fail_file_task_impl(
+        task_id,
+        log_message,
+        task_message,
+        result,
+        is_stopped=is_task_stopped,
+        add_log=add_task_log,
+        update=update_task,
+    )
 
 
 def _enqueue_file_task(
@@ -206,7 +209,8 @@ def _enqueue_file_task(
 
 
 def _file_task_stopped_after_init(task_id: str) -> bool:
-    if is_task_stopped(task_id):
-        add_task_log(task_id, "🛑 任务在初始化过程中被停止")
-        return True
-    return False
+    return _file_task_stopped_after_init_impl(
+        task_id,
+        is_stopped=is_task_stopped,
+        add_log=add_task_log,
+    )
