@@ -556,6 +556,33 @@ class ZSXQFileDatabaseHelperTests(unittest.TestCase):
             db.cursor.executed,
         )
 
+    def test_select_download_file_records_dedupes_orders_and_counts_requested(self):
+        from backend.storage.zsxq_file_database import ZSXQFileDatabase
+
+        db = object.__new__(ZSXQFileDatabase)
+        db.cursor = FakeListPageCursor(
+            rows=[
+                (102, "Second.pdf", 456, 3),
+                (101, None, None, None),
+            ],
+        )
+        db.group_id = "303"
+
+        selection = ZSXQFileDatabase.select_download_file_records(db, ["101", 102, "101", 999])
+
+        query, params = db.cursor.executed[0]
+        self.assertIn("WHERE group_id = ? AND file_id IN (?, ?, ?)", query)
+        self.assertEqual((303, 101, 102, 999), params)
+        self.assertEqual(3, selection.requested_count)
+        self.assertEqual([999], selection.missing)
+        self.assertEqual(
+            [
+                (101, "file_101", 0, 0),
+                (102, "Second.pdf", 456, 3),
+            ],
+            selection.records,
+        )
+
     def test_get_file_status_record_scopes_and_preserves_status_row(self):
         from backend.storage.zsxq_file_database import ZSXQFileDatabase
 

@@ -16,14 +16,7 @@ from backend.services.file_task_lifecycle import (
 from backend.services.task_runtime import add_task_log, is_task_stopped, update_task
 from backend.storage.zsxq_file_database import (
     DownloadFileRecord,
-    _add_file_download_status_condition,
-    _add_file_search_condition,
-    _build_filtered_download_file_records_query,
-    _build_selected_download_file_records_query,
-    _fetch_download_file_rows,
-    _normalize_download_file_record,
-    _query_group_id,
-    _unique_int_file_ids,
+    DownloadFileSelection,
 )
 
 
@@ -84,8 +77,8 @@ def _load_download_file_records(
     downloader: ZSXQFileDownloader,
     group_id: str,
     file_ids: Sequence[int],
-) -> tuple[list[DownloadFileRecord], list[int]]:
-    return downloader.file_db.load_download_file_records(file_ids, group_id=group_id)
+) -> DownloadFileSelection:
+    return downloader.file_db.select_download_file_records(file_ids, group_id=group_id)
 
 
 def _load_filtered_download_file_records(
@@ -170,19 +163,19 @@ def run_selected_file_download_task(task_id: str, group_id: str, file_ids: Seque
         if _file_task_stopped_after_init(task_id):
             return
 
-        records, missing = _load_download_file_records(downloader, group_id, file_ids)
+        selection = _load_download_file_records(downloader, group_id, file_ids)
         stats = _build_download_task_stats(
-            total_files=len(_unique_int_file_ids(file_ids)),
-            found=len(records),
-            missing=len(missing),
+            total_files=selection.requested_count,
+            found=len(selection.records),
+            missing=len(selection.missing),
         )
-        if missing:
-            add_task_log(task_id, f"⚠️ {len(missing)} 个文件未在文件库中找到，已跳过")
-        if not records:
+        if selection.missing:
+            add_task_log(task_id, f"⚠️ {len(selection.missing)} 个文件未在文件库中找到，已跳过")
+        if not selection.records:
             _complete_empty_download_records_task(task_id, stats, "没有可下载的文件记录")
             return
 
-        _complete_download_records_task(task_id, downloader, records, stats, "选中文件下载完成")
+        _complete_download_records_task(task_id, downloader, selection.records, stats, "选中文件下载完成")
     except Exception as e:
         _fail_file_task(task_id, f"选中文件下载失败: {e}", f"选中文件下载失败: {e}")
     finally:

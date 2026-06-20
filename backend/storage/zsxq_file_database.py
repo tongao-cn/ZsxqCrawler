@@ -92,6 +92,12 @@ class DownloadFileRecord(NamedTuple):
         }
 
 
+class DownloadFileSelection(NamedTuple):
+    records: list[DownloadFileRecord]
+    missing: list[int]
+    requested_count: int
+
+
 class FileStatusRecord(NamedTuple):
     name: str
     size: Any
@@ -551,6 +557,14 @@ class ZSXQFileDatabase:
         file_ids: Sequence[int],
         group_id: Optional[Any] = None,
     ) -> tuple[list[DownloadFileRecord], list[int]]:
+        selection = self.select_download_file_records(file_ids, group_id=group_id)
+        return selection.records, selection.missing
+
+    def select_download_file_records(
+        self,
+        file_ids: Sequence[int],
+        group_id: Optional[Any] = None,
+    ) -> DownloadFileSelection:
         ordered_ids = _unique_int_file_ids(file_ids)
         query, params = _build_selected_download_file_records_query(
             self.group_id if group_id is None else group_id,
@@ -563,7 +577,7 @@ class ZSXQFileDatabase:
             for row in (by_file_id[file_id] for file_id in ordered_ids if file_id in by_file_id)
         ]
         missing = [file_id for file_id in ordered_ids if file_id not in by_file_id]
-        return records, missing
+        return DownloadFileSelection(records, missing, len(ordered_ids))
 
     def load_filtered_download_file_records(
         self,

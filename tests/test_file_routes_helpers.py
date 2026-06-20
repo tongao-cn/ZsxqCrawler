@@ -9,17 +9,13 @@ from backend.services.file_analysis_workflow import (
     _run_file_analysis_items,
 )
 from backend.services.file_download_records_workflow import (
-    DownloadFileRecord,
-    _add_file_search_condition,
     _build_download_file_info,
     _build_download_task_stats,
     _complete_download_records_task,
     _download_result_stat_key,
     _load_download_file_records,
     _load_filtered_download_file_records,
-    _query_group_id,
     _run_download_records,
-    _unique_int_file_ids,
 )
 from backend.services.file_single_download_workflow import _complete_successful_single_file_download
 from backend.services.file_workflow_service import (
@@ -34,10 +30,15 @@ from backend.services.file_workflow_service import (
     _resolve_download_record_status,
 )
 from backend.storage.zsxq_file_database import (
+    DownloadFileRecord,
+    DownloadFileSelection,
     FileAnalysisSourceRecord,
     FileListPage,
     FileListRecord,
     ZSXQFileDatabase,
+    _add_file_search_condition,
+    _query_group_id,
+    _unique_int_file_ids,
 )
 
 
@@ -2198,7 +2199,10 @@ class FileRoutesHelperTests(unittest.TestCase):
 
         with (
             patch("backend.services.file_download_records_workflow._create_file_downloader", return_value=downloader),
-            patch("backend.services.file_download_records_workflow._load_download_file_records", return_value=(records, [])),
+            patch(
+                "backend.services.file_download_records_workflow._load_download_file_records",
+                return_value=DownloadFileSelection(records, [], len(records)),
+            ),
             patch("backend.services.file_download_records_workflow._run_download_records") as run_download_records,
             patch("backend.services.file_download_records_workflow.update_task") as update_task,
             patch("backend.services.file_download_records_workflow.add_task_log"),
@@ -2249,7 +2253,10 @@ class FileRoutesHelperTests(unittest.TestCase):
 
         with (
             patch("backend.services.file_download_records_workflow._create_file_downloader", return_value=downloader),
-            patch("backend.services.file_download_records_workflow._load_download_file_records", return_value=([], [101, 102])),
+            patch(
+                "backend.services.file_download_records_workflow._load_download_file_records",
+                return_value=DownloadFileSelection([], [101, 102], 2),
+            ),
             patch("backend.services.file_download_records_workflow._run_download_records") as run_download_records,
             patch("backend.services.file_download_records_workflow.update_task") as update_task,
             patch("backend.services.file_download_records_workflow.add_task_log") as add_task_log,
@@ -2742,7 +2749,7 @@ class FileRoutesHelperTests(unittest.TestCase):
 
         downloader = FakeDownloader()
 
-        records, missing = _load_download_file_records(downloader, "123", [101, 102, 101, 999])
+        selection = _load_download_file_records(downloader, "123", [101, 102, 101, 999])
 
         query, params = downloader.file_db.cursor.executed[0]
         self.assertIn("WHERE group_id = ? AND file_id IN (?, ?, ?)", " ".join(query.split()))
@@ -2752,9 +2759,10 @@ class FileRoutesHelperTests(unittest.TestCase):
                 (101, "Report.PDF", 123, 7),
                 (102, "file_102", 0, 0),
             ],
-            records,
+            selection.records,
         )
-        self.assertEqual([999], missing)
+        self.assertEqual([999], selection.missing)
+        self.assertEqual(3, selection.requested_count)
 
     def test_load_download_file_records_keeps_empty_selection_query_shape(self):
         class FakeCursor:
@@ -2773,7 +2781,7 @@ class FileRoutesHelperTests(unittest.TestCase):
 
         downloader = FakeDownloader()
 
-        records, missing = _load_download_file_records(downloader, "123", [])
+        selection = _load_download_file_records(downloader, "123", [])
 
         query, params = downloader.file_db.cursor.executed[0]
         self.assertIn(
@@ -2781,8 +2789,9 @@ class FileRoutesHelperTests(unittest.TestCase):
             " ".join(query.split()),
         )
         self.assertEqual((123,), params)
-        self.assertEqual([], records)
-        self.assertEqual([], missing)
+        self.assertEqual([], selection.records)
+        self.assertEqual([], selection.missing)
+        self.assertEqual(0, selection.requested_count)
 
     def test_unique_int_file_ids_preserves_existing_selected_download_semantics(self):
         self.assertEqual([101, 102, 999], _unique_int_file_ids(["101", 102, "101", 999]))
