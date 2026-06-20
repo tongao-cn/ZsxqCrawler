@@ -10,6 +10,7 @@ HAS_GROUP_ROUTE_DEPS = find_spec("fastapi") is not None
 
 if HAS_GROUP_ROUTE_DEPS:
     from backend.routes import group_routes
+    from backend.services import group_workflow_service
 
 
 class FakePathManager:
@@ -135,8 +136,8 @@ class GroupRoutesHelperTests(unittest.TestCase):
         return asyncio.run(coro)
 
     def test_default_local_group_fields_and_entry(self):
-        fields = group_routes._default_local_group_fields(123)
-        entry = group_routes._build_local_group_entry(123, fields)
+        fields = group_workflow_service._default_local_group_fields(123)
+        entry = group_workflow_service._build_local_group_entry(123, fields)
 
         self.assertEqual(fields["local_name"], "本地群（123）")
         self.assertEqual(entry["group_id"], 123)
@@ -157,7 +158,7 @@ class GroupRoutesHelperTests(unittest.TestCase):
 
         with (
             patch.object(
-                group_routes,
+                group_workflow_service,
                 "_read_local_group_meta",
                 return_value={
                     "name": "Meta 群",
@@ -165,9 +166,13 @@ class GroupRoutesHelperTests(unittest.TestCase):
                     "join_time": "2024-01-01",
                 },
             ),
-            patch.object(group_routes, "_load_local_group_db_fields", side_effect=fake_load_local_group_db_fields),
+            patch.object(
+                group_workflow_service,
+                "_load_local_group_db_fields",
+                side_effect=fake_load_local_group_db_fields,
+            ),
         ):
-            entry = group_routes._build_local_group_entry_from_sources(123)
+            entry = group_workflow_service._build_local_group_entry_from_sources(123)
 
         expected_fields_before_db_load = {
             "local_name": "Meta 群",
@@ -188,8 +193,8 @@ class GroupRoutesHelperTests(unittest.TestCase):
         self.assertEqual("local", entry["source"])
 
     def test_apply_local_group_meta_preserves_defaults_for_empty_values(self):
-        fields = group_routes._default_local_group_fields(123)
-        updated = group_routes._apply_local_group_meta(
+        fields = group_workflow_service._default_local_group_fields(123)
+        updated = group_workflow_service._apply_local_group_meta(
             fields,
             {
                 "name": "Meta 群",
@@ -217,18 +222,18 @@ class GroupRoutesHelperTests(unittest.TestCase):
             meta_path = Path(tmp) / "group_meta.json"
             meta_path.write_text(json.dumps({"name": "本地缓存群"}, ensure_ascii=False), encoding="utf-8")
 
-            with patch.object(group_routes, "get_db_path_manager", return_value=FakePathManager(group_dir=tmp)):
-                meta = group_routes._read_local_group_meta(123)
+            with patch.object(group_workflow_service, "get_db_path_manager", return_value=FakePathManager(group_dir=tmp)):
+                meta = group_workflow_service._read_local_group_meta(123)
 
         self.assertEqual(meta, {"name": "本地缓存群"})
 
     def test_load_local_group_db_fields_fills_missing_values(self):
-        fields = group_routes._default_local_group_fields(123)
+        fields = group_workflow_service._default_local_group_fields(123)
 
         with patch.object(
-            group_routes, "ZSXQDatabase", FakeDb
+            group_workflow_service, "ZSXQDatabase", FakeDb
         ):
-            updated = group_routes._load_local_group_db_fields(123, fields)
+            updated = group_workflow_service._load_local_group_db_fields(123, fields)
 
         self.assertEqual(updated["local_name"], "数据库群")
         self.assertEqual(updated["local_type"], "paid")
@@ -297,7 +302,7 @@ class GroupRoutesHelperTests(unittest.TestCase):
         self.assertTrue(FakeStatsDb.last_instance.closed)
 
     def test_build_official_group_entry_maps_supported_fields(self):
-        entry = group_routes._build_official_group_entry(
+        entry = group_workflow_service._build_official_group_entry(
             {
                 "group_id": "123",
                 "name": "官方群",
@@ -317,7 +322,7 @@ class GroupRoutesHelperTests(unittest.TestCase):
         self.assertIsNone(entry["expiry_time"])
 
     def test_build_official_group_entry_skips_invalid_group_id(self):
-        self.assertIsNone(group_routes._build_official_group_entry({"group_id": "abc"}))
+        self.assertIsNone(group_workflow_service._build_official_group_entry({"group_id": "abc"}))
 
     def test_fetch_official_groups_uses_self_user_id(self):
         class FakeOfficialClient:
@@ -327,7 +332,7 @@ class GroupRoutesHelperTests(unittest.TestCase):
             def get_user_groups(self, user_id, limit=200, scope="all"):
                 return {"groups": [{"group_id": "123"}], "count": 1}
 
-        groups = group_routes._fetch_official_groups(FakeOfficialClient())
+        groups = group_workflow_service.fetch_official_groups(FakeOfficialClient())
 
         self.assertEqual([{"group_id": "123"}], groups)
 
@@ -340,11 +345,11 @@ class GroupRoutesHelperTests(unittest.TestCase):
             return result
 
         with (
-            patch.object(group_routes, "build_account_group_detection", return_value={"123": {"id": "acc"}}),
-            patch.object(group_routes, "get_cached_local_group_ids", return_value={"123", "456"}),
+            patch.object(group_workflow_service, "build_account_group_detection", return_value={"123": {"id": "acc"}}),
+            patch.object(group_workflow_service, "get_cached_local_group_ids", return_value={"123", "456"}),
             patch.object(
-                group_routes,
-                "_fetch_official_groups",
+                group_workflow_service,
+                "fetch_official_groups",
                 return_value=[
                     {
                         "group_id": "123",
@@ -353,11 +358,19 @@ class GroupRoutesHelperTests(unittest.TestCase):
                     }
                 ],
             ),
-            patch.object(group_routes, "_persist_group_meta_local", side_effect=lambda gid, info: persisted.append((gid, info["source"]))),
-            patch.object(group_routes, "_read_local_group_meta", return_value={}),
-            patch.object(group_routes, "_load_local_group_db_fields", side_effect=fake_load_local_group_db_fields),
+            patch.object(
+                group_workflow_service,
+                "_persist_group_meta_local",
+                side_effect=lambda gid, info: persisted.append((gid, info["source"])),
+            ),
+            patch.object(group_workflow_service, "_read_local_group_meta", return_value={}),
+            patch.object(
+                group_workflow_service,
+                "_load_local_group_db_fields",
+                side_effect=fake_load_local_group_db_fields,
+            ),
         ):
-            response = group_routes._get_groups_response()
+            response = group_workflow_service.get_groups_response()
 
         groups_by_id = {item["group_id"]: item for item in response["groups"]}
         self.assertEqual("account|local", groups_by_id[123]["source"])
@@ -387,7 +400,7 @@ class GroupRoutesHelperTests(unittest.TestCase):
             ],
             calls,
         )
-        self.assertEqual({"called": "_get_groups_response", "args": ()}, groups)
+        self.assertEqual({"called": "get_groups_response", "args": ()}, groups)
         self.assertEqual({"called": "_get_group_info_response", "args": ("123",)}, info)
         self.assertEqual({"called": "_get_group_stats_response", "args": (123,)}, stats)
         self.assertEqual({"called": "_get_group_database_info_response", "args": (123,)}, database_info)
@@ -445,7 +458,7 @@ class GroupRoutesHelperTests(unittest.TestCase):
             ],
             calls,
         )
-        self.assertEqual({"called": "_get_groups_response", "args": ()}, groups)
+        self.assertEqual({"called": "get_groups_response", "args": ()}, groups)
         self.assertEqual({"called": "_get_group_info_response", "args": ("123",)}, info)
         self.assertEqual({"called": "_get_group_stats_response", "args": (123,)}, stats)
         self.assertEqual({"called": "_get_group_database_info_response", "args": (123,)}, database_info)

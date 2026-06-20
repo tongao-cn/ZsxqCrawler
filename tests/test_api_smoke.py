@@ -43,9 +43,9 @@ class ApiSmokeTests(unittest.TestCase):
         from backend.main import create_app
 
         with (
-            patch("backend.routes.group_routes.build_account_group_detection", return_value={}),
-            patch("backend.routes.group_routes.get_cached_local_group_ids", return_value=set()),
-            patch("backend.routes.group_routes._fetch_official_groups", side_effect=RuntimeError("boom")),
+            patch("backend.services.group_workflow_service.build_account_group_detection", return_value={}),
+            patch("backend.services.group_workflow_service.get_cached_local_group_ids", return_value=set()),
+            patch("backend.services.group_workflow_service.fetch_official_groups", side_effect=RuntimeError("boom")),
         ):
             response = TestClient(create_app()).get("/api/groups")
 
