@@ -18,12 +18,12 @@ from backend.services.file_download_records_workflow import (
     _run_download_records,
     _unique_int_file_ids,
 )
+from backend.services.file_single_download_workflow import _complete_successful_single_file_download
 from backend.services.file_workflow_service import (
     _build_check_local_file_status_response,
     _build_file_status_response,
     _build_sync_files_response,
     _close_crawler_file_databases,
-    _complete_successful_single_file_download,
     _enqueue_file_task,
     _fail_file_task,
     _get_download_file_status,
@@ -2533,8 +2533,8 @@ class FileRoutesHelperTests(unittest.TestCase):
         }
 
         with (
-            patch("backend.services.file_workflow_service.add_task_log") as add_task_log,
-            patch("backend.services.file_workflow_service.update_task") as update_task,
+            patch("backend.services.file_single_download_workflow.add_task_log") as add_task_log,
+            patch("backend.services.file_single_download_workflow.update_task") as update_task,
         ):
             _complete_successful_single_file_download("task-1", downloader, 123, file_info)
 
@@ -2589,11 +2589,11 @@ class FileRoutesHelperTests(unittest.TestCase):
         )
 
         with (
-            patch("backend.services.file_workflow_service._create_file_downloader", return_value=downloader) as create_downloader,
-            patch("backend.services.file_workflow_service.update_task") as update_task,
-            patch("backend.services.file_workflow_service.add_task_log") as add_task_log,
-            patch("backend.services.file_workflow_service.is_task_stopped", return_value=True),
-            patch("backend.services.file_workflow_service._safe_remove_file_downloader") as safe_remove,
+            patch("backend.services.file_single_download_workflow._create_file_downloader", return_value=downloader) as create_downloader,
+            patch("backend.services.file_single_download_workflow.update_task") as update_task,
+            patch("backend.services.file_single_download_workflow.add_task_log") as add_task_log,
+            patch("backend.services.file_single_download_workflow.is_task_stopped", return_value=True),
+            patch("backend.services.file_single_download_workflow._safe_remove_file_downloader") as safe_remove,
         ):
             run_single_file_download_task_with_info("task-1", "123", 123)
 
@@ -2877,11 +2877,11 @@ class FileRoutesHelperTests(unittest.TestCase):
         from backend.services.file_workflow_service import run_single_file_download_task_with_info
 
         with (
-            patch("backend.services.file_workflow_service._create_file_downloader", return_value=downloader) as create_downloader,
-            patch("backend.services.file_workflow_service.update_task") as update_task,
-            patch("backend.services.file_workflow_service.add_task_log") as add_task_log,
-            patch("backend.services.file_workflow_service.is_task_stopped", return_value=False),
-            patch("backend.services.file_workflow_service._safe_remove_file_downloader") as safe_remove,
+            patch("backend.services.file_single_download_workflow._create_file_downloader", return_value=downloader) as create_downloader,
+            patch("backend.services.file_single_download_workflow.update_task") as update_task,
+            patch("backend.services.file_single_download_workflow.add_task_log") as add_task_log,
+            patch("backend.services.file_single_download_workflow.is_task_stopped", return_value=False),
+            patch("backend.services.file_single_download_workflow._safe_remove_file_downloader") as safe_remove,
         ):
             run_single_file_download_task_with_info(
                 "task-1",
