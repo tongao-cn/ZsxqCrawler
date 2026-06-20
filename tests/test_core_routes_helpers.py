@@ -86,12 +86,26 @@ class CoreRoutesHelperTests(unittest.TestCase):
 
         from backend.routes.core_routes import get_database_stats
 
-        with patch("backend.routes.core_routes.is_configured", side_effect=RuntimeError("boom")):
+        with patch("backend.routes.core_routes.get_global_database_stats_read_model", side_effect=RuntimeError("boom")):
             with self.assertRaises(HTTPException) as caught:
                 asyncio.run(get_database_stats())
 
         self.assertEqual(caught.exception.status_code, 500)
         self.assertEqual(caught.exception.detail, "获取数据库统计失败: boom")
+
+    @unittest.skipUnless(HAS_CORE_ROUTE_DEPS, "core route dependencies are not installed")
+    def test_get_database_stats_route_offloads_read_model_to_thread(self):
+        import asyncio
+
+        from backend.routes import core_routes
+
+        async def fake_to_thread(func, *args):
+            return {"called": func.__name__, "args": args}
+
+        with patch.object(core_routes.asyncio, "to_thread", side_effect=fake_to_thread):
+            result = asyncio.run(core_routes.get_database_stats())
+
+        self.assertEqual({"called": "get_global_database_stats_read_model", "args": ()}, result)
 
 
 if __name__ == "__main__":

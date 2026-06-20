@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from contextlib import closing
+import asyncio
 from datetime import datetime
 from typing import Any, Dict
 
@@ -16,28 +16,16 @@ from backend.services.a_share_analysis_service import (
 from backend.core.crawler_runtime import clear_crawler_instance
 from backend.core.account_context import is_configured
 from backend.core.app_config import load_config
-from backend.storage.zsxq_database import ZSXQDatabase
-from backend.storage.zsxq_file_database import ZSXQFileDatabase
+from backend.services.group_read_model import (
+    empty_database_stats_response,
+    get_global_database_stats_read_model,
+)
 
 router = APIRouter(tags=["core"])
 
 
 def _empty_database_stats_response(configured: bool) -> Dict[str, Any]:
-    return {
-        "configured": configured,
-        "topic_database": {
-            "stats": {},
-            "timestamp_info": {
-                "total_topics": 0,
-                "oldest_timestamp": "",
-                "newest_timestamp": "",
-                "has_data": False,
-            },
-        },
-        "file_database": {
-            "stats": {},
-        },
-    }
+    return empty_database_stats_response(configured)
 
 
 def _masked_config_cookie(cookie: str) -> str:
@@ -133,26 +121,6 @@ api_key = ""
 async def get_database_stats():
     """获取数据库统计信息"""
     try:
-        configured = is_configured()
-        if not configured:
-            return _empty_database_stats_response(False)
-
-        with closing(ZSXQDatabase()) as db:
-            aggregated_topic_stats = db.get_database_stats()
-            aggregated_timestamp_info = db.get_timestamp_range_info()
-
-        with closing(ZSXQFileDatabase()) as fdb:
-            aggregated_file_stats = fdb.get_database_stats()
-
-        return {
-            "configured": True,
-            "topic_database": {
-                "stats": aggregated_topic_stats,
-                "timestamp_info": aggregated_timestamp_info,
-            },
-            "file_database": {
-                "stats": aggregated_file_stats,
-            },
-        }
+        return await asyncio.to_thread(get_global_database_stats_read_model)
     except Exception as e:
         raise _core_route_error("获取数据库统计失败", e)

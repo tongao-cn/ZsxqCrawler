@@ -6,7 +6,6 @@ from typing import Any, Dict
 
 from fastapi import APIRouter, HTTPException
 
-from backend.core.db_path_manager import get_db_path_manager
 from backend.core.account_context import get_account_summary_for_group_auto
 from backend.core.local_group_runtime import (
     get_cached_local_group_ids,
@@ -17,7 +16,10 @@ from backend.services.group_workflow_service import (
     fetch_official_groups as _fetch_official_groups,
     get_groups_response as _get_groups_response,
 )
-from backend.storage.zsxq_database import ZSXQDatabase
+from backend.services.group_read_model import (
+    get_group_database_info_read_model,
+    get_group_stats_read_model,
+)
 from backend.storage.zsxq_file_database import ZSXQFileDatabase
 
 router = APIRouter(prefix="/api", tags=["groups"])
@@ -102,24 +104,11 @@ def _get_group_info_response(group_id: str) -> Dict[str, Any]:
 
 
 def _get_group_stats_response(group_id: int) -> Dict[str, Any]:
-    with closing(ZSXQDatabase(str(group_id))) as db:
-        return db.get_group_stats_summary()
+    return get_group_stats_read_model(group_id)
 
 
 def _get_group_database_info_response(group_id: int) -> Dict[str, Any]:
-    with closing(ZSXQDatabase(str(group_id))) as topics_db, closing(ZSXQFileDatabase(str(group_id))) as files_db:
-        db_info = {
-            "group_id": str(group_id),
-            "schema": "zsxq_core",
-            "group_dir": get_db_path_manager().get_group_dir(str(group_id)),
-            "topics": topics_db.get_database_stats(),
-            "files": files_db.get_database_stats(),
-        }
-
-    return {
-        "group_id": group_id,
-        "database_info": db_info,
-    }
+    return get_group_database_info_read_model(group_id)
 
 
 async def _groups() -> Dict[str, Any]:
