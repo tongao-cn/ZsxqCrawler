@@ -10,7 +10,11 @@ from backend.crawlers.official_topic_client import (
     normalize_official_topic,
     official_payload_topic,
 )
-from backend.services.topic_workflow_service import _clear_group_topic_data
+from backend.services.topic_workflow_service import (
+    TopicWorkflowError,
+    _clear_group_topic_data,
+    fetch_single_topic as fetch_single_topic_workflow,
+)
 from backend.storage.zsxq_database import TagNotFoundInGroupError, ZSXQDatabase
 
 router = APIRouter(prefix="/api", tags=["topics"])
@@ -42,19 +46,6 @@ def _rollback_topic_db(db) -> None:
 
 def _query_group_id(group_id: int | str) -> int | str:
     return int(group_id) if str(group_id).isdigit() else str(group_id)
-
-
-def _build_single_topic_response(topic_id: int, group_id: str, imported: str, comments_fetched: int, message: Optional[str] = None) -> dict:
-    response = {
-        "success": True,
-        "topic_id": topic_id,
-        "group_id": int(group_id),
-        "imported": imported,
-        "comments_fetched": comments_fetched,
-    }
-    if message:
-        response["message"] = message
-    return response
 
 
 def _validate_topic_group(topic: dict, group_id: str) -> None:
@@ -243,44 +234,6 @@ def _delete_single_topic_response(topic_id: int, group_id: int) -> dict:
         _close_topic_db(db)
 
 
-def _fetch_single_topic_response(group_id: str, topic_id: int, fetch_comments: bool = True) -> dict:
-    db = None
-    try:
-        db = ZSXQDatabase(str(group_id))
-        client = OfficialTopicClient()
-
-        if db.topic_exists(topic_id):
-            return _build_single_topic_response(topic_id, group_id, "skipped", 0, "话题已存在，跳过采集")
-
-        topic = official_payload_topic(client.get_topic_info(topic_id))
-        if not topic:
-            raise HTTPException(status_code=404, detail="未获取到有效话题数据")
-
-        _validate_topic_group(topic, group_id)
-
-        topic_data = normalize_official_topic(topic, group_id)
-
-        comments_fetched = 0
-        if fetch_comments:
-            comments_count = topic_data.get("comments_count", 0) or 0
-            comments = client.get_topic_comments(topic_id) if comments_count > 0 else []
-            if comments:
-                topic_data["show_comments"] = comments
-                comments_fetched = len(comments)
-
-        import_result = db.import_topic_data_with_result(topic_data)
-        if not import_result.succeeded:
-            message = import_result.error_message or "unknown error"
-            raise HTTPException(status_code=500, detail=f"话题导入失败: {message}")
-        db.conn.commit()
-
-        if import_result.status == "existing":
-            return _build_single_topic_response(topic_id, group_id, "skipped", comments_fetched, "话题已存在，跳过采集")
-        return _build_single_topic_response(topic_id, group_id, "created", comments_fetched)
-    finally:
-        _close_topic_db(db)
-
-
 def _get_group_tags_response(group_id: str) -> dict:
     db = None
     try:
@@ -356,7 +309,10 @@ async def _deleted_single_topic(topic_id: int, group_id: int) -> dict:
 
 
 async def _fetched_single_topic(group_id: str, topic_id: int, fetch_comments: bool) -> dict:
-    return await asyncio.to_thread(_fetch_single_topic_response, group_id, topic_id, fetch_comments)
+    try:
+        return await asyncio.to_thread(fetch_single_topic_workflow, group_id, topic_id, fetch_comments)
+    except TopicWorkflowError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail)
 
 
 async def _group_tags(group_id: str) -> dict:

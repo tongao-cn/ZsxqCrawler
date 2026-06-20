@@ -156,7 +156,7 @@ class TopicRoutesHelperTests(unittest.TestCase):
 
     @unittest.skipUnless(HAS_TOPIC_ROUTE_DEPS, "topic route dependencies are not installed")
     def test_build_single_topic_response_includes_optional_message(self):
-        from backend.routes.topic_routes import _build_single_topic_response
+        from backend.services.topic_workflow_service import _build_single_topic_response
 
         response = _build_single_topic_response(10, "123", "skipped", 0, "already exists")
 
@@ -184,8 +184,8 @@ class TopicRoutesHelperTests(unittest.TestCase):
         self.assertEqual(400, ctx.exception.status_code)
 
     @unittest.skipUnless(HAS_TOPIC_ROUTE_DEPS, "topic route dependencies are not installed")
-    def test_fetch_single_topic_response_commits_created_import_result(self):
-        from backend.routes.topic_routes import _fetch_single_topic_response
+    def test_fetch_single_topic_workflow_commits_created_import_result(self):
+        from backend.services.topic_workflow_service import fetch_single_topic
         from backend.storage.zsxq_database import TopicImportResult
 
         db = FakeSingleTopicImportDb(TopicImportResult("created", topic_id=14))
@@ -193,12 +193,15 @@ class TopicRoutesHelperTests(unittest.TestCase):
         topic_data = {"topic_id": 14, "group": {"group_id": 123}, "comments_count": 1}
 
         with (
-            patch("backend.routes.topic_routes.ZSXQDatabase", return_value=db),
-            patch("backend.routes.topic_routes.OfficialTopicClient", return_value=client),
-            patch("backend.routes.topic_routes.official_payload_topic", return_value={"topic_id": 14, "group": {"group_id": 123}}),
-            patch("backend.routes.topic_routes.normalize_official_topic", return_value=topic_data),
+            patch("backend.services.topic_workflow_service.ZSXQDatabase", return_value=db),
+            patch("backend.services.topic_workflow_service.OfficialTopicClient", return_value=client),
+            patch(
+                "backend.services.topic_workflow_service.official_payload_topic",
+                return_value={"topic_id": 14, "group": {"group_id": 123}},
+            ),
+            patch("backend.services.topic_workflow_service.normalize_official_topic", return_value=topic_data),
         ):
-            response = _fetch_single_topic_response("123", 14, fetch_comments=True)
+            response = fetch_single_topic("123", 14, fetch_comments=True)
 
         self.assertEqual(
             {
@@ -218,18 +221,18 @@ class TopicRoutesHelperTests(unittest.TestCase):
         self.assertEqual([{**topic_data, "show_comments": [{"comment_id": 1}]}], db.imported_topics)
 
     @unittest.skipUnless(HAS_TOPIC_ROUTE_DEPS, "topic route dependencies are not installed")
-    def test_fetch_single_topic_response_skips_existing_topic_via_storage(self):
-        from backend.routes.topic_routes import _fetch_single_topic_response
+    def test_fetch_single_topic_workflow_skips_existing_topic_via_storage(self):
+        from backend.services.topic_workflow_service import fetch_single_topic
         from backend.storage.zsxq_database import TopicImportResult
 
         db = FakeSingleTopicImportDb(TopicImportResult("created", topic_id=14), existing=True)
         client = FakeSingleTopicClient()
 
         with (
-            patch("backend.routes.topic_routes.ZSXQDatabase", return_value=db),
-            patch("backend.routes.topic_routes.OfficialTopicClient", return_value=client),
+            patch("backend.services.topic_workflow_service.ZSXQDatabase", return_value=db),
+            patch("backend.services.topic_workflow_service.OfficialTopicClient", return_value=client),
         ):
-            response = _fetch_single_topic_response("123", 14, fetch_comments=True)
+            response = fetch_single_topic("123", 14, fetch_comments=True)
 
         self.assertEqual(
             {
@@ -250,30 +253,32 @@ class TopicRoutesHelperTests(unittest.TestCase):
         self.assertTrue(db.closed)
 
     @unittest.skipUnless(HAS_TOPIC_ROUTE_DEPS, "topic route dependencies are not installed")
-    def test_fetch_single_topic_response_rejects_failed_import_result(self):
-        from fastapi import HTTPException
-
-        from backend.routes.topic_routes import _fetch_single_topic_response
+    def test_fetch_single_topic_workflow_rejects_failed_import_result(self):
+        from backend.services.topic_workflow_service import TopicWorkflowError, fetch_single_topic
         from backend.storage.zsxq_database import TopicImportResult
 
         db = FakeSingleTopicImportDb(TopicImportResult("error", topic_id=14, error_message="boom"))
         client = FakeSingleTopicClient()
 
         with (
-            patch("backend.routes.topic_routes.ZSXQDatabase", return_value=db),
-            patch("backend.routes.topic_routes.OfficialTopicClient", return_value=client),
-            patch("backend.routes.topic_routes.official_payload_topic", return_value={"topic_id": 14, "group": {"group_id": 123}}),
+            patch("backend.services.topic_workflow_service.ZSXQDatabase", return_value=db),
+            patch("backend.services.topic_workflow_service.OfficialTopicClient", return_value=client),
             patch(
-                "backend.routes.topic_routes.normalize_official_topic",
+                "backend.services.topic_workflow_service.official_payload_topic",
+                return_value={"topic_id": 14, "group": {"group_id": 123}},
+            ),
+            patch(
+                "backend.services.topic_workflow_service.normalize_official_topic",
                 return_value={"topic_id": 14, "group": {"group_id": 123}, "comments_count": 0},
             ),
         ):
-            with self.assertRaises(HTTPException) as ctx:
-                _fetch_single_topic_response("123", 14, fetch_comments=False)
+            with self.assertRaises(TopicWorkflowError) as ctx:
+                fetch_single_topic("123", 14, fetch_comments=False)
 
         self.assertEqual(500, ctx.exception.status_code)
         self.assertEqual("话题导入失败: boom", ctx.exception.detail)
         self.assertFalse(db.committed)
+        self.assertTrue(db.rolled_back)
         self.assertTrue(db.closed)
         self.assertEqual([14], db.topic_exists_calls)
         self.assertEqual(1, len(db.imported_topics))
@@ -657,7 +662,7 @@ class TopicRoutesHelperTests(unittest.TestCase):
                 (topic_routes._refresh_topic_response, (11, "group-1")),
                 (topic_routes._fetch_more_comments_response, (12, "group-1")),
                 (topic_routes._delete_single_topic_response, (13, 123)),
-                (topic_routes._fetch_single_topic_response, ("123", 14, False)),
+                (topic_routes.fetch_single_topic_workflow, ("123", 14, False)),
                 (topic_routes._get_group_tags_response, ("123",)),
                 (topic_routes._get_topics_by_tag_response, (123, 9, 2, 5)),
                 (topic_routes._delete_group_topics_response, (123,)),
@@ -668,7 +673,7 @@ class TopicRoutesHelperTests(unittest.TestCase):
         self.assertEqual({"called": "_refresh_topic_response", "args": (11, "group-1")}, refresh_result)
         self.assertEqual({"called": "_fetch_more_comments_response", "args": (12, "group-1")}, comments_result)
         self.assertEqual({"called": "_delete_single_topic_response", "args": (13, 123)}, delete_result)
-        self.assertEqual({"called": "_fetch_single_topic_response", "args": ("123", 14, False)}, fetch_single_result)
+        self.assertEqual({"called": "fetch_single_topic", "args": ("123", 14, False)}, fetch_single_result)
         self.assertEqual({"called": "_get_group_tags_response", "args": ("123",)}, tags_result)
         self.assertEqual({"called": "_get_topics_by_tag_response", "args": (123, 9, 2, 5)}, tag_topics_result)
         self.assertEqual({"called": "_delete_group_topics_response", "args": (123,)}, delete_group_result)
@@ -815,7 +820,7 @@ class TopicRoutesHelperTests(unittest.TestCase):
                 (topic_routes._refresh_topic_response, (11, "group-1")),
                 (topic_routes._fetch_more_comments_response, (12, "group-1")),
                 (topic_routes._delete_single_topic_response, (13, 123)),
-                (topic_routes._fetch_single_topic_response, ("123", 14, False)),
+                (topic_routes.fetch_single_topic_workflow, ("123", 14, False)),
                 (topic_routes._get_group_tags_response, ("123",)),
                 (topic_routes._get_topics_by_tag_response, (123, 9, 2, 5)),
                 (topic_routes._delete_group_topics_response, (123,)),
@@ -826,10 +831,24 @@ class TopicRoutesHelperTests(unittest.TestCase):
         self.assertEqual({"called": "_refresh_topic_response", "args": (11, "group-1")}, refresh_result)
         self.assertEqual({"called": "_fetch_more_comments_response", "args": (12, "group-1")}, comments_result)
         self.assertEqual({"called": "_delete_single_topic_response", "args": (13, 123)}, delete_result)
-        self.assertEqual({"called": "_fetch_single_topic_response", "args": ("123", 14, False)}, fetch_single_result)
+        self.assertEqual({"called": "fetch_single_topic", "args": ("123", 14, False)}, fetch_single_result)
         self.assertEqual({"called": "_get_group_tags_response", "args": ("123",)}, tags_result)
         self.assertEqual({"called": "_get_topics_by_tag_response", "args": (123, 9, 2, 5)}, tag_topics_result)
         self.assertEqual({"called": "_delete_group_topics_response", "args": (123,)}, delete_group_result)
+
+    @unittest.skipUnless(HAS_TOPIC_ROUTE_DEPS, "topic route dependencies are not installed")
+    def test_fetched_single_topic_maps_workflow_error_to_http_exception(self):
+        from backend.routes import topic_routes
+
+        async def fake_to_thread(func, *args):
+            raise topic_routes.TopicWorkflowError(404, "missing")
+
+        with patch("backend.routes.topic_routes.asyncio.to_thread", side_effect=fake_to_thread):
+            with self.assertRaises(topic_routes.HTTPException) as ctx:
+                self._run_async(topic_routes._fetched_single_topic("123", 14, False))
+
+        self.assertEqual(404, ctx.exception.status_code)
+        self.assertEqual("missing", ctx.exception.detail)
 
 
 if __name__ == "__main__":
