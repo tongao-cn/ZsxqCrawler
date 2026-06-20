@@ -208,6 +208,18 @@ def _enqueue_file_task(
     )
 
 
+def create_file_collect_task(group_id: str, request: Any) -> Dict[str, str]:
+    return launch_ingestion_task(
+        "collect_files",
+        "收集文件列表",
+        run_collect_files_task,
+        group_id,
+        group_id,
+        request,
+        prepend_group_id_to_args=False,
+    )
+
+
 def _file_task_stopped_after_init(task_id: str) -> bool:
     return _file_task_stopped_after_init_impl(
         task_id,

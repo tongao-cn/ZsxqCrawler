@@ -33,7 +33,7 @@ from backend.services.file_workflow_service import (
     _get_file_status_response,
     _get_files_response,
     _log_file_route_event,
-    run_collect_files_task,
+    create_file_collect_task,
     run_filtered_file_download_task,
     run_file_analysis_task,
     run_file_download_task,
@@ -101,15 +101,7 @@ async def _created_file_analysis(group_id: str, file_id: int, force: bool) -> di
 async def collect_files(group_id: str, request: FileCollectRequest, background_tasks: BackgroundTasks):
     """收集文件列表"""
     try:
-        return _enqueue_file_task(
-            background_tasks,
-            "collect_files",
-            "收集文件列表",
-            run_collect_files_task,
-            group_id,
-            request,
-            ingestion_group_id=group_id,
-        )
+        return create_file_collect_task(group_id, request)
     except HTTPException:
         raise
     except Exception as e:

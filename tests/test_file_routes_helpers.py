@@ -28,6 +28,8 @@ from backend.services.file_workflow_service import (
     _get_download_file_status,
     _get_file_status_response,
     _resolve_download_record_status,
+    create_file_collect_task,
+    run_collect_files_task,
 )
 from backend.storage.zsxq_file_database import (
     DownloadFileRecord,
@@ -259,6 +261,24 @@ class FileRoutesHelperTests(unittest.TestCase):
         self.assertEqual({"task_id": "task-1", "message": "任务已创建，正在后台执行"}, response)
         self.assertEqual([], background_tasks.calls)
 
+    def test_create_file_collect_task_uses_ingestion_launch_recipe(self):
+        with patch(
+            "backend.services.file_workflow_service.launch_ingestion_task",
+            return_value={"task_id": "task-1", "message": "任务已创建，正在后台执行"},
+        ) as launch:
+            response = create_file_collect_task("group-1", "request")
+
+        launch.assert_called_once_with(
+            "collect_files",
+            "收集文件列表",
+            run_collect_files_task,
+            "group-1",
+            "group-1",
+            "request",
+            prepend_group_id_to_args=False,
+        )
+        self.assertEqual({"task_id": "task-1", "message": "任务已创建，正在后台执行"}, response)
+
     def test_enqueue_file_task_can_attach_group_metadata(self):
         background_tasks = FakeBackgroundTasks()
 
@@ -286,6 +306,23 @@ class FileRoutesHelperTests(unittest.TestCase):
             message="任务已创建，正在后台执行",
         )
         self.assertEqual({"task_id": "task-1", "message": "任务已创建，正在后台执行"}, response)
+        self.assertEqual([], background_tasks.calls)
+
+    def test_collect_files_delegates_to_collect_launch_recipe(self):
+        from backend.routes.file_routes import collect_files
+        from backend.schemas.files import FileCollectRequest
+
+        background_tasks = FakeBackgroundTasks()
+        request = FileCollectRequest()
+
+        with patch(
+            "backend.routes.file_routes.create_file_collect_task",
+            return_value={"task_id": "task-1", "message": "ok"},
+        ) as create_task:
+            response = self._run_async(collect_files("group-1", request, background_tasks))
+
+        self.assertEqual({"task_id": "task-1", "message": "ok"}, response)
+        create_task.assert_called_once_with("group-1", request)
         self.assertEqual([], background_tasks.calls)
 
     def test_download_single_file_uses_group_ingestion_lock(self):
@@ -558,8 +595,13 @@ class FileRoutesHelperTests(unittest.TestCase):
         for route, route_args, route_kwargs, expected_detail, needs_api_key in cases:
             with self.subTest(route=route.__name__):
                 with ExitStack() as stack:
+                    patch_target = (
+                        "backend.routes.file_routes.create_file_collect_task"
+                        if route is file_routes.collect_files
+                        else "backend.routes.file_routes._enqueue_file_task"
+                    )
                     stack.enter_context(
-                        patch("backend.routes.file_routes._enqueue_file_task", side_effect=RuntimeError("boom"))
+                        patch(patch_target, side_effect=RuntimeError("boom"))
                     )
                     if needs_api_key:
                         stack.enter_context(patch("backend.routes.file_routes.has_openai_api_key", return_value=True))
@@ -624,7 +666,12 @@ class FileRoutesHelperTests(unittest.TestCase):
             original_error = file_routes.HTTPException(status_code=409, detail="conflict")
             with self.subTest(route=route.__name__):
                 with ExitStack() as stack:
-                    stack.enter_context(patch("backend.routes.file_routes._enqueue_file_task", side_effect=original_error))
+                    patch_target = (
+                        "backend.routes.file_routes.create_file_collect_task"
+                        if route is file_routes.collect_files
+                        else "backend.routes.file_routes._enqueue_file_task"
+                    )
+                    stack.enter_context(patch(patch_target, side_effect=original_error))
                     if needs_api_key:
                         stack.enter_context(patch("backend.routes.file_routes.has_openai_api_key", return_value=True))
 
