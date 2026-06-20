@@ -192,6 +192,32 @@ def _require_topic_excerpt(value: Any, *, topic_id: Any, stock_name: Any) -> str
     return require_topic_excerpt(value, topic_id=topic_id, stock_name=stock_name)
 
 
+def _load_topic_excerpt_fallbacks(conn: Any, group_id: str, topic_ids: List[str], stock_name: str) -> Dict[str, str]:
+    alias_terms = _build_stock_alias_terms(stock_name)
+    if not topic_ids or not alias_terms:
+        return {}
+    topic_placeholders = ",".join("?" for _ in topic_ids)
+    alias_conditions = " OR ".join("stock_name ILIKE ?" for _ in alias_terms)
+    rows = conn.execute(
+        f"""
+        SELECT topic_id, excerpt
+        FROM zsxq_a_share_topic_stock_extractions
+        WHERE group_id = ?
+          AND topic_id IN ({topic_placeholders})
+          AND COALESCE(TRIM(excerpt), '') <> ''
+          AND ({alias_conditions})
+        ORDER BY topic_date DESC, topic_id DESC
+        """,
+        [group_id, *topic_ids, *(f"%{term}%" for term in alias_terms)],
+    ).fetchall()
+    excerpts: Dict[str, str] = {}
+    for row in rows:
+        topic_id = str(row["topic_id"])
+        if topic_id not in excerpts:
+            excerpts[topic_id] = _normalize_text(row["excerpt"])
+    return excerpts
+
+
 def _score_relevant_topic(extracted_content: str, mode: str, matched_terms: Iterable[str], topic_row: Dict[str, Any]) -> int:
     if not extracted_content:
         return 0
@@ -223,6 +249,7 @@ def _empty_topic_summary(topic_id: Any) -> Dict[str, Any]:
 def _load_topic_summaries(conn: Any, group_id: str, topic_ids: List[str], stock_name: str = "") -> List[Dict[str, Any]]:
     if not topic_ids:
         return []
+    fallback_excerpts = _load_topic_excerpt_fallbacks(conn, group_id, topic_ids, stock_name)
     placeholders = ",".join("?" for _ in topic_ids)
     rows = conn.execute(
         f"""
@@ -253,10 +280,15 @@ def _load_topic_summaries(conn: Any, group_id: str, topic_ids: List[str], stock_
     ).fetchall()
     summaries: List[Dict[str, Any]] = []
     for row in rows:
-        excerpt = _require_topic_excerpt(row["excerpt"], topic_id=row["topic_id"], stock_name=stock_name)
+        topic_id = str(row["topic_id"])
+        excerpt = _require_topic_excerpt(
+            row["excerpt"] or fallback_excerpts.get(topic_id),
+            topic_id=topic_id,
+            stock_name=stock_name,
+        )
         summaries.append(
             {
-                "topic_id": str(row["topic_id"]),
+                "topic_id": topic_id,
                 "title": row["title"] or "",
                 "create_time": row["create_time"] or "",
                 "likes_count": int(row["likes_count"] or 0),

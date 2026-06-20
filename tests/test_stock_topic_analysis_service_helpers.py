@@ -674,6 +674,8 @@ class StockTopicAnalysisServiceHelperTests(unittest.TestCase):
         }
         latest_cursor = Mock()
         latest_cursor.fetchone.return_value = row
+        fallback_cursor = Mock()
+        fallback_cursor.fetchall.return_value = []
         topics_cursor = Mock()
         topics_cursor.fetchall.return_value = [
             {
@@ -702,7 +704,7 @@ class StockTopicAnalysisServiceHelperTests(unittest.TestCase):
             },
         ]
         conn = Mock()
-        conn.execute.side_effect = [latest_cursor, topics_cursor]
+        conn.execute.side_effect = [latest_cursor, fallback_cursor, topics_cursor]
 
         with patch("backend.services.stock_topic_analysis_service.connect", return_value=conn):
             result = get_latest_stock_topic_analysis("51111112855254", "宁德时代")
@@ -737,6 +739,8 @@ class StockTopicAnalysisServiceHelperTests(unittest.TestCase):
         }
         latest_cursor = Mock()
         latest_cursor.fetchone.return_value = row
+        fallback_cursor = Mock()
+        fallback_cursor.fetchall.return_value = []
         topics_cursor = Mock()
         topics_cursor.fetchall.return_value = [
             {
@@ -753,11 +757,63 @@ class StockTopicAnalysisServiceHelperTests(unittest.TestCase):
             },
         ]
         conn = Mock()
-        conn.execute.side_effect = [latest_cursor, topics_cursor]
+        conn.execute.side_effect = [latest_cursor, fallback_cursor, topics_cursor]
 
         with patch("backend.services.stock_topic_analysis_service.connect", return_value=conn):
             with self.assertRaisesRegex(RuntimeError, "缺少 宁德时代 的 excerpt"):
                 get_latest_stock_topic_analysis("51111112855254", "宁德时代")
+
+    @unittest.skipUnless(HAS_SERVICE_DEPS, "stock topic analysis service dependencies are not installed")
+    def test_get_latest_stock_topic_analysis_uses_alias_excerpt_fallback(self):
+        from backend.services.stock_topic_analysis_service import get_latest_stock_topic_analysis
+
+        row = {
+            "group_id": "51111112855254",
+            "stock_name": "信科移动",
+            "stock_code": "",
+            "market": "",
+            "topic_ids_json": '["101"]',
+            "concepts_json": "[]",
+            "recommendation_count": 1,
+            "summary_markdown": "summary",
+            "model": "test-model",
+            "status": "completed",
+            "error": "",
+            "created_at": "2026-05-10T10:00:00",
+            "updated_at": "2026-05-10T10:01:00",
+        }
+        latest_cursor = Mock()
+        latest_cursor.fetchone.return_value = row
+        fallback_cursor = Mock()
+        fallback_cursor.fetchall.return_value = [
+            {
+                "topic_id": "101",
+                "excerpt": "信科移动U 商业航天相关摘录。",
+            }
+        ]
+        topics_cursor = Mock()
+        topics_cursor.fetchall.return_value = [
+            {
+                "topic_id": "101",
+                "title": "topic 101",
+                "create_time": "2026-05-10T09:00:00",
+                "likes_count": 1,
+                "comments_count": 2,
+                "reading_count": 3,
+                "talk_text": "content 101",
+                "question_text": "",
+                "answer_text": "",
+                "excerpt": "",
+            },
+        ]
+        conn = Mock()
+        conn.execute.side_effect = [latest_cursor, fallback_cursor, topics_cursor]
+
+        with patch("backend.services.stock_topic_analysis_service.connect", return_value=conn):
+            result = get_latest_stock_topic_analysis("51111112855254", "信科移动")
+
+        self.assertEqual("信科移动U 商业航天相关摘录。", result["topics"][0]["excerpt"])
+        self.assertEqual("信科移动U 商业航天相关摘录。", result["topics"][0]["content_preview"])
 
     @unittest.skipUnless(HAS_SERVICE_DEPS, "stock topic analysis service dependencies are not installed")
     def test_build_analysis_topic_payload_uses_search_result_excerpt(self):
