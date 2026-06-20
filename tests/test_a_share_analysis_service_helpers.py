@@ -396,6 +396,23 @@ class AShareAnalysisServiceHelperTests(unittest.TestCase):
         self.assertIn("业绩下修", messages[1]["content"])
         self.assertIn("营收利润重算后大幅下滑", messages[1]["content"])
 
+    def test_call_openai_extract_topic_stocks_rejects_invalid_json(self):
+        from backend.services import a_share_analysis_service as service
+
+        original_content = _FakeOpenAIResponseMessage.content
+        _FakeOpenAIResponseMessage.content = "not json"
+        try:
+            with patch("backend.services.ai_client.OpenAI", _FakeOpenAIClient):
+                with self.assertRaisesRegex(RuntimeError, "AI 公司抽取结果不是合法 JSON"):
+                    service.call_openai_extract_topic_stocks(
+                        "这是一段足够长的内容，用于触发 A 股公司抽取模型返回解析。",
+                        api_key="test-key",
+                        model="test-model",
+                        wire_api="chat",
+                    )
+        finally:
+            _FakeOpenAIResponseMessage.content = original_content
+
     def test_call_openai_extract_topic_stocks_skips_empty_or_too_short_content(self):
         from backend.services import a_share_analysis_service as service
 

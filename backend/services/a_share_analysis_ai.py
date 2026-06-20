@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import os
 import time
 from typing import Any, Callable, Dict, List, Optional, Set
@@ -19,7 +18,7 @@ from backend.services.ai_client import (
     is_retryable_ai_error,
     responses_json_schema_text_format,
 )
-from backend.services.ai_json_utils import extract_json_object
+from backend.services.ai_json_utils import JsonObjectParseError, require_json_object
 from backend.services.stock_concept_taxonomy import normalize_stock_concept_term
 
 
@@ -84,7 +83,7 @@ def _extract_response_text(response: Any) -> str:
 
 
 def _extract_json_object(text: str) -> Dict[str, Any]:
-    return extract_json_object(text)
+    return require_json_object(text, label="AI 公司抽取结果")
 
 
 def _safe_float(value: Any, default: float = 0.0) -> float:
@@ -324,7 +323,7 @@ def call_openai_extract_topic_stocks(
 
     try:
         cleaned = _parse_topic_stock_extraction_output(message)
-    except json.JSONDecodeError as exc:
+    except JsonObjectParseError as exc:
         raise RuntimeError(f"AI 公司抽取结果不是合法 JSON: {message[:200]}") from exc
 
     debug_logger(f"openai-compatible model extracted topic stocks: {len(cleaned)}")
