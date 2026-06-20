@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-from typing import Callable, Dict, Any, Optional, List
+from typing import Any, Callable, Dict, List, NamedTuple, Optional
 
 from backend.storage.db_compat import connect
 from backend.storage.zsxq_database_helpers import (
@@ -69,6 +69,16 @@ from backend.storage.zsxq_database_helpers import (
     user_liked_emoji_insert_statement,
     user_insert_statement,
 )
+
+
+class TopicImportResult(NamedTuple):
+    status: str
+    topic_id: Optional[Any] = None
+    error_message: Optional[str] = None
+
+    @property
+    def succeeded(self) -> bool:
+        return self.status != "error"
 
 
 _DATABASE_STATS_TABLES = (
@@ -436,30 +446,34 @@ class ZSXQDatabase:
 
     def import_topic_data(self, topic_data: Dict[str, Any]) -> bool:
         """导入话题数据到数据库"""
+        return self.import_topic_data_with_result(topic_data).succeeded
+
+    def import_topic_data_with_result(self, topic_data: Dict[str, Any]) -> TopicImportResult:
+        """导入话题数据到数据库，并返回存储侧导入结果。"""
         try:
             topic_id = topic_data.get('topic_id')
             group_info = topic_data.get('group', {})
             
             if not topic_id:
-                return False
+                return TopicImportResult("error", topic_id=topic_id, error_message="missing_topic_id")
 
             # 如果话题已存在，直接跳过，避免重复写入或更新
             if self._topic_exists(topic_id):
                 self._sync_existing_topic_talk_files(topic_data)
                 print(f"话题 {topic_id} 已存在，跳过导入")
-                return True
+                return TopicImportResult("existing", topic_id=topic_id)
             
 
             self._import_new_topic_payloads(topic_id, topic_data, group_info)
 
-            return True
+            return TopicImportResult("created", topic_id=topic_id)
             
         except Exception as e:
             self.conn.rollback()
             print(f"导入话题数据失败: {e}")
             import traceback
             traceback.print_exc()
-            return False
+            return TopicImportResult("error", error_message=str(e))
 
     def _topic_exists(self, topic_id: int) -> bool:
         sql, params = _topic_exists_query(topic_id, self.group_id)

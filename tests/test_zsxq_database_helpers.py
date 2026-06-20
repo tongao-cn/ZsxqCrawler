@@ -2095,6 +2095,25 @@ class ZSXQDatabaseHelperTests(unittest.TestCase):
         self.assertIn("获取最新话题时间戳失败", mocked_print.call_args_list[0].args[0])
         self.assertIn("获取最老话题时间戳失败", mocked_print.call_args_list[1].args[0])
 
+    def test_import_topic_data_with_result_reports_existing_topic(self):
+        from backend.storage.zsxq_database import TopicImportResult, ZSXQDatabase
+
+        cursor = FakeCursor()
+        cursor.row = (1,)
+        db = object.__new__(ZSXQDatabase)
+        db.cursor = cursor
+        db.conn = FakeConnection()
+        db.group_id = "303"
+        synced = []
+        db._sync_topic_files_to_core_tables = lambda topic, files: synced.append((topic, files))
+
+        topic_data = {"topic_id": 202, "talk": {"files": [{"file_id": 101}]}}
+        with patch("builtins.print"):
+            result = ZSXQDatabase.import_topic_data_with_result(db, topic_data)
+
+        self.assertEqual(TopicImportResult("existing", topic_id=202), result)
+        self.assertEqual([(topic_data, [{"file_id": 101}])], synced)
+
     def test_import_topic_data_existing_topic_preserves_skip_and_file_sync(self):
         from backend.storage.zsxq_database import ZSXQDatabase
 

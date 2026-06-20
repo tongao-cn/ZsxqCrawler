@@ -501,12 +501,11 @@ def _query_group_id(group_id: str) -> Any:
     value = str(group_id or "").strip()
     return int(value) if value.isdigit() else value
 
-def _official_import_topic(db: ZSXQDatabase, group_id: str, topic_data: dict[str, Any]) -> str:
-    topic_id = topic_data.get("topic_id")
-    exists = _official_topic_exists(db, group_id, topic_id)
-    if not db.import_topic_data(topic_data):
+def _official_import_topic(db: ZSXQDatabase, _group_id: str, topic_data: dict[str, Any]) -> str:
+    result = db.import_topic_data_with_result(topic_data)
+    if not result.succeeded:
         return "error"
-    return "updated" if exists else "new"
+    return "updated" if result.status == "existing" else "new"
 
 def _official_topic_exists(db: ZSXQDatabase, group_id: str, topic_id: Any) -> bool:
     db.cursor.execute(
