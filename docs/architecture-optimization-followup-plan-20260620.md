@@ -72,3 +72,7 @@ npm --prefix frontend run build
 - 五个候选均完成最小可验证优化。
 - 每片独立窄提交。
 - 最终工作区干净。
+
+## 进度记录
+
+- P1 已完成：A-share、daily topic、daily stock concept route 的 task 创建/runner 逻辑已统一委托 `workflow_task_launch`，route 只保留 request/error adapter；focused tests 36 个通过，route 残留 lifecycle 关键词扫描无命中。

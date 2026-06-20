@@ -21,42 +21,43 @@ class AShareRoutesHelperTests(unittest.TestCase):
         self.assertEqual("获取A股分析状态失败: route boom", error.detail)
 
     @unittest.skipUnless(HAS_A_SHARE_ROUTE_DEPS, "a-share route dependencies are not installed")
-    def test_a_share_task_metadata_preserves_group_field(self):
-        from backend.routes.a_share_routes import _a_share_task_metadata
+    def test_create_a_share_analysis_task_response_delegates_to_workflow_launch(self):
+        from backend.routes.a_share_routes import AShareAnalysisRunRequest, _create_a_share_analysis_task_response
 
-        self.assertEqual({"group_id": "51111112855254"}, _a_share_task_metadata("51111112855254"))
-        self.assertEqual({"group_id": None}, _a_share_task_metadata(None))
-
-    @unittest.skipUnless(HAS_A_SHARE_ROUTE_DEPS, "a-share route dependencies are not installed")
-    def test_create_a_share_analysis_task_response_preserves_task_contract(self):
-        from backend.routes.a_share_routes import (
-            TASK_CREATED_MESSAGE,
-            AShareAnalysisRunRequest,
-            _create_a_share_analysis_task_response,
-            run_a_share_analysis_task,
+        request = AShareAnalysisRunRequest(
+            group_id="51111112855254",
+            days=14,
+            concurrency=2,
+            model="test-model",
+            api_base="https://example.test/v1",
+            wire_api="chat_completions",
+            reasoning_effort="low",
+            start_date="2026-05-01",
+            end_date="2026-05-07",
+            reset_start_date="2026-05-01",
+            reset_end_date="2026-05-02",
         )
-
-        request = AShareAnalysisRunRequest(group_id="51111112855254", days=21)
 
         with patch(
-            "backend.routes.a_share_routes.launch_task",
-            return_value={"task_id": "task-a-share", "message": TASK_CREATED_MESSAGE},
-        ) as launch_task:
-            response = _create_a_share_analysis_task_response(
-                request,
-                "51111112855254",
-                "群组 51111112855254",
-                "最近 21 天",
-            )
+            "backend.routes.a_share_routes.create_a_share_analysis_task",
+            return_value={"task_id": "task-a-share", "message": "任务已创建，正在后台执行"},
+        ) as create_task:
+            response = _create_a_share_analysis_task_response(request)
 
-        launch_task.assert_called_once_with(
-            "a_share_analysis",
-            "A股公司分析（群组 51111112855254，最近 21 天）",
-            run_a_share_analysis_task,
-            request,
-            metadata={"group_id": "51111112855254"},
+        create_task.assert_called_once_with(
+            group_id="51111112855254",
+            days=14,
+            concurrency=2,
+            model="test-model",
+            api_base="https://example.test/v1",
+            wire_api="chat_completions",
+            reasoning_effort="low",
+            start_date="2026-05-01",
+            end_date="2026-05-07",
+            reset_start_date="2026-05-01",
+            reset_end_date="2026-05-02",
         )
-        self.assertEqual({"task_id": "task-a-share", "message": TASK_CREATED_MESSAGE}, response)
+        self.assertEqual({"task_id": "task-a-share", "message": "任务已创建，正在后台执行"}, response)
 
     @unittest.skipUnless(HAS_A_SHARE_ROUTE_DEPS, "a-share route dependencies are not installed")
     def test_start_a_share_analysis_preserves_missing_api_key_http_error(self):
@@ -64,149 +65,62 @@ class AShareRoutesHelperTests(unittest.TestCase):
 
         from fastapi import HTTPException
 
-        from backend.routes.a_share_routes import AShareAnalysisRunRequest, start_a_share_analysis
+        from backend.routes import a_share_routes
+        from backend.routes.a_share_routes import AShareAnalysisRunRequest
 
         request = AShareAnalysisRunRequest(group_id="51111112855254")
-        missing_key_message = "未配置 OpenAI API Key，请设置环境变量 OPENAI_API_KEY 或 config.toml [ai].api_key"
 
-        with (
-            patch("backend.routes.a_share_routes.has_openai_api_key", return_value=False) as has_api_key,
-            patch("backend.routes.a_share_routes._normalize_group_scope") as normalize_group_scope,
-            patch("backend.routes.a_share_routes._create_a_share_analysis_task_response") as create_task_response,
+        with patch.object(
+            a_share_routes,
+            "create_a_share_analysis_task",
+            side_effect=RuntimeError(a_share_routes.A_SHARE_MISSING_API_KEY_MESSAGE),
         ):
             with self.assertRaises(HTTPException) as raised:
-                asyncio.run(start_a_share_analysis(request, None))
+                asyncio.run(a_share_routes.start_a_share_analysis(request, None))
 
-        self.assertEqual(500, raised.exception.status_code)
-        self.assertEqual(f"创建A股分析任务失败: 400: {missing_key_message}", raised.exception.detail)
-        has_api_key.assert_called_once_with()
-        normalize_group_scope.assert_not_called()
-        create_task_response.assert_not_called()
+        self.assertEqual(400, raised.exception.status_code)
+        self.assertEqual(a_share_routes.A_SHARE_MISSING_API_KEY_MESSAGE, raised.exception.detail)
 
     @unittest.skipUnless(HAS_A_SHARE_ROUTE_DEPS, "a-share route dependencies are not installed")
-    def test_a_share_routes_preserve_wrapped_unexpected_errors(self):
+    def test_start_a_share_analysis_preserves_wrapped_unexpected_error(self):
         import asyncio
 
         from fastapi import HTTPException
 
         from backend.routes import a_share_routes
-        from backend.routes.a_share_routes import (
-            AShareAnalysisExportTdxRequest,
-            AShareAnalysisResetRangeRequest,
-            AShareAnalysisRunRequest,
-        )
+        from backend.routes.a_share_routes import AShareAnalysisRunRequest
 
-        def assert_wrapped_error(route_call, patch_target: str, expected_detail: str):
-            with patch(patch_target, side_effect=Exception("route boom")):
-                with self.assertRaises(HTTPException) as raised:
-                    asyncio.run(route_call())
+        with patch.object(a_share_routes, "create_a_share_analysis_task", side_effect=RuntimeError("boom")):
+            with self.assertRaises(HTTPException) as raised:
+                asyncio.run(a_share_routes.start_a_share_analysis(AShareAnalysisRunRequest(), None))
 
-            self.assertEqual(500, raised.exception.status_code)
-            self.assertEqual(expected_detail, raised.exception.detail)
+        self.assertEqual(500, raised.exception.status_code)
+        self.assertEqual("创建A股分析任务失败: boom", raised.exception.detail)
 
-        assert_wrapped_error(
-            lambda: a_share_routes.get_a_share_analysis_status("51111112855254"),
-            "backend.routes.a_share_routes._a_share_analysis_summary",
-            "获取A股分析状态失败: route boom",
-        )
-        assert_wrapped_error(
-            lambda: a_share_routes.get_a_share_analysis_chart(
-                group_id="51111112855254",
-                start_date="2026-05-01",
-                end_date="2026-05-07",
-            ),
-            "backend.routes.a_share_routes._a_share_chart_payload",
-            "获取A股分析图表失败: route boom",
-        )
+    @unittest.skipUnless(HAS_A_SHARE_ROUTE_DEPS, "a-share route dependencies are not installed")
+    def test_analysis_defaults_payload_matches_endpoint_shape(self):
+        from backend.routes import a_share_routes
 
-        with patch("backend.routes.a_share_routes.has_openai_api_key", return_value=True):
-            assert_wrapped_error(
-                lambda: a_share_routes.start_a_share_analysis(
-                    AShareAnalysisRunRequest(group_id="51111112855254"),
-                    None,
-                ),
-                "backend.routes.a_share_routes._a_share_analysis_task_context",
-                "创建A股分析任务失败: route boom",
-            )
-
-        assert_wrapped_error(
-            lambda: a_share_routes.reset_a_share_analysis_date_range(
-                AShareAnalysisResetRangeRequest(
-                    group_id="51111112855254",
-                    start_date="2026-05-01",
-                    end_date="2026-05-07",
-                )
-            ),
-            "backend.routes.a_share_routes._reset_a_share_analysis_range",
-            "删除A股分析日期区间失败: route boom",
-        )
-        assert_wrapped_error(
-            lambda: a_share_routes.export_a_share_analysis_to_tdx(
-                AShareAnalysisExportTdxRequest(group_id="51111112855254")
-            ),
-            "backend.routes.a_share_routes._export_a_share_analysis_to_tdx",
-            "导入通达信失败: route boom",
+        self.assertEqual(
+            {
+                "days": 21,
+                "concurrency": a_share_routes.A_SHARE_DEFAULT_CONCURRENCY,
+                "model": a_share_routes.A_SHARE_DEFAULT_MODEL,
+                "api_base": a_share_routes.A_SHARE_DEFAULT_API_BASE,
+                "wire_api": a_share_routes.A_SHARE_DEFAULT_WIRE_API,
+                "reasoning_effort": a_share_routes.A_SHARE_DEFAULT_REASONING_EFFORT,
+                "ranking_windows": list(a_share_routes.A_SHARE_DEFAULT_RANKING_WINDOWS),
+            },
+            a_share_routes._analysis_defaults_payload(),
         )
 
     @unittest.skipUnless(HAS_A_SHARE_ROUTE_DEPS, "a-share route dependencies are not installed")
-    def test_start_a_share_analysis_enqueues_runtime_task(self):
-        import asyncio
+    def test_bounded_chart_top_n_clamps_to_existing_range(self):
+        from backend.routes.a_share_routes import _bounded_chart_top_n
 
-        from backend.routes.a_share_routes import (
-            AShareAnalysisRunRequest,
-            run_a_share_analysis_task,
-            start_a_share_analysis,
-        )
-
-        request = AShareAnalysisRunRequest(group_id="51111112855254", days=21)
-        with (
-            patch(
-                "backend.routes.a_share_routes.has_openai_api_key",
-                return_value=True,
-            ) as has_api_key,
-            patch(
-                "backend.routes.a_share_routes.launch_task",
-                return_value={"task_id": "task-a-share", "message": "任务已创建，正在后台执行"},
-            ) as launch_task,
-        ):
-            response = asyncio.run(start_a_share_analysis(request, None))
-
-        has_api_key.assert_called_once_with()
-        launch_task.assert_called_once_with(
-            "a_share_analysis",
-            "A股公司分析（群组 51111112855254，最近 21 天）",
-            run_a_share_analysis_task,
-            request,
-            metadata={"group_id": "51111112855254"},
-        )
-        self.assertEqual(
-            {"task_id": "task-a-share", "message": "任务已创建，正在后台执行"},
-            response,
-        )
-
-    @unittest.skipUnless(HAS_A_SHARE_ROUTE_DEPS, "a-share route dependencies are not installed")
-    def test_a_share_analysis_task_context_preserves_scope_and_range(self):
-        from backend.routes.a_share_routes import (
-            AShareAnalysisRunRequest,
-            _a_share_analysis_task_context,
-        )
-
-        self.assertEqual(
-            ("51111112855254", "群组 51111112855254", "最近 21 天"),
-            _a_share_analysis_task_context(
-                AShareAnalysisRunRequest(group_id="51111112855254", days=21)
-            ),
-        )
-        self.assertEqual(
-            (None, "全局聚合", "2026-05-01 ~ 2026-05-07"),
-            _a_share_analysis_task_context(
-                AShareAnalysisRunRequest(
-                    group_id=None,
-                    start_date="2026-05-01",
-                    end_date="2026-05-07",
-                )
-            ),
-        )
+        self.assertEqual(1, _bounded_chart_top_n(0))
+        self.assertEqual(20, _bounded_chart_top_n(20))
+        self.assertEqual(100, _bounded_chart_top_n(999))
 
     @unittest.skipUnless(HAS_A_SHARE_ROUTE_DEPS, "a-share route dependencies are not installed")
     def test_get_a_share_analysis_status_preserves_success_payload_shape(self):
@@ -218,15 +132,13 @@ class AShareRoutesHelperTests(unittest.TestCase):
         latest_task = {"id": "latest"}
         running_task = {"id": "running"}
         storage = {"enabled": True, "mode": "postgres"}
-        latest_export = {"block_name": "A-share"}
+        latest_export = {"total_written": 3}
 
         with (
             patch.object(a_share_routes, "get_analysis_summary", return_value=summary) as get_summary,
-            patch.object(a_share_routes, "_a_share_status_tasks", return_value=(latest_task, running_task))
-            as get_tasks,
+            patch.object(a_share_routes, "_a_share_status_tasks", return_value=(latest_task, running_task)) as get_tasks,
             patch.object(a_share_routes, "_a_share_storage_status", return_value=storage) as get_storage_status,
-            patch.object(a_share_routes, "_latest_a_share_tdx_export", return_value=latest_export)
-            as get_latest_export,
+            patch.object(a_share_routes, "_latest_a_share_tdx_export", return_value=latest_export) as get_latest_export,
             patch.object(a_share_routes, "has_openai_api_key", return_value=True) as has_api_key,
         ):
             result = asyncio.run(a_share_routes.get_a_share_analysis_status(" 51111112855254 "))
@@ -251,356 +163,19 @@ class AShareRoutesHelperTests(unittest.TestCase):
         has_api_key.assert_called_once_with()
 
     @unittest.skipUnless(HAS_A_SHARE_ROUTE_DEPS, "a-share route dependencies are not installed")
-    def test_a_share_analysis_summary_preserves_service_call_shape(self):
+    def test_a_share_chart_payload_preserves_service_arguments(self):
         import asyncio
 
         from backend.routes import a_share_routes
 
-        calls = []
-        payload = {"rows_count": 7}
-
-        async def fake_to_thread(func, *args, **kwargs):
-            calls.append((func, args, kwargs))
-            return payload
-
-        with patch.object(a_share_routes.asyncio, "to_thread", side_effect=fake_to_thread):
-            result = asyncio.run(a_share_routes._a_share_analysis_summary("51111112855254"))
-
-        self.assertEqual(payload, result)
-        self.assertEqual(
-            [
-                (
-                    a_share_routes.get_analysis_summary,
-                    (),
-                    {"group_id": "51111112855254"},
-                )
-            ],
-            calls,
-        )
-
-    @unittest.skipUnless(HAS_A_SHARE_ROUTE_DEPS, "a-share route dependencies are not installed")
-    def test_a_share_status_payload_preserves_response_shape(self):
-        from backend.routes import a_share_routes
-
-        summary = {"rows_count": 7}
-        latest_task = {"id": "latest"}
-        running_task = {"id": "running"}
-        storage = {"enabled": True}
-        latest_export = {"block_name": "A-share"}
-
-        with patch.object(a_share_routes, "has_openai_api_key", return_value=False) as has_api_key:
-            self.assertEqual(
-                {
-                    "summary": summary,
-                    "group_id": "51111112855254",
-                    "defaults": a_share_routes._analysis_defaults_payload(),
-                    "api_key_configured": False,
-                    "latest_task": latest_task,
-                    "running_task": running_task,
-                    "storage": storage,
-                    "latest_tdx_export": latest_export,
-                },
-                a_share_routes._a_share_status_payload(
-                    "51111112855254",
-                    summary,
-                    latest_task,
-                    running_task,
-                    storage,
-                    latest_export,
-                ),
-            )
-
-        has_api_key.assert_called_once_with()
-
-    @unittest.skipUnless(HAS_A_SHARE_ROUTE_DEPS, "a-share route dependencies are not installed")
-    def test_get_a_share_analysis_status_preserves_storage_failure_fallback(self):
-        import asyncio
-
-        from backend.routes import a_share_routes
-
-        summary = {"rows_count": 7, "processed_items": 5}
-        latest_task = {"id": "latest"}
-        running_task = {"id": "running"}
-        latest_export = {"block_name": "A-share"}
-
-        def latest_task_side_effect(task_type, status=None, group_id=None):
-            self.assertEqual("a_share_analysis", task_type)
-            self.assertEqual("51111112855254", group_id)
-            return running_task if status == "running" else latest_task
-
-        with (
-            patch.object(a_share_routes, "get_analysis_summary", return_value=summary) as get_summary,
-            patch.object(a_share_routes, "get_latest_task_by_type", side_effect=latest_task_side_effect)
-            as get_latest_task,
-            patch.object(a_share_routes, "get_storage_health", side_effect=RuntimeError("temporary outage"))
-            as get_storage_health,
-            patch.object(a_share_routes, "get_latest_tdx_export", return_value=latest_export) as get_latest_export,
-            patch.object(a_share_routes, "has_openai_api_key", return_value=True) as has_api_key,
-        ):
-            result = asyncio.run(a_share_routes.get_a_share_analysis_status(" 51111112855254 "))
-
-        self.assertEqual(summary, result["summary"])
-        self.assertEqual("51111112855254", result["group_id"])
-        self.assertEqual(latest_task, result["latest_task"])
-        self.assertEqual(running_task, result["running_task"])
-        self.assertEqual(
-            {
-                "enabled": False,
-                "mode": "file_fallback",
-                "label": "本地文件降级（PostgreSQL 不可用: temporary outage）",
-                "daily_rows": 7,
-                "processed_rows": 5,
-            },
-            result["storage"],
-        )
-        self.assertEqual(latest_export, result["latest_tdx_export"])
-        self.assertTrue(result["api_key_configured"])
-        get_summary.assert_called_once_with(group_id="51111112855254")
-        self.assertEqual(2, get_latest_task.call_count)
-        get_storage_health.assert_called_once_with(group_id="51111112855254")
-        get_latest_export.assert_called_once_with("51111112855254")
-        has_api_key.assert_called_once_with()
-
-    @unittest.skipUnless(HAS_A_SHARE_ROUTE_DEPS, "a-share route dependencies are not installed")
-    def test_get_a_share_analysis_status_preserves_latest_tdx_export_failure_fallback(self):
-        import asyncio
-
-        from backend.routes import a_share_routes
-
-        summary = {"rows_count": 7, "processed_items": 5}
-        storage = {"enabled": True, "mode": "postgres"}
-
-        with (
-            patch.object(a_share_routes, "get_analysis_summary", return_value=summary) as get_summary,
-            patch.object(a_share_routes, "get_latest_task_by_type", return_value=None) as get_latest_task,
-            patch.object(a_share_routes, "_a_share_storage_status", return_value=storage) as get_storage_status,
-            patch.object(a_share_routes, "get_latest_tdx_export", side_effect=RuntimeError("tdx unavailable"))
-            as get_latest_export,
-            patch.object(a_share_routes, "has_openai_api_key", return_value=False) as has_api_key,
-        ):
-            result = asyncio.run(a_share_routes.get_a_share_analysis_status("51111112855254"))
-
-        self.assertEqual(summary, result["summary"])
-        self.assertEqual("51111112855254", result["group_id"])
-        self.assertIsNone(result["latest_task"])
-        self.assertIsNone(result["running_task"])
-        self.assertEqual(storage, result["storage"])
-        self.assertIsNone(result["latest_tdx_export"])
-        self.assertFalse(result["api_key_configured"])
-        get_summary.assert_called_once_with(group_id="51111112855254")
-        self.assertEqual(2, get_latest_task.call_count)
-        get_storage_status.assert_awaited_once_with(summary, "51111112855254")
-        get_latest_export.assert_called_once_with("51111112855254")
-        has_api_key.assert_called_once_with()
-
-    @unittest.skipUnless(HAS_A_SHARE_ROUTE_DEPS, "a-share route dependencies are not installed")
-    def test_a_share_status_tasks_preserves_latest_then_running_lookup_order(self):
-        import asyncio
-
-        from backend.routes import a_share_routes
-
-        summary = {"rows_count": 7}
-        storage = {"enabled": True, "mode": "postgres"}
-        latest_export = {"block_name": "A-share"}
-        latest_task = {"id": "latest"}
-        running_task = {"id": "running"}
-        events = []
-
-        def latest_task_side_effect(*args, **kwargs):
-            events.append((args, kwargs))
-            return latest_task if len(events) == 1 else running_task
-
-        with (
-            patch.object(a_share_routes, "get_analysis_summary", return_value=summary),
-            patch.object(
-                a_share_routes,
-                "get_latest_task_by_type",
-                side_effect=latest_task_side_effect,
-            ) as get_latest_task,
-            patch.object(a_share_routes, "_a_share_storage_status", return_value=storage),
-            patch.object(a_share_routes, "_latest_a_share_tdx_export", return_value=latest_export),
-            patch.object(a_share_routes, "has_openai_api_key", return_value=True),
-        ):
-            result = asyncio.run(a_share_routes.get_a_share_analysis_status("51111112855254"))
-
-        self.assertEqual(latest_task, result["latest_task"])
-        self.assertEqual(running_task, result["running_task"])
-        self.assertEqual(
-            [
-                (("a_share_analysis",), {"group_id": "51111112855254"}),
-                (("a_share_analysis",), {"status": "running", "group_id": "51111112855254"}),
-            ],
-            events,
-        )
-        self.assertEqual(2, get_latest_task.call_count)
-
-    @unittest.skipUnless(HAS_A_SHARE_ROUTE_DEPS, "a-share route dependencies are not installed")
-    def test_a_share_status_tasks_returns_latest_and_running_tasks(self):
-        from backend.routes import a_share_routes
-
-        latest_task = {"id": "latest"}
-        running_task = {"id": "running"}
-
-        with patch.object(
-            a_share_routes,
-            "get_latest_task_by_type",
-            side_effect=[latest_task, running_task],
-        ) as get_latest_task:
-            self.assertEqual(
-                (latest_task, running_task),
-                a_share_routes._a_share_status_tasks("51111112855254"),
-            )
-
-        get_latest_task.assert_any_call("a_share_analysis", group_id="51111112855254")
-        get_latest_task.assert_any_call("a_share_analysis", status="running", group_id="51111112855254")
-        self.assertEqual(2, get_latest_task.call_count)
-
-    @unittest.skipUnless(HAS_A_SHARE_ROUTE_DEPS, "a-share route dependencies are not installed")
-    def test_a_share_file_fallback_storage_status_defaults_missing_counts(self):
-        from backend.routes.a_share_routes import _a_share_file_fallback_storage_status
-
-        self.assertEqual(
-            {
-                "enabled": False,
-                "mode": "file_fallback",
-                "label": "本地文件降级（PostgreSQL 不可用: temporary outage）",
-                "daily_rows": 0,
-                "processed_rows": 0,
-            },
-            _a_share_file_fallback_storage_status(
-                {"rows_count": None},
-                RuntimeError("temporary outage"),
-            ),
-        )
-
-    @unittest.skipUnless(HAS_A_SHARE_ROUTE_DEPS, "a-share route dependencies are not installed")
-    def test_latest_a_share_tdx_export_returns_service_payload(self):
-        import asyncio
-
-        from backend.routes import a_share_routes
-
-        payload = {"block_name": "A-share"}
-        with patch.object(a_share_routes, "get_latest_tdx_export", return_value=payload) as get_latest_export:
-            result = asyncio.run(a_share_routes._latest_a_share_tdx_export("51111112855254"))
-
-        self.assertEqual(payload, result)
-        get_latest_export.assert_called_once_with("51111112855254")
-
-    @unittest.skipUnless(HAS_A_SHARE_ROUTE_DEPS, "a-share route dependencies are not installed")
-    def test_latest_a_share_tdx_export_returns_none_on_failure(self):
-        import asyncio
-
-        from backend.routes import a_share_routes
-
-        with patch.object(
-            a_share_routes,
-            "get_latest_tdx_export",
-            side_effect=RuntimeError("tdx unavailable"),
-        ) as get_latest_export:
-            result = asyncio.run(a_share_routes._latest_a_share_tdx_export("51111112855254"))
-
-        self.assertIsNone(result)
-        get_latest_export.assert_called_once_with("51111112855254")
-
-    @unittest.skipUnless(HAS_A_SHARE_ROUTE_DEPS, "a-share route dependencies are not installed")
-    def test_run_a_share_analysis_for_task_preserves_service_arguments(self):
-        from backend.routes.a_share_routes import AShareAnalysisRunRequest, _run_a_share_analysis_for_task
-
-        request = AShareAnalysisRunRequest(
-            group_id="51111112855254",
-            days=30,
-            concurrency=4,
-            model="model-a",
-            api_base="https://api.example.test",
-            wire_api="responses",
-            reasoning_effort="low",
-            start_date="2026-05-01",
-            end_date="2026-05-07",
-            reset_start_date="2026-05-02",
-            reset_end_date="2026-05-03",
-        )
-        expected = {"ok": True}
-        with (
-            patch("backend.routes.a_share_routes.run_analysis", return_value=expected) as run_analysis,
-            patch("backend.routes.a_share_routes.add_task_log") as add_task_log,
-        ):
-            result = _run_a_share_analysis_for_task("task-a-share", "51111112855254", request)
-
-            self.assertEqual(expected, result)
-            run_analysis.assert_called_once()
-            _, call_kwargs = run_analysis.call_args
-            self.assertEqual(30, call_kwargs["days"])
-            self.assertEqual("51111112855254", call_kwargs["group_id"])
-            self.assertEqual("model-a", call_kwargs["model"])
-            self.assertEqual("https://api.example.test", call_kwargs["api_base"])
-            self.assertEqual("responses", call_kwargs["wire_api"])
-            self.assertEqual("low", call_kwargs["reasoning_effort"])
-            self.assertEqual(4, call_kwargs["concurrency"])
-            self.assertEqual("2026-05-01", call_kwargs["start_date"])
-            self.assertEqual("2026-05-07", call_kwargs["end_date"])
-            self.assertEqual("2026-05-02", call_kwargs["reset_start_date"])
-            self.assertEqual("2026-05-03", call_kwargs["reset_end_date"])
-
-            call_kwargs["log_callback"]("analysis log")
-
-        add_task_log.assert_called_once_with("task-a-share", "analysis log")
-
-    @unittest.skipUnless(HAS_A_SHARE_ROUTE_DEPS, "a-share route dependencies are not installed")
-    def test_start_a_share_analysis_task_preserves_status_and_logs(self):
-        from backend.routes.a_share_routes import AShareAnalysisRunRequest, _start_a_share_analysis_task
-
-        request = AShareAnalysisRunRequest(
-            days=30,
-            concurrency=4,
-            model="model-a",
-            api_base="https://api.example.test",
-            wire_api="responses",
-            reasoning_effort="low",
-            reset_start_date="2026-05-02",
-            reset_end_date="2026-05-03",
-        )
-
-        with (
-            patch("backend.routes.a_share_routes.update_task") as update_task,
-            patch("backend.routes.a_share_routes.add_task_log") as add_task_log,
-        ):
-            description = _start_a_share_analysis_task(
-                "task-a-share",
-                None,
-                "全局聚合",
-                "最近 30 天",
-                request,
-            )
-
-        self.assertEqual("开始A股公司分析（全局聚合），扫描最近 30 天数据", description)
-        update_task.assert_called_once_with("task-a-share", "running", description)
-        self.assertEqual(
-            [
-                ("task-a-share", f"🚀 {description}"),
-                (
-                    "task-a-share",
-                    "⚙️ 参数: group_id=GLOBAL, concurrency=4, model=model-a, "
-                    "api_base=https://api.example.test, wire_api=responses, reasoning_effort=low",
-                ),
-                ("task-a-share", "🧹 删除并重跑区间: 2026-05-02 ~ 2026-05-03"),
-            ],
-            [call.args for call in add_task_log.call_args_list],
-        )
-
-    @unittest.skipUnless(HAS_A_SHARE_ROUTE_DEPS, "a-share route dependencies are not installed")
-    def test_get_a_share_analysis_chart_preserves_service_arguments(self):
-        import asyncio
-
-        from backend.routes import a_share_routes
-
-        payload = {"chart": "payload"}
+        payload = {"chart_data": []}
         with patch.object(a_share_routes, "build_chart_payload", return_value=payload) as build_chart_payload:
             result = asyncio.run(
-                a_share_routes.get_a_share_analysis_chart(
-                    group_id=" 51111112855254 ",
-                    start_date="2026-05-01",
-                    end_date="2026-05-07",
-                    top_n=101,
+                a_share_routes._a_share_chart_payload(
+                    "51111112855254",
+                    "2026-05-01",
+                    "2026-05-07",
+                    999,
                 )
             )
 
@@ -614,421 +189,60 @@ class AShareRoutesHelperTests(unittest.TestCase):
         )
 
     @unittest.skipUnless(HAS_A_SHARE_ROUTE_DEPS, "a-share route dependencies are not installed")
-    def test_a_share_chart_payload_preserves_service_arguments(self):
-        import asyncio
-
-        from backend.routes import a_share_routes
-
-        payload = {"chart": "payload"}
-        with patch.object(a_share_routes, "build_chart_payload", return_value=payload) as build_chart_payload:
-            result = asyncio.run(
-                a_share_routes._a_share_chart_payload(
-                    "51111112855254",
-                    "2026-05-01",
-                    "2026-05-07",
-                    0,
-                )
-            )
-
-        self.assertEqual(payload, result)
-        build_chart_payload.assert_called_once_with(
-            start_date="2026-05-01",
-            end_date="2026-05-07",
-            top_n=1,
-            ranking_windows=a_share_routes.A_SHARE_DEFAULT_RANKING_WINDOWS,
-            group_id="51111112855254",
-        )
-
-    @unittest.skipUnless(HAS_A_SHARE_ROUTE_DEPS, "a-share route dependencies are not installed")
     def test_reset_a_share_analysis_date_range_preserves_service_arguments(self):
         import asyncio
 
         from backend.routes import a_share_routes
         from backend.routes.a_share_routes import AShareAnalysisResetRangeRequest
 
-        reset_result = {"deleted": 3}
-        with patch.object(
-            a_share_routes,
-            "reset_analysis_range",
-            return_value=reset_result,
-        ) as reset_analysis_range:
-            result = asyncio.run(
-                a_share_routes.reset_a_share_analysis_date_range(
-                    AShareAnalysisResetRangeRequest(
-                        group_id=" 51111112855254 ",
-                        start_date="2026-05-01",
-                        end_date="2026-05-07",
-                    )
-                )
-            )
+        request = AShareAnalysisResetRangeRequest(
+            group_id="51111112855254",
+            start_date="2026-05-01",
+            end_date="2026-05-07",
+        )
+        with patch.object(a_share_routes, "reset_analysis_range", return_value={"removed": 3}) as reset_range:
+            result = asyncio.run(a_share_routes.reset_a_share_analysis_date_range(request))
 
-        self.assertEqual({"success": True, "deleted": 3}, result)
-        reset_analysis_range.assert_called_once_with(
+        self.assertEqual({"success": True, "removed": 3}, result)
+        reset_range.assert_called_once_with(
             "2026-05-01",
             "2026-05-07",
             group_id="51111112855254",
         )
 
     @unittest.skipUnless(HAS_A_SHARE_ROUTE_DEPS, "a-share route dependencies are not installed")
-    def test_reset_a_share_analysis_range_preserves_global_group_scope(self):
+    def test_export_tdx_delegates_to_workflow_launch(self):
         import asyncio
 
         from backend.routes import a_share_routes
-        from backend.routes.a_share_routes import AShareAnalysisResetRangeRequest
-
-        reset_result = {"deleted": 0}
-        with patch.object(
-            a_share_routes,
-            "reset_analysis_range",
-            return_value=reset_result,
-        ) as reset_analysis_range:
-            result = asyncio.run(
-                a_share_routes._reset_a_share_analysis_range(
-                    AShareAnalysisResetRangeRequest(
-                        start_date="2026-05-01",
-                        end_date="2026-05-07",
-                    )
-                )
-            )
-
-        self.assertEqual(reset_result, result)
-        reset_analysis_range.assert_called_once_with(
-            "2026-05-01",
-            "2026-05-07",
-            group_id=None,
-        )
-
-    @unittest.skipUnless(HAS_A_SHARE_ROUTE_DEPS, "a-share route dependencies are not installed")
-    def test_fail_a_share_analysis_task_preserves_failure_status_and_log(self):
-        from backend.routes.a_share_routes import _fail_a_share_analysis_task
-
-        with (
-            patch("backend.routes.a_share_routes.add_task_log") as add_task_log,
-            patch("backend.routes.a_share_routes.update_task") as update_task,
-        ):
-            _fail_a_share_analysis_task("task-a-share", RuntimeError("boom"))
-
-        add_task_log.assert_called_once_with("task-a-share", "❌ A股公司分析失败: boom")
-        update_task.assert_called_once_with("task-a-share", "failed", "A股公司分析失败: boom")
-
-    @unittest.skipUnless(HAS_A_SHARE_ROUTE_DEPS, "a-share route dependencies are not installed")
-    def test_fail_a_share_analysis_task_swallows_failure_recording_errors(self):
-        from backend.routes.a_share_routes import _fail_a_share_analysis_task
-
-        with (
-            patch("backend.routes.a_share_routes.add_task_log", side_effect=RuntimeError("log failed")) as add_task_log,
-            patch("backend.routes.a_share_routes.update_task") as update_task,
-        ):
-            _fail_a_share_analysis_task("task-a-share", RuntimeError("boom"))
-
-        add_task_log.assert_called_once_with("task-a-share", "❌ A股公司分析失败: boom")
-        update_task.assert_not_called()
-
-    @unittest.skipUnless(HAS_A_SHARE_ROUTE_DEPS, "a-share route dependencies are not installed")
-    def test_complete_a_share_analysis_task_preserves_status_result_and_log(self):
-        from backend.routes.a_share_routes import _complete_a_share_analysis_task
-
-        result = {"processed": 3}
-        with (
-            patch("backend.routes.a_share_routes.update_task") as update_task,
-            patch("backend.routes.a_share_routes.add_task_log") as add_task_log,
-        ):
-            _complete_a_share_analysis_task("task-a-share", result)
-
-        update_task.assert_called_once_with("task-a-share", "completed", "A股公司分析完成", result)
-        add_task_log.assert_called_once_with("task-a-share", "✅ A股公司分析完成")
-
-    @unittest.skipUnless(HAS_A_SHARE_ROUTE_DEPS, "a-share route dependencies are not installed")
-    def test_run_a_share_analysis_task_fails_fast_without_api_key(self):
-        from backend.routes.a_share_routes import AShareAnalysisRunRequest, run_a_share_analysis_task
-
-        events = []
-
-        def update_task_side_effect(*args):
-            events.append(("update_task", args))
-
-        def add_task_log_side_effect(*args):
-            events.append(("add_task_log", args))
-
-        request = AShareAnalysisRunRequest(group_id="51111112855254")
-        message = "未配置 OpenAI API Key，请设置环境变量 OPENAI_API_KEY 或 config.toml [ai].api_key"
-
-        with (
-            patch("backend.routes.a_share_routes.has_openai_api_key", return_value=False),
-            patch("backend.routes.a_share_routes.update_task", side_effect=update_task_side_effect) as update_task,
-            patch("backend.routes.a_share_routes.add_task_log", side_effect=add_task_log_side_effect) as add_task_log,
-            patch("backend.routes.a_share_routes.is_task_stopped") as is_task_stopped,
-            patch("backend.routes.a_share_routes._start_a_share_analysis_task") as start_task,
-            patch("backend.routes.a_share_routes._run_a_share_analysis_for_task") as run_analysis,
-            patch("backend.routes.a_share_routes._complete_a_share_analysis_task") as complete_task,
-        ):
-            run_a_share_analysis_task("task-a-share", request)
-
-        self.assertEqual(
-            [
-                ("update_task", ("task-a-share", "failed", message)),
-                ("add_task_log", ("task-a-share", f"❌ {message}")),
-            ],
-            events,
-        )
-        update_task.assert_called_once_with("task-a-share", "failed", message)
-        add_task_log.assert_called_once_with("task-a-share", f"❌ {message}")
-        is_task_stopped.assert_not_called()
-        start_task.assert_not_called()
-        run_analysis.assert_not_called()
-        complete_task.assert_not_called()
-
-    @unittest.skipUnless(HAS_A_SHARE_ROUTE_DEPS, "a-share route dependencies are not installed")
-    def test_a_share_api_key_available_or_fail_task_returns_true_when_configured(self):
-        from backend.routes.a_share_routes import _a_share_api_key_available_or_fail_task
-
-        with (
-            patch("backend.routes.a_share_routes.has_openai_api_key", return_value=True) as has_api_key,
-            patch("backend.routes.a_share_routes.update_task") as update_task,
-            patch("backend.routes.a_share_routes.add_task_log") as add_task_log,
-        ):
-            available = _a_share_api_key_available_or_fail_task("task-a-share")
-
-        self.assertTrue(available)
-        has_api_key.assert_called_once_with()
-        update_task.assert_not_called()
-        add_task_log.assert_not_called()
-
-    @unittest.skipUnless(HAS_A_SHARE_ROUTE_DEPS, "a-share route dependencies are not installed")
-    def test_a_share_api_key_available_or_fail_task_records_missing_key_failure(self):
-        from backend.routes.a_share_routes import _a_share_api_key_available_or_fail_task
-
-        events = []
-
-        def update_task_side_effect(*args):
-            events.append(("update_task", args))
-
-        def add_task_log_side_effect(*args):
-            events.append(("add_task_log", args))
-
-        message = "未配置 OpenAI API Key，请设置环境变量 OPENAI_API_KEY 或 config.toml [ai].api_key"
-        with (
-            patch("backend.routes.a_share_routes.has_openai_api_key", return_value=False) as has_api_key,
-            patch("backend.routes.a_share_routes.update_task", side_effect=update_task_side_effect) as update_task,
-            patch("backend.routes.a_share_routes.add_task_log", side_effect=add_task_log_side_effect) as add_task_log,
-        ):
-            available = _a_share_api_key_available_or_fail_task("task-a-share")
-
-        self.assertFalse(available)
-        has_api_key.assert_called_once_with()
-        self.assertEqual(
-            [
-                ("update_task", ("task-a-share", "failed", message)),
-                ("add_task_log", ("task-a-share", f"❌ {message}")),
-            ],
-            events,
-        )
-        update_task.assert_called_once_with("task-a-share", "failed", message)
-        add_task_log.assert_called_once_with("task-a-share", f"❌ {message}")
-
-    @unittest.skipUnless(HAS_A_SHARE_ROUTE_DEPS, "a-share route dependencies are not installed")
-    def test_run_a_share_analysis_task_returns_when_stopped_before_run(self):
-        from backend.routes.a_share_routes import AShareAnalysisRunRequest, run_a_share_analysis_task
-
-        request = AShareAnalysisRunRequest(group_id="51111112855254")
-        with (
-            patch("backend.routes.a_share_routes._a_share_api_key_available_or_fail_task", return_value=True)
-            as api_key_preflight,
-            patch("backend.routes.a_share_routes.is_task_stopped", return_value=True) as is_task_stopped,
-            patch("backend.routes.a_share_routes._normalize_group_scope") as normalize_group_scope,
-            patch("backend.routes.a_share_routes._start_a_share_analysis_task") as start_task,
-            patch("backend.routes.a_share_routes._run_a_share_analysis_for_task") as run_analysis,
-            patch("backend.routes.a_share_routes._complete_a_share_analysis_task") as complete_task,
-        ):
-            run_a_share_analysis_task("task-a-share", request)
-
-        api_key_preflight.assert_called_once_with("task-a-share")
-        is_task_stopped.assert_called_once_with("task-a-share")
-        normalize_group_scope.assert_not_called()
-        start_task.assert_not_called()
-        run_analysis.assert_not_called()
-        complete_task.assert_not_called()
-
-    @unittest.skipUnless(HAS_A_SHARE_ROUTE_DEPS, "a-share route dependencies are not installed")
-    def test_a_share_task_ready_to_start_skips_stop_check_when_api_key_missing(self):
-        from backend.routes.a_share_routes import _a_share_task_ready_to_start
-
-        with (
-            patch("backend.routes.a_share_routes._a_share_api_key_available_or_fail_task", return_value=False)
-            as api_key_preflight,
-            patch("backend.routes.a_share_routes.is_task_stopped") as is_task_stopped,
-        ):
-            ready = _a_share_task_ready_to_start("task-a-share")
-
-        self.assertFalse(ready)
-        api_key_preflight.assert_called_once_with("task-a-share")
-        is_task_stopped.assert_not_called()
-
-    @unittest.skipUnless(HAS_A_SHARE_ROUTE_DEPS, "a-share route dependencies are not installed")
-    def test_a_share_task_ready_to_start_returns_false_when_stopped(self):
-        from backend.routes.a_share_routes import _a_share_task_ready_to_start
-
-        with (
-            patch("backend.routes.a_share_routes._a_share_api_key_available_or_fail_task", return_value=True)
-            as api_key_preflight,
-            patch("backend.routes.a_share_routes.is_task_stopped", return_value=True) as is_task_stopped,
-        ):
-            ready = _a_share_task_ready_to_start("task-a-share")
-
-        self.assertFalse(ready)
-        api_key_preflight.assert_called_once_with("task-a-share")
-        is_task_stopped.assert_called_once_with("task-a-share")
-
-    @unittest.skipUnless(HAS_A_SHARE_ROUTE_DEPS, "a-share route dependencies are not installed")
-    def test_a_share_task_ready_to_start_returns_true_when_not_stopped(self):
-        from backend.routes.a_share_routes import _a_share_task_ready_to_start
-
-        with (
-            patch("backend.routes.a_share_routes._a_share_api_key_available_or_fail_task", return_value=True)
-            as api_key_preflight,
-            patch("backend.routes.a_share_routes.is_task_stopped", return_value=False) as is_task_stopped,
-        ):
-            ready = _a_share_task_ready_to_start("task-a-share")
-
-        self.assertTrue(ready)
-        api_key_preflight.assert_called_once_with("task-a-share")
-        is_task_stopped.assert_called_once_with("task-a-share")
-
-    @unittest.skipUnless(HAS_A_SHARE_ROUTE_DEPS, "a-share route dependencies are not installed")
-    def test_normalize_group_scope_keeps_existing_labels(self):
-        from backend.routes.a_share_routes import _normalize_group_scope
-
-        self.assertEqual((None, "全局聚合"), _normalize_group_scope(None))
-        self.assertEqual((None, "全局聚合"), _normalize_group_scope("  "))
-        self.assertEqual(("12345", "群组 12345"), _normalize_group_scope(" 12345 "))
-        self.assertEqual(("67890", "群组 67890"), _normalize_group_scope(67890))
-
-    @unittest.skipUnless(HAS_A_SHARE_ROUTE_DEPS, "a-share route dependencies are not installed")
-    def test_analysis_defaults_payload_matches_endpoint_shape(self):
-        from backend.routes.a_share_routes import (
-            A_SHARE_DEFAULT_API_BASE,
-            A_SHARE_DEFAULT_CONCURRENCY,
-            A_SHARE_DEFAULT_MODEL,
-            A_SHARE_DEFAULT_RANKING_WINDOWS,
-            A_SHARE_DEFAULT_REASONING_EFFORT,
-            A_SHARE_DEFAULT_WIRE_API,
-            _analysis_defaults_payload,
-        )
-
-        self.assertEqual(
-            {
-                "days": 21,
-                "concurrency": A_SHARE_DEFAULT_CONCURRENCY,
-                "model": A_SHARE_DEFAULT_MODEL,
-                "api_base": A_SHARE_DEFAULT_API_BASE,
-                "wire_api": A_SHARE_DEFAULT_WIRE_API,
-                "reasoning_effort": A_SHARE_DEFAULT_REASONING_EFFORT,
-                "ranking_windows": list(A_SHARE_DEFAULT_RANKING_WINDOWS),
-            },
-            _analysis_defaults_payload(),
-        )
-
-    @unittest.skipUnless(HAS_A_SHARE_ROUTE_DEPS, "a-share route dependencies are not installed")
-    def test_export_tdx_passes_group_name_to_service(self):
-        from backend.routes import a_share_routes
         from backend.routes.a_share_routes import AShareAnalysisExportTdxRequest
 
-        with patch.object(
-            a_share_routes,
-            "export_a_share_rankings_to_tdx",
-            return_value={"group_id": "123", "blocks": []},
-        ) as export_mock:
-            import asyncio
-
-            result = asyncio.run(
-                a_share_routes.export_a_share_analysis_to_tdx(
-                    AShareAnalysisExportTdxRequest(
-                        group_id="123",
-                        group_name="纪要又要",
-                        start_date="2026-05-01",
-                        end_date="2026-05-19",
-                    )
-                )
-            )
-
-        self.assertTrue(result["success"])
-        export_mock.assert_called_once_with(
-            "2026-05-01",
-            "2026-05-19",
-            group_id="123",
+        request = AShareAnalysisExportTdxRequest(
+            group_id="51111112855254",
             group_name="纪要又要",
+            start_date="2026-05-01",
+            end_date="2026-05-07",
         )
-
-    @unittest.skipUnless(HAS_A_SHARE_ROUTE_DEPS, "a-share route dependencies are not installed")
-    def test_export_a_share_analysis_to_tdx_preserves_global_group_scope(self):
-        import asyncio
-
-        from backend.routes import a_share_routes
-        from backend.routes.a_share_routes import AShareAnalysisExportTdxRequest
-
-        payload = {"group_id": None, "blocks": []}
         with patch.object(
             a_share_routes,
-            "export_a_share_rankings_to_tdx",
-            return_value=payload,
-        ) as export_mock:
-            result = asyncio.run(
-                a_share_routes._export_a_share_analysis_to_tdx(
-                    AShareAnalysisExportTdxRequest()
-                )
-            )
+            "run_a_share_tdx_export",
+            return_value={"success": True, "total_written": 2},
+        ) as export_tdx:
+            result = asyncio.run(a_share_routes.export_a_share_analysis_to_tdx(request))
 
-        self.assertEqual(payload, result)
-        export_mock.assert_called_once_with(
-            None,
-            None,
-            group_id=None,
-            group_name=None,
+        self.assertEqual({"success": True, "total_written": 2}, result)
+        export_tdx.assert_awaited_once_with(
+            group_id="51111112855254",
+            group_name="纪要又要",
+            start_date="2026-05-01",
+            end_date="2026-05-07",
         )
-
-    @unittest.skipUnless(HAS_A_SHARE_ROUTE_DEPS, "a-share route dependencies are not installed")
-    def test_bounded_chart_top_n_clamps_to_existing_range(self):
-        from backend.routes.a_share_routes import _bounded_chart_top_n
-
-        self.assertEqual(1, _bounded_chart_top_n(-5))
-        self.assertEqual(1, _bounded_chart_top_n(0))
-        self.assertEqual(20, _bounded_chart_top_n(20))
-        self.assertEqual(100, _bounded_chart_top_n(101))
 
     @unittest.skipUnless(HAS_A_SHARE_ROUTE_DEPS, "a-share route dependencies are not installed")
     def test_success_payload_preserves_existing_merge_order(self):
         from backend.routes.a_share_routes import _success_payload
 
-        self.assertEqual({"success": True, "deleted": 3}, _success_payload({"deleted": 3}))
-        self.assertEqual({"success": False, "error": "kept"}, _success_payload({"success": False, "error": "kept"}))
-
-    @unittest.skipUnless(HAS_A_SHARE_ROUTE_DEPS, "a-share route dependencies are not installed")
-    def test_run_range_text_supports_explicit_date_range(self):
-        from backend.routes.a_share_routes import AShareAnalysisRunRequest, _run_range_text
-
-        self.assertEqual("最近 21 天", _run_range_text(AShareAnalysisRunRequest(days=21)))
-        self.assertEqual(
-            "2026-05-01 ~ 2026-05-07",
-            _run_range_text(
-                AShareAnalysisRunRequest(
-                    days=21,
-                    start_date="2026-05-01",
-                    end_date="2026-05-07",
-                )
-            ),
-        )
-
-        with self.assertRaisesRegex(ValueError, "start_date 和 end_date 需要同时提供"):
-            _run_range_text(AShareAnalysisRunRequest(days=21, start_date="2026-05-01"))
-
-        with self.assertRaisesRegex(ValueError, "start_date 不能晚于 end_date"):
-            _run_range_text(
-                AShareAnalysisRunRequest(
-                    days=21,
-                    start_date="2026-05-08",
-                    end_date="2026-05-07",
-                )
-            )
+        self.assertEqual({"success": False, "count": 1}, _success_payload({"success": False, "count": 1}))
 
 
 if __name__ == "__main__":

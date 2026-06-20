@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime
 from typing import Optional
 
 import requests
 from fastapi import APIRouter, BackgroundTasks, HTTPException
 from pydantic import BaseModel, Field
 
+from backend.core.ai_provider_config import has_openai_api_key
 from backend.services.a_share_analysis_db_storage import get_storage_health
 from backend.services.a_share_analysis_service import (
     DEFAULT_API_BASE as A_SHARE_DEFAULT_API_BASE,
@@ -20,22 +20,18 @@ from backend.services.a_share_analysis_service import (
     get_analysis_summary,
     normalize_group_id,
     reset_analysis_range,
-    run_analysis,
 )
-from backend.core.ai_provider_config import has_openai_api_key
-from backend.services.tdx_a_share_export_service import export_a_share_rankings_to_tdx, get_latest_tdx_export
-from backend.services.task_launch import TASK_CREATED_MESSAGE as _TASK_CREATED_MESSAGE, launch_task
-from backend.services.task_runtime import (
-    add_task_log,
-    build_task_log_callback,
-    get_latest_task_by_type,
-    is_task_stopped,
-    update_task,
+from backend.services.tdx_a_share_export_service import get_latest_tdx_export
+from backend.services.task_launch import TASK_CREATED_MESSAGE as _TASK_CREATED_MESSAGE
+from backend.services.task_runtime import get_latest_task_by_type
+from backend.services.workflow_task_launch import (
+    A_SHARE_MISSING_API_KEY_MESSAGE,
+    create_a_share_analysis_task,
+    export_a_share_analysis_to_tdx as run_a_share_tdx_export,
 )
 
 router = APIRouter(prefix="/api/analytics/a-share", tags=["a-share"])
 TASK_CREATED_MESSAGE = _TASK_CREATED_MESSAGE
-A_SHARE_MISSING_API_KEY_MESSAGE = "未配置 OpenAI API Key，请设置环境变量 OPENAI_API_KEY 或 config.toml [ai].api_key"
 
 
 def _a_share_route_error(message: str, error: Exception) -> HTTPException:
@@ -74,12 +70,6 @@ class AShareAnalysisExportTdxRequest(BaseModel):
     end_date: Optional[str] = Field(default=None, description="图表筛选结束日期 YYYY-MM-DD")
 
 
-def _normalize_group_scope(group_id: Optional[str | int]) -> tuple[Optional[str], str]:
-    normalized_group_id = normalize_group_id(group_id)
-    scope_text = f"群组 {normalized_group_id}" if normalized_group_id else "全局聚合"
-    return normalized_group_id, scope_text
-
-
 def _analysis_defaults_payload() -> dict:
     return {
         "days": 21,
@@ -100,124 +90,20 @@ def _success_payload(result: dict) -> dict:
     return {"success": True, **result}
 
 
-def _run_range_text(request: AShareAnalysisRunRequest) -> str:
-    if request.start_date or request.end_date:
-        if not request.start_date or not request.end_date:
-            raise ValueError("start_date 和 end_date 需要同时提供")
-        try:
-            start_day = datetime.strptime(request.start_date.strip(), "%Y-%m-%d").strftime("%Y-%m-%d")
-            end_day = datetime.strptime(request.end_date.strip(), "%Y-%m-%d").strftime("%Y-%m-%d")
-        except ValueError as exc:
-            raise ValueError("start_date 和 end_date 必须是 YYYY-MM-DD 格式") from exc
-        if start_day > end_day:
-            raise ValueError("start_date 不能晚于 end_date")
-        return f"{start_day} ~ {end_day}"
-    return f"最近 {request.days} 天"
-
-
-def _a_share_task_metadata(normalized_group_id: Optional[str]) -> dict[str, Optional[str]]:
-    return {"group_id": normalized_group_id}
-
-
-def _a_share_analysis_task_context(
-    request: AShareAnalysisRunRequest,
-) -> tuple[Optional[str], str, str]:
-    normalized_group_id, scope_text = _normalize_group_scope(request.group_id)
-    return normalized_group_id, scope_text, _run_range_text(request)
-
-
-def _create_a_share_analysis_task_response(
-    request: AShareAnalysisRunRequest,
-    normalized_group_id: Optional[str],
-    scope_text: str,
-    run_range_text: str,
-) -> dict[str, str]:
-    return launch_task(
-        "a_share_analysis",
-        f"A股公司分析（{scope_text}，{run_range_text}）",
-        run_a_share_analysis_task,
-        request,
-        metadata=_a_share_task_metadata(normalized_group_id),
-    )
-
-
-def _start_a_share_analysis_task(
-    task_id: str,
-    normalized_group_id: Optional[str],
-    scope_text: str,
-    run_range_text: str,
-    request: AShareAnalysisRunRequest,
-) -> str:
-    description = f"开始A股公司分析（{scope_text}），扫描{run_range_text}数据"
-    update_task(task_id, "running", description)
-    add_task_log(task_id, f"🚀 {description}")
-    add_task_log(
-        task_id,
-        f"⚙️ 参数: group_id={normalized_group_id or 'GLOBAL'}, concurrency={request.concurrency}, "
-        f"model={request.model}, api_base={request.api_base}, wire_api={request.wire_api}, "
-        f"reasoning_effort={request.reasoning_effort}",
-    )
-
-    if request.reset_start_date or request.reset_end_date:
-        add_task_log(
-            task_id,
-            f"🧹 删除并重跑区间: {request.reset_start_date or '-'} ~ {request.reset_end_date or '-'}",
-        )
-
-    return description
-
-
-def _run_a_share_analysis_for_task(
-    task_id: str,
-    normalized_group_id: Optional[str],
-    request: AShareAnalysisRunRequest,
-) -> dict:
-    return run_analysis(
+def _create_a_share_analysis_task_response(request: AShareAnalysisRunRequest) -> dict[str, str]:
+    return create_a_share_analysis_task(
+        group_id=request.group_id,
         days=request.days,
-        group_id=normalized_group_id,
+        concurrency=request.concurrency,
         model=request.model,
         api_base=request.api_base,
         wire_api=request.wire_api,
         reasoning_effort=request.reasoning_effort,
-        concurrency=request.concurrency,
         start_date=request.start_date,
         end_date=request.end_date,
         reset_start_date=request.reset_start_date,
         reset_end_date=request.reset_end_date,
-        log_callback=build_task_log_callback(
-            task_id,
-            lambda current_task_id, message: add_task_log(current_task_id, message),
-        ),
     )
-
-
-def _fail_a_share_analysis_task(task_id: str, error: Exception) -> None:
-    try:
-        message = f"A股公司分析失败: {str(error)}"
-        add_task_log(task_id, f"❌ {message}")
-        update_task(task_id, "failed", message)
-    except Exception:
-        pass
-
-
-def _complete_a_share_analysis_task(task_id: str, result: dict) -> None:
-    update_task(task_id, "completed", "A股公司分析完成", result)
-    add_task_log(task_id, "✅ A股公司分析完成")
-
-
-def _a_share_api_key_available_or_fail_task(task_id: str) -> bool:
-    if has_openai_api_key():
-        return True
-
-    update_task(task_id, "failed", A_SHARE_MISSING_API_KEY_MESSAGE)
-    add_task_log(task_id, f"❌ {A_SHARE_MISSING_API_KEY_MESSAGE}")
-    return False
-
-
-def _a_share_task_ready_to_start(task_id: str) -> bool:
-    if not _a_share_api_key_available_or_fail_task(task_id):
-        return False
-    return not is_task_stopped(task_id)
 
 
 def _a_share_file_fallback_storage_status(summary: dict, storage_error: Exception) -> dict:
@@ -307,30 +193,12 @@ async def _reset_a_share_analysis_range(request: AShareAnalysisResetRangeRequest
 
 
 async def _export_a_share_analysis_to_tdx(request: AShareAnalysisExportTdxRequest) -> dict:
-    return await asyncio.to_thread(
-        export_a_share_rankings_to_tdx,
-        request.start_date,
-        request.end_date,
+    return await run_a_share_tdx_export(
         group_id=normalize_group_id(request.group_id),
         group_name=request.group_name,
+        start_date=request.start_date,
+        end_date=request.end_date,
     )
-
-
-def run_a_share_analysis_task(task_id: str, request: AShareAnalysisRunRequest):
-    """后台执行A股公司提及分析任务"""
-    try:
-        if not _a_share_task_ready_to_start(task_id):
-            return
-
-        normalized_group_id, scope_text = _normalize_group_scope(request.group_id)
-        run_range_text = _run_range_text(request)
-        _start_a_share_analysis_task(task_id, normalized_group_id, scope_text, run_range_text, request)
-
-        result = _run_a_share_analysis_for_task(task_id, normalized_group_id, request)
-
-        _complete_a_share_analysis_task(task_id, result)
-    except Exception as e:
-        _fail_a_share_analysis_task(task_id, e)
 
 
 @router.get("/status")
@@ -377,19 +245,11 @@ async def get_a_share_analysis_chart(
 async def start_a_share_analysis(request: AShareAnalysisRunRequest, background_tasks: BackgroundTasks):
     """启动A股公司提及分析后台任务"""
     try:
-        if not has_openai_api_key():
-            raise HTTPException(
-                status_code=400,
-                detail=A_SHARE_MISSING_API_KEY_MESSAGE,
-            )
-
-        normalized_group_id, scope_text, run_range_text = _a_share_analysis_task_context(request)
-        return _create_a_share_analysis_task_response(
-            request,
-            normalized_group_id,
-            scope_text,
-            run_range_text,
-        )
+        return _create_a_share_analysis_task_response(request)
+    except RuntimeError as e:
+        if str(e) == A_SHARE_MISSING_API_KEY_MESSAGE:
+            raise HTTPException(status_code=400, detail=str(e))
+        raise _a_share_route_error("创建A股分析任务失败", e)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
@@ -412,8 +272,7 @@ async def reset_a_share_analysis_date_range(request: AShareAnalysisResetRangeReq
 async def export_a_share_analysis_to_tdx(request: AShareAnalysisExportTdxRequest):
     """把当前A股推荐池覆盖导入到通达信现有板块"""
     try:
-        result = await _export_a_share_analysis_to_tdx(request)
-        return _success_payload(result)
+        return await _export_a_share_analysis_to_tdx(request)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except RuntimeError as e:

@@ -1,20 +1,13 @@
 from __future__ import annotations
 
-from typing import Callable, Optional
+from typing import Optional
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Query
 from pydantic import BaseModel, Field
 
-from backend.services.daily_stock_concept_service import (
-    extract_daily_stock_concepts,
-    get_daily_stock_concepts,
-)
-from backend.services.task_runtime import (
-    add_task_log,
-    build_task_log_callback,
-    run_workflow,
-)
-from backend.services.task_launch import TASK_CREATED_MESSAGE as _TASK_CREATED_MESSAGE, launch_task
+from backend.services.daily_stock_concept_service import get_daily_stock_concepts
+from backend.services.task_launch import TASK_CREATED_MESSAGE as _TASK_CREATED_MESSAGE
+from backend.services.workflow_task_launch import create_daily_stock_concept_task
 
 
 router = APIRouter(prefix="/api/analysis/daily-stock-concepts", tags=["daily-stock-concepts"])
@@ -26,55 +19,19 @@ class DailyStockConceptRequest(BaseModel):
     commentsPerTopic: int = Field(default=0, ge=0, le=50, description="每个话题最多纳入的评论数")
 
 
-def _build_stock_concept_log_callback(task_id: str) -> Callable[[str], None]:
-    return build_task_log_callback(
-        task_id,
-        lambda current_task_id, message: add_task_log(current_task_id, message),
-    )
-
-
-def _stock_concept_task_metadata(group_id: str, report_date: Optional[str]) -> dict[str, Optional[str]]:
-    return {"group_id": group_id, "report_date": report_date}
-
-
 def _create_daily_stock_concept_task_response(
     group_id: str,
     request: DailyStockConceptRequest,
 ) -> dict[str, str]:
-    return launch_task(
-        "daily_stock_concepts",
-        f"提取每日股票概念 (群组: {group_id})",
-        run_daily_stock_concept_task,
+    return create_daily_stock_concept_task(
         group_id,
-        request,
-        metadata=_stock_concept_task_metadata(group_id, request.date),
+        date=request.date,
+        comments_per_topic=request.commentsPerTopic,
     )
 
 
 def _daily_stock_concept_route_error(message: str, error: Exception) -> HTTPException:
     return HTTPException(status_code=500, detail=f"{message}: {str(error)}")
-
-
-def _extract_daily_stock_concepts_for_task(task_id: str, group_id: str, request: DailyStockConceptRequest) -> dict:
-    return extract_daily_stock_concepts(
-        group_id,
-        request.date,
-        comments_per_topic=request.commentsPerTopic,
-        log_callback=_build_stock_concept_log_callback(task_id),
-    )
-
-
-def run_daily_stock_concept_task(task_id: str, group_id: str, request: DailyStockConceptRequest) -> None:
-    def work() -> dict:
-        return _extract_daily_stock_concepts_for_task(task_id, group_id, request)
-
-    run_workflow(
-        task_id,
-        running_message="开始提取每日股票概念...",
-        completed_message="每日股票概念提取完成",
-        failure_label="每日股票概念提取",
-        work=work,
-    )
 
 
 def _daily_stock_concepts_or_404(group_id: str, date: Optional[str]) -> dict:

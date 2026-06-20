@@ -1,7 +1,7 @@
 import asyncio
 import unittest
 from importlib.util import find_spec
-from unittest.mock import call, patch
+from unittest.mock import patch
 
 
 HAS_DAILY_ROUTE_DEPS = find_spec("fastapi") is not None and find_spec("pydantic") is not None
@@ -10,13 +10,6 @@ HAS_DAILY_ROUTE_DEPS = find_spec("fastapi") is not None and find_spec("pydantic"
 class FakeBackgroundTasks:
     def __init__(self):
         self.tasks = []
-
-    def add_task(self, func, *args):
-        self.tasks.append((func, args))
-
-
-def fake_task(*args):
-    return args
 
 
 class DailyAnalysisRoutesHelperTests(unittest.TestCase):
@@ -30,91 +23,28 @@ class DailyAnalysisRoutesHelperTests(unittest.TestCase):
         self.assertEqual("获取每日报告失败: boom", error.detail)
 
     @unittest.skipUnless(HAS_DAILY_ROUTE_DEPS, "daily analysis route dependencies are not installed")
-    def test_create_daily_task_response_creates_and_enqueues_task(self):
-        from backend.routes.daily_analysis_routes import _create_daily_task_response
-
-        background_tasks = FakeBackgroundTasks()
-        metadata = {"group_id": "group-1", "report_date": "2026-05-07"}
-
-        with patch(
-            "backend.routes.daily_analysis_routes.launch_task",
-            return_value={"task_id": "task-1", "message": "任务已创建，正在后台执行"},
-        ) as launch_task:
-            response = _create_daily_task_response(
-                background_tasks,
-                "daily_topic_analysis",
-                "生成每日话题 AI 报告 (群组: group-1)",
-                metadata,
-                fake_task,
-                "group-1",
-                "request",
-            )
-
-        launch_task.assert_called_once_with(
-            "daily_topic_analysis",
-            "生成每日话题 AI 报告 (群组: group-1)",
-            fake_task,
-            "group-1",
-            "request",
-            metadata=metadata,
-        )
-        self.assertEqual({"task_id": "task-1", "message": "任务已创建，正在后台执行"}, response)
-        self.assertEqual([], background_tasks.tasks)
-
-    @unittest.skipUnless(HAS_DAILY_ROUTE_DEPS, "daily analysis route dependencies are not installed")
-    def test_create_daily_report_enqueues_runtime_task(self):
-        from backend.routes.daily_analysis_routes import (
-            DailyAnalysisRequest,
-            create_daily_report,
-            run_daily_analysis_task,
-        )
-
-        background_tasks = FakeBackgroundTasks()
-        request = DailyAnalysisRequest(date="2026-06-13", commentsPerTopic=2)
-        with patch(
-            "backend.routes.daily_analysis_routes.launch_task",
-            return_value={"task_id": "task-daily", "message": "任务已创建，正在后台执行"},
-        ) as launch_task:
-            result = asyncio.run(create_daily_report("51111112855254", request, background_tasks))
-
-        self.assertEqual({"task_id": "task-daily", "message": "任务已创建，正在后台执行"}, result)
-        launch_task.assert_called_once_with(
-            "daily_topic_analysis",
-            "生成每日话题 AI 报告 (群组: 51111112855254)",
-            run_daily_analysis_task,
-            "51111112855254",
-            request,
-            metadata={"group_id": "51111112855254", "report_date": "2026-06-13"},
-        )
-        self.assertEqual([], background_tasks.tasks)
-
-    @unittest.skipUnless(HAS_DAILY_ROUTE_DEPS, "daily analysis route dependencies are not installed")
-    def test_create_daily_report_task_response_preserves_task_contract(self):
+    def test_create_daily_report_task_response_delegates_to_workflow_launch(self):
         from backend.routes import daily_analysis_routes
-        from backend.routes.daily_analysis_routes import DailyAnalysisRequest, run_daily_analysis_task
+        from backend.routes.daily_analysis_routes import DailyAnalysisRequest
 
-        background_tasks = FakeBackgroundTasks()
         request = DailyAnalysisRequest(date="2026-06-13", commentsPerTopic=2)
         expected = {"task_id": "task-daily", "message": "任务已创建，正在后台执行"}
-        with patch(
-            "backend.routes.daily_analysis_routes._create_daily_task_response",
+        with patch.object(
+            daily_analysis_routes,
+            "create_daily_topic_analysis_task",
             return_value=expected,
-        ) as create_response:
+        ) as create_task:
             result = daily_analysis_routes._create_daily_report_task_response(
                 "51111112855254",
                 request,
-                background_tasks,
+                FakeBackgroundTasks(),
             )
 
         self.assertEqual(expected, result)
-        create_response.assert_called_once_with(
-            background_tasks,
-            "daily_topic_analysis",
-            "生成每日话题 AI 报告 (群组: 51111112855254)",
-            {"group_id": "51111112855254", "report_date": "2026-06-13"},
-            run_daily_analysis_task,
+        create_task.assert_called_once_with(
             "51111112855254",
-            request,
+            date="2026-06-13",
+            comments_per_topic=2,
         )
 
     @unittest.skipUnless(HAS_DAILY_ROUTE_DEPS, "daily analysis route dependencies are not installed")
@@ -144,67 +74,37 @@ class DailyAnalysisRoutesHelperTests(unittest.TestCase):
         self.assertEqual("创建每日分析任务失败: boom", raised.exception.detail)
 
     @unittest.skipUnless(HAS_DAILY_ROUTE_DEPS, "daily analysis route dependencies are not installed")
-    def test_run_today_report_enqueues_runtime_task(self):
-        from backend.routes.daily_analysis_routes import (
-            DailyRunTodayRequest,
-            run_daily_today_task,
-            run_today_report,
-        )
-
-        background_tasks = FakeBackgroundTasks()
-        request = DailyRunTodayRequest(
-            date="2026-06-13",
-            commentsPerTopic=2,
-            crawlLatestFirst=False,
-        )
-        with patch(
-            "backend.routes.daily_analysis_routes.launch_task",
-            return_value={"task_id": "task-today", "message": "任务已创建，正在后台执行"},
-        ) as launch_task:
-            result = asyncio.run(run_today_report("51111112855254", request, background_tasks))
-
-        self.assertEqual({"task_id": "task-today", "message": "任务已创建，正在后台执行"}, result)
-        launch_task.assert_called_once_with(
-            "daily_topic_crawl_and_analysis",
-            "每日抓取与 AI 分析 (群组: 51111112855254)",
-            run_daily_today_task,
-            "51111112855254",
-            request,
-            metadata={"group_id": "51111112855254", "report_date": "2026-06-13"},
-        )
-        self.assertEqual([], background_tasks.tasks)
-
-    @unittest.skipUnless(HAS_DAILY_ROUTE_DEPS, "daily analysis route dependencies are not installed")
-    def test_create_daily_today_task_response_preserves_task_contract(self):
+    def test_create_daily_today_task_response_delegates_to_workflow_launch(self):
+        from backend.schemas.crawl import CrawlSettingsRequest
         from backend.routes import daily_analysis_routes
-        from backend.routes.daily_analysis_routes import DailyRunTodayRequest, run_daily_today_task
+        from backend.routes.daily_analysis_routes import DailyRunTodayRequest
 
-        background_tasks = FakeBackgroundTasks()
+        crawl_settings = CrawlSettingsRequest(pagesPerBatch=15)
         request = DailyRunTodayRequest(
             date="2026-06-13",
             commentsPerTopic=2,
             crawlLatestFirst=False,
+            crawlSettings=crawl_settings,
         )
         expected = {"task_id": "task-today", "message": "任务已创建，正在后台执行"}
-        with patch(
-            "backend.routes.daily_analysis_routes._create_daily_task_response",
+        with patch.object(
+            daily_analysis_routes,
+            "create_daily_topic_crawl_and_analysis_task",
             return_value=expected,
-        ) as create_response:
+        ) as create_task:
             result = daily_analysis_routes._create_daily_today_task_response(
                 "51111112855254",
                 request,
-                background_tasks,
+                FakeBackgroundTasks(),
             )
 
         self.assertEqual(expected, result)
-        create_response.assert_called_once_with(
-            background_tasks,
-            "daily_topic_crawl_and_analysis",
-            "每日抓取与 AI 分析 (群组: 51111112855254)",
-            {"group_id": "51111112855254", "report_date": "2026-06-13"},
-            run_daily_today_task,
+        create_task.assert_called_once_with(
             "51111112855254",
-            request,
+            date="2026-06-13",
+            comments_per_topic=2,
+            crawl_latest_first=False,
+            crawl_settings=crawl_settings,
         )
 
     @unittest.skipUnless(HAS_DAILY_ROUTE_DEPS, "daily analysis route dependencies are not installed")
@@ -234,270 +134,10 @@ class DailyAnalysisRoutesHelperTests(unittest.TestCase):
         self.assertEqual("创建每日抓取分析任务失败: boom", raised.exception.detail)
 
     @unittest.skipUnless(HAS_DAILY_ROUTE_DEPS, "daily analysis route dependencies are not installed")
-    def test_daily_task_metadata_preserves_group_and_report_date_fields(self):
-        from backend.routes.daily_analysis_routes import _daily_task_metadata
-
-        self.assertEqual(
-            {"group_id": "group-1", "report_date": "2026-05-07"},
-            _daily_task_metadata("group-1", "2026-05-07"),
-        )
-        self.assertEqual(
-            {"group_id": "group-1", "report_date": None},
-            _daily_task_metadata("group-1", None),
-        )
-
-    @unittest.skipUnless(HAS_DAILY_ROUTE_DEPS, "daily analysis route dependencies are not installed")
-    def test_build_daily_log_callback_writes_task_log(self):
-        from backend.routes.daily_analysis_routes import _build_daily_log_callback
-
-        log_callback = _build_daily_log_callback("task-1")
-
-        with patch("backend.routes.daily_analysis_routes.add_task_log") as add_task_log:
-            log_callback("hello")
-
-        add_task_log.assert_called_once_with("task-1", "hello")
-
-    @unittest.skipUnless(HAS_DAILY_ROUTE_DEPS, "daily analysis route dependencies are not installed")
-    def test_analyze_daily_topics_for_task_preserves_service_arguments(self):
-        from backend.routes.daily_analysis_routes import DailyAnalysisRequest, _analyze_daily_topics_for_task
-
-        request = DailyAnalysisRequest(date="2026-06-13", commentsPerTopic=2)
-        expected = {"report": []}
-        with (
-            patch("backend.routes.daily_analysis_routes.analyze_daily_topics", return_value=expected) as analyze,
-            patch("backend.routes.daily_analysis_routes.add_task_log") as add_task_log,
-        ):
-            result = _analyze_daily_topics_for_task("task-1", "51111112855254", request)
-
-            self.assertEqual(expected, result)
-            analyze.assert_called_once()
-            call_args, call_kwargs = analyze.call_args
-            self.assertEqual(("51111112855254", "2026-06-13"), call_args)
-            self.assertEqual(2, call_kwargs["comments_per_topic"])
-
-            call_kwargs["log_callback"]("daily log")
-
-        add_task_log.assert_called_once_with("task-1", "daily log")
-
-    @unittest.skipUnless(HAS_DAILY_ROUTE_DEPS, "daily analysis route dependencies are not installed")
-    def test_run_daily_analysis_task_uses_runtime_workflow_lifecycle(self):
-        from backend.routes.daily_analysis_routes import DailyAnalysisRequest, run_daily_analysis_task
-
-        request = DailyAnalysisRequest(date="2026-06-13", commentsPerTopic=2)
-        with (
-            patch("backend.routes.daily_analysis_routes.run_workflow") as run_workflow,
-            patch("backend.routes.daily_analysis_routes.analyze_daily_topics", return_value={"report": []}) as analyze,
-        ):
-            run_daily_analysis_task("task-1", "51111112855254", request)
-
-            run_workflow.assert_called_once()
-            args, kwargs = run_workflow.call_args
-            self.assertEqual(("task-1",), args)
-            self.assertEqual("开始生成每日话题 AI 报告...", kwargs["running_message"])
-            self.assertEqual("每日话题 AI 报告生成完成", kwargs["completed_message"])
-            self.assertEqual("每日话题 AI 报告生成", kwargs["failure_label"])
-
-            result = kwargs["work"]()
-            self.assertEqual({"report": []}, result)
-            analyze.assert_called_once()
-            call_args, call_kwargs = analyze.call_args
-            self.assertEqual(("51111112855254", "2026-06-13"), call_args)
-            self.assertEqual(2, call_kwargs["comments_per_topic"])
-            self.assertTrue(callable(call_kwargs["log_callback"]))
-
-    @unittest.skipUnless(HAS_DAILY_ROUTE_DEPS, "daily analysis route dependencies are not installed")
-    def test_daily_task_stopped_or_failed_checks_stop_before_status(self):
-        from backend.routes import daily_analysis_routes
-
-        with patch.object(daily_analysis_routes, "is_task_stopped", return_value=True) as is_task_stopped:
-            stopped = daily_analysis_routes._daily_task_stopped_or_failed("task-1")
-
-        is_task_stopped.assert_called_once_with("task-1")
-        self.assertTrue(stopped)
-
-    @unittest.skipUnless(HAS_DAILY_ROUTE_DEPS, "daily analysis route dependencies are not installed")
-    def test_daily_task_stopped_or_failed_detects_failed_status(self):
-        from backend.routes import daily_analysis_routes
-
-        with (
-            patch.object(daily_analysis_routes, "is_task_stopped", return_value=False),
-            patch.dict(daily_analysis_routes.current_tasks, {"task-1": {"status": "failed"}}, clear=True),
-        ):
-            failed = daily_analysis_routes._daily_task_stopped_or_failed("task-1")
-
-        self.assertTrue(failed)
-
-    @unittest.skipUnless(HAS_DAILY_ROUTE_DEPS, "daily analysis route dependencies are not installed")
-    def test_fail_daily_task_unless_stopped_logs_and_updates_failure(self):
-        from backend.routes.daily_analysis_routes import _fail_daily_task_unless_stopped
-
-        with (
-            patch("backend.routes.daily_analysis_routes.is_task_stopped", return_value=False),
-            patch("backend.routes.daily_analysis_routes.add_task_log") as add_task_log,
-            patch("backend.routes.daily_analysis_routes.update_task") as update_task,
-        ):
-            _fail_daily_task_unless_stopped("task-1", "每日话题 AI 报告生成", RuntimeError("boom"))
-
-        add_task_log.assert_called_once_with("task-1", "❌ 每日话题 AI 报告生成失败: boom")
-        update_task.assert_called_once_with("task-1", "failed", "每日话题 AI 报告生成失败: boom")
-
-    @unittest.skipUnless(HAS_DAILY_ROUTE_DEPS, "daily analysis route dependencies are not installed")
-    def test_fail_daily_task_unless_stopped_skips_stopped_task(self):
-        from backend.routes.daily_analysis_routes import _fail_daily_task_unless_stopped
-
-        with (
-            patch("backend.routes.daily_analysis_routes.is_task_stopped", return_value=True),
-            patch("backend.routes.daily_analysis_routes.add_task_log") as add_task_log,
-            patch("backend.routes.daily_analysis_routes.update_task") as update_task,
-        ):
-            _fail_daily_task_unless_stopped("task-1", "每日抓取与 AI 分析", RuntimeError("boom"))
-
-        add_task_log.assert_not_called()
-        update_task.assert_not_called()
-
-    @unittest.skipUnless(HAS_DAILY_ROUTE_DEPS, "daily analysis route dependencies are not installed")
-    def test_run_daily_today_task_preserves_crawl_first_lifecycle(self):
-        from backend.routes.daily_analysis_routes import DailyRunTodayRequest, run_daily_today_task
-
-        request = DailyRunTodayRequest(date="2026-06-13", commentsPerTopic=2, crawlLatestFirst=True)
-        result = {"report": []}
-
-        with (
-            patch("backend.routes.daily_analysis_routes.update_task") as update_task,
-            patch("backend.routes.daily_analysis_routes.add_task_log") as add_task_log,
-            patch("backend.routes.daily_analysis_routes.run_crawl_latest_task") as run_crawl_latest_task,
-            patch("backend.routes.daily_analysis_routes._daily_task_stopped_or_failed", return_value=False)
-            as stopped_or_failed,
-            patch("backend.routes.daily_analysis_routes._analyze_daily_topics_for_task", return_value=result)
-            as analyze,
-            patch("backend.routes.daily_analysis_routes.is_task_stopped", return_value=False) as is_task_stopped,
-        ):
-            run_daily_today_task("task-1", "group-1", request)
-
-        self.assertEqual(
-            [
-                call("task-1", "running", "开始每日抓取与 AI 分析..."),
-                call("task-1", "running", "最新话题抓取完成，开始 AI 分析..."),
-                call("task-1", "completed", "每日抓取与 AI 分析完成", result),
-            ],
-            update_task.call_args_list,
-        )
-        add_task_log.assert_called_once_with("task-1", "🔄 先抓取最新话题...")
-        run_crawl_latest_task.assert_called_once_with("task-1", "group-1", None)
-        stopped_or_failed.assert_called_once_with("task-1")
-        analyze.assert_called_once_with("task-1", "group-1", request)
-        is_task_stopped.assert_called_once_with("task-1")
-
-    @unittest.skipUnless(HAS_DAILY_ROUTE_DEPS, "daily analysis route dependencies are not installed")
-    def test_run_daily_today_task_returns_after_crawl_stop_or_failure(self):
-        from backend.routes.daily_analysis_routes import DailyRunTodayRequest, run_daily_today_task
-
-        request = DailyRunTodayRequest(date="2026-06-13", crawlLatestFirst=True)
-
-        with (
-            patch("backend.routes.daily_analysis_routes.update_task") as update_task,
-            patch("backend.routes.daily_analysis_routes.add_task_log") as add_task_log,
-            patch("backend.routes.daily_analysis_routes.run_crawl_latest_task") as run_crawl_latest_task,
-            patch("backend.routes.daily_analysis_routes._daily_task_stopped_or_failed", return_value=True)
-            as stopped_or_failed,
-            patch("backend.routes.daily_analysis_routes._analyze_daily_topics_for_task") as analyze,
-            patch("backend.routes.daily_analysis_routes.is_task_stopped") as is_task_stopped,
-        ):
-            run_daily_today_task("task-1", "group-1", request)
-
-        update_task.assert_called_once_with("task-1", "running", "开始每日抓取与 AI 分析...")
-        add_task_log.assert_called_once_with("task-1", "🔄 先抓取最新话题...")
-        run_crawl_latest_task.assert_called_once_with("task-1", "group-1", None)
-        stopped_or_failed.assert_called_once_with("task-1")
-        analyze.assert_not_called()
-        is_task_stopped.assert_not_called()
-
-    @unittest.skipUnless(HAS_DAILY_ROUTE_DEPS, "daily analysis route dependencies are not installed")
-    def test_run_daily_today_task_skips_crawl_when_disabled(self):
-        from backend.routes.daily_analysis_routes import DailyRunTodayRequest, run_daily_today_task
-
-        request = DailyRunTodayRequest(date="2026-06-13", commentsPerTopic=2, crawlLatestFirst=False)
-        result = {"report": []}
-
-        with (
-            patch("backend.routes.daily_analysis_routes.update_task") as update_task,
-            patch("backend.routes.daily_analysis_routes.add_task_log") as add_task_log,
-            patch("backend.routes.daily_analysis_routes.run_crawl_latest_task") as run_crawl_latest_task,
-            patch("backend.routes.daily_analysis_routes._daily_task_stopped_or_failed") as stopped_or_failed,
-            patch("backend.routes.daily_analysis_routes._analyze_daily_topics_for_task", return_value=result)
-            as analyze,
-            patch("backend.routes.daily_analysis_routes.is_task_stopped", return_value=False) as is_task_stopped,
-        ):
-            run_daily_today_task("task-1", "group-1", request)
-
-        self.assertEqual(
-            [
-                call("task-1", "running", "开始每日抓取与 AI 分析..."),
-                call("task-1", "completed", "每日抓取与 AI 分析完成", result),
-            ],
-            update_task.call_args_list,
-        )
-        add_task_log.assert_not_called()
-        run_crawl_latest_task.assert_not_called()
-        stopped_or_failed.assert_not_called()
-        analyze.assert_called_once_with("task-1", "group-1", request)
-        is_task_stopped.assert_called_once_with("task-1")
-
-    @unittest.skipUnless(HAS_DAILY_ROUTE_DEPS, "daily analysis route dependencies are not installed")
-    def test_run_daily_today_task_returns_when_stopped_after_analysis(self):
-        from backend.routes.daily_analysis_routes import DailyRunTodayRequest, run_daily_today_task
-
-        request = DailyRunTodayRequest(date="2026-06-13", crawlLatestFirst=False)
-
-        with (
-            patch("backend.routes.daily_analysis_routes.update_task") as update_task,
-            patch("backend.routes.daily_analysis_routes._run_daily_today_crawl_first_step", return_value=True)
-            as crawl_first_step,
-            patch("backend.routes.daily_analysis_routes._analyze_daily_topics_for_task", return_value={"report": []})
-            as analyze,
-            patch("backend.routes.daily_analysis_routes.is_task_stopped", return_value=True) as is_task_stopped,
-        ):
-            run_daily_today_task("task-1", "group-1", request)
-
-        update_task.assert_called_once_with("task-1", "running", "开始每日抓取与 AI 分析...")
-        crawl_first_step.assert_called_once_with("task-1", "group-1", request)
-        analyze.assert_called_once_with("task-1", "group-1", request)
-        is_task_stopped.assert_called_once_with("task-1")
-
-    @unittest.skipUnless(HAS_DAILY_ROUTE_DEPS, "daily analysis route dependencies are not installed")
-    def test_complete_daily_today_task_unless_stopped_preserves_completed_result(self):
-        from backend.routes.daily_analysis_routes import _complete_daily_today_task_unless_stopped
-
-        result = {"report": []}
-        with (
-            patch("backend.routes.daily_analysis_routes.is_task_stopped", return_value=False) as is_task_stopped,
-            patch("backend.routes.daily_analysis_routes.update_task") as update_task,
-        ):
-            _complete_daily_today_task_unless_stopped("task-1", result)
-
-        is_task_stopped.assert_called_once_with("task-1")
-        update_task.assert_called_once_with("task-1", "completed", "每日抓取与 AI 分析完成", result)
-
-    @unittest.skipUnless(HAS_DAILY_ROUTE_DEPS, "daily analysis route dependencies are not installed")
-    def test_complete_daily_today_task_unless_stopped_skips_stopped_task(self):
-        from backend.routes.daily_analysis_routes import _complete_daily_today_task_unless_stopped
-
-        with (
-            patch("backend.routes.daily_analysis_routes.is_task_stopped", return_value=True) as is_task_stopped,
-            patch("backend.routes.daily_analysis_routes.update_task") as update_task,
-        ):
-            _complete_daily_today_task_unless_stopped("task-1", {"report": []})
-
-        is_task_stopped.assert_called_once_with("task-1")
-        update_task.assert_not_called()
-
-    @unittest.skipUnless(HAS_DAILY_ROUTE_DEPS, "daily analysis route dependencies are not installed")
     def test_read_daily_report_preserves_report_passthrough(self):
-        import asyncio
-
         from backend.routes import daily_analysis_routes
 
-        report = {"date": "2026-06-13", "topics": []}
+        report = {"date": "2026-06-13", "summary": "ok"}
         with patch.object(daily_analysis_routes, "get_daily_report", return_value=report) as get_report:
             result = asyncio.run(daily_analysis_routes.read_daily_report("group-1", "2026-06-13"))
 
@@ -506,8 +146,6 @@ class DailyAnalysisRoutesHelperTests(unittest.TestCase):
 
     @unittest.skipUnless(HAS_DAILY_ROUTE_DEPS, "daily analysis route dependencies are not installed")
     def test_read_daily_report_preserves_missing_report_404(self):
-        import asyncio
-
         from fastapi import HTTPException
 
         from backend.routes import daily_analysis_routes
@@ -526,30 +164,12 @@ class DailyAnalysisRoutesHelperTests(unittest.TestCase):
 
         from backend.routes import daily_analysis_routes
 
-        with patch.object(
-            daily_analysis_routes,
-            "_daily_report_or_404",
-            side_effect=RuntimeError("boom"),
-        ):
+        with patch.object(daily_analysis_routes, "_daily_report_or_404", side_effect=RuntimeError("boom")):
             with self.assertRaises(HTTPException) as raised:
                 asyncio.run(daily_analysis_routes.read_daily_report("group-1", None))
 
         self.assertEqual(500, raised.exception.status_code)
         self.assertEqual("获取每日报告失败: boom", raised.exception.detail)
-
-    @unittest.skipUnless(HAS_DAILY_ROUTE_DEPS, "daily analysis route dependencies are not installed")
-    def test_daily_report_or_404_preserves_missing_report_404(self):
-        from fastapi import HTTPException
-
-        from backend.routes import daily_analysis_routes
-
-        with patch.object(daily_analysis_routes, "get_daily_report", return_value={}) as get_report:
-            with self.assertRaises(HTTPException) as raised:
-                daily_analysis_routes._daily_report_or_404("group-1", "2026-06-13")
-
-        self.assertEqual(404, raised.exception.status_code)
-        self.assertEqual("日报不存在，请先生成", raised.exception.detail)
-        get_report.assert_called_once_with("group-1", "2026-06-13")
 
 
 if __name__ == "__main__":
