@@ -2,12 +2,15 @@ import unittest
 from contextlib import ExitStack
 from unittest.mock import patch
 
+from backend.services.file_analysis_workflow import (
+    _build_file_analysis_stats,
+    _run_file_analysis_items,
+)
 from backend.services.file_workflow_service import (
     _add_file_search_condition,
     _build_check_local_file_status_response,
     _build_download_file_info,
     _build_download_task_stats,
-    _build_file_analysis_stats,
     _build_file_status_response,
     _build_sync_files_response,
     _close_crawler_file_databases,
@@ -23,7 +26,6 @@ from backend.services.file_workflow_service import (
     _query_group_id,
     _resolve_download_record_status,
     _run_download_records,
-    _run_file_analysis_items,
     _unique_int_file_ids,
 )
 
@@ -789,7 +791,7 @@ class FileRoutesHelperTests(unittest.TestCase):
         self.assertEqual("文件 AI 分析失败: 409: conflict", raised.exception.detail)
 
     def test_run_file_analysis_task_dedupes_ids_and_preserves_mixed_stats(self):
-        from backend.services import file_workflow_service
+        from backend.services import file_analysis_workflow
 
         def analyze_side_effect(group_id, file_id, **_kwargs):
             if file_id == 3:
@@ -797,12 +799,12 @@ class FileRoutesHelperTests(unittest.TestCase):
             return {"cached": file_id == 2}
 
         with (
-            patch("backend.services.file_workflow_service.update_task") as update_task,
-            patch("backend.services.file_workflow_service.add_task_log") as add_task_log,
-            patch("backend.services.file_workflow_service.is_task_stopped", return_value=False),
-            patch("backend.services.file_workflow_service.analyze_group_file", side_effect=analyze_side_effect) as analyze,
+            patch("backend.services.file_analysis_workflow.update_task") as update_task,
+            patch("backend.services.file_analysis_workflow.add_task_log") as add_task_log,
+            patch("backend.services.file_analysis_workflow.is_task_stopped", return_value=False),
+            patch("backend.services.file_analysis_workflow.analyze_group_file", side_effect=analyze_side_effect) as analyze,
         ):
-            file_workflow_service.run_file_analysis_task("task-1", "group-1", [1, 2, 1, 3], force=True)
+            file_analysis_workflow.run_file_analysis_task("task-1", "group-1", [1, 2, 1, 3], force=True)
 
         self.assertEqual(
             [("group-1", 1), ("group-1", 2), ("group-1", 3)],
@@ -821,15 +823,15 @@ class FileRoutesHelperTests(unittest.TestCase):
         )
 
     def test_run_file_analysis_task_preserves_pre_cast_deduplication_for_mixed_id_types(self):
-        from backend.services import file_workflow_service
+        from backend.services import file_analysis_workflow
 
         with (
-            patch("backend.services.file_workflow_service.update_task") as update_task,
-            patch("backend.services.file_workflow_service.add_task_log"),
-            patch("backend.services.file_workflow_service.is_task_stopped", return_value=False),
-            patch("backend.services.file_workflow_service.analyze_group_file", return_value={"cached": False}) as analyze,
+            patch("backend.services.file_analysis_workflow.update_task") as update_task,
+            patch("backend.services.file_analysis_workflow.add_task_log"),
+            patch("backend.services.file_analysis_workflow.is_task_stopped", return_value=False),
+            patch("backend.services.file_analysis_workflow.analyze_group_file", return_value={"cached": False}) as analyze,
         ):
-            file_workflow_service.run_file_analysis_task("task-1", "group-1", [1, "1"], force=False)
+            file_analysis_workflow.run_file_analysis_task("task-1", "group-1", [1, "1"], force=False)
 
         self.assertEqual(
             [("group-1", 1), ("group-1", 1)],
@@ -843,15 +845,15 @@ class FileRoutesHelperTests(unittest.TestCase):
         )
 
     def test_run_file_analysis_task_stops_between_files_without_final_update(self):
-        from backend.services import file_workflow_service
+        from backend.services import file_analysis_workflow
 
         with (
-            patch("backend.services.file_workflow_service.update_task") as update_task,
-            patch("backend.services.file_workflow_service.add_task_log") as add_task_log,
-            patch("backend.services.file_workflow_service.is_task_stopped", side_effect=[False, True]),
-            patch("backend.services.file_workflow_service.analyze_group_file", return_value={"cached": False}) as analyze,
+            patch("backend.services.file_analysis_workflow.update_task") as update_task,
+            patch("backend.services.file_analysis_workflow.add_task_log") as add_task_log,
+            patch("backend.services.file_analysis_workflow.is_task_stopped", side_effect=[False, True]),
+            patch("backend.services.file_analysis_workflow.analyze_group_file", return_value={"cached": False}) as analyze,
         ):
-            file_workflow_service.run_file_analysis_task("task-1", "group-1", [1, 2], force=False)
+            file_analysis_workflow.run_file_analysis_task("task-1", "group-1", [1, 2], force=False)
 
         self.assertEqual([("group-1", 1)], [call.args[:2] for call in analyze.call_args_list])
         self.assertEqual(
@@ -866,15 +868,15 @@ class FileRoutesHelperTests(unittest.TestCase):
         )
 
     def test_run_file_analysis_task_marks_task_failed_when_all_files_fail(self):
-        from backend.services import file_workflow_service
+        from backend.services import file_analysis_workflow
 
         with (
-            patch("backend.services.file_workflow_service.update_task") as update_task,
-            patch("backend.services.file_workflow_service.add_task_log"),
-            patch("backend.services.file_workflow_service.is_task_stopped", return_value=False),
-            patch("backend.services.file_workflow_service.analyze_group_file", side_effect=RuntimeError("boom")),
+            patch("backend.services.file_analysis_workflow.update_task") as update_task,
+            patch("backend.services.file_analysis_workflow.add_task_log"),
+            patch("backend.services.file_analysis_workflow.is_task_stopped", return_value=False),
+            patch("backend.services.file_analysis_workflow.analyze_group_file", side_effect=RuntimeError("boom")),
         ):
-            file_workflow_service.run_file_analysis_task("task-1", "group-1", [1], force=False)
+            file_analysis_workflow.run_file_analysis_task("task-1", "group-1", [1], force=False)
 
         update_task.assert_any_call(
             "task-1",
@@ -892,10 +894,10 @@ class FileRoutesHelperTests(unittest.TestCase):
         stats = _build_file_analysis_stats(total_files=3)
 
         with (
-            patch("backend.services.file_workflow_service.is_task_stopped", return_value=False),
-            patch("backend.services.file_workflow_service.add_task_log") as add_task_log,
+            patch("backend.services.file_analysis_workflow.is_task_stopped", return_value=False),
+            patch("backend.services.file_analysis_workflow.add_task_log") as add_task_log,
             patch(
-                "backend.services.file_workflow_service._analyze_group_file_with_defaults",
+                "backend.services.file_analysis_workflow._analyze_group_file_with_defaults",
                 side_effect=analyze_side_effect,
             ) as analyze,
         ):
@@ -923,10 +925,10 @@ class FileRoutesHelperTests(unittest.TestCase):
         stats = _build_file_analysis_stats(total_files=2)
 
         with (
-            patch("backend.services.file_workflow_service.is_task_stopped", side_effect=[False, True]),
-            patch("backend.services.file_workflow_service.add_task_log") as add_task_log,
+            patch("backend.services.file_analysis_workflow.is_task_stopped", side_effect=[False, True]),
+            patch("backend.services.file_analysis_workflow.add_task_log") as add_task_log,
             patch(
-                "backend.services.file_workflow_service._analyze_group_file_with_defaults",
+                "backend.services.file_analysis_workflow._analyze_group_file_with_defaults",
                 return_value={"cached": False},
             ) as analyze,
         ):
