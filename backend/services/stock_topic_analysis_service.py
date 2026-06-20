@@ -48,11 +48,9 @@ from backend.services.stock_topic_analysis_store import (
     load_latest_processed_topic_ids,
     load_question_topic_search_rows,
     load_saved_stock_topic_analysis,
-    load_stock_topic_processed_state_ids,
     load_stock_recommendation_counts,
     load_stock_topic_search_rows,
     upsert_stock_topic_analysis,
-    upsert_stock_topic_processed_states,
 )
 from backend.services.stock_topic_analysis_runner import (
     AnalyzeStockTopicsBatchRequest,
@@ -204,40 +202,6 @@ def _load_latest_processed_topic_ids(conn: Any, group_id: str, stock_name: str) 
         stock_name,
         processed_topic_statuses=PROCESSED_TOPIC_STATUSES,
         max_tracked_topic_ids=MAX_TRACKED_TOPIC_IDS,
-    )
-
-
-def _load_stock_topic_processed_state_ids(conn: Any, group_id: str, stock_name: str) -> List[str]:
-    return load_stock_topic_processed_state_ids(
-        conn,
-        group_id,
-        stock_name,
-        processed_topic_statuses=PROCESSED_TOPIC_STATUSES,
-        max_tracked_topic_ids=MAX_TRACKED_TOPIC_IDS,
-    )
-
-
-def _upsert_stock_topic_processed_states(
-    conn: Any,
-    *,
-    group_id: str,
-    stock_name: str,
-    topic_ids: Iterable[Any],
-    status: str,
-    extract_mode: str = "",
-    model: str = "",
-    error: str = "",
-) -> None:
-    upsert_stock_topic_processed_states(
-        conn,
-        group_id=group_id,
-        stock_name=stock_name,
-        topic_ids=topic_ids,
-        status=status,
-        max_tracked_topic_ids=MAX_TRACKED_TOPIC_IDS,
-        extract_mode=extract_mode,
-        model=model,
-        error=error,
     )
 
 

@@ -536,14 +536,20 @@ class StockTopicAnalysisServiceHelperTests(unittest.TestCase):
 
     @unittest.skipUnless(HAS_SERVICE_DEPS, "stock topic analysis service dependencies are not installed")
     def test_load_processed_state_uses_only_completed_statuses(self):
-        from backend.services.stock_topic_analysis_service import _load_stock_topic_processed_state_ids
+        from backend.services.stock_topic_analysis_store import load_stock_topic_processed_state_ids
 
         conn = Mock()
         cursor = Mock()
         cursor.fetchall.return_value = [{"topic_id": "101"}, {"topic_id": "102"}]
         conn.execute.return_value = cursor
 
-        result = _load_stock_topic_processed_state_ids(conn, "51111112855254", "宁德时代")
+        result = load_stock_topic_processed_state_ids(
+            conn,
+            "51111112855254",
+            "宁德时代",
+            processed_topic_statuses={"analyzed", "skipped"},
+            max_tracked_topic_ids=5000,
+        )
 
         self.assertEqual(["101", "102"], result)
         self.assertIn("status IN", conn.execute.call_args.args[0])
