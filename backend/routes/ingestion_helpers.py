@@ -4,20 +4,18 @@ from typing import Any, Callable, Dict
 
 from fastapi import BackgroundTasks, HTTPException
 
-from backend.services.task_runtime import create_ingestion_task, enqueue_runtime_task
-
-
-INGESTION_CONFLICT_MESSAGE = "该群组已有采集或同步任务正在运行"
-TASK_CREATED_MESSAGE = "任务已创建，正在后台执行"
+from backend.services.task_launch import (
+    INGESTION_CONFLICT_MESSAGE,
+    TASK_CREATED_MESSAGE,
+    TaskLaunchConflict,
+    create_ingestion_task_or_raise as _create_ingestion_task_or_raise,
+    ingestion_conflict_detail as _ingestion_conflict_detail,
+    launch_ingestion_task,
+)
 
 
 def ingestion_conflict_detail(existing: Dict[str, Any]) -> Dict[str, Any]:
-    return {
-        "message": INGESTION_CONFLICT_MESSAGE,
-        "task_id": existing.get("task_id"),
-        "type": existing.get("type"),
-        "status": existing.get("status"),
-    }
+    return _ingestion_conflict_detail(existing)
 
 
 def raise_ingestion_conflict(existing: Dict[str, Any]) -> None:
@@ -25,10 +23,10 @@ def raise_ingestion_conflict(existing: Dict[str, Any]) -> None:
 
 
 def create_ingestion_task_or_raise(task_type: str, description: str, group_id: str) -> str:
-    task_id, existing = create_ingestion_task(task_type, description, group_id)
-    if existing:
-        raise_ingestion_conflict(existing)
-    return task_id
+    try:
+        return _create_ingestion_task_or_raise(task_type, description, group_id)
+    except TaskLaunchConflict as exc:
+        raise_ingestion_conflict(exc.existing)
 
 
 def enqueue_ingestion_task(
@@ -40,6 +38,14 @@ def enqueue_ingestion_task(
     *task_args: Any,
     message: str = TASK_CREATED_MESSAGE,
 ) -> Dict[str, str]:
-    task_id = create_ingestion_task_or_raise(task_type, description, group_id)
-    enqueue_runtime_task(task_func, task_id, group_id, *task_args)
-    return {"task_id": task_id, "message": message}
+    try:
+        return launch_ingestion_task(
+            task_type,
+            description,
+            task_func,
+            group_id,
+            *task_args,
+            message=message,
+        )
+    except TaskLaunchConflict as exc:
+        raise_ingestion_conflict(exc.existing)
