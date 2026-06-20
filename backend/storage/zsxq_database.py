@@ -458,7 +458,7 @@ class ZSXQDatabase:
                 return TopicImportResult("error", topic_id=topic_id, error_message="missing_topic_id")
 
             # 如果话题已存在，直接跳过，避免重复写入或更新
-            if self._topic_exists(topic_id):
+            if self.topic_exists(topic_id):
                 self._sync_existing_topic_talk_files(topic_data)
                 print(f"话题 {topic_id} 已存在，跳过导入")
                 return TopicImportResult("existing", topic_id=topic_id)
@@ -476,6 +476,9 @@ class ZSXQDatabase:
             return TopicImportResult("error", error_message=str(e))
 
     def _topic_exists(self, topic_id: int) -> bool:
+        return self.topic_exists(topic_id)
+
+    def topic_exists(self, topic_id: int) -> bool:
         sql, params = _topic_exists_query(topic_id, self.group_id)
         return self._fetch_row_exists(sql, params)
     

@@ -497,22 +497,14 @@ def _run_legacy_time_range_pages(
 
     return _LegacyTimeRangeRunResult(stats=total_stats, expired=False)
 
-def _query_group_id(group_id: str) -> Any:
-    value = str(group_id or "").strip()
-    return int(value) if value.isdigit() else value
-
 def _official_import_topic(db: ZSXQDatabase, _group_id: str, topic_data: dict[str, Any]) -> str:
     result = db.import_topic_data_with_result(topic_data)
     if not result.succeeded:
         return "error"
     return "updated" if result.status == "existing" else "new"
 
-def _official_topic_exists(db: ZSXQDatabase, group_id: str, topic_id: Any) -> bool:
-    db.cursor.execute(
-        "SELECT topic_id FROM topics WHERE topic_id = ? AND group_id = ?",
-        (topic_id, _query_group_id(group_id)),
-    )
-    return db.cursor.fetchone() is not None
+def _official_topic_exists(db: ZSXQDatabase, _group_id: str, topic_id: Any) -> bool:
+    return db.topic_exists(topic_id)
 
 def _official_topic_id(topic: dict[str, Any]) -> int:
     return int(topic.get("topic_id") or 0)

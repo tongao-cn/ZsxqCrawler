@@ -1277,6 +1277,24 @@ class CrawlRoutesHelperTests(unittest.TestCase):
         self.assertEqual([existing_topic, missing_id_topic, failed_topic], db.imported)
 
     @unittest.skipUnless(HAS_CRAWL_ROUTE_DEPS, "crawl route dependencies are not installed")
+    def test_official_topic_exists_delegates_to_storage_topic_exists(self):
+        from backend.services.crawl_service import _official_topic_exists
+
+        class FakeDb:
+            def __init__(self):
+                self.topic_exists_calls = []
+
+            def topic_exists(self, topic_id):
+                self.topic_exists_calls.append(topic_id)
+                return topic_id == 10
+
+        db = FakeDb()
+
+        self.assertTrue(_official_topic_exists(db, "group-1", 10))
+        self.assertFalse(_official_topic_exists(db, "group-2", 11))
+        self.assertEqual([10, 11], db.topic_exists_calls)
+
+    @unittest.skipUnless(HAS_CRAWL_ROUTE_DEPS, "crawl route dependencies are not installed")
     def test_official_import_topics_preserves_comment_count_stats_and_commit(self):
         from backend.services.crawl_service import _official_import_topics
 

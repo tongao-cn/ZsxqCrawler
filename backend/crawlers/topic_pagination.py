@@ -3,7 +3,6 @@ from __future__ import annotations
 from typing import Any, Dict, List, Optional
 
 from backend.core.console_output import safe_console_print as print
-from backend.crawlers.topic_ingestion import _query_group_id
 
 
 TOPIC_PAGINATION_MAX_RETRIES_PER_PAGE = 10
@@ -291,11 +290,7 @@ class TopicPaginationMixin:
                     new_topics_count = 0
                     for topic in topics:
                         topic_id = topic.get('topic_id')
-                        self.db.cursor.execute(
-                            'SELECT topic_id FROM topics WHERE topic_id = ? AND group_id = ?',
-                            (topic_id, _query_group_id(self.group_id)),
-                        )
-                        if not self.db.cursor.fetchone():
+                        if not self.db.topic_exists(topic_id):
                             new_topics_count += 1
 
                     # 存储数据
@@ -444,11 +439,7 @@ class TopicPaginationMixin:
                     new_topics_count = 0
                     for topic in topics:
                         topic_id = topic.get('topic_id')
-                        self.db.cursor.execute(
-                            'SELECT topic_id FROM topics WHERE topic_id = ? AND group_id = ?',
-                            (topic_id, _query_group_id(self.group_id)),
-                        )
-                        if not self.db.cursor.fetchone():
+                        if not self.db.topic_exists(topic_id):
                             new_topics_count += 1
 
                     print(f"   📊 获取到 {len(topics)} 个话题，其中 {new_topics_count} 个为新话题")
@@ -599,11 +590,7 @@ class TopicPaginationMixin:
 
                     for topic in topics:
                         topic_id = topic.get('topic_id')
-                        self.db.cursor.execute(
-                            'SELECT topic_id FROM topics WHERE topic_id = ? AND group_id = ?',
-                            (topic_id, _query_group_id(self.group_id)),
-                        )
-                        if self.db.cursor.fetchone():
+                        if self.db.topic_exists(topic_id):
                             existing_count += 1
                         else:
                             new_topics_list.append(topic)
@@ -649,11 +636,7 @@ class TopicPaginationMixin:
                             try:
                                 topic_id = new_topic.get('topic_id')
                                 # 检查是否已存在（双重检查）
-                                self.db.cursor.execute(
-                                    'SELECT topic_id FROM topics WHERE topic_id = ? AND group_id = ?',
-                                    (topic_id, _query_group_id(self.group_id)),
-                                )
-                                exists = self.db.cursor.fetchone()
+                                exists = self.db.topic_exists(topic_id)
 
                                 # 导入数据
                                 if not self.db.import_topic_data(new_topic):

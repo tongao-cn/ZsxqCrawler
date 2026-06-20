@@ -1750,6 +1750,40 @@ class ZSXQDatabaseHelperTests(unittest.TestCase):
             missing_db.cursor.calls,
         )
 
+    def test_topic_exists_preserves_group_scope_and_row_presence_semantics(self):
+        from backend.storage.zsxq_database import ZSXQDatabase
+
+        existing_db = object.__new__(ZSXQDatabase)
+        existing_db.cursor = FakeCursor()
+        existing_db.cursor.row = (None,)
+        existing_db.group_id = "303"
+
+        self.assertTrue(ZSXQDatabase.topic_exists(existing_db, 202))
+        self.assertEqual(
+            [
+                (
+                    "SELECT 1 FROM topics WHERE topic_id = ? AND (? IS NULL OR group_id = ?) LIMIT 1",
+                    (202, 303, 303),
+                )
+            ],
+            existing_db.cursor.calls,
+        )
+
+        missing_db = object.__new__(ZSXQDatabase)
+        missing_db.cursor = FakeCursor()
+        missing_db.group_id = None
+
+        self.assertFalse(ZSXQDatabase.topic_exists(missing_db, 203))
+        self.assertEqual(
+            [
+                (
+                    "SELECT 1 FROM topics WHERE topic_id = ? AND (? IS NULL OR group_id = ?) LIMIT 1",
+                    (203, "", ""),
+                )
+            ],
+            missing_db.cursor.calls,
+        )
+
     def test_topic_timestamp_query_helpers_preserve_existing_scope_semantics(self):
         newest_sql, newest_params = _newest_topic_create_time_query(None, nullable_scope=True)
         self.assertIn("ORDER BY create_time DESC LIMIT 1", " ".join(newest_sql.split()))
