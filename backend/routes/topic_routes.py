@@ -405,12 +405,7 @@ def _delete_single_topic_response(topic_id: int, group_id: int) -> dict:
     db = None
     try:
         db = ZSXQDatabase(str(group_id))
-        db.cursor.execute(
-            "SELECT COUNT(*) FROM topics WHERE topic_id = ? AND group_id = ?",
-            (topic_id, group_id),
-        )
-        exists = db.cursor.fetchone()[0] > 0
-        if not exists:
+        if not db.topic_exists(topic_id):
             return {"success": False, "message": "话题不存在"}
 
         deleted = _delete_single_topic_rows(db, topic_id, group_id)
@@ -430,11 +425,7 @@ def _fetch_single_topic_response(group_id: str, topic_id: int, fetch_comments: b
         db = ZSXQDatabase(str(group_id))
         client = OfficialTopicClient()
 
-        db.cursor.execute(
-            "SELECT 1 FROM topics WHERE topic_id = ? AND group_id = ? LIMIT 1",
-            (topic_id, _query_group_id(group_id)),
-        )
-        if db.cursor.fetchone():
+        if db.topic_exists(topic_id):
             return _build_single_topic_response(topic_id, group_id, "skipped", 0, "话题已存在，跳过采集")
 
         topic = official_payload_topic(client.get_topic_info(topic_id))

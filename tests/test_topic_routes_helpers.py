@@ -62,24 +62,17 @@ class FakeCommentClient:
         return self.comments
 
 
-class FakeSingleTopicCursor:
-    def __init__(self, existing=False):
-        self.existing = existing
-        self.calls = []
-
-    def execute(self, query, params=()):
-        self.calls.append((" ".join(query.split()), params))
-
-    def fetchone(self):
-        return (1,) if self.existing else None
-
-
 class FakeSingleTopicImportDb(FakeDb):
     def __init__(self, import_result, existing=False):
         super().__init__()
-        self.cursor = FakeSingleTopicCursor(existing=existing)
         self.import_result = import_result
         self.imported_topics = []
+        self.existing = existing
+        self.topic_exists_calls = []
+
+    def topic_exists(self, topic_id):
+        self.topic_exists_calls.append(topic_id)
+        return self.existing
 
     def import_topic_data_with_result(self, topic_data):
         self.imported_topics.append(topic_data)
@@ -221,7 +214,40 @@ class TopicRoutesHelperTests(unittest.TestCase):
         self.assertTrue(db.closed)
         self.assertEqual([14], client.info_calls)
         self.assertEqual([14], client.comment_calls)
+        self.assertEqual([14], db.topic_exists_calls)
         self.assertEqual([{**topic_data, "show_comments": [{"comment_id": 1}]}], db.imported_topics)
+
+    @unittest.skipUnless(HAS_TOPIC_ROUTE_DEPS, "topic route dependencies are not installed")
+    def test_fetch_single_topic_response_skips_existing_topic_via_storage(self):
+        from backend.routes.topic_routes import _fetch_single_topic_response
+        from backend.storage.zsxq_database import TopicImportResult
+
+        db = FakeSingleTopicImportDb(TopicImportResult("created", topic_id=14), existing=True)
+        client = FakeSingleTopicClient()
+
+        with (
+            patch("backend.routes.topic_routes.ZSXQDatabase", return_value=db),
+            patch("backend.routes.topic_routes.OfficialTopicClient", return_value=client),
+        ):
+            response = _fetch_single_topic_response("123", 14, fetch_comments=True)
+
+        self.assertEqual(
+            {
+                "success": True,
+                "topic_id": 14,
+                "group_id": 123,
+                "imported": "skipped",
+                "comments_fetched": 0,
+                "message": "话题已存在，跳过采集",
+            },
+            response,
+        )
+        self.assertEqual([14], db.topic_exists_calls)
+        self.assertEqual([], client.info_calls)
+        self.assertEqual([], client.comment_calls)
+        self.assertEqual([], db.imported_topics)
+        self.assertFalse(db.committed)
+        self.assertTrue(db.closed)
 
     @unittest.skipUnless(HAS_TOPIC_ROUTE_DEPS, "topic route dependencies are not installed")
     def test_fetch_single_topic_response_rejects_failed_import_result(self):
@@ -249,7 +275,49 @@ class TopicRoutesHelperTests(unittest.TestCase):
         self.assertEqual("话题导入失败: boom", ctx.exception.detail)
         self.assertFalse(db.committed)
         self.assertTrue(db.closed)
+        self.assertEqual([14], db.topic_exists_calls)
         self.assertEqual(1, len(db.imported_topics))
+
+    @unittest.skipUnless(HAS_TOPIC_ROUTE_DEPS, "topic route dependencies are not installed")
+    def test_delete_single_topic_response_uses_storage_topic_exists(self):
+        from backend.routes.topic_routes import _delete_single_topic_response
+
+        class FakeDeleteTopicDb(FakeDb):
+            def __init__(self, existing):
+                super().__init__()
+                self.existing = existing
+                self.topic_exists_calls = []
+
+            def topic_exists(self, topic_id):
+                self.topic_exists_calls.append(topic_id)
+                return self.existing
+
+        existing_db = FakeDeleteTopicDb(existing=True)
+        missing_db = FakeDeleteTopicDb(existing=False)
+
+        with (
+            patch("backend.routes.topic_routes.ZSXQDatabase", return_value=existing_db),
+            patch("backend.routes.topic_routes._delete_single_topic_rows", return_value={"topics": 1}) as delete_rows,
+        ):
+            response = _delete_single_topic_response(14, 123)
+
+        self.assertEqual({"success": True, "deleted_topic_id": 14, "deleted": {"topics": 1}}, response)
+        self.assertEqual([14], existing_db.topic_exists_calls)
+        delete_rows.assert_called_once_with(existing_db, 14, 123)
+        self.assertTrue(existing_db.committed)
+        self.assertTrue(existing_db.closed)
+
+        with (
+            patch("backend.routes.topic_routes.ZSXQDatabase", return_value=missing_db),
+            patch("backend.routes.topic_routes._delete_single_topic_rows") as delete_rows,
+        ):
+            response = _delete_single_topic_response(15, 123)
+
+        self.assertEqual({"success": False, "message": "话题不存在"}, response)
+        self.assertEqual([15], missing_db.topic_exists_calls)
+        delete_rows.assert_not_called()
+        self.assertFalse(missing_db.committed)
+        self.assertTrue(missing_db.closed)
 
     @unittest.skipUnless(HAS_TOPIC_ROUTE_DEPS, "topic route dependencies are not installed")
     def test_fetch_and_import_topic_comments_imports_comments(self):
