@@ -1,4 +1,4 @@
-from typing import Dict, List, Any, Optional
+from typing import Any, Dict, List, NamedTuple, Optional, Sequence
 
 from backend.storage.db_compat import connect
 from backend.storage.zsxq_file_database_helpers import (
@@ -29,6 +29,174 @@ from backend.storage.zsxq_file_database_helpers import (
     _user_liked_emoji_record_params,
     _user_record_params,
 )
+
+
+_COMPLETED_DOWNLOAD_STATUSES = ("completed", "downloaded", "skipped")
+
+_FILE_SEARCH_CONDITION = """
+        (
+            LOWER(COALESCE(f.name, '')) LIKE ?
+            OR EXISTS (
+                SELECT 1
+                FROM file_topic_relations fr
+                LEFT JOIN topics t ON t.topic_id = fr.topic_id
+                LEFT JOIN talks tk ON tk.topic_id = fr.topic_id
+                LEFT JOIN articles ar ON ar.topic_id = fr.topic_id
+                WHERE fr.file_id = f.file_id
+                  AND (
+                      LOWER(COALESCE(t.title, '')) LIKE ?
+                      OR LOWER(COALESCE(t.annotation, '')) LIKE ?
+                      OR LOWER(COALESCE(tk.text, '')) LIKE ?
+                      OR LOWER(COALESCE(ar.title, '')) LIKE ?
+                  )
+            )
+            OR EXISTS (
+                SELECT 1
+                FROM topic_files tf
+                LEFT JOIN topics t2 ON t2.topic_id = tf.topic_id
+                WHERE tf.file_id = f.file_id
+                  AND (
+                      LOWER(COALESCE(tf.name, '')) LIKE ?
+                      OR LOWER(COALESCE(t2.title, '')) LIKE ?
+                      OR LOWER(COALESCE(t2.annotation, '')) LIKE ?
+                  )
+            )
+        )
+        """
+
+
+class DownloadFileRecord(NamedTuple):
+    file_id: int
+    name: str
+    size: int
+    download_count: int = 0
+
+    @classmethod
+    def from_row(cls, row: Sequence[Any]) -> "DownloadFileRecord":
+        file_id = int(row[0])
+        return cls(
+            file_id=file_id,
+            name=str(row[1] or f"file_{file_id}"),
+            size=int(row[2] or 0),
+            download_count=int(row[3] or 0),
+        )
+
+    def to_downloader_payload(self) -> Dict[str, Dict[str, Any]]:
+        return {
+            "file": {
+                "id": self.file_id,
+                "name": self.name,
+                "size": self.size,
+                "download_count": self.download_count,
+            }
+        }
+
+
+def _query_group_id(group_id: Optional[Any]) -> Any:
+    return _group_id_param(group_id)
+
+
+def _unique_int_file_ids(file_ids: Sequence[int]) -> list[int]:
+    return list(dict.fromkeys(int(file_id) for file_id in file_ids))
+
+
+def _add_file_download_status_condition(
+    conditions: list[str],
+    params: list[Any],
+    status: Optional[str],
+    *,
+    strip_status: bool = False,
+    treat_all_as_empty: bool = False,
+    exclude_completed_when_empty: bool = False,
+) -> None:
+    requested_status = str(status or "")
+    if strip_status:
+        requested_status = requested_status.strip()
+    if treat_all_as_empty and requested_status == "all":
+        requested_status = ""
+
+    if requested_status:
+        if requested_status == "completed":
+            conditions.append("f.download_status IN (?, ?, ?)")
+            params.extend(_COMPLETED_DOWNLOAD_STATUSES)
+        else:
+            conditions.append("f.download_status = ?")
+            params.append(requested_status)
+    elif exclude_completed_when_empty:
+        conditions.append("(f.download_status IS NULL OR f.download_status NOT IN (?, ?, ?))")
+        params.extend(_COMPLETED_DOWNLOAD_STATUSES)
+
+
+def _add_file_search_condition(conditions: list[str], params: list[Any], search: Optional[str]) -> None:
+    search_text = (search or "").strip()
+    if not search_text:
+        return
+
+    search_pattern = f"%{search_text.lower()}%"
+    conditions.append(_FILE_SEARCH_CONDITION)
+    params.extend([search_pattern] * 8)
+
+
+def _build_selected_download_file_records_query(
+    group_id: Optional[Any],
+    ordered_ids: Sequence[int],
+) -> tuple[str, tuple[Any, ...]]:
+    placeholders = ", ".join("?" for _ in ordered_ids)
+    return (
+        f"""
+        SELECT file_id, name, size, download_count
+        FROM files
+        WHERE group_id = ? AND file_id IN ({placeholders})
+        """,
+        (_query_group_id(group_id), *ordered_ids),
+    )
+
+
+def _fetch_download_file_rows(
+    file_db: Any,
+    query: str,
+    params: Sequence[Any],
+) -> Sequence[Sequence[Any]]:
+    file_db.cursor.execute(query, params)
+    return file_db.cursor.fetchall()
+
+
+def _normalize_download_file_record(row: Sequence[Any]) -> DownloadFileRecord:
+    return DownloadFileRecord.from_row(row)
+
+
+def _build_filtered_download_file_records_query(
+    group_id: Optional[Any],
+    status: Optional[str],
+    search: Optional[str],
+    max_files: Optional[int],
+) -> tuple[str, tuple[Any, ...]]:
+    conditions = ["f.group_id = ?"]
+    params: list[Any] = [_query_group_id(group_id)]
+    _add_file_download_status_condition(
+        conditions,
+        params,
+        status,
+        strip_status=True,
+        treat_all_as_empty=True,
+        exclude_completed_when_empty=True,
+    )
+
+    _add_file_search_condition(conditions, params, search)
+    limit_clause = "LIMIT ?" if max_files else ""
+    if max_files:
+        params.append(int(max_files))
+
+    return (
+        f"""
+        SELECT f.file_id, f.name, f.size, f.download_count
+        FROM files f
+        WHERE {' AND '.join(conditions)}
+        ORDER BY f.create_time DESC, f.download_count DESC
+        {limit_clause}
+        """,
+        tuple(params),
+    )
 
 
 class ZSXQFileDatabase:
@@ -167,6 +335,42 @@ class ZSXQFileDatabase:
           AND (? IS NULL OR group_id = ?)
         ''', _file_download_status_params(self.group_id, file_id, status, local_path, error_code, error_message))
         self.conn.commit()
+
+    def load_download_file_records(
+        self,
+        file_ids: Sequence[int],
+        group_id: Optional[Any] = None,
+    ) -> tuple[list[DownloadFileRecord], list[int]]:
+        ordered_ids = _unique_int_file_ids(file_ids)
+        query, params = _build_selected_download_file_records_query(
+            self.group_id if group_id is None else group_id,
+            ordered_ids,
+        )
+        rows = _fetch_download_file_rows(self, query, params)
+        by_file_id = {int(row[0]): row for row in rows}
+        records = [
+            _normalize_download_file_record(row)
+            for row in (by_file_id[file_id] for file_id in ordered_ids if file_id in by_file_id)
+        ]
+        missing = [file_id for file_id in ordered_ids if file_id not in by_file_id]
+        return records, missing
+
+    def load_filtered_download_file_records(
+        self,
+        *,
+        status: Optional[str] = None,
+        search: Optional[str] = None,
+        max_files: Optional[int] = None,
+        group_id: Optional[Any] = None,
+    ) -> list[DownloadFileRecord]:
+        query, params = _build_filtered_download_file_records_query(
+            self.group_id if group_id is None else group_id,
+            status,
+            search,
+            max_files,
+        )
+        rows = _fetch_download_file_rows(self, query, params)
+        return [_normalize_download_file_record(row) for row in rows]
     
     def insert_talk(self, topic_id: int, talk_data: Dict[str, Any]):
         """插入话题内容"""

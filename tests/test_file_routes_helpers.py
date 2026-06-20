@@ -31,6 +31,7 @@ from backend.services.file_workflow_service import (
     _get_file_status_response,
     _resolve_download_record_status,
 )
+from backend.storage.zsxq_file_database import ZSXQFileDatabase
 
 
 class FakeBackgroundTasks:
@@ -142,6 +143,13 @@ class FakeSyncFilesTopicsDb:
 
     def close(self):
         self.closed = True
+
+
+def fake_zsxq_file_db(cursor, group_id="123"):
+    file_db = object.__new__(ZSXQFileDatabase)
+    file_db.group_id = group_id
+    file_db.cursor = cursor
+    return file_db
 
 
 class FakeImageCacheManager:
@@ -2637,7 +2645,7 @@ class FileRoutesHelperTests(unittest.TestCase):
 
         class FakeDownloader:
             def __init__(self):
-                self.file_db = type("FakeFileDb", (), {"cursor": FakeCursor()})()
+                self.file_db = fake_zsxq_file_db(FakeCursor())
 
         downloader = FakeDownloader()
 
@@ -2675,7 +2683,7 @@ class FileRoutesHelperTests(unittest.TestCase):
 
         class FakeDownloader:
             def __init__(self):
-                self.file_db = type("FakeFileDb", (), {"cursor": FakeCursor()})()
+                self.file_db = fake_zsxq_file_db(FakeCursor())
 
         downloader = FakeDownloader()
 
@@ -2701,7 +2709,7 @@ class FileRoutesHelperTests(unittest.TestCase):
 
         class FakeDownloader:
             def __init__(self):
-                self.file_db = type("FakeFileDb", (), {"cursor": FakeCursor()})()
+                self.file_db = fake_zsxq_file_db(FakeCursor())
 
         downloader = FakeDownloader()
 
@@ -2735,7 +2743,7 @@ class FileRoutesHelperTests(unittest.TestCase):
 
         class FakeDownloader:
             def __init__(self):
-                self.file_db = type("FakeFileDb", (), {"cursor": FakeCursor()})()
+                self.file_db = fake_zsxq_file_db(FakeCursor())
 
         downloader = FakeDownloader()
 
@@ -2766,7 +2774,7 @@ class FileRoutesHelperTests(unittest.TestCase):
 
         class FakeDownloader:
             def __init__(self):
-                self.file_db = type("FakeFileDb", (), {"cursor": FakeCursor()})()
+                self.file_db = fake_zsxq_file_db(FakeCursor())
 
         downloader = FakeDownloader()
 
