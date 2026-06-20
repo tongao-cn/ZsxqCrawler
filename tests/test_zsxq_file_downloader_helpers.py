@@ -58,6 +58,13 @@ from backend.crawlers.zsxq_file_downloader import (
     _file_collection_log_id,
     _latest_file_create_time,
 )
+from backend.crawlers.file_database_download_runner import (
+    DatabaseDownloadTarget,
+    fetch_database_download_rows,
+    prepare_database_download_query_plan,
+    run_database_download_after_initial_stop,
+    run_database_download_rows,
+)
 from backend.crawlers.file_download_url import (
     DownloadUrlResponseDecision as UrlDownloadUrlResponseDecision,
     DownloadUrlRetryLoopTarget as UrlDownloadUrlRetryLoopTarget,
@@ -3708,7 +3715,7 @@ class FileDownloaderDatabaseDownloadTests(unittest.TestCase):
             "params": (511,),
         }
 
-        fetched_rows = ZSXQFileDownloader._fetch_database_download_rows(
+        fetched_rows = fetch_database_download_rows(
             downloader,
             query_plan,
         )
@@ -3730,7 +3737,7 @@ class FileDownloaderDatabaseDownloadTests(unittest.TestCase):
         )
 
         with self.assertRaises(TypeError):
-            ZSXQFileDownloader._fetch_database_download_rows(
+            fetch_database_download_rows(
                 downloader,
                 {"query": "SELECT partial", "params": ()},
             )
@@ -3745,13 +3752,15 @@ class FileDownloaderDatabaseDownloadTests(unittest.TestCase):
         ]
         loop_calls = []
 
-        def download_rows(files, stats):
+        def download_rows(_runtime, files, stats):
             loop_calls.append((files, stats))
             stats.update({"downloaded": 1, "skipped": 1, "failed": 0})
 
-        downloader._download_database_file_rows = download_rows
-
-        stats = ZSXQFileDownloader._run_database_download_rows(downloader, files_to_download)
+        with patch(
+            "backend.crawlers.file_database_download_runner.download_database_file_rows",
+            download_rows,
+        ):
+            stats = run_database_download_rows(downloader, files_to_download)
 
         self.assertEqual({"total_files": 2, "downloaded": 1, "skipped": 1, "failed": 0}, stats)
         self.assertEqual(1, len(loop_calls))
@@ -3774,19 +3783,28 @@ class FileDownloaderDatabaseDownloadTests(unittest.TestCase):
         empty_downloader = object.__new__(ZSXQFileDownloader)
         empty_fetch_calls = []
         empty_summary_calls = []
-        empty_downloader._fetch_database_download_rows = lambda plan: empty_fetch_calls.append(plan) or []
-        empty_downloader._log_database_download_rows_summary = (
-            lambda files, sort_by: empty_summary_calls.append((files, sort_by))
-        )
-        empty_downloader._run_database_download_rows = lambda files: self.fail(
-            "empty database download should not enter row runner"
-        )
+        def empty_run_rows(_runtime, _files):
+            self.fail("empty database download should not enter row runner")
 
-        empty_stats = ZSXQFileDownloader._run_database_download_after_initial_stop(
-            empty_downloader,
-            query_plan,
-            "create_time",
-        )
+        with (
+            patch(
+                "backend.crawlers.file_database_download_runner.fetch_database_download_rows",
+                lambda runtime, plan: empty_fetch_calls.append(plan) or [],
+            ),
+            patch(
+                "backend.crawlers.file_database_download_runner.log_database_download_rows_summary",
+                lambda runtime, files, sort_by: empty_summary_calls.append((files, sort_by)),
+            ),
+            patch(
+                "backend.crawlers.file_database_download_runner.run_database_download_rows",
+                empty_run_rows,
+            ),
+        ):
+            empty_stats = run_database_download_after_initial_stop(
+                empty_downloader,
+                query_plan,
+                "create_time",
+            )
 
         self.assertEqual({"total_files": 0, "downloaded": 0, "skipped": 0, "failed": 0}, empty_stats)
         self.assertEqual([query_plan], empty_fetch_calls)
@@ -3798,97 +3816,64 @@ class FileDownloaderDatabaseDownloadTests(unittest.TestCase):
         nonempty_summary_calls = []
         nonempty_run_calls = []
         expected_stats = {"total_files": 1, "downloaded": 1, "skipped": 0, "failed": 0}
-        nonempty_downloader._fetch_database_download_rows = (
-            lambda plan: nonempty_fetch_calls.append(plan) or rows
-        )
-        nonempty_downloader._log_database_download_rows_summary = (
-            lambda files, sort_by: nonempty_summary_calls.append((files, sort_by))
-        )
-        nonempty_downloader._run_database_download_rows = (
-            lambda files: nonempty_run_calls.append(files) or expected_stats
-        )
-
-        stats = ZSXQFileDownloader._run_database_download_after_initial_stop(
-            nonempty_downloader,
-            query_plan,
-            "download_count",
-        )
+        with (
+            patch(
+                "backend.crawlers.file_database_download_runner.fetch_database_download_rows",
+                lambda runtime, plan: nonempty_fetch_calls.append(plan) or rows,
+            ),
+            patch(
+                "backend.crawlers.file_database_download_runner.log_database_download_rows_summary",
+                lambda runtime, files, sort_by: nonempty_summary_calls.append((files, sort_by)),
+            ),
+            patch(
+                "backend.crawlers.file_database_download_runner.run_database_download_rows",
+                lambda runtime, files: nonempty_run_calls.append(files) or expected_stats,
+            ),
+        ):
+            stats = run_database_download_after_initial_stop(
+                nonempty_downloader,
+                query_plan,
+                "download_count",
+            )
 
         self.assertIs(expected_stats, stats)
         self.assertEqual([query_plan], nonempty_fetch_calls)
         self.assertEqual([(rows, "download_count")], nonempty_summary_calls)
         self.assertEqual([rows], nonempty_run_calls)
 
-    def test_download_files_from_database_preserves_entry_handoff_kwargs_and_initial_stop(self):
+    def test_download_files_from_database_preserves_facade_target_handoff(self):
         downloader = object.__new__(ZSXQFileDownloader)
-        start_calls = []
-        query_calls = []
-        after_calls = []
-        query_plan = {"query": "SELECT files", "params": (511,), "sort_by": "create_time"}
         expected_stats = {"total_files": 2, "downloaded": 1, "skipped": 1, "failed": 0}
-        downloader._log_database_download_start = (
-            lambda max_files, status_filter: start_calls.append((max_files, status_filter))
-        )
 
-        def prepare_query(max_files, status_filter, sort_by, start_date, end_date, last_days, kwargs):
-            query_calls.append((max_files, status_filter, sort_by, start_date, end_date, last_days, kwargs))
-            return query_plan
-
-        downloader._prepare_database_download_query_plan = prepare_query
-        downloader._should_stop_database_download_initially = lambda: False
-        downloader._run_database_download_after_initial_stop = (
-            lambda plan, sort_by: after_calls.append((plan, sort_by)) or expected_stats
-        )
-
-        stats = ZSXQFileDownloader.download_files_from_database(
-            downloader,
-            max_files=9,
-            status_filter="failed",
-            sort_by="download_count",
-            start_date="2026-05-01",
-            end_date="2026-05-07",
-            last_days=3,
-            recent_days=5,
-            order_by="create_time DESC",
-        )
+        with patch(
+            "backend.crawlers.zsxq_file_downloader.run_database_file_download",
+            return_value=expected_stats,
+        ) as run_database_download:
+            stats = ZSXQFileDownloader.download_files_from_database(
+                downloader,
+                max_files=9,
+                status_filter="failed",
+                sort_by="download_count",
+                start_date="2026-05-01",
+                end_date="2026-05-07",
+                last_days=3,
+                recent_days=5,
+                order_by="create_time DESC",
+            )
 
         self.assertIs(expected_stats, stats)
-        self.assertEqual([(9, "failed")], start_calls)
-        self.assertEqual(
-            [
-                (
-                    9,
-                    "failed",
-                    "download_count",
-                    "2026-05-01",
-                    "2026-05-07",
-                    3,
-                    {"recent_days": 5, "order_by": "create_time DESC"},
-                )
-            ],
-            query_calls,
+        run_database_download.assert_called_once_with(
+            downloader,
+            DatabaseDownloadTarget(
+                9,
+                "failed",
+                "download_count",
+                "2026-05-01",
+                "2026-05-07",
+                3,
+                {"recent_days": 5, "order_by": "create_time DESC"},
+            ),
         )
-        self.assertEqual([(query_plan, "create_time")], after_calls)
-
-        stopped_downloader = object.__new__(ZSXQFileDownloader)
-        stopped_start_calls = []
-        stopped_query_calls = []
-        stopped_downloader._log_database_download_start = (
-            lambda max_files, status_filter: stopped_start_calls.append((max_files, status_filter))
-        )
-        stopped_downloader._prepare_database_download_query_plan = (
-            lambda *args: stopped_query_calls.append(args) or query_plan
-        )
-        stopped_downloader._should_stop_database_download_initially = lambda: True
-        stopped_downloader._run_database_download_after_initial_stop = lambda *args: self.fail(
-            "initial stop should not run database download"
-        )
-
-        stopped_stats = ZSXQFileDownloader.download_files_from_database(stopped_downloader)
-
-        self.assertEqual({"total_files": 0, "downloaded": 0, "skipped": 0, "failed": 0}, stopped_stats)
-        self.assertEqual([(None, "pending")], stopped_start_calls)
-        self.assertEqual([(None, "pending", "download_count", None, None, None, {})], stopped_query_calls)
 
     def test_prepare_database_download_query_plan_preserves_legacy_kwargs_and_filter_logs(self):
         downloader = self._downloader_for_query_capture()
@@ -3897,15 +3882,17 @@ class FileDownloaderDatabaseDownloadTests(unittest.TestCase):
             "backend.crawlers.zsxq_file_downloader_helpers.normalize_date_range",
             return_value=("2026-05-01", "2026-05-07", None),
         ) as normalize:
-            query_plan = ZSXQFileDownloader._prepare_database_download_query_plan(
+            query_plan = prepare_database_download_query_plan(
                 downloader,
-                max_files=5,
-                status_filter="failed",
-                sort_by="download_count",
-                start_date=None,
-                end_date=None,
-                last_days=None,
-                kwargs={"recent_days": 7, "order_by": "create_time DESC"},
+                DatabaseDownloadTarget(
+                    5,
+                    "failed",
+                    "download_count",
+                    None,
+                    None,
+                    None,
+                    {"recent_days": 7, "order_by": "create_time DESC"},
+                ),
             )
 
         compact_query = self._compact_sql(query_plan["query"])
@@ -3997,9 +3984,6 @@ class FileDownloaderDatabaseDownloadTests(unittest.TestCase):
     def test_download_files_from_database_initial_stop_skips_query_and_download(self):
         downloader = self._downloader_for_query_capture()
         downloader.check_stop = lambda: True
-        downloader._download_database_file_rows = lambda *args: self.fail(
-            "initial stop should not enter database download row loop"
-        )
 
         stats = ZSXQFileDownloader.download_files_from_database(downloader)
 
@@ -4039,11 +4023,14 @@ class FileDownloaderDatabaseDownloadTests(unittest.TestCase):
             ],
         )
         loop_calls = []
-        downloader._download_database_file_rows = lambda files, stats: loop_calls.append(
-            (files, stats.copy())
-        )
+        def download_rows(_runtime, files, stats):
+            loop_calls.append((files, stats.copy()))
 
-        stats = ZSXQFileDownloader.download_files_from_database(downloader, sort_by="create_time")
+        with patch(
+            "backend.crawlers.file_database_download_runner.download_database_file_rows",
+            download_rows,
+        ):
+            stats = ZSXQFileDownloader.download_files_from_database(downloader, sort_by="create_time")
 
         self.assertEqual({"total_files": 2, "downloaded": 0, "skipped": 0, "failed": 0}, stats)
         self.assertEqual(1, len(loop_calls))
@@ -4102,9 +4089,12 @@ class FileDownloaderDatabaseDownloadTests(unittest.TestCase):
         stop_checks = iter([False, True])
         processed_rows = []
         downloader.check_stop = lambda: next(stop_checks)
-        downloader._download_database_file_row = lambda *args: processed_rows.append(args)
 
-        stats = ZSXQFileDownloader.download_files_from_database(downloader)
+        with patch(
+            "backend.crawlers.file_database_download_runner.download_database_file_row",
+            lambda *args: processed_rows.append(args),
+        ):
+            stats = ZSXQFileDownloader.download_files_from_database(downloader)
 
         self.assertEqual({"total_files": 2, "downloaded": 0, "skipped": 0, "failed": 0}, stats)
         self.assertEqual([], processed_rows)
@@ -4122,7 +4112,7 @@ class FileDownloaderDatabaseDownloadTests(unittest.TestCase):
         )
         handled_rows = []
 
-        def handle_row(file_row, position, total_files, stats):
+        def handle_row(_runtime, file_row, position, total_files, stats):
             handled_rows.append((position, total_files, file_row[0]))
             if position == 1:
                 raise RuntimeError("stable row failure")
@@ -4130,9 +4120,11 @@ class FileDownloaderDatabaseDownloadTests(unittest.TestCase):
                 raise KeyboardInterrupt()
             stats["downloaded"] += 1
 
-        downloader._download_database_file_row = handle_row
-
-        stats = ZSXQFileDownloader.download_files_from_database(downloader)
+        with patch(
+            "backend.crawlers.file_database_download_runner.download_database_file_row",
+            handle_row,
+        ):
+            stats = ZSXQFileDownloader.download_files_from_database(downloader)
 
         self.assertEqual({"total_files": 3, "downloaded": 0, "skipped": 0, "failed": 1}, stats)
         self.assertEqual([(1, 3, 101), (2, 3, 102)], handled_rows)

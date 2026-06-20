@@ -76,3 +76,4 @@ npm --prefix frontend run build
 ## 进度记录
 
 - P1 已完成：A-share、daily topic、daily stock concept route 的 task 创建/runner 逻辑已统一委托 `workflow_task_launch`，route 只保留 request/error adapter；focused tests 36 个通过，route 残留 lifecycle 关键词扫描无命中。
+- P2 已完成：数据库文件下载 runner 已抽到 `backend/crawlers/file_database_download_runner.py`，`ZSXQFileDownloader.download_files_from_database` 保持 facade；focused database download tests 15 个通过，相关模块 py_compile 通过。

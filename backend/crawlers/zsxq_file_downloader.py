@@ -47,6 +47,13 @@ from backend.crawlers.file_download_transfer import (
     run_download_retry_loop,
     write_download_response_body_stream,
 )
+from backend.crawlers.file_database_download_runner import (
+    DatabaseDownloadAfterInitialStopTarget,
+    DatabaseDownloadRow,
+    DatabaseDownloadRowsTarget,
+    DatabaseDownloadTarget,
+    run_database_file_download,
+)
 from backend.crawlers.zsxq_file_downloader_helpers import (
     API_FAILURE_NON_RETRY,
     API_FAILURE_PERMISSION_DENIED_1030,
@@ -69,13 +76,6 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     batch_download_skipped_message,
     batch_download_start_messages,
     clean_cookie_result,
-    database_download_completion_messages,
-    database_download_effective_last_days,
-    database_download_filter_messages,
-    database_download_file_info,
-    database_download_query_plan,
-    database_download_start_messages,
-    database_download_time_range_message,
     database_stats_api_response_query,
     database_stats_table_emoji,
     database_stats_time_range_query,
@@ -574,33 +574,6 @@ class TimeCollectionDatabaseState(NamedTuple):
     db_latest_time: Optional[Any]
 
 
-class DatabaseDownloadRow(NamedTuple):
-    file_id: Any
-    file_name: Any
-    file_size: Any
-    download_count: Any
-    create_time: Any
-
-
-class DatabaseDownloadRowsTarget(NamedTuple):
-    files_to_download: list[DatabaseDownloadRow]
-
-
-class DatabaseDownloadAfterInitialStopTarget(NamedTuple):
-    query_plan: Dict[str, Any]
-    sort_by: str
-
-
-class DatabaseDownloadTarget(NamedTuple):
-    max_files: Optional[int]
-    status_filter: str
-    sort_by: str
-    start_date: Optional[str]
-    end_date: Optional[str]
-    last_days: Optional[int]
-    kwargs: Dict[str, Any]
-
-
 class DatabaseStatsTotalSize(NamedTuple):
     total_size: Any
 
@@ -760,10 +733,6 @@ def _database_stats_time_range_row(result: Any) -> Optional[DatabaseStatsTimeRan
 
 def _database_stats_time_range(result: Any) -> Optional[DatabaseStatsTimeRange]:
     return _database_stats_time_range_row(result)
-
-
-def _database_download_row(row: Any) -> DatabaseDownloadRow:
-    return DatabaseDownloadRow(*row)
 
 
 def _record_file_download_result(result: Any, stats: Dict[str, int]) -> str:
@@ -3587,196 +3556,6 @@ class ZSXQFileDownloader:
             )
         )
 
-    def _download_database_file_row(
-        self,
-        file_row: DatabaseDownloadRow,
-        position: int,
-        total_files: int,
-        stats: Dict[str, int],
-    ) -> None:
-        self.log(f"【{position}/{total_files}】{file_row.file_name}")
-        self.log(
-            f"   📊 文件ID: {file_row.file_id}, 大小: {file_row.file_size/1024:.1f}KB, "
-            f"下载次数: {file_row.download_count}"
-        )
-
-        file_info = database_download_file_info(
-            file_row.file_id,
-            file_row.file_name,
-            file_row.file_size,
-            file_row.download_count,
-        )
-
-        result = self.download_file(file_info)
-        self._apply_database_download_result(result, position, total_files, stats)
-
-    def _apply_database_download_result(
-        self,
-        result: Any,
-        position: int,
-        total_files: int,
-        stats: Dict[str, int],
-    ) -> None:
-        result_status = _record_file_download_result(result, stats)
-        if result_status == "skipped":
-            self.log(f"   ⚠️ 文件已跳过")
-        elif result_status == "downloaded":
-            self.check_long_delay()
-            if position < total_files:
-                self.download_delay()
-        else:
-            self.log(f"   ❌ 下载失败")
-
-    def _fetch_database_download_rows(
-        self,
-        query_plan: Dict[str, Any],
-    ) -> list[DatabaseDownloadRow]:
-        self.file_db.cursor.execute(query_plan["query"], query_plan["params"])
-        return [_database_download_row(row) for row in self.file_db.cursor.fetchall()]
-
-    def _download_database_file_rows(
-        self,
-        files_to_download: list[DatabaseDownloadRow],
-        stats: Dict[str, int],
-    ) -> None:
-        total_files = len(files_to_download)
-        for i, file_row in enumerate(files_to_download, 1):
-            # 检查是否需要停止
-            if self.check_stop():
-                self.log("🛑 下载任务被停止")
-                break
-
-            try:
-                self._download_database_file_row(file_row, i, total_files, stats)
-            except KeyboardInterrupt:
-                self.log(f"⏹️ 用户中断下载")
-                break
-            except Exception as e:
-                self.log(f"   ❌ 处理文件异常: {e}")
-                stats['failed'] += 1
-                continue
-
-    def _should_stop_database_download_initially(self) -> bool:
-        if self.check_stop():
-            self.log("🛑 任务被停止")
-            return True
-
-        return False
-
-    def _database_download_query_plan_with_effective_days(
-        self,
-        max_files: Optional[int],
-        status_filter: str,
-        sort_by: str,
-        start_date: Optional[str],
-        end_date: Optional[str],
-        last_days: Optional[int],
-        kwargs: Dict[str, Any],
-    ) -> tuple[Dict[str, Any], Any]:
-        last_days = database_download_effective_last_days(last_days, kwargs.get('recent_days'))
-
-        query_plan = database_download_query_plan(
-            _query_group_id(self.group_id),
-            max_files=max_files,
-            status_filter=status_filter,
-            sort_by=sort_by,
-            start_date=start_date,
-            end_date=end_date,
-            last_days=last_days,
-            legacy_order_by=kwargs.get('order_by'),
-        )
-        return query_plan, last_days
-
-    def _prepare_database_download_query_plan(
-        self,
-        max_files: Optional[int],
-        status_filter: str,
-        sort_by: str,
-        start_date: Optional[str],
-        end_date: Optional[str],
-        last_days: Optional[int],
-        kwargs: Dict[str, Any],
-    ) -> Dict[str, Any]:
-        query_plan, last_days = self._database_download_query_plan_with_effective_days(
-            max_files,
-            status_filter,
-            sort_by,
-            start_date,
-            end_date,
-            last_days,
-            kwargs,
-        )
-        normalized_start = query_plan["normalized_start"]
-        normalized_end = query_plan["normalized_end"]
-        sort_by = query_plan["sort_by"]
-
-        for message in database_download_filter_messages(normalized_start, normalized_end, last_days, sort_by):
-            self.log(message)
-
-        return query_plan
-
-    def _log_database_download_rows_summary(
-        self,
-        files_to_download: list[DatabaseDownloadRow],
-        sort_by: str,
-    ) -> None:
-        if not files_to_download:
-            self.log(f"📭 数据库中没有符合条件的文件可下载")
-            return
-
-        self.log(f"📋 找到 {len(files_to_download)} 个待下载文件")
-        time_range_message = database_download_time_range_message(files_to_download, sort_by)
-        if time_range_message:
-            self.log(time_range_message)
-
-    def _log_database_download_completion(self, stats: Dict[str, int]) -> None:
-        for message in database_download_completion_messages(stats):
-            self.log(message)
-
-    def _log_database_download_start(self, max_files: Optional[int], status_filter: str) -> None:
-        for message in database_download_start_messages(max_files, status_filter):
-            self.log(message)
-
-    def _run_database_download_rows(
-        self,
-        files_to_download: list[DatabaseDownloadRow],
-    ) -> Dict[str, int]:
-        return self._run_database_download_rows_target(
-            DatabaseDownloadRowsTarget(files_to_download),
-        )
-
-    def _run_database_download_rows_target(
-        self,
-        target: DatabaseDownloadRowsTarget,
-    ) -> Dict[str, int]:
-        stats = download_result_stats(len(target.files_to_download))
-
-        self._download_database_file_rows(target.files_to_download, stats)
-        self._log_database_download_completion(stats)
-
-        return stats
-
-    def _run_database_download_after_initial_stop(
-        self,
-        query_plan: Dict[str, Any],
-        sort_by: str,
-    ) -> Dict[str, int]:
-        return self._run_database_download_after_initial_stop_target(
-            DatabaseDownloadAfterInitialStopTarget(query_plan, sort_by),
-        )
-
-    def _run_database_download_after_initial_stop_target(
-        self,
-        target: DatabaseDownloadAfterInitialStopTarget,
-    ) -> Dict[str, int]:
-        files_to_download = self._fetch_database_download_rows(target.query_plan)
-
-        self._log_database_download_rows_summary(files_to_download, target.sort_by)
-        if not files_to_download:
-            return download_result_stats()
-
-        return self._run_database_download_rows(files_to_download)
-
     def download_files_from_database(
         self,
         max_files: Optional[int] = None,
@@ -3804,24 +3583,7 @@ class ZSXQFileDownloader:
         self,
         target: DatabaseDownloadTarget,
     ) -> Dict[str, int]:
-        self._log_database_download_start(target.max_files, target.status_filter)
-
-        query_plan = self._prepare_database_download_query_plan(
-            target.max_files,
-            target.status_filter,
-            target.sort_by,
-            target.start_date,
-            target.end_date,
-            target.last_days,
-            target.kwargs,
-        )
-        sort_by = query_plan["sort_by"]
-
-        # 检查是否需要停止
-        if self._should_stop_database_download_initially():
-            return download_result_stats()
-
-        return self._run_database_download_after_initial_stop(query_plan, sort_by)
+        return run_database_file_download(self, target)
 
     def _print_database_core_stats(self, stats: Dict[str, Any]) -> None:
         total_files = stats.get('files', 0)
