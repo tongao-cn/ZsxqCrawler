@@ -529,6 +529,54 @@ class ZSXQFileDatabaseHelperTests(unittest.TestCase):
             db.cursor.executed,
         )
 
+    def test_get_file_status_record_scopes_and_preserves_status_row(self):
+        from backend.storage.zsxq_file_database import ZSXQFileDatabase
+
+        db = object.__new__(ZSXQFileDatabase)
+        db.cursor = FakeRowCursor([("file.pdf", 456, None), None])
+        db.group_id = "303"
+
+        record = ZSXQFileDatabase.get_file_status_record(db, 101)
+        missing = ZSXQFileDatabase.get_file_status_record(db, 102, group_id="404")
+
+        self.assertEqual(("file.pdf", 456, None), record)
+        self.assertIsNone(missing)
+        self.assertEqual(
+            [
+                (
+                    "SELECT name, size, download_status FROM files WHERE file_id = ? AND group_id = ?",
+                    (101, 303),
+                ),
+                (
+                    "SELECT name, size, download_status FROM files WHERE file_id = ? AND group_id = ?",
+                    (102, 404),
+                ),
+            ],
+            db.cursor.executed,
+        )
+
+    def test_get_file_download_stats_scopes_and_defaults_missing_row_to_zeroes(self):
+        from backend.storage.zsxq_file_database import ZSXQFileDatabase
+
+        db = object.__new__(ZSXQFileDatabase)
+        db.cursor = FakeRowCursor([(9, 4, 3, None), None])
+        db.group_id = "303"
+
+        stats = ZSXQFileDatabase.get_file_download_stats(db)
+        missing_stats = ZSXQFileDatabase.get_file_download_stats(db, group_id="404")
+
+        self.assertEqual((9, 4, 3, 0), stats)
+        self.assertEqual((0, 0, 0, 0), missing_stats)
+        first_sql, first_params = db.cursor.executed[0]
+        second_sql, second_params = db.cursor.executed[1]
+        self.assertIn(
+            "COUNT(CASE WHEN download_status IN ('completed', 'downloaded', 'skipped') THEN 1 END)",
+            first_sql,
+        )
+        self.assertEqual((303,), first_params)
+        self.assertEqual((404,), second_params)
+        self.assertEqual(first_sql, second_sql)
+
     def test_close_connection_ignores_none_and_closes_connection(self):
         _close_connection(None)
 

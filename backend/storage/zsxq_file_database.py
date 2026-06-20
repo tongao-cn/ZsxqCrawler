@@ -92,6 +92,34 @@ class DownloadFileRecord(NamedTuple):
         }
 
 
+class FileStatusRecord(NamedTuple):
+    name: str
+    size: Any
+    download_status: Optional[str]
+
+    @classmethod
+    def from_row(cls, row: Sequence[Any]) -> "FileStatusRecord":
+        return cls(row[0], row[1], row[2])
+
+
+class FileDownloadStats(NamedTuple):
+    total_files: int
+    downloaded: int
+    pending: int
+    failed: int
+
+    @classmethod
+    def from_row(cls, row: Optional[Sequence[Any]]) -> "FileDownloadStats":
+        if not row:
+            return cls(0, 0, 0, 0)
+        return cls(
+            int(row[0] or 0),
+            int(row[1] or 0),
+            int(row[2] or 0),
+            int(row[3] or 0),
+        )
+
+
 def _query_group_id(group_id: Optional[Any]) -> Any:
     return _group_id_param(group_id)
 
@@ -361,6 +389,39 @@ class ZSXQFileDatabase:
         )
         row = self.cursor.fetchone()
         return _normalize_download_file_record(row) if row else None
+
+    def get_file_status_record(
+        self,
+        file_id: int,
+        group_id: Optional[Any] = None,
+    ) -> Optional[FileStatusRecord]:
+        scoped_group_id = self.group_id if group_id is None else group_id
+        self.cursor.execute(
+            """
+            SELECT name, size, download_status
+            FROM files
+            WHERE file_id = ? AND group_id = ?
+            """,
+            (file_id, _query_group_id(scoped_group_id)),
+        )
+        row = self.cursor.fetchone()
+        return FileStatusRecord.from_row(row) if row else None
+
+    def get_file_download_stats(self, group_id: Optional[Any] = None) -> FileDownloadStats:
+        scoped_group_id = self.group_id if group_id is None else group_id
+        self.cursor.execute(
+            """
+            SELECT
+                COUNT(*) as total_files,
+                COUNT(CASE WHEN download_status IN ('completed', 'downloaded', 'skipped') THEN 1 END) as downloaded,
+                COUNT(CASE WHEN download_status = 'pending' THEN 1 END) as pending,
+                COUNT(CASE WHEN download_status = 'failed' THEN 1 END) as failed
+            FROM files
+            WHERE group_id = ?
+            """,
+            (_query_group_id(scoped_group_id),),
+        )
+        return FileDownloadStats.from_row(self.cursor.fetchone())
 
     def load_download_file_records(
         self,

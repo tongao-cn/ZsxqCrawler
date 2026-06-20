@@ -65,8 +65,6 @@ from backend.services.file_status_service import (
     _build_file_status_response,
     _build_sync_files_response,
     _check_local_file_status_response,
-    _fetch_file_download_stats,
-    _fetch_file_status_row,
     _file_db,
     _get_download_file_status,
     _get_file_stats_response,

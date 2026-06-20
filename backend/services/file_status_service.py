@@ -8,7 +8,6 @@ from typing import Any, Dict, Iterator, Optional, Sequence
 
 from backend.core.db_path_manager import get_db_path_manager
 from backend.services.file_ai_analysis_service import resolve_local_file_path
-from backend.services.file_download_records_workflow import _query_group_id
 from backend.storage.zsxq_file_database import ZSXQFileDatabase
 
 
@@ -120,25 +119,9 @@ def _build_sync_files_response(group_id: str, stats: Dict[str, Any]) -> Dict[str
     }
 
 
-_FILE_STATUS_QUERY = """
-            SELECT name, size, download_status
-            FROM files
-            WHERE file_id = ? AND group_id = ?
-        """
-
-
-def _fetch_file_status_row(
-    file_db: ZSXQFileDatabase,
-    group_id: str,
-    file_id: int,
-) -> Optional[tuple]:
-    file_db.cursor.execute(_FILE_STATUS_QUERY, (file_id, _query_group_id(group_id)))
-    return file_db.cursor.fetchone()
-
-
 def _get_file_status_response(group_id: str, file_id: int) -> dict:
     with _file_db(group_id) as file_db:
-        result = _fetch_file_status_row(file_db, group_id, file_id)
+        result = file_db.get_file_status_record(file_id)
 
         if not result:
             return _build_file_status_response(file_id, result)
@@ -165,24 +148,8 @@ def _build_file_stats_response(stats: Dict[str, Any], download_stats: Optional[S
     }
 
 
-_FILE_DOWNLOAD_STATS_QUERY = """
-            SELECT
-                COUNT(*) as total_files,
-                COUNT(CASE WHEN download_status IN ('completed', 'downloaded', 'skipped') THEN 1 END) as downloaded,
-                COUNT(CASE WHEN download_status = 'pending' THEN 1 END) as pending,
-                COUNT(CASE WHEN download_status = 'failed' THEN 1 END) as failed
-            FROM files
-            WHERE group_id = ?
-            """
-
-
-def _fetch_file_download_stats(file_db: ZSXQFileDatabase, group_id: str) -> Optional[Sequence[Any]]:
-    file_db.cursor.execute(_FILE_DOWNLOAD_STATS_QUERY, (_query_group_id(group_id),))
-    return file_db.cursor.fetchone()
-
-
 def _get_file_stats_response(group_id: str) -> dict:
     with _file_db(group_id) as file_db:
         stats = file_db.get_database_stats()
-        download_stats = _fetch_file_download_stats(file_db, group_id)
+        download_stats = file_db.get_file_download_stats()
         return _build_file_stats_response(stats, download_stats)
