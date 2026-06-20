@@ -66,8 +66,13 @@ class FakeFileDb:
     def __init__(self):
         self.group_id = None
         self.cursor = FakeFileCursor()
+        self.count_calls = 0
         self.closed = False
         FakeFileDb.last_instance = self
+
+    def count_files(self):
+        self.count_calls += 1
+        return 7
 
     def close(self):
         self.closed = True
@@ -247,10 +252,8 @@ class GroupRoutesHelperTests(unittest.TestCase):
 
         file_db = FakeScopedFileDb.last_instance
 
-        self.assertEqual(
-            file_db.cursor.calls,
-            [("SELECT COUNT(*) FROM files WHERE group_id = ?", (123,))],
-        )
+        self.assertEqual(1, file_db.count_calls)
+        self.assertEqual([], file_db.cursor.calls)
         self.assertEqual(file_db.group_id, "123")
         self.assertTrue(file_db.closed)
 

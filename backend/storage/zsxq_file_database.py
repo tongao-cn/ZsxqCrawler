@@ -336,6 +336,32 @@ class ZSXQFileDatabase:
         ''', _file_download_status_params(self.group_id, file_id, status, local_path, error_code, error_message))
         self.conn.commit()
 
+    def count_files(self, group_id: Optional[Any] = None) -> int:
+        scoped_group_id = self.group_id if group_id is None else group_id
+        self.cursor.execute(
+            "SELECT COUNT(*) FROM files WHERE group_id = ?",
+            (_query_group_id(scoped_group_id),),
+        )
+        row = self.cursor.fetchone()
+        return (row[0] or 0) if row else 0
+
+    def get_download_file_record(
+        self,
+        file_id: int,
+        group_id: Optional[Any] = None,
+    ) -> Optional[DownloadFileRecord]:
+        scoped_group_id = self.group_id if group_id is None else group_id
+        self.cursor.execute(
+            """
+            SELECT file_id, name, size, download_count
+            FROM files
+            WHERE file_id = ? AND group_id = ?
+            """,
+            (file_id, _query_group_id(scoped_group_id)),
+        )
+        row = self.cursor.fetchone()
+        return _normalize_download_file_record(row) if row else None
+
     def load_download_file_records(
         self,
         file_ids: Sequence[int],

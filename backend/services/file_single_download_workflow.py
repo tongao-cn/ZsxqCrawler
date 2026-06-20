@@ -6,10 +6,7 @@ import os
 from typing import Any, Dict, Optional
 
 from backend.crawlers.zsxq_file_downloader import ZSXQFileDownloader
-from backend.services.file_download_records_workflow import (
-    _build_download_file_info,
-    _query_group_id,
-)
+from backend.services.file_download_records_workflow import _build_download_file_info
 from backend.services.file_downloader_runtime import (
     _create_file_downloader,
     _rollback_downloader_file_db,
@@ -62,20 +59,12 @@ def _build_single_download_fallback_info(
     return _build_download_file_info(file_id, f"file_{file_id}", 0)
 
 
-def _fetch_single_download_file_row(
+def _fetch_single_download_file_record(
     downloader: ZSXQFileDownloader,
     group_id: str,
     file_id: int,
 ) -> Any:
-    downloader.file_db.cursor.execute(
-        """
-        SELECT file_id, name, size, download_count
-        FROM files
-        WHERE file_id = ? AND group_id = ?
-        """,
-        (file_id, _query_group_id(group_id)),
-    )
-    return downloader.file_db.cursor.fetchone()
+    return downloader.file_db.get_download_file_record(file_id, group_id=group_id)
 
 
 def _resolve_single_download_file_info(
@@ -86,11 +75,10 @@ def _resolve_single_download_file_info(
     file_name: Optional[str],
     file_size: Optional[int],
 ) -> Dict[str, Dict[str, Any]]:
-    result = _fetch_single_download_file_row(downloader, group_id, file_id)
-    if result:
-        _, db_file_name, db_file_size, download_count = result
-        add_task_log(task_id, f"📄 从数据库获取文件信息: {db_file_name} ({db_file_size} bytes)")
-        return _build_download_file_info(file_id, db_file_name, db_file_size, download_count)
+    record = _fetch_single_download_file_record(downloader, group_id, file_id)
+    if record:
+        add_task_log(task_id, f"📄 从数据库获取文件信息: {record.name} ({record.size} bytes)")
+        return record.to_downloader_payload()
     return _build_single_download_fallback_info(task_id, file_id, file_name, file_size)
 
 

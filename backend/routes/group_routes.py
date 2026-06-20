@@ -217,9 +217,7 @@ def _coerce_group_id(group_id: str) -> int | str:
 def _count_group_files(group_id: str) -> int:
     try:
         with closing(ZSXQFileDatabase(group_id)) as files_db:
-            files_db.cursor.execute("SELECT COUNT(*) FROM files WHERE group_id = ?", (_coerce_group_id(group_id),))
-            row = files_db.cursor.fetchone()
-            return (row[0] or 0) if row else 0
+            return files_db.count_files()
     except Exception:
         return 0
 

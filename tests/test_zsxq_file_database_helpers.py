@@ -51,6 +51,20 @@ class FakeCursor:
         return (self.counts[self.current_table],)
 
 
+class FakeRowCursor:
+    def __init__(self, rows):
+        self.rows = list(rows)
+        self.executed = []
+
+    def execute(self, sql, params=()):
+        self.executed.append((" ".join(sql.split()), params))
+
+    def fetchone(self):
+        if self.rows:
+            return self.rows.pop(0)
+        return None
+
+
 class FakeConnection:
     def __init__(self):
         self.closed = False
@@ -471,6 +485,49 @@ class ZSXQFileDatabaseHelperTests(unittest.TestCase):
         sql, params = cursor.executed[0]
         self.assertIn("WHERE topic_id IN (SELECT topic_id FROM topics WHERE group_id = ?)", sql)
         self.assertEqual((303,), params)
+
+    def test_count_files_scopes_by_group_and_defaults_missing_row_to_zero(self):
+        from backend.storage.zsxq_file_database import ZSXQFileDatabase
+
+        db = object.__new__(ZSXQFileDatabase)
+        db.cursor = FakeRowCursor([(5,)])
+        db.group_id = "303"
+
+        self.assertEqual(5, ZSXQFileDatabase.count_files(db))
+        self.assertEqual([("SELECT COUNT(*) FROM files WHERE group_id = ?", (303,))], db.cursor.executed)
+
+        missing_db = object.__new__(ZSXQFileDatabase)
+        missing_db.cursor = FakeRowCursor([])
+        missing_db.group_id = "303"
+
+        self.assertEqual(0, ZSXQFileDatabase.count_files(missing_db, group_id="404"))
+        self.assertEqual([("SELECT COUNT(*) FROM files WHERE group_id = ?", (404,))], missing_db.cursor.executed)
+
+    def test_get_download_file_record_scopes_and_normalizes_row(self):
+        from backend.storage.zsxq_file_database import ZSXQFileDatabase
+
+        db = object.__new__(ZSXQFileDatabase)
+        db.cursor = FakeRowCursor([(101, None, None, None), None])
+        db.group_id = "303"
+
+        record = ZSXQFileDatabase.get_download_file_record(db, 101)
+        missing = ZSXQFileDatabase.get_download_file_record(db, 102, group_id="404")
+
+        self.assertEqual((101, "file_101", 0, 0), record)
+        self.assertIsNone(missing)
+        self.assertEqual(
+            [
+                (
+                    "SELECT file_id, name, size, download_count FROM files WHERE file_id = ? AND group_id = ?",
+                    (101, 303),
+                ),
+                (
+                    "SELECT file_id, name, size, download_count FROM files WHERE file_id = ? AND group_id = ?",
+                    (102, 404),
+                ),
+            ],
+            db.cursor.executed,
+        )
 
     def test_close_connection_ignores_none_and_closes_connection(self):
         _close_connection(None)

@@ -5,7 +5,6 @@ from __future__ import annotations
 from typing import Any, Dict, Optional
 
 from backend.crawlers.zsxq_file_downloader import ZSXQFileDownloader
-from backend.services.file_download_records_workflow import _query_group_id
 from backend.services.file_downloader_runtime import (
     _create_file_downloader,
     _safe_remove_file_downloader,
@@ -139,11 +138,7 @@ def _build_file_download_options(
 
 
 def _count_existing_file_records(downloader: ZSXQFileDownloader, group_id: str) -> int:
-    downloader.file_db.cursor.execute(
-        "SELECT COUNT(*) FROM files WHERE group_id = ?",
-        (_query_group_id(group_id),),
-    )
-    return downloader.file_db.cursor.fetchone()[0] or 0
+    return downloader.file_db.count_files(group_id=group_id)
 
 
 def _download_prepared_files(

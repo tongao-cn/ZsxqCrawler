@@ -80,9 +80,19 @@ class FakeFileDownloadTaskCursor:
         return (self.existing_count,)
 
 
+class FakeFileDownloadTaskFileDb:
+    def __init__(self, existing_count):
+        self.cursor = FakeFileDownloadTaskCursor(existing_count)
+        self.count_calls = []
+
+    def count_files(self, group_id=None):
+        self.count_calls.append(group_id)
+        return self.cursor.existing_count
+
+
 class FakeFileDownloadTaskDownloader:
     def __init__(self, existing_count):
-        self.file_db = type("FakeFileDb", (), {"cursor": FakeFileDownloadTaskCursor(existing_count)})()
+        self.file_db = FakeFileDownloadTaskFileDb(existing_count)
         self.collect_calls = []
         self.download_calls = []
 
@@ -115,6 +125,12 @@ class FakeSingleFileDownloadTaskFileDb:
     def __init__(self, row):
         self.cursor = FakeSingleFileDownloadTaskCursor(row)
         self.status_updates = []
+        self.record_calls = []
+
+    def get_download_file_record(self, file_id, group_id=None):
+        self.record_calls.append((file_id, group_id))
+        row = self.cursor.fetchone()
+        return DownloadFileRecord.from_row(row) if row else None
 
     def update_file_download_status(self, file_id, status, local_path):
         self.status_updates.append((file_id, status, local_path))
@@ -1915,10 +1931,8 @@ class FileRoutesHelperTests(unittest.TestCase):
             long_sleep_interval_min=None,
             long_sleep_interval_max=None,
         )
-        self.assertEqual(
-            [("SELECT COUNT(*) FROM files WHERE group_id = ?", (123,))],
-            downloader.file_db.cursor.executed,
-        )
+        self.assertEqual(["123"], downloader.file_db.count_calls)
+        self.assertEqual([], downloader.file_db.cursor.executed)
         self.assertEqual([], downloader.collect_calls)
         self.assertEqual(
             [{"max_files": 5, "status_filter": "pending", "sort_by": "download_count"}],
@@ -2556,10 +2570,8 @@ class FileRoutesHelperTests(unittest.TestCase):
 
         _create_downloader, update_task, add_task_log, safe_remove = self._run_single_file_download_case(downloader)
 
-        self.assertEqual(
-            [("SELECT file_id, name, size, download_count FROM files WHERE file_id = ? AND group_id = ?", (123, 123))],
-            [(" ".join(sql.split()), params) for sql, params in downloader.file_db.cursor.executed],
-        )
+        self.assertEqual([(123, "123")], downloader.file_db.record_calls)
+        self.assertEqual([], downloader.file_db.cursor.executed)
         self.assertEqual(
             [{"file": {"id": 123, "name": "Db File.pdf", "size": 456, "download_count": 7}}],
             downloader.download_calls,

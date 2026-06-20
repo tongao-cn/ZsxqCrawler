@@ -54,7 +54,7 @@ from backend.services.file_single_download_workflow import (
     _complete_skipped_single_file_download,
     _complete_successful_single_file_download,
     _download_and_complete_single_file,
-    _fetch_single_download_file_row,
+    _fetch_single_download_file_record,
     _resolve_single_download_file_info,
     _single_file_download_local_path,
     run_single_file_download_task_with_info,
