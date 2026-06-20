@@ -60,7 +60,7 @@ from backend.services.stock_topic_analysis_runner import (
     answer_stock_question as run_stock_question_answer,
 )
 from backend.services.daily_topic_analysis_topics import clip_text as _clip
-from backend.services.stock_topic_question_payload import load_question_topic_payload
+from backend.services.stock_topic_question_payload import build_question_topic_payload_from_rows, load_question_topic_payload
 from backend.storage.db_compat import connect
 
 
@@ -379,23 +379,14 @@ def search_stock_topics(group_id: str, stock_name: str, *, limit: int | None = N
     }
 
 
-def search_stock_question_topics(group_id: str, question: str, *, limit: int = MAX_QUESTION_TOPICS) -> Dict[str, Any]:
-    question_text = _normalize_text(question)
-    if not question_text:
-        raise ValueError("question 不能为空")
-    keywords, keyword_model = _call_question_keyword_ai(question_text)
-    if not keywords:
-        raise ValueError("无法从问题中提取关键词")
-
-    group_id_text = _normalize_text(group_id)
-    recent_cutoff = _recent_topic_cutoff_text()
-    rows = load_question_topic_search_rows(
-        group_id_text,
-        keywords,
-        recent_cutoff=recent_cutoff,
-        limit=max(1, min(int(limit), MAX_QUESTION_TOPICS)),
-    )
-
+def _build_stock_question_search_result(
+    *,
+    group_id: str,
+    question: str,
+    keywords: List[str],
+    keyword_model: str,
+    rows: List[Any],
+) -> Dict[str, Any]:
     topics_by_id: Dict[str, Dict[str, Any]] = {}
     for row in rows:
         topic_id = str(row["topic_id"])
@@ -414,8 +405,8 @@ def search_stock_question_topics(group_id: str, question: str, *, limit: int = M
 
     topics = sorted(topics_by_id.values(), key=lambda item: str(item["create_time"] or ""), reverse=True)
     return {
-        "group_id": group_id_text,
-        "question": question_text,
+        "group_id": group_id,
+        "question": question,
         "keywords": keywords,
         "keyword_model": keyword_model,
         "topics": topics,
@@ -423,11 +414,57 @@ def search_stock_question_topics(group_id: str, question: str, *, limit: int = M
     }
 
 
+def _search_stock_question_topics_with_rows(
+    group_id: str,
+    question: str,
+    *,
+    limit: int = MAX_QUESTION_TOPICS,
+) -> tuple[Dict[str, Any], List[Any]]:
+    question_text = _normalize_text(question)
+    if not question_text:
+        raise ValueError("question 不能为空")
+    keywords, keyword_model = _call_question_keyword_ai(question_text)
+    if not keywords:
+        raise ValueError("无法从问题中提取关键词")
+
+    group_id_text = _normalize_text(group_id)
+    recent_cutoff = _recent_topic_cutoff_text()
+    rows = load_question_topic_search_rows(
+        group_id_text,
+        keywords,
+        recent_cutoff=recent_cutoff,
+        limit=max(1, min(int(limit), MAX_QUESTION_TOPICS)),
+    )
+
+    return (
+        _build_stock_question_search_result(
+            group_id=group_id_text,
+            question=question_text,
+            keywords=keywords,
+            keyword_model=keyword_model,
+            rows=rows,
+        ),
+        rows,
+    )
+
+
+def search_stock_question_topics(group_id: str, question: str, *, limit: int = MAX_QUESTION_TOPICS) -> Dict[str, Any]:
+    search_result, _rows = _search_stock_question_topics_with_rows(group_id, question, limit=limit)
+    return search_result
+
+
 def _build_analysis_topic_payload(search_result: Dict[str, Any]) -> List[Dict[str, Any]]:
     return build_analysis_topic_payload(search_result)
 
 
-def _build_question_topic_payload(search_result: Dict[str, Any]) -> List[Dict[str, Any]]:
+def _build_question_topic_payload(search_result: Dict[str, Any], rows: List[Any] | None = None) -> List[Dict[str, Any]]:
+    if rows is not None:
+        return build_question_topic_payload_from_rows(
+            search_result,
+            rows,
+            max_analysis_topics=MAX_ANALYSIS_TOPICS,
+            max_topic_text_chars=MAX_TOPIC_TEXT_CHARS,
+        )
     return load_question_topic_payload(
         search_result,
         max_analysis_topics=MAX_ANALYSIS_TOPICS,
@@ -901,12 +938,12 @@ def _answer_stock_question_impl(
     log_callback: Callable[[str], None] | None = None,
 ) -> Dict[str, Any]:
     _log(log_callback, "🔎 根据问题关键词搜索话题...")
-    search_result = search_stock_question_topics(group_id, question)
+    search_result, search_rows = _search_stock_question_topics_with_rows(group_id, question)
     _log(
         log_callback,
         f"📚 关键词: {'、'.join(search_result['keywords'])}；命中话题: {search_result['topic_count']}",
     )
-    topics = _build_question_topic_payload(search_result)
+    topics = _build_question_topic_payload(search_result, search_rows)
     if not topics:
         return {
             **search_result,

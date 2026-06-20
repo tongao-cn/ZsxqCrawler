@@ -742,13 +742,47 @@ class StockTopicAnalysisServiceHelperTests(unittest.TestCase):
         }
 
         with (
-            patch("backend.services.stock_topic_analysis_service.search_stock_question_topics", return_value=search_result),
-            patch("backend.services.stock_topic_analysis_service._build_question_topic_payload", return_value=[]),
+            patch("backend.services.stock_topic_analysis_service._search_stock_question_topics_with_rows", return_value=(search_result, [])),
+            patch("backend.services.stock_topic_analysis_service._build_question_topic_payload", return_value=[]) as build_payload,
         ):
             result = answer_stock_question("51111112855254", "固态电池怎么看")
 
         self.assertEqual("没有找到可回答该问题的话题内容。", result["summary_markdown"])
         self.assertEqual("completed", result["status"])
+        build_payload.assert_called_once_with(search_result, [])
+
+    @unittest.skipUnless(HAS_SERVICE_DEPS, "stock topic analysis service dependencies are not installed")
+    def test_answer_stock_question_uses_search_rows_for_payload(self):
+        from backend.services.stock_topic_analysis_service import answer_stock_question
+
+        search_result = {
+            "group_id": "51111112855254",
+            "question": "固态电池怎么看",
+            "keywords": ["固态电池"],
+            "topics": [{"topic_id": "101"}],
+            "topic_count": 1,
+        }
+        rows = [{"topic_id": "101"}]
+        topics = [{"topic_id": "101", "content": "固态电池讨论"}]
+
+        with (
+            patch("backend.services.stock_topic_analysis_service._search_stock_question_topics_with_rows", return_value=(search_result, rows)),
+            patch(
+                "backend.services.stock_topic_analysis_service.build_question_topic_payload_from_rows",
+                return_value=topics,
+            ) as build_payload,
+            patch("backend.services.stock_topic_analysis_service._call_question_analysis_ai", return_value=("summary", "test-model")),
+        ):
+            result = answer_stock_question("51111112855254", "固态电池怎么看")
+
+        self.assertEqual("summary", result["summary_markdown"])
+        self.assertEqual("test-model", result["model"])
+        build_payload.assert_called_once_with(
+            search_result,
+            rows,
+            max_analysis_topics=30,
+            max_topic_text_chars=1800,
+        )
 
     @unittest.skipUnless(HAS_SERVICE_DEPS, "stock topic analysis service dependencies are not installed")
     def test_analyze_stock_topics_saves_empty_result(self):
@@ -1009,6 +1043,33 @@ class StockTopicAnalysisServiceHelperTests(unittest.TestCase):
         self.assertEqual([{"topic_id": "101"}], result)
         load_rows.assert_called_once_with("51111112855254", ["101", "102"])
         build_payload.assert_called_once_with(rows, keywords=["固态电池"], max_topic_text_chars=120)
+
+    def test_build_question_topic_payload_from_rows_uses_search_topic_order(self):
+        from backend.services.stock_topic_question_payload import build_question_topic_payload_from_rows
+
+        rows = [{"topic_id": "102"}, {"topic_id": "101"}, {"topic_id": "103"}]
+        search_result = {
+            "keywords": ["固态电池"],
+            "topics": [{"topic_id": "101"}, {"topic_id": 102}, {"topic_id": "104"}],
+        }
+
+        with patch(
+            "backend.services.stock_topic_question_payload.build_question_topic_payload",
+            return_value=[{"topic_id": "101"}],
+        ) as build_payload:
+            result = build_question_topic_payload_from_rows(
+                search_result,
+                rows,
+                max_analysis_topics=2,
+                max_topic_text_chars=120,
+            )
+
+        self.assertEqual([{"topic_id": "101"}], result)
+        build_payload.assert_called_once_with(
+            [{"topic_id": "101"}, {"topic_id": "102"}],
+            keywords=["固态电池"],
+            max_topic_text_chars=120,
+        )
 
     def test_question_topic_rows_query_preserves_scope_and_placeholders(self):
         from backend.services.stock_topic_analysis_store import question_topic_rows_query
