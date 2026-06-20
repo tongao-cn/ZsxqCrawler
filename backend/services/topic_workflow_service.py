@@ -36,6 +36,23 @@ def _build_single_topic_response(
     return response
 
 
+def _build_refresh_topic_failure(message: str) -> dict:
+    return {"success": False, "message": message}
+
+
+def _build_refresh_topic_success(topic_data: dict) -> dict:
+    return {
+        "success": True,
+        "message": "话题信息已更新",
+        "updated_data": {
+            "likes_count": topic_data.get("likes_count", 0),
+            "comments_count": topic_data.get("comments_count", 0),
+            "reading_count": topic_data.get("reading_count", 0),
+            "readers_count": topic_data.get("readers_count", 0),
+        },
+    }
+
+
 def _validate_topic_group(topic: dict, group_id: str) -> None:
     topic_group_id = str((topic.get("group") or {}).get("group_id", ""))
     if topic_group_id and topic_group_id != str(group_id):
@@ -58,6 +75,32 @@ def _clear_group_topic_data(group_id: str) -> dict:
         return deleted_counts
     finally:
         db.close()
+
+
+def refresh_topic_stats(topic_id: int, group_id: str) -> dict:
+    db = None
+    try:
+        db = ZSXQDatabase(group_id)
+        payload = OfficialTopicClient().get_topic_info(topic_id)
+        topic = official_payload_topic(payload)
+        if not topic:
+            return _build_refresh_topic_failure("MCP返回数据格式错误")
+
+        _validate_topic_group(topic, group_id)
+        topic_data = normalize_official_topic(topic, group_id)
+
+        success = db.update_topic_stats(topic_data)
+        if not success:
+            return _build_refresh_topic_failure("话题不存在或更新失败")
+
+        db.conn.commit()
+        return _build_refresh_topic_success(topic_data)
+    except Exception:
+        _rollback_topic_db(db)
+        raise
+    finally:
+        if db:
+            db.close()
 
 
 def fetch_single_topic(group_id: str, topic_id: int, fetch_comments: bool = True) -> dict:

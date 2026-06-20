@@ -174,11 +174,9 @@ class TopicRoutesHelperTests(unittest.TestCase):
 
     @unittest.skipUnless(HAS_TOPIC_ROUTE_DEPS, "topic route dependencies are not installed")
     def test_validate_topic_group_rejects_mismatched_group(self):
-        from fastapi import HTTPException
+        from backend.services.topic_workflow_service import TopicWorkflowError, _validate_topic_group
 
-        from backend.routes.topic_routes import _validate_topic_group
-
-        with self.assertRaises(HTTPException) as ctx:
+        with self.assertRaises(TopicWorkflowError) as ctx:
             _validate_topic_group({"group": {"group_id": 456}}, "123")
 
         self.assertEqual(400, ctx.exception.status_code)
@@ -282,6 +280,143 @@ class TopicRoutesHelperTests(unittest.TestCase):
         self.assertTrue(db.closed)
         self.assertEqual([14], db.topic_exists_calls)
         self.assertEqual(1, len(db.imported_topics))
+
+    @unittest.skipUnless(HAS_TOPIC_ROUTE_DEPS, "topic route dependencies are not installed")
+    def test_refresh_topic_stats_workflow_updates_stats_and_commits(self):
+        from backend.services.topic_workflow_service import refresh_topic_stats
+
+        class FakeRefreshDb(FakeDb):
+            def __init__(self, update_success=True):
+                super().__init__()
+                self.update_success = update_success
+                self.updated_topics = []
+
+            def update_topic_stats(self, topic_data):
+                self.updated_topics.append(topic_data)
+                return self.update_success
+
+        db = FakeRefreshDb()
+        client = FakeSingleTopicClient()
+        topic_data = {
+            "topic_id": 14,
+            "group": {"group_id": 123},
+            "likes_count": 5,
+            "comments_count": 2,
+        }
+
+        with (
+            patch("backend.services.topic_workflow_service.ZSXQDatabase", return_value=db),
+            patch("backend.services.topic_workflow_service.OfficialTopicClient", return_value=client),
+            patch(
+                "backend.services.topic_workflow_service.official_payload_topic",
+                return_value={"topic_id": 14, "group": {"group_id": 123}},
+            ),
+            patch("backend.services.topic_workflow_service.normalize_official_topic", return_value=topic_data),
+        ):
+            response = refresh_topic_stats(14, "123")
+
+        self.assertEqual(
+            {
+                "success": True,
+                "message": "话题信息已更新",
+                "updated_data": {
+                    "likes_count": 5,
+                    "comments_count": 2,
+                    "reading_count": 0,
+                    "readers_count": 0,
+                },
+            },
+            response,
+        )
+        self.assertEqual([14], client.info_calls)
+        self.assertEqual([topic_data], db.updated_topics)
+        self.assertTrue(db.committed)
+        self.assertTrue(db.closed)
+
+    @unittest.skipUnless(HAS_TOPIC_ROUTE_DEPS, "topic route dependencies are not installed")
+    def test_refresh_topic_stats_workflow_returns_failure_for_invalid_payload(self):
+        from backend.services.topic_workflow_service import refresh_topic_stats
+
+        class FakeRefreshDb(FakeDb):
+            def __init__(self):
+                super().__init__()
+                self.updated_topics = []
+
+            def update_topic_stats(self, topic_data):
+                self.updated_topics.append(topic_data)
+                return True
+
+        db = FakeRefreshDb()
+
+        with (
+            patch("backend.services.topic_workflow_service.ZSXQDatabase", return_value=db),
+            patch("backend.services.topic_workflow_service.OfficialTopicClient", return_value=FakeSingleTopicClient()),
+            patch("backend.services.topic_workflow_service.official_payload_topic", return_value=None),
+        ):
+            response = refresh_topic_stats(14, "123")
+
+        self.assertEqual({"success": False, "message": "MCP返回数据格式错误"}, response)
+        self.assertEqual([], db.updated_topics)
+        self.assertFalse(db.committed)
+        self.assertTrue(db.closed)
+
+    @unittest.skipUnless(HAS_TOPIC_ROUTE_DEPS, "topic route dependencies are not installed")
+    def test_refresh_topic_stats_workflow_returns_failure_when_local_update_misses(self):
+        from backend.services.topic_workflow_service import refresh_topic_stats
+
+        class FakeRefreshDb(FakeDb):
+            def __init__(self):
+                super().__init__()
+                self.updated_topics = []
+
+            def update_topic_stats(self, topic_data):
+                self.updated_topics.append(topic_data)
+                return False
+
+        db = FakeRefreshDb()
+        topic_data = {"topic_id": 14, "group": {"group_id": 123}}
+
+        with (
+            patch("backend.services.topic_workflow_service.ZSXQDatabase", return_value=db),
+            patch("backend.services.topic_workflow_service.OfficialTopicClient", return_value=FakeSingleTopicClient()),
+            patch(
+                "backend.services.topic_workflow_service.official_payload_topic",
+                return_value={"topic_id": 14, "group": {"group_id": 123}},
+            ),
+            patch("backend.services.topic_workflow_service.normalize_official_topic", return_value=topic_data),
+        ):
+            response = refresh_topic_stats(14, "123")
+
+        self.assertEqual({"success": False, "message": "话题不存在或更新失败"}, response)
+        self.assertEqual([topic_data], db.updated_topics)
+        self.assertFalse(db.committed)
+        self.assertTrue(db.closed)
+
+    @unittest.skipUnless(HAS_TOPIC_ROUTE_DEPS, "topic route dependencies are not installed")
+    def test_refresh_topic_stats_workflow_rejects_mismatched_group(self):
+        from backend.services.topic_workflow_service import TopicWorkflowError, refresh_topic_stats
+
+        class FakeRefreshDb(FakeDb):
+            def update_topic_stats(self, topic_data):
+                raise AssertionError("update should not run for mismatched group")
+
+        db = FakeRefreshDb()
+
+        with (
+            patch("backend.services.topic_workflow_service.ZSXQDatabase", return_value=db),
+            patch("backend.services.topic_workflow_service.OfficialTopicClient", return_value=FakeSingleTopicClient()),
+            patch(
+                "backend.services.topic_workflow_service.official_payload_topic",
+                return_value={"topic_id": 14, "group": {"group_id": 456}},
+            ),
+        ):
+            with self.assertRaises(TopicWorkflowError) as ctx:
+                refresh_topic_stats(14, "123")
+
+        self.assertEqual(400, ctx.exception.status_code)
+        self.assertEqual("该话题不属于当前群组", ctx.exception.detail)
+        self.assertTrue(db.rolled_back)
+        self.assertTrue(db.closed)
 
     @unittest.skipUnless(HAS_TOPIC_ROUTE_DEPS, "topic route dependencies are not installed")
     def test_delete_single_topic_response_uses_storage_topic_exists(self):
@@ -429,7 +564,7 @@ class TopicRoutesHelperTests(unittest.TestCase):
 
     @unittest.skipUnless(HAS_TOPIC_ROUTE_DEPS, "topic route dependencies are not installed")
     def test_build_refresh_topic_success_defaults_missing_counts(self):
-        from backend.routes.topic_routes import _build_refresh_topic_success
+        from backend.services.topic_workflow_service import _build_refresh_topic_success
 
         response = _build_refresh_topic_success({"likes_count": 5, "comments_count": 2})
 
@@ -659,7 +794,7 @@ class TopicRoutesHelperTests(unittest.TestCase):
         self.assertEqual(
             [
                 (topic_routes._clear_topic_database_response, ("group-1",)),
-                (topic_routes._refresh_topic_response, (11, "group-1")),
+                (topic_routes.refresh_topic_stats_workflow, (11, "group-1")),
                 (topic_routes._fetch_more_comments_response, (12, "group-1")),
                 (topic_routes._delete_single_topic_response, (13, 123)),
                 (topic_routes.fetch_single_topic_workflow, ("123", 14, False)),
@@ -670,7 +805,7 @@ class TopicRoutesHelperTests(unittest.TestCase):
             calls,
         )
         self.assertEqual({"called": "_clear_topic_database_response", "args": ("group-1",)}, clear_result)
-        self.assertEqual({"called": "_refresh_topic_response", "args": (11, "group-1")}, refresh_result)
+        self.assertEqual({"called": "refresh_topic_stats", "args": (11, "group-1")}, refresh_result)
         self.assertEqual({"called": "_fetch_more_comments_response", "args": (12, "group-1")}, comments_result)
         self.assertEqual({"called": "_delete_single_topic_response", "args": (13, 123)}, delete_result)
         self.assertEqual({"called": "fetch_single_topic", "args": ("123", 14, False)}, fetch_single_result)
@@ -817,7 +952,7 @@ class TopicRoutesHelperTests(unittest.TestCase):
         self.assertEqual(
             [
                 (topic_routes._clear_topic_database_response, ("group-1",)),
-                (topic_routes._refresh_topic_response, (11, "group-1")),
+                (topic_routes.refresh_topic_stats_workflow, (11, "group-1")),
                 (topic_routes._fetch_more_comments_response, (12, "group-1")),
                 (topic_routes._delete_single_topic_response, (13, 123)),
                 (topic_routes.fetch_single_topic_workflow, ("123", 14, False)),
@@ -828,13 +963,27 @@ class TopicRoutesHelperTests(unittest.TestCase):
             calls,
         )
         self.assertEqual({"called": "_clear_topic_database_response", "args": ("group-1",)}, clear_result)
-        self.assertEqual({"called": "_refresh_topic_response", "args": (11, "group-1")}, refresh_result)
+        self.assertEqual({"called": "refresh_topic_stats", "args": (11, "group-1")}, refresh_result)
         self.assertEqual({"called": "_fetch_more_comments_response", "args": (12, "group-1")}, comments_result)
         self.assertEqual({"called": "_delete_single_topic_response", "args": (13, 123)}, delete_result)
         self.assertEqual({"called": "fetch_single_topic", "args": ("123", 14, False)}, fetch_single_result)
         self.assertEqual({"called": "_get_group_tags_response", "args": ("123",)}, tags_result)
         self.assertEqual({"called": "_get_topics_by_tag_response", "args": (123, 9, 2, 5)}, tag_topics_result)
         self.assertEqual({"called": "_delete_group_topics_response", "args": (123,)}, delete_group_result)
+
+    @unittest.skipUnless(HAS_TOPIC_ROUTE_DEPS, "topic route dependencies are not installed")
+    def test_refreshed_topic_maps_workflow_error_to_http_exception(self):
+        from backend.routes import topic_routes
+
+        async def fake_to_thread(func, *args):
+            raise topic_routes.TopicWorkflowError(400, "wrong group")
+
+        with patch("backend.routes.topic_routes.asyncio.to_thread", side_effect=fake_to_thread):
+            with self.assertRaises(topic_routes.HTTPException) as ctx:
+                self._run_async(topic_routes._refreshed_topic(11, "group-1"))
+
+        self.assertEqual(400, ctx.exception.status_code)
+        self.assertEqual("wrong group", ctx.exception.detail)
 
     @unittest.skipUnless(HAS_TOPIC_ROUTE_DEPS, "topic route dependencies are not installed")
     def test_fetched_single_topic_maps_workflow_error_to_http_exception(self):

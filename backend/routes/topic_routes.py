@@ -5,15 +5,12 @@ from typing import Optional
 
 from fastapi import APIRouter, HTTPException
 
-from backend.crawlers.official_topic_client import (
-    OfficialTopicClient,
-    normalize_official_topic,
-    official_payload_topic,
-)
+from backend.crawlers.official_topic_client import OfficialTopicClient
 from backend.services.topic_workflow_service import (
     TopicWorkflowError,
     _clear_group_topic_data,
     fetch_single_topic as fetch_single_topic_workflow,
+    refresh_topic_stats as refresh_topic_stats_workflow,
 )
 from backend.storage.zsxq_database import TagNotFoundInGroupError, ZSXQDatabase
 
@@ -48,12 +45,6 @@ def _query_group_id(group_id: int | str) -> int | str:
     return int(group_id) if str(group_id).isdigit() else str(group_id)
 
 
-def _validate_topic_group(topic: dict, group_id: str) -> None:
-    topic_group_id = str((topic.get("group") or {}).get("group_id", ""))
-    if topic_group_id and topic_group_id != str(group_id):
-        raise HTTPException(status_code=400, detail="该话题不属于当前群组")
-
-
 def _fetch_and_import_topic_comments(db, topic_id: int, comments_count: int, client: Optional[OfficialTopicClient] = None) -> int:
     if comments_count <= 0:
         return 0
@@ -68,23 +59,6 @@ def _fetch_and_import_topic_comments(db, topic_id: int, comments_count: int, cli
         _log_topic_event("WARN", f"单话题评论获取失败: {e}")
 
     return 0
-
-
-def _build_refresh_topic_failure(message: str) -> dict:
-    return {"success": False, "message": message}
-
-
-def _build_refresh_topic_success(topic_data: dict) -> dict:
-    return {
-        "success": True,
-        "message": "话题信息已更新",
-        "updated_data": {
-            "likes_count": topic_data.get("likes_count", 0),
-            "comments_count": topic_data.get("comments_count", 0),
-            "reading_count": topic_data.get("reading_count", 0),
-            "readers_count": topic_data.get("readers_count", 0),
-        },
-    }
 
 
 def _should_fetch_more_comments(comments_count: int) -> bool:
@@ -165,28 +139,6 @@ def _clear_topic_database_response(group_id: str) -> dict:
         _log_topic_event("WARN", f"清空图片缓存时出错: {cache_error}")
 
     return {"message": f"群组 {group_id} 的话题数据和图片缓存已删除", "deleted": deleted_counts}
-
-
-def _refresh_topic_response(topic_id: int, group_id: str) -> dict:
-    db = None
-    try:
-        db = ZSXQDatabase(group_id)
-        payload = OfficialTopicClient().get_topic_info(topic_id)
-        topic = official_payload_topic(payload)
-        if not topic:
-            return _build_refresh_topic_failure("MCP返回数据格式错误")
-
-        _validate_topic_group(topic, group_id)
-        topic_data = normalize_official_topic(topic, group_id)
-
-        success = db.update_topic_stats(topic_data)
-        if not success:
-            return _build_refresh_topic_failure("话题不存在或更新失败")
-
-        db.conn.commit()
-        return _build_refresh_topic_success(topic_data)
-    finally:
-        _close_topic_db(db)
 
 
 def _fetch_more_comments_response(topic_id: int, group_id: str) -> dict:
@@ -297,7 +249,10 @@ async def _cleared_topic_database(group_id: str) -> dict:
 
 
 async def _refreshed_topic(topic_id: int, group_id: str) -> dict:
-    return await asyncio.to_thread(_refresh_topic_response, topic_id, group_id)
+    try:
+        return await asyncio.to_thread(refresh_topic_stats_workflow, topic_id, group_id)
+    except TopicWorkflowError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail)
 
 
 async def _more_comments(topic_id: int, group_id: str) -> dict:
