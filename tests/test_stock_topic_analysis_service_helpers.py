@@ -1078,6 +1078,29 @@ class StockTopicAnalysisServiceHelperTests(unittest.TestCase):
         self.assertIn("AND e.topic_date >=", sql)
         self.assertEqual(("%宁德时代%", "51111112855254", "2025-06-20", 25), params)
 
+    def test_load_stock_recommendation_counts_builds_scoped_query(self):
+        from backend.services.stock_topic_analysis_store import load_stock_recommendation_counts
+
+        conn = Mock()
+        conn.execute.return_value.fetchall.return_value = [
+            {"mention_date": "2026-05-10", "count": 2},
+            {"mention_date": "2026-05-11", "count": 3},
+        ]
+
+        total, by_date = load_stock_recommendation_counts(
+            conn,
+            " 51111112855254 ",
+            ["宁德时代", "宁德时代", "CATL"],
+            max_names=2,
+        )
+
+        self.assertEqual(5, total)
+        self.assertEqual({"2026-05-10": 2, "2026-05-11": 3}, by_date)
+        sql, params = conn.execute.call_args.args
+        self.assertIn("FROM zsxq_a_share_daily_mentions", sql)
+        self.assertIn("company ILIKE ? OR company ILIKE ?", sql)
+        self.assertEqual(["51111112855254", "%宁德时代%", "%CATL%"], params)
+
     @unittest.skipUnless(HAS_SERVICE_DEPS, "stock topic analysis service dependencies are not installed")
     def test_get_latest_stock_topic_analyses_returns_missing_rows(self):
         from backend.services.stock_topic_analysis_service import get_latest_stock_topic_analyses

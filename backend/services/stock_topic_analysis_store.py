@@ -158,6 +158,36 @@ def load_stock_topic_search_rows(
     ).fetchall()
 
 
+def load_stock_recommendation_counts(
+    conn: Any,
+    group_id: str,
+    names: Iterable[Any],
+    *,
+    max_names: int = 10,
+) -> tuple[int, Dict[str, int]]:
+    normalized_names = _ordered_unique([name for name in names if name], limit=max_names)
+    if not normalized_names:
+        return 0, {}
+
+    conditions = " OR ".join("company ILIKE ?" for _ in normalized_names)
+    params: List[Any] = [_normalize_text(group_id)]
+    params.extend(f"%{name}%" for name in normalized_names)
+    rows = conn.execute(
+        f"""
+        SELECT mention_date::text AS mention_date, SUM(mentions_count) AS count
+        FROM zsxq_a_share_daily_mentions
+        WHERE group_id = ?
+          AND ({conditions})
+        GROUP BY mention_date
+        ORDER BY mention_date ASC
+        """,
+        params,
+    ).fetchall()
+
+    by_date = {str(row["mention_date"]): int(row["count"] or 0) for row in rows}
+    return sum(by_date.values()), by_date
+
+
 def _load_topic_excerpt_fallbacks(conn: Any, group_id: str, topic_ids: List[str], stock_name: str) -> Dict[str, str]:
     alias_terms = _build_stock_alias_terms(stock_name)
     if not topic_ids or not alias_terms:

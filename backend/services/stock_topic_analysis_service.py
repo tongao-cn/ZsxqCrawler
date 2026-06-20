@@ -48,6 +48,7 @@ from backend.services.stock_topic_analysis_store import (
     load_question_topic_search_rows,
     load_saved_stock_topic_analysis,
     load_stock_topic_processed_state_ids,
+    load_stock_recommendation_counts,
     load_stock_topic_search_rows,
     upsert_stock_topic_analysis,
     upsert_stock_topic_processed_states,
@@ -253,30 +254,6 @@ def _upsert_stock_topic_processed_states(
     )
 
 
-def _load_recommendation_counts(conn: Any, group_id: str, names: List[str]) -> Tuple[int, Dict[str, int]]:
-    names = _ordered_unique([name for name in names if name], limit=10)
-    if not names:
-        return 0, {}
-
-    conditions = " OR ".join("company ILIKE ?" for _ in names)
-    params: List[Any] = [group_id]
-    params.extend(f"%{name}%" for name in names)
-    rows = conn.execute(
-        f"""
-        SELECT mention_date::text AS mention_date, SUM(mentions_count) AS count
-        FROM zsxq_a_share_daily_mentions
-        WHERE group_id = ?
-          AND ({conditions})
-        GROUP BY mention_date
-        ORDER BY mention_date ASC
-        """,
-        params,
-    ).fetchall()
-
-    by_date = {str(row["mention_date"]): int(row["count"] or 0) for row in rows}
-    return sum(by_date.values()), by_date
-
-
 def _upsert_stock_topic_analysis(
     conn: Any,
     *,
@@ -421,7 +398,7 @@ def search_stock_topics(group_id: str, stock_name: str, *, limit: int | None = N
             if len(extracted_content) > len(str(topic.get("analysis_content") or "")):
                 topic["analysis_content"] = extracted_content
 
-        recommendation_count, recommendation_by_date = _load_recommendation_counts(
+        recommendation_count, recommendation_by_date = load_stock_recommendation_counts(
             conn,
             group_id_text,
             _ordered_unique([query, *stock_names], limit=10),
