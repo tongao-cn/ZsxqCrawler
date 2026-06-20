@@ -17,6 +17,7 @@ from backend.storage.zsxq_database_helpers import (
     format_group_topic_row,
     format_tag_row,
     format_tag_topic_row,
+    format_topic_row,
     group_topics_count_query,
     group_topics_query,
     group_id_param,
@@ -61,6 +62,8 @@ from backend.storage.zsxq_database_helpers import (
     topic_file_group_payload_from_row,
     topic_file_payload_from_row,
     topic_file_insert_statement,
+    topics_count_query,
+    topics_query,
     topic_group_id_query,
     topic_image_payloads_from_data,
     topic_insert_statement,
@@ -137,6 +140,10 @@ def _format_group_topic_row(topic) -> Dict[str, Any]:
     return format_group_topic_row(topic)
 
 
+def _format_topic_row(topic) -> Dict[str, Any]:
+    return format_topic_row(topic)
+
+
 def _topic_tags_from_data(topic_data: Dict[str, Any]) -> set[tuple[str, str]]:
     return topic_tags_from_data(topic_data)
 
@@ -195,6 +202,14 @@ def _group_topics_query(group_id: Any, per_page: int, offset: int, search: Optio
 
 def _group_topics_count_query(group_id: Any, search: Optional[str]) -> tuple[str, tuple[Any, ...]]:
     return group_topics_count_query(group_id, search)
+
+
+def _topics_query(per_page: int, offset: int, search: Optional[str]) -> tuple[str, tuple[Any, ...]]:
+    return topics_query(per_page, offset, search)
+
+
+def _topics_count_query(search: Optional[str]) -> tuple[str, tuple[Any, ...]]:
+    return topics_count_query(search)
 
 
 def _group_insert_statement(group_data: Dict[str, Any], created_at: str) -> tuple[str, tuple[Any, ...]]:
@@ -1211,6 +1226,23 @@ class ZSXQDatabase:
 
     def _fetch_topic_count_by_tag(self, tag_id: int) -> int:
         sql, params = _topic_count_by_tag_query(tag_id)
+        return self._fetch_first_column(sql, params)
+
+    def get_topics(self, page: int = 1, per_page: int = 20, search: Optional[str] = None) -> Dict[str, Any]:
+        offset = (page - 1) * per_page
+        topics = self._fetch_topics(per_page, offset, search)
+        total = self._fetch_topic_count(search)
+        return {
+            "topics": topics,
+            "pagination": _build_pagination(page, per_page, total),
+        }
+
+    def _fetch_topics(self, per_page: int, offset: int, search: Optional[str]) -> List[Dict[str, Any]]:
+        sql, params = _topics_query(per_page, offset, search)
+        return self._fetch_mapped_rows(sql, params, _format_topic_row)
+
+    def _fetch_topic_count(self, search: Optional[str]) -> int:
+        sql, params = _topics_count_query(search)
         return self._fetch_first_column(sql, params)
 
     def get_group_topics(

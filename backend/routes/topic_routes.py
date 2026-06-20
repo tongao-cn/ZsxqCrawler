@@ -126,99 +126,11 @@ def _import_more_comments(db, topic_id: int, comments_count: int, client: Option
     return len(additional_comments)
 
 
-def _build_pagination(page: int, per_page: int, total: int) -> dict:
-    return {
-        "page": page,
-        "per_page": per_page,
-        "total": total,
-        "pages": (total + per_page - 1) // per_page,
-    }
-
-
-def _format_topic_row(topic) -> dict:
-    return {
-        "topic_id": topic[0],
-        "title": topic[1],
-        "create_time": topic[2],
-        "likes_count": topic[3],
-        "comments_count": topic[4],
-        "reading_count": topic[5],
-    }
-
-
-def _build_topics_query(page: int, per_page: int, search: Optional[str]) -> tuple[str, tuple, str, tuple]:
-    offset = (page - 1) * per_page
-    if search:
-        search_param = f"%{search}%"
-        return (
-            """
-            SELECT topic_id, title, create_time, likes_count, comments_count, reading_count
-            FROM topics
-            WHERE title LIKE ?
-            ORDER BY create_time DESC
-            LIMIT ? OFFSET ?
-            """,
-            (search_param, per_page, offset),
-            "SELECT COUNT(*) FROM topics WHERE title LIKE ?",
-            (search_param,),
-        )
-
-    return (
-        """
-        SELECT topic_id, title, create_time, likes_count, comments_count, reading_count
-        FROM topics
-        ORDER BY create_time DESC
-        LIMIT ? OFFSET ?
-        """,
-        (per_page, offset),
-        "SELECT COUNT(*) FROM topics",
-        (),
-    )
-
-
-def _fetch_rows_and_total(cursor, query: str, params: tuple, count_query: str, count_params: tuple) -> tuple[list, int]:
-    cursor.execute(query, params)
-    rows = cursor.fetchall()
-
-    cursor.execute(count_query, count_params)
-    total = cursor.fetchone()[0]
-
-    return rows, total
-
-
-def _build_topic_page_response(
-    cursor,
-    query: str,
-    params: tuple,
-    count_query: str,
-    count_params: tuple,
-    formatter,
-    page: int,
-    per_page: int,
-) -> dict:
-    topics, total = _fetch_rows_and_total(cursor, query, params, count_query, count_params)
-    return {
-        "topics": [formatter(topic) for topic in topics],
-        "pagination": _build_pagination(page, per_page, total),
-    }
-
-
 def _get_topics_response(page: int = 1, per_page: int = 20, search: Optional[str] = None) -> dict:
     db = None
     try:
         db = ZSXQDatabase()
-
-        query, params, count_query, count_params = _build_topics_query(page, per_page, search)
-        return _build_topic_page_response(
-            db.cursor,
-            query,
-            params,
-            count_query,
-            count_params,
-            _format_topic_row,
-            page,
-            per_page,
-        )
+        return db.get_topics(page, per_page, search)
     finally:
         _close_topic_db(db)
 

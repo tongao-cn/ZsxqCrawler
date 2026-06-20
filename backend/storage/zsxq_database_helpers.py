@@ -148,6 +148,17 @@ def format_group_topic_row(topic) -> Dict[str, Any]:
     return topic_data
 
 
+def format_topic_row(topic) -> Dict[str, Any]:
+    return {
+        "topic_id": topic[0],
+        "title": topic[1],
+        "create_time": topic[2],
+        "likes_count": topic[3],
+        "comments_count": topic[4],
+        "reading_count": topic[5],
+    }
+
+
 def topic_tags_from_data(topic_data: Dict[str, Any]) -> set[tuple[str, str]]:
     text_contents = []
 
@@ -296,6 +307,39 @@ def group_topics_count_query(group_id: Any, search: Optional[str]) -> tuple[str,
             """,
         (group_id,),
     )
+
+
+def topics_query(per_page: int, offset: int, search: Optional[str]) -> tuple[str, tuple[Any, ...]]:
+    if search:
+        search_param = f"%{search}%"
+        return (
+            """
+                SELECT topic_id, title, create_time, likes_count, comments_count, reading_count
+                FROM topics
+                WHERE title LIKE ?
+                ORDER BY create_time DESC
+                LIMIT ? OFFSET ?
+            """,
+            (search_param, per_page, offset),
+        )
+
+    return (
+        """
+                SELECT topic_id, title, create_time, likes_count, comments_count, reading_count
+                FROM topics
+                ORDER BY create_time DESC
+                LIMIT ? OFFSET ?
+            """,
+        (per_page, offset),
+    )
+
+
+def topics_count_query(search: Optional[str]) -> tuple[str, tuple[Any, ...]]:
+    if search:
+        search_param = f"%{search}%"
+        return "SELECT COUNT(*) FROM topics WHERE title LIKE ?", (search_param,)
+
+    return "SELECT COUNT(*) FROM topics", ()
 
 
 def group_insert_statement(group_data: Dict[str, Any], created_at: str) -> tuple[str, tuple[Any, ...]]:

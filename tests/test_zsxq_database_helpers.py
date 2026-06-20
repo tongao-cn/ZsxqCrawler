@@ -14,6 +14,7 @@ from backend.storage.zsxq_database import (
     _format_group_topic_row,
     _format_tag_row,
     _format_tag_topic_row,
+    _format_topic_row,
     _group_topics_count_query,
     _group_topics_query,
     _group_id_param,
@@ -49,6 +50,8 @@ from backend.storage.zsxq_database import (
     _topic_files_backfill_query,
     _topic_file_payload_from_row,
     _topic_file_insert_statement,
+    _topics_count_query,
+    _topics_query,
     _topic_group_id_query,
     _topic_image_payloads_from_data,
     _topic_insert_statement,
@@ -744,6 +747,19 @@ class ZSXQDatabaseHelperTests(unittest.TestCase):
         self.assertFalse(topic["digested"])
         self.assertFalse(topic["sticky"])
 
+    def test_format_topic_row_maps_basic_topic_fields(self):
+        self.assertEqual(
+            {
+                "topic_id": 10,
+                "title": "标题",
+                "create_time": "2026-01-01",
+                "likes_count": 1,
+                "comments_count": 2,
+                "reading_count": 3,
+            },
+            _format_topic_row((10, "标题", "2026-01-01", 1, 2, 3)),
+        )
+
     def test_format_group_topic_row_maps_imported_at_and_string_topic_id(self):
         row = (
             12,
@@ -879,6 +895,22 @@ class ZSXQDatabaseHelperTests(unittest.TestCase):
         unfiltered_sql, unfiltered_params = _group_topics_count_query(303, None)
         self.assertEqual("SELECT COUNT(*) FROM topics WHERE group_id = ?", " ".join(unfiltered_sql.split()))
         self.assertEqual((303,), unfiltered_params)
+
+    def test_topic_read_query_helpers_preserve_search_and_paging(self):
+        topics_sql, topics_params = _topics_query(20, 40, "offer")
+        count_sql, count_params = _topics_count_query("offer")
+
+        self.assertIn("WHERE title LIKE ?", " ".join(topics_sql.split()))
+        self.assertEqual(("%offer%", 20, 40), topics_params)
+        self.assertEqual("SELECT COUNT(*) FROM topics WHERE title LIKE ?", count_sql)
+        self.assertEqual(("%offer%",), count_params)
+
+        unfiltered_sql, unfiltered_params = _topics_query(20, 0, None)
+        unfiltered_count_sql, unfiltered_count_params = _topics_count_query(None)
+        self.assertNotIn("WHERE", " ".join(unfiltered_sql.split()))
+        self.assertEqual((20, 0), unfiltered_params)
+        self.assertEqual("SELECT COUNT(*) FROM topics", unfiltered_count_sql)
+        self.assertEqual((), unfiltered_count_params)
 
     def test_group_and_user_insert_statement_helpers_preserve_sql_shape_and_params(self):
         group_sql, group_params = _group_insert_statement(
@@ -3616,6 +3648,43 @@ class ZSXQDatabaseHelperTests(unittest.TestCase):
             ],
             db.cursor.calls,
         )
+
+    def test_get_topics_uses_helper_queries_and_preserves_pagination(self):
+        from backend.storage.zsxq_database import ZSXQDatabase
+
+        class FakeTopicPageCursor(FakeCursor):
+            def __init__(self):
+                super().__init__()
+                self.rows = [(202, "title", "2026-05-07", 1, 2, 3)]
+
+            def fetchall(self):
+                return self.rows
+
+            def fetchone(self):
+                return (12,)
+
+        db = object.__new__(ZSXQDatabase)
+        db.cursor = FakeTopicPageCursor()
+
+        self.assertEqual(
+            {
+                "topics": [
+                    {
+                        "topic_id": 202,
+                        "title": "title",
+                        "create_time": "2026-05-07",
+                        "likes_count": 1,
+                        "comments_count": 2,
+                        "reading_count": 3,
+                    }
+                ],
+                "pagination": {"page": 2, "per_page": 5, "total": 12, "pages": 3},
+            },
+            ZSXQDatabase.get_topics(db, page=2, per_page=5, search="offer"),
+        )
+        self.assertEqual(("%offer%", 5, 5), db.cursor.calls[0][1])
+        self.assertIn("FROM topics", db.cursor.calls[0][0])
+        self.assertEqual(("SELECT COUNT(*) FROM topics WHERE title LIKE ?", ("%offer%",)), db.cursor.calls[1])
 
     def test_get_group_topics_uses_matching_queries_and_preserves_pagination(self):
         from backend.storage.zsxq_database import ZSXQDatabase
