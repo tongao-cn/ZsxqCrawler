@@ -15,6 +15,7 @@ from backend.services.task_runtime_memory import (
 from backend.services.task_runtime_resources import (
     clear_runtime_resource_tracking,
     register_task_crawler as _register_resource_crawler,
+    register_task_file_downloader as _register_resource_file_downloader,
     request_stop_for_resources,
     request_stop_for_task_resources,
     runtime_crawlers_snapshot,
@@ -22,6 +23,7 @@ from backend.services.task_runtime_resources import (
     task_crawler,
     task_file_downloader,
     unregister_task_crawler as _unregister_resource_crawler,
+    unregister_task_file_downloader as _unregister_resource_file_downloader,
 )
 from backend.services.task_runtime_status import (
     INGESTION_LOCK_KEY,
@@ -402,6 +404,14 @@ def _unregister_task_crawler_locked(task_id: str) -> None:
     _unregister_resource_crawler(crawler_instances, task_id)
 
 
+def _register_task_file_downloader_locked(task_id: str, downloader: Any) -> None:
+    _register_resource_file_downloader(file_downloader_instances, task_id, downloader)
+
+
+def _unregister_task_file_downloader_locked(task_id: str) -> None:
+    _unregister_resource_file_downloader(file_downloader_instances, task_id)
+
+
 def _task_crawler_locked(task_id: str) -> Any:
     return task_crawler(crawler_instances, task_id)
 
@@ -430,6 +440,16 @@ def register_task_crawler(task_id: str, crawler: Any) -> None:
 def unregister_task_crawler(task_id: str) -> None:
     with _state_lock:
         _unregister_task_crawler_locked(task_id)
+
+
+def register_task_file_downloader(task_id: str, downloader: Any) -> None:
+    with _state_lock:
+        _register_task_file_downloader_locked(task_id, downloader)
+
+
+def unregister_task_file_downloader(task_id: str) -> None:
+    with _state_lock:
+        _unregister_task_file_downloader_locked(task_id)
 
 
 def _prepare_task_stop_resources_locked(task_id: str) -> tuple[Any, Any]:

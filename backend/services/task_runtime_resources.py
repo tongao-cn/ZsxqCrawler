@@ -11,6 +11,18 @@ def unregister_task_crawler(crawler_instances: Dict[str, Any], task_id: str) -> 
     crawler_instances.pop(task_id, None)
 
 
+def register_task_file_downloader(
+    file_downloader_instances: Dict[str, Any],
+    task_id: str,
+    downloader: Any,
+) -> None:
+    file_downloader_instances[task_id] = downloader
+
+
+def unregister_task_file_downloader(file_downloader_instances: Dict[str, Any], task_id: str) -> None:
+    file_downloader_instances.pop(task_id, None)
+
+
 def task_crawler(crawler_instances: Dict[str, Any], task_id: str) -> Any:
     return crawler_instances.get(task_id)
 

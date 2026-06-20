@@ -1236,6 +1236,36 @@ class FileRoutesHelperTests(unittest.TestCase):
             payload,
         )
 
+    def test_create_file_downloader_registers_with_task_runtime(self):
+        from backend.services.file_downloader_runtime import _create_file_downloader
+
+        class FakeDownloader:
+            pass
+
+        downloader = FakeDownloader()
+
+        with (
+            patch("backend.services.file_downloader_runtime.get_cookie_for_group", return_value="cookie") as get_cookie,
+            patch("backend.services.file_downloader_runtime.ZSXQFileDownloader", return_value=downloader) as downloader_cls,
+            patch("backend.services.file_downloader_runtime.register_task_file_downloader") as register_downloader,
+        ):
+            created = _create_file_downloader("task-1", "123", files_per_batch=5)
+
+        self.assertIs(downloader, created)
+        self.assertTrue(callable(downloader.log_callback))
+        self.assertTrue(callable(downloader.stop_check_func))
+        get_cookie.assert_called_once_with("123")
+        downloader_cls.assert_called_once_with(cookie="cookie", group_id="123", files_per_batch=5)
+        register_downloader.assert_called_once_with("task-1", downloader)
+
+    def test_remove_file_downloader_unregisters_with_task_runtime(self):
+        from backend.services.file_downloader_runtime import _remove_file_downloader
+
+        with patch("backend.services.file_downloader_runtime.unregister_task_file_downloader") as unregister_downloader:
+            _remove_file_downloader("task-1")
+
+        unregister_downloader.assert_called_once_with("task-1")
+
     def test_download_file_record_builds_downloader_payload(self):
         record = DownloadFileRecord.from_row((123, "", None, None))
 

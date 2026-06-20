@@ -442,12 +442,12 @@ class TaskRuntimeHelperTests(unittest.TestCase):
         with patch("backend.services.task_runtime.get_task_store", return_value=store):
             try:
                 task_runtime.register_task_crawler("task-1", crawler)
-                task_runtime.file_downloader_instances["task-1"] = downloader
+                task_runtime.register_task_file_downloader("task-1", downloader)
 
                 stopped = task_runtime.stop_task("task-1")
             finally:
                 task_runtime.unregister_task_crawler("task-1")
-                task_runtime.file_downloader_instances.pop("task-1", None)
+                task_runtime.unregister_task_file_downloader("task-1")
                 task_runtime.task_stop_flags.pop("task-1", None)
 
         self.assertTrue(stopped)
@@ -480,12 +480,12 @@ class TaskRuntimeHelperTests(unittest.TestCase):
         with patch("backend.services.task_runtime.get_task_store", return_value=store):
             try:
                 task_runtime.register_task_crawler("task-1", crawler)
-                task_runtime.file_downloader_instances["task-1"] = downloader
+                task_runtime.register_task_file_downloader("task-1", downloader)
 
                 stopped = task_runtime.stop_task("task-1")
             finally:
                 task_runtime.unregister_task_crawler("task-1")
-                task_runtime.file_downloader_instances.pop("task-1", None)
+                task_runtime.unregister_task_file_downloader("task-1")
                 task_runtime.task_stop_flags.pop("task-1", None)
 
         self.assertFalse(stopped)
@@ -511,6 +511,22 @@ class TaskRuntimeHelperTests(unittest.TestCase):
             task_runtime.crawler_instances.pop("task-1", None)
 
         self.assertNotIn("task-1", task_runtime.crawler_instances)
+
+    def test_unregister_task_file_downloader_removes_registered_downloader_and_is_idempotent(self):
+        from backend.services import task_runtime
+
+        downloader = Stoppable()
+
+        try:
+            task_runtime.register_task_file_downloader("task-1", downloader)
+            self.assertIs(downloader, task_runtime.file_downloader_instances["task-1"])
+
+            task_runtime.unregister_task_file_downloader("task-1")
+            task_runtime.unregister_task_file_downloader("task-1")
+        finally:
+            task_runtime.file_downloader_instances.pop("task-1", None)
+
+        self.assertNotIn("task-1", task_runtime.file_downloader_instances)
 
     def test_stop_task_marks_memory_stop_flag_before_stopping_resources(self):
         from backend.services import task_runtime
@@ -951,7 +967,7 @@ class TaskRuntimeHelperTests(unittest.TestCase):
                 task_runtime.current_tasks["task-1"] = dict(store.tasks["task-1"])
                 task_runtime.current_tasks["task-2"] = dict(store.tasks["task-2"])
                 task_runtime.register_task_crawler("task-1", crawler)
-                task_runtime.file_downloader_instances["task-1"] = downloader
+                task_runtime.register_task_file_downloader("task-1", downloader)
                 task_runtime.sse_connections["task-1"] = [object()]
 
                 task_runtime.request_runtime_shutdown()

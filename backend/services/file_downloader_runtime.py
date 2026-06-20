@@ -6,7 +6,12 @@ from typing import Any, Optional
 
 from backend.core.account_context import get_cookie_for_group
 from backend.crawlers.zsxq_file_downloader import ZSXQFileDownloader
-from backend.services.task_runtime import add_task_log, file_downloader_instances, is_task_stopped
+from backend.services.task_runtime import (
+    add_task_log,
+    is_task_stopped,
+    register_task_file_downloader,
+    unregister_task_file_downloader,
+)
 
 
 def _create_file_downloader(
@@ -24,12 +29,12 @@ def _create_file_downloader(
     downloader = ZSXQFileDownloader(cookie=cookie, group_id=group_id, **kwargs)
     downloader.log_callback = log_callback
     downloader.stop_check_func = stop_check
-    file_downloader_instances[task_id] = downloader
+    register_task_file_downloader(task_id, downloader)
     return downloader
 
 
 def _remove_file_downloader(task_id: str) -> None:
-    file_downloader_instances.pop(task_id, None)
+    unregister_task_file_downloader(task_id)
 
 
 def _safe_remove_file_downloader(task_id: str) -> None:
