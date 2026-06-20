@@ -305,6 +305,30 @@ class StockTopicAnalysisServiceHelperTests(unittest.TestCase):
         self.assertEqual("test-model", model)
 
     @unittest.skipUnless(HAS_SERVICE_DEPS, "stock topic analysis service dependencies are not installed")
+    def test_call_question_keyword_ai_rejects_invalid_json(self):
+        from backend.services.stock_topic_analysis_service import _call_question_keyword_ai
+
+        class FakeResponses:
+            def create(self, **kwargs):
+                response = Mock()
+                response.output_text = "not json"
+                return response
+
+        class FakeClient:
+            def __init__(self, **kwargs):
+                self.responses = FakeResponses()
+
+        with (
+            patch("backend.services.ai_client.OpenAI", FakeClient),
+            patch(
+                "backend.services.stock_topic_analysis_service.get_openai_compatible_config",
+                return_value={"api_key": "test-key", "model": "test-model", "base_url": "http://test"},
+            ),
+        ):
+            with self.assertRaisesRegex(ValueError, "AI 问题关键词抽取结果不是合法 JSON"):
+                _call_question_keyword_ai("商业航天板块最近怎么样，推荐吗")
+
+    @unittest.skipUnless(HAS_SERVICE_DEPS, "stock topic analysis service dependencies are not installed")
     def test_parse_image_data_url_validates_image_payload(self):
         from backend.services.stock_topic_analysis_service import _parse_image_data_url
 

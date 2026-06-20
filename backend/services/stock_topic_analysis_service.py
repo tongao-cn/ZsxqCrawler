@@ -14,7 +14,7 @@ from backend.core.ai_provider_config import (
     get_summary_reasoning_effort,
 )
 from backend.services.ai_client import AITextRequest, call_ai_text
-from backend.services.ai_json_utils import extract_json_object
+from backend.services.ai_json_utils import JsonObjectParseError, extract_json_object, require_json_object
 from backend.services.stock_topic_analysis_ai_prompts import (
     build_image_stock_extraction_input,
     build_question_analysis_messages,
@@ -756,7 +756,10 @@ def _call_question_keyword_ai(question: str) -> Tuple[List[str], str]:
         )
     )
 
-    parsed = _extract_json_object(text)
+    try:
+        parsed = require_json_object(text, label="AI 问题关键词抽取结果")
+    except JsonObjectParseError as exc:
+        raise ValueError("AI 问题关键词抽取结果不是合法 JSON") from exc
     keywords = _normalize_question_keywords(parsed.get("keywords") or parsed.get("keyword") or [])
     if not keywords:
         raise ValueError("AI 未能从问题中提取检索关键词")
