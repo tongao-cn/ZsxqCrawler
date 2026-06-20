@@ -127,13 +127,13 @@ class TopicRoutesHelperTests(unittest.TestCase):
         _rollback_topic_db(None)
 
     @unittest.skipUnless(HAS_TOPIC_ROUTE_DEPS, "topic route dependencies are not installed")
-    def test_delete_single_topic_rows_deletes_detail_tables_and_topic(self):
-        from backend.routes.topic_routes import _delete_single_topic_rows
-        from backend.services.topic_workflow_service import TOPIC_DETAIL_TABLES
+    def test_delete_single_topic_records_deletes_detail_tables_and_topic(self):
+        from backend.storage.zsxq_database import TOPIC_DETAIL_TABLES, ZSXQDatabase
 
-        db = FakeSqlDb()
+        db = object.__new__(ZSXQDatabase)
+        db.cursor = FakeCursor()
 
-        deleted = _delete_single_topic_rows(db, 10, 123)
+        deleted = ZSXQDatabase.delete_single_topic_records(db, 10, 123)
 
         self.assertTrue(deleted)
         self.assertEqual(len(TOPIC_DETAIL_TABLES) + 1, len(db.cursor.calls))
@@ -141,13 +141,13 @@ class TopicRoutesHelperTests(unittest.TestCase):
         self.assertEqual(("DELETE FROM topics WHERE topic_id = ? AND group_id = ?", (10, 123)), db.cursor.calls[-1])
 
     @unittest.skipUnless(HAS_TOPIC_ROUTE_DEPS, "topic route dependencies are not installed")
-    def test_delete_group_topic_rows_returns_deleted_counts(self):
-        from backend.routes.topic_routes import _delete_group_topic_rows
-        from backend.services.topic_workflow_service import GROUP_TOPIC_TABLES
+    def test_delete_group_topic_records_returns_deleted_counts(self):
+        from backend.storage.zsxq_database import GROUP_TOPIC_TABLES, ZSXQDatabase
 
-        db = FakeSqlDb()
+        db = object.__new__(ZSXQDatabase)
+        db.cursor = FakeCursor()
 
-        deleted_counts = _delete_group_topic_rows(db, 123)
+        deleted_counts = ZSXQDatabase.delete_group_topic_records(db, 123)
 
         self.assertEqual({table: 1 for table, _ in GROUP_TOPIC_TABLES}, deleted_counts)
         self.assertEqual(len(GROUP_TOPIC_TABLES), len(db.cursor.calls))
@@ -287,35 +287,81 @@ class TopicRoutesHelperTests(unittest.TestCase):
                 super().__init__()
                 self.existing = existing
                 self.topic_exists_calls = []
+                self.deleted_topic_calls = []
 
             def topic_exists(self, topic_id):
                 self.topic_exists_calls.append(topic_id)
                 return self.existing
 
+            def delete_single_topic_records(self, topic_id, group_id):
+                self.deleted_topic_calls.append((topic_id, group_id))
+                return True
+
         existing_db = FakeDeleteTopicDb(existing=True)
         missing_db = FakeDeleteTopicDb(existing=False)
 
-        with (
-            patch("backend.routes.topic_routes.ZSXQDatabase", return_value=existing_db),
-            patch("backend.routes.topic_routes._delete_single_topic_rows", return_value={"topics": 1}) as delete_rows,
-        ):
+        with patch("backend.routes.topic_routes.ZSXQDatabase", return_value=existing_db):
             response = _delete_single_topic_response(14, 123)
 
-        self.assertEqual({"success": True, "deleted_topic_id": 14, "deleted": {"topics": 1}}, response)
+        self.assertEqual({"success": True, "deleted_topic_id": 14, "deleted": True}, response)
         self.assertEqual([14], existing_db.topic_exists_calls)
-        delete_rows.assert_called_once_with(existing_db, 14, 123)
+        self.assertEqual([(14, 123)], existing_db.deleted_topic_calls)
         self.assertTrue(existing_db.committed)
         self.assertTrue(existing_db.closed)
 
-        with (
-            patch("backend.routes.topic_routes.ZSXQDatabase", return_value=missing_db),
-            patch("backend.routes.topic_routes._delete_single_topic_rows") as delete_rows,
-        ):
+        with patch("backend.routes.topic_routes.ZSXQDatabase", return_value=missing_db):
             response = _delete_single_topic_response(15, 123)
 
         self.assertEqual({"success": False, "message": "话题不存在"}, response)
         self.assertEqual([15], missing_db.topic_exists_calls)
-        delete_rows.assert_not_called()
+        self.assertEqual([], missing_db.deleted_topic_calls)
+        self.assertFalse(missing_db.committed)
+        self.assertTrue(missing_db.closed)
+
+    @unittest.skipUnless(HAS_TOPIC_ROUTE_DEPS, "topic route dependencies are not installed")
+    def test_delete_group_topics_response_uses_storage_count_and_delete(self):
+        from backend.routes.topic_routes import _delete_group_topics_response
+
+        class FakeDeleteGroupDb(FakeDb):
+            def __init__(self, topics_count):
+                super().__init__()
+                self.topics_count = topics_count
+                self.count_topic_calls = []
+                self.deleted_group_calls = []
+
+            def count_topics(self, group_id):
+                self.count_topic_calls.append(group_id)
+                return self.topics_count
+
+            def delete_group_topic_records(self, group_id):
+                self.deleted_group_calls.append(group_id)
+                return {"topics": 2}
+
+        existing_db = FakeDeleteGroupDb(topics_count=2)
+        missing_db = FakeDeleteGroupDb(topics_count=0)
+
+        with patch("backend.routes.topic_routes.ZSXQDatabase", return_value=existing_db):
+            response = _delete_group_topics_response(123)
+
+        self.assertEqual(
+            {
+                "message": "成功删除群组 123 的所有话题数据",
+                "deleted_topics_count": 2,
+                "deleted_details": {"topics": 2},
+            },
+            response,
+        )
+        self.assertEqual([123], existing_db.count_topic_calls)
+        self.assertEqual([123], existing_db.deleted_group_calls)
+        self.assertTrue(existing_db.committed)
+        self.assertTrue(existing_db.closed)
+
+        with patch("backend.routes.topic_routes.ZSXQDatabase", return_value=missing_db):
+            response = _delete_group_topics_response(123)
+
+        self.assertEqual({"message": "该群组没有话题数据", "deleted_count": 0}, response)
+        self.assertEqual([123], missing_db.count_topic_calls)
+        self.assertEqual([], missing_db.deleted_group_calls)
         self.assertFalse(missing_db.committed)
         self.assertTrue(missing_db.closed)
 

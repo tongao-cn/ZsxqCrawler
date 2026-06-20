@@ -1799,6 +1799,47 @@ class ZSXQDatabaseHelperTests(unittest.TestCase):
         self.assertEqual((303, 303), count_params)
         self.assertEqual((None, None), _topic_count_query(None)[1])
 
+    def test_count_topics_uses_existing_storage_count_scope(self):
+        from backend.storage.zsxq_database import ZSXQDatabase
+
+        db = object.__new__(ZSXQDatabase)
+        db.cursor = FakeTimestampCursor([(5,)])
+        db.group_id = "303"
+
+        self.assertEqual(5, ZSXQDatabase.count_topics(db))
+        self.assertEqual(
+            [("SELECT COUNT(*) FROM topics WHERE (? IS NULL OR group_id = ?)", (303, 303))],
+            db.cursor.calls,
+        )
+
+    def test_delete_single_topic_records_deletes_detail_tables_then_topic(self):
+        from backend.storage.zsxq_database import TOPIC_DETAIL_TABLES, ZSXQDatabase
+
+        db = object.__new__(ZSXQDatabase)
+        db.cursor = FakeCursor()
+        db.cursor.rowcount = 1
+        db.group_id = "303"
+
+        self.assertTrue(ZSXQDatabase.delete_single_topic_records(db, 202))
+        self.assertEqual(len(TOPIC_DETAIL_TABLES) + 1, len(db.cursor.calls))
+        self.assertEqual(("DELETE FROM user_liked_emojis WHERE topic_id = ?", (202,)), db.cursor.calls[0])
+        self.assertEqual(("DELETE FROM topics WHERE topic_id = ? AND group_id = ?", (202, 303)), db.cursor.calls[-1])
+
+    def test_delete_group_topic_records_returns_counts_for_detail_tables_then_topics(self):
+        from backend.storage.zsxq_database import GROUP_TOPIC_TABLES, ZSXQDatabase
+
+        db = object.__new__(ZSXQDatabase)
+        db.cursor = FakeCursor()
+        db.cursor.rowcount = 1
+        db.group_id = "303"
+
+        deleted_counts = ZSXQDatabase.delete_group_topic_records(db)
+
+        self.assertEqual({table: 1 for table, _ in GROUP_TOPIC_TABLES}, deleted_counts)
+        self.assertEqual(len(GROUP_TOPIC_TABLES), len(db.cursor.calls))
+        self.assertIn("SELECT topic_id FROM topics WHERE group_id = ?", db.cursor.calls[0][0])
+        self.assertEqual(("DELETE FROM topics WHERE group_id = ?", (303,)), db.cursor.calls[-1])
+
     def test_group_stats_queries_preserve_metric_names_and_scope(self):
         queries = _group_stats_queries("303")
 

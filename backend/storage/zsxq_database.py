@@ -97,6 +97,22 @@ _DATABASE_STATS_TABLES = (
     'answers',
 )
 
+TOPIC_DETAIL_TABLES = (
+    "user_liked_emojis",
+    "like_emojis",
+    "likes",
+    "images",
+    "comments",
+    "answers",
+    "questions",
+    "articles",
+    "talks",
+    "topic_files",
+    "topic_tags",
+)
+
+GROUP_TOPIC_TABLES = tuple((table, "topic_id") for table in TOPIC_DETAIL_TABLES) + (("topics", "group_id"),)
+
 
 def _beijing_now_timestamp() -> str:
     return beijing_now_timestamp()
@@ -486,6 +502,43 @@ class ZSXQDatabase:
     def topic_exists(self, topic_id: int) -> bool:
         sql, params = _topic_exists_query(topic_id, self.group_id)
         return self._fetch_row_exists(sql, params)
+
+    def count_topics(self, group_id: Optional[Any] = None) -> int:
+        sql, params = _topic_count_query(self.group_id if group_id is None else group_id)
+        return int(self._fetch_first_column(sql, params) or 0)
+
+    def delete_single_topic_records(self, topic_id: int, group_id: Optional[Any] = None) -> bool:
+        scoped_group_id = group_id_param(self.group_id if group_id is None else group_id)
+        for table in TOPIC_DETAIL_TABLES:
+            self.cursor.execute(f"DELETE FROM {table} WHERE topic_id = ?", (topic_id,))
+
+        self.cursor.execute(
+            "DELETE FROM topics WHERE topic_id = ? AND group_id = ?",
+            (topic_id, scoped_group_id),
+        )
+        return self.cursor.rowcount > 0
+
+    def delete_group_topic_records(self, group_id: Optional[Any] = None) -> Dict[str, int]:
+        scoped_group_id = group_id_param(self.group_id if group_id is None else group_id)
+        deleted_counts = {}
+
+        for table, id_column in GROUP_TOPIC_TABLES:
+            if id_column == "group_id":
+                self.cursor.execute(f"DELETE FROM {table} WHERE {id_column} = ?", (scoped_group_id,))
+            else:
+                self.cursor.execute(
+                    f"""
+                    DELETE FROM {table}
+                    WHERE {id_column} IN (
+                        SELECT topic_id FROM topics WHERE group_id = ?
+                    )
+                    """,
+                    (scoped_group_id,),
+                )
+
+            deleted_counts[table] = self.cursor.rowcount
+
+        return deleted_counts
     
     def _upsert_group(self, group_data: Dict[str, Any]):
         """插入或更新群组信息"""

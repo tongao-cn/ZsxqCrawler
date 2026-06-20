@@ -10,11 +10,7 @@ from backend.crawlers.official_topic_client import (
     normalize_official_topic,
     official_payload_topic,
 )
-from backend.services.topic_workflow_service import (
-    _clear_group_topic_data,
-    _delete_group_topic_rows,
-    _delete_single_topic_rows,
-)
+from backend.services.topic_workflow_service import _clear_group_topic_data
 from backend.storage.zsxq_database import ZSXQDatabase
 
 router = APIRouter(prefix="/api", tags=["topics"])
@@ -408,7 +404,7 @@ def _delete_single_topic_response(topic_id: int, group_id: int) -> dict:
         if not db.topic_exists(topic_id):
             return {"success": False, "message": "话题不存在"}
 
-        deleted = _delete_single_topic_rows(db, topic_id, group_id)
+        deleted = db.delete_single_topic_records(topic_id, group_id)
         db.conn.commit()
 
         return {"success": True, "deleted_topic_id": topic_id, "deleted": deleted}
@@ -489,13 +485,12 @@ def _delete_group_topics_response(group_id: int) -> dict:
     db = None
     try:
         db = ZSXQDatabase(str(group_id))
-        db.cursor.execute("SELECT COUNT(*) FROM topics WHERE group_id = ?", (group_id,))
-        topics_count = db.cursor.fetchone()[0]
+        topics_count = db.count_topics(group_id)
 
         if topics_count == 0:
             return {"message": "该群组没有话题数据", "deleted_count": 0}
 
-        deleted_counts = _delete_group_topic_rows(db, group_id)
+        deleted_counts = db.delete_group_topic_records(group_id)
         db.conn.commit()
 
         return {
