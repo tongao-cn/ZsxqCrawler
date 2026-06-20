@@ -62,6 +62,45 @@ class FakeCommentClient:
         return self.comments
 
 
+class FakeSingleTopicCursor:
+    def __init__(self, existing=False):
+        self.existing = existing
+        self.calls = []
+
+    def execute(self, query, params=()):
+        self.calls.append((" ".join(query.split()), params))
+
+    def fetchone(self):
+        return (1,) if self.existing else None
+
+
+class FakeSingleTopicImportDb(FakeDb):
+    def __init__(self, import_result, existing=False):
+        super().__init__()
+        self.cursor = FakeSingleTopicCursor(existing=existing)
+        self.import_result = import_result
+        self.imported_topics = []
+
+    def import_topic_data_with_result(self, topic_data):
+        self.imported_topics.append(topic_data)
+        return self.import_result
+
+
+class FakeSingleTopicClient:
+    def __init__(self, comments=None):
+        self.comments = comments or []
+        self.info_calls = []
+        self.comment_calls = []
+
+    def get_topic_info(self, topic_id):
+        self.info_calls.append(topic_id)
+        return {"topic": {"topic_id": topic_id}}
+
+    def get_topic_comments(self, topic_id):
+        self.comment_calls.append(topic_id)
+        return self.comments
+
+
 class TopicRoutesHelperTests(unittest.TestCase):
     def _run_async(self, coro):
         import asyncio
@@ -150,6 +189,67 @@ class TopicRoutesHelperTests(unittest.TestCase):
             _validate_topic_group({"group": {"group_id": 456}}, "123")
 
         self.assertEqual(400, ctx.exception.status_code)
+
+    @unittest.skipUnless(HAS_TOPIC_ROUTE_DEPS, "topic route dependencies are not installed")
+    def test_fetch_single_topic_response_commits_created_import_result(self):
+        from backend.routes.topic_routes import _fetch_single_topic_response
+        from backend.storage.zsxq_database import TopicImportResult
+
+        db = FakeSingleTopicImportDb(TopicImportResult("created", topic_id=14))
+        client = FakeSingleTopicClient(comments=[{"comment_id": 1}])
+        topic_data = {"topic_id": 14, "group": {"group_id": 123}, "comments_count": 1}
+
+        with (
+            patch("backend.routes.topic_routes.ZSXQDatabase", return_value=db),
+            patch("backend.routes.topic_routes.OfficialTopicClient", return_value=client),
+            patch("backend.routes.topic_routes.official_payload_topic", return_value={"topic_id": 14, "group": {"group_id": 123}}),
+            patch("backend.routes.topic_routes.normalize_official_topic", return_value=topic_data),
+        ):
+            response = _fetch_single_topic_response("123", 14, fetch_comments=True)
+
+        self.assertEqual(
+            {
+                "success": True,
+                "topic_id": 14,
+                "group_id": 123,
+                "imported": "created",
+                "comments_fetched": 1,
+            },
+            response,
+        )
+        self.assertTrue(db.committed)
+        self.assertTrue(db.closed)
+        self.assertEqual([14], client.info_calls)
+        self.assertEqual([14], client.comment_calls)
+        self.assertEqual([{**topic_data, "show_comments": [{"comment_id": 1}]}], db.imported_topics)
+
+    @unittest.skipUnless(HAS_TOPIC_ROUTE_DEPS, "topic route dependencies are not installed")
+    def test_fetch_single_topic_response_rejects_failed_import_result(self):
+        from fastapi import HTTPException
+
+        from backend.routes.topic_routes import _fetch_single_topic_response
+        from backend.storage.zsxq_database import TopicImportResult
+
+        db = FakeSingleTopicImportDb(TopicImportResult("error", topic_id=14, error_message="boom"))
+        client = FakeSingleTopicClient()
+
+        with (
+            patch("backend.routes.topic_routes.ZSXQDatabase", return_value=db),
+            patch("backend.routes.topic_routes.OfficialTopicClient", return_value=client),
+            patch("backend.routes.topic_routes.official_payload_topic", return_value={"topic_id": 14, "group": {"group_id": 123}}),
+            patch(
+                "backend.routes.topic_routes.normalize_official_topic",
+                return_value={"topic_id": 14, "group": {"group_id": 123}, "comments_count": 0},
+            ),
+        ):
+            with self.assertRaises(HTTPException) as ctx:
+                _fetch_single_topic_response("123", 14, fetch_comments=False)
+
+        self.assertEqual(500, ctx.exception.status_code)
+        self.assertEqual("话题导入失败: boom", ctx.exception.detail)
+        self.assertFalse(db.committed)
+        self.assertTrue(db.closed)
+        self.assertEqual(1, len(db.imported_topics))
 
     @unittest.skipUnless(HAS_TOPIC_ROUTE_DEPS, "topic route dependencies are not installed")
     def test_fetch_and_import_topic_comments_imports_comments(self):

@@ -453,9 +453,14 @@ def _fetch_single_topic_response(group_id: str, topic_id: int, fetch_comments: b
                 topic_data["show_comments"] = comments
                 comments_fetched = len(comments)
 
-        db.import_topic_data(topic_data)
+        import_result = db.import_topic_data_with_result(topic_data)
+        if not import_result.succeeded:
+            message = import_result.error_message or "unknown error"
+            raise HTTPException(status_code=500, detail=f"话题导入失败: {message}")
         db.conn.commit()
 
+        if import_result.status == "existing":
+            return _build_single_topic_response(topic_id, group_id, "skipped", comments_fetched, "话题已存在，跳过采集")
         return _build_single_topic_response(topic_id, group_id, "created", comments_fetched)
     finally:
         _close_topic_db(db)
