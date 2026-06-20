@@ -931,6 +931,52 @@ class StockTopicAnalysisServiceHelperTests(unittest.TestCase):
         self.assertNotIn("content", payload[0])
         connect.assert_not_called()
 
+    def test_load_question_topic_payload_skips_database_without_topics(self):
+        from backend.services.stock_topic_question_payload import load_question_topic_payload
+
+        with patch("backend.services.stock_topic_question_payload.connect") as connect:
+            result = load_question_topic_payload(
+                {"topics": []},
+                max_analysis_topics=30,
+                max_topic_text_chars=1800,
+            )
+
+        self.assertEqual([], result)
+        connect.assert_not_called()
+
+    def test_load_question_topic_payload_limits_topics_and_delegates_builder(self):
+        from backend.services.stock_topic_question_payload import load_question_topic_payload
+
+        rows = [{"topic_id": "101"}]
+        conn = Mock()
+        conn.execute.return_value.fetchall.return_value = rows
+        search_result = {
+            "group_id": "51111112855254",
+            "keywords": ["固态电池"],
+            "topics": [{"topic_id": "101"}, {"topic_id": 102}, {"topic_id": "103"}],
+        }
+
+        with (
+            patch("backend.services.stock_topic_question_payload.connect", return_value=conn),
+            patch(
+                "backend.services.stock_topic_question_payload.build_question_topic_payload",
+                return_value=[{"topic_id": "101"}],
+            ) as build_payload,
+        ):
+            result = load_question_topic_payload(
+                search_result,
+                max_analysis_topics=2,
+                max_topic_text_chars=120,
+            )
+
+        self.assertEqual([{"topic_id": "101"}], result)
+        sql, params = conn.execute.call_args.args
+        self.assertIn("FROM topics t", sql)
+        self.assertIn("IN (?,?)", sql)
+        self.assertEqual(["51111112855254", "101", "102"], params)
+        build_payload.assert_called_once_with(rows, keywords=["固态电池"], max_topic_text_chars=120)
+        conn.close.assert_called_once()
+
     @unittest.skipUnless(HAS_SERVICE_DEPS, "stock topic analysis service dependencies are not installed")
     def test_get_latest_stock_topic_analyses_returns_missing_rows(self):
         from backend.services.stock_topic_analysis_service import get_latest_stock_topic_analyses

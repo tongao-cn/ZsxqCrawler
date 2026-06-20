@@ -39,7 +39,6 @@ from backend.services.stock_topic_analysis_helpers import (
 from backend.services.stock_topic_analysis_payloads import (
     build_analysis_topic_payload,
     build_question_analysis_prompt,
-    build_question_topic_payload,
     build_stock_analysis_prompt,
     require_topic_excerpt,
 )
@@ -63,6 +62,7 @@ from backend.services.stock_topic_analysis_runner import (
     answer_stock_question as run_stock_question_answer,
 )
 from backend.services.daily_topic_analysis_topics import clip_text as _clip
+from backend.services.stock_topic_question_payload import load_question_topic_payload
 from backend.storage.db_compat import connect
 
 
@@ -673,41 +673,9 @@ def _build_analysis_topic_payload(search_result: Dict[str, Any]) -> List[Dict[st
 
 
 def _build_question_topic_payload(search_result: Dict[str, Any]) -> List[Dict[str, Any]]:
-    topic_ids = [str(topic.get("topic_id") or "") for topic in search_result.get("topics", [])[:MAX_ANALYSIS_TOPICS]]
-    if not topic_ids:
-        return []
-
-    conn = connect()
-    try:
-        placeholders = ",".join("?" for _ in topic_ids)
-        rows = conn.execute(
-            f"""
-            SELECT
-                t.topic_id,
-                t.title,
-                t.create_time,
-                t.likes_count,
-                t.comments_count,
-                t.reading_count,
-                tk.text AS talk_text,
-                q.text AS question_text,
-                a.text AS answer_text
-            FROM topics t
-            LEFT JOIN talks tk ON t.topic_id = tk.topic_id
-            LEFT JOIN questions q ON t.topic_id = q.topic_id
-            LEFT JOIN answers a ON t.topic_id = a.topic_id
-            WHERE t.group_id::text = ?
-              AND t.topic_id::text IN ({placeholders})
-            ORDER BY t.create_time DESC
-            """,
-            [search_result["group_id"], *topic_ids],
-        ).fetchall()
-    finally:
-        conn.close()
-
-    return build_question_topic_payload(
-        rows,
-        keywords=list(search_result.get("keywords") or []),
+    return load_question_topic_payload(
+        search_result,
+        max_analysis_topics=MAX_ANALYSIS_TOPICS,
         max_topic_text_chars=MAX_TOPIC_TEXT_CHARS,
     )
 
