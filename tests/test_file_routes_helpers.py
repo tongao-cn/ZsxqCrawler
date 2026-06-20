@@ -31,7 +31,7 @@ from backend.services.file_workflow_service import (
     _get_file_status_response,
     _resolve_download_record_status,
 )
-from backend.storage.zsxq_file_database import ZSXQFileDatabase
+from backend.storage.zsxq_file_database import FileListPage, FileListRecord, ZSXQFileDatabase
 
 
 class FakeBackgroundTasks:
@@ -159,6 +159,22 @@ class FakeSyncFilesTopicsDb:
 
     def close(self):
         self.closed = True
+
+
+class FakeFileListDb:
+    def __init__(self, records=None, total=0):
+        self.page_calls = []
+        self.page = FileListPage(list(records or []), total)
+
+    def load_file_list_page(self, **kwargs):
+        self.page_calls.append(kwargs)
+        return self.page
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        return False
 
 
 def fake_zsxq_file_db(cursor, group_id="123"):
@@ -1562,142 +1578,62 @@ class FileRoutesHelperTests(unittest.TestCase):
         self.assertEqual({"called": "_clear_file_database_response", "args": ("group-1",)}, clear_response)
         self.assertEqual({"called": "_get_files_response", "args": ("group-1", 2, 5, "completed", "pdf", "pending")}, files)
 
-    def test_get_files_response_filters_analysis_status_in_database_query(self):
+    def test_get_files_response_passes_analysis_status_to_storage(self):
         from backend.services import file_workflow_service
 
-        class FakeCursor:
-            def __init__(self):
-                self.executed = []
-
-            def execute(self, sql, params=()):
-                self.executed.append((sql, params))
-
-            def fetchall(self):
-                return []
-
-            def fetchone(self):
-                return (0,)
-
-        class FakeFileDb:
-            def __init__(self):
-                self.cursor = FakeCursor()
-
-            def __enter__(self):
-                return self
-
-            def __exit__(self, exc_type, exc, tb):
-                return False
-
-        fake_db = FakeFileDb()
+        fake_db = FakeFileListDb()
         with patch("backend.services.file_workflow_service._file_db", return_value=fake_db):
             response = file_workflow_service._get_files_response("group-1", analysis_status="analyzed")
 
         self.assertEqual([], response["files"])
-        self.assertTrue(any("faa.updated_at IS NOT NULL" in sql for sql, _params in fake_db.cursor.executed))
-        self.assertEqual(2, len(fake_db.cursor.executed))
-        self.assertTrue(
-            all(
-                "LEFT JOIN file_ai_analyses faa ON faa.file_id = f.file_id" in sql
-                for sql, _params in fake_db.cursor.executed
-            )
+        self.assertEqual(
+            [{"page": 1, "per_page": 20, "status": None, "search": None, "analysis_status": "analyzed"}],
+            fake_db.page_calls,
         )
 
-        fake_db = FakeFileDb()
+        fake_db = FakeFileListDb()
         with patch("backend.services.file_workflow_service._file_db", return_value=fake_db):
             file_workflow_service._get_files_response("group-1", analysis_status="pending")
 
-        self.assertTrue(any("faa.updated_at IS NULL" in sql for sql, _params in fake_db.cursor.executed))
-        self.assertEqual(2, len(fake_db.cursor.executed))
-        self.assertTrue(
-            all(
-                "LEFT JOIN file_ai_analyses faa ON faa.file_id = f.file_id" in sql
-                for sql, _params in fake_db.cursor.executed
-            )
+        self.assertEqual(
+            [{"page": 1, "per_page": 20, "status": None, "search": None, "analysis_status": "pending"}],
+            fake_db.page_calls,
         )
 
-    def test_get_files_response_without_status_keeps_download_status_unfiltered(self):
+    def test_get_files_response_passes_empty_status_to_storage(self):
         from backend.services import file_workflow_service
 
-        class FakeCursor:
-            def __init__(self):
-                self.executed = []
-
-            def execute(self, sql, params=()):
-                self.executed.append((sql, params))
-
-            def fetchall(self):
-                return []
-
-            def fetchone(self):
-                return (0,)
-
-        class FakeFileDb:
-            def __init__(self):
-                self.cursor = FakeCursor()
-
-            def __enter__(self):
-                return self
-
-            def __exit__(self, exc_type, exc, tb):
-                return False
-
-        fake_db = FakeFileDb()
+        fake_db = FakeFileListDb()
         with patch("backend.services.file_workflow_service._file_db", return_value=fake_db):
             response = file_workflow_service._get_files_response("123")
 
-        query, params = fake_db.cursor.executed[0]
-        count_query, count_params = fake_db.cursor.executed[1]
         self.assertEqual([], response["files"])
-        self.assertNotIn("f.download_status IN", query)
-        self.assertNotIn("f.download_status =", query)
-        self.assertNotIn("f.download_status IN", count_query)
-        self.assertNotIn("f.download_status =", count_query)
-        self.assertEqual((123, 20, 0), params)
-        self.assertEqual((123,), count_params)
+        self.assertEqual(
+            [{"page": 1, "per_page": 20, "status": None, "search": None, "analysis_status": None}],
+            fake_db.page_calls,
+        )
 
     def test_get_files_response_keeps_completed_search_and_pagination_shape(self):
         from backend.services import file_workflow_service
 
-        class FakeCursor:
-            def __init__(self):
-                self.executed = []
-                self._fetchall_calls = 0
-
-            def execute(self, sql, params=()):
-                self.executed.append((sql, params))
-
-            def fetchall(self):
-                self._fetchall_calls += 1
-                return [
-                    (
-                        101,
-                        "Report.PDF",
-                        123,
-                        7,
-                        "2026-06-10T10:00:00+08:00",
-                        "downloaded",
-                        r"C:\old\Report.PDF",
-                        "E1",
-                        "boom",
-                        "2026-06-11T09:00:00+08:00",
-                        "2026-06-11T10:00:00+08:00",
-                    )
-                ]
-
-            def fetchone(self):
-                return (21,)
-
-        class FakeFileDb:
-            def __init__(self):
-                self.cursor = FakeCursor()
-
-            def __enter__(self):
-                return self
-
-            def __exit__(self, exc_type, exc, tb):
-                return False
-
-        fake_db = FakeFileDb()
+        fake_db = FakeFileListDb(
+            records=[
+                FileListRecord(
+                    101,
+                    "Report.PDF",
+                    123,
+                    7,
+                    "2026-06-10T10:00:00+08:00",
+                    "downloaded",
+                    r"C:\old\Report.PDF",
+                    "E1",
+                    "boom",
+                    "2026-06-11T09:00:00+08:00",
+                    "2026-06-11T10:00:00+08:00",
+                )
+            ],
+            total=21,
+        )
         with (
             patch("backend.services.file_workflow_service._file_db", return_value=fake_db),
             patch(
@@ -1714,14 +1650,10 @@ class FileRoutesHelperTests(unittest.TestCase):
                 analysis_status="analyzed",
             )
 
-        query, params = fake_db.cursor.executed[0]
-        count_query, count_params = fake_db.cursor.executed[1]
-        self.assertIn("f.download_status IN (?, ?, ?)", query)
-        self.assertIn("faa.updated_at IS NOT NULL", query)
-        self.assertIn("LOWER(COALESCE(f.name, '')) LIKE ?", query)
-        self.assertEqual((123, "completed", "downloaded", "skipped", *["%foo%"] * 8, 5, 5), params)
-        self.assertEqual((123, "completed", "downloaded", "skipped", *["%foo%"] * 8), count_params)
-        self.assertTrue(count_query.strip().startswith("SELECT COUNT(*)"))
+        self.assertEqual(
+            [{"page": 2, "per_page": 5, "status": "completed", "search": " Foo ", "analysis_status": "analyzed"}],
+            fake_db.page_calls,
+        )
         self.assertEqual(
             {
                 "page": 2,

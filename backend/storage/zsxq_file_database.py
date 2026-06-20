@@ -120,6 +120,41 @@ class FileDownloadStats(NamedTuple):
         )
 
 
+class FileListRecord(NamedTuple):
+    file_id: Any
+    name: Any
+    size: Any
+    download_count: Any
+    create_time: Any
+    download_status: Optional[str]
+    local_path: Optional[str]
+    download_error_code: Optional[str]
+    download_error_message: Optional[str]
+    last_download_attempt_at: Optional[str]
+    analysis_updated_at: Optional[str]
+
+    @classmethod
+    def from_row(cls, row: Sequence[Any]) -> "FileListRecord":
+        return cls(
+            row[0],
+            row[1],
+            row[2],
+            row[3],
+            row[4],
+            row[5],
+            row[6],
+            row[7],
+            row[8],
+            row[9],
+            row[10],
+        )
+
+
+class FileListPage(NamedTuple):
+    records: list[FileListRecord]
+    total: int
+
+
 def _query_group_id(group_id: Optional[Any]) -> Any:
     return _group_id_param(group_id)
 
@@ -225,6 +260,64 @@ def _build_filtered_download_file_records_query(
         """,
         tuple(params),
     )
+
+
+_FILE_LIST_FROM_CLAUSE = """
+            FROM files f
+            LEFT JOIN file_ai_analyses faa ON faa.file_id = f.file_id
+        """
+
+
+def _build_file_list_filters(
+    group_id: Optional[Any],
+    status: Optional[str],
+    search: Optional[str],
+    analysis_status: Optional[str],
+) -> tuple[str, list[Any]]:
+    conditions = []
+    params_prefix = [_query_group_id(group_id)]
+    conditions.append("f.group_id = ?")
+
+    _add_file_download_status_condition(conditions, params_prefix, status)
+
+    if analysis_status == "analyzed":
+        conditions.append("faa.updated_at IS NOT NULL")
+    elif analysis_status == "pending":
+        conditions.append("faa.updated_at IS NULL")
+
+    _add_file_search_condition(conditions, params_prefix, search)
+
+    where_clause = f"WHERE {' AND '.join(conditions)}" if conditions else ""
+    return where_clause, params_prefix
+
+
+def _build_file_list_query(where_clause: str) -> str:
+    return f"""
+            SELECT
+                f.file_id,
+                f.name,
+                f.size,
+                f.download_count,
+                f.create_time,
+                f.download_status,
+                f.local_path,
+                f.download_error_code,
+                f.download_error_message,
+                f.last_download_attempt_at,
+                faa.updated_at
+            {_FILE_LIST_FROM_CLAUSE}
+            {where_clause}
+            ORDER BY f.create_time DESC
+            LIMIT ? OFFSET ?
+        """
+
+
+def _build_file_count_query(where_clause: str) -> str:
+    return f"SELECT COUNT(*) {_FILE_LIST_FROM_CLAUSE} {where_clause}"
+
+
+def _normalize_file_list_record(row: Sequence[Any]) -> FileListRecord:
+    return FileListRecord.from_row(row)
 
 
 class ZSXQFileDatabase:
@@ -458,6 +551,30 @@ class ZSXQFileDatabase:
         )
         rows = _fetch_download_file_rows(self, query, params)
         return [_normalize_download_file_record(row) for row in rows]
+
+    def load_file_list_page(
+        self,
+        *,
+        page: int = 1,
+        per_page: int = 20,
+        status: Optional[str] = None,
+        search: Optional[str] = None,
+        analysis_status: Optional[str] = None,
+        group_id: Optional[Any] = None,
+    ) -> FileListPage:
+        scoped_group_id = self.group_id if group_id is None else group_id
+        offset = (page - 1) * per_page
+        where_clause, params_prefix = _build_file_list_filters(scoped_group_id, status, search, analysis_status)
+
+        query = _build_file_list_query(where_clause)
+        self.cursor.execute(query, (*params_prefix, per_page, offset))
+        records = [_normalize_file_list_record(row) for row in self.cursor.fetchall()]
+
+        count_query = _build_file_count_query(where_clause)
+        self.cursor.execute(count_query, tuple(params_prefix))
+        row = self.cursor.fetchone()
+        total = (row[0] or 0) if row else 0
+        return FileListPage(records, total)
     
     def insert_talk(self, topic_id: int, talk_data: Dict[str, Any]):
         """插入话题内容"""

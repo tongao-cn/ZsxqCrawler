@@ -65,6 +65,22 @@ class FakeRowCursor:
         return None
 
 
+class FakeListPageCursor:
+    def __init__(self, rows=None, total=0):
+        self.rows = list(rows or [])
+        self.total = total
+        self.executed = []
+
+    def execute(self, sql, params=()):
+        self.executed.append((" ".join(sql.split()), params))
+
+    def fetchall(self):
+        return list(self.rows)
+
+    def fetchone(self):
+        return (self.total,)
+
+
 class FakeConnection:
     def __init__(self):
         self.closed = False
@@ -576,6 +592,85 @@ class ZSXQFileDatabaseHelperTests(unittest.TestCase):
         self.assertEqual((303,), first_params)
         self.assertEqual((404,), second_params)
         self.assertEqual(first_sql, second_sql)
+
+    def test_load_file_list_page_keeps_empty_status_unfiltered(self):
+        from backend.storage.zsxq_file_database import ZSXQFileDatabase
+
+        db = object.__new__(ZSXQFileDatabase)
+        db.cursor = FakeListPageCursor(total=0)
+        db.group_id = "123"
+
+        page = ZSXQFileDatabase.load_file_list_page(db)
+
+        query, params = db.cursor.executed[0]
+        count_query, count_params = db.cursor.executed[1]
+        self.assertIn("LEFT JOIN file_ai_analyses faa ON faa.file_id = f.file_id", query)
+        self.assertNotIn("f.download_status IN", query)
+        self.assertNotIn("f.download_status =", query)
+        self.assertNotIn("f.download_status IN", count_query)
+        self.assertNotIn("f.download_status =", count_query)
+        self.assertEqual((123, 20, 0), params)
+        self.assertEqual((123,), count_params)
+        self.assertEqual([], page.records)
+        self.assertEqual(0, page.total)
+
+    def test_load_file_list_page_applies_completed_search_analysis_and_pagination(self):
+        from backend.storage.zsxq_file_database import ZSXQFileDatabase
+
+        db = object.__new__(ZSXQFileDatabase)
+        db.cursor = FakeListPageCursor(
+            rows=[
+                (
+                    101,
+                    "Report.PDF",
+                    123,
+                    7,
+                    "2026-06-10T10:00:00+08:00",
+                    "downloaded",
+                    r"C:\old\Report.PDF",
+                    "E1",
+                    "boom",
+                    "2026-06-11T09:00:00+08:00",
+                    "2026-06-11T10:00:00+08:00",
+                )
+            ],
+            total=21,
+        )
+        db.group_id = "123"
+
+        page = ZSXQFileDatabase.load_file_list_page(
+            db,
+            page=2,
+            per_page=5,
+            status="completed",
+            search=" Foo ",
+            analysis_status="analyzed",
+        )
+
+        query, params = db.cursor.executed[0]
+        count_query, count_params = db.cursor.executed[1]
+        self.assertIn("f.download_status IN (?, ?, ?)", query)
+        self.assertIn("faa.updated_at IS NOT NULL", query)
+        self.assertIn("LOWER(COALESCE(f.name, '')) LIKE ?", query)
+        self.assertEqual((123, "completed", "downloaded", "skipped", *["%foo%"] * 8, 5, 5), params)
+        self.assertEqual((123, "completed", "downloaded", "skipped", *["%foo%"] * 8), count_params)
+        self.assertTrue(count_query.strip().startswith("SELECT COUNT(*)"))
+        self.assertEqual(21, page.total)
+        self.assertEqual(101, page.records[0].file_id)
+        self.assertEqual("2026-06-11T10:00:00+08:00", page.records[0].analysis_updated_at)
+
+    def test_load_file_list_page_applies_pending_analysis_status(self):
+        from backend.storage.zsxq_file_database import ZSXQFileDatabase
+
+        db = object.__new__(ZSXQFileDatabase)
+        db.cursor = FakeListPageCursor(total=0)
+        db.group_id = "group-1"
+
+        ZSXQFileDatabase.load_file_list_page(db, analysis_status="pending")
+
+        self.assertTrue(any("faa.updated_at IS NULL" in sql for sql, _params in db.cursor.executed))
+        self.assertEqual(("group-1", 20, 0), db.cursor.executed[0][1])
+        self.assertEqual(("group-1",), db.cursor.executed[1][1])
 
     def test_close_connection_ignores_none_and_closes_connection(self):
         _close_connection(None)

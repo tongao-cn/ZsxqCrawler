@@ -25,21 +25,13 @@ from backend.services.file_download_workflow import (
     run_file_download_task,
 )
 from backend.services.file_download_records_workflow import (
-    _add_file_download_status_condition,
-    _add_file_search_condition,
     _build_download_file_info,
     _build_download_task_stats,
-    _build_filtered_download_file_records_query,
-    _build_selected_download_file_records_query,
     _complete_download_records_task,
     _download_result_stat_key,
-    _fetch_download_file_rows,
     _load_download_file_records,
     _load_filtered_download_file_records,
-    _normalize_download_file_record,
-    _query_group_id,
     _run_download_records,
-    _unique_int_file_ids,
     run_filtered_file_download_task,
     run_selected_file_download_task,
 )
@@ -83,68 +75,13 @@ from backend.services.task_runtime import (
     is_task_stopped,
     update_task,
 )
-from backend.storage.zsxq_file_database import ZSXQFileDatabase
 
 
-_FILES_FROM_CLAUSE = """
-            FROM files f
-            LEFT JOIN file_ai_analyses faa ON faa.file_id = f.file_id
-        """
-
-
-def _build_file_list_filters(
-    group_id: str,
-    status: Optional[str],
-    search: Optional[str],
-    analysis_status: Optional[str],
-) -> tuple[str, list[Any]]:
-    conditions = []
-    params_prefix = [_query_group_id(group_id)]
-    conditions.append("f.group_id = ?")
-
-    _add_file_download_status_condition(conditions, params_prefix, status)
-
-    if analysis_status == "analyzed":
-        conditions.append("faa.updated_at IS NOT NULL")
-    elif analysis_status == "pending":
-        conditions.append("faa.updated_at IS NULL")
-
-    _add_file_search_condition(conditions, params_prefix, search)
-
-    where_clause = f"WHERE {' AND '.join(conditions)}" if conditions else ""
-    return where_clause, params_prefix
-
-
-def _build_file_list_query(where_clause: str) -> str:
-    return f"""
-            SELECT
-                f.file_id,
-                f.name,
-                f.size,
-                f.download_count,
-                f.create_time,
-                f.download_status,
-                f.local_path,
-                f.download_error_code,
-                f.download_error_message,
-                f.last_download_attempt_at,
-                faa.updated_at
-            {_FILES_FROM_CLAUSE}
-            {where_clause}
-            ORDER BY f.create_time DESC
-            LIMIT ? OFFSET ?
-        """
-
-
-def _build_file_count_query(where_clause: str) -> str:
-    return f"SELECT COUNT(*) {_FILES_FROM_CLAUSE} {where_clause}"
-
-
-def _normalize_file_list_row(group_id: str, file: Sequence[Any]) -> Dict[str, Any]:
-    file_id = file[0]
-    file_name = file[1]
-    stored_status = file[5] if len(file) > 5 else "unknown"
-    stored_local_path = file[6] if len(file) > 6 else None
+def _normalize_file_list_row(group_id: str, file: Any) -> Dict[str, Any]:
+    file_id = file.file_id
+    file_name = file.name
+    stored_status = file.download_status
+    stored_local_path = file.local_path
 
     local_status = _resolve_download_record_status(
         group_id,
@@ -157,23 +94,23 @@ def _normalize_file_list_row(group_id: str, file: Sequence[Any]) -> Dict[str, An
     return {
         "file_id": file_id,
         "name": file_name,
-        "size": file[2],
-        "download_count": file[3],
-        "create_time": file[4],
+        "size": file.size,
+        "download_count": file.download_count,
+        "create_time": file.create_time,
         "download_status": local_status["download_status"],
         "local_exists": local_status["local_exists"],
         "local_path": local_status["local_path"],
-        "download_error_code": file[7] if len(file) > 7 else None,
-        "download_error_message": file[8] if len(file) > 8 else None,
-        "last_download_attempt_at": file[9] if len(file) > 9 else None,
-        "has_ai_analysis": bool(file[10]) if len(file) > 10 and file[10] else False,
-        "analysis_updated_at": file[10] if len(file) > 10 else None,
+        "download_error_code": file.download_error_code,
+        "download_error_message": file.download_error_message,
+        "last_download_attempt_at": file.last_download_attempt_at,
+        "has_ai_analysis": bool(file.analysis_updated_at),
+        "analysis_updated_at": file.analysis_updated_at,
     }
 
 
 def _build_file_list_response(
     group_id: str,
-    files: Sequence[Sequence[Any]],
+    files: Sequence[Any],
     total: int,
     page: int,
     per_page: int,
@@ -189,25 +126,6 @@ def _build_file_list_response(
     }
 
 
-def _fetch_file_list_page(
-    file_db: ZSXQFileDatabase,
-    where_clause: str,
-    params_prefix: Sequence[Any],
-    per_page: int,
-    offset: int,
-) -> tuple[Sequence[Sequence[Any]], int]:
-    query = _build_file_list_query(where_clause)
-    params = (*params_prefix, per_page, offset)
-
-    file_db.cursor.execute(query, params)
-    files = file_db.cursor.fetchall()
-
-    count_query = _build_file_count_query(where_clause)
-    file_db.cursor.execute(count_query, tuple(params_prefix))
-    total = file_db.cursor.fetchone()[0]
-    return files, total
-
-
 def _get_files_response(
     group_id: str,
     page: int = 1,
@@ -217,10 +135,14 @@ def _get_files_response(
     analysis_status: Optional[str] = None,
 ) -> dict:
     with _file_db(group_id) as file_db:
-        offset = (page - 1) * per_page
-        where_clause, params_prefix = _build_file_list_filters(group_id, status, search, analysis_status)
-        files, total = _fetch_file_list_page(file_db, where_clause, params_prefix, per_page, offset)
-        return _build_file_list_response(group_id, files, total, page, per_page)
+        file_page = file_db.load_file_list_page(
+            page=page,
+            per_page=per_page,
+            status=status,
+            search=search,
+            analysis_status=analysis_status,
+        )
+        return _build_file_list_response(group_id, file_page.records, file_page.total, page, per_page)
 
 
 def _log_file_route_event(level: str, message: str) -> None:
