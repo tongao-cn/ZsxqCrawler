@@ -409,21 +409,19 @@ class FileRoutesHelperTests(unittest.TestCase):
 
     def test_create_file_ai_analysis_task_uses_group_metadata_launch_recipe(self):
         with patch(
-            "backend.services.file_workflow_service.launch_task",
+            "backend.services.file_workflow_service.launch_task_recipe",
             return_value={"task_id": "task-1", "message": "文件 AI 分析任务已创建"},
         ) as launch:
             response = create_file_ai_analysis_task("group-1", 123, True)
 
-        launch.assert_called_once_with(
-            "analyze_file",
-            "分析文件 (ID: 123)",
-            run_file_analysis_task,
-            "group-1",
-            [123],
-            True,
-            group_id="group-1",
-            message="文件 AI 分析任务已创建",
-        )
+        launch.assert_called_once()
+        recipe = launch.call_args.args[0]
+        self.assertEqual("analyze_file", recipe.task_type)
+        self.assertEqual("分析文件 (ID: 123)", recipe.description)
+        self.assertEqual(run_file_analysis_task, recipe.task_func)
+        self.assertEqual(("group-1", [123], True), recipe.args)
+        self.assertEqual("group-1", recipe.group_id)
+        self.assertEqual("文件 AI 分析任务已创建", recipe.message)
         self.assertEqual({"task_id": "task-1", "message": "文件 AI 分析任务已创建"}, response)
 
     def test_create_selected_file_ai_analysis_task_uses_group_metadata_launch_recipe(self):
@@ -432,21 +430,19 @@ class FileRoutesHelperTests(unittest.TestCase):
         request = FileAIAnalysisBatchRequest(file_ids=[123, 456], force=False)
 
         with patch(
-            "backend.services.file_workflow_service.launch_task",
+            "backend.services.file_workflow_service.launch_task_recipe",
             return_value={"task_id": "task-1", "message": "批量文件 AI 分析任务已创建"},
         ) as launch:
             response = create_selected_file_ai_analysis_task("group-1", request)
 
-        launch.assert_called_once_with(
-            "analyze_files",
-            "批量分析文件 (2 个)",
-            run_file_analysis_task,
-            "group-1",
-            [123, 456],
-            False,
-            group_id="group-1",
-            message="批量文件 AI 分析任务已创建",
-        )
+        launch.assert_called_once()
+        recipe = launch.call_args.args[0]
+        self.assertEqual("analyze_files", recipe.task_type)
+        self.assertEqual("批量分析文件 (2 个)", recipe.description)
+        self.assertEqual(run_file_analysis_task, recipe.task_func)
+        self.assertEqual(("group-1", [123, 456], False), recipe.args)
+        self.assertEqual("group-1", recipe.group_id)
+        self.assertEqual("批量文件 AI 分析任务已创建", recipe.message)
         self.assertEqual({"task_id": "task-1", "message": "批量文件 AI 分析任务已创建"}, response)
 
     def test_create_sync_files_from_topics_task_uses_ingestion_launch_recipe(self):

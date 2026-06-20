@@ -56,7 +56,6 @@ from backend.services.file_topic_sync_workflow import (
 )
 from backend.services.task_launch import (
     TaskLaunchRecipe,
-    launch_task,
     launch_task_recipe,
 )
 from backend.services.task_runtime import (
@@ -219,28 +218,28 @@ def create_filtered_file_download_task(group_id: str, request: Any) -> Dict[str,
 
 
 def create_file_ai_analysis_task(group_id: str, file_id: int, force: bool) -> Dict[str, str]:
-    return launch_task(
-        "analyze_file",
-        f"分析文件 (ID: {file_id})",
-        run_file_analysis_task,
-        group_id,
-        [file_id],
-        force,
-        group_id=group_id,
-        message="文件 AI 分析任务已创建",
+    return launch_task_recipe(
+        TaskLaunchRecipe(
+            task_type="analyze_file",
+            description=f"分析文件 (ID: {file_id})",
+            task_func=run_file_analysis_task,
+            args=(group_id, [file_id], force),
+            group_id=group_id,
+            message="文件 AI 分析任务已创建",
+        )
     )
 
 
 def create_selected_file_ai_analysis_task(group_id: str, request: Any) -> Dict[str, str]:
-    return launch_task(
-        "analyze_files",
-        f"批量分析文件 ({len(request.file_ids)} 个)",
-        run_file_analysis_task,
-        group_id,
-        request.file_ids,
-        request.force,
-        group_id=group_id,
-        message="批量文件 AI 分析任务已创建",
+    return launch_task_recipe(
+        TaskLaunchRecipe(
+            task_type="analyze_files",
+            description=f"批量分析文件 ({len(request.file_ids)} 个)",
+            task_func=run_file_analysis_task,
+            args=(group_id, request.file_ids, request.force),
+            group_id=group_id,
+            message="批量文件 AI 分析任务已创建",
+        )
     )
 
 
