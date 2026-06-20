@@ -54,7 +54,12 @@ from backend.services.file_topic_sync_workflow import (
     _complete_sync_files_from_topics_task,
     run_sync_files_from_topics_task,
 )
-from backend.services.task_launch import launch_ingestion_task, launch_task
+from backend.services.task_launch import (
+    TaskLaunchRecipe,
+    launch_ingestion_task,
+    launch_task,
+    launch_task_recipe,
+)
 from backend.services.task_runtime import (
     add_task_log,
     is_task_stopped,
@@ -98,22 +103,26 @@ def _enqueue_file_task(
     task_group_id: Optional[str] = None,
 ) -> Dict[str, str]:
     if ingestion_group_id is not None:
-        return launch_ingestion_task(
-            task_type,
-            description,
-            task_func,
-            ingestion_group_id,
-            *args,
-            message=message,
-            prepend_group_id_to_args=False,
+        return launch_task_recipe(
+            TaskLaunchRecipe.ingestion(
+                task_type,
+                description,
+                task_func,
+                ingestion_group_id,
+                *args,
+                message=message,
+                prepend_group_id_to_args=False,
+            )
         )
-    return launch_task(
-        task_type,
-        description,
-        task_func,
-        *args,
-        group_id=task_group_id,
-        message=message,
+    return launch_task_recipe(
+        TaskLaunchRecipe(
+            task_type=task_type,
+            description=description,
+            task_func=task_func,
+            args=args,
+            group_id=task_group_id,
+            message=message,
+        )
     )
 
 

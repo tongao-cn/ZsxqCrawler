@@ -223,7 +223,10 @@ class FileRoutesHelperTests(unittest.TestCase):
     def test_enqueue_file_task_creates_task_and_schedules_callback(self):
         background_tasks = FakeBackgroundTasks()
 
-        with patch("backend.services.file_workflow_service.launch_task", return_value={"task_id": "task-1", "message": "已创建"}) as launch:
+        with patch(
+            "backend.services.file_workflow_service.launch_task_recipe",
+            return_value={"task_id": "task-1", "message": "已创建"},
+        ) as launch:
             response = _enqueue_file_task(
                 background_tasks,
                 "analyze_files",
@@ -234,15 +237,14 @@ class FileRoutesHelperTests(unittest.TestCase):
                 message="已创建",
             )
 
-        launch.assert_called_once_with(
-            "analyze_files",
-            "测试文件任务",
-            fake_task,
-            "group-1",
-            123,
-            group_id=None,
-            message="已创建",
-        )
+        launch.assert_called_once()
+        recipe = launch.call_args.args[0]
+        self.assertEqual("analyze_files", recipe.task_type)
+        self.assertEqual("测试文件任务", recipe.description)
+        self.assertEqual(fake_task, recipe.task_func)
+        self.assertEqual(("group-1", 123), recipe.args)
+        self.assertIsNone(recipe.group_id)
+        self.assertEqual("已创建", recipe.message)
         self.assertEqual({"task_id": "task-1", "message": "已创建"}, response)
         self.assertEqual([], background_tasks.calls)
 
@@ -250,7 +252,7 @@ class FileRoutesHelperTests(unittest.TestCase):
         background_tasks = FakeBackgroundTasks()
 
         with patch(
-            "backend.services.file_workflow_service.launch_ingestion_task",
+            "backend.services.file_workflow_service.launch_task_recipe",
             return_value={"task_id": "task-1", "message": "任务已创建，正在后台执行"},
         ) as launch:
             response = _enqueue_file_task(
@@ -263,16 +265,15 @@ class FileRoutesHelperTests(unittest.TestCase):
                 ingestion_group_id="group-1",
             )
 
-        launch.assert_called_once_with(
-            "collect_files",
-            "收集文件列表",
-            fake_task,
-            "group-1",
-            "group-1",
-            "request",
-            message="任务已创建，正在后台执行",
-            prepend_group_id_to_args=False,
-        )
+        launch.assert_called_once()
+        recipe = launch.call_args.args[0]
+        self.assertEqual("collect_files", recipe.task_type)
+        self.assertEqual("收集文件列表", recipe.description)
+        self.assertEqual(fake_task, recipe.task_func)
+        self.assertEqual("group-1", recipe.ingestion_group_id)
+        self.assertEqual(("group-1", "request"), recipe.args)
+        self.assertEqual("任务已创建，正在后台执行", recipe.message)
+        self.assertFalse(recipe.prepend_group_id_to_args)
         self.assertEqual({"task_id": "task-1", "message": "任务已创建，正在后台执行"}, response)
         self.assertEqual([], background_tasks.calls)
 
@@ -473,7 +474,7 @@ class FileRoutesHelperTests(unittest.TestCase):
         background_tasks = FakeBackgroundTasks()
 
         with patch(
-            "backend.services.file_workflow_service.launch_task",
+            "backend.services.file_workflow_service.launch_task_recipe",
             return_value={"task_id": "task-1", "message": "任务已创建，正在后台执行"},
         ) as launch:
             response = _enqueue_file_task(
@@ -486,15 +487,14 @@ class FileRoutesHelperTests(unittest.TestCase):
                 task_group_id="group-1",
             )
 
-        launch.assert_called_once_with(
-            "analyze_files",
-            "分析文件",
-            fake_task,
-            "group-1",
-            [123],
-            group_id="group-1",
-            message="任务已创建，正在后台执行",
-        )
+        launch.assert_called_once()
+        recipe = launch.call_args.args[0]
+        self.assertEqual("analyze_files", recipe.task_type)
+        self.assertEqual("分析文件", recipe.description)
+        self.assertEqual(fake_task, recipe.task_func)
+        self.assertEqual(("group-1", [123]), recipe.args)
+        self.assertEqual("group-1", recipe.group_id)
+        self.assertEqual("任务已创建，正在后台执行", recipe.message)
         self.assertEqual({"task_id": "task-1", "message": "任务已创建，正在后台执行"}, response)
         self.assertEqual([], background_tasks.calls)
 
@@ -1225,7 +1225,10 @@ class FileRoutesHelperTests(unittest.TestCase):
         existing = {"task_id": "task-old", "type": "crawl_latest", "status": "running"}
         background_tasks = FakeBackgroundTasks()
 
-        with patch("backend.services.file_workflow_service.launch_ingestion_task", side_effect=TaskLaunchConflict(existing)):
+        with patch(
+            "backend.services.file_workflow_service.launch_task_recipe",
+            side_effect=TaskLaunchConflict(existing),
+        ):
             with self.assertRaises(TaskLaunchConflict) as raised:
                 _enqueue_file_task(
                     background_tasks,
