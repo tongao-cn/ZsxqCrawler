@@ -6,7 +6,7 @@ import json
 from datetime import date
 from typing import Any, Dict, List, Sequence
 
-from backend.services.daily_topic_analysis_service import _clip
+from backend.services.daily_topic_analysis_topics import clip_text as _clip
 
 
 def _normalize_text(value: Any) -> str:

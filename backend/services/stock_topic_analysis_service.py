@@ -54,7 +54,7 @@ from backend.services.stock_topic_analysis_store import (
     upsert_stock_topic_analysis,
     upsert_stock_topic_processed_states,
 )
-from backend.services.daily_topic_analysis_service import _clip
+from backend.services.daily_topic_analysis_topics import clip_text as _clip
 from backend.storage.db_compat import connect
 
 

@@ -21,12 +21,12 @@ from backend.services.ai_client import (
 )
 from backend.services.ai_json_utils import extract_json_object
 from backend.services.a_share_analysis_db_storage import load_stock_basic_records, load_topic_stock_extractions
-from backend.services.daily_topic_analysis_service import (
+from backend.services.topic_material import (
     DEFAULT_COMMENTS_PER_TOPIC,
-    _build_prompt_payload,
-    _connect_topics_db,
-    _fetch_topics_for_date,
-    _parse_report_date,
+    build_daily_topic_material_payload,
+    connect_topic_material_db,
+    fetch_daily_topic_material,
+    parse_topic_material_date,
 )
 from backend.services.stock_concept_taxonomy import normalize_stock_concept_term
 
@@ -444,13 +444,13 @@ def extract_daily_stock_concepts(
     comments_per_topic: int = DEFAULT_COMMENTS_PER_TOPIC,
     log_callback: Optional[Callable[[str], None]] = None,
 ) -> Dict[str, Any]:
-    parsed_date = _parse_report_date(report_date)
+    parsed_date = parse_topic_material_date(report_date)
     report_date_text = parsed_date.isoformat()
-    conn = _connect_topics_db(group_id)
+    conn = connect_topic_material_db(group_id)
 
     try:
         _log(log_callback, f"📚 读取 {report_date_text} 的话题数据...")
-        topics = _fetch_topics_for_date(
+        topics = fetch_daily_topic_material(
             conn,
             group_id=group_id,
             report_date=parsed_date,
@@ -476,7 +476,7 @@ def extract_daily_stock_concepts(
                 model_values = [str(item.get("model") or "") for item in topic_extractions if item.get("model")]
                 model = model_values[0] if model_values else ""
             else:
-                prompt_payload = _build_prompt_payload(group_id, report_date_text, topics)
+                prompt_payload = build_daily_topic_material_payload(group_id, report_date_text, topics)
                 _log(log_callback, "🤖 未找到话题级明细，回退为按天 AI 提取股票概念...")
                 stocks, model = _generate_stock_concepts_with_ai(prompt_payload, report_date_text)
 
@@ -511,9 +511,9 @@ def extract_daily_stock_concepts(
 
 
 def get_daily_stock_concepts(group_id: str, report_date: Optional[str] = None) -> Optional[Dict[str, Any]]:
-    parsed_date = _parse_report_date(report_date)
+    parsed_date = parse_topic_material_date(report_date)
     report_date_text = parsed_date.isoformat()
-    conn = _connect_topics_db(group_id)
+    conn = connect_topic_material_db(group_id)
     try:
         rows = conn.execute(
             """
