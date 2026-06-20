@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
+
 from backend.core.crawler_runtime import get_crawler_safe
 
 CRAWLER_SETTING_FIELDS = (
@@ -63,9 +65,9 @@ def settings_from_attrs(source, fields: tuple[str, ...]) -> dict:
     return {field: getattr(source, field) for field in fields}
 
 
-def apply_settings(target, request, fields: tuple[str, ...]) -> None:
+def apply_settings(target, values: Mapping[str, object], fields: tuple[str, ...]) -> None:
     for field in fields:
-        setattr(target, field, getattr(request, field))
+        setattr(target, field, values[field])
 
 
 def settings_update_response(message: str, settings: dict) -> dict:
@@ -75,15 +77,31 @@ def settings_update_response(message: str, settings: dict) -> dict:
     }
 
 
-def get_crawl_settings_response() -> dict:
-    return default_crawl_settings()
+def get_runtime_settings(scope: str) -> dict:
+    if scope == "crawl":
+        return default_crawl_settings()
+    if scope == "crawler":
+        return _get_crawler_settings()
+    if scope == "downloader":
+        return _get_downloader_settings()
+    raise ValueError(f"Unknown settings scope: {scope}")
 
 
-def update_crawl_settings_response(settings: dict) -> dict:
+def update_runtime_settings(scope: str, values: Mapping[str, object]) -> dict:
+    if scope == "crawl":
+        return _update_crawl_settings(values)
+    if scope == "crawler":
+        return _update_crawler_settings(values)
+    if scope == "downloader":
+        return _update_downloader_settings(values)
+    raise ValueError(f"Unknown settings scope: {scope}")
+
+
+def _update_crawl_settings(settings: Mapping[str, object]) -> dict:
     return {"success": True, "message": "爬取设置已更新"}
 
 
-def get_crawler_settings_response() -> dict:
+def _get_crawler_settings() -> dict:
     crawler = get_crawler_safe()
     if not crawler:
         return default_crawler_settings()
@@ -91,15 +109,15 @@ def get_crawler_settings_response() -> dict:
     return settings_from_attrs(crawler, CRAWLER_SETTING_FIELDS)
 
 
-def update_crawler_settings_response(request) -> dict:
+def _update_crawler_settings(values: Mapping[str, object]) -> dict:
     crawler = get_crawler_safe()
     if not crawler:
         raise SettingsServiceError(404, "爬虫未初始化")
 
-    if request.min_delay >= request.max_delay:
+    if values["min_delay"] >= values["max_delay"]:
         raise SettingsServiceError(400, "最小延迟必须小于最大延迟")
 
-    apply_settings(crawler, request, CRAWLER_SETTING_FIELDS)
+    apply_settings(crawler, values, CRAWLER_SETTING_FIELDS)
 
     return settings_update_response(
         "爬虫设置已更新",
@@ -107,7 +125,7 @@ def update_crawler_settings_response(request) -> dict:
     )
 
 
-def get_downloader_settings_response() -> dict:
+def _get_downloader_settings() -> dict:
     crawler = get_crawler_safe()
     if not crawler:
         return default_downloader_settings()
@@ -116,20 +134,20 @@ def get_downloader_settings_response() -> dict:
     return settings_from_attrs(downloader, DOWNLOADER_SETTING_FIELDS)
 
 
-def update_downloader_settings_response(request) -> dict:
+def _update_downloader_settings(values: Mapping[str, object]) -> dict:
     crawler = get_crawler_safe()
     if not crawler:
         raise SettingsServiceError(404, "爬虫未初始化")
 
-    if request.download_interval_min >= request.download_interval_max:
+    if values["download_interval_min"] >= values["download_interval_max"]:
         raise SettingsServiceError(400, "最小下载间隔必须小于最大下载间隔")
 
-    if request.long_delay_min >= request.long_delay_max:
+    if values["long_delay_min"] >= values["long_delay_max"]:
         raise SettingsServiceError(400, "最小长休眠时间必须小于最大长休眠时间")
 
     downloader = crawler.get_file_downloader()
 
-    apply_settings(downloader, request, DOWNLOADER_SETTING_FIELDS)
+    apply_settings(downloader, values, DOWNLOADER_SETTING_FIELDS)
 
     return settings_update_response(
         "下载器设置已更新",

@@ -4,12 +4,8 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 from backend.services.settings_service import (
-    get_crawl_settings_response as _get_crawl_settings_response,
-    get_crawler_settings_response as _get_crawler_settings_response,
-    get_downloader_settings_response as _get_downloader_settings_response,
-    update_crawl_settings_response as _update_crawl_settings_response,
-    update_crawler_settings_response as _update_crawler_settings_response,
-    update_downloader_settings_response as _update_downloader_settings_response,
+    get_runtime_settings,
+    update_runtime_settings,
 )
 
 router = APIRouter(prefix="/api", tags=["settings"])
@@ -39,7 +35,7 @@ class DownloaderSettingsRequest(BaseModel):
 async def get_crawl_settings():
     """获取话题爬取设置"""
     try:
-        return _get_crawl_settings_response()
+        return get_runtime_settings("crawl")
     except Exception as e:
         raise _settings_route_error("获取爬取设置失败", e)
 
@@ -48,7 +44,7 @@ async def get_crawl_settings():
 async def update_crawl_settings(settings: dict):
     """更新话题爬取设置"""
     try:
-        return _update_crawl_settings_response(settings)
+        return update_runtime_settings("crawl", settings)
     except Exception as e:
         raise _settings_route_error("更新爬取设置失败", e)
 
@@ -57,7 +53,7 @@ async def update_crawl_settings(settings: dict):
 async def get_crawler_settings():
     """获取爬虫设置"""
     try:
-        return _get_crawler_settings_response()
+        return get_runtime_settings("crawler")
     except Exception as e:
         raise _settings_route_error("获取爬虫设置失败", e)
 
@@ -66,7 +62,7 @@ async def get_crawler_settings():
 async def update_crawler_settings(request: CrawlerSettingsRequest):
     """更新爬虫设置"""
     try:
-        return _update_crawler_settings_response(request)
+        return update_runtime_settings("crawler", request.model_dump())
     except Exception as e:
         raise _settings_route_error("更新爬虫设置失败", e)
 
@@ -75,7 +71,7 @@ async def update_crawler_settings(request: CrawlerSettingsRequest):
 async def get_downloader_settings():
     """获取文件下载器设置"""
     try:
-        return _get_downloader_settings_response()
+        return get_runtime_settings("downloader")
     except Exception as e:
         raise _settings_route_error("获取下载器设置失败", e)
 
@@ -84,6 +80,6 @@ async def get_downloader_settings():
 async def update_downloader_settings(request: DownloaderSettingsRequest):
     """更新文件下载器设置"""
     try:
-        return _update_downloader_settings_response(request)
+        return update_runtime_settings("downloader", request.model_dump())
     except Exception as e:
         raise _settings_route_error("更新下载器设置失败", e)

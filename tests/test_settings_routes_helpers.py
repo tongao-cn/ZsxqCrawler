@@ -23,15 +23,35 @@ from backend.services.settings_service import (
     default_crawl_settings as _default_crawl_settings,
     default_crawler_settings as _default_crawler_settings,
     default_downloader_settings as _default_downloader_settings,
-    get_crawl_settings_response as _get_crawl_settings_response,
-    get_crawler_settings_response as _get_crawler_settings_response,
-    get_downloader_settings_response as _get_downloader_settings_response,
+    get_runtime_settings,
     settings_from_attrs as _settings_from_attrs,
     settings_update_response as _settings_update_response,
-    update_crawl_settings_response as _update_crawl_settings_response,
-    update_crawler_settings_response as _update_crawler_settings_response,
-    update_downloader_settings_response as _update_downloader_settings_response,
+    update_runtime_settings,
 )
+
+
+def _get_crawl_settings_response():
+    return get_runtime_settings("crawl")
+
+
+def _update_crawl_settings_response(settings):
+    return update_runtime_settings("crawl", settings)
+
+
+def _get_crawler_settings_response():
+    return get_runtime_settings("crawler")
+
+
+def _update_crawler_settings_response(request):
+    return update_runtime_settings("crawler", request.model_dump())
+
+
+def _get_downloader_settings_response():
+    return get_runtime_settings("downloader")
+
+
+def _update_downloader_settings_response(request):
+    return update_runtime_settings("downloader", request.model_dump())
 
 
 class SettingsRoutesHelpersTest(unittest.TestCase):
@@ -97,16 +117,16 @@ class SettingsRoutesHelpersTest(unittest.TestCase):
             long_delay_max=600,
             keep_me="unchanged",
         )
-        request = SimpleNamespace(
-            download_interval_min=5,
-            download_interval_max=25,
-            long_delay_interval=3,
-            long_delay_min=90,
-            long_delay_max=180,
-            keep_me="request value",
-        )
+        values = {
+            "download_interval_min": 5,
+            "download_interval_max": 25,
+            "long_delay_interval": 3,
+            "long_delay_min": 90,
+            "long_delay_max": 180,
+            "keep_me": "request value",
+        }
 
-        _apply_settings(downloader, request, _DOWNLOADER_SETTING_FIELDS)
+        _apply_settings(downloader, values, _DOWNLOADER_SETTING_FIELDS)
 
         self.assertEqual(
             _settings_from_attrs(downloader, _DOWNLOADER_SETTING_FIELDS),
@@ -130,6 +150,12 @@ class SettingsRoutesHelpersTest(unittest.TestCase):
                 "settings": settings,
             },
         )
+
+    def test_runtime_settings_rejects_unknown_scope(self):
+        with self.assertRaises(ValueError) as caught:
+            get_runtime_settings("unknown")
+
+        self.assertEqual(str(caught.exception), "Unknown settings scope: unknown")
 
     def test_settings_route_error_preserves_status_and_detail_format(self):
         error = _settings_route_error("更新设置失败", RuntimeError("boom"))
@@ -256,6 +282,20 @@ class SettingsRoutesHelpersTest(unittest.TestCase):
         self.assertEqual(result, {"message": "爬虫设置已更新", "settings": expected_settings})
         self.assertEqual(_settings_from_attrs(crawler, _CRAWLER_SETTING_FIELDS), expected_settings)
         get_crawler.assert_called_once_with()
+
+    def test_update_crawler_settings_route_passes_plain_values_to_service(self):
+        import asyncio
+
+        request = CrawlerSettingsRequest(min_delay=2.5, max_delay=6.5)
+
+        with patch(
+            "backend.routes.settings_routes.update_runtime_settings",
+            return_value={"message": "ok", "settings": {}},
+        ) as update_settings:
+            result = asyncio.run(update_crawler_settings(request))
+
+        self.assertEqual({"message": "ok", "settings": {}}, result)
+        update_settings.assert_called_once_with("crawler", request.model_dump())
 
     def test_update_crawler_settings_route_preserves_wrapped_missing_crawler_error(self):
         import asyncio
@@ -566,7 +606,7 @@ class SettingsRoutesHelpersTest(unittest.TestCase):
     def test_get_crawl_settings_route_preserves_wrapped_unexpected_error(self):
         import asyncio
 
-        with patch("backend.routes.settings_routes._get_crawl_settings_response", side_effect=RuntimeError("boom")):
+        with patch("backend.routes.settings_routes.get_runtime_settings", side_effect=RuntimeError("boom")):
             with self.assertRaises(HTTPException) as caught:
                 asyncio.run(get_crawl_settings())
 
@@ -576,7 +616,7 @@ class SettingsRoutesHelpersTest(unittest.TestCase):
     def test_update_crawl_settings_route_preserves_wrapped_unexpected_error(self):
         import asyncio
 
-        with patch("backend.routes.settings_routes._update_crawl_settings_response", side_effect=RuntimeError("boom")):
+        with patch("backend.routes.settings_routes.update_runtime_settings", side_effect=RuntimeError("boom")):
             with self.assertRaises(HTTPException) as caught:
                 asyncio.run(update_crawl_settings({"ignored": "value"}))
 
@@ -586,7 +626,7 @@ class SettingsRoutesHelpersTest(unittest.TestCase):
     def test_get_crawler_settings_route_preserves_wrapped_unexpected_error(self):
         import asyncio
 
-        with patch("backend.routes.settings_routes._get_crawler_settings_response", side_effect=RuntimeError("boom")):
+        with patch("backend.routes.settings_routes.get_runtime_settings", side_effect=RuntimeError("boom")):
             with self.assertRaises(HTTPException) as caught:
                 asyncio.run(get_crawler_settings())
 
@@ -596,7 +636,7 @@ class SettingsRoutesHelpersTest(unittest.TestCase):
     def test_update_crawler_settings_route_preserves_wrapped_unexpected_error(self):
         import asyncio
 
-        with patch("backend.routes.settings_routes._update_crawler_settings_response", side_effect=RuntimeError("boom")):
+        with patch("backend.routes.settings_routes.update_runtime_settings", side_effect=RuntimeError("boom")):
             with self.assertRaises(HTTPException) as caught:
                 asyncio.run(update_crawler_settings(CrawlerSettingsRequest()))
 
@@ -606,7 +646,7 @@ class SettingsRoutesHelpersTest(unittest.TestCase):
     def test_get_downloader_settings_route_preserves_wrapped_unexpected_error(self):
         import asyncio
 
-        with patch("backend.routes.settings_routes._get_downloader_settings_response", side_effect=RuntimeError("boom")):
+        with patch("backend.routes.settings_routes.get_runtime_settings", side_effect=RuntimeError("boom")):
             with self.assertRaises(HTTPException) as caught:
                 asyncio.run(get_downloader_settings())
 
@@ -616,7 +656,7 @@ class SettingsRoutesHelpersTest(unittest.TestCase):
     def test_update_downloader_settings_route_preserves_wrapped_unexpected_error(self):
         import asyncio
 
-        with patch("backend.routes.settings_routes._update_downloader_settings_response", side_effect=RuntimeError("boom")):
+        with patch("backend.routes.settings_routes.update_runtime_settings", side_effect=RuntimeError("boom")):
             with self.assertRaises(HTTPException) as caught:
                 asyncio.run(update_downloader_settings(DownloaderSettingsRequest()))
 
