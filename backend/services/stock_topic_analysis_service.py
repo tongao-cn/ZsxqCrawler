@@ -11,9 +11,8 @@ from backend.core.ai_provider_config import (
     get_openai_compatible_config,
     get_summary_reasoning_effort,
 )
-from backend.services.ai_client import call_ai_text
 from backend.services.ai_json_utils import JsonObjectParseError, extract_json_object, require_json_object
-from backend.services.ai_runtime_request import build_runtime_ai_text_request
+from backend.services.ai_runtime_request import call_runtime_ai_text
 from backend.services.stock_topic_analysis_ai_prompts import (
     build_image_stock_extraction_input,
     build_question_analysis_messages,
@@ -447,7 +446,7 @@ def _build_question_analysis_prompt(search_result: Dict[str, Any], topics: List[
 
 def _call_stock_analysis_ai(prompt_payload: str, *, incremental: bool = False) -> Tuple[str, str]:
     messages = build_stock_analysis_messages(prompt_payload)
-    request = build_runtime_ai_text_request(
+    result = call_runtime_ai_text(
         messages,
         get_ai_config=get_openai_compatible_config,
         wire_api="responses",
@@ -456,8 +455,8 @@ def _call_stock_analysis_ai(prompt_payload: str, *, incremental: bool = False) -
     )
 
     return (
-        call_ai_text(request).strip(),
-        request.model,
+        result.text.strip(),
+        result.model,
     )
 
 
@@ -467,14 +466,14 @@ def _extract_json_object(text: str) -> Dict[str, Any]:
 
 def _call_question_keyword_ai(question: str) -> Tuple[List[str], str]:
     messages = build_question_keyword_messages(question)
-    request = build_runtime_ai_text_request(
+    result = call_runtime_ai_text(
         messages,
         get_ai_config=get_openai_compatible_config,
         wire_api="responses",
         reasoning_effort=get_summary_reasoning_effort(),
         timeout=120,
     )
-    text = call_ai_text(request)
+    text = result.text
 
     try:
         parsed = require_json_object(text, label="AI 问题关键词抽取结果")
@@ -483,12 +482,12 @@ def _call_question_keyword_ai(question: str) -> Tuple[List[str], str]:
     keywords = _normalize_question_keywords(parsed.get("keywords") or parsed.get("keyword") or [])
     if not keywords:
         raise ValueError("AI 未能从问题中提取检索关键词")
-    return keywords, request.model
+    return keywords, result.model
 
 
 def _call_question_analysis_ai(question: str, prompt_payload: str) -> Tuple[str, str]:
     messages = build_question_analysis_messages(question, prompt_payload)
-    request = build_runtime_ai_text_request(
+    result = call_runtime_ai_text(
         messages,
         get_ai_config=get_openai_compatible_config,
         wire_api="responses",
@@ -497,8 +496,8 @@ def _call_question_analysis_ai(question: str, prompt_payload: str) -> Tuple[str,
     )
 
     return (
-        call_ai_text(request).strip(),
-        request.model,
+        result.text.strip(),
+        result.model,
     )
 
 
@@ -512,14 +511,14 @@ def extract_stock_names_from_image(image_data_url: str) -> Dict[str, Any]:
         "要求：保留图片里的股票中文简称，去重，最多 50 个。"
     )
 
-    request = build_runtime_ai_text_request(
+    result = call_runtime_ai_text(
         build_image_stock_extraction_input(prompt, normalized_data_url),
         get_ai_config=get_openai_compatible_config,
         wire_api="responses",
         reasoning_effort=get_summary_reasoning_effort(),
         timeout=120,
     )
-    text = call_ai_text(request)
+    text = result.text
 
     parsed = _extract_json_object(text)
     if parsed:
@@ -530,7 +529,7 @@ def extract_stock_names_from_image(image_data_url: str) -> Dict[str, Any]:
         raise ValueError("图片里没有识别到明确股票名称")
     return {
         "stockNames": stock_names,
-        "model": request.model,
+        "model": result.model,
         "mime_type": mime_type,
         "image_bytes": len(image_bytes),
     }

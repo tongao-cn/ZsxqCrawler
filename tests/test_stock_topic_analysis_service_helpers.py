@@ -296,47 +296,33 @@ class StockTopicAnalysisServiceHelperTests(unittest.TestCase):
 
     @unittest.skipUnless(HAS_SERVICE_DEPS, "stock topic analysis service dependencies are not installed")
     def test_call_question_keyword_ai_parses_ai_json(self):
+        from backend.services.ai_runtime_request import AIRuntimeTextResult
         from backend.services.stock_topic_analysis_service import _call_question_keyword_ai
 
-        class FakeResponses:
-            def create(self, **kwargs):
-                response = Mock()
-                response.output_text = '{"keywords":["商业航天","低空经济"]}'
-                return response
+        captured = {}
 
-        class FakeClient:
-            def __init__(self, **kwargs):
-                self.responses = FakeResponses()
+        def fake_call(messages, **kwargs):
+            captured["messages"] = messages
+            captured["kwargs"] = kwargs
+            return AIRuntimeTextResult('{"keywords":["商业航天","低空经济"]}', "test-model")
 
-        with (
-            patch("backend.services.ai_client.OpenAI", FakeClient),
-            patch("backend.services.stock_topic_analysis_service.get_openai_compatible_config", return_value={"api_key": "test-key", "model": "test-model", "base_url": "http://test"}),
-        ):
+        with patch("backend.services.stock_topic_analysis_service.call_runtime_ai_text", side_effect=fake_call):
             keywords, model = _call_question_keyword_ai("商业航天板块最近怎么样，推荐吗")
 
         self.assertEqual(["商业航天", "低空经济"], keywords)
         self.assertEqual("test-model", model)
+        self.assertEqual("responses", captured["kwargs"]["wire_api"])
+        self.assertEqual(120, captured["kwargs"]["timeout"])
+        self.assertIn("商业航天板块最近怎么样，推荐吗", str(captured["messages"]))
 
     @unittest.skipUnless(HAS_SERVICE_DEPS, "stock topic analysis service dependencies are not installed")
     def test_call_question_keyword_ai_rejects_invalid_json(self):
+        from backend.services.ai_runtime_request import AIRuntimeTextResult
         from backend.services.stock_topic_analysis_service import _call_question_keyword_ai
 
-        class FakeResponses:
-            def create(self, **kwargs):
-                response = Mock()
-                response.output_text = "not json"
-                return response
-
-        class FakeClient:
-            def __init__(self, **kwargs):
-                self.responses = FakeResponses()
-
-        with (
-            patch("backend.services.ai_client.OpenAI", FakeClient),
-            patch(
-                "backend.services.stock_topic_analysis_service.get_openai_compatible_config",
-                return_value={"api_key": "test-key", "model": "test-model", "base_url": "http://test"},
-            ),
+        with patch(
+            "backend.services.stock_topic_analysis_service.call_runtime_ai_text",
+            return_value=AIRuntimeTextResult("not json", "test-model"),
         ):
             with self.assertRaisesRegex(ValueError, "AI 问题关键词抽取结果不是合法 JSON"):
                 _call_question_keyword_ai("商业航天板块最近怎么样，推荐吗")
@@ -357,54 +343,40 @@ class StockTopicAnalysisServiceHelperTests(unittest.TestCase):
 
     @unittest.skipUnless(HAS_SERVICE_DEPS, "stock topic analysis service dependencies are not installed")
     def test_extract_stock_names_from_image_parses_ai_json(self):
+        from backend.services.ai_runtime_request import AIRuntimeTextResult
         from backend.services.stock_topic_analysis_service import extract_stock_names_from_image
 
         stock_names = [f"股票{i}" for i in range(55)]
+        captured = {}
 
-        class FakeResponses:
-            def create(self, **kwargs):
-                self.kwargs = kwargs
-                response = Mock()
-                response.output_text = json.dumps({"stockNames": [*stock_names, stock_names[0]]}, ensure_ascii=False)
-                return response
-
-        class FakeClient:
-            responses_instance = None
-
-            def __init__(self, **kwargs):
-                self.responses = FakeResponses()
-                FakeClient.responses_instance = self.responses
+        def fake_call(messages, **kwargs):
+            captured["messages"] = messages
+            captured["kwargs"] = kwargs
+            return AIRuntimeTextResult(
+                json.dumps({"stockNames": [*stock_names, stock_names[0]]}, ensure_ascii=False),
+                "test-model",
+            )
 
         encoded = base64.b64encode(b"image-bytes").decode("ascii")
-        with (
-            patch("backend.services.ai_client.OpenAI", FakeClient),
-            patch("backend.services.stock_topic_analysis_service.get_openai_compatible_config", return_value={"api_key": "test-key", "model": "test-model", "base_url": "http://test"}),
-        ):
+        with patch("backend.services.stock_topic_analysis_service.call_runtime_ai_text", side_effect=fake_call):
             result = extract_stock_names_from_image(f"data:image/png;base64,{encoded}")
 
         self.assertEqual(stock_names[:50], result["stockNames"])
         self.assertEqual("test-model", result["model"])
-        prompt_text = FakeClient.responses_instance.kwargs["input"][0]["content"][0]["text"]
+        self.assertEqual("responses", captured["kwargs"]["wire_api"])
+        self.assertEqual(120, captured["kwargs"]["timeout"])
+        prompt_text = captured["messages"][0]["content"][0]["text"]
         self.assertIn("最多 50 个", prompt_text)
 
     @unittest.skipUnless(HAS_SERVICE_DEPS, "stock topic analysis service dependencies are not installed")
     def test_extract_stock_names_from_image_rejects_empty_result(self):
+        from backend.services.ai_runtime_request import AIRuntimeTextResult
         from backend.services.stock_topic_analysis_service import extract_stock_names_from_image
 
-        class FakeResponses:
-            def create(self, **kwargs):
-                response = Mock()
-                response.output_text = '{"stockNames":[]}'
-                return response
-
-        class FakeClient:
-            def __init__(self, **kwargs):
-                self.responses = FakeResponses()
-
         encoded = base64.b64encode(b"image-bytes").decode("ascii")
-        with (
-            patch("backend.services.ai_client.OpenAI", FakeClient),
-            patch("backend.services.stock_topic_analysis_service.get_openai_compatible_config", return_value={"api_key": "test-key", "model": "test-model", "base_url": "http://test"}),
+        with patch(
+            "backend.services.stock_topic_analysis_service.call_runtime_ai_text",
+            return_value=AIRuntimeTextResult('{"stockNames":[]}', "test-model"),
         ):
             with self.assertRaises(ValueError) as raised:
                 extract_stock_names_from_image(f"data:image/png;base64,{encoded}")
@@ -1659,25 +1631,22 @@ class StockTopicAnalysisServiceHelperTests(unittest.TestCase):
 
     @unittest.skipUnless(HAS_SERVICE_DEPS, "stock topic analysis service dependencies are not installed")
     def test_stock_analysis_prompt_uses_excerpt_and_incremental_dedupe_guidance(self):
+        from backend.services.ai_runtime_request import AIRuntimeTextResult
         from backend.services.stock_topic_analysis_service import _call_stock_analysis_ai
 
-        class FakeClient:
-            def __init__(self, *args, **kwargs):
-                pass
+        captured = {}
 
-            class responses:
-                @staticmethod
-                def create(**kwargs):
-                    FakeClient.kwargs = kwargs
-                    return type("Response", (), {"output_text": "summary"})()
+        def fake_call(messages, **kwargs):
+            captured["messages"] = messages
+            captured["kwargs"] = kwargs
+            return AIRuntimeTextResult("summary", "test-model")
 
-        with (
-            patch("backend.services.ai_client.OpenAI", FakeClient),
-            patch("backend.services.stock_topic_analysis_service.get_openai_compatible_config", return_value={"api_key": "test-key", "model": "test-model", "base_url": "http://test"}),
-        ):
+        with patch("backend.services.stock_topic_analysis_service.call_runtime_ai_text", side_effect=fake_call):
             _call_stock_analysis_ai('{"new_topics":[]}')
 
-        prompt = FakeClient.kwargs["input"][1]["content"]
+        self.assertEqual("responses", captured["kwargs"]["wire_api"])
+        self.assertEqual(180, captured["kwargs"]["timeout"])
+        prompt = captured["messages"][1]["content"]
         self.assertIn("输入原文摘录", prompt)
         self.assertIn("输入中的 excerpt", prompt)
         self.assertIn("关键数据与经营口径", prompt)
