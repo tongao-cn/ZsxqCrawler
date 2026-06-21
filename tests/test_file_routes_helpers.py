@@ -1750,8 +1750,8 @@ class FileRoutesHelperTests(unittest.TestCase):
         downloader = FakeFileDownloadTaskDownloader(existing_count=0)
 
         with (
+            patch("backend.services.file_collect_workflow.run_workflow") as run_workflow,
             patch("backend.services.file_collect_workflow._create_file_downloader", return_value=downloader),
-            patch("backend.services.file_collect_workflow.update_task") as update_task,
             patch("backend.services.file_collect_workflow.add_task_log") as add_task_log,
             patch("backend.services.file_collect_workflow.is_task_stopped", return_value=False),
             patch("backend.services.file_collect_workflow._safe_remove_file_downloader") as safe_remove,
@@ -1761,7 +1761,12 @@ class FileRoutesHelperTests(unittest.TestCase):
                 "123",
                 FileCollectRequest(start_time="2026-06-01", end_time="2026-06-02"),
             )
+            result = run_workflow.call_args.kwargs["work"]()
 
+        self.assertEqual(("task-1",), run_workflow.call_args.args)
+        self.assertEqual("开始收集文件列表...", run_workflow.call_args.kwargs["running_message"])
+        self.assertEqual("文件列表收集完成", run_workflow.call_args.kwargs["completed_message"])
+        self.assertEqual("文件列表收集", run_workflow.call_args.kwargs["failure_label"])
         self.assertEqual(
             [
                 (
@@ -1778,7 +1783,7 @@ class FileRoutesHelperTests(unittest.TestCase):
             ("task-1", "📅 收集范围: 2026-06-01 ~ 2026-06-02"),
             log_calls,
         )
-        update_task.assert_any_call("task-1", "completed", "文件列表收集完成", "range-result")
+        self.assertEqual("range-result", result)
         safe_remove.assert_called_once_with("task-1")
 
     def test_run_collect_files_task_default_uses_incremental_collect(self):
@@ -1788,13 +1793,14 @@ class FileRoutesHelperTests(unittest.TestCase):
         downloader = FakeFileDownloadTaskDownloader(existing_count=0)
 
         with (
+            patch("backend.services.file_collect_workflow.run_workflow") as run_workflow,
             patch("backend.services.file_collect_workflow._create_file_downloader", return_value=downloader),
-            patch("backend.services.file_collect_workflow.update_task") as update_task,
             patch("backend.services.file_collect_workflow.add_task_log") as add_task_log,
             patch("backend.services.file_collect_workflow.is_task_stopped", return_value=False),
             patch("backend.services.file_collect_workflow._safe_remove_file_downloader") as safe_remove,
         ):
             run_collect_files_task("task-1", "123", FileCollectRequest())
+            result = run_workflow.call_args.kwargs["work"]()
 
         self.assertEqual([("incremental", {})], downloader.collect_calls)
         log_calls = [call.args for call in add_task_log.call_args_list]
@@ -1802,31 +1808,30 @@ class FileRoutesHelperTests(unittest.TestCase):
             ("task-1", "📅 收集最近天数: None天"),
             log_calls,
         )
-        update_task.assert_any_call("task-1", "completed", "文件列表收集完成", "incremental-result")
+        self.assertEqual("incremental-result", result)
         safe_remove.assert_called_once_with("task-1")
 
     def test_run_collect_files_task_stops_after_downloader_creation(self):
         from backend.schemas.files import FileCollectRequest
         from backend.services.file_workflow_service import run_collect_files_task
+        from backend.services.task_runtime import skip_workflow_completion
 
         downloader = FakeFileDownloadTaskDownloader(existing_count=0)
 
         with (
+            patch("backend.services.file_collect_workflow.run_workflow") as run_workflow,
             patch("backend.services.file_collect_workflow._create_file_downloader", return_value=downloader) as create_downloader,
-            patch("backend.services.file_collect_workflow.update_task") as update_task,
             patch("backend.services.file_collect_workflow.add_task_log") as add_task_log,
             patch("backend.services.file_collect_workflow.is_task_stopped", return_value=True),
             patch("backend.services.file_collect_workflow._safe_remove_file_downloader") as safe_remove,
         ):
             run_collect_files_task("task-1", "123", FileCollectRequest())
+            result = run_workflow.call_args.kwargs["work"]()
 
         create_downloader.assert_called_once_with("task-1", "123")
         self.assertEqual([], downloader.collect_calls)
-        self.assertEqual(
-            [("task-1", "running", "开始收集文件列表...")],
-            [call.args for call in update_task.call_args_list],
-        )
         add_task_log.assert_called_once_with("task-1", "🛑 任务在初始化过程中被停止")
+        self.assertEqual(skip_workflow_completion(), result)
         safe_remove.assert_called_once_with("task-1")
 
     def test_run_collect_files_task_logs_success_and_completed_payload(self):
@@ -1836,17 +1841,18 @@ class FileRoutesHelperTests(unittest.TestCase):
         downloader = FakeFileDownloadTaskDownloader(existing_count=0)
 
         with (
+            patch("backend.services.file_collect_workflow.run_workflow") as run_workflow,
             patch("backend.services.file_collect_workflow._create_file_downloader", return_value=downloader),
-            patch("backend.services.file_collect_workflow.update_task") as update_task,
             patch("backend.services.file_collect_workflow.add_task_log") as add_task_log,
             patch("backend.services.file_collect_workflow.is_task_stopped", return_value=False),
             patch("backend.services.file_collect_workflow._safe_remove_file_downloader") as safe_remove,
         ):
             run_collect_files_task("task-1", "123", FileCollectRequest(last_days=7))
+            result = run_workflow.call_args.kwargs["work"]()
 
         log_calls = [call.args for call in add_task_log.call_args_list]
         self.assertIn(("task-1", "✅ 文件列表收集完成！"), log_calls)
-        update_task.assert_any_call("task-1", "completed", "文件列表收集完成", "range-result")
+        self.assertEqual("range-result", result)
         safe_remove.assert_called_once_with("task-1")
 
     def test_run_file_download_task_existing_files_uses_download_count_without_collect(self):

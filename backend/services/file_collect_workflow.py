@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import Any
 
 from backend.crawlers.zsxq_file_downloader import ZSXQFileDownloader
 from backend.schemas.files import FileCollectRequest
@@ -11,28 +11,14 @@ from backend.services.file_downloader_runtime import (
     _safe_remove_file_downloader,
 )
 from backend.services.file_task_lifecycle import (
-    fail_file_task as _fail_file_task_impl,
     file_task_stopped_after_init as _file_task_stopped_after_init_impl,
-    finish_file_task as _finish_file_task_impl,
 )
-from backend.services.task_runtime import add_task_log, is_task_stopped, update_task
-
-
-def _fail_file_task(
-    task_id: str,
-    log_message: str,
-    task_message: str,
-    result: Optional[Dict[str, Any]] = None,
-) -> None:
-    _fail_file_task_impl(
-        task_id,
-        log_message,
-        task_message,
-        result,
-        is_stopped=is_task_stopped,
-        add_log=add_task_log,
-        update=update_task,
-    )
+from backend.services.task_runtime import (
+    add_task_log,
+    is_task_stopped,
+    run_workflow,
+    skip_workflow_completion,
+)
 
 
 def _file_task_stopped_after_init(task_id: str) -> bool:
@@ -64,34 +50,30 @@ def _collect_files_for_request(
     return downloader.collect_incremental_files()
 
 
-def _complete_collect_files_task(task_id: str, result: Any) -> None:
-    _finish_file_task_impl(
-        task_id,
-        "completed",
-        "文件列表收集完成",
-        result,
-        log_message="✅ 文件列表收集完成！",
-        add_log=add_task_log,
-        update=update_task,
-    )
-
-
-def run_collect_files_task(task_id: str, group_id: str, request: FileCollectRequest):
+def _collect_files(task_id: str, group_id: str, request: FileCollectRequest) -> Any:
     try:
-        update_task(task_id, "running", "开始收集文件列表...")
         downloader = _create_file_downloader(task_id, group_id)
 
         if _file_task_stopped_after_init(task_id):
-            return
+            return skip_workflow_completion()
 
         add_task_log(task_id, "📡 连接到知识星球API...")
         result = _collect_files_for_request(task_id, downloader, request)
 
         if is_task_stopped(task_id):
-            return
+            return skip_workflow_completion()
 
-        _complete_collect_files_task(task_id, result)
-    except Exception as e:
-        _fail_file_task(task_id, f"文件列表收集失败: {e}", f"文件列表收集失败: {e}")
+        add_task_log(task_id, "✅ 文件列表收集完成！")
+        return result
     finally:
         _safe_remove_file_downloader(task_id)
+
+
+def run_collect_files_task(task_id: str, group_id: str, request: FileCollectRequest):
+    run_workflow(
+        task_id,
+        running_message="开始收集文件列表...",
+        completed_message="文件列表收集完成",
+        failure_label="文件列表收集",
+        work=lambda: _collect_files(task_id, group_id, request),
+    )
