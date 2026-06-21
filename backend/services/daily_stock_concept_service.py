@@ -7,19 +7,16 @@ from datetime import datetime
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from backend.core.ai_provider_config import (
-    get_default_base_url,
-    get_default_model,
-    get_default_wire_api,
     get_extraction_reasoning_effort,
     get_openai_compatible_config,
 )
 from backend.services.ai_client import (
-    AITextRequest,
     call_ai_text,
     chat_json_schema_response_format,
     responses_json_schema_text_format,
 )
 from backend.services.ai_json_utils import JsonObjectParseError, require_json_object
+from backend.services.ai_runtime_request import build_runtime_ai_text_request
 from backend.services.a_share_analysis_db_storage import load_topic_stock_extractions
 from backend.services.daily_stock_concept_payload import (
     aggregate_topic_stock_extractions,
@@ -82,16 +79,6 @@ def _get_chat_json_schema_response_format() -> Dict[str, Any]:
 
 
 def _generate_stock_concepts_with_ai(prompt_payload: str, report_date: str) -> Tuple[List[Dict[str, Any]], str]:
-    runtime_ai_config = get_openai_compatible_config()
-    api_key = str(runtime_ai_config.get("api_key") or "").strip()
-    if not api_key:
-        raise RuntimeError("OPENAI_API_KEY not set and config.toml [ai].api_key is empty")
-
-    model = str(runtime_ai_config.get("model") or get_default_model())
-    api_base = str(runtime_ai_config.get("base_url") or get_default_base_url())
-    wire_api = str(runtime_ai_config.get("wire_api") or get_default_wire_api())
-    reasoning_effort = get_extraction_reasoning_effort()
-
     messages = [
         {
             "role": "system",
@@ -116,19 +103,15 @@ def _generate_stock_concepts_with_ai(prompt_payload: str, report_date: str) -> T
         },
     ]
 
-    message = call_ai_text(
-        AITextRequest(
-            api_key=api_key,
-            model=model,
-            api_base=api_base,
+    request = build_runtime_ai_text_request(
             messages=messages,
-            wire_api=wire_api,
-            reasoning_effort=reasoning_effort,
+            get_ai_config=get_openai_compatible_config,
+            reasoning_effort=get_extraction_reasoning_effort(),
             timeout=180,
             responses_text_format=_get_responses_json_schema_text_format(),
             chat_response_format=_get_chat_json_schema_response_format(),
-        )
     )
+    message = call_ai_text(request)
 
     try:
         payload = require_json_object(message, label="AI 股票概念抽取结果")
@@ -136,7 +119,7 @@ def _generate_stock_concepts_with_ai(prompt_payload: str, report_date: str) -> T
         raise RuntimeError(f"AI 股票概念抽取结果不是合法 JSON: {message[:200]}") from exc
 
     stocks = parse_stock_concept_payload(payload)
-    return stocks, model
+    return stocks, request.model
 
 
 def _delete_stock_concepts(conn: Any, group_id: str, report_date: str) -> None:
