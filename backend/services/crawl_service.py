@@ -1050,7 +1050,7 @@ def run_crawl_time_range_task(task_id: str, group_id: str, request: Any):
         if legacy_result.expired:
             return
 
-        update_task(task_id, "completed", "时间区间爬取完成", legacy_result.stats)
+        complete_task_unless_stopped(task_id, "时间区间爬取完成", legacy_result.stats)
     except Exception as e:
         if not is_task_stopped(task_id):
             add_task_log(task_id, f"❌ 时间区间爬取失败: {str(e)}")

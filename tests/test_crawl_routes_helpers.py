@@ -356,6 +356,7 @@ class CrawlRoutesHelperTests(unittest.TestCase):
             patch("backend.services.crawl_service.is_task_stopped", return_value=False),
             patch("backend.services.crawl_service.add_task_log") as add_task_log,
             patch("backend.services.crawl_service.update_task") as update_task,
+            patch("backend.services.crawl_service.complete_task_unless_stopped") as complete_task,
         ):
             run_crawl_time_range_task(
                 "task-1",
@@ -380,11 +381,16 @@ class CrawlRoutesHelperTests(unittest.TestCase):
             crawler.fetch_calls[0],
         )
         add_task_log.assert_any_call("task-1", "📭 无更多数据，任务结束")
-        update_task.assert_any_call(
+        complete_task.assert_called_once_with(
             "task-1",
-            "completed",
             "时间区间爬取完成",
             {"new_topics": 0, "updated_topics": 0, "errors": 0, "pages": 0},
+        )
+        self.assertFalse(
+            any(
+                len(call_args.args) > 1 and call_args.args[1] == "completed"
+                for call_args in update_task.call_args_list
+            )
         )
 
     @unittest.skipUnless(HAS_CRAWL_ROUTE_DEPS, "crawl route dependencies are not installed")
@@ -400,6 +406,7 @@ class CrawlRoutesHelperTests(unittest.TestCase):
             patch("backend.services.crawl_service.is_task_stopped", return_value=False),
             patch("backend.services.crawl_service.add_task_log"),
             patch("backend.services.crawl_service.update_task"),
+            patch("backend.services.crawl_service.complete_task_unless_stopped"),
         ):
             run_crawl_time_range_task(
                 "task-1",
@@ -426,6 +433,7 @@ class CrawlRoutesHelperTests(unittest.TestCase):
             patch("backend.services.crawl_service.is_task_stopped", return_value=True),
             patch("backend.services.crawl_service.add_task_log") as add_task_log,
             patch("backend.services.crawl_service.update_task") as update_task,
+            patch("backend.services.crawl_service.complete_task_unless_stopped") as complete_task,
             patch("backend.services.crawl_service.unregister_task_crawler") as unregister_task_crawler,
         ):
             run_crawl_time_range_task(
@@ -441,11 +449,16 @@ class CrawlRoutesHelperTests(unittest.TestCase):
 
         self.assertEqual([], crawler.fetch_calls)
         add_task_log.assert_any_call("task-1", "🛑 任务已停止")
-        update_task.assert_any_call(
+        complete_task.assert_called_once_with(
             "task-1",
-            "completed",
             "时间区间爬取完成",
             {"new_topics": 0, "updated_topics": 0, "errors": 0, "pages": 0},
+        )
+        self.assertFalse(
+            any(
+                len(call_args.args) > 1 and call_args.args[1] == "completed"
+                for call_args in update_task.call_args_list
+            )
         )
         unregister_task_crawler.assert_called_once_with("task-1")
 
@@ -476,6 +489,7 @@ class CrawlRoutesHelperTests(unittest.TestCase):
             patch("backend.services.crawl_service.is_task_stopped", return_value=False),
             patch("backend.services.crawl_service.add_task_log") as add_task_log,
             patch("backend.services.crawl_service.update_task") as update_task,
+            patch("backend.services.crawl_service.complete_task_unless_stopped") as complete_task,
             patch("backend.services.crawl_service.unregister_task_crawler"),
         ):
             run_crawl_time_range_task(
@@ -525,11 +539,16 @@ class CrawlRoutesHelperTests(unittest.TestCase):
         self.assertEqual(1, crawler.delay_calls)
         add_task_log.assert_any_call("task-1", "📄 本页获取 3 个话题，区间内 2 个")
         add_task_log.assert_any_call("task-1", "📭 无更多数据，任务结束")
-        update_task.assert_any_call(
+        complete_task.assert_called_once_with(
             "task-1",
-            "completed",
             "时间区间爬取完成",
             {"new_topics": 2, "updated_topics": 1, "errors": 0, "pages": 1},
+        )
+        self.assertFalse(
+            any(
+                len(call_args.args) > 1 and call_args.args[1] == "completed"
+                for call_args in update_task.call_args_list
+            )
         )
 
     @unittest.skipUnless(HAS_CRAWL_ROUTE_DEPS, "crawl route dependencies are not installed")
@@ -558,6 +577,7 @@ class CrawlRoutesHelperTests(unittest.TestCase):
             patch("backend.services.crawl_service.is_task_stopped", return_value=False),
             patch("backend.services.crawl_service.add_task_log"),
             patch("backend.services.crawl_service.update_task"),
+            patch("backend.services.crawl_service.complete_task_unless_stopped"),
             patch("backend.services.crawl_service.unregister_task_crawler"),
         ):
             run_crawl_time_range_task(
@@ -598,6 +618,7 @@ class CrawlRoutesHelperTests(unittest.TestCase):
             patch("backend.services.crawl_service.is_task_stopped", return_value=False),
             patch("backend.services.crawl_service.add_task_log") as add_task_log,
             patch("backend.services.crawl_service.update_task") as update_task,
+            patch("backend.services.crawl_service.complete_task_unless_stopped") as complete_task,
             patch("backend.services.crawl_service.unregister_task_crawler"),
         ):
             run_crawl_time_range_task(
@@ -614,11 +635,16 @@ class CrawlRoutesHelperTests(unittest.TestCase):
         self.assertEqual([], crawler.store_calls)
         self.assertEqual(1, crawler.delay_calls)
         add_task_log.assert_any_call("task-1", "📄 本页获取 1 个话题，区间内 0 个")
-        update_task.assert_any_call(
+        complete_task.assert_called_once_with(
             "task-1",
-            "completed",
             "时间区间爬取完成",
             {"new_topics": 0, "updated_topics": 0, "errors": 0, "pages": 1},
+        )
+        self.assertFalse(
+            any(
+                len(call_args.args) > 1 and call_args.args[1] == "completed"
+                for call_args in update_task.call_args_list
+            )
         )
 
     @unittest.skipUnless(HAS_CRAWL_ROUTE_DEPS, "crawl route dependencies are not installed")
@@ -645,6 +671,7 @@ class CrawlRoutesHelperTests(unittest.TestCase):
             patch("backend.services.crawl_service.is_task_stopped", return_value=False),
             patch("backend.services.crawl_service.add_task_log") as add_task_log,
             patch("backend.services.crawl_service.update_task") as update_task,
+            patch("backend.services.crawl_service.complete_task_unless_stopped") as complete_task,
             patch("backend.services.crawl_service.unregister_task_crawler"),
         ):
             run_crawl_time_range_task(
@@ -662,11 +689,16 @@ class CrawlRoutesHelperTests(unittest.TestCase):
         self.assertEqual([], crawler.store_calls)
         self.assertEqual(0, crawler.delay_calls)
         add_task_log.assert_any_call("task-1", "✅ 已到达起始时间之前，任务结束")
-        update_task.assert_any_call(
+        complete_task.assert_called_once_with(
             "task-1",
-            "completed",
             "时间区间爬取完成",
             {"new_topics": 0, "updated_topics": 0, "errors": 0, "pages": 1},
+        )
+        self.assertFalse(
+            any(
+                len(call_args.args) > 1 and call_args.args[1] == "completed"
+                for call_args in update_task.call_args_list
+            )
         )
 
     @unittest.skipUnless(HAS_CRAWL_ROUTE_DEPS, "crawl route dependencies are not installed")
@@ -687,6 +719,7 @@ class CrawlRoutesHelperTests(unittest.TestCase):
             patch("backend.services.crawl_service.is_task_stopped", return_value=False),
             patch("backend.services.crawl_service.add_task_log") as add_task_log,
             patch("backend.services.crawl_service.update_task") as update_task,
+            patch("backend.services.crawl_service.complete_task_unless_stopped") as complete_task,
             patch("backend.services.crawl_service.unregister_task_crawler"),
         ):
             run_crawl_time_range_task(
@@ -703,11 +736,16 @@ class CrawlRoutesHelperTests(unittest.TestCase):
         self.assertEqual(2, len(crawler.fetch_calls))
         add_task_log.assert_any_call("task-1", "❌ 页面获取失败 (重试1/10)")
         add_task_log.assert_any_call("task-1", "📭 无更多数据，任务结束")
-        update_task.assert_any_call(
+        complete_task.assert_called_once_with(
             "task-1",
-            "completed",
             "时间区间爬取完成",
             {"new_topics": 0, "updated_topics": 0, "errors": 1, "pages": 0},
+        )
+        self.assertFalse(
+            any(
+                len(call_args.args) > 1 and call_args.args[1] == "completed"
+                for call_args in update_task.call_args_list
+            )
         )
 
     @unittest.skipUnless(HAS_CRAWL_ROUTE_DEPS, "crawl route dependencies are not installed")
@@ -723,6 +761,7 @@ class CrawlRoutesHelperTests(unittest.TestCase):
             patch("backend.services.crawl_service.is_task_stopped", return_value=False),
             patch("backend.services.crawl_service.add_task_log") as add_task_log,
             patch("backend.services.crawl_service.update_task") as update_task,
+            patch("backend.services.crawl_service.complete_task_unless_stopped") as complete_task,
             patch("backend.services.crawl_service.unregister_task_crawler"),
         ):
             run_crawl_time_range_task(
@@ -739,11 +778,16 @@ class CrawlRoutesHelperTests(unittest.TestCase):
         self.assertEqual(10, len(crawler.fetch_calls))
         add_task_log.assert_any_call("task-1", "❌ 页面获取失败 (重试10/10)")
         add_task_log.assert_any_call("task-1", "🚫 当前页面达到最大重试次数，终止任务")
-        update_task.assert_any_call(
+        complete_task.assert_called_once_with(
             "task-1",
-            "completed",
             "时间区间爬取完成",
             {"new_topics": 0, "updated_topics": 0, "errors": 10, "pages": 0},
+        )
+        self.assertFalse(
+            any(
+                len(call_args.args) > 1 and call_args.args[1] == "completed"
+                for call_args in update_task.call_args_list
+            )
         )
 
     @unittest.skipUnless(HAS_CRAWL_ROUTE_DEPS, "crawl route dependencies are not installed")
