@@ -67,7 +67,19 @@ class DatabasePathManager:
 
     def _normalize_group_id(self, group_id: str) -> str:
         """归一化群组ID为路径组件使用的字符串。"""
-        return str(group_id)
+        normalized = str(group_id).strip()
+        if not normalized or normalized in {".", ".."}:
+            raise ValueError("group_id must be a single path component")
+        if "/" in normalized or "\\" in normalized:
+            raise ValueError("group_id must be a single path component")
+        return normalized
+
+    def _resolve_group_dir(self, group_id: str) -> Path:
+        base_dir = Path(self.base_dir).resolve()
+        group_dir = (base_dir / self._normalize_group_id(group_id)).resolve()
+        if group_dir == base_dir or base_dir not in group_dir.parents:
+            raise ValueError("group_id path escapes local resource directory")
+        return group_dir
 
     def _ensure_dir(self, path: str, label: str) -> None:
         """确保目录存在。"""
@@ -77,7 +89,7 @@ class DatabasePathManager:
 
     def get_group_dir(self, group_id: str) -> str:
         """获取指定群组的本地资源目录。"""
-        group_dir = os.path.join(self.base_dir, self._normalize_group_id(group_id))
+        group_dir = str(self._resolve_group_dir(group_id))
         self._ensure_dir(group_dir, "群组目录")
         return group_dir
 
