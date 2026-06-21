@@ -14,6 +14,7 @@ from backend.services.file_downloader_runtime import (
 from backend.services.file_task_lifecycle import (
     fail_file_task as _fail_file_task_impl,
     file_task_stopped_after_init as _file_task_stopped_after_init_impl,
+    finish_file_task as _finish_file_task_impl,
 )
 from backend.services.file_local_paths import download_target_path
 from backend.services.task_runtime import add_task_log, is_task_stopped, update_task
@@ -101,17 +102,29 @@ def _complete_successful_single_file_download(
     add_task_log(task_id, "✅ 文件下载成功")
     local_path = _single_file_download_local_path(downloader, file_id, file_info)
     downloader.file_db.update_file_download_status(file_id, "completed", local_path)
-    update_task(task_id, "completed", "下载成功")
+    _finish_file_task_impl(task_id, "completed", "下载成功", update=update_task)
 
 
 def _complete_skipped_single_file_download(task_id: str) -> None:
-    add_task_log(task_id, "✅ 文件已存在，跳过下载")
-    update_task(task_id, "completed", "文件已存在")
+    _finish_file_task_impl(
+        task_id,
+        "completed",
+        "文件已存在",
+        log_message="✅ 文件已存在，跳过下载",
+        add_log=add_task_log,
+        update=update_task,
+    )
 
 
 def _complete_failed_single_file_download(task_id: str) -> None:
-    add_task_log(task_id, "❌ 文件下载失败")
-    update_task(task_id, "failed", "下载失败")
+    _finish_file_task_impl(
+        task_id,
+        "failed",
+        "下载失败",
+        log_message="❌ 文件下载失败",
+        add_log=add_task_log,
+        update=update_task,
+    )
 
 
 def _complete_single_file_download(

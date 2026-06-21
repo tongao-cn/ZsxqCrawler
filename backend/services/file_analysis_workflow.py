@@ -11,7 +11,10 @@ from backend.services.file_ai_analysis_service import (
     DEFAULT_FILE_ANALYSIS_WIRE_API,
     analyze_group_file,
 )
-from backend.services.file_task_lifecycle import fail_file_task as _fail_file_task_impl
+from backend.services.file_task_lifecycle import (
+    fail_file_task as _fail_file_task_impl,
+    finish_file_task as _finish_file_task_impl,
+)
 from backend.services.task_runtime import add_task_log, is_task_stopped, update_task
 
 
@@ -36,9 +39,21 @@ def _record_file_analysis_result(stats: Dict[str, int], result: Dict[str, Any]) 
 
 def _finish_file_analysis_task(task_id: str, stats: Dict[str, int]) -> None:
     if stats["failed"] and stats["completed"] == 0 and stats["cached"] == 0:
-        update_task(task_id, "failed", "文件分析全部失败", {"analysis": stats})
+        _finish_file_task_impl(
+            task_id,
+            "failed",
+            "文件分析全部失败",
+            {"analysis": stats},
+            update=update_task,
+        )
     else:
-        update_task(task_id, "completed", "文件分析完成", {"analysis": stats})
+        _finish_file_task_impl(
+            task_id,
+            "completed",
+            "文件分析完成",
+            {"analysis": stats},
+            update=update_task,
+        )
 
 
 def _unique_file_analysis_ids(file_ids: Sequence[Any]) -> list[int]:
