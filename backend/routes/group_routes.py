@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Any, Dict
+from typing import Any, Callable, Dict
 
 from fastapi import APIRouter, HTTPException
 
@@ -69,40 +69,35 @@ def _group_route_error(message: str, error: Exception) -> HTTPException:
     return internal_route_error(message, error)
 
 
+async def _run_group_route(operation: Callable[[], Any], failure_message: str) -> Any:
+    try:
+        return await operation()
+    except Exception as e:
+        raise _group_route_error(failure_message, e)
+
+
 @router.get("/groups")
 async def get_groups():
     """获取群组列表：账号群 ∪ 本地目录群（去重合并）"""
-    try:
-        return await _groups()
-    except Exception as e:
-        raise _group_route_error("获取群组列表失败", e)
+    return await _run_group_route(_groups, "获取群组列表失败")
 
 
 @router.get("/groups/{group_id}/info")
 async def get_group_info(group_id: str):
     """获取群组信息（带本地回退，避免401/500导致前端报错）"""
-    try:
-        return await _group_info(group_id)
-    except Exception as e:
-        raise _group_route_error("获取群组信息失败", e)
+    return await _run_group_route(lambda: _group_info(group_id), "获取群组信息失败")
 
 
 @router.get("/groups/{group_id}/stats")
 async def get_group_stats(group_id: int):
     """获取指定群组的统计信息"""
-    try:
-        return await _group_stats(group_id)
-    except Exception as e:
-        raise _group_route_error("获取群组统计失败", e)
+    return await _run_group_route(lambda: _group_stats(group_id), "获取群组统计失败")
 
 
 @router.get("/groups/{group_id}/database-info")
 async def get_group_database_info(group_id: int):
     """获取指定群组的数据库信息"""
-    try:
-        return await _group_database_info(group_id)
-    except Exception as e:
-        raise _group_route_error("获取数据库信息失败", e)
+    return await _run_group_route(lambda: _group_database_info(group_id), "获取数据库信息失败")
 
 
 @router.delete("/groups/{group_id}")
