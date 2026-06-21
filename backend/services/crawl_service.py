@@ -981,6 +981,10 @@ def run_crawl_incremental_task(
         if is_task_stopped(task_id):
             return
 
+        if result and result.get("expired"):
+            _mark_expired_task(task_id, result)
+            return
+
         add_task_log(task_id, f"✅ 增量爬取完成！新增话题: {result.get('new_topics', 0)}, 更新话题: {result.get('updated_topics', 0)}")
         complete_task_unless_stopped(task_id, "增量爬取完成", result)
     except Exception as e:

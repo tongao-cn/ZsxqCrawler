@@ -70,18 +70,20 @@ class LatestCrawler:
 
 
 class LegacyLifecycleCrawler:
-    def __init__(self):
+    def __init__(self, incremental_result=None, all_result=None):
         self.db = self
         self.incremental_calls = []
         self.all_calls = []
+        self.incremental_result = incremental_result or {"new_topics": 3, "updated_topics": 4}
+        self.all_result = all_result or {"new_topics": 5, "updated_topics": 6, "pages": 7}
 
     def crawl_incremental(self, pages, per_page):
         self.incremental_calls.append((pages, per_page))
-        return {"new_topics": 3, "updated_topics": 4}
+        return self.incremental_result
 
     def crawl_all_historical(self, **kwargs):
         self.all_calls.append(kwargs)
-        return {"new_topics": 5, "updated_topics": 6, "pages": 7}
+        return self.all_result
 
     def get_database_stats(self):
         return {"topics": 10, "users": 2}
@@ -848,6 +850,47 @@ class CrawlRoutesHelperTests(unittest.TestCase):
                 )
             )
             unregister_task_crawler.assert_called_once_with("task-1")
+
+    @unittest.skipUnless(HAS_CRAWL_ROUTE_DEPS, "crawl route dependencies are not installed")
+    def test_legacy_incremental_expired_result_fails_instead_of_completing(self):
+        from backend.routes.crawl_routes import CrawlHistoricalRequest
+        from backend.services.crawl_service import run_crawl_incremental_task
+
+        expired_payload = {"expired": True, "code": 1059, "message": "expired"}
+        crawler = LegacyLifecycleCrawler(incremental_result=expired_payload)
+
+        with (
+            patch("backend.services.crawl_service._prepare_legacy_crawler", return_value=crawler),
+            patch("backend.services.crawl_service.is_task_stopped", return_value=False),
+            patch("backend.services.crawl_service.add_task_log") as add_task_log,
+            patch("backend.services.crawl_service.update_task") as update_task,
+            patch("backend.services.crawl_service.complete_task_unless_stopped") as complete_task,
+            patch("backend.services.crawl_service.unregister_task_crawler") as unregister_task_crawler,
+        ):
+            run_crawl_incremental_task(
+                "task-1",
+                "group-1",
+                4,
+                26,
+                CrawlHistoricalRequest(topicSource="legacy"),
+            )
+
+        self.assertEqual([(4, 26)], crawler.incremental_calls)
+        add_task_log.assert_any_call("task-1", "❌ 会员已过期: expired")
+        update_task.assert_any_call(
+            "task-1",
+            "failed",
+            "会员已过期",
+            {"expired": True, "code": 1059, "message": "expired"},
+        )
+        complete_task.assert_not_called()
+        self.assertFalse(
+            any(
+                len(call_args.args) > 1 and call_args.args[1] == "completed"
+                for call_args in update_task.call_args_list
+            )
+        )
+        unregister_task_crawler.assert_called_once_with("task-1")
 
     @unittest.skipUnless(HAS_CRAWL_ROUTE_DEPS, "crawl route dependencies are not installed")
     def test_legacy_latest_branch_creates_registered_crawler_and_applies_settings(self):
