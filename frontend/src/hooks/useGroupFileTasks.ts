@@ -3,8 +3,9 @@
 import { useCallback, useState } from 'react';
 import { toast } from 'sonner';
 
-import { apiClient, FileAIAnalysis, FileItem, getTaskConflictDetail } from '@/lib/api';
+import { apiClient, FileAIAnalysis, FileItem } from '@/lib/api';
 import type { FileTaskState } from '@/components/GroupFileTaskWatchers';
+import { useTaskLauncher } from '@/hooks/useTaskLauncher';
 
 interface UseGroupFileTasksOptions {
   groupId: number;
@@ -38,6 +39,10 @@ export function useGroupFileTasks({
   const [batchAnalysisTaskId, setBatchAnalysisTaskId] = useState<string | null>(null);
   const [batchAnalysisFileIds, setBatchAnalysisFileIds] = useState<number[]>([]);
   const [batchAnalyzing, setBatchAnalyzing] = useState(false);
+  const { handleTaskCreateError, notifyTaskCreated } = useTaskLauncher({
+    onTaskConflict,
+    onTaskCreated,
+  });
 
   const markFileDownloading = useCallback((fileId: number, downloading: boolean) => {
     setDownloadingFiles(prev => {
@@ -214,31 +219,25 @@ export function useGroupFileTasks({
         file.name,
         file.size,
       ) as { task_id?: string };
-      toast.success(response.task_id ? `文件下载任务已创建: ${response.task_id}` : '文件下载任务已创建');
 
       if (response.task_id) {
-        onTaskCreated?.(response.task_id);
+        notifyTaskCreated(response.task_id, `文件下载任务已创建: ${response.task_id}`);
         updateFileTaskStatus(file.file_id, response.task_id, 'pending', '下载任务已创建');
       } else {
+        toast.success('文件下载任务已创建');
         await refreshFiles();
         markFileDownloading(file.file_id, false);
       }
     } catch (error) {
-      const conflict = getTaskConflictDetail(error);
-      if (conflict?.task_id) {
-        toast.error(`已有任务 ${conflict.task_id} 正在运行`);
-        onTaskConflict?.(conflict.task_id);
-      } else {
-        toast.error(`文件下载失败: ${error instanceof Error ? error.message : '未知错误'}`);
-      }
+      handleTaskCreateError(error, '文件下载失败');
       markFileDownloading(file.file_id, false);
     }
   }, [
     downloadingFiles,
     groupId,
+    handleTaskCreateError,
     markFileDownloading,
-    onTaskConflict,
-    onTaskCreated,
+    notifyTaskCreated,
     updateFileTaskStatus,
   ]);
 
@@ -257,25 +256,18 @@ export function useGroupFileTasks({
 
     try {
       const response = await apiClient.downloadSelectedFiles(groupId, fileIds);
-      onTaskCreated?.(response.task_id);
+      notifyTaskCreated(response.task_id, `当前页下载任务已创建: ${response.task_id}`);
       setBatchDownloadTaskId(response.task_id);
       setBatchDownloadFileIds(fileIds);
-      toast.success(`当前页下载任务已创建: ${response.task_id}`);
     } catch (error) {
-      const conflict = getTaskConflictDetail(error);
-      if (conflict?.task_id) {
-        toast.error(`已有任务 ${conflict.task_id} 正在运行`);
-        onTaskConflict?.(conflict.task_id);
-      } else {
-        toast.error(`当前页下载任务创建失败: ${error instanceof Error ? error.message : '未知错误'}`);
-      }
+      handleTaskCreateError(error, '当前页下载任务创建失败');
       setDownloadingFiles(prev => {
         const next = new Set(prev);
         fileIds.forEach((fileId) => next.delete(fileId));
         return next;
       });
     }
-  }, [groupId, onTaskConflict, onTaskCreated]);
+  }, [groupId, handleTaskCreateError, notifyTaskCreated]);
 
   const handleDownloadFilteredResults = useCallback(async (filters: {
     searchQuery: string;
@@ -290,20 +282,13 @@ export function useGroupFileTasks({
         status: filters.statusFilter === 'all' ? undefined : filters.statusFilter,
         search: filters.searchQuery || undefined,
       });
-      onTaskCreated?.(response.task_id);
+      notifyTaskCreated(response.task_id, `筛选结果下载任务已创建: ${response.task_id}`);
       setBatchDownloadTaskId(response.task_id);
       setBatchDownloadFileIds([]);
-      toast.success(`筛选结果下载任务已创建: ${response.task_id}`);
     } catch (error) {
-      const conflict = getTaskConflictDetail(error);
-      if (conflict?.task_id) {
-        toast.error(`已有任务 ${conflict.task_id} 正在运行`);
-        onTaskConflict?.(conflict.task_id);
-      } else {
-        toast.error(`筛选结果下载任务创建失败: ${error instanceof Error ? error.message : '未知错误'}`);
-      }
+      handleTaskCreateError(error, '筛选结果下载任务创建失败');
     }
-  }, [batchDownloadTaskId, groupId, onTaskConflict, onTaskCreated]);
+  }, [batchDownloadTaskId, groupId, handleTaskCreateError, notifyTaskCreated]);
 
   const handleBatchAnalyzeCurrentPage = useCallback(async (pendingAnalysisFiles: FileItem[]) => {
     if (pendingAnalysisFiles.length === 0 || batchAnalyzing) {
@@ -320,12 +305,11 @@ export function useGroupFileTasks({
 
     try {
       const response = await apiClient.analyzeSelectedFiles(groupId, fileIds, false);
-      onTaskCreated?.(response.task_id);
+      notifyTaskCreated(response.task_id, `当前页分析任务已创建: ${response.task_id}`);
       setBatchAnalysisTaskId(response.task_id);
       setBatchAnalysisFileIds(fileIds);
-      toast.success(`当前页分析任务已创建: ${response.task_id}`);
     } catch (error) {
-      toast.error(`当前页分析任务创建失败: ${error instanceof Error ? error.message : '未知错误'}`);
+      handleTaskCreateError(error, '当前页分析任务创建失败');
       setBatchAnalyzing(false);
       setAnalyzingFileIds(prev => {
         const next = new Set(prev);
@@ -333,7 +317,7 @@ export function useGroupFileTasks({
         return next;
       });
     }
-  }, [batchAnalyzing, groupId, onTaskCreated]);
+  }, [batchAnalyzing, groupId, handleTaskCreateError, notifyTaskCreated]);
 
   return {
     analysisTasks,
