@@ -4,6 +4,7 @@ import unittest
 from backend.services.columns_remote_service import (
     fetch_column_file_download_url,
     fetch_column_topics,
+    fetch_topic_detail,
     fetch_column_video_m3u8_url,
 )
 
@@ -169,6 +170,91 @@ class ColumnsRemoteServiceTests(unittest.TestCase):
         self.assertEqual([("task-1", "   ⚠️ 解析文章列表失败: bad json")], task_logs)
         self.assertEqual(
             ["解析专栏文章列表JSON失败: column_id=3, response=not-json"],
+            log_exceptions,
+        )
+
+    def test_fetch_topic_detail_reuses_json_request_for_http_failure(self):
+        task_logs = []
+        log_errors = []
+        responses = [
+            FakeResponse(status_code=503, text="service unavailable"),
+            FakeResponse({"succeeded": True, "resp_data": {"topic": {"topic_id": 5}}}),
+        ]
+
+        def request_get(url, **kwargs):
+            self.assertEqual("https://api.zsxq.com/v2/topics/5/info", url)
+            self.assertEqual({"Cookie": "redacted"}, kwargs["headers"])
+            self.assertEqual(30, kwargs["timeout"])
+            return responses.pop(0)
+
+        async def sleep(_seconds):
+            return None
+
+        topic_detail, requests_made = asyncio.run(
+            fetch_topic_detail(
+                "task-1",
+                5,
+                {"Cookie": "redacted"},
+                current_request_count=0,
+                items_per_batch=10,
+                long_sleep_min=20,
+                long_sleep_max=30,
+                crawl_interval_min=0,
+                crawl_interval_max=0,
+                request_get=request_get,
+                add_task_log=lambda task_id, message: task_logs.append((task_id, message)),
+                log_error=log_errors.append,
+                sleep=sleep,
+                random_uniform=lambda _min, _max: 0,
+            )
+        )
+
+        self.assertEqual({"succeeded": True, "resp_data": {"topic": {"topic_id": 5}}}, topic_detail)
+        self.assertEqual(2, requests_made)
+        self.assertEqual([("task-1", "      ⚠️ 获取详情失败: HTTP 503")], task_logs)
+        self.assertEqual(
+            ["获取文章详情失败: topic_id=5, HTTP 503, response=service unavailable"],
+            log_errors,
+        )
+
+    def test_fetch_topic_detail_reuses_json_request_for_parse_failure(self):
+        task_logs = []
+        log_exceptions = []
+        responses = [
+            FakeResponse(ValueError("bad json"), text="not-json"),
+            FakeResponse({"succeeded": True, "resp_data": {"topic": {"topic_id": 5}}}),
+        ]
+
+        def request_get(*args, **kwargs):
+            return responses.pop(0)
+
+        async def sleep(_seconds):
+            return None
+
+        topic_detail, requests_made = asyncio.run(
+            fetch_topic_detail(
+                "task-1",
+                5,
+                {},
+                current_request_count=0,
+                items_per_batch=10,
+                long_sleep_min=20,
+                long_sleep_max=30,
+                crawl_interval_min=0,
+                crawl_interval_max=0,
+                request_get=request_get,
+                add_task_log=lambda task_id, message: task_logs.append((task_id, message)),
+                log_exception=log_exceptions.append,
+                sleep=sleep,
+                random_uniform=lambda _min, _max: 0,
+            )
+        )
+
+        self.assertEqual({"succeeded": True, "resp_data": {"topic": {"topic_id": 5}}}, topic_detail)
+        self.assertEqual(2, requests_made)
+        self.assertEqual([("task-1", "      ⚠️ 解析详情失败: bad json")], task_logs)
+        self.assertEqual(
+            ["解析文章详情JSON失败: topic_id=5, response=not-json"],
             log_exceptions,
         )
 

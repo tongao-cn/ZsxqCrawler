@@ -136,6 +136,7 @@ def _request_column_json_once(
     parse_label: str,
     user_action: str,
     user_parse_label: str,
+    task_log_prefix: str = "   ",
 ) -> tuple[Optional[Dict[str, Any]], int]:
     request_count = 0
 
@@ -144,7 +145,7 @@ def _request_column_json_once(
         request_count += 1
     except Exception as req_err:
         log_exception(f"{log_action}请求异常: {context}, url={url}")
-        add_task_log(task_id, f"   ⚠️ {user_action}请求异常: {req_err}")
+        add_task_log(task_id, f"{task_log_prefix}⚠️ {user_action}请求异常: {req_err}")
         return None, request_count
 
     if resp.status_code != 200:
@@ -152,14 +153,14 @@ def _request_column_json_once(
             f"{log_action}失败: {context}, HTTP {resp.status_code}, "
             f"response={redact_response_for_log(resp.text)}"
         )
-        add_task_log(task_id, f"   ⚠️ {user_action}失败: HTTP {resp.status_code}")
+        add_task_log(task_id, f"{task_log_prefix}⚠️ {user_action}失败: HTTP {resp.status_code}")
         return None, request_count
 
     try:
         return resp.json(), request_count
     except Exception as json_err:
         log_exception(f"解析{parse_label}JSON失败: {context}, response={redact_response_for_log(resp.text)}")
-        add_task_log(task_id, f"   ⚠️ 解析{user_parse_label}失败: {json_err}")
+        add_task_log(task_id, f"{task_log_prefix}⚠️ 解析{user_parse_label}失败: {json_err}")
         return None, request_count
 
 
@@ -319,28 +320,24 @@ async def fetch_topic_detail(
         await sleep(delay)
 
         detail_url = f"https://api.zsxq.com/v2/topics/{topic_id}/info"
-        try:
-            detail_resp = request_get(detail_url, headers=headers, timeout=30)
-            request_count += 1
-            requests_made += 1
-        except Exception as req_err:
-            log_exception(f"获取文章详情请求异常: topic_id={topic_id}, url={detail_url}")
-            add_task_log(task_id, f"      ⚠️ 获取详情请求异常: {req_err}")
-            continue
-
-        if detail_resp.status_code != 200:
-            log_error(
-                f"获取文章详情失败: topic_id={topic_id}, HTTP {detail_resp.status_code}, "
-                f"response={redact_response_for_log(detail_resp.text)}"
-            )
-            add_task_log(task_id, f"      ⚠️ 获取详情失败: HTTP {detail_resp.status_code}")
-            continue
-
-        try:
-            topic_detail = detail_resp.json()
-        except Exception as json_err:
-            log_exception(f"解析文章详情JSON失败: topic_id={topic_id}, response={redact_response_for_log(detail_resp.text)}")
-            add_task_log(task_id, f"      ⚠️ 解析详情失败: {json_err}")
+        topic_detail, attempt_request_count = _request_column_json_once(
+            task_id,
+            detail_url,
+            headers,
+            request_get=request_get,
+            add_task_log=add_task_log,
+            log_error=log_error,
+            log_exception=log_exception,
+            context=f"topic_id={topic_id}",
+            log_action="获取文章详情",
+            parse_label="文章详情",
+            user_action="获取详情",
+            user_parse_label="详情",
+            task_log_prefix="      ",
+        )
+        request_count += attempt_request_count
+        requests_made += attempt_request_count
+        if topic_detail is None:
             continue
 
         if topic_detail and topic_detail.get("succeeded"):
