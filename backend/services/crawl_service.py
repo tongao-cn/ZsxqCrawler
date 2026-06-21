@@ -39,6 +39,7 @@ from backend.services.official_topic_page_state import (
 )
 from backend.services.task_runtime import (
     add_task_log,
+    complete_task_unless_stopped,
     is_task_stopped,
     register_task_crawler,
     unregister_task_crawler,
@@ -783,7 +784,7 @@ def _run_official_crawl_time_range_task(
             add_task_log(task_id, "✅ 已到达起始时间之前，任务结束")
             break
 
-    update_task(task_id, "completed", "官方时间区间采集完成", total_stats)
+    complete_task_unless_stopped(task_id, "官方时间区间采集完成", total_stats)
 
 def _run_official_crawl_pages_task(
     task_id: str,
@@ -835,7 +836,7 @@ def _run_official_crawl_pages_task(
             break
         cursor = next_cursor
 
-    update_task(task_id, "completed", _official_crawl_completion_message(mode), total_stats)
+    complete_task_unless_stopped(task_id, _official_crawl_completion_message(mode), total_stats)
 
 def run_crawl_historical_task(
     task_id: str,

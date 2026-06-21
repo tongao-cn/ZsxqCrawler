@@ -1516,6 +1516,74 @@ class CrawlRoutesHelperTests(unittest.TestCase):
         )
 
     @unittest.skipUnless(HAS_CRAWL_ROUTE_DEPS, "crawl route dependencies are not installed")
+    def test_run_official_crawl_pages_task_completes_through_task_runtime_guard(self):
+        from backend.services.crawl_service import _run_official_crawl_pages_task
+
+        with (
+            patch("backend.services.crawl_service._official_topic_client", return_value=object()),
+            patch("backend.services.crawl_service.ZSXQDatabase"),
+            patch("backend.services.crawl_service.is_task_stopped", return_value=False),
+            patch("backend.services.crawl_service._fetch_unique_official_topic_page", return_value=None),
+            patch("backend.services.crawl_service.add_task_log"),
+            patch("backend.services.crawl_service.complete_task_unless_stopped") as complete_task,
+            patch("backend.services.crawl_service.update_task") as update_task,
+        ):
+            _run_official_crawl_pages_task("task-1", "group-1", 1, 20, "latest")
+
+        complete_task.assert_called_once_with(
+            "task-1",
+            "官方最新采集完成",
+            {
+                "new_topics": 0,
+                "updated_topics": 0,
+                "errors": 0,
+                "pages": 0,
+                "duplicates": 0,
+                "source": "official",
+            },
+        )
+        update_task.assert_not_called()
+
+    @unittest.skipUnless(HAS_CRAWL_ROUTE_DEPS, "crawl route dependencies are not installed")
+    def test_run_official_time_range_task_completes_through_task_runtime_guard(self):
+        from backend.routes.crawl_routes import CrawlTimeRangeRequest
+        from backend.services.crawl_service import _run_official_crawl_time_range_task
+
+        start_dt = datetime(2026, 5, 1, tzinfo=timezone(timedelta(hours=8)))
+        end_dt = datetime(2026, 5, 1, 23, 59, 59, tzinfo=timezone(timedelta(hours=8)))
+
+        with (
+            patch("backend.services.crawl_service._official_topic_client", return_value=object()),
+            patch("backend.services.crawl_service.ZSXQDatabase"),
+            patch("backend.services.crawl_service.is_task_stopped", return_value=False),
+            patch("backend.services.crawl_service._fetch_unique_official_topic_page", return_value=None),
+            patch("backend.services.crawl_service.add_task_log"),
+            patch("backend.services.crawl_service.complete_task_unless_stopped") as complete_task,
+            patch("backend.services.crawl_service.update_task") as update_task,
+        ):
+            _run_official_crawl_time_range_task(
+                "task-1",
+                "group-1",
+                CrawlTimeRangeRequest(perPage=20, topicSource="official"),
+                start_dt,
+                end_dt,
+            )
+
+        complete_task.assert_called_once_with(
+            "task-1",
+            "官方时间区间采集完成",
+            {
+                "new_topics": 0,
+                "updated_topics": 0,
+                "errors": 0,
+                "pages": 0,
+                "duplicates": 0,
+                "source": "official",
+            },
+        )
+        update_task.assert_not_called()
+
+    @unittest.skipUnless(HAS_CRAWL_ROUTE_DEPS, "crawl route dependencies are not installed")
     def test_official_topic_client_preserves_log_callback_binding(self):
         from backend.services.crawl_service import _official_topic_client
 
