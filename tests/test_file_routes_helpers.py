@@ -2920,8 +2920,8 @@ class FileRoutesHelperTests(unittest.TestCase):
 
         with (
             patch("backend.services.file_clear_workflow._clear_group_file_data", return_value={"files": 1}),
-            patch("backend.core.image_cache_manager.get_image_cache_manager", return_value=cache_manager) as get_cache,
-            patch("backend.core.image_cache_manager.clear_group_cache_manager") as clear_group_cache,
+            patch("backend.services.group_image_cache_clear.get_image_cache_manager", return_value=cache_manager) as get_cache,
+            patch("backend.services.group_image_cache_clear.clear_group_cache_manager") as clear_group_cache,
             patch("backend.services.file_clear_workflow._log_file_route_event") as log_file_route_event,
         ):
             response = clear_file_database_response("group-1")
@@ -2939,8 +2939,8 @@ class FileRoutesHelperTests(unittest.TestCase):
 
         with (
             patch("backend.services.file_clear_workflow._clear_group_file_data", return_value={"files": 1}),
-            patch("backend.core.image_cache_manager.get_image_cache_manager", return_value=cache_manager),
-            patch("backend.core.image_cache_manager.clear_group_cache_manager") as clear_group_cache,
+            patch("backend.services.group_image_cache_clear.get_image_cache_manager", return_value=cache_manager),
+            patch("backend.services.group_image_cache_clear.clear_group_cache_manager") as clear_group_cache,
             patch("backend.services.file_clear_workflow._log_file_route_event") as log_file_route_event,
         ):
             response = clear_file_database_response("group-1")
@@ -2955,8 +2955,11 @@ class FileRoutesHelperTests(unittest.TestCase):
 
         with (
             patch("backend.services.file_clear_workflow._clear_group_file_data", return_value={"files": 1}),
-            patch("backend.core.image_cache_manager.get_image_cache_manager", side_effect=RuntimeError("cache boom")),
-            patch("backend.core.image_cache_manager.clear_group_cache_manager") as clear_group_cache,
+            patch(
+                "backend.services.group_image_cache_clear.get_image_cache_manager",
+                side_effect=RuntimeError("cache boom"),
+            ),
+            patch("backend.services.group_image_cache_clear.clear_group_cache_manager") as clear_group_cache,
             patch("backend.services.file_clear_workflow._log_file_route_event") as log_file_route_event,
         ):
             response = clear_file_database_response("group-1")

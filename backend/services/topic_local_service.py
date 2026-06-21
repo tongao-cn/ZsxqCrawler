@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Optional
 
-from backend.core.image_cache_manager import clear_group_cache_manager, get_image_cache_manager
+from backend.services.group_image_cache_clear import clear_group_image_cache
 from backend.services.topic_workflow_service import TopicWorkflowError, _clear_group_topic_data
 from backend.storage.zsxq_database import TagNotFoundInGroupError, ZSXQDatabase
 
@@ -59,17 +59,7 @@ def get_topic_detail_response(topic_id: int, group_id: str) -> dict:
 
 def clear_topic_database_response(group_id: str) -> dict:
     deleted_counts = _clear_group_topic_data(group_id)
-    try:
-        cache_manager = get_image_cache_manager(group_id)
-        success, message = cache_manager.clear_cache()
-        if success:
-            _log_topic_event("INFO", f"图片缓存已清空: {message}")
-        else:
-            _log_topic_event("WARN", f"清空图片缓存失败: {message}")
-        clear_group_cache_manager(group_id)
-    except Exception as cache_error:
-        _log_topic_event("WARN", f"清空图片缓存时出错: {cache_error}")
-
+    clear_group_image_cache(group_id, _log_topic_event)
     return {"message": f"群组 {group_id} 的话题数据和图片缓存已删除", "deleted": deleted_counts}
 
 
