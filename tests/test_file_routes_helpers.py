@@ -1861,8 +1861,8 @@ class FileRoutesHelperTests(unittest.TestCase):
         downloader = FakeFileDownloadTaskDownloader(existing_count=2)
 
         with (
+            patch("backend.services.file_download_workflow.run_workflow") as run_workflow,
             patch("backend.services.file_download_workflow._create_file_downloader", return_value=downloader) as create_downloader,
-            patch("backend.services.file_download_workflow.update_task") as update_task,
             patch("backend.services.file_download_workflow.add_task_log") as add_task_log,
             patch("backend.services.file_download_workflow.is_task_stopped", return_value=False),
             patch("backend.services.file_download_workflow._safe_remove_file_downloader") as safe_remove,
@@ -1876,7 +1876,12 @@ class FileRoutesHelperTests(unittest.TestCase):
                 long_sleep_interval=30.0,
                 files_per_batch=4,
             )
+            result = run_workflow.call_args.kwargs["work"]()
 
+        self.assertEqual(("task-1",), run_workflow.call_args.args)
+        self.assertEqual("开始文件下载...", run_workflow.call_args.kwargs["running_message"])
+        self.assertEqual("文件下载完成", run_workflow.call_args.kwargs["completed_message"])
+        self.assertEqual("文件下载", run_workflow.call_args.kwargs["failure_label"])
         create_downloader.assert_called_once_with(
             "task-1",
             "123",
@@ -1899,7 +1904,7 @@ class FileRoutesHelperTests(unittest.TestCase):
             ("task-1", "📚 文件库已有 2 条记录，跳过收集阶段，直接下载"),
             [call.args for call in add_task_log.call_args_list],
         )
-        update_task.assert_any_call("task-1", "completed", "文件下载完成", {"downloaded_files": "download-result"})
+        self.assertEqual({"downloaded_files": "download-result"}, result)
         safe_remove.assert_called_once_with("task-1")
 
     def test_run_file_download_task_empty_create_time_collects_and_downloads_date_range(self):
@@ -1908,8 +1913,8 @@ class FileRoutesHelperTests(unittest.TestCase):
         downloader = FakeFileDownloadTaskDownloader(existing_count=0)
 
         with (
+            patch("backend.services.file_download_workflow.run_workflow") as run_workflow,
             patch("backend.services.file_download_workflow._create_file_downloader", return_value=downloader),
-            patch("backend.services.file_download_workflow.update_task") as update_task,
             patch("backend.services.file_download_workflow.add_task_log") as add_task_log,
             patch("backend.services.file_download_workflow.is_task_stopped", return_value=False),
             patch("backend.services.file_download_workflow._safe_remove_file_downloader") as safe_remove,
@@ -1922,6 +1927,7 @@ class FileRoutesHelperTests(unittest.TestCase):
                 start_time="2026-06-01",
                 end_time="2026-06-02",
             )
+            result = run_workflow.call_args.kwargs["work"]()
 
         self.assertEqual(
             [
@@ -1953,7 +1959,7 @@ class FileRoutesHelperTests(unittest.TestCase):
             ("task-1", "📊 文件收集完成: range-result"),
             [call.args for call in add_task_log.call_args_list],
         )
-        update_task.assert_any_call("task-1", "completed", "文件下载完成", {"downloaded_files": "download-result"})
+        self.assertEqual({"downloaded_files": "download-result"}, result)
         safe_remove.assert_called_once_with("task-1")
 
     def test_run_file_download_task_logs_download_config_before_work(self):
@@ -1962,8 +1968,8 @@ class FileRoutesHelperTests(unittest.TestCase):
         downloader = FakeFileDownloadTaskDownloader(existing_count=1)
 
         with (
+            patch("backend.services.file_download_workflow.run_workflow") as run_workflow,
             patch("backend.services.file_download_workflow._create_file_downloader", return_value=downloader),
-            patch("backend.services.file_download_workflow.update_task"),
             patch("backend.services.file_download_workflow.add_task_log") as add_task_log,
             patch("backend.services.file_download_workflow.is_task_stopped", return_value=False),
             patch("backend.services.file_download_workflow._safe_remove_file_downloader"),
@@ -1978,6 +1984,7 @@ class FileRoutesHelperTests(unittest.TestCase):
                 long_sleep_interval=40.0,
                 files_per_batch=6,
             )
+            run_workflow.call_args.kwargs["work"]()
 
         self.assertEqual(
             [
@@ -1992,12 +1999,13 @@ class FileRoutesHelperTests(unittest.TestCase):
 
     def test_run_file_download_task_stops_after_collect_before_download_phase(self):
         from backend.services.file_workflow_service import run_file_download_task
+        from backend.services.task_runtime import skip_workflow_completion
 
         downloader = FakeFileDownloadTaskDownloader(existing_count=0)
 
         with (
+            patch("backend.services.file_download_workflow.run_workflow") as run_workflow,
             patch("backend.services.file_download_workflow._create_file_downloader", return_value=downloader),
-            patch("backend.services.file_download_workflow.update_task") as update_task,
             patch("backend.services.file_download_workflow.add_task_log") as add_task_log,
             patch("backend.services.file_download_workflow.is_task_stopped", side_effect=[False, True]),
             patch("backend.services.file_download_workflow._safe_remove_file_downloader") as safe_remove,
@@ -2010,6 +2018,7 @@ class FileRoutesHelperTests(unittest.TestCase):
                 start_time="2026-06-01",
                 end_time="2026-06-02",
             )
+            result = run_workflow.call_args.kwargs["work"]()
 
         self.assertEqual(
             [
@@ -2025,20 +2034,18 @@ class FileRoutesHelperTests(unittest.TestCase):
         self.assertIn(("task-1", "📍 阶段一：收集文件列表"), log_calls)
         self.assertNotIn(("task-1", "📊 文件收集完成: range-result"), log_calls)
         self.assertNotIn(("task-1", "📍 阶段二：下载文件本体"), log_calls)
-        self.assertEqual(
-            [("task-1", "running", "开始文件下载...")],
-            [call.args for call in update_task.call_args_list],
-        )
+        self.assertEqual(skip_workflow_completion(), result)
         safe_remove.assert_called_once_with("task-1")
 
     def test_run_file_download_task_stops_after_download_before_completion(self):
         from backend.services.file_workflow_service import run_file_download_task
+        from backend.services.task_runtime import skip_workflow_completion
 
         downloader = FakeFileDownloadTaskDownloader(existing_count=2)
 
         with (
+            patch("backend.services.file_download_workflow.run_workflow") as run_workflow,
             patch("backend.services.file_download_workflow._create_file_downloader", return_value=downloader),
-            patch("backend.services.file_download_workflow.update_task") as update_task,
             patch("backend.services.file_download_workflow.add_task_log") as add_task_log,
             patch("backend.services.file_download_workflow.is_task_stopped", side_effect=[False, False, True]),
             patch("backend.services.file_download_workflow._safe_remove_file_downloader") as safe_remove,
@@ -2049,6 +2056,7 @@ class FileRoutesHelperTests(unittest.TestCase):
                 max_files=5,
                 sort_by="download_count",
             )
+            result = run_workflow.call_args.kwargs["work"]()
 
         self.assertEqual([], downloader.collect_calls)
         self.assertEqual(
@@ -2059,10 +2067,7 @@ class FileRoutesHelperTests(unittest.TestCase):
         self.assertIn(("task-1", "📍 阶段二：下载文件本体"), log_calls)
         self.assertIn(("task-1", "🚀 开始下载文件..."), log_calls)
         self.assertNotIn(("task-1", "✅ 文件下载完成！"), log_calls)
-        self.assertEqual(
-            [("task-1", "running", "开始文件下载...")],
-            [call.args for call in update_task.call_args_list],
-        )
+        self.assertEqual(skip_workflow_completion(), result)
         safe_remove.assert_called_once_with("task-1")
 
     def test_run_file_download_task_logs_success_and_completed_payload(self):
@@ -2071,8 +2076,8 @@ class FileRoutesHelperTests(unittest.TestCase):
         downloader = FakeFileDownloadTaskDownloader(existing_count=1)
 
         with (
+            patch("backend.services.file_download_workflow.run_workflow") as run_workflow,
             patch("backend.services.file_download_workflow._create_file_downloader", return_value=downloader),
-            patch("backend.services.file_download_workflow.update_task") as update_task,
             patch("backend.services.file_download_workflow.add_task_log") as add_task_log,
             patch("backend.services.file_download_workflow.is_task_stopped", return_value=False),
             patch("backend.services.file_download_workflow._safe_remove_file_downloader") as safe_remove,
@@ -2083,22 +2088,24 @@ class FileRoutesHelperTests(unittest.TestCase):
                 max_files=5,
                 sort_by="download_count",
             )
+            result = run_workflow.call_args.kwargs["work"]()
 
         self.assertIn(
             ("task-1", "✅ 文件下载完成！"),
             [call.args for call in add_task_log.call_args_list],
         )
-        update_task.assert_any_call("task-1", "completed", "文件下载完成", {"downloaded_files": "download-result"})
+        self.assertEqual({"downloaded_files": "download-result"}, result)
         safe_remove.assert_called_once_with("task-1")
 
     def test_run_file_download_task_stops_after_initialization(self):
         from backend.services.file_workflow_service import run_file_download_task
+        from backend.services.task_runtime import skip_workflow_completion
 
         downloader = FakeFileDownloadTaskDownloader(existing_count=1)
 
         with (
+            patch("backend.services.file_download_workflow.run_workflow") as run_workflow,
             patch("backend.services.file_download_workflow._create_file_downloader", return_value=downloader) as create_downloader,
-            patch("backend.services.file_download_workflow.update_task") as update_task,
             patch("backend.services.file_download_workflow.add_task_log") as add_task_log,
             patch("backend.services.file_download_workflow.is_task_stopped", return_value=True),
             patch("backend.services.file_download_workflow._safe_remove_file_downloader") as safe_remove,
@@ -2112,6 +2119,7 @@ class FileRoutesHelperTests(unittest.TestCase):
                 long_sleep_interval=30.0,
                 files_per_batch=4,
             )
+            result = run_workflow.call_args.kwargs["work"]()
 
         create_downloader.assert_called_once_with(
             "task-1",
@@ -2127,10 +2135,6 @@ class FileRoutesHelperTests(unittest.TestCase):
         self.assertEqual([], downloader.collect_calls)
         self.assertEqual([], downloader.download_calls)
         self.assertEqual(
-            [("task-1", "running", "开始文件下载...")],
-            [call.args for call in update_task.call_args_list],
-        )
-        self.assertEqual(
             [
                 ("task-1", "⚙️ 下载配置:"),
                 ("task-1", "   ⏱️ 单次下载间隔: 2.0秒"),
@@ -2140,6 +2144,7 @@ class FileRoutesHelperTests(unittest.TestCase):
             ],
             [call.args for call in add_task_log.call_args_list],
         )
+        self.assertEqual(skip_workflow_completion(), result)
         safe_remove.assert_called_once_with("task-1")
 
     def test_run_selected_file_download_task_stops_after_downloader_creation(self):
