@@ -2,14 +2,6 @@ import unittest
 from unittest.mock import patch
 
 
-class FakeBackgroundTasks:
-    def __init__(self):
-        self.tasks = []
-
-    def add_task(self, func, *args):
-        self.tasks.append((func, args))
-
-
 def fake_task(*args):
     return args
 
@@ -55,14 +47,11 @@ class IngestionHelpersTests(unittest.TestCase):
     def test_enqueue_ingestion_task_uses_launch_recipe(self):
         from backend.routes.ingestion_helpers import enqueue_ingestion_task
 
-        background_tasks = FakeBackgroundTasks()
-
         with patch(
             "backend.routes.ingestion_helpers.launch_task_recipe",
             return_value={"task_id": "task-2", "message": "已启动"},
         ) as launch_task_recipe:
             response = enqueue_ingestion_task(
-                background_tasks,
                 "columns_fetch",
                 "desc",
                 fake_task,
@@ -80,14 +69,12 @@ class IngestionHelpersTests(unittest.TestCase):
         self.assertEqual(("request",), recipe.args)
         self.assertEqual("已启动", recipe.message)
         self.assertEqual({"task_id": "task-2", "message": "已启动"}, response)
-        self.assertEqual([], background_tasks.tasks)
 
     def test_enqueue_ingestion_task_rejects_conflict(self):
         from fastapi import HTTPException
         from backend.routes.ingestion_helpers import enqueue_ingestion_task
         from backend.services.task_launch import TaskLaunchConflict
 
-        background_tasks = FakeBackgroundTasks()
         existing = {"task_id": "task-1", "type": "crawl_all", "status": "running"}
 
         with patch(
@@ -96,7 +83,6 @@ class IngestionHelpersTests(unittest.TestCase):
         ):
             with self.assertRaises(HTTPException) as raised:
                 enqueue_ingestion_task(
-                    background_tasks,
                     "columns_fetch",
                     "desc",
                     fake_task,
@@ -106,7 +92,6 @@ class IngestionHelpersTests(unittest.TestCase):
 
         self.assertEqual(409, raised.exception.status_code)
         self.assertEqual("task-1", raised.exception.detail["task_id"])
-        self.assertEqual([], background_tasks.tasks)
 
 
 if __name__ == "__main__":

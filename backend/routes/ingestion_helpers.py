@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Callable, Dict
 
-from fastapi import BackgroundTasks, HTTPException
+from fastapi import HTTPException
 
 from backend.services.task_launch import (
     INGESTION_CONFLICT_MESSAGE,
@@ -31,7 +31,6 @@ def create_ingestion_task_or_raise(task_type: str, description: str, group_id: s
 
 
 def enqueue_ingestion_task(
-    background_tasks: BackgroundTasks,
     task_type: str,
     description: str,
     task_func: Callable[..., Any],
