@@ -3,6 +3,7 @@
 import { type ChangeEvent, type ClipboardEvent, type KeyboardEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { apiClient, type StockTopicAnalysisResponse } from '@/lib/api';
+import { useTaskLauncher } from '@/hooks/useTaskLauncher';
 import { useTaskStatus } from '@/hooks/useTaskStatus';
 
 export const MAX_STOCK_COUNT = 50;
@@ -146,6 +147,9 @@ export function useStockTopicAnalysisPanel({
   const active = Boolean(activeBatchAnalysis);
   const analyzeButtonLabel = getAnalyzeButtonLabel(results, parsedStockNames.length, active, analyzing);
   const allResultsSelected = results.length > 0 && selectedResults.length === results.length;
+  const { handleTaskCreateError, notifyTaskCreated } = useTaskLauncher({
+    onTaskCreated,
+  });
 
   useEffect(() => {
     try {
@@ -198,14 +202,13 @@ export function useStockTopicAnalysisPanel({
       setAnalyzing(true);
       const response = await apiClient.analyzeStockTopicsBatch(groupId, stockNames);
       setActiveBatchAnalysis({ taskId: response.task_id, stockNames: [...stockNames] });
-      onTaskCreated?.(response.task_id);
-      toast.success(`${successPrefix}: ${response.task_id}`);
+      notifyTaskCreated(response.task_id, `${successPrefix}: ${response.task_id}`);
     } catch (error) {
-      toast.error(`创建分析任务失败: ${error instanceof Error ? error.message : '未知错误'}`);
+      handleTaskCreateError(error, '创建分析任务失败');
     } finally {
       setAnalyzing(false);
     }
-  }, [groupId, onTaskCreated]);
+  }, [groupId, handleTaskCreateError, notifyTaskCreated]);
 
   const handleSearch = useCallback(async () => {
     if (parsedStockNames.length === 0) {
