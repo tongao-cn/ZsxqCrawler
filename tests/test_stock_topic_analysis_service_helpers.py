@@ -923,6 +923,7 @@ class StockTopicAnalysisServiceHelperTests(unittest.TestCase):
     @unittest.skipUnless(HAS_SERVICE_DEPS, "stock topic analysis service dependencies are not installed")
     def test_answer_stock_question_returns_empty_answer_without_topics(self):
         from backend.services.stock_topic_analysis_service import answer_stock_question
+        from backend.services.stock_topic_question_payload import QuestionTopicMaterial
 
         search_result = {
             "group_id": "51111112855254",
@@ -931,20 +932,23 @@ class StockTopicAnalysisServiceHelperTests(unittest.TestCase):
             "topics": [],
             "topic_count": 0,
         }
+        material = QuestionTopicMaterial(search_result=search_result, analysis_topics=[])
 
         with (
-            patch("backend.services.stock_topic_analysis_service._search_stock_question_topics_with_rows", return_value=(search_result, [])),
-            patch("backend.services.stock_topic_analysis_service._build_question_topic_payload", return_value=[]) as build_payload,
+            patch("backend.services.stock_topic_analysis_service._search_stock_question_material", return_value=material) as search,
+            patch("backend.services.stock_topic_analysis_service._call_question_analysis_ai") as call_ai,
         ):
             result = answer_stock_question("51111112855254", "固态电池怎么看")
 
         self.assertEqual("没有找到可回答该问题的话题内容。", result["summary_markdown"])
         self.assertEqual("completed", result["status"])
-        build_payload.assert_called_once_with(search_result, [])
+        search.assert_called_once_with("51111112855254", "固态电池怎么看")
+        call_ai.assert_not_called()
 
     @unittest.skipUnless(HAS_SERVICE_DEPS, "stock topic analysis service dependencies are not installed")
-    def test_answer_stock_question_uses_search_rows_for_payload(self):
+    def test_answer_stock_question_uses_material_topics(self):
         from backend.services.stock_topic_analysis_service import answer_stock_question
+        from backend.services.stock_topic_question_payload import QuestionTopicMaterial
 
         search_result = {
             "group_id": "51111112855254",
@@ -953,27 +957,18 @@ class StockTopicAnalysisServiceHelperTests(unittest.TestCase):
             "topics": [{"topic_id": "101"}],
             "topic_count": 1,
         }
-        rows = [{"topic_id": "101"}]
         topics = [{"topic_id": "101", "content": "固态电池讨论"}]
+        material = QuestionTopicMaterial(search_result=search_result, analysis_topics=topics)
 
         with (
-            patch("backend.services.stock_topic_analysis_service._search_stock_question_topics_with_rows", return_value=(search_result, rows)),
-            patch(
-                "backend.services.stock_topic_analysis_service.build_question_topic_payload_from_rows",
-                return_value=topics,
-            ) as build_payload,
+            patch("backend.services.stock_topic_analysis_service._search_stock_question_material", return_value=material) as search,
             patch("backend.services.stock_topic_analysis_service._call_question_analysis_ai", return_value=("summary", "test-model")),
         ):
             result = answer_stock_question("51111112855254", "固态电池怎么看")
 
         self.assertEqual("summary", result["summary_markdown"])
         self.assertEqual("test-model", result["model"])
-        build_payload.assert_called_once_with(
-            search_result,
-            rows,
-            max_analysis_topics=30,
-            max_topic_text_chars=1800,
-        )
+        search.assert_called_once_with("51111112855254", "固态电池怎么看")
 
     @unittest.skipUnless(HAS_SERVICE_DEPS, "stock topic analysis service dependencies are not installed")
     def test_analyze_stock_topics_saves_empty_result(self):
@@ -1261,6 +1256,64 @@ class StockTopicAnalysisServiceHelperTests(unittest.TestCase):
             keywords=["固态电池"],
             max_topic_text_chars=120,
         )
+
+    def test_build_question_topic_material_builds_result_and_payload(self):
+        from backend.services.stock_topic_question_payload import build_question_topic_material
+
+        rows = [
+            {
+                "topic_id": "101",
+                "title": "固态电池交流",
+                "create_time": "2026-05-09T09:00:00",
+                "likes_count": 1,
+                "comments_count": 2,
+                "reading_count": 3,
+                "talk_text": "固态电池量产节奏讨论",
+                "question_text": "",
+                "answer_text": "",
+            },
+            {
+                "topic_id": "102",
+                "title": "商业航天跟踪",
+                "create_time": "2026-05-10T09:00:00",
+                "likes_count": 4,
+                "comments_count": 5,
+                "reading_count": 6,
+                "talk_text": "",
+                "question_text": "商业航天订单有什么变化",
+                "answer_text": "商业航天产业链热度提升",
+            },
+            {
+                "topic_id": "101",
+                "title": "固态电池交流更新",
+                "create_time": "2026-05-09T10:00:00",
+                "likes_count": 7,
+                "comments_count": 8,
+                "reading_count": 9,
+                "talk_text": "固态电池新材料更新",
+                "question_text": "",
+                "answer_text": "",
+            },
+        ]
+
+        material = build_question_topic_material(
+            group_id="51111112855254",
+            question="固态电池和商业航天怎么看",
+            keywords=["固态电池", "商业航天"],
+            keyword_model="test-model",
+            rows=rows,
+            max_analysis_topics=1,
+            max_topic_text_chars=120,
+        )
+
+        self.assertEqual("51111112855254", material.search_result["group_id"])
+        self.assertEqual("test-model", material.search_result["keyword_model"])
+        self.assertEqual(["102", "101"], [topic["topic_id"] for topic in material.search_result["topics"]])
+        self.assertEqual(["商业航天"], material.search_result["topics"][0]["matched_keywords"])
+        self.assertEqual(["固态电池"], material.search_result["topics"][1]["matched_keywords"])
+        self.assertEqual(2, material.search_result["topic_count"])
+        self.assertEqual(["102"], [topic["topic_id"] for topic in material.analysis_topics])
+        self.assertEqual(["商业航天"], material.analysis_topics[0]["matched_keywords"])
 
     def test_question_topic_rows_query_preserves_scope_and_placeholders(self):
         from backend.services.stock_topic_analysis_store import question_topic_rows_query

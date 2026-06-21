@@ -63,8 +63,10 @@ from backend.services.stock_topic_analysis_runner import (
     AnswerStockQuestionRequest,
     StockTopicAnalysisEngine,
 )
-from backend.services.daily_topic_analysis_topics import clip_text as _clip
-from backend.services.stock_topic_question_payload import build_question_topic_payload_from_rows, load_question_topic_payload
+from backend.services.stock_topic_question_payload import (
+    QuestionTopicMaterial,
+    build_question_topic_material,
+)
 from backend.storage.db_compat import connect as connect
 
 
@@ -160,19 +162,6 @@ def _parse_image_data_url(image_data_url: str) -> Tuple[str, str, bytes]:
     return mime_type, value, image_bytes
 
 
-def _topic_content(row: Any) -> str:
-    return "\n".join(
-        part
-        for part in (
-            _normalize_text(row["title"]),
-            _normalize_text(row["talk_text"]),
-            _normalize_text(row["question_text"]),
-            _normalize_text(row["answer_text"]),
-        )
-        if part
-    )
-
-
 def _empty_latest_result(group_id: str, stock_name: str) -> Dict[str, Any]:
     return {
         **build_empty_stock_topic_search_result(group_id, stock_name),
@@ -254,47 +243,12 @@ def search_stock_topics(group_id: str, stock_name: str, *, limit: int | None = N
     )
 
 
-def _build_stock_question_search_result(
-    *,
-    group_id: str,
-    question: str,
-    keywords: List[str],
-    keyword_model: str,
-    rows: List[Any],
-) -> Dict[str, Any]:
-    topics_by_id: Dict[str, Dict[str, Any]] = {}
-    for row in rows:
-        topic_id = str(row["topic_id"])
-        content = _topic_content(row)
-        matched_keywords = [keyword for keyword in keywords if keyword.lower() in content.lower()]
-        topics_by_id[topic_id] = {
-            "topic_id": topic_id,
-            "title": row["title"] or "",
-            "create_time": row["create_time"] or "",
-            "likes_count": int(row["likes_count"] or 0),
-            "comments_count": int(row["comments_count"] or 0),
-            "reading_count": int(row["reading_count"] or 0),
-            "content_preview": _clip(content, 300),
-            "matched_keywords": matched_keywords,
-        }
-
-    topics = sorted(topics_by_id.values(), key=lambda item: str(item["create_time"] or ""), reverse=True)
-    return {
-        "group_id": group_id,
-        "question": question,
-        "keywords": keywords,
-        "keyword_model": keyword_model,
-        "topics": topics,
-        "topic_count": len(topics),
-    }
-
-
-def _search_stock_question_topics_with_rows(
+def _search_stock_question_material(
     group_id: str,
     question: str,
     *,
     limit: int = MAX_QUESTION_TOPICS,
-) -> tuple[Dict[str, Any], List[Any]]:
+) -> QuestionTopicMaterial:
     question_text = _normalize_text(question)
     if not question_text:
         raise ValueError("question 不能为空")
@@ -311,40 +265,23 @@ def _search_stock_question_topics_with_rows(
         limit=max(1, min(int(limit), MAX_QUESTION_TOPICS)),
     )
 
-    return (
-        _build_stock_question_search_result(
-            group_id=group_id_text,
-            question=question_text,
-            keywords=keywords,
-            keyword_model=keyword_model,
-            rows=rows,
-        ),
-        rows,
+    return build_question_topic_material(
+        group_id=group_id_text,
+        question=question_text,
+        keywords=keywords,
+        keyword_model=keyword_model,
+        rows=rows,
+        max_analysis_topics=MAX_ANALYSIS_TOPICS,
+        max_topic_text_chars=MAX_TOPIC_TEXT_CHARS,
     )
 
 
 def search_stock_question_topics(group_id: str, question: str, *, limit: int = MAX_QUESTION_TOPICS) -> Dict[str, Any]:
-    search_result, _rows = _search_stock_question_topics_with_rows(group_id, question, limit=limit)
-    return search_result
+    return _search_stock_question_material(group_id, question, limit=limit).search_result
 
 
 def _build_analysis_topic_payload(search_result: Dict[str, Any]) -> List[Dict[str, Any]]:
     return build_analysis_topic_payload(search_result)
-
-
-def _build_question_topic_payload(search_result: Dict[str, Any], rows: List[Any] | None = None) -> List[Dict[str, Any]]:
-    if rows is not None:
-        return build_question_topic_payload_from_rows(
-            search_result,
-            rows,
-            max_analysis_topics=MAX_ANALYSIS_TOPICS,
-            max_topic_text_chars=MAX_TOPIC_TEXT_CHARS,
-        )
-    return load_question_topic_payload(
-        search_result,
-        max_analysis_topics=MAX_ANALYSIS_TOPICS,
-        max_topic_text_chars=MAX_TOPIC_TEXT_CHARS,
-    )
 
 
 def _build_stock_analysis_prompt(
@@ -723,12 +660,13 @@ def _answer_stock_question_impl(
     log_callback: Callable[[str], None] | None = None,
 ) -> Dict[str, Any]:
     _log(log_callback, "🔎 根据问题关键词搜索话题...")
-    search_result, search_rows = _search_stock_question_topics_with_rows(group_id, question)
+    material = _search_stock_question_material(group_id, question)
+    search_result = material.search_result
     _log(
         log_callback,
         f"📚 关键词: {'、'.join(search_result['keywords'])}；命中话题: {search_result['topic_count']}",
     )
-    topics = _build_question_topic_payload(search_result, search_rows)
+    topics = material.analysis_topics
     if not topics:
         return {
             **search_result,
