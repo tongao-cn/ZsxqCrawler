@@ -28,7 +28,6 @@ from backend.services.file_status_service import (
 )
 from backend.services.file_workflow_service import (
     _close_crawler_file_databases,
-    _enqueue_file_task,
     _fail_file_task,
     create_filtered_file_download_task,
     create_file_ai_analysis_task,
@@ -57,10 +56,6 @@ from backend.storage.zsxq_file_database import (
     _query_group_id,
     _unique_int_file_ids,
 )
-
-
-def fake_task(*args):
-    return args
 
 
 class FakeClosable:
@@ -212,55 +207,6 @@ class FakeImageCacheManager:
 
 
 class FileRoutesHelperTests(unittest.TestCase):
-    def test_enqueue_file_task_creates_task_and_schedules_callback(self):
-        with patch(
-            "backend.services.file_workflow_service.launch_task_recipe",
-            return_value={"task_id": "task-1", "message": "已创建"},
-        ) as launch:
-            response = _enqueue_file_task(
-                "analyze_files",
-                "测试文件任务",
-                fake_task,
-                "group-1",
-                123,
-                message="已创建",
-            )
-
-        launch.assert_called_once()
-        recipe = launch.call_args.args[0]
-        self.assertEqual("analyze_files", recipe.task_type)
-        self.assertEqual("测试文件任务", recipe.description)
-        self.assertEqual(fake_task, recipe.task_func)
-        self.assertEqual(("group-1", 123), recipe.args)
-        self.assertIsNone(recipe.group_id)
-        self.assertEqual("已创建", recipe.message)
-        self.assertEqual({"task_id": "task-1", "message": "已创建"}, response)
-
-    def test_enqueue_file_task_uses_ingestion_lock_when_requested(self):
-        with patch(
-            "backend.services.file_workflow_service.launch_task_recipe",
-            return_value={"task_id": "task-1", "message": "任务已创建，正在后台执行"},
-        ) as launch:
-            response = _enqueue_file_task(
-                "collect_files",
-                "收集文件列表",
-                fake_task,
-                "group-1",
-                "request",
-                ingestion_group_id="group-1",
-            )
-
-        launch.assert_called_once()
-        recipe = launch.call_args.args[0]
-        self.assertEqual("collect_files", recipe.task_type)
-        self.assertEqual("收集文件列表", recipe.description)
-        self.assertEqual(fake_task, recipe.task_func)
-        self.assertEqual("group-1", recipe.ingestion_group_id)
-        self.assertEqual(("group-1", "request"), recipe.args)
-        self.assertEqual("任务已创建，正在后台执行", recipe.message)
-        self.assertFalse(recipe.prepend_group_id_to_args)
-        self.assertEqual({"task_id": "task-1", "message": "任务已创建，正在后台执行"}, response)
-
     def test_create_file_collect_task_uses_ingestion_launch_recipe(self):
         with patch(
             "backend.services.file_workflow_service.launch_task_recipe",
@@ -446,30 +392,6 @@ class FileRoutesHelperTests(unittest.TestCase):
         self.assertEqual("从话题同步文件记录任务已创建", recipe.message)
         self.assertFalse(recipe.prepend_group_id_to_args)
         self.assertEqual({"task_id": "task-1", "message": "从话题同步文件记录任务已创建"}, response)
-
-    def test_enqueue_file_task_can_attach_group_metadata(self):
-        with patch(
-            "backend.services.file_workflow_service.launch_task_recipe",
-            return_value={"task_id": "task-1", "message": "任务已创建，正在后台执行"},
-        ) as launch:
-            response = _enqueue_file_task(
-                "analyze_files",
-                "分析文件",
-                fake_task,
-                "group-1",
-                [123],
-                task_group_id="group-1",
-            )
-
-        launch.assert_called_once()
-        recipe = launch.call_args.args[0]
-        self.assertEqual("analyze_files", recipe.task_type)
-        self.assertEqual("分析文件", recipe.description)
-        self.assertEqual(fake_task, recipe.task_func)
-        self.assertEqual(("group-1", [123]), recipe.args)
-        self.assertEqual("group-1", recipe.group_id)
-        self.assertEqual("任务已创建，正在后台执行", recipe.message)
-        self.assertEqual({"task_id": "task-1", "message": "任务已创建，正在后台执行"}, response)
 
     def test_collect_files_delegates_to_collect_launch_recipe(self):
         from backend.routes.file_routes import collect_files
@@ -720,10 +642,7 @@ class FileRoutesHelperTests(unittest.TestCase):
                         ),
                         file_routes.sync_files_from_topics: "backend.routes.file_routes.create_sync_files_from_topics_task",
                     }
-                    patch_target = launch_patch_targets.get(
-                        route,
-                        "backend.routes.file_routes._enqueue_file_task",
-                    )
+                    patch_target = launch_patch_targets[route]
                     stack.enter_context(
                         patch(patch_target, side_effect=RuntimeError("boom"))
                     )
@@ -790,10 +709,7 @@ class FileRoutesHelperTests(unittest.TestCase):
                         ),
                         file_routes.sync_files_from_topics: "backend.routes.file_routes.create_sync_files_from_topics_task",
                     }
-                    patch_target = launch_patch_targets.get(
-                        route,
-                        "backend.routes.file_routes._enqueue_file_task",
-                    )
+                    patch_target = launch_patch_targets[route]
                     stack.enter_context(patch(patch_target, side_effect=original_error))
                     with self.assertRaises(file_routes.HTTPException) as raised:
                         self._run_async(route(*route_args, **route_kwargs))
@@ -1159,26 +1075,6 @@ class FileRoutesHelperTests(unittest.TestCase):
             ],
             [call.args for call in add_task_log.call_args_list],
         )
-
-    def test_enqueue_file_task_rejects_ingestion_conflict(self):
-        from backend.services.task_launch import TaskLaunchConflict
-
-        existing = {"task_id": "task-old", "type": "crawl_latest", "status": "running"}
-
-        with patch(
-            "backend.services.file_workflow_service.launch_task_recipe",
-            side_effect=TaskLaunchConflict(existing),
-        ):
-            with self.assertRaises(TaskLaunchConflict) as raised:
-                _enqueue_file_task(
-                    "collect_files",
-                    "收集文件列表",
-                    fake_task,
-                    "group-1",
-                    ingestion_group_id="group-1",
-                )
-
-        self.assertEqual(existing, raised.exception.existing)
 
     def test_fail_file_task_logs_and_updates_failure(self):
         with (

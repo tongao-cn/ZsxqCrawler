@@ -90,39 +90,6 @@ def _fail_file_task(
     )
 
 
-def _enqueue_file_task(
-    task_type: str,
-    description: str,
-    task_func,
-    *args,
-    message: str = "任务已创建，正在后台执行",
-    ingestion_group_id: Optional[str] = None,
-    task_group_id: Optional[str] = None,
-) -> Dict[str, str]:
-    if ingestion_group_id is not None:
-        return launch_task_recipe(
-            TaskLaunchRecipe.ingestion(
-                task_type,
-                description,
-                task_func,
-                ingestion_group_id,
-                *args,
-                message=message,
-                prepend_group_id_to_args=False,
-            )
-        )
-    return launch_task_recipe(
-        TaskLaunchRecipe(
-            task_type=task_type,
-            description=description,
-            task_func=task_func,
-            args=args,
-            group_id=task_group_id,
-            message=message,
-        )
-    )
-
-
 def create_file_collect_task(group_id: str, request: Any) -> Dict[str, str]:
     return launch_task_recipe(
         TaskLaunchRecipe.ingestion(
