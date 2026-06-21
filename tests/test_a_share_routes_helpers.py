@@ -21,7 +21,7 @@ class AShareRoutesHelperTests(unittest.TestCase):
         self.assertEqual("获取A股分析状态失败: route boom", error.detail)
 
     @unittest.skipUnless(HAS_A_SHARE_ROUTE_DEPS, "a-share route dependencies are not installed")
-    def test_create_a_share_analysis_task_response_delegates_to_workflow_launch(self):
+    def test_create_a_share_analysis_task_response_delegates_to_a_share_workflow(self):
         from backend.routes.a_share_routes import AShareAnalysisRunRequest, _create_a_share_analysis_task_response
 
         request = AShareAnalysisRunRequest(
@@ -183,7 +183,7 @@ class AShareRoutesHelperTests(unittest.TestCase):
         )
 
     @unittest.skipUnless(HAS_A_SHARE_ROUTE_DEPS, "a-share route dependencies are not installed")
-    def test_export_tdx_delegates_to_workflow_launch(self):
+    def test_export_tdx_delegates_to_a_share_workflow(self):
         import asyncio
 
         from backend.routes import a_share_routes
