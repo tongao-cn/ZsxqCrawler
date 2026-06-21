@@ -1,6 +1,7 @@
 import json
 import queue
 import unittest
+from datetime import datetime
 from importlib.util import find_spec
 
 
@@ -12,19 +13,34 @@ class TaskRoutesHelperTests(unittest.TestCase):
     def test_sse_event_formats_json_data_frame(self):
         from backend.routes.task_routes import _sse_event
 
-        event = _sse_event({"type": "log", "message": "hello"})
+        event = _sse_event({"type": "log", "message": "hello", "created_at": datetime(2026, 6, 21, 9, 30)})
 
         self.assertTrue(event.startswith("data: "))
         self.assertTrue(event.endswith("\n\n"))
-        self.assertEqual({"type": "log", "message": "hello"}, json.loads(event.removeprefix("data: ").strip()))
+        self.assertEqual(
+            {"type": "log", "message": "hello", "created_at": "2026-06-21T09:30:00"},
+            json.loads(event.removeprefix("data: ").strip()),
+        )
 
     @unittest.skipUnless(HAS_TASK_ROUTE_DEPS, "task route dependencies are not installed")
     def test_task_status_payload_keeps_existing_fields(self):
         from backend.routes.task_routes import _task_status_payload
 
-        payload = _task_status_payload({"status": "running", "message": "处理中", "extra": "ignored"})
+        task = {
+            "task_id": "task-1",
+            "type": "a_share_analysis",
+            "status": "running",
+            "message": "处理中",
+            "display_name": "股票推荐池",
+            "cancellable": False,
+        }
 
-        self.assertEqual({"type": "status", "status": "running", "message": "处理中"}, payload)
+        payload = _task_status_payload(task)
+
+        self.assertEqual("status", payload["type"])
+        self.assertEqual("running", payload["status"])
+        self.assertEqual("处理中", payload["message"])
+        self.assertEqual(task, payload["task"])
 
     @unittest.skipUnless(HAS_TASK_ROUTE_DEPS, "task route dependencies are not installed")
     def test_task_stream_payload_helpers_keep_existing_shapes(self):

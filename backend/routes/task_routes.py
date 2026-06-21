@@ -6,6 +6,7 @@ import queue
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Query
+from fastapi.encoders import jsonable_encoder
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
@@ -27,11 +28,11 @@ class TaskCleanupRequest(BaseModel):
 
 
 def _sse_event(payload: dict) -> str:
-    return f"data: {json.dumps(payload)}\n\n"
+    return f"data: {json.dumps(jsonable_encoder(payload))}\n\n"
 
 
 def _task_status_payload(task: dict) -> dict:
-    return {"type": "status", "status": task["status"], "message": task["message"]}
+    return {"type": "status", "status": task["status"], "message": task["message"], "task": task}
 
 
 def _task_log_payload(message: str) -> dict:

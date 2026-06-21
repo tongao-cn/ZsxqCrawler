@@ -14,6 +14,7 @@ interface TaskStreamMessage {
   type?: 'log' | 'status' | 'heartbeat';
   message?: string;
   status?: Task['status'];
+  task?: Task;
 }
 
 interface UseTaskStreamOptions {
@@ -34,6 +35,13 @@ function isTerminalTaskStatus(status: Task['status']) {
 }
 
 function taskFromStatusEvent(taskId: string, data: TaskStreamMessage): Task {
+  if (data.task) {
+    return {
+      ...data.task,
+      status: data.task.status || data.status || 'pending',
+      message: data.task.message || data.message || '',
+    };
+  }
   return {
     task_id: taskId,
     type: '',
@@ -53,6 +61,8 @@ function mergeTaskStatus(taskId: string, statusTask: Task, previous: Task | null
     result: statusTask.result ?? previous?.result,
     created_at: statusTask.created_at || previous?.created_at || '',
     updated_at: statusTask.updated_at || previous?.updated_at || '',
+    display_name: statusTask.display_name ?? previous?.display_name,
+    cancellable: statusTask.cancellable ?? previous?.cancellable,
     group_id: statusTask.group_id ?? previous?.group_id,
     ingestion_lock_key: statusTask.ingestion_lock_key ?? previous?.ingestion_lock_key,
   };
@@ -243,7 +253,7 @@ export function useTaskStream(
 
         const statusTask = taskFromStatusEvent(taskId, data);
         if (isTerminalTaskStatus(data.status)) {
-          void handleTerminalTask(statusTask, true);
+          void handleTerminalTask(statusTask, !data.task);
           return;
         }
         handleTaskStatus(statusTask);
