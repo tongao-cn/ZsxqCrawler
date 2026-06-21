@@ -6,6 +6,8 @@ export interface Task {
   result?: any;
   created_at: string;
   updated_at: string;
+  display_name?: string;
+  cancellable?: boolean;
   group_id?: string | number | null;
   ingestion_lock_key?: string | null;
 }

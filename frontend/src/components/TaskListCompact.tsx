@@ -29,48 +29,15 @@ function normalizeGroupId(value?: string | number | null) {
   return text || null;
 }
 
-function getTaskTypeLabel(type: string) {
-  switch (type) {
-    case 'crawl_latest':
-    case 'crawl_latest_until_complete':
-      return '获取最新';
-    case 'crawl_historical':
-      return '历史采集';
-    case 'crawl_incremental':
-      return '增量采集';
-    case 'crawl_all':
-      return '全量采集';
-    case 'crawl_time_range':
-      return '时间区间';
-    case 'collect_files':
-      return '收集文件';
-    case 'download_files':
-      return '下载文件';
-    case 'download_filtered_files':
-      return '筛选文件下载';
-    case 'download_selected_files':
-      return '选中文件下载';
-    case 'download_single_file':
-      return '单文件下载';
-    case 'analyze_file':
-      return '文件分析';
-    case 'analyze_files':
-      return '批量文件分析';
-    case 'sync_files_from_topics':
-      return '同步文件';
-    case 'columns_fetch':
-      return '专栏采集';
-    case 'a_share_analysis':
-      return '股票推荐池';
-    case 'stock_topic_analysis':
-      return '个股分析';
-    case 'stock_topic_analysis_batch':
-      return '批量个股分析';
-    case 'stock_question_analysis':
-      return 'A股问答';
-    default:
-      return type;
+function getTaskDisplayName(task: Task) {
+  if (task.display_name) {
+    return task.display_name;
   }
+  return task.type === 'crawl_latest' ? '获取最新' : task.type;
+}
+
+function canStopTask(task: Task) {
+  return isActiveTask(task) && task.cancellable !== false;
 }
 
 function getStatusBadge(task: Task) {
@@ -254,7 +221,7 @@ export default function TaskListCompact({
                     className="min-w-0 text-left"
                     onClick={() => onSelectTask?.(task.task_id)}
                   >
-                    <div className="truncate font-medium text-gray-900">{getTaskTypeLabel(task.type)}</div>
+                    <div className="truncate font-medium text-gray-900">{getTaskDisplayName(task)}</div>
                     <div className="truncate font-mono text-xs text-gray-500">{task.task_id}</div>
                     <div className="truncate text-xs text-gray-500">群组: {normalizeGroupId(task.group_id) || '-'}</div>
                   </button>
@@ -271,7 +238,7 @@ export default function TaskListCompact({
                     <div>更新 {formatTime(task.updated_at)}</div>
                   </div>
                   <div className="flex items-start justify-end">
-                    {isActiveTask(task) ? (
+                    {canStopTask(task) ? (
                       <Button
                         variant="destructive"
                         size="sm"

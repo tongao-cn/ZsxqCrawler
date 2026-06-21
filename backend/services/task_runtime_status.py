@@ -4,7 +4,11 @@ from datetime import datetime
 from typing import Any, Dict, Optional
 
 from backend.services.a_share_analysis_service import normalize_group_id
-from backend.services.workflow_registry import INGESTION_LOCK_CATEGORY, INGESTION_WORKFLOW_TYPES
+from backend.services.workflow_registry import (
+    INGESTION_LOCK_CATEGORY,
+    INGESTION_WORKFLOW_TYPES,
+    get_workflow_spec,
+)
 
 
 ACTIVE_TASK_STATUSES = {"pending", "running"}
@@ -31,6 +35,11 @@ def _normalize_task(task: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
         return None
     normalized = dict(task)
     normalized["status"] = _normalize_task_status(str(normalized.get("status") or ""))
+    task_type = str(normalized.get("type") or "")
+    if task_type:
+        spec = get_workflow_spec(task_type)
+        normalized["display_name"] = spec.display_name if spec else task_type
+        normalized["cancellable"] = spec is None or spec.cancellable
     return normalized
 
 

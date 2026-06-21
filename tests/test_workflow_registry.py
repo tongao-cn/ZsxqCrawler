@@ -57,6 +57,7 @@ class WorkflowRegistryTests(unittest.TestCase):
         from backend.services.workflow_registry import get_workflow_spec
 
         download_spec = get_workflow_spec("download_selected_files")
+        self.assertEqual("选中文件下载", download_spec.display_name)
         self.assertEqual("group", download_spec.scope)
         self.assertEqual("ingestion", download_spec.lock_category)
         self.assertTrue(download_spec.cancellable)
@@ -64,6 +65,7 @@ class WorkflowRegistryTests(unittest.TestCase):
         self.assertEqual("none", download_spec.checkpoint_policy)
 
         a_share_spec = get_workflow_spec("a_share_analysis")
+        self.assertEqual("股票推荐池", a_share_spec.display_name)
         self.assertEqual("optional_group", a_share_spec.scope)
         self.assertIsNone(a_share_spec.lock_category)
         self.assertFalse(a_share_spec.cancellable)

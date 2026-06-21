@@ -129,8 +129,10 @@ class TaskRuntimeHelperTests(unittest.TestCase):
         self.assertTrue(_is_runtime_terminal_status("stopped"))
         self.assertFalse(_is_runtime_terminal_status("running"))
 
-        normalized = _normalize_task({"task_id": "task-1", "status": "stopped"})
+        normalized = _normalize_task({"task_id": "task-1", "type": "a_share_analysis", "status": "stopped"})
         self.assertEqual("cancelled", normalized["status"])
+        self.assertEqual("股票推荐池", normalized["display_name"])
+        self.assertFalse(normalized["cancellable"])
 
     def test_get_task_state_prefers_persisted_task_over_memory_fallback(self):
         from backend.services import task_runtime
