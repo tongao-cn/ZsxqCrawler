@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 from typing import Optional
 
-from fastapi import APIRouter, BackgroundTasks, HTTPException
+from fastapi import APIRouter, HTTPException
 
 from backend.schemas.files import (
     FileAIAnalysisBatchRequest,
@@ -90,7 +90,7 @@ async def _created_file_analysis(group_id: str, file_id: int, force: bool) -> di
 
 
 @router.post("/collect/{group_id}")
-async def collect_files(group_id: str, request: FileCollectRequest, background_tasks: BackgroundTasks):
+async def collect_files(group_id: str, request: FileCollectRequest):
     """收集文件列表"""
     try:
         return create_file_collect_task(group_id, request)
@@ -101,7 +101,7 @@ async def collect_files(group_id: str, request: FileCollectRequest, background_t
 
 
 @router.post("/download/{group_id}")
-async def download_files(group_id: str, request: FileDownloadRequest, background_tasks: BackgroundTasks):
+async def download_files(group_id: str, request: FileDownloadRequest):
     """下载文件"""
     try:
         return create_file_download_task(group_id, request)
@@ -115,7 +115,6 @@ async def download_files(group_id: str, request: FileDownloadRequest, background
 async def download_single_file(
     group_id: str,
     file_id: int,
-    background_tasks: BackgroundTasks,
     file_name: Optional[str] = None,
     file_size: Optional[int] = None,
 ):
@@ -129,7 +128,7 @@ async def download_single_file(
 
 
 @router.post("/download-selected/{group_id}")
-async def download_selected_files(group_id: str, request: FileIdListRequest, background_tasks: BackgroundTasks):
+async def download_selected_files(group_id: str, request: FileIdListRequest):
     """下载指定文件列表。"""
     try:
         return create_selected_file_download_task(group_id, request)
@@ -143,7 +142,6 @@ async def download_selected_files(group_id: str, request: FileIdListRequest, bac
 async def download_filtered_files(
     group_id: str,
     request: FileFilteredDownloadRequest,
-    background_tasks: BackgroundTasks,
 ):
     """下载当前筛选条件匹配的文件。"""
     try:
@@ -199,7 +197,6 @@ async def create_file_analysis_task(
     group_id: str,
     file_id: int,
     request: FileAIAnalysisRequest,
-    background_tasks: BackgroundTasks,
 ):
     """创建单文件 AI 分析后台任务。"""
     try:
@@ -216,7 +213,6 @@ async def create_file_analysis_task(
 async def create_selected_file_analysis_task(
     group_id: str,
     request: FileAIAnalysisBatchRequest,
-    background_tasks: BackgroundTasks,
 ):
     """创建批量文件 AI 分析后台任务。"""
     try:
@@ -251,7 +247,7 @@ async def clear_file_database(group_id: str):
 
 
 @router.post("/sync-from-topics/{group_id}")
-async def sync_files_from_topics(group_id: str, background_tasks: BackgroundTasks):
+async def sync_files_from_topics(group_id: str):
     """从话题库 topic_files 回填/重建文件库记录。"""
     try:
         return create_sync_files_from_topics_task(group_id)

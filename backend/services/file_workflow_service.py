@@ -91,7 +91,6 @@ def _fail_file_task(
 
 
 def _enqueue_file_task(
-    _background_tasks: Any,
     task_type: str,
     description: str,
     task_func,

@@ -59,14 +59,6 @@ from backend.storage.zsxq_file_database import (
 )
 
 
-class FakeBackgroundTasks:
-    def __init__(self):
-        self.calls = []
-
-    def add_task(self, func, *args):
-        self.calls.append((func, args))
-
-
 def fake_task(*args):
     return args
 
@@ -221,14 +213,11 @@ class FakeImageCacheManager:
 
 class FileRoutesHelperTests(unittest.TestCase):
     def test_enqueue_file_task_creates_task_and_schedules_callback(self):
-        background_tasks = FakeBackgroundTasks()
-
         with patch(
             "backend.services.file_workflow_service.launch_task_recipe",
             return_value={"task_id": "task-1", "message": "已创建"},
         ) as launch:
             response = _enqueue_file_task(
-                background_tasks,
                 "analyze_files",
                 "测试文件任务",
                 fake_task,
@@ -246,17 +235,13 @@ class FileRoutesHelperTests(unittest.TestCase):
         self.assertIsNone(recipe.group_id)
         self.assertEqual("已创建", recipe.message)
         self.assertEqual({"task_id": "task-1", "message": "已创建"}, response)
-        self.assertEqual([], background_tasks.calls)
 
     def test_enqueue_file_task_uses_ingestion_lock_when_requested(self):
-        background_tasks = FakeBackgroundTasks()
-
         with patch(
             "backend.services.file_workflow_service.launch_task_recipe",
             return_value={"task_id": "task-1", "message": "任务已创建，正在后台执行"},
         ) as launch:
             response = _enqueue_file_task(
-                background_tasks,
                 "collect_files",
                 "收集文件列表",
                 fake_task,
@@ -275,7 +260,6 @@ class FileRoutesHelperTests(unittest.TestCase):
         self.assertEqual("任务已创建，正在后台执行", recipe.message)
         self.assertFalse(recipe.prepend_group_id_to_args)
         self.assertEqual({"task_id": "task-1", "message": "任务已创建，正在后台执行"}, response)
-        self.assertEqual([], background_tasks.calls)
 
     def test_create_file_collect_task_uses_ingestion_launch_recipe(self):
         with patch(
@@ -464,14 +448,11 @@ class FileRoutesHelperTests(unittest.TestCase):
         self.assertEqual({"task_id": "task-1", "message": "从话题同步文件记录任务已创建"}, response)
 
     def test_enqueue_file_task_can_attach_group_metadata(self):
-        background_tasks = FakeBackgroundTasks()
-
         with patch(
             "backend.services.file_workflow_service.launch_task_recipe",
             return_value={"task_id": "task-1", "message": "任务已创建，正在后台执行"},
         ) as launch:
             response = _enqueue_file_task(
-                background_tasks,
                 "analyze_files",
                 "分析文件",
                 fake_task,
@@ -489,46 +470,39 @@ class FileRoutesHelperTests(unittest.TestCase):
         self.assertEqual("group-1", recipe.group_id)
         self.assertEqual("任务已创建，正在后台执行", recipe.message)
         self.assertEqual({"task_id": "task-1", "message": "任务已创建，正在后台执行"}, response)
-        self.assertEqual([], background_tasks.calls)
 
     def test_collect_files_delegates_to_collect_launch_recipe(self):
         from backend.routes.file_routes import collect_files
         from backend.schemas.files import FileCollectRequest
 
-        background_tasks = FakeBackgroundTasks()
         request = FileCollectRequest()
 
         with patch(
             "backend.routes.file_routes.create_file_collect_task",
             return_value={"task_id": "task-1", "message": "ok"},
         ) as create_task:
-            response = self._run_async(collect_files("group-1", request, background_tasks))
+            response = self._run_async(collect_files("group-1", request))
 
         self.assertEqual({"task_id": "task-1", "message": "ok"}, response)
         create_task.assert_called_once_with("group-1", request)
-        self.assertEqual([], background_tasks.calls)
 
     def test_download_files_delegates_to_download_launch_recipe(self):
         from backend.routes.file_routes import download_files
         from backend.schemas.files import FileDownloadRequest
 
-        background_tasks = FakeBackgroundTasks()
         request = FileDownloadRequest()
 
         with patch(
             "backend.routes.file_routes.create_file_download_task",
             return_value={"task_id": "task-1", "message": "ok"},
         ) as create_task:
-            response = self._run_async(download_files("group-1", request, background_tasks))
+            response = self._run_async(download_files("group-1", request))
 
         self.assertEqual({"task_id": "task-1", "message": "ok"}, response)
         create_task.assert_called_once_with("group-1", request)
-        self.assertEqual([], background_tasks.calls)
 
     def test_download_single_file_delegates_to_single_download_launch_recipe(self):
         from backend.routes.file_routes import download_single_file
-
-        background_tasks = FakeBackgroundTasks()
 
         with patch(
             "backend.routes.file_routes.create_single_file_download_task",
@@ -538,7 +512,6 @@ class FileRoutesHelperTests(unittest.TestCase):
                 download_single_file(
                     "group-1",
                     123,
-                    background_tasks,
                     file_name="file.pdf",
                     file_size=456,
                 )
@@ -546,13 +519,11 @@ class FileRoutesHelperTests(unittest.TestCase):
 
         self.assertEqual({"task_id": "task-1", "message": "ok"}, response)
         create_task.assert_called_once_with("group-1", 123, "file.pdf", 456)
-        self.assertEqual([], background_tasks.calls)
 
     def test_download_selected_files_delegates_to_selected_download_launch_recipe(self):
         from backend.routes.file_routes import download_selected_files
         from backend.schemas.files import FileIdListRequest
 
-        background_tasks = FakeBackgroundTasks()
         request = FileIdListRequest(file_ids=[123, 456])
 
         with patch(
@@ -563,19 +534,16 @@ class FileRoutesHelperTests(unittest.TestCase):
                 download_selected_files(
                     "group-1",
                     request,
-                    background_tasks,
                 )
             )
 
         self.assertEqual({"task_id": "task-1", "message": "ok"}, response)
         create_task.assert_called_once_with("group-1", request)
-        self.assertEqual([], background_tasks.calls)
 
     def test_download_filtered_files_delegates_to_filtered_download_launch_recipe(self):
         from backend.routes.file_routes import download_filtered_files
         from backend.schemas.files import FileFilteredDownloadRequest
 
-        background_tasks = FakeBackgroundTasks()
         request = FileFilteredDownloadRequest(status="failed", search="pdf", max_files=10)
 
         with patch(
@@ -586,34 +554,27 @@ class FileRoutesHelperTests(unittest.TestCase):
                 download_filtered_files(
                     "group-1",
                     request,
-                    background_tasks,
                 )
             )
 
         self.assertEqual({"task_id": "task-1", "message": "ok"}, response)
         create_task.assert_called_once_with("group-1", request)
-        self.assertEqual([], background_tasks.calls)
 
     def test_sync_files_from_topics_is_enqueued(self):
         from backend.routes.file_routes import sync_files_from_topics
-
-        background_tasks = FakeBackgroundTasks()
 
         with patch(
             "backend.routes.file_routes.create_sync_files_from_topics_task",
             return_value={"task_id": "task-1", "message": "ok"},
         ) as create_task:
-            response = self._run_async(sync_files_from_topics("group-1", background_tasks))
+            response = self._run_async(sync_files_from_topics("group-1"))
 
         self.assertEqual({"task_id": "task-1", "message": "ok"}, response)
         create_task.assert_called_once_with("group-1")
-        self.assertEqual([], background_tasks.calls)
 
     def test_file_analysis_task_attaches_group_metadata(self):
         from backend.routes.file_routes import create_file_analysis_task
         from backend.schemas.files import FileAIAnalysisRequest
-
-        background_tasks = FakeBackgroundTasks()
 
         with (
             patch(
@@ -626,19 +587,16 @@ class FileRoutesHelperTests(unittest.TestCase):
                     "group-1",
                     123,
                     FileAIAnalysisRequest(force=True),
-                    background_tasks,
                 )
             )
 
         self.assertEqual({"task_id": "task-1", "message": "ok"}, response)
         create_task.assert_called_once_with("group-1", 123, True)
-        self.assertEqual([], background_tasks.calls)
 
     def test_selected_file_analysis_task_attaches_group_metadata(self):
         from backend.routes.file_routes import create_selected_file_analysis_task
         from backend.schemas.files import FileAIAnalysisBatchRequest
 
-        background_tasks = FakeBackgroundTasks()
         request = FileAIAnalysisBatchRequest(file_ids=[123, 456], force=False)
 
         with (
@@ -651,13 +609,11 @@ class FileRoutesHelperTests(unittest.TestCase):
                 create_selected_file_analysis_task(
                     "group-1",
                     request,
-                    background_tasks,
                 )
             )
 
         self.assertEqual({"task_id": "task-1", "message": "ok"}, response)
         create_task.assert_called_once_with("group-1", request)
-        self.assertEqual([], background_tasks.calls)
 
     def test_file_route_error_preserves_status_and_detail_format(self):
         from backend.routes import file_routes
@@ -698,53 +654,52 @@ class FileRoutesHelperTests(unittest.TestCase):
             FileIdListRequest,
         )
 
-        background_tasks = FakeBackgroundTasks()
         cases = [
             (
                 file_routes.collect_files,
-                ("group-1", FileCollectRequest(), background_tasks),
+                ("group-1", FileCollectRequest()),
                 {},
                 "创建文件收集任务失败: boom",
             ),
             (
                 file_routes.download_files,
-                ("group-1", FileDownloadRequest(), background_tasks),
+                ("group-1", FileDownloadRequest()),
                 {},
                 "创建文件下载任务失败: boom",
             ),
             (
                 file_routes.download_single_file,
-                ("group-1", 123, background_tasks),
+                ("group-1", 123),
                 {"file_name": "file.pdf", "file_size": 456},
                 "创建单个文件下载任务失败: boom",
             ),
             (
                 file_routes.download_selected_files,
-                ("group-1", FileIdListRequest(file_ids=[123, 456]), background_tasks),
+                ("group-1", FileIdListRequest(file_ids=[123, 456])),
                 {},
                 "创建选中文件下载任务失败: boom",
             ),
             (
                 file_routes.download_filtered_files,
-                ("group-1", FileFilteredDownloadRequest(status="failed", search="pdf"), background_tasks),
+                ("group-1", FileFilteredDownloadRequest(status="failed", search="pdf")),
                 {},
                 "创建筛选结果下载任务失败: boom",
             ),
             (
                 file_routes.create_file_analysis_task,
-                ("group-1", 123, FileAIAnalysisRequest(force=True), background_tasks),
+                ("group-1", 123, FileAIAnalysisRequest(force=True)),
                 {},
                 "创建文件 AI 分析任务失败: boom",
             ),
             (
                 file_routes.create_selected_file_analysis_task,
-                ("group-1", FileAIAnalysisBatchRequest(file_ids=[123, 456]), background_tasks),
+                ("group-1", FileAIAnalysisBatchRequest(file_ids=[123, 456])),
                 {},
                 "创建批量文件 AI 分析任务失败: boom",
             ),
             (
                 file_routes.sync_files_from_topics,
-                ("group-1", background_tasks),
+                ("group-1",),
                 {},
                 "创建同步文件记录任务失败: boom",
             ),
@@ -777,9 +732,6 @@ class FileRoutesHelperTests(unittest.TestCase):
 
                 self.assertEqual(500, raised.exception.status_code)
                 self.assertEqual(expected_detail, raised.exception.detail)
-
-        self.assertEqual([], background_tasks.calls)
-
     def test_file_task_routes_preserve_http_exception_passthrough(self):
         from backend.routes import file_routes
         from backend.schemas.files import (
@@ -791,36 +743,35 @@ class FileRoutesHelperTests(unittest.TestCase):
             FileIdListRequest,
         )
 
-        background_tasks = FakeBackgroundTasks()
         cases = [
-            (file_routes.collect_files, ("group-1", FileCollectRequest(), background_tasks), {}),
-            (file_routes.download_files, ("group-1", FileDownloadRequest(), background_tasks), {}),
+            (file_routes.collect_files, ("group-1", FileCollectRequest()), {}),
+            (file_routes.download_files, ("group-1", FileDownloadRequest()), {}),
             (
                 file_routes.download_single_file,
-                ("group-1", 123, background_tasks),
+                ("group-1", 123),
                 {"file_name": "file.pdf", "file_size": 456},
             ),
             (
                 file_routes.download_selected_files,
-                ("group-1", FileIdListRequest(file_ids=[123, 456]), background_tasks),
+                ("group-1", FileIdListRequest(file_ids=[123, 456])),
                 {},
             ),
             (
                 file_routes.download_filtered_files,
-                ("group-1", FileFilteredDownloadRequest(status="failed", search="pdf"), background_tasks),
+                ("group-1", FileFilteredDownloadRequest(status="failed", search="pdf")),
                 {},
             ),
             (
                 file_routes.create_file_analysis_task,
-                ("group-1", 123, FileAIAnalysisRequest(force=True), background_tasks),
+                ("group-1", 123, FileAIAnalysisRequest(force=True)),
                 {},
             ),
             (
                 file_routes.create_selected_file_analysis_task,
-                ("group-1", FileAIAnalysisBatchRequest(file_ids=[123, 456]), background_tasks),
+                ("group-1", FileAIAnalysisBatchRequest(file_ids=[123, 456])),
                 {},
             ),
-            (file_routes.sync_files_from_topics, ("group-1", background_tasks), {}),
+            (file_routes.sync_files_from_topics, ("group-1",), {}),
         ]
 
         for route, route_args, route_kwargs in cases:
@@ -850,9 +801,6 @@ class FileRoutesHelperTests(unittest.TestCase):
                 self.assertIs(original_error, raised.exception)
                 self.assertEqual(409, raised.exception.status_code)
                 self.assertEqual("conflict", raised.exception.detail)
-
-        self.assertEqual([], background_tasks.calls)
-
     def test_file_analysis_routes_preserve_success_payloads(self):
         from backend.routes import file_routes
         from backend.schemas.files import FileAIAnalysisRequest
@@ -1216,7 +1164,6 @@ class FileRoutesHelperTests(unittest.TestCase):
         from backend.services.task_launch import TaskLaunchConflict
 
         existing = {"task_id": "task-old", "type": "crawl_latest", "status": "running"}
-        background_tasks = FakeBackgroundTasks()
 
         with patch(
             "backend.services.file_workflow_service.launch_task_recipe",
@@ -1224,7 +1171,6 @@ class FileRoutesHelperTests(unittest.TestCase):
         ):
             with self.assertRaises(TaskLaunchConflict) as raised:
                 _enqueue_file_task(
-                    background_tasks,
                     "collect_files",
                     "收集文件列表",
                     fake_task,
@@ -1233,7 +1179,6 @@ class FileRoutesHelperTests(unittest.TestCase):
                 )
 
         self.assertEqual(existing, raised.exception.existing)
-        self.assertEqual([], background_tasks.calls)
 
     def test_fail_file_task_logs_and_updates_failure(self):
         with (
