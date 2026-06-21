@@ -11,13 +11,15 @@ from backend.services.file_downloader_runtime import (
     _rollback_downloader_file_db,
     _safe_remove_file_downloader,
 )
-from backend.services.file_task_lifecycle import (
-    fail_file_task as _fail_file_task_impl,
-    file_task_stopped_after_init as _file_task_stopped_after_init_impl,
-    finish_file_task as _finish_file_task_impl,
-)
 from backend.services.file_local_paths import download_target_path
-from backend.services.task_runtime import add_task_log, is_task_stopped, update_task
+from backend.services.task_runtime import (
+    WorkflowCompletionDecision,
+    add_task_log,
+    finish_workflow,
+    is_task_stopped,
+    run_workflow,
+    skip_workflow_completion,
+)
 
 
 def _fail_file_task(
@@ -25,24 +27,22 @@ def _fail_file_task(
     log_message: str,
     task_message: str,
     result: Optional[Dict[str, Any]] = None,
-) -> None:
-    _fail_file_task_impl(
-        task_id,
-        log_message,
+) -> WorkflowCompletionDecision:
+    if is_task_stopped(task_id):
+        return skip_workflow_completion()
+    add_task_log(task_id, f"❌ {log_message}")
+    return finish_workflow(
+        "failed",
         task_message,
         result,
-        is_stopped=is_task_stopped,
-        add_log=add_task_log,
-        update=update_task,
     )
 
 
 def _file_task_stopped_after_init(task_id: str) -> bool:
-    return _file_task_stopped_after_init_impl(
-        task_id,
-        is_stopped=is_task_stopped,
-        add_log=add_task_log,
-    )
+    if is_task_stopped(task_id):
+        add_task_log(task_id, "🛑 任务在初始化过程中被停止")
+        return True
+    return False
 
 
 def _build_single_download_fallback_info(
@@ -98,33 +98,21 @@ def _complete_successful_single_file_download(
     downloader: ZSXQFileDownloader,
     file_id: int,
     file_info: Dict[str, Dict[str, Any]],
-) -> None:
+) -> WorkflowCompletionDecision:
     add_task_log(task_id, "✅ 文件下载成功")
     local_path = _single_file_download_local_path(downloader, file_id, file_info)
     downloader.file_db.update_file_download_status(file_id, "completed", local_path)
-    _finish_file_task_impl(task_id, "completed", "下载成功", update=update_task)
+    return finish_workflow("completed", "下载成功")
 
 
-def _complete_skipped_single_file_download(task_id: str) -> None:
-    _finish_file_task_impl(
-        task_id,
-        "completed",
-        "文件已存在",
-        log_message="✅ 文件已存在，跳过下载",
-        add_log=add_task_log,
-        update=update_task,
-    )
+def _complete_skipped_single_file_download(task_id: str) -> WorkflowCompletionDecision:
+    add_task_log(task_id, "✅ 文件已存在，跳过下载")
+    return finish_workflow("completed", "文件已存在")
 
 
-def _complete_failed_single_file_download(task_id: str) -> None:
-    _finish_file_task_impl(
-        task_id,
-        "failed",
-        "下载失败",
-        log_message="❌ 文件下载失败",
-        add_log=add_task_log,
-        update=update_task,
-    )
+def _complete_failed_single_file_download(task_id: str) -> WorkflowCompletionDecision:
+    add_task_log(task_id, "❌ 文件下载失败")
+    return finish_workflow("failed", "下载失败")
 
 
 def _complete_single_file_download(
@@ -133,13 +121,12 @@ def _complete_single_file_download(
     file_id: int,
     file_info: Dict[str, Dict[str, Any]],
     result: Any,
-) -> None:
+) -> WorkflowCompletionDecision:
     if result == "skipped":
-        _complete_skipped_single_file_download(task_id)
-    elif result:
-        _complete_successful_single_file_download(task_id, downloader, file_id, file_info)
-    else:
-        _complete_failed_single_file_download(task_id)
+        return _complete_skipped_single_file_download(task_id)
+    if result:
+        return _complete_successful_single_file_download(task_id, downloader, file_id, file_info)
+    return _complete_failed_single_file_download(task_id)
 
 
 def _download_and_complete_single_file(
@@ -147,25 +134,24 @@ def _download_and_complete_single_file(
     downloader: ZSXQFileDownloader,
     file_id: int,
     file_info: Dict[str, Dict[str, Any]],
-) -> None:
+) -> WorkflowCompletionDecision:
     result = downloader.download_file(file_info)
-    _complete_single_file_download(task_id, downloader, file_id, file_info, result)
+    return _complete_single_file_download(task_id, downloader, file_id, file_info, result)
 
 
-def run_single_file_download_task_with_info(
+def _run_single_file_download(
     task_id: str,
     group_id: str,
     file_id: int,
-    file_name: Optional[str] = None,
-    file_size: Optional[int] = None,
-):
+    file_name: Optional[str],
+    file_size: Optional[int],
+) -> WorkflowCompletionDecision:
     downloader = None
     try:
-        update_task(task_id, "running", f"开始下载文件 (ID: {file_id})...")
         downloader = _create_file_downloader(task_id, group_id)
 
         if _file_task_stopped_after_init(task_id):
-            return
+            return skip_workflow_completion()
 
         file_info = _resolve_single_download_file_info(
             task_id,
@@ -175,9 +161,25 @@ def run_single_file_download_task_with_info(
             file_name,
             file_size,
         )
-        _download_and_complete_single_file(task_id, downloader, file_id, file_info)
+        return _download_and_complete_single_file(task_id, downloader, file_id, file_info)
     except Exception as e:
         _rollback_downloader_file_db(downloader)
-        _fail_file_task(task_id, f"任务执行失败: {e}", f"任务失败: {e}")
+        return _fail_file_task(task_id, f"任务执行失败: {e}", f"任务失败: {e}")
     finally:
         _safe_remove_file_downloader(task_id)
+
+
+def run_single_file_download_task_with_info(
+    task_id: str,
+    group_id: str,
+    file_id: int,
+    file_name: Optional[str] = None,
+    file_size: Optional[int] = None,
+):
+    run_workflow(
+        task_id,
+        running_message=f"开始下载文件 (ID: {file_id})...",
+        completed_message="下载成功",
+        failure_label="单文件下载",
+        work=lambda: _run_single_file_download(task_id, group_id, file_id, file_name, file_size),
+    )

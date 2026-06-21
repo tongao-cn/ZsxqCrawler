@@ -138,6 +138,7 @@ class FakeSingleFileDownloadTaskFileDb:
         self.cursor = FakeSingleFileDownloadTaskCursor(row)
         self.status_updates = []
         self.record_calls = []
+        self.conn = object()
 
     def get_download_file_record(self, file_id, group_id=None):
         self.record_calls.append((file_id, group_id))
@@ -2534,13 +2535,19 @@ class FileRoutesHelperTests(unittest.TestCase):
         self.assertEqual(skip_workflow_completion(), result)
 
     def test_run_single_file_download_task_uses_database_file_info_and_marks_completed(self):
+        from backend.services.task_runtime import finish_workflow
+
         downloader = FakeSingleFileDownloadTaskDownloader(
             row=(123, "Db File.pdf", 456, 7),
             download_result=True,
         )
 
-        _create_downloader, update_task, add_task_log, safe_remove = self._run_single_file_download_case(downloader)
+        _create_downloader, run_workflow, decision, add_task_log, safe_remove = self._run_single_file_download_case(downloader)
 
+        self.assertEqual(("task-1",), run_workflow.call_args.args)
+        self.assertEqual("开始下载文件 (ID: 123)...", run_workflow.call_args.kwargs["running_message"])
+        self.assertEqual("下载成功", run_workflow.call_args.kwargs["completed_message"])
+        self.assertEqual("单文件下载", run_workflow.call_args.kwargs["failure_label"])
         self.assertEqual([(123, "123")], downloader.file_db.record_calls)
         self.assertEqual([], downloader.file_db.cursor.executed)
         self.assertEqual(
@@ -2552,10 +2559,12 @@ class FileRoutesHelperTests(unittest.TestCase):
             ("task-1", "📄 从数据库获取文件信息: Db File.pdf (456 bytes)"),
             [call.args for call in add_task_log.call_args_list],
         )
-        update_task.assert_any_call("task-1", "completed", "下载成功")
+        self.assertEqual(finish_workflow("completed", "下载成功"), decision)
         safe_remove.assert_called_once_with("task-1")
 
     def test_complete_successful_single_file_download_updates_status_with_safe_local_path(self):
+        from backend.services.task_runtime import finish_workflow
+
         downloader = FakeSingleFileDownloadTaskDownloader(row=None, download_result=True)
         file_info = {
             "file": {
@@ -2568,18 +2577,19 @@ class FileRoutesHelperTests(unittest.TestCase):
 
         with (
             patch("backend.services.file_single_download_workflow.add_task_log") as add_task_log,
-            patch("backend.services.file_single_download_workflow.update_task") as update_task,
         ):
-            _complete_successful_single_file_download("task-1", downloader, 123, file_info)
+            decision = _complete_successful_single_file_download("task-1", downloader, 123, file_info)
 
         add_task_log.assert_called_once_with("task-1", "✅ 文件下载成功")
         self.assertEqual([(123, "completed", r"C:\downloads\Report2026.pdf")], downloader.file_db.status_updates)
-        update_task.assert_called_once_with("task-1", "completed", "下载成功")
+        self.assertEqual(finish_workflow("completed", "下载成功"), decision)
 
     def test_run_single_file_download_task_uses_request_info_fallback_for_skipped_file(self):
+        from backend.services.task_runtime import finish_workflow
+
         downloader = FakeSingleFileDownloadTaskDownloader(row=None, download_result="skipped")
 
-        _create_downloader, update_task, add_task_log, safe_remove = self._run_single_file_download_case(
+        _create_downloader, _run_workflow, decision, add_task_log, safe_remove = self._run_single_file_download_case(
             downloader,
             file_name="Request File.pdf",
             file_size=456,
@@ -2594,13 +2604,15 @@ class FileRoutesHelperTests(unittest.TestCase):
             ("task-1", "📄 文件库未命中，使用请求中的文件信息: Request File.pdf (456 bytes)"),
             [call.args for call in add_task_log.call_args_list],
         )
-        update_task.assert_any_call("task-1", "completed", "文件已存在")
+        self.assertEqual(finish_workflow("completed", "文件已存在"), decision)
         safe_remove.assert_called_once_with("task-1")
 
     def test_run_single_file_download_task_uses_file_id_fallback_for_failed_file(self):
+        from backend.services.task_runtime import finish_workflow
+
         downloader = FakeSingleFileDownloadTaskDownloader(row=None, download_result=False)
 
-        _create_downloader, update_task, add_task_log, safe_remove = self._run_single_file_download_case(downloader)
+        _create_downloader, _run_workflow, decision, add_task_log, safe_remove = self._run_single_file_download_case(downloader)
 
         self.assertEqual(
             [{"file": {"id": 123, "name": "file_123", "size": 0, "download_count": 0}}],
@@ -2611,11 +2623,12 @@ class FileRoutesHelperTests(unittest.TestCase):
             ("task-1", "📄 直接下载文件 ID: 123"),
             [call.args for call in add_task_log.call_args_list],
         )
-        update_task.assert_any_call("task-1", "failed", "下载失败")
+        self.assertEqual(finish_workflow("failed", "下载失败"), decision)
         safe_remove.assert_called_once_with("task-1")
 
     def test_run_single_file_download_task_stops_after_downloader_creation(self):
         from backend.services.file_workflow_service import run_single_file_download_task_with_info
+        from backend.services.task_runtime import skip_workflow_completion
 
         downloader = FakeSingleFileDownloadTaskDownloader(
             row=(123, "Db File.pdf", 456, 7),
@@ -2623,23 +2636,66 @@ class FileRoutesHelperTests(unittest.TestCase):
         )
 
         with (
+            patch("backend.services.file_single_download_workflow.run_workflow") as run_workflow,
             patch("backend.services.file_single_download_workflow._create_file_downloader", return_value=downloader) as create_downloader,
-            patch("backend.services.file_single_download_workflow.update_task") as update_task,
             patch("backend.services.file_single_download_workflow.add_task_log") as add_task_log,
             patch("backend.services.file_single_download_workflow.is_task_stopped", return_value=True),
             patch("backend.services.file_single_download_workflow._safe_remove_file_downloader") as safe_remove,
         ):
             run_single_file_download_task_with_info("task-1", "123", 123)
+            decision = run_workflow.call_args.kwargs["work"]()
 
+        self.assertEqual(("task-1",), run_workflow.call_args.args)
+        self.assertEqual("开始下载文件 (ID: 123)...", run_workflow.call_args.kwargs["running_message"])
         create_downloader.assert_called_once_with("task-1", "123")
         self.assertEqual([], downloader.file_db.cursor.executed)
         self.assertEqual([], downloader.download_calls)
         self.assertEqual([], downloader.file_db.status_updates)
-        self.assertEqual(
-            [("task-1", "running", "开始下载文件 (ID: 123)...")],
-            [call.args for call in update_task.call_args_list],
-        )
         add_task_log.assert_called_once_with("task-1", "🛑 任务在初始化过程中被停止")
+        self.assertEqual(skip_workflow_completion(), decision)
+        safe_remove.assert_called_once_with("task-1")
+
+    def test_run_single_file_download_task_rolls_back_before_failure_decision(self):
+        from backend.services.file_workflow_service import run_single_file_download_task_with_info
+        from backend.services.task_runtime import finish_workflow
+
+        events = []
+        downloader = FakeSingleFileDownloadTaskDownloader(
+            row=(123, "Db File.pdf", 456, 7),
+            download_result=True,
+        )
+
+        def fail_download(_file_info):
+            raise RuntimeError("boom")
+
+        def rollback(rolled_back_downloader):
+            events.append(("rollback", rolled_back_downloader))
+
+        def add_log(task_id, message):
+            events.append(("log", task_id, message))
+
+        downloader.download_file = fail_download
+
+        with (
+            patch("backend.services.file_single_download_workflow.run_workflow") as run_workflow,
+            patch("backend.services.file_single_download_workflow._create_file_downloader", return_value=downloader),
+            patch("backend.services.file_single_download_workflow._rollback_downloader_file_db", side_effect=rollback),
+            patch("backend.services.file_single_download_workflow.add_task_log", side_effect=add_log),
+            patch("backend.services.file_single_download_workflow.is_task_stopped", return_value=False),
+            patch("backend.services.file_single_download_workflow._safe_remove_file_downloader") as safe_remove,
+        ):
+            run_single_file_download_task_with_info("task-1", "123", 123)
+            decision = run_workflow.call_args.kwargs["work"]()
+
+        self.assertEqual(
+            [
+                ("log", "task-1", "📄 从数据库获取文件信息: Db File.pdf (456 bytes)"),
+                ("rollback", downloader),
+                ("log", "task-1", "❌ 任务执行失败: boom"),
+            ],
+            events,
+        )
+        self.assertEqual(finish_workflow("failed", "任务失败: boom"), decision)
         safe_remove.assert_called_once_with("task-1")
 
     def test_load_filtered_download_file_records_keeps_default_search_and_limit_shape(self):
@@ -2940,8 +2996,8 @@ class FileRoutesHelperTests(unittest.TestCase):
         from backend.services.file_workflow_service import run_single_file_download_task_with_info
 
         with (
+            patch("backend.services.file_single_download_workflow.run_workflow") as run_workflow,
             patch("backend.services.file_single_download_workflow._create_file_downloader", return_value=downloader) as create_downloader,
-            patch("backend.services.file_single_download_workflow.update_task") as update_task,
             patch("backend.services.file_single_download_workflow.add_task_log") as add_task_log,
             patch("backend.services.file_single_download_workflow.is_task_stopped", return_value=False),
             patch("backend.services.file_single_download_workflow._safe_remove_file_downloader") as safe_remove,
@@ -2953,8 +3009,9 @@ class FileRoutesHelperTests(unittest.TestCase):
                 file_name=file_name,
                 file_size=file_size,
             )
+            decision = run_workflow.call_args.kwargs["work"]()
 
-        return create_downloader, update_task, add_task_log, safe_remove
+        return create_downloader, run_workflow, decision, add_task_log, safe_remove
 
 
 if __name__ == "__main__":
