@@ -1077,6 +1077,48 @@ class TaskRuntimeHelperTests(unittest.TestCase):
         self.assertEqual([], store.logs)
         self.assertEqual([], store.released_locks)
 
+    def test_fail_task_with_message_unless_stopped_logs_and_fails_unstopped_task(self):
+        from backend.services.task_runtime import fail_task_with_message_unless_stopped
+
+        store = FakeTaskStore()
+        store.tasks["task-1"] = {"task_id": "task-1", "status": "pending", "message": "queued"}
+
+        with patch("backend.services.task_runtime.get_task_store", return_value=store):
+            fail_task_with_message_unless_stopped(
+                "task-1",
+                "会员已过期",
+                {"expired": True},
+                log_message="❌ 会员已过期: expired",
+            )
+
+        self.assertEqual("failed", store.tasks["task-1"]["status"])
+        self.assertEqual("会员已过期", store.tasks["task-1"]["message"])
+        self.assertEqual({"expired": True}, store.tasks["task-1"]["result"])
+        self.assertIn(("task-1", "❌ 会员已过期: expired"), store.logs)
+        self.assertIn(("task-1", "状态更新: 会员已过期"), store.logs)
+        self.assertEqual([("task-1", "failed")], store.released_locks)
+
+    def test_fail_task_with_message_unless_stopped_skips_stopped_task(self):
+        from backend.services.task_runtime import fail_task_with_message_unless_stopped
+
+        store = FakeTaskStore()
+        store.tasks["task-1"] = {"task_id": "task-1", "status": "pending", "message": "queued"}
+        store.stop_flags["task-1"] = True
+
+        with patch("backend.services.task_runtime.get_task_store", return_value=store):
+            fail_task_with_message_unless_stopped(
+                "task-1",
+                "会员已过期",
+                {"expired": True},
+                log_message="❌ 会员已过期: expired",
+            )
+
+        self.assertEqual("pending", store.tasks["task-1"]["status"])
+        self.assertEqual("queued", store.tasks["task-1"]["message"])
+        self.assertNotIn("result", store.tasks["task-1"])
+        self.assertEqual([], store.logs)
+        self.assertEqual([], store.released_locks)
+
     def test_get_task_logs_state_returns_memory_log_copy(self):
         from backend.services import task_runtime
 

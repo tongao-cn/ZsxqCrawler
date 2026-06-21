@@ -40,6 +40,7 @@ from backend.services.official_topic_page_state import (
 from backend.services.task_runtime import (
     add_task_log,
     complete_task_unless_stopped,
+    fail_task_with_message_unless_stopped,
     is_task_stopped,
     register_task_crawler,
     unregister_task_crawler,
@@ -146,8 +147,12 @@ def _uses_official_topic_source(request: Any) -> bool:
 
 def _mark_expired_task(task_id: str, result: dict[str, Any], default_message: str = "成员体验已到期") -> None:
     message = result.get("message", default_message)
-    add_task_log(task_id, f"❌ 会员已过期: {message}")
-    update_task(task_id, "failed", "会员已过期", {"expired": True, "code": result.get("code"), "message": result.get("message")})
+    fail_task_with_message_unless_stopped(
+        task_id,
+        "会员已过期",
+        {"expired": True, "code": result.get("code"), "message": result.get("message")},
+        log_message=f"❌ 会员已过期: {message}",
+    )
 
 def _is_date_only(value: Optional[str]) -> bool:
     text = (value or "").strip()
@@ -292,8 +297,12 @@ def _record_legacy_time_range_fetch_failure(
     return retry
 
 def _mark_legacy_time_range_expired(task_id: str, data: dict[str, Any]) -> None:
-    add_task_log(task_id, f"❌ 会员已过期: {data.get('message')}")
-    update_task(task_id, "failed", "会员已过期", data)
+    fail_task_with_message_unless_stopped(
+        task_id,
+        "会员已过期",
+        data,
+        log_message=f"❌ 会员已过期: {data.get('message')}",
+    )
 
 def _legacy_time_range_response_expired(task_id: str, data: Any) -> bool:
     if not data or not isinstance(data, dict) or not data.get("expired"):
@@ -721,7 +730,7 @@ def _run_official_incremental_pages_from_oldest(
 ) -> None:
     start_cursor = _official_start_cursor_for_group_oldest(group_id, task_id, allow_empty=False)
     if start_cursor == "":
-        update_task(task_id, "failed", empty_failure_message)
+        fail_task_with_message_unless_stopped(task_id, empty_failure_message)
         return
     _run_official_crawl_pages_task(task_id, group_id, pages, per_page, "incremental", start_cursor=start_cursor)
 
@@ -891,9 +900,11 @@ def run_crawl_historical_task(
         add_task_log(task_id, f"✅ 获取完成！新增话题: {result.get('new_topics', 0)}, 更新话题: {result.get('updated_topics', 0)}")
         complete_task_unless_stopped(task_id, "历史数据爬取完成", result)
     except Exception as e:
-        if not is_task_stopped(task_id):
-            add_task_log(task_id, f"❌ 获取失败: {str(e)}")
-            update_task(task_id, "failed", f"爬取失败: {str(e)}")
+        fail_task_with_message_unless_stopped(
+            task_id,
+            f"爬取失败: {str(e)}",
+            log_message=f"❌ 获取失败: {str(e)}",
+        )
     finally:
         unregister_task_crawler(task_id)
 
@@ -940,9 +951,11 @@ def run_crawl_all_task(task_id: str, group_id: str, crawl_settings: Any = None):
         add_task_log(task_id, f"📊 最终统计: 新增话题: {result.get('new_topics', 0)}, 更新话题: {result.get('updated_topics', 0)}, 总页数: {result.get('pages', 0)}")
         complete_task_unless_stopped(task_id, "全量爬取完成", result)
     except Exception as e:
-        if not is_task_stopped(task_id):
-            add_task_log(task_id, f"❌ 全量爬取失败: {str(e)}")
-            update_task(task_id, "failed", f"全量爬取失败: {str(e)}")
+        fail_task_with_message_unless_stopped(
+            task_id,
+            f"全量爬取失败: {str(e)}",
+            log_message=f"❌ 全量爬取失败: {str(e)}",
+        )
     finally:
         unregister_task_crawler(task_id)
 
@@ -988,9 +1001,11 @@ def run_crawl_incremental_task(
         add_task_log(task_id, f"✅ 增量爬取完成！新增话题: {result.get('new_topics', 0)}, 更新话题: {result.get('updated_topics', 0)}")
         complete_task_unless_stopped(task_id, "增量爬取完成", result)
     except Exception as e:
-        if not is_task_stopped(task_id):
-            add_task_log(task_id, f"❌ 增量爬取失败: {str(e)}")
-            update_task(task_id, "failed", f"增量爬取失败: {str(e)}")
+        fail_task_with_message_unless_stopped(
+            task_id,
+            f"增量爬取失败: {str(e)}",
+            log_message=f"❌ 增量爬取失败: {str(e)}",
+        )
     finally:
         unregister_task_crawler(task_id)
 
@@ -1024,9 +1039,11 @@ def run_crawl_latest_task(task_id: str, group_id: str, crawl_settings: Any = Non
         add_task_log(task_id, f"✅ 获取最新记录完成！新增话题: {result.get('new_topics', 0)}, 更新话题: {result.get('updated_topics', 0)}")
         complete_task_unless_stopped(task_id, "获取最新记录完成", result)
     except Exception as e:
-        if not is_task_stopped(task_id):
-            add_task_log(task_id, f"❌ 获取最新记录失败: {str(e)}")
-            update_task(task_id, "failed", f"获取最新记录失败: {str(e)}")
+        fail_task_with_message_unless_stopped(
+            task_id,
+            f"获取最新记录失败: {str(e)}",
+            log_message=f"❌ 获取最新记录失败: {str(e)}",
+        )
     finally:
         unregister_task_crawler(task_id)
 
@@ -1052,8 +1069,10 @@ def run_crawl_time_range_task(task_id: str, group_id: str, request: Any):
 
         complete_task_unless_stopped(task_id, "时间区间爬取完成", legacy_result.stats)
     except Exception as e:
-        if not is_task_stopped(task_id):
-            add_task_log(task_id, f"❌ 时间区间爬取失败: {str(e)}")
-            update_task(task_id, "failed", f"时间区间爬取失败: {str(e)}")
+        fail_task_with_message_unless_stopped(
+            task_id,
+            f"时间区间爬取失败: {str(e)}",
+            log_message=f"❌ 时间区间爬取失败: {str(e)}",
+        )
     finally:
         unregister_task_crawler(task_id)

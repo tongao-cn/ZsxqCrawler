@@ -61,12 +61,20 @@ class LatestCrawler:
     def __init__(self):
         self.interval_kwargs = None
         self.stop_check_func = None
+        self.latest_calls = 0
 
     def set_custom_intervals(self, **kwargs):
         self.interval_kwargs = kwargs
 
     def crawl_latest_until_complete(self):
+        self.latest_calls += 1
         return {"new_topics": 1, "updated_topics": 2}
+
+
+class FailingLatestCrawler(LatestCrawler):
+    def crawl_latest_until_complete(self):
+        self.latest_calls += 1
+        raise RuntimeError("boom")
 
 
 class LegacyLifecycleCrawler:
@@ -87,6 +95,25 @@ class LegacyLifecycleCrawler:
 
     def get_database_stats(self):
         return {"topics": 10, "users": 2}
+
+
+class FailingLegacyLifecycleCrawler(LegacyLifecycleCrawler):
+    def crawl_incremental(self, pages, per_page):
+        self.incremental_calls.append((pages, per_page))
+        raise RuntimeError("boom")
+
+    def crawl_all_historical(self, **kwargs):
+        self.all_calls.append(kwargs)
+        raise RuntimeError("boom")
+
+
+class FailingTimeRangeCrawler(TimeRangeCrawler):
+    def __init__(self):
+        super().__init__([])
+
+    def fetch_topics_safe(self, **kwargs):
+        self.fetch_calls.append(kwargs)
+        raise RuntimeError("boom")
 
 
 class CrawlRoutesHelperTests(unittest.TestCase):
@@ -327,7 +354,8 @@ class CrawlRoutesHelperTests(unittest.TestCase):
             patch("backend.services.crawl_service._run_official_crawl_pages_task") as official_runner,
             patch("backend.services.crawl_service.ZSXQDatabase"),
             patch("backend.services.crawl_service.ZSXQTopicCrawler") as legacy_crawler,
-            patch("backend.services.crawl_service.update_task") as update_task,
+            patch("backend.services.crawl_service.update_task"),
+            patch("backend.services.crawl_service.fail_task_with_message_unless_stopped") as fail_task,
             patch("backend.services.crawl_service.add_task_log"),
             patch("backend.services.crawl_service.unregister_task_crawler"),
         ):
@@ -341,7 +369,7 @@ class CrawlRoutesHelperTests(unittest.TestCase):
 
         official_runner.assert_not_called()
         legacy_crawler.assert_not_called()
-        update_task.assert_any_call("task-1", "failed", "官方增量采集失败: 数据库为空")
+        fail_task.assert_called_once_with("task-1", "官方增量采集失败: 数据库为空")
 
     @unittest.skipUnless(HAS_CRAWL_ROUTE_DEPS, "crawl route dependencies are not installed")
     def test_time_range_crawl_stops_after_empty_page(self):
@@ -802,7 +830,9 @@ class CrawlRoutesHelperTests(unittest.TestCase):
             patch("backend.services.crawl_service.get_cookie_for_group", return_value="cookie"),
             patch("backend.services.crawl_service.ZSXQTopicCrawler", return_value=crawler),
             patch("backend.services.crawl_service.is_task_stopped", return_value=False),
-            patch("backend.services.crawl_service.add_task_log") as add_task_log,
+            patch("backend.services.crawl_service.fail_task_with_message_unless_stopped") as fail_task,
+            patch("backend.services.crawl_service.complete_task_unless_stopped") as complete_task,
+            patch("backend.services.crawl_service.add_task_log"),
             patch("backend.services.crawl_service.update_task") as update_task,
             patch("backend.services.crawl_service.unregister_task_crawler") as unregister_task_crawler,
         ):
@@ -819,8 +849,13 @@ class CrawlRoutesHelperTests(unittest.TestCase):
 
         self.assertEqual(1, len(crawler.fetch_calls))
         self.assertEqual([], crawler.store_calls)
-        add_task_log.assert_any_call("task-1", "❌ 会员已过期: expired")
-        update_task.assert_any_call("task-1", "failed", "会员已过期", expired_payload)
+        fail_task.assert_called_once_with(
+            "task-1",
+            "会员已过期",
+            expired_payload,
+            log_message="❌ 会员已过期: expired",
+        )
+        complete_task.assert_not_called()
         self.assertFalse(
             any(
                 len(call_args.args) > 1 and call_args.args[1] == "completed"
@@ -896,6 +931,148 @@ class CrawlRoutesHelperTests(unittest.TestCase):
             unregister_task_crawler.assert_called_once_with("task-1")
 
     @unittest.skipUnless(HAS_CRAWL_ROUTE_DEPS, "crawl route dependencies are not installed")
+    def test_legacy_non_range_crawl_failures_use_task_runtime_guard(self):
+        from backend.routes.crawl_routes import CrawlHistoricalRequest, CrawlSettingsRequest
+        from backend.services.crawl_service import (
+            run_crawl_all_task,
+            run_crawl_historical_task,
+            run_crawl_incremental_task,
+        )
+
+        cases = [
+            (
+                "historical",
+                run_crawl_historical_task,
+                ("task-1", "group-1", 3, 25, CrawlHistoricalRequest(topicSource="legacy")),
+                "开始爬取历史数据 3 页...",
+                "爬取失败: boom",
+                "❌ 获取失败: boom",
+                lambda crawler: self.assertEqual([(3, 25)], crawler.incremental_calls),
+            ),
+            (
+                "all",
+                run_crawl_all_task,
+                ("task-1", "group-1", CrawlSettingsRequest(topicSource="legacy")),
+                "开始全量爬取...",
+                "全量爬取失败: boom",
+                "❌ 全量爬取失败: boom",
+                lambda crawler: self.assertEqual(
+                    [{"per_page": 20, "auto_confirm": True}],
+                    crawler.all_calls,
+                ),
+            ),
+            (
+                "incremental",
+                run_crawl_incremental_task,
+                ("task-1", "group-1", 4, 26, CrawlHistoricalRequest(topicSource="legacy")),
+                "开始增量爬取...",
+                "增量爬取失败: boom",
+                "❌ 增量爬取失败: boom",
+                lambda crawler: self.assertEqual([(4, 26)], crawler.incremental_calls),
+            ),
+        ]
+
+        for case_name, runner, args, running_message, failed_message, log_message, assert_crawler in cases:
+            crawler = FailingLegacyLifecycleCrawler()
+            with (
+                self.subTest(case_name=case_name),
+                patch("backend.services.crawl_service._prepare_legacy_crawler", return_value=crawler),
+                patch("backend.services.crawl_service.update_task") as update_task,
+                patch("backend.services.crawl_service.complete_task_unless_stopped") as complete_task,
+                patch("backend.services.crawl_service.fail_task_with_message_unless_stopped") as fail_task,
+                patch("backend.services.crawl_service.add_task_log"),
+                patch("backend.services.crawl_service.unregister_task_crawler") as unregister_task_crawler,
+            ):
+                runner(*args)
+
+            assert_crawler(crawler)
+            update_task.assert_any_call("task-1", "running", running_message)
+            fail_task.assert_called_once_with("task-1", failed_message, log_message=log_message)
+            complete_task.assert_not_called()
+            self.assertFalse(
+                any(
+                    len(call_args.args) > 1 and call_args.args[1] == "failed"
+                    for call_args in update_task.call_args_list
+                )
+            )
+            unregister_task_crawler.assert_called_once_with("task-1")
+
+    @unittest.skipUnless(HAS_CRAWL_ROUTE_DEPS, "crawl route dependencies are not installed")
+    def test_legacy_latest_failure_uses_task_runtime_guard(self):
+        from backend.routes.crawl_routes import CrawlSettingsRequest
+        from backend.services.crawl_service import run_crawl_latest_task
+
+        crawler = FailingLatestCrawler()
+
+        with (
+            patch("backend.services.crawl_service._prepare_legacy_crawler", return_value=crawler),
+            patch("backend.services.crawl_service.update_task") as update_task,
+            patch("backend.services.crawl_service.complete_task_unless_stopped") as complete_task,
+            patch("backend.services.crawl_service.fail_task_with_message_unless_stopped") as fail_task,
+            patch("backend.services.crawl_service.add_task_log"),
+            patch("backend.services.crawl_service.unregister_task_crawler") as unregister_task_crawler,
+        ):
+            run_crawl_latest_task("task-1", "group-1", CrawlSettingsRequest(topicSource="legacy"))
+
+        self.assertEqual(1, crawler.latest_calls)
+        update_task.assert_any_call("task-1", "running", "开始获取最新记录...")
+        fail_task.assert_called_once_with(
+            "task-1",
+            "获取最新记录失败: boom",
+            log_message="❌ 获取最新记录失败: boom",
+        )
+        complete_task.assert_not_called()
+        self.assertFalse(
+            any(
+                len(call_args.args) > 1 and call_args.args[1] == "failed"
+                for call_args in update_task.call_args_list
+            )
+        )
+        unregister_task_crawler.assert_called_once_with("task-1")
+
+    @unittest.skipUnless(HAS_CRAWL_ROUTE_DEPS, "crawl route dependencies are not installed")
+    def test_legacy_time_range_failure_uses_task_runtime_guard(self):
+        from backend.routes.crawl_routes import CrawlTimeRangeRequest
+        from backend.services.crawl_service import run_crawl_time_range_task
+
+        crawler = FailingTimeRangeCrawler()
+
+        with (
+            patch("backend.services.crawl_service._prepare_legacy_crawler", return_value=crawler),
+            patch("backend.services.crawl_service.update_task") as update_task,
+            patch("backend.services.crawl_service.complete_task_unless_stopped") as complete_task,
+            patch("backend.services.crawl_service.fail_task_with_message_unless_stopped") as fail_task,
+            patch("backend.services.crawl_service.add_task_log"),
+            patch("backend.services.crawl_service.unregister_task_crawler") as unregister_task_crawler,
+        ):
+            run_crawl_time_range_task(
+                "task-1",
+                "group-1",
+                CrawlTimeRangeRequest(
+                    startTime="2026-02-01",
+                    endTime="2026-02-02",
+                    perPage=20,
+                    topicSource="legacy",
+                ),
+            )
+
+        self.assertEqual(1, len(crawler.fetch_calls))
+        update_task.assert_any_call("task-1", "running", "开始按时间区间爬取...")
+        fail_task.assert_called_once_with(
+            "task-1",
+            "时间区间爬取失败: boom",
+            log_message="❌ 时间区间爬取失败: boom",
+        )
+        complete_task.assert_not_called()
+        self.assertFalse(
+            any(
+                len(call_args.args) > 1 and call_args.args[1] == "failed"
+                for call_args in update_task.call_args_list
+            )
+        )
+        unregister_task_crawler.assert_called_once_with("task-1")
+
+    @unittest.skipUnless(HAS_CRAWL_ROUTE_DEPS, "crawl route dependencies are not installed")
     def test_legacy_incremental_expired_result_fails_instead_of_completing(self):
         from backend.routes.crawl_routes import CrawlHistoricalRequest
         from backend.services.crawl_service import run_crawl_incremental_task
@@ -906,7 +1083,8 @@ class CrawlRoutesHelperTests(unittest.TestCase):
         with (
             patch("backend.services.crawl_service._prepare_legacy_crawler", return_value=crawler),
             patch("backend.services.crawl_service.is_task_stopped", return_value=False),
-            patch("backend.services.crawl_service.add_task_log") as add_task_log,
+            patch("backend.services.crawl_service.fail_task_with_message_unless_stopped") as fail_task,
+            patch("backend.services.crawl_service.add_task_log"),
             patch("backend.services.crawl_service.update_task") as update_task,
             patch("backend.services.crawl_service.complete_task_unless_stopped") as complete_task,
             patch("backend.services.crawl_service.unregister_task_crawler") as unregister_task_crawler,
@@ -920,12 +1098,11 @@ class CrawlRoutesHelperTests(unittest.TestCase):
             )
 
         self.assertEqual([(4, 26)], crawler.incremental_calls)
-        add_task_log.assert_any_call("task-1", "❌ 会员已过期: expired")
-        update_task.assert_any_call(
+        fail_task.assert_called_once_with(
             "task-1",
-            "failed",
             "会员已过期",
             {"expired": True, "code": 1059, "message": "expired"},
+            log_message="❌ 会员已过期: expired",
         )
         complete_task.assert_not_called()
         self.assertFalse(
@@ -1206,18 +1383,14 @@ class CrawlRoutesHelperTests(unittest.TestCase):
 
         result = {"expired": True, "code": 1059, "message": "expired"}
 
-        with (
-            patch("backend.services.crawl_service.add_task_log") as add_task_log,
-            patch("backend.services.crawl_service.update_task") as update_task,
-        ):
+        with patch("backend.services.crawl_service.fail_task_with_message_unless_stopped") as fail_task:
             _mark_expired_task("task-1", result)
 
-        add_task_log.assert_called_once_with("task-1", "❌ 会员已过期: expired")
-        update_task.assert_called_once_with(
+        fail_task.assert_called_once_with(
             "task-1",
-            "failed",
             "会员已过期",
             {"expired": True, "code": 1059, "message": "expired"},
+            log_message="❌ 会员已过期: expired",
         )
 
     @unittest.skipUnless(HAS_CRAWL_ROUTE_DEPS, "crawl route dependencies are not installed")

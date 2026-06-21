@@ -45,6 +45,7 @@ from backend.services.task_workflow_lifecycle import (
     WorkflowCompletionDecision,  # noqa: F401 - compatibility re-export for task runtime callers
     WorkflowRunningMessage,
     complete_task_unless_stopped as _complete_task_unless_stopped,
+    fail_task_with_message_unless_stopped as _fail_task_with_message_unless_stopped,
     fail_task_unless_stopped as _fail_task_unless_stopped,
     finish_workflow,  # noqa: F401 - compatibility re-export for task runtime callers
     run_workflow_lifecycle,
@@ -409,6 +410,23 @@ def fail_task_unless_stopped(task_id: str, failure_label: str, error: Exception)
         task_id,
         failure_label=failure_label,
         error=error,
+        is_task_stopped=is_task_stopped,
+        update_task_state=update_task,
+        add_task_log=add_task_log,
+    )
+
+
+def fail_task_with_message_unless_stopped(
+    task_id: str,
+    message: str,
+    result: Any = None,
+    log_message: str | None = None,
+) -> None:
+    _fail_task_with_message_unless_stopped(
+        task_id,
+        failed_message=message,
+        result=result,
+        failure_log_message=log_message,
         is_task_stopped=is_task_stopped,
         update_task_state=update_task,
         add_task_log=add_task_log,

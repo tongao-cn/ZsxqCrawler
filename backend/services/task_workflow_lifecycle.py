@@ -81,11 +81,34 @@ def fail_task_unless_stopped(
     update_task_state: Callable[[str, str, str, Any], None],
     add_task_log: Callable[[str, str], None],
 ) -> None:
-    if is_task_stopped(task_id):
-        return
     message = f"{failure_label}失败: {str(error)}"
-    add_task_log(task_id, f"❌ {message}")
-    update_task_state(task_id, "failed", message, None)
+    fail_task_with_message_unless_stopped(
+        task_id,
+        failed_message=message,
+        failure_log_message=f"❌ {message}",
+        result=None,
+        is_task_stopped=is_task_stopped,
+        update_task_state=update_task_state,
+        add_task_log=add_task_log,
+    )
+
+
+def fail_task_with_message_unless_stopped(
+    task_id: str,
+    *,
+    failed_message: str,
+    result: Any = None,
+    failure_log_message: str | None = None,
+    is_task_stopped: Callable[[str], bool],
+    update_task_state: Callable[[str, str, str, Any], None],
+    add_task_log: Callable[[str, str], None],
+) -> bool:
+    if is_task_stopped(task_id):
+        return False
+    if failure_log_message:
+        add_task_log(task_id, failure_log_message)
+    update_task_state(task_id, "failed", failed_message, result)
+    return True
 
 
 def run_workflow_lifecycle(
