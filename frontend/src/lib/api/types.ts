@@ -40,6 +40,7 @@ export type { FileAIAnalysis, FileItem, FileStatus, LocalFileStatus } from './fi
 export type {
   Account,
   AccountSelf,
+  DeleteGroupResponse,
   FetchMoreCommentsResponse,
   Group,
   GroupStats,

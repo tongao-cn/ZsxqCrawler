@@ -168,7 +168,7 @@ export function useGroupSelectorData() {
     setDeletingGroups((prev) => new Set(prev).add(groupId));
     try {
       const res = await apiClient.deleteGroup(groupId);
-      const msg = (res as any)?.message || '已删除';
+      const msg = res.message || '已删除';
       toast.success(msg);
       await loadGroups(0);
     } catch (err) {

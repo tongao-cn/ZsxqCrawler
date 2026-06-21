@@ -70,7 +70,7 @@ export function useGroupMetadataLoaders(groupId: number) {
   const loadGroupAccount = useCallback(async () => {
     try {
       const response = await apiClient.getGroupAccount(groupId);
-      const account = (response as any)?.account || null;
+      const account = response.account || null;
       setGroupAccount(account);
       setSelectedAccountId(account?.id || '');
     } catch (err) {
@@ -81,7 +81,7 @@ export function useGroupMetadataLoaders(groupId: number) {
   const loadGroupAccountSelf = useCallback(async () => {
     try {
       const response = await apiClient.getGroupAccountSelf(groupId);
-      setAccountSelf((response as any)?.self || null);
+      setAccountSelf(response.self || null);
     } catch (err) {
       console.error('加载账号用户信息失败:', err);
     }

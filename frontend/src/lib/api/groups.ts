@@ -1,5 +1,14 @@
 import { FilesApiClient } from './files';
-import type { Account, AccountSelf, FetchMoreCommentsResponse, Group, GroupStats, Topic, TopicDetail } from './groupTypes';
+import type {
+  Account,
+  AccountSelf,
+  DeleteGroupResponse,
+  FetchMoreCommentsResponse,
+  Group,
+  GroupStats,
+  Topic,
+  TopicDetail,
+} from './groupTypes';
 import type { PaginatedResponse } from './types';
 
 export class GroupsApiClient extends FilesApiClient {
@@ -256,7 +265,7 @@ export class GroupsApiClient extends FilesApiClient {
     });
   }
 
-  async deleteGroup(groupId: number | string) {
+  async deleteGroup(groupId: number | string): Promise<DeleteGroupResponse> {
     return this.request(`/api/groups/${groupId}`, {
       method: 'DELETE',
     });

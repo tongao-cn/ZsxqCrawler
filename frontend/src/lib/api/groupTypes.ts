@@ -95,6 +95,16 @@ export interface GroupStats {
   total_readings: number;
 }
 
+export interface DeleteGroupResponse {
+  success: boolean;
+  message?: string;
+  details?: {
+    downloads_dir_removed?: boolean;
+    images_cache_removed?: boolean;
+    group_dir_removed?: boolean;
+  };
+}
+
 export interface Account {
   id: string;
   name?: string;
