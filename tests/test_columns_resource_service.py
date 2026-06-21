@@ -34,8 +34,8 @@ class ColumnsResourceServiceTests(unittest.TestCase):
     def test_download_topic_files_counts_downloaded_and_skipped_files(self):
         calls = []
 
-        async def fake_download_column_file(*args):
-            calls.append(args)
+        async def fake_download_column_file(**kwargs):
+            calls.append(kwargs)
             return "downloaded" if len(calls) == 1 else "skipped"
 
         topic_detail = {
@@ -74,9 +74,27 @@ class ColumnsResourceServiceTests(unittest.TestCase):
         self.assertEqual(1, skipped)
         self.assertEqual(1, request_count)
         self.assertEqual(2, len(calls))
+        self.assertEqual(
+            {
+                "group_id": "123",
+                "file_id": 1,
+                "file_name": "downloaded.pdf",
+                "file_size": 10,
+                "topic_id": 10,
+                "headers": {},
+                "task_id": "task-1",
+            },
+            {
+                key: calls[0][key]
+                for key in ("group_id", "file_id", "file_name", "file_size", "topic_id", "headers", "task_id")
+            },
+        )
 
     def test_download_topic_video_counts_skipped_result(self):
-        async def fake_download_column_video(*args):
+        calls = []
+
+        async def fake_download_column_video(**kwargs):
+            calls.append(kwargs)
             return "skipped"
 
         downloaded, skipped, request_count = asyncio.run(
@@ -104,15 +122,36 @@ class ColumnsResourceServiceTests(unittest.TestCase):
         self.assertEqual(0, downloaded)
         self.assertEqual(1, skipped)
         self.assertEqual(0, request_count)
+        self.assertEqual(
+            {
+                "group_id": "123",
+                "video_id": 7,
+                "video_size": 1024,
+                "video_duration": 30,
+                "topic_id": 10,
+                "headers": {},
+                "task_id": "task-1",
+            },
+            {
+                key: calls[0][key]
+                for key in ("group_id", "video_id", "video_size", "video_duration", "topic_id", "headers", "task_id")
+            },
+        )
 
     def test_process_topic_resources_aggregates_resource_counts(self):
-        async def fake_download_topic_files(*args):
+        file_calls = []
+        video_calls = []
+        image_calls = []
+        cover_calls = []
+
+        async def fake_download_topic_files(**kwargs):
+            file_calls.append(kwargs)
             return 1, 2, 3
 
-        async def fake_download_topic_video(*args):
+        async def fake_download_topic_video(**kwargs):
+            video_calls.append(kwargs)
             return 4, 5, 6
 
-        cover_calls = []
         config = {
             "download_files": True,
             "download_videos": True,
@@ -137,8 +176,8 @@ class ColumnsResourceServiceTests(unittest.TestCase):
         stats = asyncio.run(
             process_topic_resources(
                 add_task_log=lambda _task_id, _message: None,
-                cache_topic_images=lambda *_args: 8,
-                cache_video_cover=lambda *args: cover_calls.append(args) or True,
+                cache_topic_images=lambda **kwargs: image_calls.append(kwargs) or 8,
+                cache_video_cover=lambda **kwargs: cover_calls.append(kwargs) or True,
                 config=config,
                 current_request_count=0,
                 db=object(),
@@ -160,6 +199,10 @@ class ColumnsResourceServiceTests(unittest.TestCase):
         self.assertEqual(5, stats.videos_skipped)
         self.assertEqual(9, stats.request_count)
         self.assertEqual(1, len(cover_calls))
+        self.assertEqual(0, file_calls[0]["current_request_count"])
+        self.assertEqual(3, video_calls[0]["current_request_count"])
+        self.assertEqual("123", image_calls[0]["group_id"])
+        self.assertEqual(7, cover_calls[0]["video_id"])
 
 
 if __name__ == "__main__":

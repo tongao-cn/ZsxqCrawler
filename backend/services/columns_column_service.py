@@ -62,14 +62,14 @@ async def process_column_topic(
     stats = ColumnFetchStats(topics_count=1, details_count=1, request_count=detail_request_count)
     stats.add(
         await process_topic_resources(
-            task_id,
-            group_id,
-            topic_id,
-            topic_detail,
-            db,
-            headers,
-            current_request_count + detail_request_count,
-            config,
+            task_id=task_id,
+            group_id=group_id,
+            topic_id=topic_id,
+            topic_detail=topic_detail,
+            db=db,
+            headers=headers,
+            current_request_count=current_request_count + detail_request_count,
+            config=config,
         )
     )
 
@@ -131,16 +131,16 @@ async def process_column(
             break
 
         topic_stats = await process_column_topic(
-            task_id,
-            group_id,
-            column_id,
-            topic,
-            topic_idx,
-            len(topics_list),
-            db,
-            headers,
-            request_count,
-            config,
+            task_id=task_id,
+            group_id=group_id,
+            column_id=column_id,
+            topic=topic,
+            topic_idx=topic_idx,
+            total_topics=len(topics_list),
+            db=db,
+            headers=headers,
+            current_request_count=request_count,
+            config=config,
         )
         stats.add(topic_stats)
         request_count += topic_stats.request_count

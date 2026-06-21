@@ -65,7 +65,10 @@ class ColumnsColumnServiceTests(unittest.TestCase):
         async def fake_fetch_topic_detail(*args):
             return topic_detail, 1
 
-        async def fake_process_topic_resources(*args):
+        resource_calls = []
+
+        async def fake_process_topic_resources(**kwargs):
+            resource_calls.append(kwargs)
             return ColumnFetchStats(files_count=2, files_skipped=3, images_count=4, videos_count=5, videos_skipped=6, request_count=7)
 
         stats = asyncio.run(
@@ -95,6 +98,8 @@ class ColumnsColumnServiceTests(unittest.TestCase):
         self.assertEqual(3, stats.files_skipped)
         self.assertEqual(6, stats.videos_skipped)
         self.assertEqual(8, stats.request_count)
+        self.assertEqual(10, resource_calls[0]["topic_id"])
+        self.assertEqual(1, resource_calls[0]["current_request_count"])
 
     def test_process_column_aggregates_topics_and_updates_progress(self):
         config = {
@@ -109,7 +114,10 @@ class ColumnsColumnServiceTests(unittest.TestCase):
         db = FakeColumnsDbForColumn()
         updates = []
 
-        async def fake_process_column_topic(*args):
+        column_topic_calls = []
+
+        async def fake_process_column_topic(**kwargs):
+            column_topic_calls.append(kwargs)
             if len(updates) == 0:
                 return ColumnFetchStats(
                     topics_count=1,
@@ -156,6 +164,8 @@ class ColumnsColumnServiceTests(unittest.TestCase):
         self.assertEqual(5, stats.files_skipped)
         self.assertEqual(6, stats.videos_skipped)
         self.assertEqual(10, stats.request_count)
+        self.assertEqual([10, 11], [call["topic"].get("topic_id") for call in column_topic_calls])
+        self.assertEqual([1, 8], [call["current_request_count"] for call in column_topic_calls])
         self.assertEqual(
             [("task-1", "running", "进度: 11 篇文章, 22 个文件, 44 个视频, 33 张图片")],
             updates,

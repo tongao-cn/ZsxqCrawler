@@ -73,14 +73,14 @@ async def download_topic_files(
 
         try:
             result = await download_column_file(
-                group_id,
-                file_id,
-                file_name,
-                file_size,
-                topic_id,
-                db,
-                headers,
-                task_id,
+                group_id=group_id,
+                file_id=file_id,
+                file_name=file_name,
+                file_size=file_size,
+                topic_id=topic_id,
+                db=db,
+                headers=headers,
+                task_id=task_id,
             )
             if result == "downloaded":
                 downloaded_count += 1
@@ -131,14 +131,14 @@ async def download_topic_video(
 
     try:
         result = await download_column_video(
-            group_id,
-            video_id,
-            video_size,
-            video_duration,
-            topic_id,
-            db,
-            headers,
-            task_id,
+            group_id=group_id,
+            video_id=video_id,
+            video_size=video_size,
+            video_duration=video_duration,
+            topic_id=topic_id,
+            db=db,
+            headers=headers,
+            task_id=task_id,
         )
         if result == "downloaded":
             return 1, 0, 1
@@ -173,18 +173,18 @@ async def process_topic_resources(
 
     if config["download_files"]:
         downloaded_files, skipped_files, file_request_count = await download_topic_files(
-            task_id,
-            group_id,
-            topic_id,
-            topic_detail,
-            db,
-            headers,
-            request_count,
-            config["items_per_batch"],
-            config["long_sleep_min"],
-            config["long_sleep_max"],
-            config["crawl_interval_min"],
-            config["crawl_interval_max"],
+            task_id=task_id,
+            group_id=group_id,
+            topic_id=topic_id,
+            topic_detail=topic_detail,
+            db=db,
+            headers=headers,
+            current_request_count=request_count,
+            items_per_batch=config["items_per_batch"],
+            long_sleep_min=config["long_sleep_min"],
+            long_sleep_max=config["long_sleep_max"],
+            crawl_interval_min=config["crawl_interval_min"],
+            crawl_interval_max=config["crawl_interval_max"],
         )
         stats.files_count += downloaded_files
         stats.files_skipped += skipped_files
@@ -192,7 +192,12 @@ async def process_topic_resources(
         stats.request_count += file_request_count
 
     if config["cache_images"]:
-        stats.images_count += cache_topic_images(task_id, group_id, topic_detail, db)
+        stats.images_count += cache_topic_images(
+            task_id=task_id,
+            group_id=group_id,
+            topic_detail=topic_detail,
+            db=db,
+        )
 
     video = get_topic_video_fn(topic_detail)
     if not video:
@@ -207,22 +212,28 @@ async def process_topic_resources(
     add_task_log(task_id, f"      🎬 发现视频: ID={video_id}, 大小={video_size/(1024*1024):.1f}MB, 时长={video_duration}秒")
 
     if config["cache_images"] and cover_url:
-        cache_video_cover(task_id, group_id, video_id, cover_url, db)
+        cache_video_cover(
+            task_id=task_id,
+            group_id=group_id,
+            video_id=video_id,
+            cover_url=cover_url,
+            db=db,
+        )
 
     if config["download_videos"]:
         downloaded_videos, skipped_videos, video_request_count = await download_topic_video(
-            task_id,
-            group_id,
-            topic_id,
-            video,
-            db,
-            headers,
-            request_count,
-            config["items_per_batch"],
-            config["long_sleep_min"],
-            config["long_sleep_max"],
-            config["crawl_interval_min"],
-            config["crawl_interval_max"],
+            task_id=task_id,
+            group_id=group_id,
+            topic_id=topic_id,
+            video=video,
+            db=db,
+            headers=headers,
+            current_request_count=request_count,
+            items_per_batch=config["items_per_batch"],
+            long_sleep_min=config["long_sleep_min"],
+            long_sleep_max=config["long_sleep_max"],
+            crawl_interval_min=config["crawl_interval_min"],
+            crawl_interval_max=config["crawl_interval_max"],
         )
         stats.videos_count += downloaded_videos
         stats.videos_skipped += skipped_videos
