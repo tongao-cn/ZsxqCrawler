@@ -42,6 +42,18 @@ def expected_group_download_path(group_id: str, file_name: Any, file_id: Any) ->
     return download_target_path(group_download_dir(group_id), file_name, file_id)
 
 
+def column_download_target_path(group_dir: str, file_name: Any, file_id: Any) -> tuple[str, str]:
+    download_dir = os.path.join(group_dir, "column_downloads")
+    safe_filename, target_path = download_target_path(download_dir, file_name, file_id)
+    base_path = Path(download_dir).resolve()
+    resolved_target_path = Path(target_path).resolve()
+
+    if resolved_target_path == base_path or base_path not in resolved_target_path.parents:
+        raise ValueError("column download target path escapes column_downloads")
+
+    return safe_filename, str(resolved_target_path)
+
+
 def resolve_local_file_path(
     group_id: str,
     file_id: int,

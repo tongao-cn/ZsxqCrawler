@@ -20,6 +20,23 @@ class FileLocalPathTests(unittest.TestCase):
             download_target_path("downloads", "../memo?.pdf", 101),
         )
 
+    def test_column_download_target_path_uses_safe_filename_under_column_dir(self):
+        from backend.services.file_local_paths import column_download_target_path
+
+        with TemporaryDirectory() as temp_dir:
+            safe_filename, target_path = column_download_target_path(temp_dir, "../memo?.pdf", 101)
+            expected_path = (Path(temp_dir) / "column_downloads" / "..memo.pdf").resolve()
+
+        self.assertEqual("..memo.pdf", safe_filename)
+        self.assertEqual(expected_path, Path(target_path))
+
+    def test_column_download_target_path_rejects_parent_directory_target(self):
+        from backend.services.file_local_paths import column_download_target_path
+
+        with TemporaryDirectory() as temp_dir:
+            with self.assertRaises(ValueError):
+                column_download_target_path(temp_dir, "..", 101)
+
     def test_resolve_local_file_path_prefers_existing_stored_path(self):
         from backend.services.file_local_paths import resolve_local_file_path
 

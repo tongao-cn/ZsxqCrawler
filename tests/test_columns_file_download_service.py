@@ -83,6 +83,36 @@ class ColumnsFileDownloadServiceTests(unittest.TestCase):
         self.assertEqual(b"hello world", content)
         self.assertEqual([(2, "completed", local_path)], db.status_updates)
 
+    def test_download_column_file_writes_to_sanitized_column_path(self):
+        responses = [
+            FakeResponse({"succeeded": True, "resp_data": {"download_url": "https://example.test/file"}}),
+            FakeResponse(status_code=200, chunks=[b"safe"]),
+        ]
+
+        def request_get(*args, **kwargs):
+            return responses.pop(0)
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            db = FakeColumnsDb()
+            result = asyncio.run(
+                download_column_file(
+                    db=db,
+                    file_id=3,
+                    file_name="../note?.txt",
+                    file_size=4,
+                    group_dir=tmp_dir,
+                    headers={},
+                    request_get=request_get,
+                )
+            )
+            local_path = os.path.join(tmp_dir, "column_downloads", "..note.txt")
+            with open(local_path, "rb") as file_obj:
+                content = file_obj.read()
+
+        self.assertEqual("downloaded", result)
+        self.assertEqual(b"safe", content)
+        self.assertEqual([(3, "completed", local_path)], db.status_updates)
+
 
 if __name__ == "__main__":
     unittest.main()

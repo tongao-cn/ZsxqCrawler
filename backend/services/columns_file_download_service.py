@@ -7,6 +7,7 @@ from typing import Any, Callable
 import requests
 
 from backend.services.columns_remote_service import redact_response_for_log, retry_wait_seconds
+from backend.services.file_local_paths import column_download_target_path
 
 
 async def download_column_file(
@@ -25,8 +26,8 @@ async def download_column_file(
     sleep: Callable[[float], Any] = asyncio.sleep,
     task_id: str | None = None,
 ) -> str:
-    downloads_dir = os.path.join(group_dir, "column_downloads")
-    local_path = os.path.join(downloads_dir, file_name)
+    _safe_filename, local_path = column_download_target_path(group_dir, file_name, file_id)
+    downloads_dir = os.path.dirname(local_path)
 
     if os.path.exists(local_path):
         existing_size = os.path.getsize(local_path)
