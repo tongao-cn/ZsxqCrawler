@@ -12,6 +12,9 @@ from backend.services.file_downloader_runtime import (
     _safe_remove_file_downloader,
 )
 from backend.services.file_local_paths import download_target_path
+from backend.services.file_task_lifecycle import (
+    file_task_stopped_after_init as _file_task_stopped_after_init_impl,
+)
 from backend.services.task_runtime import (
     WorkflowCompletionDecision,
     add_task_log,
@@ -39,10 +42,11 @@ def _fail_file_task(
 
 
 def _file_task_stopped_after_init(task_id: str) -> bool:
-    if is_task_stopped(task_id):
-        add_task_log(task_id, "🛑 任务在初始化过程中被停止")
-        return True
-    return False
+    return _file_task_stopped_after_init_impl(
+        task_id,
+        is_stopped=is_task_stopped,
+        add_log=add_task_log,
+    )
 
 
 def _build_single_download_fallback_info(
