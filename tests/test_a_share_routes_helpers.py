@@ -67,19 +67,20 @@ class AShareRoutesHelperTests(unittest.TestCase):
 
         from backend.routes import a_share_routes
         from backend.routes.a_share_routes import AShareAnalysisRunRequest
+        from backend.services.ai_workflow_preflight import AIWorkflowPreflightError, MISSING_OPENAI_API_KEY_MESSAGE
 
         request = AShareAnalysisRunRequest(group_id="51111112855254")
 
         with patch.object(
             a_share_routes,
             "create_a_share_analysis_task",
-            side_effect=RuntimeError(a_share_routes.A_SHARE_MISSING_API_KEY_MESSAGE),
+            side_effect=AIWorkflowPreflightError(400, MISSING_OPENAI_API_KEY_MESSAGE),
         ):
             with self.assertRaises(HTTPException) as raised:
                 asyncio.run(a_share_routes.start_a_share_analysis(request))
 
         self.assertEqual(400, raised.exception.status_code)
-        self.assertEqual(a_share_routes.A_SHARE_MISSING_API_KEY_MESSAGE, raised.exception.detail)
+        self.assertEqual(MISSING_OPENAI_API_KEY_MESSAGE, raised.exception.detail)
 
     @unittest.skipUnless(HAS_A_SHARE_ROUTE_DEPS, "a-share route dependencies are not installed")
     def test_start_a_share_analysis_preserves_wrapped_unexpected_error(self):

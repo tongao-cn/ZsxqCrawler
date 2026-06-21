@@ -780,7 +780,7 @@ class FileRoutesHelperTests(unittest.TestCase):
             created,
         )
 
-    def test_create_file_analysis_preserves_missing_api_key_wrapped_error(self):
+    def test_create_file_analysis_preserves_missing_api_key_http_error(self):
         from backend.routes import file_routes
         from backend.schemas.files import FileAIAnalysisRequest
         from fastapi import HTTPException
@@ -795,9 +795,9 @@ class FileRoutesHelperTests(unittest.TestCase):
             with self.assertRaises(HTTPException) as raised:
                 self._run_async(file_routes.create_file_analysis("group-1", 456, FileAIAnalysisRequest(force=True)))
 
-        self.assertEqual(500, raised.exception.status_code)
+        self.assertEqual(400, raised.exception.status_code)
         self.assertEqual(
-            "文件 AI 分析失败: 400: 未配置 OpenAI API Key，请设置环境变量 OPENAI_API_KEY 或 config.toml [ai].api_key",
+            "未配置 OpenAI API Key，请设置环境变量 OPENAI_API_KEY 或 config.toml [ai].api_key",
             raised.exception.detail,
         )
         create_analysis.assert_called_once_with("group-1", 456, True)

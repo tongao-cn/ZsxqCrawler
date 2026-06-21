@@ -6,7 +6,6 @@ from datetime import datetime
 from typing import Any, Optional
 
 from backend.services.ai_workflow_preflight import (
-    AIWorkflowPreflightError,
     fail_task_if_openai_api_key_missing,
     require_openai_api_key,
 )
@@ -192,10 +191,7 @@ def create_a_share_analysis_task(
     reset_start_date: Optional[str] = None,
     reset_end_date: Optional[str] = None,
 ) -> dict[str, str]:
-    try:
-        require_openai_api_key()
-    except AIWorkflowPreflightError as exc:
-        raise RuntimeError(exc.detail) from exc
+    require_openai_api_key()
 
     request = AShareAnalysisTaskRequest(
         group_id=group_id,

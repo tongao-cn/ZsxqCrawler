@@ -26,6 +26,16 @@ class TaskHttpErrorsTests(unittest.TestCase):
         self.assertEqual("stock_name 不能为空", error.detail)
 
     @unittest.skipUnless(HAS_ROUTE_DEPS, "route dependencies are not installed")
+    def test_route_error_maps_ai_workflow_preflight_error(self):
+        from backend.routes.task_http_errors import route_error
+        from backend.services.ai_workflow_preflight import AIWorkflowPreflightError
+
+        error = route_error("创建任务失败", AIWorkflowPreflightError(400, "missing key"))
+
+        self.assertEqual(400, error.status_code)
+        self.assertEqual("missing key", error.detail)
+
+    @unittest.skipUnless(HAS_ROUTE_DEPS, "route dependencies are not installed")
     def test_task_launch_route_error_maps_ingestion_conflict_to_409(self):
         from backend.routes.task_http_errors import task_launch_route_error
         from backend.services.task_launch import TaskLaunchConflict

@@ -6,10 +6,13 @@ from unittest.mock import patch
 class AShareAnalysisWorkflowTests(unittest.TestCase):
     def test_create_a_share_analysis_task_requires_api_key(self):
         from backend.services import a_share_analysis_workflow as workflow
+        from backend.services.ai_workflow_preflight import AIWorkflowPreflightError, MISSING_OPENAI_API_KEY_MESSAGE
 
         with patch("backend.services.ai_workflow_preflight.has_openai_api_key", return_value=False):
-            with self.assertRaisesRegex(RuntimeError, "OpenAI API Key"):
+            with self.assertRaises(AIWorkflowPreflightError) as raised:
                 workflow.create_a_share_analysis_task(group_id="51111112855254")
+        self.assertEqual(400, raised.exception.status_code)
+        self.assertEqual(MISSING_OPENAI_API_KEY_MESSAGE, raised.exception.detail)
 
     def test_create_a_share_analysis_task_uses_service_runner_and_metadata(self):
         from backend.services import a_share_analysis_workflow as workflow

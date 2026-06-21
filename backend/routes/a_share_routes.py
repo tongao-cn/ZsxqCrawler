@@ -7,6 +7,7 @@ import requests
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
+from backend.routes.task_http_errors import route_error
 from backend.services.a_share_analysis_service import (
     DEFAULT_API_BASE as A_SHARE_DEFAULT_API_BASE,
     DEFAULT_CONCURRENCY as A_SHARE_DEFAULT_CONCURRENCY,
@@ -23,7 +24,6 @@ from backend.services.a_share_analysis_workflow import (
     create_a_share_analysis_task,
     export_a_share_analysis_to_tdx as run_a_share_tdx_export,
 )
-from backend.services.ai_workflow_preflight import MISSING_OPENAI_API_KEY_MESSAGE as A_SHARE_MISSING_API_KEY_MESSAGE
 from backend.services.task_launch import TASK_CREATED_MESSAGE as _TASK_CREATED_MESSAGE
 
 router = APIRouter(prefix="/api/analytics/a-share", tags=["a-share"])
@@ -31,7 +31,7 @@ TASK_CREATED_MESSAGE = _TASK_CREATED_MESSAGE
 
 
 def _a_share_route_error(message: str, error: Exception) -> HTTPException:
-    return HTTPException(status_code=500, detail=f"{message}: {str(error)}")
+    return route_error(message, error, value_error_status_code=None)
 
 
 class AShareAnalysisRunRequest(BaseModel):
@@ -155,10 +155,6 @@ async def start_a_share_analysis(request: AShareAnalysisRunRequest):
     """启动A股公司提及分析后台任务"""
     try:
         return _create_a_share_analysis_task_response(request)
-    except RuntimeError as e:
-        if str(e) == A_SHARE_MISSING_API_KEY_MESSAGE:
-            raise HTTPException(status_code=400, detail=str(e))
-        raise _a_share_route_error("创建A股分析任务失败", e)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
