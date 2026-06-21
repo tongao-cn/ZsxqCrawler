@@ -46,7 +46,13 @@ from backend.services.columns_topic_persistence_service import (
     save_topic_detail as _service_save_topic_detail,
 )
 from backend.services.columns_video_download_service import download_column_video as _service_download_column_video
-from backend.services.task_runtime import add_task_log, is_task_stopped, update_task
+from backend.services.task_runtime import (
+    add_task_log,
+    complete_task_unless_stopped,
+    fail_task_unless_stopped,
+    is_task_stopped,
+    update_task,
+)
 from backend.storage.zsxq_columns_database import ZSXQColumnsDatabase
 
 
@@ -152,7 +158,18 @@ def log_columns_fetch_config(task_id: str, group_id: str, config: Dict[str, Any]
 
 def complete_empty_columns_task(task_id: str) -> None:
     add_task_log(task_id, "ℹ️ 该群组没有专栏内容")
-    update_task(task_id, "completed", "该群组没有专栏内容")
+    complete_task_unless_stopped(task_id, "该群组没有专栏内容", None)
+
+
+def complete_columns_fetch_task(task_id: str, message: str, result: Dict[str, Any]) -> None:
+    complete_task_unless_stopped(task_id, message, result)
+
+
+def fail_columns_fetch_task(task_id: str, error: Exception) -> None:
+    try:
+        fail_task_unless_stopped(task_id, "专栏采集", error)
+    except Exception:
+        pass
 
 
 def extract_topic_data(topic_detail: Dict[str, Any]) -> Optional[Dict[str, Any]]:
@@ -565,7 +582,6 @@ async def run_columns_fetch_task(task_id: str, group_id: str, settings: Any) -> 
             request_count += column_stats.request_count
 
         if is_task_stopped(task_id):
-            update_task(task_id, "stopped", "任务已被用户停止")
             return
 
         if log_id:
@@ -590,12 +606,7 @@ async def run_columns_fetch_task(task_id: str, group_id: str, settings: Any) -> 
             stats.videos_skipped,
         )
 
-        update_task(
-            task_id,
-            "completed",
-            result_msg,
-            result_payload,
-        )
+        complete_columns_fetch_task(task_id, result_msg, result_payload)
     except Exception as exc:
         try:
             if log_id and db:
@@ -603,15 +614,7 @@ async def run_columns_fetch_task(task_id: str, group_id: str, settings: Any) -> 
         except Exception:
             pass
 
-        try:
-            update_task(task_id, "failed", f"专栏采集失败: {str(exc)}")
-        except Exception:
-            pass
-
-        try:
-            add_task_log(task_id, f"❌ 专栏采集失败: {str(exc)}")
-        except Exception:
-            pass
+        fail_columns_fetch_task(task_id, exc)
     finally:
         try:
             if db:

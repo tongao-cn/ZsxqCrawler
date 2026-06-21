@@ -95,12 +95,12 @@ class ColumnsFetchTaskServiceTests(unittest.TestCase):
 
         with (
             patch.object(service, "add_task_log") as add_log,
-            patch.object(service, "update_task") as update,
+            patch.object(service, "complete_task_unless_stopped") as complete,
         ):
             service.complete_empty_columns_task("task-1")
 
         add_log.assert_called_once_with("task-1", "ℹ️ 该群组没有专栏内容")
-        update.assert_called_once_with("task-1", "completed", "该群组没有专栏内容")
+        complete.assert_called_once_with("task-1", "该群组没有专栏内容", None)
 
     def test_run_columns_fetch_task_completes_empty_catalog(self):
         from backend.services import columns_fetch_task_service as service
@@ -124,14 +124,50 @@ class ColumnsFetchTaskServiceTests(unittest.TestCase):
             patch.object(service, "get_columns_db", return_value=fake_db),
             patch.object(service, "fetch_columns_catalog", new=AsyncMock(return_value=([], 1))),
             patch.object(service, "add_task_log"),
-            patch.object(service, "update_task") as update_task,
+            patch.object(service, "complete_task_unless_stopped") as complete_task,
         ):
             import asyncio
 
             asyncio.run(service.run_columns_fetch_task("task-1", "123", settings))
 
         self.assertEqual([(123, "full_fetch")], fake_db.crawl_logs)
-        update_task.assert_called_with("task-1", "completed", "该群组没有专栏内容")
+        complete_task.assert_called_once_with("task-1", "该群组没有专栏内容", None)
+        self.assertTrue(fake_db.closed)
+
+    def test_run_columns_fetch_task_skips_worker_terminal_update_when_stopped_after_catalog(self):
+        from backend.services import columns_fetch_task_service as service
+
+        fake_db = FakeColumnsDb()
+        settings = SimpleNamespace(
+            crawlIntervalMin=2.0,
+            crawlIntervalMax=5.0,
+            longSleepIntervalMin=30.0,
+            longSleepIntervalMax=60.0,
+            itemsPerBatch=10,
+            downloadFiles=True,
+            downloadVideos=True,
+            cacheImages=True,
+            incrementalMode=False,
+        )
+
+        with (
+            patch.object(service, "get_cookie_for_group", return_value="cookie"),
+            patch.object(service, "build_stealth_headers", return_value={"Cookie": "cookie"}),
+            patch.object(service, "get_columns_db", return_value=fake_db),
+            patch.object(service, "fetch_columns_catalog", new=AsyncMock(return_value=([{"column_id": 1}], 1))),
+            patch.object(service, "process_column", new=AsyncMock(return_value=ColumnFetchStats())),
+            patch.object(service, "is_task_stopped", side_effect=[False, True]),
+            patch.object(service, "add_task_log") as add_task_log,
+            patch.object(service, "update_task") as update_task,
+            patch.object(service, "complete_task_unless_stopped") as complete_task,
+        ):
+            import asyncio
+
+            asyncio.run(service.run_columns_fetch_task("task-1", "123", settings))
+
+        self.assertNotIn(("task-1", "🛑 任务已被用户停止"), [call.args for call in add_task_log.call_args_list])
+        update_task.assert_not_called()
+        complete_task.assert_not_called()
         self.assertTrue(fake_db.closed)
 
     def test_run_columns_fetch_task_updates_completed_result(self):
@@ -159,7 +195,7 @@ class ColumnsFetchTaskServiceTests(unittest.TestCase):
             patch.object(service, "process_column", new=AsyncMock(return_value=column_stats)),
             patch.object(service, "is_task_stopped", return_value=False),
             patch.object(service, "add_task_log"),
-            patch.object(service, "update_task") as update_task,
+            patch.object(service, "complete_task_unless_stopped") as complete_task,
         ):
             import asyncio
 
@@ -178,9 +214,8 @@ class ColumnsFetchTaskServiceTests(unittest.TestCase):
             ),
             fake_db.updated_logs[-1],
         )
-        update_task.assert_called_with(
+        complete_task.assert_called_once_with(
             "task-1",
-            "completed",
             "采集完成: 1 个专栏, 2 篇新文章, 1 个文件, 0 个视频",
             {
                 "columns_count": 1,
@@ -194,6 +229,39 @@ class ColumnsFetchTaskServiceTests(unittest.TestCase):
                 "videos_skipped": 0,
             },
         )
+
+    def test_run_columns_fetch_task_uses_stopped_aware_failure_helper(self):
+        from backend.services import columns_fetch_task_service as service
+
+        fake_db = FakeColumnsDb()
+        error = RuntimeError("boom")
+        settings = SimpleNamespace(
+            crawlIntervalMin=2.0,
+            crawlIntervalMax=5.0,
+            longSleepIntervalMin=30.0,
+            longSleepIntervalMax=60.0,
+            itemsPerBatch=10,
+            downloadFiles=True,
+            downloadVideos=True,
+            cacheImages=True,
+            incrementalMode=False,
+        )
+
+        with (
+            patch.object(service, "get_cookie_for_group", return_value="cookie"),
+            patch.object(service, "build_stealth_headers", return_value={"Cookie": "cookie"}),
+            patch.object(service, "get_columns_db", return_value=fake_db),
+            patch.object(service, "fetch_columns_catalog", new=AsyncMock(side_effect=error)),
+            patch.object(service, "add_task_log"),
+            patch.object(service, "fail_task_unless_stopped") as fail_task,
+        ):
+            import asyncio
+
+            asyncio.run(service.run_columns_fetch_task("task-1", "123", settings))
+
+        self.assertEqual((9, {"status": "failed", "error_message": "boom"}), fake_db.updated_logs[-1])
+        fail_task.assert_called_once_with("task-1", "专栏采集", error)
+        self.assertTrue(fake_db.closed)
 
 
 if __name__ == "__main__":
