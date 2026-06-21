@@ -3,6 +3,7 @@
 import { useCallback, useState } from 'react';
 import { toast } from 'sonner';
 import { apiClient, ColumnsFetchSettings } from '@/lib/api';
+import { useTaskLauncher } from '@/hooks/useTaskLauncher';
 
 interface UseColumnsActionsParams {
   groupId: string;
@@ -14,21 +15,28 @@ export function useColumnsActions({ groupId, loadColumns, resetColumnsData }: Us
   const [fetchingColumns, setFetchingColumns] = useState(false);
   const [currentTaskId, setCurrentTaskId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const { handleTaskCreateError, notifyTaskCreated } = useTaskLauncher({
+    onTaskCreated: setCurrentTaskId,
+  });
 
   const handleFetchColumns = useCallback(async (settings: ColumnsFetchSettings) => {
     try {
       setFetchingColumns(true);
       const result = await apiClient.fetchGroupColumns(groupId, settings);
       if (result.success) {
-        setCurrentTaskId(result.task_id);
-        toast.success(settings.incrementalMode ? '增量采集任务已启动（跳过已存在）' : '全量采集任务已启动');
+        const successMessage = settings.incrementalMode ? '增量采集任务已启动（跳过已存在）' : '全量采集任务已启动';
+        if (result.task_id) {
+          notifyTaskCreated(result.task_id, successMessage);
+        } else {
+          toast.success(successMessage);
+        }
       }
     } catch (error) {
       console.error('启动专栏采集失败:', error);
-      toast.error(`启动专栏采集失败: ${error instanceof Error ? error.message : '未知错误'}`);
+      handleTaskCreateError(error, '启动专栏采集失败');
       setFetchingColumns(false);
     }
-  }, [groupId]);
+  }, [groupId, handleTaskCreateError, notifyTaskCreated]);
 
   const handleDeleteAllColumns = useCallback(async () => {
     try {
