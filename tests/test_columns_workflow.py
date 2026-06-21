@@ -32,14 +32,5 @@ class ColumnsWorkflowTests(unittest.TestCase):
         self.assertEqual(columns_workflow.COLUMNS_FETCH_CREATED_MESSAGE, recipe.message)
         update_task.assert_called_once_with("task-1", "running", columns_workflow.COLUMNS_FETCH_RUNNING_MESSAGE)
 
-    def test_workflow_task_launch_keeps_columns_compatibility_exports(self):
-        from backend.services import columns_workflow
-        from backend.services import workflow_task_launch
-
-        self.assertIs(workflow_task_launch.create_columns_fetch_task, columns_workflow.create_columns_fetch_task)
-        self.assertEqual(workflow_task_launch.COLUMNS_FETCH_CREATED_MESSAGE, columns_workflow.COLUMNS_FETCH_CREATED_MESSAGE)
-        self.assertEqual(workflow_task_launch.COLUMNS_FETCH_RUNNING_MESSAGE, columns_workflow.COLUMNS_FETCH_RUNNING_MESSAGE)
-
-
 if __name__ == "__main__":
     unittest.main()

@@ -105,23 +105,5 @@ class DailyAnalysisWorkflowTests(unittest.TestCase):
         self.assertEqual(3, recipe.args[1].comments_per_topic)
         self.assertEqual({"group_id": "51111112855254", "report_date": "2026-06-20"}, recipe.metadata)
 
-    def test_workflow_task_launch_keeps_daily_compatibility_exports(self):
-        from backend.services import daily_analysis_workflow as workflow
-        from backend.services import workflow_task_launch
-
-        self.assertIs(workflow_task_launch.DailyTopicAnalysisTaskRequest, workflow.DailyTopicAnalysisTaskRequest)
-        self.assertIs(
-            workflow_task_launch.DailyTopicCrawlAndAnalysisTaskRequest,
-            workflow.DailyTopicCrawlAndAnalysisTaskRequest,
-        )
-        self.assertIs(workflow_task_launch.DailyStockConceptTaskRequest, workflow.DailyStockConceptTaskRequest)
-        self.assertIs(workflow_task_launch.create_daily_topic_analysis_task, workflow.create_daily_topic_analysis_task)
-        self.assertIs(
-            workflow_task_launch.create_daily_topic_crawl_and_analysis_task,
-            workflow.create_daily_topic_crawl_and_analysis_task,
-        )
-        self.assertIs(workflow_task_launch.create_daily_stock_concept_task, workflow.create_daily_stock_concept_task)
-
-
 if __name__ == "__main__":
     unittest.main()

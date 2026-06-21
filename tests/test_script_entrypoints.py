@@ -2,7 +2,7 @@ import unittest
 from pathlib import Path
 
 
-class WorkflowTaskLaunchTests(unittest.TestCase):
+class ScriptEntrypointTests(unittest.TestCase):
     def test_script_entrypoints_do_not_import_routes(self):
         root = Path(__file__).resolve().parents[1]
         for relative_path in (

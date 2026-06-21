@@ -111,20 +111,5 @@ class CrawlWorkflowTests(unittest.TestCase):
         self.assertEqual("existing", source)
         self.assertEqual("task-existing", response["task_id"])
 
-    def test_workflow_task_launch_keeps_crawl_compatibility_exports(self):
-        from backend.services import crawl_workflow
-        from backend.services import workflow_task_launch
-
-        self.assertIs(workflow_task_launch.create_historical_crawl_task, crawl_workflow.create_historical_crawl_task)
-        self.assertIs(workflow_task_launch.create_all_crawl_task, crawl_workflow.create_all_crawl_task)
-        self.assertIs(workflow_task_launch.create_incremental_crawl_task, crawl_workflow.create_incremental_crawl_task)
-        self.assertIs(workflow_task_launch.launch_latest_crawl_task, crawl_workflow.launch_latest_crawl_task)
-        self.assertIs(workflow_task_launch.create_time_range_crawl_task, crawl_workflow.create_time_range_crawl_task)
-        self.assertIs(
-            workflow_task_launch.launch_or_reuse_latest_crawl_task,
-            crawl_workflow.launch_or_reuse_latest_crawl_task,
-        )
-
-
 if __name__ == "__main__":
     unittest.main()

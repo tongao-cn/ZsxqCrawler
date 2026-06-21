@@ -91,15 +91,5 @@ class AShareAnalysisWorkflowTests(unittest.TestCase):
 
         self.assertEqual({"success": True, "total_written": 3}, result)
 
-    def test_workflow_task_launch_keeps_compatibility_exports(self):
-        from backend.services import a_share_analysis_workflow as workflow
-        from backend.services import workflow_task_launch
-
-        self.assertIs(workflow_task_launch.AShareAnalysisTaskRequest, workflow.AShareAnalysisTaskRequest)
-        self.assertIs(workflow_task_launch.create_a_share_analysis_task, workflow.create_a_share_analysis_task)
-        self.assertIs(workflow_task_launch.run_a_share_analysis_task, workflow.run_a_share_analysis_task)
-        self.assertIs(workflow_task_launch.export_a_share_analysis_to_tdx, workflow.export_a_share_analysis_to_tdx)
-
-
 if __name__ == "__main__":
     unittest.main()
