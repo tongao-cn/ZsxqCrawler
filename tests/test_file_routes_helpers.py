@@ -19,13 +19,13 @@ from backend.services.file_download_records_workflow import (
     _run_download_records,
 )
 from backend.services.file_single_download_workflow import _complete_successful_single_file_download
-from backend.services.file_status_service import (
+from backend.services.file_read_model import (
     _build_check_local_file_status_response,
     _build_file_status_response,
     _build_sync_files_response,
     _get_download_file_status,
-    _get_file_status_response,
     _resolve_download_record_status,
+    get_file_status_response,
 )
 from backend.services.file_workflow_service import (
     _close_crawler_file_databases,
@@ -1110,7 +1110,7 @@ class FileRoutesHelperTests(unittest.TestCase):
         )
 
     def test_get_download_file_status_handles_missing_file(self):
-        with patch("backend.services.file_status_service.group_download_dir", return_value=r"C:\tmp\group-1\downloads"):
+        with patch("backend.services.file_read_model.group_download_dir", return_value=r"C:\tmp\group-1\downloads"):
             status = _get_download_file_status("group-1", "missing.pdf", 123, "fallback.pdf")
 
         self.assertEqual("missing.pdf", status["safe_filename"])
@@ -1120,7 +1120,7 @@ class FileRoutesHelperTests(unittest.TestCase):
         self.assertFalse(status["is_complete"])
 
     def test_resolve_download_record_status_marks_existing_file_completed(self):
-        with patch("backend.services.file_status_service.resolve_local_file_path") as mocked_resolve:
+        with patch("backend.services.file_read_model.resolve_local_file_path") as mocked_resolve:
             mocked_resolve.return_value = r"C:\tmp\group-1\downloads\file.pdf"
 
             status = _resolve_download_record_status(
@@ -1201,13 +1201,13 @@ class FileRoutesHelperTests(unittest.TestCase):
         fake_db = FakeFileDb()
 
         with (
-            patch("backend.services.file_status_service._file_db", return_value=fake_db),
+            patch("backend.services.file_read_model._file_db", return_value=fake_db),
             patch(
-                "backend.services.file_status_service._get_download_file_status",
+                "backend.services.file_read_model._get_download_file_status",
                 return_value=local_status,
             ) as get_download_file_status,
         ):
-            response = _get_file_status_response("123", 456)
+            response = get_file_status_response("123", 456)
 
         self.assertEqual([456], fake_db.status_calls)
         get_download_file_status.assert_called_once_with("123", "file.pdf", 456, "file_456")
@@ -1242,10 +1242,10 @@ class FileRoutesHelperTests(unittest.TestCase):
 
         fake_db = FakeFileDb()
         with (
-            patch("backend.services.file_status_service._file_db", return_value=fake_db),
-            patch("backend.services.file_status_service._get_download_file_status") as get_download_file_status,
+            patch("backend.services.file_read_model._file_db", return_value=fake_db),
+            patch("backend.services.file_read_model._get_download_file_status") as get_download_file_status,
         ):
-            response = _get_file_status_response("group-1", 123)
+            response = get_file_status_response("group-1", 123)
 
         self.assertEqual([123], fake_db.status_calls)
         get_download_file_status.assert_not_called()
@@ -1397,7 +1397,7 @@ class FileRoutesHelperTests(unittest.TestCase):
                 return False
 
         fake_db = FakeFileDb()
-        with patch("backend.services.file_status_service._file_db", return_value=fake_db):
+        with patch("backend.services.file_read_model._file_db", return_value=fake_db):
             response = file_read_model.get_file_stats_response("123")
 
         self.assertEqual(1, fake_db.download_stats_calls)
@@ -1435,7 +1435,7 @@ class FileRoutesHelperTests(unittest.TestCase):
                 return False
 
         fake_db = FakeFileDb()
-        with patch("backend.services.file_status_service._file_db", return_value=fake_db):
+        with patch("backend.services.file_read_model._file_db", return_value=fake_db):
             response = file_read_model.get_file_stats_response("group-1")
 
         self.assertEqual(1, fake_db.download_stats_calls)
@@ -1473,7 +1473,7 @@ class FileRoutesHelperTests(unittest.TestCase):
                 return False
 
         fake_db = FakeFileDb()
-        with patch("backend.services.file_status_service._file_db", return_value=fake_db):
+        with patch("backend.services.file_read_model._file_db", return_value=fake_db):
             response = file_read_model.get_file_stats_response("123")
 
         self.assertEqual(
@@ -1713,7 +1713,7 @@ class FileRoutesHelperTests(unittest.TestCase):
         with (
             patch("backend.services.file_read_model._file_db", return_value=fake_db),
             patch(
-                "backend.services.file_status_service.resolve_local_file_path",
+                "backend.services.file_read_model.resolve_local_file_path",
                 return_value=r"C:\resolved\Report.PDF",
             ),
         ):
