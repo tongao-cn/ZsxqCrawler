@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 from typing import Any, Dict, Optional
 
 from backend.crawlers.zsxq_file_downloader import ZSXQFileDownloader
@@ -16,12 +15,8 @@ from backend.services.file_task_lifecycle import (
     fail_file_task as _fail_file_task_impl,
     file_task_stopped_after_init as _file_task_stopped_after_init_impl,
 )
+from backend.services.file_local_paths import download_target_path
 from backend.services.task_runtime import add_task_log, is_task_stopped, update_task
-
-
-def _safe_filename(file_name: str, fallback: str) -> str:
-    safe = "".join(c for c in file_name if c.isalnum() or c in "._-（）()[]{}")
-    return safe or fallback
 
 
 def _fail_file_task(
@@ -93,8 +88,8 @@ def _single_file_download_local_path(
 ) -> str:
     actual_file_info = file_info["file"]
     actual_file_name = actual_file_info.get("name", f"file_{file_id}")
-    safe_filename = _safe_filename(actual_file_name, f"file_{file_id}")
-    return os.path.join(downloader.download_dir, safe_filename)
+    _safe_filename, local_path = download_target_path(downloader.download_dir, actual_file_name, file_id)
+    return local_path
 
 
 def _complete_successful_single_file_download(

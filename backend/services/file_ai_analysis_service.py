@@ -22,8 +22,8 @@ from backend.core.ai_provider_config import (
     get_openai_compatible_config,
     get_summary_reasoning_effort,
 )
-from backend.core.db_path_manager import get_db_path_manager
 from backend.services.ai_client import AITextRequest, call_ai_text, extract_response_text
+from backend.services.file_local_paths import resolve_local_file_path
 from backend.storage.zsxq_file_database import ZSXQFileDatabase
 
 
@@ -92,29 +92,8 @@ _WHISPER_MODEL_CACHE: dict[tuple[str, str, str], Any] = {}
 _WHISPER_MODEL_LOCK = threading.Lock()
 
 
-def _safe_filename(file_name: str, fallback_file_id: int) -> str:
-    safe_filename = "".join(c for c in str(file_name or "") if c.isalnum() or c in "._-（）()[]{} ")
-    safe_filename = safe_filename.strip()
-    return safe_filename or f"file_{fallback_file_id}"
-
-
 def _get_file_db(group_id: str) -> ZSXQFileDatabase:
     return ZSXQFileDatabase(group_id)
-
-
-def resolve_local_file_path(group_id: str, file_id: int, file_name: str, local_path: Optional[str]) -> Optional[Path]:
-    candidates = []
-    if local_path:
-        candidates.append(Path(local_path))
-
-    path_manager = get_db_path_manager()
-    group_dir = Path(path_manager.get_group_dir(group_id))
-    candidates.append(group_dir / "downloads" / _safe_filename(file_name, file_id))
-
-    for candidate in candidates:
-        if candidate.exists() and candidate.is_file():
-            return candidate.resolve()
-    return None
 
 
 def _decode_bytes(data: bytes) -> str:

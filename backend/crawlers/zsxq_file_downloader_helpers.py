@@ -8,6 +8,10 @@ import re
 from typing import Any, Dict, NamedTuple, Optional, Tuple
 
 from backend.core.log_redaction import redact_response_text
+from backend.services.file_local_paths import (
+    download_target_path as _download_target_path,
+    safe_download_filename as _safe_download_filename,
+)
 
 
 IMPORT_STAT_KEYS = (
@@ -1058,15 +1062,11 @@ def page_crosses_stop_before(
 
 
 def safe_download_filename(file_name: Any, file_id: Any) -> str:
-    safe_filename = "".join(c for c in str(file_name or "") if c.isalnum() or c in "._-（）()[]{}")
-    if not safe_filename:
-        safe_filename = f"file_{file_id}"
-    return safe_filename
+    return _safe_download_filename(file_name, file_id)
 
 
 def download_target_path(download_dir: str, file_name: Any, file_id: Any) -> tuple[str, str]:
-    safe_filename = safe_download_filename(file_name, file_id)
-    return safe_filename, os.path.join(download_dir, safe_filename)
+    return _download_target_path(download_dir, file_name, file_id)
 
 
 def download_file_data(file_info: Dict[str, Any]) -> Dict[str, Any]:

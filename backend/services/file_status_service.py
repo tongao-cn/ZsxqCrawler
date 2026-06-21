@@ -6,14 +6,12 @@ import os
 from contextlib import contextmanager
 from typing import Any, Dict, Iterator, Optional, Sequence
 
-from backend.core.db_path_manager import get_db_path_manager
-from backend.services.file_ai_analysis_service import resolve_local_file_path
+from backend.services.file_local_paths import (
+    download_target_path_with_fallback,
+    group_download_dir,
+    resolve_local_file_path,
+)
 from backend.storage.zsxq_file_database import ZSXQFileDatabase
-
-
-def _safe_filename(file_name: str, fallback: str) -> str:
-    safe = "".join(c for c in file_name if c.isalnum() or c in "._-（）()[]{}")
-    return safe or fallback
 
 
 def _open_file_db(group_id: str) -> ZSXQFileDatabase:
@@ -30,9 +28,8 @@ def _file_db(group_id: str) -> Iterator[ZSXQFileDatabase]:
 
 
 def _get_download_file_status(group_id: str, file_name: str, file_size: int, fallback: str) -> Dict[str, Any]:
-    safe_filename = _safe_filename(file_name, fallback)
-    download_dir = os.path.join(get_db_path_manager().get_group_dir(group_id), "downloads")
-    file_path = os.path.join(download_dir, safe_filename)
+    download_dir = group_download_dir(group_id)
+    safe_filename, file_path = download_target_path_with_fallback(download_dir, file_name, fallback)
     local_exists = os.path.exists(file_path)
     local_size = os.path.getsize(file_path) if local_exists else 0
     return {

@@ -1099,9 +1099,7 @@ class FileRoutesHelperTests(unittest.TestCase):
         update_task.assert_not_called()
 
     def test_get_download_file_status_handles_missing_file(self):
-        with patch("backend.services.file_status_service.get_db_path_manager") as mocked_manager:
-            mocked_manager.return_value.get_group_dir.return_value = r"C:\tmp\group-1"
-
+        with patch("backend.services.file_status_service.group_download_dir", return_value=r"C:\tmp\group-1\downloads"):
             status = _get_download_file_status("group-1", "missing.pdf", 123, "fallback.pdf")
 
         self.assertEqual("missing.pdf", status["safe_filename"])
