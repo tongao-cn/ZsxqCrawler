@@ -75,6 +75,68 @@ class AShareAnalysisWorkflowTests(unittest.TestCase):
         add_task_log.assert_called_once_with("task-a-share", f"❌ {MISSING_OPENAI_API_KEY_MESSAGE}")
         run_analysis.assert_not_called()
 
+    def test_complete_a_share_analysis_task_uses_shared_completion_and_success_log(self):
+        from backend.services import a_share_analysis_workflow as workflow
+
+        events = []
+        result = {"ok": True}
+
+        def complete_task(task_id, message, task_result):
+            events.append(("complete", task_id, message, task_result))
+
+        def add_log(task_id, message):
+            events.append(("log", task_id, message))
+
+        with (
+            patch.object(workflow, "complete_task_unless_stopped", side_effect=complete_task) as complete,
+            patch.object(workflow, "is_task_stopped", return_value=False) as is_stopped,
+            patch.object(workflow, "add_task_log", side_effect=add_log) as add_task_log,
+        ):
+            workflow._complete_a_share_analysis_task("task-a-share", result)
+
+        self.assertEqual(
+            [
+                ("complete", "task-a-share", "A股公司分析完成", result),
+                ("log", "task-a-share", "✅ A股公司分析完成"),
+            ],
+            events,
+        )
+        complete.assert_called_once_with("task-a-share", "A股公司分析完成", result)
+        is_stopped.assert_called_once_with("task-a-share")
+        add_task_log.assert_called_once_with("task-a-share", "✅ A股公司分析完成")
+
+    def test_complete_a_share_analysis_task_skips_success_log_when_stopped(self):
+        from backend.services import a_share_analysis_workflow as workflow
+
+        result = {"ok": True}
+
+        with (
+            patch.object(workflow, "complete_task_unless_stopped") as complete,
+            patch.object(workflow, "is_task_stopped", return_value=True) as is_stopped,
+            patch.object(workflow, "add_task_log") as add_task_log,
+        ):
+            workflow._complete_a_share_analysis_task("task-a-share", result)
+
+        complete.assert_called_once_with("task-a-share", "A股公司分析完成", result)
+        is_stopped.assert_called_once_with("task-a-share")
+        add_task_log.assert_not_called()
+
+    def test_fail_a_share_analysis_task_uses_shared_failure_helper(self):
+        from backend.services import a_share_analysis_workflow as workflow
+
+        error = RuntimeError("boom")
+
+        with patch.object(workflow, "fail_task_unless_stopped") as fail_task:
+            workflow._fail_a_share_analysis_task("task-a-share", error)
+
+        fail_task.assert_called_once_with("task-a-share", "A股公司分析", error)
+
+    def test_fail_a_share_analysis_task_swallows_failure_reporting_errors(self):
+        from backend.services import a_share_analysis_workflow as workflow
+
+        with patch.object(workflow, "fail_task_unless_stopped", side_effect=RuntimeError("report down")):
+            workflow._fail_a_share_analysis_task("task-a-share", RuntimeError("boom"))
+
     def test_export_a_share_analysis_to_tdx_returns_success_payload(self):
         from backend.services import a_share_analysis_workflow as workflow
 

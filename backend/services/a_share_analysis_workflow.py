@@ -19,7 +19,14 @@ from backend.services.a_share_analysis_service import (
     run_analysis,
 )
 from backend.services.task_launch import TaskLaunchRecipe, launch_task_recipe
-from backend.services.task_runtime import add_task_log, build_task_log_callback, is_task_stopped, update_task
+from backend.services.task_runtime import (
+    add_task_log,
+    build_task_log_callback,
+    complete_task_unless_stopped,
+    fail_task_unless_stopped,
+    is_task_stopped,
+    update_task,
+)
 from backend.services.tdx_a_share_export_service import export_a_share_rankings_to_tdx
 
 
@@ -147,16 +154,15 @@ def _run_a_share_analysis_for_task(
 
 def _fail_a_share_analysis_task(task_id: str, error: Exception) -> None:
     try:
-        message = f"A股公司分析失败: {str(error)}"
-        add_task_log(task_id, f"❌ {message}")
-        update_task(task_id, "failed", message)
+        fail_task_unless_stopped(task_id, "A股公司分析", error)
     except Exception:
         pass
 
 
 def _complete_a_share_analysis_task(task_id: str, result: dict) -> None:
-    update_task(task_id, "completed", "A股公司分析完成", result)
-    add_task_log(task_id, "✅ A股公司分析完成")
+    complete_task_unless_stopped(task_id, "A股公司分析完成", result)
+    if not is_task_stopped(task_id):
+        add_task_log(task_id, "✅ A股公司分析完成")
 
 
 def run_a_share_analysis_task(task_id: str, request: AShareAnalysisTaskRequest) -> None:
