@@ -10,12 +10,7 @@ from backend.core.ai_provider_config import (
     get_extraction_reasoning_effort,
     get_openai_compatible_config,
 )
-from backend.services.ai_client import (
-    chat_json_schema_response_format,
-    responses_json_schema_text_format,
-)
-from backend.services.ai_json_utils import JsonObjectParseError, require_json_object
-from backend.services.ai_runtime_request import call_runtime_ai_text
+from backend.services.ai_runtime_request import call_structured_ai_object
 from backend.services.a_share_analysis_db_storage import load_topic_stock_extractions
 from backend.services.daily_stock_concept_payload import (
     aggregate_topic_stock_extractions,
@@ -69,14 +64,6 @@ def _log(log_callback: Optional[Callable[[str], None]], message: str) -> None:
         log_callback(message)
 
 
-def _get_responses_json_schema_text_format() -> Dict[str, Any]:
-    return responses_json_schema_text_format("daily_stock_concepts", STOCK_CONCEPT_SCHEMA)
-
-
-def _get_chat_json_schema_response_format() -> Dict[str, Any]:
-    return chat_json_schema_response_format("daily_stock_concepts", STOCK_CONCEPT_SCHEMA)
-
-
 def _generate_stock_concepts_with_ai(prompt_payload: str, report_date: str) -> Tuple[List[Dict[str, Any]], str]:
     messages = [
         {
@@ -102,22 +89,17 @@ def _generate_stock_concepts_with_ai(prompt_payload: str, report_date: str) -> T
         },
     ]
 
-    result = call_runtime_ai_text(
+    result = call_structured_ai_object(
         messages=messages,
         get_ai_config=get_openai_compatible_config,
+        schema_name="daily_stock_concepts",
+        schema=STOCK_CONCEPT_SCHEMA,
+        label="AI 股票概念抽取结果",
         reasoning_effort=get_extraction_reasoning_effort(),
         timeout=180,
-        responses_text_format=_get_responses_json_schema_text_format(),
-        chat_response_format=_get_chat_json_schema_response_format(),
     )
-    message = result.text
 
-    try:
-        payload = require_json_object(message, label="AI 股票概念抽取结果")
-    except JsonObjectParseError as exc:
-        raise RuntimeError(f"AI 股票概念抽取结果不是合法 JSON: {message[:200]}") from exc
-
-    stocks = parse_stock_concept_payload(payload)
+    stocks = parse_stock_concept_payload(result.payload)
     return stocks, result.model
 
 

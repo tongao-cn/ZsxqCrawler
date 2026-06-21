@@ -9,7 +9,13 @@ from backend.core.ai_provider_config import (
     DEFAULT_FALLBACK_WIRE_API,
     get_openai_compatible_config,
 )
-from backend.services.ai_client import AITextRequest, call_ai_text
+from backend.services.ai_client import (
+    AITextRequest,
+    call_ai_text,
+    chat_json_schema_response_format,
+    responses_json_schema_text_format,
+)
+from backend.services.ai_json_utils import JsonObjectParseError, require_json_object
 
 
 MISSING_OPENAI_RUNTIME_API_KEY_MESSAGE = "OPENAI_API_KEY not set and config.toml [ai].api_key is empty"
@@ -25,6 +31,13 @@ class AIRuntimeTextSettings:
 
 @dataclass(frozen=True)
 class AIRuntimeTextResult:
+    text: str
+    model: str
+
+
+@dataclass(frozen=True)
+class AIRuntimeStructuredObjectResult:
+    payload: Dict[str, Any]
     text: str
     model: str
 
@@ -125,3 +138,38 @@ def call_runtime_ai_text(
         chat_response_format=chat_response_format,
     )
     return AIRuntimeTextResult(text=call_text(request), model=request.model)
+
+
+def call_structured_ai_object(
+    messages: List[Dict[str, Any]],
+    *,
+    schema_name: str,
+    schema: Dict[str, Any],
+    label: str,
+    settings: Optional[AIRuntimeTextSettings] = None,
+    get_ai_config: Callable[[], Mapping[str, Any]] = get_openai_compatible_config,
+    model: Optional[str] = None,
+    api_base: Optional[str] = None,
+    wire_api: Optional[str] = None,
+    reasoning_effort: str = "",
+    timeout: int = 180,
+    call_text: Callable[[AITextRequest], str] = call_ai_text,
+) -> AIRuntimeStructuredObjectResult:
+    result = call_runtime_ai_text(
+        messages,
+        settings=settings,
+        get_ai_config=get_ai_config,
+        model=model,
+        api_base=api_base,
+        wire_api=wire_api,
+        reasoning_effort=reasoning_effort,
+        timeout=timeout,
+        responses_text_format=responses_json_schema_text_format(schema_name, schema),
+        chat_response_format=chat_json_schema_response_format(schema_name, schema),
+        call_text=call_text,
+    )
+    try:
+        payload = require_json_object(result.text, label=label)
+    except JsonObjectParseError as exc:
+        raise RuntimeError(f"{label}不是合法 JSON: {result.text[:200]}") from exc
+    return AIRuntimeStructuredObjectResult(payload=payload, text=result.text, model=result.model)
