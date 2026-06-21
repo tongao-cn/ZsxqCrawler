@@ -75,6 +75,7 @@ class DailyStockConceptServiceHelperTests(unittest.TestCase):
     @unittest.skipUnless(HAS_STOCK_CONCEPT_DEPS, "daily stock concept service dependencies are not installed")
     def test_generate_stock_concepts_with_ai_rejects_invalid_json(self):
         from backend.services import daily_stock_concept_service as service
+        from backend.services.ai_runtime_request import AIRuntimeTextResult
 
         with (
             patch.object(
@@ -87,7 +88,7 @@ class DailyStockConceptServiceHelperTests(unittest.TestCase):
                     "wire_api": "responses",
                 },
             ),
-            patch.object(service, "call_ai_text", return_value="not json"),
+            patch.object(service, "call_runtime_ai_text", return_value=AIRuntimeTextResult("not json", "test-model")),
         ):
             with self.assertRaisesRegex(RuntimeError, "AI 股票概念抽取结果不是合法 JSON"):
                 service._generate_stock_concepts_with_ai("topic payload", "2026-05-20")
