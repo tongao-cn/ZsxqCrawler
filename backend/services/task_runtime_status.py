@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Dict, Iterable, List, Optional
 
-from backend.services.a_share_analysis_service import normalize_group_id
+from backend.core.group_identity import normalize_group_id
 from backend.services.workflow_registry import (
     INGESTION_LOCK_CATEGORY,
     INGESTION_WORKFLOW_TYPES,

@@ -106,6 +106,16 @@ class StopFlagObserver:
 
 
 class TaskRuntimeHelperTests(unittest.TestCase):
+    def test_group_identity_normalization_is_core_and_a_share_compatible(self):
+        from backend.core.group_identity import normalize_group_id
+        from backend.services.a_share_analysis_local_store import normalize_group_id as a_share_normalize_group_id
+
+        self.assertIs(a_share_normalize_group_id, normalize_group_id)
+        self.assertIsNone(normalize_group_id(None))
+        self.assertIsNone(normalize_group_id("  "))
+        self.assertEqual("155", normalize_group_id(155))
+        self.assertEqual("00155", normalize_group_id(" 00155 "))
+
     def test_columns_fetch_is_ingestion_locked(self):
         from backend.services.task_runtime import INGESTION_LOCK_TYPES
 

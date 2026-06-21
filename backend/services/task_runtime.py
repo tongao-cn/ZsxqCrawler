@@ -8,7 +8,7 @@ from datetime import datetime
 from typing import Any, Callable, Dict, List, Optional
 
 from backend.core import crawler_runtime
-from backend.services.a_share_analysis_service import normalize_group_id
+from backend.core.group_identity import normalize_group_id
 from backend.services.task_runtime_memory import (
     should_apply_task_update,
 )

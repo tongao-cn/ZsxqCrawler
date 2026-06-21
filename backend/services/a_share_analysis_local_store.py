@@ -5,6 +5,7 @@ import json
 import os
 from typing import Callable, Dict, Iterable, Optional, Tuple
 
+from backend.core.group_identity import normalize_group_id
 from backend.core.db_path_manager import get_db_path_manager
 
 
@@ -13,14 +14,6 @@ DEFAULT_STATE_PATH = "output/company_mentions_state.json"
 GROUP_ANALYSIS_DIRNAME = "a_share_analysis"
 GROUP_OUTPUT_FILENAME = "company_mentions.csv"
 GROUP_STATE_FILENAME = "company_mentions_state.json"
-
-
-def normalize_group_id(group_id: Optional[str]) -> Optional[str]:
-    if group_id is None:
-        return None
-    normalized = str(group_id).strip()
-    return normalized or None
-
 
 def get_group_analysis_paths(group_id: str) -> Dict[str, str]:
     normalized_group_id = normalize_group_id(group_id)
