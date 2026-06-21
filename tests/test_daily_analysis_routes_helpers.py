@@ -18,6 +18,19 @@ class DailyAnalysisRoutesHelperTests(unittest.TestCase):
         self.assertEqual("获取每日报告失败: boom", error.detail)
 
     @unittest.skipUnless(HAS_DAILY_ROUTE_DEPS, "daily analysis route dependencies are not installed")
+    def test_daily_analysis_route_error_preserves_ai_preflight_status(self):
+        from backend.routes.daily_analysis_routes import _daily_analysis_route_error
+        from backend.services.ai_workflow_preflight import AIWorkflowPreflightError
+
+        error = _daily_analysis_route_error(
+            "创建每日分析任务失败",
+            AIWorkflowPreflightError(400, "missing key"),
+        )
+
+        self.assertEqual(400, error.status_code)
+        self.assertEqual("missing key", error.detail)
+
+    @unittest.skipUnless(HAS_DAILY_ROUTE_DEPS, "daily analysis route dependencies are not installed")
     def test_create_daily_report_task_response_delegates_to_daily_workflow(self):
         from backend.routes import daily_analysis_routes
         from backend.routes.daily_analysis_routes import DailyAnalysisRequest

@@ -12,6 +12,7 @@ from backend.services.daily_analysis_workflow import (
 )
 from backend.services.daily_topic_analysis_service import get_daily_report
 from backend.services.task_launch import TASK_CREATED_MESSAGE as _TASK_CREATED_MESSAGE
+from backend.routes.task_http_errors import task_launch_route_error
 
 
 router = APIRouter(prefix="/api/analysis/daily", tags=["daily-analysis"])
@@ -53,7 +54,7 @@ def _create_daily_today_task_response(
 
 
 def _daily_analysis_route_error(message: str, error: Exception) -> HTTPException:
-    return HTTPException(status_code=500, detail=f"{message}: {str(error)}")
+    return task_launch_route_error(message, error)
 
 
 def _daily_report_or_404(group_id: str, date: Optional[str]) -> dict:

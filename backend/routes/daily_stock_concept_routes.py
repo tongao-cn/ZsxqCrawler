@@ -5,6 +5,7 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 
+from backend.routes.task_http_errors import task_launch_route_error
 from backend.services.daily_analysis_workflow import create_daily_stock_concept_task
 from backend.services.daily_stock_concept_service import get_daily_stock_concepts
 from backend.services.task_launch import TASK_CREATED_MESSAGE as _TASK_CREATED_MESSAGE
@@ -31,7 +32,7 @@ def _create_daily_stock_concept_task_response(
 
 
 def _daily_stock_concept_route_error(message: str, error: Exception) -> HTTPException:
-    return HTTPException(status_code=500, detail=f"{message}: {str(error)}")
+    return task_launch_route_error(message, error)
 
 
 def _daily_stock_concepts_or_404(group_id: str, date: Optional[str]) -> dict:

@@ -17,6 +17,27 @@ class DailyStockConceptRoutesHelperTests(unittest.TestCase):
         self.assertEqual("获取每日股票概念失败: boom", error.detail)
 
     @unittest.skipUnless(HAS_ROUTE_DEPS, "daily stock concept route dependencies are not installed")
+    def test_daily_stock_concept_route_error_preserves_task_conflict_detail(self):
+        from backend.routes.daily_stock_concept_routes import _daily_stock_concept_route_error
+        from backend.services.task_launch import TaskLaunchConflict
+
+        error = _daily_stock_concept_route_error(
+            "创建每日股票概念提取任务失败",
+            TaskLaunchConflict({"task_id": "task-old", "type": "crawl_all", "status": "running"}),
+        )
+
+        self.assertEqual(409, error.status_code)
+        self.assertEqual(
+            {
+                "message": "该群组已有采集或同步任务正在运行",
+                "task_id": "task-old",
+                "type": "crawl_all",
+                "status": "running",
+            },
+            error.detail,
+        )
+
+    @unittest.skipUnless(HAS_ROUTE_DEPS, "daily stock concept route dependencies are not installed")
     def test_create_daily_stock_concept_task_response_delegates_to_daily_workflow(self):
         from backend.routes.daily_stock_concept_routes import DailyStockConceptRequest, _create_daily_stock_concept_task_response
 
