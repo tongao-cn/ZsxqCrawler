@@ -80,17 +80,6 @@ export interface StockTopicAnalysisResponse {
   analysis_mode?: 'saved' | 'initialize' | 'incremental' | 'up_to_date' | string;
 }
 
-export interface StockTopicBatchAnalysisResponse {
-  group_id: string;
-  stocks: StockTopicAnalysisResponse[];
-  summary?: {
-    total: number;
-    success: number;
-    failed: number;
-    no_topics: number;
-  };
-}
-
 export interface StockTopicImageExtractResponse {
   stockNames: string[];
   model?: string;

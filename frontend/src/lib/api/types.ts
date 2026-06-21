@@ -20,7 +20,6 @@ export type {
   StockQuestionResponse,
   StockQuestionTopicMatch,
   StockTopicAnalysisResponse,
-  StockTopicBatchAnalysisResponse,
   StockTopicImageExtractResponse,
   StockTopicMatch,
 } from './analysisTypes';

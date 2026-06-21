@@ -9,7 +9,6 @@ import type {
   DailyStockConceptResponse,
   DailyTopicAnalysisPayload,
   DailyTopicReport,
-  StockTopicBatchAnalysisResponse,
   StockTopicAnalysisResponse,
   StockTopicImageExtractResponse,
   StockQuestionResponse,
@@ -157,20 +156,6 @@ export class AnalysisApiClient extends TasksApiClient {
     });
   }
 
-  async searchStockTopics(groupId: number | string, stockName: string, options: ApiRequestOptions = {}): Promise<StockTopicAnalysisResponse> {
-    const search = new URLSearchParams({ stock_name: stockName });
-    return this.request(`/api/analysis/stock-topics/${groupId}?${search}`, {
-      signal: options.signal,
-    });
-  }
-
-  async analyzeStockTopics(groupId: number | string, stockName: string): Promise<TaskCreateResponse> {
-    return this.request(`/api/analysis/stock-topics/${groupId}/analyze`, {
-      method: 'POST',
-      body: JSON.stringify({ stockName }),
-    });
-  }
-
   async analyzeStockTopicsBatch(groupId: number | string, stockNames: string[]): Promise<TaskCreateResponse> {
     return this.request(`/api/analysis/stock-topics/${groupId}/analyze-batch`, {
       method: 'POST',
@@ -182,20 +167,6 @@ export class AnalysisApiClient extends TasksApiClient {
     return this.request('/api/analysis/stock-topics/extract-stocks-from-image', {
       method: 'POST',
       body: JSON.stringify({ imageDataUrl }),
-    });
-  }
-
-  async getLatestStockTopicAnalysis(groupId: number | string, stockName: string, options: ApiRequestOptions = {}): Promise<StockTopicAnalysisResponse> {
-    const search = new URLSearchParams({ stock_name: stockName });
-    return this.request(`/api/analysis/stock-topics/${groupId}/latest?${search}`, {
-      signal: options.signal,
-    });
-  }
-
-  async getLatestStockTopicAnalyses(groupId: number | string, stockNames: string[], options: ApiRequestOptions = {}): Promise<StockTopicBatchAnalysisResponse> {
-    const search = new URLSearchParams({ stock_names: stockNames.join('、') });
-    return this.request(`/api/analysis/stock-topics/${groupId}/latest-batch?${search}`, {
-      signal: options.signal,
     });
   }
 
