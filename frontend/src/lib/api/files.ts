@@ -1,5 +1,5 @@
 import { AnalysisApiClient } from './analysis';
-import type { FileAIAnalysis, FileItem } from './fileTypes';
+import type { FileAIAnalysis, FileItem, FileStatus, LocalFileStatus } from './fileTypes';
 import type { TaskCreateResponse } from './taskTypes';
 import type { PaginatedResponse } from './types';
 
@@ -136,11 +136,11 @@ export class FilesApiClient extends AnalysisApiClient {
     });
   }
 
-  async getFileStatus(groupId: string, fileId: number) {
+  async getFileStatus(groupId: string, fileId: number): Promise<FileStatus> {
     return this.request(`/api/files/status/${groupId}/${fileId}`);
   }
 
-  async checkLocalFileStatus(groupId: string, fileName: string, fileSize: number) {
+  async checkLocalFileStatus(groupId: string, fileName: string, fileSize: number): Promise<LocalFileStatus> {
     const params = new URLSearchParams({
       file_name: fileName,
       file_size: fileSize.toString(),

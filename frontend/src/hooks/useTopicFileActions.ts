@@ -55,7 +55,7 @@ export function useTopicFileActions({
 
   const getFileStatus = useCallback(async (fileId: number, fileName?: string, fileSize?: number) => {
     try {
-      const status = await apiClient.getFileStatus(String(groupId), fileId) as FileStatus;
+      const status = await apiClient.getFileStatus(String(groupId), fileId);
       setFileStatuses((prev) => new Map(prev).set(fileId, status));
       return status;
     } catch (error) {
@@ -63,7 +63,7 @@ export function useTopicFileActions({
 
       if (fileName && fileSize !== undefined) {
         try {
-          const localStatus = await apiClient.checkLocalFileStatus(String(groupId), fileName, fileSize) as any;
+          const localStatus = await apiClient.checkLocalFileStatus(String(groupId), fileName, fileSize);
           const status: FileStatus = {
             file_id: fileId,
             name: fileName,

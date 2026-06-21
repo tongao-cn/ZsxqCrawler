@@ -36,7 +36,7 @@ export type {
   ColumnVideo,
 } from './columnTypes';
 export type { DatabaseStats } from './coreTypes';
-export type { FileAIAnalysis, FileItem, FileStatus } from './fileTypes';
+export type { FileAIAnalysis, FileItem, FileStatus, LocalFileStatus } from './fileTypes';
 export type {
   Account,
   AccountSelf,

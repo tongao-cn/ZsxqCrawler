@@ -43,3 +43,10 @@ export interface FileStatus {
   local_path?: string;
   is_complete: boolean;
 }
+
+export interface LocalFileStatus {
+  local_exists: boolean;
+  local_size: number;
+  local_path?: string;
+  is_complete: boolean;
+}
