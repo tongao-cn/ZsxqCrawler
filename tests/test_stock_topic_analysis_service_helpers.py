@@ -57,6 +57,21 @@ class StockTopicAnalysisServiceHelperTests(unittest.TestCase):
         self.assertEqual('["101", "102"]', _serialize_json_list(["101", "102", "101"]))
         self.assertEqual(["1", "2"], _merge_topic_ids([1, 2, 3], limit=2))
 
+    def test_stock_topic_store_json_list_wrappers_use_shared_normalization(self):
+        from backend.services.stock_topic_analysis_helpers import parse_json_list, serialize_json_list
+        from backend.services.stock_topic_analysis_store import (
+            parse_json_list as parse_store_json_list,
+            serialize_json_list as serialize_store_json_list,
+        )
+
+        self.assertEqual(["算力", "光模块"], parse_json_list('["算力", "", "光模块"]'))
+        self.assertEqual(["101", "102"], parse_store_json_list(["101", " ", 102]))
+        self.assertEqual('["101", "102"]', serialize_json_list(["101", "102", "101"]))
+        self.assertEqual(
+            '["101", "102"]',
+            serialize_store_json_list(["101", "102", "103"], max_tracked_topic_ids=2),
+        )
+
     def test_stock_topic_search_result_skips_processed_rows_before_excerpt_validation(self):
         from backend.services.stock_topic_search_results import (
             build_stock_topic_search_result,

@@ -40,6 +40,10 @@ def _parse_json_list(value: Any) -> List[str]:
     return [_normalize_text(item) for item in parsed if _normalize_text(item)]
 
 
+def parse_json_list(value: Any) -> List[str]:
+    return _parse_json_list(value)
+
+
 def _ordered_unique(values: Iterable[Any], *, limit: int = 50) -> List[str]:
     result: List[str] = []
     seen = set()
@@ -87,6 +91,10 @@ def _build_stock_alias_terms(stock_name: Any, stock_code: Any = "", market: Any 
 
 def _serialize_json_list(values: Iterable[Any], *, limit: int = 5000) -> str:
     return json.dumps(_ordered_unique(values, limit=limit), ensure_ascii=False)
+
+
+def serialize_json_list(values: Iterable[Any], *, limit: int = 5000) -> str:
+    return _serialize_json_list(values, limit=limit)
 
 
 def _topic_ids_from_result(result: Dict[str, Any], *, limit: int = 5000) -> List[str]:

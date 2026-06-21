@@ -2,13 +2,19 @@
 
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass
 from datetime import date
 from typing import Any, Dict, Iterable, List
 
 from backend.services.daily_topic_analysis_topics import clip_text as _clip
-from backend.services.stock_topic_analysis_helpers import _build_stock_alias_terms, _topic_ids_from_result
+from backend.services.stock_topic_analysis_helpers import (
+    _build_stock_alias_terms,
+    _normalize_text,
+    _ordered_unique,
+    _topic_ids_from_result,
+    parse_json_list as _parse_json_list,
+    serialize_json_list as _serialize_json_list,
+)
 from backend.services.stock_topic_analysis_payloads import require_topic_excerpt
 from backend.services.stock_topic_analysis_queries import build_question_topic_search_sql, build_topic_search_sql
 from backend.storage.db_compat import connect
@@ -26,51 +32,12 @@ CHECKPOINT_FAILED_BATCH = "failed_batch"
 CHECKPOINT_SKIPPED_ONLY = "skipped_only"
 
 
-def _normalize_text(value: Any) -> str:
-    return str(value or "").strip()
-
-
-def _normalize_company_name(value: Any) -> str:
-    return (
-        _normalize_text(value)
-        .replace(" ", "")
-        .replace("股份有限公司", "")
-        .replace("有限责任公司", "")
-        .replace("有限公司", "")
-        .replace("集团", "")
-    )
-
-
-def _ordered_unique(values: Iterable[Any], *, limit: int = 50) -> List[str]:
-    result: List[str] = []
-    seen = set()
-    for value in values:
-        text = _normalize_text(value)
-        if not text or text in seen:
-            continue
-        result.append(text)
-        seen.add(text)
-        if len(result) >= limit:
-            break
-    return result
-
-
 def parse_json_list(value: Any) -> List[str]:
-    if not value:
-        return []
-    if isinstance(value, list):
-        return [_normalize_text(item) for item in value if _normalize_text(item)]
-    try:
-        parsed = json.loads(value)
-    except Exception:
-        return []
-    if not isinstance(parsed, list):
-        return []
-    return [_normalize_text(item) for item in parsed if _normalize_text(item)]
+    return _parse_json_list(value)
 
 
 def serialize_json_list(values: Iterable[Any], *, max_tracked_topic_ids: int) -> str:
-    return json.dumps(_ordered_unique(values, limit=max_tracked_topic_ids), ensure_ascii=False)
+    return _serialize_json_list(values, limit=max_tracked_topic_ids)
 
 
 def question_topic_rows_query(group_id: str, topic_ids: List[str]) -> tuple[str, List[Any]]:
