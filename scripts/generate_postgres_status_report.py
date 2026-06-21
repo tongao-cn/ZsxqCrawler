@@ -8,20 +8,8 @@ import psycopg2
 
 from backend.storage.db_compat import get_database_backend, get_postgres_dsn
 from backend.storage.postgres_core_schema import CORE_SCHEMA, CORE_TABLE_SPECS, quote_identifier
+from backend.storage.postgres_core_reader_contract import status_report_table_names
 from scripts.backfill_postgres_core_group_ids import group_id_quality_counts
-
-IMPORTANT_CORE_TABLES = (
-    "groups",
-    "topics",
-    "files",
-    "comments",
-    "daily_ai_reports",
-    "file_ai_analyses",
-    "zsxq_a_share_daily_mentions",
-    "zsxq_a_share_processed_state",
-    "zsxq_a_share_tdx_exports",
-    "zsxq_a_share_tdx_export_blocks",
-)
 
 
 def _project_root() -> Path:
@@ -77,7 +65,7 @@ def _group_id_quality_summary(conn) -> dict[str, int]:
 
 def _important_core_table_counts(conn) -> list[tuple[str, int | None]]:
     try:
-        return [(table_name, _table_count(conn, CORE_SCHEMA, table_name)) for table_name in IMPORTANT_CORE_TABLES]
+        return [(table_name, _table_count(conn, CORE_SCHEMA, table_name)) for table_name in status_report_table_names()]
     except Exception:
         return []
 

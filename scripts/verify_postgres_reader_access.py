@@ -6,7 +6,8 @@ from dataclasses import dataclass
 
 import psycopg2
 
-from backend.storage.postgres_core_schema import CORE_SCHEMA, quote_identifier
+from backend.storage.postgres_core_reader_contract import CORE_SCHEMA, reader_probe_table_name
+from backend.storage.postgres_core_schema import quote_identifier
 
 
 @dataclass(frozen=True)
@@ -14,23 +15,6 @@ class ReaderCheck:
     name: str
     passed: bool
     detail: str
-
-
-def _first_core_table(conn) -> str | None:
-    with conn.cursor() as cur:
-        cur.execute(
-            """
-            SELECT table_name
-            FROM information_schema.tables
-            WHERE table_schema = %s
-              AND table_type = 'BASE TABLE'
-            ORDER BY table_name
-            LIMIT 1
-            """,
-            (CORE_SCHEMA,),
-        )
-        row = cur.fetchone()
-        return str(row[0]) if row else None
 
 
 def _first_legacy_schema_table(conn) -> tuple[str, str] | None:
@@ -52,9 +36,7 @@ def _first_legacy_schema_table(conn) -> tuple[str, str] | None:
 
 
 def _core_select_allowed(conn) -> ReaderCheck:
-    table_name = _first_core_table(conn)
-    if not table_name:
-        return ReaderCheck("core select allowed", False, f"{CORE_SCHEMA} has no base table")
+    table_name = reader_probe_table_name()
     try:
         with conn.cursor() as cur:
             cur.execute(f"SELECT count(*) FROM {quote_identifier(CORE_SCHEMA)}.{quote_identifier(table_name)}")
