@@ -11,7 +11,6 @@ from backend.core.ai_provider_config import (
 )
 from backend.core.logger_config import log_debug, log_warning
 from backend.services.ai_client import (
-    AITextRequest,
     call_ai_text,
     chat_json_schema_response_format,
     extract_response_text,
@@ -19,6 +18,7 @@ from backend.services.ai_client import (
     responses_json_schema_text_format,
 )
 from backend.services.ai_json_utils import JsonObjectParseError, require_json_object
+from backend.services.ai_runtime_request import AIRuntimeTextSettings, build_runtime_ai_text_request
 from backend.services.stock_concept_taxonomy import normalize_stock_concept_term
 
 
@@ -280,25 +280,27 @@ def call_openai_extract_topic_stocks(
     ]
 
     normalized_wire_api = str(wire_api or DEFAULT_WIRE_API).strip().lower()
+    runtime_settings = AIRuntimeTextSettings(
+        api_key=str(api_key or ""),
+        model=model,
+        api_base=api_base or DEFAULT_API_BASE,
+        wire_api=normalized_wire_api,
+    )
 
     last_error: Optional[Exception] = None
     attempts = max(1, int(max_retries or 1))
     message = ""
     for attempt in range(1, attempts + 1):
         try:
-            message = call_ai_text(
-                AITextRequest(
-                    api_key=api_key,
-                    model=model,
-                    api_base=(api_base or DEFAULT_API_BASE),
-                    messages=messages,
-                    wire_api=normalized_wire_api,
-                    reasoning_effort=str(reasoning_effort or DEFAULT_REASONING_EFFORT).strip() or DEFAULT_REASONING_EFFORT,
-                    timeout=timeout,
-                    responses_text_format=_get_responses_json_schema_text_format(),
-                    chat_response_format=_get_chat_json_schema_response_format(),
-                )
+            request = build_runtime_ai_text_request(
+                messages,
+                settings=runtime_settings,
+                reasoning_effort=str(reasoning_effort or DEFAULT_REASONING_EFFORT).strip() or DEFAULT_REASONING_EFFORT,
+                timeout=timeout,
+                responses_text_format=_get_responses_json_schema_text_format(),
+                chat_response_format=_get_chat_json_schema_response_format(),
             )
+            message = call_ai_text(request)
             last_error = None
             break
         except Exception as exc:

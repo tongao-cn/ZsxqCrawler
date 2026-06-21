@@ -396,6 +396,39 @@ class AShareAnalysisServiceHelperTests(unittest.TestCase):
         self.assertIn("业绩下修", messages[1]["content"])
         self.assertIn("营收利润重算后大幅下滑", messages[1]["content"])
 
+    def test_call_openai_extract_topic_stocks_builds_runtime_request(self):
+        from backend.services import a_share_analysis_service as service
+
+        captured = {}
+
+        def fake_call(request):
+            captured["request"] = request
+            return '{"stocks":[]}'
+
+        with patch("backend.services.a_share_analysis_ai.call_ai_text", side_effect=fake_call):
+            self.assertEqual(
+                [],
+                service.call_openai_extract_topic_stocks(
+                    "宁德时代有望受益于钠电池产业链进展，这是一个明确提到股票的推荐池话题。",
+                    api_key=" test-key ",
+                    model="test-model",
+                    api_base="https://api.example.test",
+                    wire_api=" Chat ",
+                    reasoning_effort=" low ",
+                    timeout=222,
+                ),
+            )
+
+        request = captured["request"]
+        self.assertEqual(" test-key ", request.api_key)
+        self.assertEqual("test-model", request.model)
+        self.assertEqual("https://api.example.test", request.api_base)
+        self.assertEqual("chat", request.wire_api)
+        self.assertEqual("low", request.reasoning_effort)
+        self.assertEqual(222, request.timeout)
+        self.assertEqual("a_share_company_extraction", request.responses_text_format["format"]["name"])
+        self.assertEqual("a_share_company_extraction", request.chat_response_format["json_schema"]["name"])
+
     def test_call_openai_extract_topic_stocks_rejects_invalid_json(self):
         from backend.services import a_share_analysis_service as service
 
