@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 from typing import Any, Dict, Optional
 
-from fastapi import APIRouter, BackgroundTasks, HTTPException
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 from backend.core.logger_config import log_exception
@@ -99,7 +99,7 @@ async def get_column_topic_detail(group_id: str, topic_id: int):
 
 
 @router.post("/groups/{group_id}/columns/fetch")
-async def fetch_group_columns(group_id: str, request: ColumnsSettingsRequest, background_tasks: BackgroundTasks):
+async def fetch_group_columns(group_id: str, request: ColumnsSettingsRequest):
     """采集群组的所有专栏内容（后台任务）"""
     try:
         return _create_columns_fetch_task_response(group_id, request)

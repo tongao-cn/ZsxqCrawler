@@ -10,14 +10,6 @@ HAS_COLUMNS_ROUTE_DEPS = (
 )
 
 
-class FakeBackgroundTasks:
-    def __init__(self):
-        self.tasks = []
-
-    def add_task(self, func, *args):
-        self.tasks.append((func, args))
-
-
 class ColumnsRoutesHelperTests(unittest.TestCase):
     @unittest.skipUnless(HAS_COLUMNS_ROUTE_DEPS, "columns route dependencies are not installed")
     def test_columns_route_error_preserves_status_and_detail_format(self):
@@ -58,7 +50,6 @@ class ColumnsRoutesHelperTests(unittest.TestCase):
     def test_create_columns_fetch_task_response_creates_ingestion_task(self):
         from backend.routes.columns_routes import ColumnsSettingsRequest, _create_columns_fetch_task_response
 
-        background_tasks = FakeBackgroundTasks()
         request = ColumnsSettingsRequest()
 
         with patch(
@@ -72,14 +63,12 @@ class ColumnsRoutesHelperTests(unittest.TestCase):
             {"success": True, "task_id": "task-1", "message": "专栏采集任务已启动"},
             response,
         )
-        self.assertEqual([], background_tasks.tasks)
 
     @unittest.skipUnless(HAS_COLUMNS_ROUTE_DEPS, "columns route dependencies are not installed")
     def test_create_columns_fetch_task_response_rejects_ingestion_conflict(self):
         from backend.services.task_launch import TaskLaunchConflict
         from backend.routes.columns_routes import ColumnsSettingsRequest, _create_columns_fetch_task_response
 
-        background_tasks = FakeBackgroundTasks()
         existing = {
             "task_id": "task-old",
             "type": "crawl_latest_until_complete",
@@ -95,7 +84,6 @@ class ColumnsRoutesHelperTests(unittest.TestCase):
 
         create_task.assert_called_once()
         self.assertEqual(existing, raised.exception.existing)
-        self.assertEqual([], background_tasks.tasks)
 
     @unittest.skipUnless(HAS_COLUMNS_ROUTE_DEPS, "columns route dependencies are not installed")
     def test_columns_route_error_maps_task_launch_conflict(self):
@@ -379,7 +367,6 @@ class ColumnsRoutesHelperTests(unittest.TestCase):
                     columns_routes.fetch_group_columns(
                         "123",
                         columns_routes.ColumnsSettingsRequest(),
-                        FakeBackgroundTasks(),
                     )
                 )
 
