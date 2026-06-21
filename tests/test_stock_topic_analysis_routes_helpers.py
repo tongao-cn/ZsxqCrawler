@@ -529,6 +529,38 @@ class StockTopicAnalysisRoutesHelperTests(unittest.IsolatedAsyncioTestCase):
         get_latest.assert_called_once_with("51111112855254", "宁德时代、德龙激光")
 
     @unittest.skipUnless(HAS_ROUTE_DEPS, "stock topic analysis route dependencies are not installed")
+    async def test_read_stock_topic_read_models_returns_service_rows(self):
+        from backend.routes.stock_topic_analysis_routes import read_stock_topic_read_models
+
+        expected = [
+            {"stock_name": "宁德时代", "analysis_mode": "incremental"},
+            {"stock_name": "德龙激光", "analysis_mode": "initialize"},
+        ]
+        with patch(
+            "backend.routes.stock_topic_analysis_routes.get_stock_topic_read_models",
+            return_value=expected,
+        ) as read_models:
+            result = await read_stock_topic_read_models("51111112855254", "宁德时代、德龙激光")
+
+        self.assertEqual(expected, result)
+        read_models.assert_called_once_with("51111112855254", "宁德时代、德龙激光")
+
+    @unittest.skipUnless(HAS_ROUTE_DEPS, "stock topic analysis route dependencies are not installed")
+    async def test_read_stock_topic_read_models_maps_value_error_to_400(self):
+        from fastapi import HTTPException
+
+        from backend.routes.stock_topic_analysis_routes import read_stock_topic_read_models
+
+        with patch(
+            "backend.routes.stock_topic_analysis_routes.get_stock_topic_read_models",
+            side_effect=ValueError("stock_names 不能为空"),
+        ):
+            with self.assertRaises(HTTPException) as raised:
+                await read_stock_topic_read_models("51111112855254", "")
+
+        self.assertEqual(400, raised.exception.status_code)
+
+    @unittest.skipUnless(HAS_ROUTE_DEPS, "stock topic analysis route dependencies are not installed")
     async def test_latest_stock_topic_analyses_preserves_raw_stock_names(self):
         from backend.routes import stock_topic_analysis_routes
 

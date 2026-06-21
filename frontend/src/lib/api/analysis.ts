@@ -25,61 +25,6 @@ function normalizeOptionalId(value?: string | number) {
   return normalized || undefined;
 }
 
-function getStockTopicReadModelKey(result: StockTopicAnalysisResponse) {
-  return result.stock_name.trim();
-}
-
-function mergeStockTopicSearchAndLatest(
-  searchResult: StockTopicAnalysisResponse,
-  latestResult: StockTopicAnalysisResponse | null,
-): StockTopicAnalysisResponse {
-  const latestTopicIds = new Set(
-    (latestResult?.processed_topic_ids || latestResult?.analyzed_topic_ids || []).map(String),
-  );
-  const newTopicCount = searchResult.topics.filter((topic) => !latestTopicIds.has(String(topic.topic_id))).length;
-  if (!latestResult || latestResult.status === 'missing') {
-    return {
-      ...searchResult,
-      processed_topic_ids: [],
-      analyzed_topic_ids: [],
-      new_topic_count: searchResult.topic_count,
-      analysis_mode: 'initialize',
-    };
-  }
-  return {
-    ...searchResult,
-    concepts: latestResult.concepts.length > 0 ? latestResult.concepts : searchResult.concepts,
-    recommendation_count: latestResult.recommendation_count || searchResult.recommendation_count,
-    summary_markdown: latestResult.summary_markdown,
-    model: latestResult.model,
-    status: latestResult.status,
-    error: latestResult.error,
-    created_at: latestResult.created_at,
-    updated_at: latestResult.updated_at,
-    processed_topic_ids: Array.from(latestTopicIds),
-    analyzed_topic_ids: Array.from(latestTopicIds),
-    new_topic_count: newTopicCount,
-    analysis_mode: newTopicCount > 0 ? 'incremental' : 'up_to_date',
-  };
-}
-
-function mergeStockTopicReadModels(
-  stockNames: string[],
-  searchResults: StockTopicAnalysisResponse[],
-  latestBatch: StockTopicBatchAnalysisResponse,
-) {
-  const latestByName = new Map(
-    latestBatch.stocks.map((item) => [getStockTopicReadModelKey(item), item]),
-  );
-  return searchResults.map((searchResult, index) => {
-    const latest = latestBatch.stocks[index]
-      || latestByName.get(getStockTopicReadModelKey(searchResult))
-      || latestByName.get(stockNames[index])
-      || null;
-    return mergeStockTopicSearchAndLatest(searchResult, latest);
-  });
-}
-
 export class AnalysisApiClient extends TasksApiClient {
   async getAShareAnalysisStatus(groupId?: string | number): Promise<AShareAnalysisStatus> {
     const search = new URLSearchParams();
@@ -259,11 +204,10 @@ export class AnalysisApiClient extends TasksApiClient {
     stockNames: string[],
     options: ApiRequestOptions = {},
   ): Promise<StockTopicAnalysisResponse[]> {
-    const [searchResults, latestBatch] = await Promise.all([
-      Promise.all(stockNames.map((stockName) => this.searchStockTopics(groupId, stockName, options))),
-      this.getLatestStockTopicAnalyses(groupId, stockNames, options),
-    ]);
-    return mergeStockTopicReadModels(stockNames, searchResults, latestBatch);
+    const search = new URLSearchParams({ stock_names: stockNames.join('、') });
+    return this.request(`/api/analysis/stock-topics/${groupId}/read-models?${search}`, {
+      signal: options.signal,
+    });
   }
 
   async searchStockQuestionTopics(groupId: number | string, question: string, options: ApiRequestOptions = {}): Promise<StockQuestionResponse> {

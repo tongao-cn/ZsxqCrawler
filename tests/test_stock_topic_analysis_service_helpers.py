@@ -1241,6 +1241,121 @@ class StockTopicAnalysisServiceHelperTests(unittest.TestCase):
         self.assertEqual("missing", result["stocks"][1]["status"])
 
     @unittest.skipUnless(HAS_SERVICE_DEPS, "stock topic analysis service dependencies are not installed")
+    def test_get_stock_topic_read_models_merges_search_and_latest_progress(self):
+        from backend.services.stock_topic_read_model import get_stock_topic_read_models
+
+        search_results = {
+            "宁德时代": {
+                "group_id": "51111112855254",
+                "stock_name": "宁德时代",
+                "stock_code": "300750",
+                "market": "SZ",
+                "topics": [{"topic_id": "101"}, {"topic_id": "102"}],
+                "concepts": ["储能"],
+                "topic_count": 2,
+                "recommendation_count": 3,
+            },
+            "德龙激光": {
+                "group_id": "51111112855254",
+                "stock_name": "德龙激光",
+                "stock_code": "688170",
+                "market": "SH",
+                "topics": [{"topic_id": "201"}],
+                "concepts": ["激光"],
+                "topic_count": 1,
+                "recommendation_count": 1,
+            },
+            "贵州茅台": {
+                "group_id": "51111112855254",
+                "stock_name": "贵州茅台",
+                "stock_code": "600519",
+                "market": "SH",
+                "topics": [{"topic_id": "301"}],
+                "concepts": ["白酒"],
+                "topic_count": 1,
+                "recommendation_count": 2,
+            },
+        }
+        latest_batch = {
+            "group_id": "51111112855254",
+            "stocks": [
+                {
+                    "stock_name": "宁德时代",
+                    "status": "completed",
+                    "concepts": ["电池"],
+                    "recommendation_count": 0,
+                    "summary_markdown": "saved summary",
+                    "model": "test-model",
+                    "processed_topic_ids": ["101"],
+                    "created_at": "2026-06-20T10:00:00",
+                    "updated_at": "2026-06-20T11:00:00",
+                },
+                {
+                    "stock_name": "德龙激光",
+                    "status": "missing",
+                    "concepts": [],
+                    "recommendation_count": 0,
+                    "processed_topic_ids": [],
+                },
+                {
+                    "stock_name": "贵州茅台",
+                    "status": "completed",
+                    "concepts": ["消费"],
+                    "recommendation_count": 4,
+                    "summary_markdown": "up to date",
+                    "processed_topic_ids": ["301"],
+                },
+            ],
+        }
+
+        with (
+            patch(
+                "backend.services.stock_topic_read_model.search_stock_topics",
+                side_effect=lambda _group_id, stock_name: search_results[stock_name],
+            ) as search,
+            patch(
+                "backend.services.stock_topic_read_model.get_latest_stock_topic_analyses",
+                return_value=latest_batch,
+            ) as latest,
+        ):
+            result = get_stock_topic_read_models("51111112855254", "宁德时代、德龙激光、贵州茅台")
+
+        latest.assert_called_once_with("51111112855254", ["宁德时代", "德龙激光", "贵州茅台"])
+        self.assertEqual(
+            [
+                ("51111112855254", "宁德时代"),
+                ("51111112855254", "德龙激光"),
+                ("51111112855254", "贵州茅台"),
+            ],
+            [call.args for call in search.call_args_list],
+        )
+        self.assertEqual(3, len(result))
+        self.assertEqual("incremental", result[0]["analysis_mode"])
+        self.assertEqual(1, result[0]["new_topic_count"])
+        self.assertEqual(["101"], result[0]["processed_topic_ids"])
+        self.assertEqual(["101"], result[0]["analyzed_topic_ids"])
+        self.assertEqual(["电池"], result[0]["concepts"])
+        self.assertEqual(3, result[0]["recommendation_count"])
+        self.assertEqual("saved summary", result[0]["summary_markdown"])
+        self.assertEqual("initialize", result[1]["analysis_mode"])
+        self.assertEqual(1, result[1]["new_topic_count"])
+        self.assertEqual([], result[1]["processed_topic_ids"])
+        self.assertEqual("up_to_date", result[2]["analysis_mode"])
+        self.assertEqual(0, result[2]["new_topic_count"])
+        self.assertEqual(["301"], result[2]["processed_topic_ids"])
+        self.assertEqual(["消费"], result[2]["concepts"])
+        self.assertEqual(4, result[2]["recommendation_count"])
+
+    @unittest.skipUnless(HAS_SERVICE_DEPS, "stock topic analysis service dependencies are not installed")
+    def test_get_stock_topic_read_models_rejects_empty_names(self):
+        from backend.services.stock_topic_read_model import get_stock_topic_read_models
+
+        with self.assertRaises(ValueError) as raised:
+            get_stock_topic_read_models("51111112855254", " , ")
+
+        self.assertEqual("stock_names 不能为空", str(raised.exception))
+
+    @unittest.skipUnless(HAS_SERVICE_DEPS, "stock topic analysis service dependencies are not installed")
     def test_analyze_stock_topics_batch_continues_after_single_failure(self):
         from backend.services.stock_topic_analysis_service import analyze_stock_topics_batch
 

@@ -17,6 +17,7 @@ from backend.services.stock_topic_analysis_workflow import (
     create_stock_topic_batch_task,
     create_stock_topic_task,
 )
+from backend.services.stock_topic_read_model import get_stock_topic_read_models
 
 
 router = APIRouter(prefix="/api/analysis/stock-topics", tags=["stock-topic-analysis"])
@@ -60,6 +61,10 @@ def _external_stock_summaries(group_id: str, request: ExternalStockSummaryReques
 
 def _latest_stock_topic_analyses(group_id: str, stock_names: str) -> dict:
     return get_latest_stock_topic_analyses(group_id, stock_names)
+
+
+def _stock_topic_read_models(group_id: str, stock_names: str) -> list[dict]:
+    return get_stock_topic_read_models(group_id, stock_names)
 
 
 def _stock_question_matches(group_id: str, question: str) -> dict:
@@ -184,3 +189,14 @@ async def read_latest_stock_topic_analyses(
         return _latest_stock_topic_analyses(group_id, stock_names)
     except Exception as exc:
         raise _stock_topic_route_error("获取批量个股话题分析结果失败", exc)
+
+
+@router.get("/{group_id}/read-models")
+async def read_stock_topic_read_models(
+    group_id: str,
+    stock_names: str = Query(..., min_length=1, description="股票名称，支持逗号、顿号、空格或换行分隔"),
+):
+    try:
+        return _stock_topic_read_models(group_id, stock_names)
+    except Exception as exc:
+        raise _stock_topic_route_error("获取个股话题读模型失败", exc)
