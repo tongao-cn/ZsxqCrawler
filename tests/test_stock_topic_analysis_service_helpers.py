@@ -324,11 +324,12 @@ class StockTopicAnalysisServiceHelperTests(unittest.TestCase):
 
     @unittest.skipUnless(HAS_SERVICE_DEPS, "stock topic analysis service dependencies are not installed")
     def test_call_question_keyword_ai_rejects_invalid_json(self):
+        from backend.services.ai_runtime_request import AIRuntimeStructuredObjectParseError
         from backend.services.stock_topic_analysis_service import _call_question_keyword_ai
 
         with patch(
             "backend.services.stock_topic_analysis_service.call_structured_ai_object",
-            side_effect=RuntimeError("AI 问题关键词抽取结果不是合法 JSON: not json"),
+            side_effect=AIRuntimeStructuredObjectParseError("AI 问题关键词抽取结果", "not json"),
         ):
             with self.assertRaisesRegex(ValueError, "AI 问题关键词抽取结果不是合法 JSON"):
                 _call_question_keyword_ai("商业航天板块最近怎么样，推荐吗")
@@ -419,12 +420,13 @@ class StockTopicAnalysisServiceHelperTests(unittest.TestCase):
 
     @unittest.skipUnless(HAS_SERVICE_DEPS, "stock topic analysis service dependencies are not installed")
     def test_extract_stock_names_from_image_rejects_invalid_json(self):
+        from backend.services.ai_runtime_request import AIRuntimeStructuredObjectParseError
         from backend.services.stock_topic_analysis_service import extract_stock_names_from_image
 
         encoded = base64.b64encode(b"image-bytes").decode("ascii")
         with patch(
             "backend.services.stock_topic_analysis_service.call_structured_ai_object",
-            side_effect=RuntimeError("AI 图片股票抽取结果不是合法 JSON: not json"),
+            side_effect=AIRuntimeStructuredObjectParseError("AI 图片股票抽取结果", "not json"),
         ):
             with self.assertRaisesRegex(ValueError, "AI 图片股票抽取结果不是合法 JSON"):
                 extract_stock_names_from_image(f"data:image/png;base64,{encoded}")

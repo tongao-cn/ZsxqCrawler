@@ -11,7 +11,11 @@ from backend.core.ai_provider_config import (
     get_openai_compatible_config,
     get_summary_reasoning_effort,
 )
-from backend.services.ai_runtime_request import call_runtime_ai_text, call_structured_ai_object
+from backend.services.ai_runtime_request import (
+    AIRuntimeStructuredObjectParseError,
+    call_runtime_ai_text,
+    call_structured_ai_object,
+)
 from backend.services.stock_topic_analysis_ai_prompts import (
     build_image_stock_extraction_input,
     build_question_analysis_messages,
@@ -494,9 +498,7 @@ def _call_question_keyword_ai(question: str) -> Tuple[List[str], str]:
             reasoning_effort=get_summary_reasoning_effort(),
             timeout=120,
         )
-    except RuntimeError as exc:
-        if not str(exc).startswith("AI 问题关键词抽取结果不是合法 JSON"):
-            raise
+    except AIRuntimeStructuredObjectParseError as exc:
         raise ValueError("AI 问题关键词抽取结果不是合法 JSON") from exc
     keywords = _normalize_question_keywords(result.payload.get("keywords") or result.payload.get("keyword") or [])
     if not keywords:
@@ -541,9 +543,7 @@ def extract_stock_names_from_image(image_data_url: str) -> Dict[str, Any]:
             reasoning_effort=get_summary_reasoning_effort(),
             timeout=120,
         )
-    except RuntimeError as exc:
-        if not str(exc).startswith("AI 图片股票抽取结果不是合法 JSON"):
-            raise
+    except AIRuntimeStructuredObjectParseError as exc:
         raise ValueError("AI 图片股票抽取结果不是合法 JSON") from exc
 
     stock_names = parse_stock_names(result.payload.get("stockNames") or result.payload.get("stock_names") or [])

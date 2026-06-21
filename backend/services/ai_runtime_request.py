@@ -42,6 +42,14 @@ class AIRuntimeStructuredObjectResult:
     model: str
 
 
+class AIRuntimeStructuredObjectParseError(RuntimeError):
+    def __init__(self, label: str, text: Any):
+        self.label = label
+        self.text = str(text or "")
+        self.preview = self.text[:200]
+        super().__init__(f"{label}不是合法 JSON: {self.preview}")
+
+
 def _text(value: Any) -> str:
     return str(value or "").strip()
 
@@ -171,5 +179,5 @@ def call_structured_ai_object(
     try:
         payload = require_json_object(result.text, label=label)
     except JsonObjectParseError as exc:
-        raise RuntimeError(f"{label}不是合法 JSON: {result.text[:200]}") from exc
+        raise AIRuntimeStructuredObjectParseError(label, result.text) from exc
     return AIRuntimeStructuredObjectResult(payload=payload, text=result.text, model=result.model)

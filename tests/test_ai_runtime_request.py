@@ -175,9 +175,9 @@ class AIRuntimeRequestTests(unittest.TestCase):
 
     @unittest.skipUnless(HAS_OPENAI, "openai dependency is not installed")
     def test_call_structured_ai_object_wraps_invalid_json_with_label(self):
-        from backend.services.ai_runtime_request import call_structured_ai_object
+        from backend.services.ai_runtime_request import AIRuntimeStructuredObjectParseError, call_structured_ai_object
 
-        with self.assertRaisesRegex(RuntimeError, "Payload不是合法 JSON"):
+        with self.assertRaisesRegex(AIRuntimeStructuredObjectParseError, "Payload不是合法 JSON") as raised:
             call_structured_ai_object(
                 [{"role": "user", "content": "hello"}],
                 schema_name="payload",
@@ -191,6 +191,10 @@ class AIRuntimeRequestTests(unittest.TestCase):
                 },
                 call_text=lambda _request: "not json",
             )
+        self.assertIsInstance(raised.exception, RuntimeError)
+        self.assertEqual("Payload", raised.exception.label)
+        self.assertEqual("not json", raised.exception.text)
+        self.assertEqual("not json", raised.exception.preview)
 
 
 if __name__ == "__main__":
