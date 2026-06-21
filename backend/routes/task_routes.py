@@ -14,6 +14,7 @@ from backend.services.task_runtime import (
     cleanup_tasks as cleanup_task_history,
     get_task_logs_state,
     get_task_state,
+    is_terminal_task_status,
     list_tasks,
     subscribe_task_logs,
     unsubscribe_task_logs,
@@ -79,13 +80,10 @@ async def get_tasks(
     task_type: Optional[str] = Query(default=None, alias="type"),
 ):
     """获取所有任务状态"""
-    tasks = list_tasks()
-    if group_id:
-        normalized_group_id = str(group_id).strip()
-        tasks = [task for task in tasks if str(task.get("group_id") or "").strip() == normalized_group_id]
-    if task_type:
-        tasks = [task for task in tasks if task.get("type") == task_type]
-    return tasks[:limit] if limit else tasks
+    normalized_group_id = str(group_id).strip() if group_id else ""
+    if normalized_group_id:
+        return list_tasks(limit=limit, group_id=normalized_group_id, task_type=task_type)
+    return list_tasks(limit=limit, task_type=task_type)
 
 
 @router.post("/cleanup")
@@ -155,7 +153,7 @@ async def stream_task_logs(task_id: str):
                 if task:
                     yield _sse_event(_task_status_payload(task))
 
-                    if task["status"] in ["completed", "failed", "cancelled"]:
+                    if is_terminal_task_status(task["status"]):
                         break
                 else:
                     yield _sse_event(_task_removed_payload())

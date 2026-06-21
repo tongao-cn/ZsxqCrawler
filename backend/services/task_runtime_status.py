@@ -30,6 +30,10 @@ def _is_runtime_terminal_status(status: Any) -> bool:
     return _normalize_task_status(str(status or "")) in RUNTIME_TERMINAL_TASK_STATUSES
 
 
+def is_terminal_task_status(status: Any) -> bool:
+    return _is_runtime_terminal_status(status)
+
+
 def _normalize_task(task: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
     if not task:
         return None
@@ -55,6 +59,19 @@ def _matches_running_ingestion_task(task: Dict[str, Any], normalized_group_id: s
     return normalize_group_id(task.get("group_id")) == normalized_group_id
 
 
+def _matches_task_query(
+    task: Dict[str, Any],
+    task_type: Optional[str] = None,
+    normalized_group_id: Optional[str] = None,
+    group_filter_provided: bool = False,
+) -> bool:
+    if task_type and task.get("type") != task_type:
+        return False
+    if group_filter_provided and normalize_group_id(task.get("group_id")) != normalized_group_id:
+        return False
+    return True
+
+
 def _matches_latest_task_query(
     task: Dict[str, Any],
     task_type: str,
@@ -62,13 +79,9 @@ def _matches_latest_task_query(
     normalized_group_id: Optional[str],
     group_filter_provided: bool = False,
 ) -> bool:
-    if task.get("type") != task_type:
-        return False
     if status and task.get("status") != status:
         return False
-    if group_filter_provided and normalize_group_id(task.get("group_id")) != normalized_group_id:
-        return False
-    return True
+    return _matches_task_query(task, task_type, normalized_group_id, group_filter_provided)
 
 
 def _task_created_at_sort_value(task: Dict[str, Any]) -> Any:

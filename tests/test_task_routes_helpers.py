@@ -3,6 +3,7 @@ import queue
 import unittest
 from datetime import datetime
 from importlib.util import find_spec
+from unittest.mock import patch
 
 
 HAS_TASK_ROUTE_DEPS = find_spec("fastapi") is not None and find_spec("pydantic") is not None
@@ -78,6 +79,36 @@ class TaskRoutesHelperTests(unittest.TestCase):
         self.assertEqual("first", _wait_for_task_log(subscription, timeout=0.01))
         self.assertEqual(["second"], _drain_task_logs(subscription))
         self.assertIsNone(_wait_for_task_log(subscription, timeout=0.01))
+
+    @unittest.skipUnless(HAS_TASK_ROUTE_DEPS, "task route dependencies are not installed")
+    def test_get_tasks_delegates_filtering_to_task_runtime(self):
+        import asyncio
+
+        from backend.routes import task_routes
+
+        expected_tasks = [{"task_id": "task-1"}]
+
+        with patch.object(task_routes, "list_tasks", return_value=expected_tasks) as list_tasks:
+            result = asyncio.run(
+                task_routes.get_tasks(limit=3, group_id=" 155 ", task_type="daily_analysis")
+            )
+
+        self.assertEqual(expected_tasks, result)
+        list_tasks.assert_called_once_with(limit=3, group_id="155", task_type="daily_analysis")
+
+    @unittest.skipUnless(HAS_TASK_ROUTE_DEPS, "task route dependencies are not installed")
+    def test_get_tasks_omits_blank_group_filter(self):
+        import asyncio
+
+        from backend.routes import task_routes
+
+        expected_tasks = [{"task_id": "task-1"}]
+
+        with patch.object(task_routes, "list_tasks", return_value=expected_tasks) as list_tasks:
+            result = asyncio.run(task_routes.get_tasks(limit=3, group_id=" ", task_type="daily_analysis"))
+
+        self.assertEqual(expected_tasks, result)
+        list_tasks.assert_called_once_with(limit=3, task_type="daily_analysis")
 
 
 if __name__ == "__main__":

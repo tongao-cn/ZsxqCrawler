@@ -117,6 +117,7 @@ class TaskRuntimeHelperTests(unittest.TestCase):
             _is_active_task_status,
             _is_runtime_terminal_status,
             _normalize_task,
+            is_terminal_task_status,
         )
 
         self.assertTrue(_is_active_task_status("pending"))
@@ -128,6 +129,8 @@ class TaskRuntimeHelperTests(unittest.TestCase):
         self.assertTrue(_is_runtime_terminal_status("cancelled"))
         self.assertTrue(_is_runtime_terminal_status("stopped"))
         self.assertFalse(_is_runtime_terminal_status("running"))
+        self.assertTrue(is_terminal_task_status("stopped"))
+        self.assertFalse(is_terminal_task_status("running"))
 
         normalized = _normalize_task({"task_id": "task-1", "type": "a_share_analysis", "status": "stopped"})
         self.assertEqual("cancelled", normalized["status"])
@@ -211,6 +214,50 @@ class TaskRuntimeHelperTests(unittest.TestCase):
                     task_runtime.task_logs.pop(task_id, None)
                     task_runtime.task_stop_flags.pop(task_id, None)
                 task_runtime.task_counter = original_counter
+
+    def test_list_tasks_filters_type_group_and_limits_after_filtering(self):
+        from backend.services.task_runtime import list_tasks
+
+        store = FakeTaskStore()
+        store.tasks = {
+            "task-other-group": {
+                "task_id": "task-other-group",
+                "type": "daily_analysis",
+                "status": "running",
+                "group_id": "166",
+            },
+            "task-match-old": {
+                "task_id": "task-match-old",
+                "type": "daily_analysis",
+                "status": "running",
+                "group_id": "155",
+            },
+            "task-match-new": {
+                "task_id": "task-match-new",
+                "type": "daily_analysis",
+                "status": "running",
+                "group_id": "155",
+            },
+            "task-other-type": {
+                "task_id": "task-other-type",
+                "type": "file_analysis",
+                "status": "running",
+                "group_id": "155",
+            },
+            "task-global": {
+                "task_id": "task-global",
+                "type": "daily_analysis",
+                "status": "running",
+                "group_id": None,
+            },
+        }
+
+        with patch("backend.services.task_runtime.get_task_store", return_value=store):
+            scoped_tasks = list_tasks(limit=1, group_id="155", task_type="daily_analysis")
+            global_tasks = list_tasks(group_id=None, task_type="daily_analysis")
+
+        self.assertEqual(["task-match-old"], [task["task_id"] for task in scoped_tasks])
+        self.assertEqual(["task-global"], [task["task_id"] for task in global_tasks])
 
     def test_find_running_ingestion_task_matches_same_group(self):
         from backend.services.task_runtime import find_running_ingestion_task

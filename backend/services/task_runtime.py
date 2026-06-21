@@ -29,12 +29,14 @@ from backend.services.task_runtime_status import (
     INGESTION_LOCK_KEY,
     INGESTION_LOCK_TYPES,  # noqa: F401 - compatibility re-export for task runtime callers
     _is_active_task_status,
-    _is_runtime_terminal_status,
+    _is_runtime_terminal_status,  # noqa: F401 - compatibility re-export for task runtime callers
     _matches_latest_task_query,
     _matches_running_ingestion_task,
+    _matches_task_query,
     _normalize_task,
     _normalize_task_status,
     _task_created_at_sort_value,
+    is_terminal_task_status,
 )
 from backend.services.task_runtime_state import TaskRuntimeState
 from backend.services.task_workflow_lifecycle import (
@@ -106,12 +108,28 @@ def _forget_task_tracking_locked(task_id: str) -> None:
     _runtime_state.forget_task(task_id)
 
 
-def list_tasks(limit: Optional[int] = None) -> List[Dict[str, Any]]:
-    return [
+def list_tasks(
+    limit: Optional[int] = None,
+    group_id: Any = _GROUP_FILTER_UNSET,
+    task_type: Optional[str] = None,
+) -> List[Dict[str, Any]]:
+    group_filter_provided = group_id is not _GROUP_FILTER_UNSET
+    normalized_group_id = normalize_group_id(group_id) if group_filter_provided else None
+    has_filter = group_filter_provided or bool(task_type)
+    tasks = [
         normalized
-        for normalized in (_normalize_task(task) for task in get_task_store().list_tasks(limit=limit))
+        for normalized in (_normalize_task(task) for task in get_task_store().list_tasks(limit=None if has_filter else limit))
         if normalized is not None
     ]
+    if has_filter:
+        tasks = [
+            task
+            for task in tasks
+            if _matches_task_query(task, task_type, normalized_group_id, group_filter_provided)
+        ]
+        if limit is not None:
+            tasks = tasks[:limit]
+    return tasks
 
 
 def _memory_task_state_locked(task_id: str) -> Optional[Dict[str, Any]]:
@@ -403,7 +421,7 @@ def _release_task_lock_on_terminal_status(
     released_at: datetime,
     store: TaskStore,
 ) -> None:
-    if not _is_runtime_terminal_status(status):
+    if not is_terminal_task_status(status):
         return
     try:
         store.release_task_lock(task_id, status, released_at=released_at)
