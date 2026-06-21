@@ -25,7 +25,7 @@ from backend.services.daily_review_topic_export_service import (
     write_review_topic_export,
 )
 from backend.services.task_runtime import get_task_logs_state, get_task_state, request_runtime_shutdown
-from backend.services.workflow_task_launch import launch_or_reuse_latest_crawl_task
+from backend.services.crawl_workflow import launch_or_reuse_latest_crawl_task
 
 
 TERMINAL_STATUSES = {"completed", "failed", "cancelled"}

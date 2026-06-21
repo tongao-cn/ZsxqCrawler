@@ -20,12 +20,14 @@ from backend.services.a_share_analysis_service import build_chart_payload, norma
 from backend.services.a_share_research_return_smoke_service import load_knowaction_trade_dates
 from backend.services.task_runtime import get_task_logs_state, get_task_state, request_runtime_shutdown
 from backend.services.tdx_a_share_export_service import DEFAULT_TDX_EXPORT_SPECS
-from backend.services.workflow_task_launch import (
+from backend.services.a_share_analysis_workflow import (
     create_a_share_analysis_task,
+    export_a_share_analysis_to_tdx,
+)
+from backend.services.crawl_workflow import launch_latest_crawl_task
+from backend.services.daily_analysis_workflow import (
     create_daily_stock_concept_task,
     create_daily_topic_analysis_task,
-    export_a_share_analysis_to_tdx,
-    launch_latest_crawl_task,
 )
 
 

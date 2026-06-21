@@ -16,8 +16,8 @@ from backend.services.columns_fetch_task_service import (
     get_group_columns_response,
 )
 from backend.services.columns_summary_service import get_columns_summary
+from backend.services.columns_workflow import create_columns_fetch_task
 from backend.services.task_launch import TaskLaunchConflict, ingestion_conflict_detail
-from backend.services.workflow_task_launch import create_columns_fetch_task
 
 router = APIRouter(prefix="/api", tags=["columns"])
 

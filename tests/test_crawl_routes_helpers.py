@@ -804,7 +804,7 @@ class CrawlRoutesHelperTests(unittest.TestCase):
         )
 
     @unittest.skipUnless(HAS_CRAWL_ROUTE_DEPS, "crawl route dependencies are not installed")
-    def test_crawl_route_task_responses_delegate_to_launch_module(self):
+    def test_crawl_route_task_responses_delegate_to_crawl_workflow(self):
         import asyncio
 
         from backend.routes import crawl_routes
