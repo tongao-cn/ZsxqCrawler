@@ -46,10 +46,6 @@ from backend.services.file_single_download_workflow import (
     _single_file_download_local_path,
     run_single_file_download_task_with_info,
 )
-from backend.services.file_task_lifecycle import (
-    fail_file_task as _fail_file_task_impl,
-    file_task_stopped_after_init as _file_task_stopped_after_init_impl,
-)
 from backend.services.file_topic_sync_workflow import (
     _complete_sync_files_from_topics_task,
     run_sync_files_from_topics_task,
@@ -57,11 +53,6 @@ from backend.services.file_topic_sync_workflow import (
 from backend.services.task_launch import (
     TaskLaunchRecipe,
     launch_task_recipe,
-)
-from backend.services.task_runtime import (
-    add_task_log,
-    is_task_stopped,
-    update_task,
 )
 
 
@@ -71,23 +62,6 @@ def _close_crawler_file_databases(crawler) -> None:
         downloader.file_db.close()
     if hasattr(crawler, "db") and crawler.db:
         crawler.db.close()
-
-
-def _fail_file_task(
-    task_id: str,
-    log_message: str,
-    task_message: str,
-    result: Optional[Dict[str, Any]] = None,
-) -> None:
-    _fail_file_task_impl(
-        task_id,
-        log_message,
-        task_message,
-        result,
-        is_stopped=is_task_stopped,
-        add_log=add_task_log,
-        update=update_task,
-    )
 
 
 def _launch_file_ingestion_task(
@@ -239,12 +213,4 @@ def create_sync_files_from_topics_task(group_id: str) -> Dict[str, str]:
         group_id,
         group_id,
         message="从话题同步文件记录任务已创建",
-    )
-
-
-def _file_task_stopped_after_init(task_id: str) -> bool:
-    return _file_task_stopped_after_init_impl(
-        task_id,
-        is_stopped=is_task_stopped,
-        add_log=add_task_log,
     )

@@ -28,7 +28,6 @@ from backend.services.file_status_service import (
 )
 from backend.services.file_workflow_service import (
     _close_crawler_file_databases,
-    _fail_file_task,
     create_filtered_file_download_task,
     create_file_ai_analysis_task,
     create_file_collect_task,
@@ -1075,28 +1074,6 @@ class FileRoutesHelperTests(unittest.TestCase):
             ],
             [call.args for call in add_task_log.call_args_list],
         )
-
-    def test_fail_file_task_logs_and_updates_failure(self):
-        with (
-            patch("backend.services.file_workflow_service.is_task_stopped", return_value=False),
-            patch("backend.services.file_workflow_service.add_task_log") as add_task_log,
-            patch("backend.services.file_workflow_service.update_task") as update_task,
-        ):
-            _fail_file_task("task-1", "下载失败: boom", "下载失败: boom", {"failed": 1})
-
-        add_task_log.assert_called_once_with("task-1", "❌ 下载失败: boom")
-        update_task.assert_called_once_with("task-1", "failed", "下载失败: boom", {"failed": 1})
-
-    def test_fail_file_task_skips_stopped_tasks(self):
-        with (
-            patch("backend.services.file_workflow_service.is_task_stopped", return_value=True),
-            patch("backend.services.file_workflow_service.add_task_log") as add_task_log,
-            patch("backend.services.file_workflow_service.update_task") as update_task,
-        ):
-            _fail_file_task("task-1", "下载失败: boom", "下载失败: boom")
-
-        add_task_log.assert_not_called()
-        update_task.assert_not_called()
 
     def test_get_download_file_status_handles_missing_file(self):
         with patch("backend.services.file_status_service.group_download_dir", return_value=r"C:\tmp\group-1\downloads"):
