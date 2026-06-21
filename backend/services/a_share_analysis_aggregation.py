@@ -1,12 +1,20 @@
 from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from dataclasses import dataclass
 from typing import Any, Callable, Dict, List, Optional, Sequence, Set, Tuple
 
 
 LogCallback = Optional[Callable[[str], None]]
 AggregateSuccessCallback = Optional[Callable[[str, str, List[Dict[str, Any]], List[str]], None]]
-StockExtractor = Callable[..., List[Dict[str, Any]]]
+StockExtractor = Callable[[str, str], List[Dict[str, Any]]]
+
+
+@dataclass(frozen=True)
+class TopicStockExtractionAdapter:
+    extract: StockExtractor
+    model: str
+    prompt_version: str
 
 
 def looks_like_attachment_only_topic(content: str) -> bool:
@@ -86,19 +94,13 @@ def format_stock_concepts_log(stocks: Sequence[Dict[str, Any]], max_chars: int =
 
 def aggregate_daily(
     items: List[Dict[str, Any]],
-    api_key: Optional[str],
-    model: str,
-    api_base: Optional[str],
     *,
-    wire_api: str,
-    reasoning_effort: str,
     concurrency: int,
     log_callback: LogCallback,
     success_callback: AggregateSuccessCallback,
-    stock_extractor: StockExtractor,
+    extraction_adapter: TopicStockExtractionAdapter,
     debug_logger: Callable[[str], None],
     emit_log: Callable[..., None],
-    prompt_version: str,
 ) -> Tuple[Dict[str, Dict[str, int]], Set[str], List[Dict[str, Any]], List[Dict[str, Any]]]:
     daily: Dict[str, Dict[str, int]] = {}
     succeeded_item_keys: Set[str] = set()
@@ -114,15 +116,10 @@ def aggregate_daily(
         if should_skip:
             debug_logger(f"skip topic_id={item.get('topic_id')} because {skip_reason}")
             return item.get("day"), [], item.get("topic_id"), item_key
-        stocks = stock_extractor(
+        item_context = f"topic_id={item.get('topic_id')} day={item.get('day')} key={item_key}"
+        stocks = extraction_adapter.extract(
             content,
-            api_key,
-            model,
-            api_base,
-            wire_api=wire_api,
-            reasoning_effort=reasoning_effort,
-            item_context=f"topic_id={item.get('topic_id')} day={item.get('day')} key={item_key}",
-            log_callback=log_callback,
+            item_context,
         )
         unique_stocks: Dict[str, Dict[str, Any]] = {}
         for stock in stocks:
@@ -140,8 +137,8 @@ def aggregate_daily(
                 "excerpt": str(stock.get("excerpt") or ""),
                 "reason": str(stock.get("reason") or ""),
                 "confidence": float(stock.get("confidence") or 0),
-                "model": model,
-                "prompt_version": prompt_version,
+                "model": extraction_adapter.model,
+                "prompt_version": extraction_adapter.prompt_version,
             }
         return item.get("day"), list(unique_stocks.values()), item.get("topic_id"), item_key
 

@@ -534,6 +534,62 @@ class AShareAnalysisServiceHelperTests(unittest.TestCase):
         self.assertEqual([], failed_items)
         self.assertEqual(1, len(extractions))
 
+    def test_aggregate_daily_impl_uses_extraction_adapter(self):
+        from backend.services.a_share_analysis_aggregation import TopicStockExtractionAdapter, aggregate_daily
+
+        calls = []
+
+        def extract(content, item_context):
+            calls.append((content, item_context))
+            return [
+                {
+                    "stock_name": "宁德时代",
+                    "concepts": ["钠电池"],
+                    "excerpt": "宁德时代有望受益",
+                    "reason": "产业链进展",
+                    "confidence": 0.9,
+                }
+            ]
+
+        daily, succeeded_keys, failed_items, extractions = aggregate_daily(
+            [
+                {
+                    "topic_id": 3,
+                    "title": "stock",
+                    "text": "宁德时代有望受益于钠电池产业链进展，这是一个明确提到股票的推荐池话题。",
+                    "create_time": "2026-05-10T10:00:00+0800",
+                    "day": "2026-05-10",
+                    "source": "topics",
+                    "group_id": "511",
+                }
+            ],
+            concurrency=1,
+            log_callback=None,
+            success_callback=None,
+            extraction_adapter=TopicStockExtractionAdapter(
+                extract=extract,
+                model="model-a",
+                prompt_version="prompt-v1",
+            ),
+            debug_logger=lambda _message: None,
+            emit_log=lambda *_args, **_kwargs: None,
+        )
+
+        self.assertEqual(
+            [
+                (
+                    "宁德时代有望受益于钠电池产业链进展，这是一个明确提到股票的推荐池话题。",
+                    "topic_id=3 day=2026-05-10 key=topics:3:2026-05-10",
+                )
+            ],
+            calls,
+        )
+        self.assertEqual({"2026-05-10": {"宁德时代": 1}}, daily)
+        self.assertEqual({"topics:3:2026-05-10"}, succeeded_keys)
+        self.assertEqual([], failed_items)
+        self.assertEqual("model-a", extractions[0]["model"])
+        self.assertEqual("prompt-v1", extractions[0]["prompt_version"])
+
     def test_backfill_topic_stock_extractions_uses_recent_seven_day_reset_range(self):
         from backend.services import a_share_analysis_service as service
 

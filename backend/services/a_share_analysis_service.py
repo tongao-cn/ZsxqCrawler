@@ -51,6 +51,7 @@ from backend.services.a_share_analysis_ai import (
     call_openai_extract_topic_stocks as _call_openai_extract_topic_stocks,
 )
 from backend.services.a_share_analysis_aggregation import (
+    TopicStockExtractionAdapter,
     aggregate_daily as _aggregate_daily,
     format_company_log as _format_company_log_impl,
     format_stock_concepts_log as _format_stock_concepts_log_impl,
@@ -316,20 +317,30 @@ def aggregate_daily(
     log_callback: LogCallback = None,
     success_callback: AggregateSuccessCallback = None,
 ) -> Tuple[Dict[str, Dict[str, int]], Set[str], List[Dict[str, Any]], List[Dict[str, Any]]]:
+    def extract_topic_stocks(content: str, item_context: str) -> List[Dict[str, Any]]:
+        return call_openai_extract_topic_stocks(
+            content,
+            api_key,
+            model,
+            api_base,
+            wire_api=wire_api,
+            reasoning_effort=reasoning_effort,
+            item_context=item_context,
+            log_callback=log_callback,
+        )
+
     return _aggregate_daily(
         items,
-        api_key,
-        model,
-        api_base,
-        wire_api=wire_api,
-        reasoning_effort=reasoning_effort,
         concurrency=concurrency,
         log_callback=log_callback,
         success_callback=success_callback,
-        stock_extractor=call_openai_extract_topic_stocks,
+        extraction_adapter=TopicStockExtractionAdapter(
+            extract=extract_topic_stocks,
+            model=model,
+            prompt_version=TOPIC_STOCK_EXTRACTION_PROMPT_VERSION,
+        ),
         debug_logger=log_debug,
         emit_log=_emit_log,
-        prompt_version=TOPIC_STOCK_EXTRACTION_PROMPT_VERSION,
     )
 
 
