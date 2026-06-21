@@ -40,6 +40,8 @@ from backend.services.task_runtime_state import TaskRuntimeState
 from backend.services.task_workflow_lifecycle import (
     WorkflowCompletedMessage,
     WorkflowRunningMessage,
+    complete_task_unless_stopped as _complete_task_unless_stopped,
+    fail_task_unless_stopped as _fail_task_unless_stopped,
     run_workflow_lifecycle,
 )
 from backend.services.workflow_registry import get_workflow_spec
@@ -363,6 +365,31 @@ def run_workflow(
         completed_message=completed_message,
         failure_label=failure_label,
         work=work,
+        is_task_stopped=is_task_stopped,
+        update_task_state=update_task,
+        add_task_log=add_task_log,
+    )
+
+
+def complete_task_unless_stopped(
+    task_id: str,
+    message: str,
+    result: Any,
+) -> None:
+    _complete_task_unless_stopped(
+        task_id,
+        completed_message=message,
+        result=result,
+        is_task_stopped=is_task_stopped,
+        update_task_state=update_task,
+    )
+
+
+def fail_task_unless_stopped(task_id: str, failure_label: str, error: Exception) -> None:
+    _fail_task_unless_stopped(
+        task_id,
+        failure_label=failure_label,
+        error=error,
         is_task_stopped=is_task_stopped,
         update_task_state=update_task,
         add_task_log=add_task_log,

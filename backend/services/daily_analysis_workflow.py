@@ -11,6 +11,8 @@ from backend.services.task_launch import TaskLaunchRecipe, launch_task_recipe
 from backend.services.task_runtime import (
     add_task_log,
     build_task_log_callback,
+    complete_task_unless_stopped,
+    fail_task_unless_stopped,
     get_task_state,
     is_task_stopped,
     run_workflow,
@@ -121,14 +123,6 @@ def _daily_task_stopped_or_failed(task_id: str) -> bool:
     return task.get("status") == "failed"
 
 
-def _fail_daily_task_unless_stopped(task_id: str, label: str, error: Exception) -> None:
-    if is_task_stopped(task_id):
-        return
-    message = f"{label}失败: {str(error)}"
-    add_task_log(task_id, f"❌ {message}")
-    update_task(task_id, "failed", message)
-
-
 def _run_daily_crawl_first_step(
     task_id: str,
     group_id: str,
@@ -143,12 +137,6 @@ def _run_daily_crawl_first_step(
         return False
     update_task(task_id, "running", "最新话题抓取完成，开始 AI 分析...")
     return True
-
-
-def _complete_daily_crawl_and_analysis_unless_stopped(task_id: str, result: dict) -> None:
-    if is_task_stopped(task_id):
-        return
-    update_task(task_id, "completed", "每日抓取与 AI 分析完成", result)
 
 
 def run_daily_topic_crawl_and_analysis_task(
@@ -169,9 +157,9 @@ def run_daily_topic_crawl_and_analysis_task(
             log_callback=_task_log_callback(task_id),
         )
 
-        _complete_daily_crawl_and_analysis_unless_stopped(task_id, result)
+        complete_task_unless_stopped(task_id, "每日抓取与 AI 分析完成", result)
     except Exception as exc:
-        _fail_daily_task_unless_stopped(task_id, "每日抓取与 AI 分析", exc)
+        fail_task_unless_stopped(task_id, "每日抓取与 AI 分析", exc)
 
 
 def create_daily_topic_crawl_and_analysis_task(
