@@ -15,7 +15,7 @@ export function useColumnsActions({ groupId, loadColumns, resetColumnsData }: Us
   const [fetchingColumns, setFetchingColumns] = useState(false);
   const [currentTaskId, setCurrentTaskId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
-  const { handleTaskCreateError, notifyTaskCreated } = useTaskLauncher({
+  const { handleTaskCreateError, notifyTaskLaunch } = useTaskLauncher({
     onTaskCreated: setCurrentTaskId,
   });
 
@@ -25,18 +25,14 @@ export function useColumnsActions({ groupId, loadColumns, resetColumnsData }: Us
       const result = await apiClient.fetchGroupColumns(groupId, settings);
       if (result.success) {
         const successMessage = settings.incrementalMode ? '增量采集任务已启动（跳过已存在）' : '全量采集任务已启动';
-        if (result.task_id) {
-          notifyTaskCreated(result.task_id, successMessage);
-        } else {
-          toast.success(successMessage);
-        }
+        notifyTaskLaunch(result, successMessage);
       }
     } catch (error) {
       console.error('启动专栏采集失败:', error);
       handleTaskCreateError(error, '启动专栏采集失败');
       setFetchingColumns(false);
     }
-  }, [groupId, handleTaskCreateError, notifyTaskCreated]);
+  }, [groupId, handleTaskCreateError, notifyTaskLaunch]);
 
   const handleDeleteAllColumns = useCallback(async () => {
     try {

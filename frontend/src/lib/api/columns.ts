@@ -1,5 +1,6 @@
 import { GroupsApiClient } from './groups';
 import type { ColumnComment, ColumnInfo, ColumnTopic, ColumnTopicDetail, ColumnsFetchSettings, ColumnsStats } from './columnTypes';
+import type { TaskCreateResponse } from './taskTypes';
 
 export class ColumnsApiClient extends GroupsApiClient {
   async getGroupColumns(groupId: number | string): Promise<{
@@ -32,10 +33,8 @@ export class ColumnsApiClient extends GroupsApiClient {
   }
 
   // 采集群组所有专栏内容
-  async fetchGroupColumns(groupId: number | string, settings?: ColumnsFetchSettings): Promise<{
+  async fetchGroupColumns(groupId: number | string, settings?: ColumnsFetchSettings): Promise<TaskCreateResponse & {
     success: boolean;
-    task_id: string;
-    message: string;
   }> {
     return this.request(`/api/groups/${groupId}/columns/fetch`, {
       method: 'POST',

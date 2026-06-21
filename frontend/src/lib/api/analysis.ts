@@ -60,7 +60,7 @@ export class AnalysisApiClient extends TasksApiClient {
     });
   }
 
-  async runAShareAnalysis(payload: AShareAnalysisRunPayload) {
+  async runAShareAnalysis(payload: AShareAnalysisRunPayload): Promise<TaskCreateResponse> {
     const groupId = normalizeOptionalId(payload.group_id);
     return this.request('/api/analytics/a-share/run', {
       method: 'POST',

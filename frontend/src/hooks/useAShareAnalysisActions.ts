@@ -53,7 +53,7 @@ export function useAShareAnalysisActions({
   const [running, setRunning] = useState(false);
   const [resetting, setResetting] = useState(false);
   const [exportingTdx, setExportingTdx] = useState(false);
-  const { handleTaskCreateError, notifyTaskCreated } = useTaskLauncher({
+  const { handleTaskCreateError, notifyTaskLaunch } = useTaskLauncher({
     onTaskCreated,
   });
 
@@ -101,13 +101,8 @@ export function useAShareAnalysisActions({
             }
           : {}),
       });
-      const taskId = (response as { task_id?: string })?.task_id;
-      if (taskId) {
-        setActiveRunTaskId(taskId);
-        notifyTaskCreated(taskId, '股票推荐池任务已创建，结果会在完成后自动刷新');
-      } else {
-        toast.success('股票推荐池任务已创建，结果会在完成后自动刷新');
-      }
+      const taskId = notifyTaskLaunch(response, '股票推荐池任务已创建，结果会在完成后自动刷新');
+      setActiveRunTaskId(taskId);
       await loadStatus(false, selectedGroup.group_id);
     } catch (error) {
       handleTaskCreateError(error, '创建股票推荐池任务失败');
