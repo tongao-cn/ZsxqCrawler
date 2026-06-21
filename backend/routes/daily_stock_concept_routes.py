@@ -5,9 +5,9 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 
+from backend.services.daily_analysis_workflow import create_daily_stock_concept_task
 from backend.services.daily_stock_concept_service import get_daily_stock_concepts
 from backend.services.task_launch import TASK_CREATED_MESSAGE as _TASK_CREATED_MESSAGE
-from backend.services.workflow_task_launch import create_daily_stock_concept_task
 
 
 router = APIRouter(prefix="/api/analysis/daily-stock-concepts", tags=["daily-stock-concepts"])

@@ -6,12 +6,12 @@ from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from backend.schemas.crawl import CrawlSettingsRequest
-from backend.services.daily_topic_analysis_service import get_daily_report
-from backend.services.task_launch import TASK_CREATED_MESSAGE as _TASK_CREATED_MESSAGE
-from backend.services.workflow_task_launch import (
+from backend.services.daily_analysis_workflow import (
     create_daily_topic_analysis_task,
     create_daily_topic_crawl_and_analysis_task,
 )
+from backend.services.daily_topic_analysis_service import get_daily_report
+from backend.services.task_launch import TASK_CREATED_MESSAGE as _TASK_CREATED_MESSAGE
 
 
 router = APIRouter(prefix="/api/analysis/daily", tags=["daily-analysis"])

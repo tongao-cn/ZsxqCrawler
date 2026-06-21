@@ -18,7 +18,7 @@ class DailyAnalysisRoutesHelperTests(unittest.TestCase):
         self.assertEqual("获取每日报告失败: boom", error.detail)
 
     @unittest.skipUnless(HAS_DAILY_ROUTE_DEPS, "daily analysis route dependencies are not installed")
-    def test_create_daily_report_task_response_delegates_to_workflow_launch(self):
+    def test_create_daily_report_task_response_delegates_to_daily_workflow(self):
         from backend.routes import daily_analysis_routes
         from backend.routes.daily_analysis_routes import DailyAnalysisRequest
 
@@ -67,7 +67,7 @@ class DailyAnalysisRoutesHelperTests(unittest.TestCase):
         self.assertEqual("创建每日分析任务失败: boom", raised.exception.detail)
 
     @unittest.skipUnless(HAS_DAILY_ROUTE_DEPS, "daily analysis route dependencies are not installed")
-    def test_create_daily_today_task_response_delegates_to_workflow_launch(self):
+    def test_create_daily_today_task_response_delegates_to_daily_workflow(self):
         from backend.schemas.crawl import CrawlSettingsRequest
         from backend.routes import daily_analysis_routes
         from backend.routes.daily_analysis_routes import DailyRunTodayRequest
