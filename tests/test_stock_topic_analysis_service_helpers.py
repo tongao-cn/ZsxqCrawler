@@ -57,6 +57,143 @@ class StockTopicAnalysisServiceHelperTests(unittest.TestCase):
         self.assertEqual('["101", "102"]', _serialize_json_list(["101", "102", "101"]))
         self.assertEqual(["1", "2"], _merge_topic_ids([1, 2, 3], limit=2))
 
+    def test_stock_topic_search_result_skips_processed_rows_before_excerpt_validation(self):
+        from backend.services.stock_topic_search_results import (
+            build_stock_topic_search_result,
+            draft_stock_topic_search_result,
+        )
+
+        draft = draft_stock_topic_search_result(
+            group_id="51111112855254",
+            stock_name="宁德时代",
+            rows=[
+                {
+                    "topic_id": "101",
+                    "title": "已处理话题",
+                    "create_time": "2026-05-09T09:00:00",
+                    "likes_count": 1,
+                    "comments_count": 2,
+                    "reading_count": 3,
+                    "stock_name": "已处理股票",
+                    "stock_code": "000001",
+                    "market": "SZ",
+                    "concepts_json": "[]",
+                    "excerpt": "",
+                    "reason": "",
+                    "confidence": 0.5,
+                },
+                {
+                    "topic_id": "102",
+                    "title": "宁德时代交流",
+                    "create_time": "2026-05-10T09:00:00",
+                    "likes_count": 4,
+                    "comments_count": 5,
+                    "reading_count": 6,
+                    "stock_name": "宁德时代",
+                    "stock_code": "300750",
+                    "market": "SZ",
+                    "concepts_json": '["储能"]',
+                    "excerpt": "宁德时代储能订单持续增长。",
+                    "reason": "订单",
+                    "confidence": 0.8,
+                },
+            ],
+            processed_topic_ids=["101"],
+            alias_terms=["宁德时代"],
+        )
+
+        self.assertEqual(["宁德时代"], draft.recommendation_names)
+        result = build_stock_topic_search_result(
+            draft,
+            recommendation_count=7,
+            recommendation_by_date={"2026-05-10": 2},
+            limit=None,
+            max_tracked_topic_ids=5000,
+        )
+
+        self.assertEqual(["101"], result["processed_topic_ids"])
+        self.assertEqual(["102"], [topic["topic_id"] for topic in result["topics"]])
+        self.assertEqual(2, result["topics"][0]["recommendation_count"])
+
+    def test_stock_topic_search_result_merges_sorts_and_limits_topics(self):
+        from backend.services.stock_topic_search_results import (
+            build_stock_topic_search_result,
+            draft_stock_topic_search_result,
+        )
+
+        draft = draft_stock_topic_search_result(
+            group_id="51111112855254",
+            stock_name="宁德时代",
+            rows=[
+                {
+                    "topic_id": "201",
+                    "title": "储能订单",
+                    "create_time": "2026-05-09T09:00:00",
+                    "likes_count": 1,
+                    "comments_count": 2,
+                    "reading_count": 3,
+                    "stock_name": "宁德时代",
+                    "stock_code": "300750",
+                    "market": "SZ",
+                    "concepts_json": '["储能"]',
+                    "excerpt": "宁德时代储能订单增长。",
+                    "reason": "订单",
+                    "confidence": 0.6,
+                },
+                {
+                    "topic_id": "202",
+                    "title": "电池材料",
+                    "create_time": "2026-05-10T09:00:00",
+                    "likes_count": 1,
+                    "comments_count": 2,
+                    "reading_count": 3,
+                    "stock_name": "宁德时代",
+                    "stock_code": "300750",
+                    "market": "SZ",
+                    "concepts_json": '["锂电"]',
+                    "excerpt": "宁德时代材料体系更新。",
+                    "reason": "材料",
+                    "confidence": 0.8,
+                },
+                {
+                    "topic_id": "201",
+                    "title": "储能订单",
+                    "create_time": "2026-05-09T09:00:00",
+                    "likes_count": 1,
+                    "comments_count": 2,
+                    "reading_count": 3,
+                    "stock_name": "宁德时代",
+                    "stock_code": "300750",
+                    "market": "SZ",
+                    "concepts_json": '["海外储能"]',
+                    "excerpt": "宁德时代海外储能订单增长，排产能见度提高。",
+                    "reason": "海外",
+                    "confidence": 0.95,
+                },
+            ],
+            processed_topic_ids=[],
+            alias_terms=["宁德时代"],
+        )
+        result = build_stock_topic_search_result(
+            draft,
+            recommendation_count=5,
+            recommendation_by_date={"2026-05-09": 3, "2026-05-10": 1},
+            limit=1,
+            max_tracked_topic_ids=5000,
+        )
+
+        self.assertEqual(1, result["topic_count"])
+        topic = result["topics"][0]
+        self.assertEqual("201", topic["topic_id"])
+        self.assertEqual(["储能", "海外储能"], topic["concepts"])
+        self.assertEqual(["订单", "海外"], topic["reasons"])
+        self.assertEqual(0.95, topic["confidence"])
+        self.assertEqual("宁德时代海外储能订单增长，排产能见度提高。", topic["analysis_content"])
+        self.assertEqual(3, topic["recommendation_count"])
+        self.assertEqual(["储能", "海外储能"], result["concepts"])
+        self.assertEqual("300750", result["stock_code"])
+        self.assertEqual("SZ", result["market"])
+
     def test_reconcile_processed_topic_ids_prefers_processed_ids(self):
         from backend.services.stock_topic_analysis_helpers import StockTopicProgress, _reconcile_processed_topic_ids
 

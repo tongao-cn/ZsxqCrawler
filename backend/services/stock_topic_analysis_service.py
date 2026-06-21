@@ -33,7 +33,6 @@ from backend.services.stock_topic_analysis_helpers import (
     _ordered_unique,
     _parse_json_list,
     _reconcile_processed_topic_ids,
-    _safe_float,
     _stock_analysis_mode,
     parse_stock_names,
 )
@@ -41,7 +40,11 @@ from backend.services.stock_topic_analysis_payloads import (
     build_analysis_topic_payload,
     build_question_analysis_prompt,
     build_stock_analysis_prompt,
-    require_topic_excerpt,
+)
+from backend.services.stock_topic_search_results import (
+    build_empty_stock_topic_search_result,
+    build_stock_topic_search_result,
+    draft_stock_topic_search_result,
 )
 from backend.services.stock_topic_analysis_store import (
     CHECKPOINT_ANALYZED_BATCH,
@@ -170,25 +173,9 @@ def _topic_content(row: Any) -> str:
     )
 
 
-def _empty_search_result(group_id: str, stock_name: str) -> Dict[str, Any]:
-    return {
-        "group_id": group_id,
-        "stock_name": stock_name,
-        "stock_code": "",
-        "market": "",
-        "topics": [],
-        "concepts": [],
-        "topic_count": 0,
-        "recommendation_count": 0,
-        "processed_topic_ids": [],
-        "analyzed_topic_ids": [],
-        "skipped_topic_ids": [],
-    }
-
-
 def _empty_latest_result(group_id: str, stock_name: str) -> Dict[str, Any]:
     return {
-        **_empty_search_result(group_id, stock_name),
+        **build_empty_stock_topic_search_result(group_id, stock_name),
         "summary_markdown": "",
         "model": "",
         "status": "missing",
@@ -200,21 +187,6 @@ def _empty_latest_result(group_id: str, stock_name: str) -> Dict[str, Any]:
 
 def _recent_topic_cutoff_text() -> str:
     return (date.today() - timedelta(days=365)).isoformat()
-
-
-def _require_topic_excerpt(value: Any, *, topic_id: Any, stock_name: Any) -> str:
-    return require_topic_excerpt(value, topic_id=topic_id, stock_name=stock_name)
-
-
-def _score_relevant_topic(extracted_content: str, mode: str, matched_terms: Iterable[str], topic_row: Dict[str, Any]) -> int:
-    if not extracted_content:
-        return 0
-    score = 100 if mode in {"full", "title_full"} else 70
-    score += min(len(_ordered_unique(matched_terms, limit=10)) * 5, 15)
-    confidence = _safe_float(topic_row.get("confidence"))
-    if confidence > 0:
-        score += min(int(confidence * 10), 10)
-    return score
 
 
 def get_latest_stock_topic_analysis(group_id: str, stock_name: str) -> Dict[str, Any] | None:
@@ -259,99 +231,27 @@ def search_stock_topics(group_id: str, stock_name: str, *, limit: int | None = N
         max_candidate_topics=MAX_SEARCH_CANDIDATE_TOPICS,
     )
     processed_topic_ids = sources.processed_topic_ids
-    processed_topic_id_set = set(processed_topic_ids)
     rows = sources.rows
-    if not rows:
-        empty_result = _empty_search_result(group_id_text, query)
-        empty_result["processed_topic_ids"] = processed_topic_ids
-        empty_result["analyzed_topic_ids"] = processed_topic_ids
-        return empty_result
-
-    topics_by_id: Dict[str, Dict[str, Any]] = {}
-    stock_names: List[str] = []
-    stock_codes: List[str] = []
-    markets: List[str] = []
-
-    for row in rows:
-        topic_id = str(row["topic_id"])
-        if topic_id in processed_topic_id_set:
-            continue
-        stored_excerpt = _require_topic_excerpt(row["excerpt"], topic_id=topic_id, stock_name=query)
-        extracted_content = stored_excerpt
-        mode = "stored_excerpt"
-        matched_terms = _ordered_unique([_normalize_text(row["stock_name"]), *alias_terms], limit=10)
-        topic = topics_by_id.setdefault(
-            topic_id,
-            {
-                "topic_id": topic_id,
-                "title": row["title"] or "",
-                "create_time": row["create_time"] or "",
-                "likes_count": int(row["likes_count"] or 0),
-                "comments_count": int(row["comments_count"] or 0),
-                "reading_count": int(row["reading_count"] or 0),
-                "content_preview": _clip(extracted_content, 260),
-                "concepts": [],
-                "reasons": [],
-                "excerpt": stored_excerpt,
-                "confidence": 0.0,
-                "recommendation_count": 0,
-                "extract_mode": mode,
-                "relevance_score": 0,
-                "analysis_content": extracted_content,
-            },
-        )
-        stock_names.append(row["stock_name"] or query)
-        stock_codes.append(row["stock_code"] or "")
-        markets.append(row["market"] or "")
-        topic["concepts"] = _ordered_unique([*topic["concepts"], *_parse_json_list(row["concepts_json"])], limit=12)
-        topic["reasons"] = _ordered_unique([*topic["reasons"], row["reason"]], limit=6)
-        topic["confidence"] = max(_safe_float(topic["confidence"]), _safe_float(row["confidence"]))
-        topic["relevance_score"] = max(
-            int(topic["relevance_score"]),
-            _score_relevant_topic(extracted_content, mode, matched_terms, topic),
-        )
-        topic["extract_mode"] = mode if topic.get("extract_mode") != "full" else topic["extract_mode"]
-        if len(extracted_content) > len(str(topic.get("analysis_content") or "")):
-            topic["analysis_content"] = extracted_content
-
+    draft = draft_stock_topic_search_result(
+        group_id=group_id_text,
+        stock_name=query,
+        rows=rows,
+        processed_topic_ids=processed_topic_ids,
+        alias_terms=alias_terms,
+    )
+    if not draft.had_rows:
+        return build_empty_stock_topic_search_result(group_id_text, query, processed_topic_ids=processed_topic_ids)
     recommendation_count, recommendation_by_date = load_stock_recommendation_counts_for_names(
         group_id_text,
-        _ordered_unique([query, *stock_names], limit=10),
+        draft.recommendation_names,
     )
-    for topic in topics_by_id.values():
-        topic_day = str(topic["create_time"] or "")[:10]
-        topic["recommendation_count"] = recommendation_by_date.get(topic_day, 0)
-
-    topics = sorted(
-        topics_by_id.values(),
-        key=lambda item: (
-            int(item.get("relevance_score") or 0),
-            str(item["create_time"] or ""),
-        ),
-        reverse=True,
+    return build_stock_topic_search_result(
+        draft,
+        recommendation_count=recommendation_count,
+        recommendation_by_date=recommendation_by_date,
+        limit=limit,
+        max_tracked_topic_ids=MAX_TRACKED_TOPIC_IDS,
     )
-    if limit is not None:
-        topics = topics[: max(1, int(limit))]
-    concepts = _ordered_unique(
-        concept
-        for topic in topics
-        for concept in topic.get("concepts", [])
-    )
-    stock_code_values = _ordered_unique(stock_codes, limit=1)
-    market_values = _ordered_unique(markets, limit=1)
-    return {
-        "group_id": group_id_text,
-        "stock_name": query,
-        "stock_code": stock_code_values[0] if stock_code_values else "",
-        "market": market_values[0] if market_values else "",
-        "topics": topics,
-        "concepts": concepts,
-        "topic_count": len(topics),
-        "recommendation_count": recommendation_count,
-        "processed_topic_ids": _ordered_unique(processed_topic_ids, limit=MAX_TRACKED_TOPIC_IDS),
-        "analyzed_topic_ids": _ordered_unique(processed_topic_ids, limit=MAX_TRACKED_TOPIC_IDS),
-        "skipped_topic_ids": [],
-    }
 
 
 def _build_stock_question_search_result(
