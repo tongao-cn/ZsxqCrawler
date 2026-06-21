@@ -3,6 +3,7 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
+from backend.routes.task_http_errors import internal_route_error
 from backend.services.settings_service import (
     get_runtime_settings,
     update_runtime_settings,
@@ -12,7 +13,7 @@ router = APIRouter(prefix="/api", tags=["settings"])
 
 
 def _settings_route_error(message: str, error: Exception) -> HTTPException:
-    return HTTPException(status_code=500, detail=f"{message}: {str(error)}")
+    return internal_route_error(message, error)
 
 
 class CrawlerSettingsRequest(BaseModel):

@@ -5,6 +5,7 @@ from typing import Any, Dict
 
 from fastapi import APIRouter, HTTPException
 
+from backend.routes.task_http_errors import internal_route_error
 from backend.core.local_group_runtime import (
     get_cached_local_group_ids,
     delete_group_local as delete_group_local_data,
@@ -65,7 +66,7 @@ async def _group_database_info(group_id: int) -> Dict[str, Any]:
 
 
 def _group_route_error(message: str, error: Exception) -> HTTPException:
-    return HTTPException(status_code=500, detail=f"{message}: {str(error)}")
+    return internal_route_error(message, error)
 
 
 @router.get("/groups")

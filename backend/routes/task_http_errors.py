@@ -26,3 +26,7 @@ def route_error(
 
 def task_launch_route_error(message: str, error: Exception) -> HTTPException:
     return route_error(message, error, value_error_status_code=None, passthrough_http=False)
+
+
+def internal_route_error(message: str, error: Exception) -> HTTPException:
+    return HTTPException(status_code=500, detail=f"{message}: {str(error)}")

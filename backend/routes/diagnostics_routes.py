@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException, Query
 
+from backend.routes.task_http_errors import internal_route_error
 from backend.services.postgres_activity import list_postgres_activity
 
 
@@ -9,7 +10,7 @@ router = APIRouter(prefix="/api/diagnostics", tags=["diagnostics"])
 
 
 def _diagnostics_route_error(message: str, error: Exception) -> HTTPException:
-    return HTTPException(status_code=500, detail=f"{message}: {str(error)}")
+    return internal_route_error(message, error)
 
 
 @router.get("/postgres/activity")

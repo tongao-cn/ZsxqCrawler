@@ -7,6 +7,7 @@ from typing import Any, Dict
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
+from backend.routes.task_http_errors import internal_route_error
 from backend.services.core_config_service import (
     get_public_config,
     masked_config_cookie,
@@ -29,7 +30,7 @@ def _masked_config_cookie(cookie: str) -> str:
 
 
 def _core_route_error(message: str, error: Exception) -> HTTPException:
-    return HTTPException(status_code=500, detail=f"{message}: {str(error)}")
+    return internal_route_error(message, error)
 
 
 class ConfigModel(BaseModel):

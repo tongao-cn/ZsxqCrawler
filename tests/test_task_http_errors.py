@@ -66,6 +66,20 @@ class TaskHttpErrorsTests(unittest.TestCase):
         self.assertEqual("创建任务失败: boom", error.detail)
 
     @unittest.skipUnless(HAS_ROUTE_DEPS, "route dependencies are not installed")
+    def test_internal_route_error_always_wraps_as_500(self):
+        from fastapi import HTTPException
+
+        from backend.routes.task_http_errors import internal_route_error
+
+        value_error = internal_route_error("读取失败", ValueError("bad input"))
+        http_error = internal_route_error("读取失败", HTTPException(status_code=404, detail="missing"))
+
+        self.assertEqual(500, value_error.status_code)
+        self.assertEqual("读取失败: bad input", value_error.detail)
+        self.assertEqual(500, http_error.status_code)
+        self.assertEqual("读取失败: 404: missing", http_error.detail)
+
+    @unittest.skipUnless(HAS_ROUTE_DEPS, "route dependencies are not installed")
     def test_task_launch_route_error_keeps_value_error_as_fallback_500(self):
         from backend.routes.task_http_errors import task_launch_route_error
 
