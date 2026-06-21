@@ -11,6 +11,7 @@ from backend.services.file_ai_analysis_service import (
     DEFAULT_FILE_ANALYSIS_WIRE_API,
     analyze_group_file,
 )
+from backend.services.file_task_lifecycle import fail_file_task as _fail_file_task_impl
 from backend.services.task_runtime import add_task_log, is_task_stopped, update_task
 
 
@@ -91,13 +92,15 @@ def _run_file_analysis_items(
 
 
 def _fail_file_analysis_task(task_id: str, message: str, stats: Dict[str, int]) -> None:
-    try:
-        if is_task_stopped(task_id):
-            return
-        add_task_log(task_id, f"❌ {message}")
-        update_task(task_id, "failed", message, {"analysis": stats})
-    except Exception:
-        pass
+    _fail_file_task_impl(
+        task_id,
+        message,
+        message,
+        {"analysis": stats},
+        is_stopped=is_task_stopped,
+        add_log=add_task_log,
+        update=update_task,
+    )
 
 
 def run_file_analysis_task(

@@ -6,6 +6,7 @@ from unittest.mock import patch
 
 from backend.services.file_analysis_workflow import (
     _build_file_analysis_stats,
+    _fail_file_analysis_task,
     _run_file_analysis_items,
 )
 from backend.services.file_download_records_workflow import (
@@ -1012,6 +1013,24 @@ class FileRoutesHelperTests(unittest.TestCase):
             "failed",
             "文件分析全部失败",
             {"analysis": {"total_files": 1, "completed": 0, "cached": 0, "failed": 1}},
+        )
+
+    def test_fail_file_analysis_task_uses_file_lifecycle_failure_payload(self):
+        stats = {"total_files": 1, "completed": 0, "cached": 0, "failed": 1}
+
+        with (
+            patch("backend.services.file_analysis_workflow.update_task") as update_task,
+            patch("backend.services.file_analysis_workflow.add_task_log") as add_task_log,
+            patch("backend.services.file_analysis_workflow.is_task_stopped", return_value=False),
+        ):
+            _fail_file_analysis_task("task-1", "文件分析任务失败: boom", stats)
+
+        add_task_log.assert_called_once_with("task-1", "❌ 文件分析任务失败: boom")
+        update_task.assert_called_once_with(
+            "task-1",
+            "failed",
+            "文件分析任务失败: boom",
+            {"analysis": stats},
         )
 
     def test_run_file_analysis_items_updates_stats_logs_and_continues_after_failure(self):
