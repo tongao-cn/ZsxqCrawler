@@ -29,27 +29,31 @@ class FileAIAnalysisServiceHelperTests(unittest.TestCase):
 
     @unittest.skipUnless(HAS_FILE_AI_DEPS, "file AI service dependencies are not installed")
     def test_extract_file_content_for_analysis_uses_audio_transcription(self):
-        from backend.services.file_ai_analysis_service import _extract_file_content_for_analysis
+        from backend.services.file_ai_content_analysis import extract_file_content_for_analysis
 
-        with patch("backend.services.file_ai_analysis_service._transcribe_audio_with_faster_whisper", return_value="text"):
-            text, content_type = _extract_file_content_for_analysis(Path("voice.mp3"))
+        text, content_type = extract_file_content_for_analysis(
+            Path("voice.mp3"),
+            transcribe_audio=lambda _path: "text",
+        )
 
         self.assertEqual("text", text)
         self.assertEqual("audio/mp3", content_type)
 
     @unittest.skipUnless(HAS_FILE_AI_DEPS, "file AI service dependencies are not installed")
     def test_extract_file_content_for_analysis_delegates_non_audio(self):
-        from backend.services.file_ai_analysis_service import _extract_file_content_for_analysis
+        from backend.services.file_ai_content_analysis import extract_file_content_for_analysis
 
-        with patch("backend.services.file_ai_analysis_service.extract_file_text", return_value=("text", "text/plain")):
-            text, content_type = _extract_file_content_for_analysis(Path("note.txt"))
+        text, content_type = extract_file_content_for_analysis(
+            Path("note.txt"),
+            extract_text=lambda _path: ("text", "text/plain"),
+        )
 
         self.assertEqual("text", text)
         self.assertEqual("text/plain", content_type)
 
     @unittest.skipUnless(HAS_FILE_AI_DEPS, "file AI service dependencies are not installed")
     def test_summarize_text_with_ai_uses_deep_summary_prompt(self):
-        from backend.services.file_ai_analysis_service import _summarize_text_with_ai
+        from backend.services.file_ai_content_analysis import summarize_text_with_ai
 
         class FakeResponses:
             def __init__(self):
@@ -69,20 +73,15 @@ class FileAIAnalysisServiceHelperTests(unittest.TestCase):
 
         fake_client = FakeClient()
 
-        with (
-            patch(
-                "backend.services.file_ai_analysis_service.get_openai_compatible_config",
-                return_value={"api_key": "sk-test"},
-            ),
-            patch("backend.services.ai_client.OpenAI", return_value=fake_client),
-        ):
-            summary = _summarize_text_with_ai(
+        with patch("backend.services.ai_client.OpenAI", return_value=fake_client):
+            summary = summarize_text_with_ai(
                 "正文内容",
                 file_name="report.txt",
                 model="gpt-5.5",
                 api_base="https://api.openai.com/v1",
                 wire_api="responses",
                 reasoning_effort="high",
+                get_ai_config=lambda: {"api_key": "sk-test"},
             )
 
         self.assertEqual("Deep summary", summary)
@@ -97,7 +96,7 @@ class FileAIAnalysisServiceHelperTests(unittest.TestCase):
 
     @unittest.skipUnless(HAS_FILE_AI_DEPS, "file AI service dependencies are not installed")
     def test_summarize_pdf_with_ai_sends_pdf_file_input(self):
-        from backend.services.file_ai_analysis_service import _summarize_pdf_with_ai
+        from backend.services.file_ai_content_analysis import summarize_pdf_with_ai
 
         class FakeResponses:
             def __init__(self):
@@ -121,20 +120,15 @@ class FileAIAnalysisServiceHelperTests(unittest.TestCase):
             pdf_path = Path(temp_dir) / "report.pdf"
             pdf_path.write_bytes(b"%PDF-1.4\nfake pdf")
 
-            with (
-                patch(
-                    "backend.services.file_ai_analysis_service.get_openai_compatible_config",
-                    return_value={"api_key": "sk-test"},
-                ),
-                patch("backend.services.ai_client.OpenAI", return_value=fake_client),
-            ):
-                summary = _summarize_pdf_with_ai(
+            with patch("backend.services.ai_client.OpenAI", return_value=fake_client):
+                summary = summarize_pdf_with_ai(
                     pdf_path,
                     file_name="report.pdf",
                     model="gpt-5.5",
                     api_base="https://api.openai.com/v1",
                     wire_api="responses",
                     reasoning_effort="medium",
+                    get_ai_config=lambda: {"api_key": "sk-test"},
                 )
 
         self.assertEqual("PDF summary", summary)
@@ -148,6 +142,29 @@ class FileAIAnalysisServiceHelperTests(unittest.TestCase):
         self.assertIn("请深度阅读并总结文件《report.pdf》", content[1]["text"])
         self.assertIn("不要为了简洁省略重要信息", content[1]["text"])
         self.assertNotIn("3-8条", content[1]["text"])
+
+    @unittest.skipUnless(HAS_FILE_AI_DEPS, "file AI service dependencies are not installed")
+    def test_analyze_file_content_returns_summary_preview_and_source_size(self):
+        from backend.services.file_ai_content_analysis import analyze_file_content
+
+        with TemporaryDirectory() as temp_dir:
+            source_path = Path(temp_dir) / "report.txt"
+            source_path.write_text("raw file bytes", encoding="utf-8")
+            result = analyze_file_content(
+                source_path,
+                file_name="report.txt",
+                model="gpt-5.5",
+                api_base="https://api.openai.com/v1",
+                wire_api="responses",
+                reasoning_effort="medium",
+                extract_content=lambda _path: ("正文" * 3000, "text/plain"),
+                summarize_text=lambda text, **_kwargs: f"summary:{len(text)}",
+            )
+
+        self.assertEqual("summary:6000", result.summary)
+        self.assertEqual("text/plain", result.content_type)
+        self.assertEqual("正文" * 2000, result.extracted_text_preview)
+        self.assertEqual(len("raw file bytes".encode("utf-8")), result.source_size)
 
 
 if __name__ == "__main__":
