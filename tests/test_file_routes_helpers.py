@@ -2463,61 +2463,58 @@ class FileRoutesHelperTests(unittest.TestCase):
         topics_db = FakeSyncFilesTopicsDb()
 
         with (
+            patch("backend.services.file_topic_sync_workflow.run_workflow") as run_workflow,
             patch("backend.services.file_topic_sync_workflow.ZSXQDatabase", return_value=topics_db) as create_db,
-            patch("backend.services.file_topic_sync_workflow.update_task") as update_task,
             patch("backend.services.file_topic_sync_workflow.add_task_log"),
             patch("backend.services.file_topic_sync_workflow.is_task_stopped", return_value=False),
         ):
             run_sync_files_from_topics_task("task-1", "123")
+            result = run_workflow.call_args.kwargs["work"]()
 
+        self.assertEqual(("task-1",), run_workflow.call_args.args)
+        self.assertEqual("开始从话题同步文件记录...", run_workflow.call_args.kwargs["running_message"])
+        self.assertEqual("从话题同步文件记录完成", run_workflow.call_args.kwargs["completed_message"])
+        self.assertEqual("从话题同步文件记录", run_workflow.call_args.kwargs["failure_label"])
         create_db.assert_called_once_with("123")
         self.assertEqual(1, topics_db.backfill_calls)
         self.assertTrue(topics_db.closed)
-        self.assertEqual(
-            [
-                ("task-1", "running", "开始从话题同步文件记录..."),
-                ("task-1", "completed", "从话题同步文件记录完成", {"files": 2, "topics": 3}),
-            ],
-            [call.args for call in update_task.call_args_list],
-        )
+        self.assertEqual({"files": 2, "topics": 3}, result)
 
     def test_run_sync_files_from_topics_task_stops_before_database_open(self):
         from backend.services.file_workflow_service import run_sync_files_from_topics_task
+        from backend.services.task_runtime import skip_workflow_completion
 
         with (
+            patch("backend.services.file_topic_sync_workflow.run_workflow") as run_workflow,
             patch("backend.services.file_topic_sync_workflow.ZSXQDatabase") as create_db,
-            patch("backend.services.file_topic_sync_workflow.update_task") as update_task,
             patch("backend.services.file_topic_sync_workflow.add_task_log") as add_task_log,
             patch("backend.services.file_topic_sync_workflow.is_task_stopped", return_value=True),
         ):
             run_sync_files_from_topics_task("task-1", "123")
+            result = run_workflow.call_args.kwargs["work"]()
 
         create_db.assert_not_called()
-        self.assertEqual(
-            [("task-1", "running", "开始从话题同步文件记录...")],
-            [call.args for call in update_task.call_args_list],
-        )
         add_task_log.assert_called_once_with("task-1", "🛑 任务在初始化过程中被停止")
+        self.assertEqual(skip_workflow_completion(), result)
 
     def test_run_sync_files_from_topics_task_stops_after_backfill_without_completion(self):
         from backend.services.file_workflow_service import run_sync_files_from_topics_task
+        from backend.services.task_runtime import skip_workflow_completion
 
         topics_db = FakeSyncFilesTopicsDb()
 
         with (
+            patch("backend.services.file_topic_sync_workflow.run_workflow") as run_workflow,
             patch("backend.services.file_topic_sync_workflow.ZSXQDatabase", return_value=topics_db),
-            patch("backend.services.file_topic_sync_workflow.update_task") as update_task,
             patch("backend.services.file_topic_sync_workflow.add_task_log"),
             patch("backend.services.file_topic_sync_workflow.is_task_stopped", side_effect=[False, True]),
         ):
             run_sync_files_from_topics_task("task-1", "123")
+            result = run_workflow.call_args.kwargs["work"]()
 
         self.assertEqual(1, topics_db.backfill_calls)
         self.assertTrue(topics_db.closed)
-        self.assertEqual(
-            [("task-1", "running", "开始从话题同步文件记录...")],
-            [call.args for call in update_task.call_args_list],
-        )
+        self.assertEqual(skip_workflow_completion(), result)
 
     def test_run_single_file_download_task_uses_database_file_info_and_marks_completed(self):
         downloader = FakeSingleFileDownloadTaskDownloader(
