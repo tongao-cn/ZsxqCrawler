@@ -60,12 +60,13 @@ def _matches_latest_task_query(
     task_type: str,
     status: Optional[str],
     normalized_group_id: Optional[str],
+    group_filter_provided: bool = False,
 ) -> bool:
     if task.get("type") != task_type:
         return False
     if status and task.get("status") != status:
         return False
-    if normalized_group_id is not None and normalize_group_id(task.get("group_id")) != normalized_group_id:
+    if group_filter_provided and normalize_group_id(task.get("group_id")) != normalized_group_id:
         return False
     return True
 

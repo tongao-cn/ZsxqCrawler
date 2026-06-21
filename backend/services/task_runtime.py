@@ -52,6 +52,7 @@ task_store: Optional[TaskStore] = None
 TASK_LOCK_LEASE_MINUTES = 30
 TASK_LOCK_HEARTBEAT_SECONDS = 60
 _state_lock = threading.RLock()
+_GROUP_FILTER_UNSET = object()
 
 
 def get_task_store() -> TaskStore:
@@ -643,13 +644,14 @@ def is_task_stopped(task_id: str) -> bool:
 def get_latest_task_by_type(
     task_type: str,
     status: Optional[str] = None,
-    group_id: Optional[str] = None,
+    group_id: Any = _GROUP_FILTER_UNSET,
 ) -> Optional[Dict[str, Any]]:
-    normalized_group_id = normalize_group_id(group_id)
+    group_filter_provided = group_id is not _GROUP_FILTER_UNSET
+    normalized_group_id = normalize_group_id(group_id) if group_filter_provided else None
     candidates = [
         task
         for task in list_tasks()
-        if _matches_latest_task_query(task, task_type, status, normalized_group_id)
+        if _matches_latest_task_query(task, task_type, status, normalized_group_id, group_filter_provided)
     ]
     if not candidates:
         return None

@@ -108,3 +108,41 @@ class AShareAnalysisStatusServiceHelperTests(unittest.TestCase):
             ],
             get_latest.call_args_list,
         )
+
+    def test_a_share_status_tasks_keeps_global_tasks_separate(self):
+        from datetime import datetime
+
+        from backend.services import a_share_analysis_status_service as service
+
+        class Store:
+            def list_tasks(self, limit=None):
+                tasks = [
+                    {
+                        "task_id": "group-running",
+                        "type": "a_share_analysis",
+                        "status": "running",
+                        "group_id": "51111112855254",
+                        "created_at": datetime(2026, 1, 3, 9, 0, 0),
+                    },
+                    {
+                        "task_id": "global-running",
+                        "type": "a_share_analysis",
+                        "status": "running",
+                        "group_id": None,
+                        "created_at": datetime(2026, 1, 2, 9, 0, 0),
+                    },
+                    {
+                        "task_id": "global-completed",
+                        "type": "a_share_analysis",
+                        "status": "completed",
+                        "group_id": None,
+                        "created_at": datetime(2026, 1, 1, 9, 0, 0),
+                    },
+                ]
+                return tasks[:limit] if limit is not None else tasks
+
+        with patch("backend.services.task_runtime.get_task_store", return_value=Store()):
+            latest_task, running_task = service._a_share_status_tasks(None)
+
+        self.assertEqual("global-running", latest_task["task_id"])
+        self.assertEqual("global-running", running_task["task_id"])

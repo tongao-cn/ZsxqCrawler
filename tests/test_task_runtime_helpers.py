@@ -267,6 +267,13 @@ class TaskRuntimeHelperTests(unittest.TestCase):
                 "group_id": "166",
                 "created_at": datetime(2026, 1, 4, 9, 0, 0),
             },
+            "task-global": {
+                "task_id": "task-global",
+                "type": "daily_analysis",
+                "status": "completed",
+                "group_id": None,
+                "created_at": datetime(2026, 1, 3, 9, 0, 0),
+            },
             "task-stopped": {
                 "task_id": "task-stopped",
                 "type": "daily_analysis",
@@ -286,10 +293,14 @@ class TaskRuntimeHelperTests(unittest.TestCase):
         with patch("backend.services.task_runtime.get_task_store", return_value=store):
             latest_completed = get_latest_task_by_type("daily_analysis", status="completed", group_id="155")
             latest_cancelled = get_latest_task_by_type("daily_analysis", status="cancelled", group_id=155)
+            latest_any_completed = get_latest_task_by_type("daily_analysis", status="completed")
+            latest_global_completed = get_latest_task_by_type("daily_analysis", status="completed", group_id=None)
 
         self.assertEqual("task-new", latest_completed["task_id"])
         self.assertEqual("task-stopped", latest_cancelled["task_id"])
         self.assertEqual("cancelled", latest_cancelled["status"])
+        self.assertEqual("task-wrong-group", latest_any_completed["task_id"])
+        self.assertEqual("task-global", latest_global_completed["task_id"])
 
     def test_create_ingestion_task_rejects_existing_same_group(self):
         from backend.services.task_runtime import create_ingestion_task
