@@ -41,6 +41,7 @@ from backend.services.task_runtime_status import (
 from backend.services.task_runtime_state import TaskRuntimeState
 from backend.services.task_workflow_lifecycle import (
     WorkflowCompletedMessage,
+    WorkflowCompletedHook,
     WorkflowCompletionDecision,  # noqa: F401 - compatibility re-export for task runtime callers
     WorkflowRunningMessage,
     complete_task_unless_stopped as _complete_task_unless_stopped,
@@ -372,6 +373,8 @@ def run_workflow(
     completed_message: WorkflowCompletedMessage,
     failure_label: str,
     work: Callable[[], Any],
+    on_completed: WorkflowCompletedHook | None = None,
+    swallow_failure_reporting_errors: bool = False,
 ) -> None:
     run_workflow_lifecycle(
         task_id,
@@ -379,6 +382,8 @@ def run_workflow(
         completed_message=completed_message,
         failure_label=failure_label,
         work=work,
+        on_completed=on_completed,
+        swallow_failure_reporting_errors=swallow_failure_reporting_errors,
         is_task_stopped=is_task_stopped,
         update_task_state=update_task,
         add_task_log=add_task_log,

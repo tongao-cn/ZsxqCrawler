@@ -22,9 +22,9 @@ from backend.services.task_launch import TaskLaunchRecipe, launch_task_recipe
 from backend.services.task_runtime import (
     add_task_log,
     build_task_log_callback,
-    complete_task_unless_stopped,
     fail_task_unless_stopped,
     is_task_stopped,
+    run_workflow,
     update_task,
 )
 from backend.services.tdx_a_share_export_service import export_a_share_rankings_to_tdx
@@ -105,15 +105,19 @@ def _a_share_task_ready_to_start(task_id: str) -> bool:
     return not is_task_stopped(task_id)
 
 
-def _start_a_share_analysis_task(
-    task_id: str,
-    normalized_group_id: Optional[str],
+def _a_share_analysis_running_message(
     scope_text: str,
     run_range_text: str,
-    request: AShareAnalysisTaskRequest,
 ) -> str:
-    description = f"开始A股公司分析（{scope_text}），扫描{run_range_text}数据"
-    update_task(task_id, "running", description)
+    return f"开始A股公司分析（{scope_text}），扫描{run_range_text}数据"
+
+
+def _log_a_share_analysis_start(
+    task_id: str,
+    normalized_group_id: Optional[str],
+    description: str,
+    request: AShareAnalysisTaskRequest,
+) -> None:
     add_task_log(task_id, f"🚀 {description}")
     add_task_log(
         task_id,
@@ -127,8 +131,6 @@ def _start_a_share_analysis_task(
             task_id,
             f"🧹 删除并重跑区间: {request.reset_start_date or '-'} ~ {request.reset_end_date or '-'}",
         )
-
-    return description
 
 
 def _run_a_share_analysis_for_task(
@@ -159,8 +161,7 @@ def _fail_a_share_analysis_task(task_id: str, error: Exception) -> None:
         pass
 
 
-def _complete_a_share_analysis_task(task_id: str, result: dict) -> None:
-    complete_task_unless_stopped(task_id, "A股公司分析完成", result)
+def _log_completed_a_share_analysis_task(task_id: str, _result: dict) -> None:
     if not is_task_stopped(task_id):
         add_task_log(task_id, "✅ A股公司分析完成")
 
@@ -171,11 +172,21 @@ def run_a_share_analysis_task(task_id: str, request: AShareAnalysisTaskRequest) 
             return
 
         normalized_group_id, scope_text, run_range_text = _a_share_analysis_task_context(request)
-        _start_a_share_analysis_task(task_id, normalized_group_id, scope_text, run_range_text, request)
+        running_message = _a_share_analysis_running_message(scope_text, run_range_text)
 
-        result = _run_a_share_analysis_for_task(task_id, normalized_group_id, request)
+        def work() -> dict:
+            _log_a_share_analysis_start(task_id, normalized_group_id, running_message, request)
+            return _run_a_share_analysis_for_task(task_id, normalized_group_id, request)
 
-        _complete_a_share_analysis_task(task_id, result)
+        run_workflow(
+            task_id,
+            running_message=running_message,
+            completed_message="A股公司分析完成",
+            failure_label="A股公司分析",
+            work=work,
+            on_completed=lambda result: _log_completed_a_share_analysis_task(task_id, result),
+            swallow_failure_reporting_errors=True,
+        )
     except Exception as exc:
         _fail_a_share_analysis_task(task_id, exc)
 

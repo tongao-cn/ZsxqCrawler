@@ -829,6 +829,102 @@ class TaskRuntimeHelperTests(unittest.TestCase):
         self.assertIn(("task-1", "状态更新: 文件分析全部失败"), store.logs)
         self.assertEqual([("task-1", "failed")], store.released_locks)
 
+    def test_run_workflow_calls_completion_hook_after_terminal_update(self):
+        from backend.services.task_runtime import run_workflow
+
+        store = FakeTaskStore()
+        store.tasks["task-1"] = {"task_id": "task-1", "status": "pending", "message": "queued"}
+        events = []
+
+        def on_completed(result):
+            events.append(("hook", store.tasks["task-1"]["status"], result))
+
+        with patch("backend.services.task_runtime.get_task_store", return_value=store):
+            run_workflow(
+                "task-1",
+                running_message="running now",
+                completed_message="done now",
+                failure_label="每日股票概念提取",
+                work=lambda: {"ok": True},
+                on_completed=on_completed,
+            )
+
+        self.assertEqual([("hook", "completed", {"ok": True})], events)
+        self.assertEqual("completed", store.tasks["task-1"]["status"])
+        self.assertEqual("done now", store.tasks["task-1"]["message"])
+        self.assertIn(("task-1", "状态更新: done now"), store.logs)
+
+    def test_run_workflow_skips_completion_hook_when_work_skips_completion(self):
+        from backend.services.task_runtime import run_workflow, skip_workflow_completion
+
+        store = FakeTaskStore()
+        store.tasks["task-1"] = {"task_id": "task-1", "status": "pending", "message": "queued"}
+        events = []
+
+        with patch("backend.services.task_runtime.get_task_store", return_value=store):
+            run_workflow(
+                "task-1",
+                running_message="running now",
+                completed_message="done now",
+                failure_label="每日股票概念提取",
+                work=skip_workflow_completion,
+                on_completed=lambda result: events.append(result),
+            )
+
+        self.assertEqual([], events)
+        self.assertEqual("running", store.tasks["task-1"]["status"])
+
+    def test_run_workflow_skips_completion_hook_when_stopped_after_work(self):
+        from backend.services.task_runtime import run_workflow
+
+        store = FakeTaskStore()
+        store.tasks["task-1"] = {"task_id": "task-1", "status": "pending", "message": "queued"}
+        events = []
+
+        def stop_after_work():
+            store.stop_flags["task-1"] = True
+            return {"ok": True}
+
+        with patch("backend.services.task_runtime.get_task_store", return_value=store):
+            run_workflow(
+                "task-1",
+                running_message="running now",
+                completed_message="done now",
+                failure_label="每日股票概念提取",
+                work=stop_after_work,
+                on_completed=lambda result: events.append(result),
+            )
+
+        self.assertEqual([], events)
+        self.assertEqual("running", store.tasks["task-1"]["status"])
+
+    def test_run_workflow_can_swallow_failure_reporting_errors(self):
+        from backend.services.task_runtime import run_workflow
+
+        store = FakeTaskStore()
+        store.tasks["task-1"] = {"task_id": "task-1", "status": "pending", "message": "queued"}
+
+        def fail():
+            raise RuntimeError("boom")
+
+        with (
+            patch("backend.services.task_runtime.get_task_store", return_value=store),
+            patch(
+                "backend.services.task_workflow_lifecycle.fail_task_unless_stopped",
+                side_effect=RuntimeError("report down"),
+            ) as fail_task,
+        ):
+            run_workflow(
+                "task-1",
+                running_message="running now",
+                completed_message="done now",
+                failure_label="每日股票概念提取",
+                work=fail,
+                swallow_failure_reporting_errors=True,
+            )
+
+        fail_task.assert_called_once()
+
     def test_run_workflow_logs_and_fails_unstopped_exception(self):
         from backend.services.task_runtime import run_workflow
 

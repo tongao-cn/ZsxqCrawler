@@ -6,6 +6,7 @@ from typing import Any, Callable
 
 WorkflowRunningMessage = str | Callable[[], str]
 WorkflowCompletedMessage = str | Callable[[Any], str]
+WorkflowCompletedHook = Callable[[Any], None]
 
 
 @dataclass(frozen=True)
@@ -46,10 +47,11 @@ def finish_task_unless_stopped(
     result: Any,
     is_task_stopped: Callable[[str], bool],
     update_task_state: Callable[[str, str, str, Any], None],
-) -> None:
+) -> bool:
     if is_task_stopped(task_id):
-        return
+        return False
     update_task_state(task_id, status, message, result)
+    return True
 
 
 def complete_task_unless_stopped(
@@ -59,8 +61,8 @@ def complete_task_unless_stopped(
     result: Any,
     is_task_stopped: Callable[[str], bool],
     update_task_state: Callable[[str, str, str, Any], None],
-) -> None:
-    finish_task_unless_stopped(
+) -> bool:
+    return finish_task_unless_stopped(
         task_id,
         status="completed",
         message=completed_message,
@@ -93,6 +95,8 @@ def run_workflow_lifecycle(
     completed_message: WorkflowCompletedMessage,
     failure_label: str,
     work: Callable[[], Any],
+    on_completed: WorkflowCompletedHook | None = None,
+    swallow_failure_reporting_errors: bool = False,
     is_task_stopped: Callable[[str], bool],
     update_task_state: Callable[[str, str, str, Any], None],
     add_task_log: Callable[[str, str], None],
@@ -107,7 +111,7 @@ def run_workflow_lifecycle(
             return
 
         message = completion.message or _resolve_workflow_completed_message(completed_message, completion.result)
-        finish_task_unless_stopped(
+        completed = finish_task_unless_stopped(
             task_id,
             status=completion.status,
             message=message,
@@ -115,12 +119,18 @@ def run_workflow_lifecycle(
             is_task_stopped=is_task_stopped,
             update_task_state=update_task_state,
         )
+        if completed and on_completed is not None:
+            on_completed(completion.result)
     except Exception as exc:
-        fail_task_unless_stopped(
-            task_id,
-            failure_label=failure_label,
-            error=exc,
-            is_task_stopped=is_task_stopped,
-            update_task_state=update_task_state,
-            add_task_log=add_task_log,
-        )
+        try:
+            fail_task_unless_stopped(
+                task_id,
+                failure_label=failure_label,
+                error=exc,
+                is_task_stopped=is_task_stopped,
+                update_task_state=update_task_state,
+                add_task_log=add_task_log,
+            )
+        except Exception:
+            if not swallow_failure_reporting_errors:
+                raise
