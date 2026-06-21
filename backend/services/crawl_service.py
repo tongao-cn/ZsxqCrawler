@@ -889,7 +889,7 @@ def run_crawl_historical_task(
             return
 
         add_task_log(task_id, f"✅ 获取完成！新增话题: {result.get('new_topics', 0)}, 更新话题: {result.get('updated_topics', 0)}")
-        update_task(task_id, "completed", "历史数据爬取完成", result)
+        complete_task_unless_stopped(task_id, "历史数据爬取完成", result)
     except Exception as e:
         if not is_task_stopped(task_id):
             add_task_log(task_id, f"❌ 获取失败: {str(e)}")
@@ -938,7 +938,7 @@ def run_crawl_all_task(task_id: str, group_id: str, crawl_settings: Any = None):
 
         add_task_log(task_id, "🎉 全量爬取完成！")
         add_task_log(task_id, f"📊 最终统计: 新增话题: {result.get('new_topics', 0)}, 更新话题: {result.get('updated_topics', 0)}, 总页数: {result.get('pages', 0)}")
-        update_task(task_id, "completed", "全量爬取完成", result)
+        complete_task_unless_stopped(task_id, "全量爬取完成", result)
     except Exception as e:
         if not is_task_stopped(task_id):
             add_task_log(task_id, f"❌ 全量爬取失败: {str(e)}")
@@ -982,7 +982,7 @@ def run_crawl_incremental_task(
             return
 
         add_task_log(task_id, f"✅ 增量爬取完成！新增话题: {result.get('new_topics', 0)}, 更新话题: {result.get('updated_topics', 0)}")
-        update_task(task_id, "completed", "增量爬取完成", result)
+        complete_task_unless_stopped(task_id, "增量爬取完成", result)
     except Exception as e:
         if not is_task_stopped(task_id):
             add_task_log(task_id, f"❌ 增量爬取失败: {str(e)}")
@@ -1018,7 +1018,7 @@ def run_crawl_latest_task(task_id: str, group_id: str, crawl_settings: Any = Non
             return
 
         add_task_log(task_id, f"✅ 获取最新记录完成！新增话题: {result.get('new_topics', 0)}, 更新话题: {result.get('updated_topics', 0)}")
-        update_task(task_id, "completed", "获取最新记录完成", result)
+        complete_task_unless_stopped(task_id, "获取最新记录完成", result)
     except Exception as e:
         if not is_task_stopped(task_id):
             add_task_log(task_id, f"❌ 获取最新记录失败: {str(e)}")

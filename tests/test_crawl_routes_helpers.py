@@ -68,6 +68,25 @@ class LatestCrawler:
     def crawl_latest_until_complete(self):
         return {"new_topics": 1, "updated_topics": 2}
 
+
+class LegacyLifecycleCrawler:
+    def __init__(self):
+        self.db = self
+        self.incremental_calls = []
+        self.all_calls = []
+
+    def crawl_incremental(self, pages, per_page):
+        self.incremental_calls.append((pages, per_page))
+        return {"new_topics": 3, "updated_topics": 4}
+
+    def crawl_all_historical(self, **kwargs):
+        self.all_calls.append(kwargs)
+        return {"new_topics": 5, "updated_topics": 6, "pages": 7}
+
+    def get_database_stats(self):
+        return {"topics": 10, "users": 2}
+
+
 class CrawlRoutesHelperTests(unittest.TestCase):
     @unittest.skipUnless(HAS_CRAWL_ROUTE_DEPS, "crawl route dependencies are not installed")
     def test_crawl_interval_kwargs_maps_request_fields(self):
@@ -765,6 +784,72 @@ class CrawlRoutesHelperTests(unittest.TestCase):
         unregister_task_crawler.assert_called_once_with("task-1")
 
     @unittest.skipUnless(HAS_CRAWL_ROUTE_DEPS, "crawl route dependencies are not installed")
+    def test_legacy_non_range_crawl_success_completes_through_task_runtime_guard(self):
+        from backend.routes.crawl_routes import CrawlHistoricalRequest, CrawlSettingsRequest
+        from backend.services.crawl_service import (
+            run_crawl_all_task,
+            run_crawl_historical_task,
+            run_crawl_incremental_task,
+        )
+
+        cases = [
+            (
+                "historical",
+                run_crawl_historical_task,
+                ("task-1", "group-1", 3, 25, CrawlHistoricalRequest(topicSource="legacy")),
+                "开始爬取历史数据 3 页...",
+                "历史数据爬取完成",
+                {"new_topics": 3, "updated_topics": 4},
+                lambda crawler: self.assertEqual([(3, 25)], crawler.incremental_calls),
+            ),
+            (
+                "all",
+                run_crawl_all_task,
+                ("task-1", "group-1", CrawlSettingsRequest(topicSource="legacy")),
+                "开始全量爬取...",
+                "全量爬取完成",
+                {"new_topics": 5, "updated_topics": 6, "pages": 7},
+                lambda crawler: self.assertEqual(
+                    [{"per_page": 20, "auto_confirm": True}],
+                    crawler.all_calls,
+                ),
+            ),
+            (
+                "incremental",
+                run_crawl_incremental_task,
+                ("task-1", "group-1", 4, 26, CrawlHistoricalRequest(topicSource="legacy")),
+                "开始增量爬取...",
+                "增量爬取完成",
+                {"new_topics": 3, "updated_topics": 4},
+                lambda crawler: self.assertEqual([(4, 26)], crawler.incremental_calls),
+            ),
+        ]
+
+        for case_name, runner, args, running_message, completed_message, result, assert_crawler in cases:
+            crawler = LegacyLifecycleCrawler()
+            with (
+                self.subTest(case_name=case_name),
+                patch("backend.services.crawl_service._prepare_legacy_crawler", return_value=crawler),
+                patch("backend.services.crawl_service.is_task_stopped", return_value=False),
+                patch("backend.services.crawl_service.add_task_log"),
+                patch("backend.services.crawl_service.update_task") as update_task,
+                patch("backend.services.crawl_service.complete_task_unless_stopped") as complete_task,
+                patch("backend.services.crawl_service.unregister_task_crawler") as unregister_task_crawler,
+            ):
+                runner(*args)
+
+            assert_crawler(crawler)
+            update_task.assert_any_call("task-1", "running", running_message)
+            complete_task.assert_called_once_with("task-1", completed_message, result)
+            self.assertFalse(
+                any(
+                    len(call_args.args) > 1 and call_args.args[1] == "completed"
+                    for call_args in update_task.call_args_list
+                )
+            )
+            unregister_task_crawler.assert_called_once_with("task-1")
+
+    @unittest.skipUnless(HAS_CRAWL_ROUTE_DEPS, "crawl route dependencies are not installed")
     def test_legacy_latest_branch_creates_registered_crawler_and_applies_settings(self):
         from backend.routes.crawl_routes import CrawlSettingsRequest
         from backend.services.crawl_service import run_crawl_latest_task
@@ -779,6 +864,7 @@ class CrawlRoutesHelperTests(unittest.TestCase):
             patch("backend.services.crawl_service.is_task_stopped", return_value=False),
             patch("backend.services.crawl_service.add_task_log") as add_task_log,
             patch("backend.services.crawl_service.update_task") as update_task,
+            patch("backend.services.crawl_service.complete_task_unless_stopped") as complete_task,
         ):
             run_crawl_latest_task(
                 "task-1",
@@ -796,11 +882,16 @@ class CrawlRoutesHelperTests(unittest.TestCase):
         add_task_log.assert_any_call("task-1", "🔍 检查数据库状态...")
         add_task_log.assert_any_call("task-1", "✅ 获取最新记录完成！新增话题: 1, 更新话题: 2")
         update_task.assert_any_call("task-1", "running", "开始获取最新记录...")
-        update_task.assert_any_call(
+        complete_task.assert_called_once_with(
             "task-1",
-            "completed",
             "获取最新记录完成",
             {"new_topics": 1, "updated_topics": 2},
+        )
+        self.assertFalse(
+            any(
+                len(call_args.args) > 1 and call_args.args[1] == "completed"
+                for call_args in update_task.call_args_list
+            )
         )
 
     @unittest.skipUnless(HAS_CRAWL_ROUTE_DEPS, "crawl route dependencies are not installed")
