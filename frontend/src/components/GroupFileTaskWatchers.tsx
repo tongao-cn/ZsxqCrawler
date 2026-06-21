@@ -1,10 +1,11 @@
 'use client';
 
 import { useTaskStatus } from '@/hooks/useTaskStatus';
+import { isActiveTaskStatus, type TaskStatus } from '@/lib/taskStatus';
 
 export interface FileTaskState {
   taskId: string;
-  status: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
+  status: TaskStatus;
   message: string;
 }
 
@@ -68,7 +69,7 @@ export function GroupFileTaskWatchers({
   return (
     <>
       {Array.from(fileTasks.entries()).map(([fileId, task]) => (
-        task.status === 'pending' || task.status === 'running' ? (
+        isActiveTaskStatus(task.status) ? (
           <FileTaskWatcher
             key={`${fileId}-${task.taskId}`}
             fileId={fileId}
@@ -85,7 +86,7 @@ export function GroupFileTaskWatchers({
         />
       )}
       {Array.from(analysisTasks.entries()).map(([fileId, task]) => (
-        task.status === 'pending' || task.status === 'running' ? (
+        isActiveTaskStatus(task.status) ? (
           <FileTaskWatcher
             key={`analysis-${fileId}-${task.taskId}`}
             fileId={fileId}

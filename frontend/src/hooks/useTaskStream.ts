@@ -4,18 +4,15 @@ import { useEffect, useRef, useState } from 'react';
 
 import { API_BASE_URL, apiClient } from '@/lib/api';
 import type { Task, TaskLogsResponse } from '@/lib/api';
+import {
+  isTerminalTaskStatus,
+  mergeTaskStatus,
+  taskFromStatusEvent,
+  type TaskStatusSnapshot,
+  type TaskStatusStreamMessage,
+  type TerminalTask,
+} from '@/lib/taskStatus';
 import { useSyncedRef } from './useSyncedRef';
-
-export type TerminalTask = Task & { result?: unknown };
-
-type TaskStatusSnapshot = Pick<Task, 'status' | 'message'>;
-
-interface TaskStreamMessage {
-  type?: 'log' | 'status' | 'heartbeat';
-  message?: string;
-  status?: Task['status'];
-  task?: Task;
-}
 
 interface UseTaskStreamOptions {
   enabled?: boolean;
@@ -26,47 +23,8 @@ interface UseTaskStreamOptions {
   onTerminal?: (task: TerminalTask) => void | Promise<void>;
 }
 
-const TERMINAL_STATUSES: Task['status'][] = ['completed', 'failed', 'cancelled'];
 const FALLBACK_POLL_INTERVAL_MS = 3000;
 const DEFAULT_MAX_LOGS = 2000;
-
-function isTerminalTaskStatus(status: Task['status']) {
-  return TERMINAL_STATUSES.includes(status);
-}
-
-function taskFromStatusEvent(taskId: string, data: TaskStreamMessage): Task {
-  if (data.task) {
-    return {
-      ...data.task,
-      status: data.task.status || data.status || 'pending',
-      message: data.task.message || data.message || '',
-    };
-  }
-  return {
-    task_id: taskId,
-    type: '',
-    status: data.status || 'pending',
-    message: data.message || '',
-    created_at: '',
-    updated_at: '',
-  };
-}
-
-function mergeTaskStatus(taskId: string, statusTask: Task, previous: Task | null): Task {
-  return {
-    task_id: statusTask.task_id || previous?.task_id || taskId,
-    type: statusTask.type || previous?.type || '',
-    status: statusTask.status,
-    message: statusTask.message || previous?.message || '',
-    result: statusTask.result ?? previous?.result,
-    created_at: statusTask.created_at || previous?.created_at || '',
-    updated_at: statusTask.updated_at || previous?.updated_at || '',
-    display_name: statusTask.display_name ?? previous?.display_name,
-    cancellable: statusTask.cancellable ?? previous?.cancellable,
-    group_id: statusTask.group_id ?? previous?.group_id,
-    ingestion_lock_key: statusTask.ingestion_lock_key ?? previous?.ingestion_lock_key,
-  };
-}
 
 function trimLogs(logs: string[], maxLogs: number) {
   return logs.length > maxLogs ? logs.slice(-maxLogs) : logs;
@@ -242,7 +200,7 @@ export function useTaskStream(
 
     eventSource.onmessage = (event) => {
       try {
-        const data = JSON.parse(event.data) as TaskStreamMessage;
+        const data = JSON.parse(event.data) as TaskStatusStreamMessage;
         if (data.type === 'log' && data.message) {
           appendLog(data.message);
           return;

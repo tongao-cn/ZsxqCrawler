@@ -6,6 +6,7 @@ import { toast } from 'sonner';
 import { apiClient, FileAIAnalysis, FileItem } from '@/lib/api';
 import type { FileTaskState } from '@/components/GroupFileTaskWatchers';
 import { useTaskLauncher } from '@/hooks/useTaskLauncher';
+import { isActiveTaskStatus, isFailedOrCancelledTaskStatus } from '@/lib/taskStatus';
 
 interface UseGroupFileTasksOptions {
   groupId: number;
@@ -19,7 +20,7 @@ interface UseGroupFileTasksOptions {
 type RefreshFiles = () => Promise<void>;
 
 function isTaskActive(task?: FileTaskState) {
-  return task?.status === 'pending' || task?.status === 'running';
+  return isActiveTaskStatus(task?.status);
 }
 
 export function useGroupFileTasks({
@@ -135,7 +136,7 @@ export function useGroupFileTasks({
     setBatchDownloadFileIds([]);
     if (status === 'completed') {
       toast.success(message || '当前页文件下载任务完成');
-    } else if (status === 'failed' || status === 'cancelled') {
+    } else if (isFailedOrCancelledTaskStatus(status)) {
       toast.error(message || '当前页文件下载任务未完成');
     }
     await refreshFiles();
@@ -171,7 +172,7 @@ export function useGroupFileTasks({
 
     if (status === 'completed') {
       toast.success('文件分析完成');
-    } else if (status === 'failed' || status === 'cancelled') {
+    } else if (isFailedOrCancelledTaskStatus(status)) {
       toast.error(message || '文件分析未完成');
     }
     await refreshFiles();
@@ -200,7 +201,7 @@ export function useGroupFileTasks({
     setBatchAnalysisFileIds([]);
     if (status === 'completed') {
       toast.success(message || '当前页文件分析完成');
-    } else if (status === 'failed' || status === 'cancelled') {
+    } else if (isFailedOrCancelledTaskStatus(status)) {
       toast.error(message || '当前页文件分析未完成');
     }
     await refreshFiles();

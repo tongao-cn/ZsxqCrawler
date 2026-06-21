@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { apiClient, Task } from '@/lib/api';
+import { canStopTask, isActiveTask } from '@/lib/taskStatus';
 import { useTaskList } from '@/hooks/useTaskList';
 
 interface TaskListCompactProps {
@@ -15,10 +16,6 @@ interface TaskListCompactProps {
   selectedTaskId?: string | null;
   onSelectTask?: (taskId: string) => void;
   onTaskStop?: () => void;
-}
-
-function isActiveTask(task: Task) {
-  return task.status === 'pending' || task.status === 'running';
 }
 
 function normalizeGroupId(value?: string | number | null) {
@@ -34,10 +31,6 @@ function getTaskDisplayName(task: Task) {
     return task.display_name;
   }
   return task.type === 'crawl_latest' ? '获取最新' : task.type;
-}
-
-function canStopTask(task: Task) {
-  return isActiveTask(task) && task.cancellable !== false;
 }
 
 function getStatusBadge(task: Task) {

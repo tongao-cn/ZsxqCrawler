@@ -1,8 +1,8 @@
 'use client';
 
 import type { Task } from '@/lib/api';
+import type { TerminalTask } from '@/lib/taskStatus';
 import { useTaskStream } from './useTaskStream';
-import type { TerminalTask } from './useTaskStream';
 
 interface UseTaskStatusOptions {
   enabled?: boolean;
