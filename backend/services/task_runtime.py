@@ -37,12 +37,15 @@ from backend.services.task_runtime_status import (
     _task_created_at_sort_value,
 )
 from backend.services.task_runtime_state import TaskRuntimeState
+from backend.services.task_workflow_lifecycle import (
+    WorkflowCompletedMessage,
+    WorkflowRunningMessage,
+    run_workflow_lifecycle,
+)
 from backend.services.workflow_registry import get_workflow_spec
 from backend.storage.task_store import TaskStore
 
 
-WorkflowRunningMessage = str | Callable[[], str]
-WorkflowCompletedMessage = str | Callable[[Any], str]
 task_store: Optional[TaskStore] = None
 TASK_LOCK_LEASE_MINUTES = 30
 TASK_LOCK_HEARTBEAT_SECONDS = 60
@@ -346,14 +349,6 @@ def update_task(
     _release_task_lock_on_terminal_status(task_id, status, now, store)
 
 
-def _resolve_workflow_running_message(message: WorkflowRunningMessage) -> str:
-    return message() if callable(message) else message
-
-
-def _resolve_workflow_completed_message(message: WorkflowCompletedMessage, result: Any) -> str:
-    return message(result) if callable(message) else message
-
-
 def run_workflow(
     task_id: str,
     *,
@@ -362,23 +357,16 @@ def run_workflow(
     failure_label: str,
     work: Callable[[], Any],
 ) -> None:
-    try:
-        if is_task_stopped(task_id):
-            return
-
-        update_task(task_id, "running", _resolve_workflow_running_message(running_message))
-        result = work()
-
-        if is_task_stopped(task_id):
-            return
-
-        update_task(task_id, "completed", _resolve_workflow_completed_message(completed_message, result), result)
-    except Exception as exc:
-        if is_task_stopped(task_id):
-            return
-        message = f"{failure_label}失败: {str(exc)}"
-        add_task_log(task_id, f"❌ {message}")
-        update_task(task_id, "failed", message)
+    run_workflow_lifecycle(
+        task_id,
+        running_message=running_message,
+        completed_message=completed_message,
+        failure_label=failure_label,
+        work=work,
+        is_task_stopped=is_task_stopped,
+        update_task_state=update_task,
+        add_task_log=add_task_log,
+    )
 
 
 def _release_task_lock_on_terminal_status(
