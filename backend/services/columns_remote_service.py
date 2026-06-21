@@ -20,6 +20,108 @@ def retry_wait_seconds(retry: int) -> int:
     return 2 if retry < 3 else (5 if retry < 6 else 10)
 
 
+async def _fetch_column_signed_resource_url(
+    *,
+    url: str,
+    headers: Dict[str, str],
+    response_field: str,
+    action_label: str,
+    retry_identity: str,
+    failure_context: str,
+    request_get: Callable[..., Any] = requests.get,
+    log_error: Callable[[str], None] = lambda _message: None,
+    log_exception: Callable[[str], None] = lambda _message: None,
+    sleep: Callable[[float], Any] = asyncio.sleep,
+) -> Optional[str]:
+    max_retries = 10
+
+    for retry in range(max_retries):
+        try:
+            resp = request_get(url, headers=headers, timeout=30)
+        except Exception as req_err:
+            if retry < max_retries - 1:
+                await sleep(retry_wait_seconds(retry))
+                continue
+            log_exception(f"{action_label}请求异常: {retry_identity}")
+            raise Exception(f"{action_label}请求异常: {req_err}")
+
+        if resp.status_code != 200:
+            if retry < max_retries - 1:
+                await sleep(retry_wait_seconds(retry))
+                continue
+            error_msg = f"{action_label}失败: HTTP {resp.status_code}, URL={url}, Response={redact_response_for_log(resp.text)}"
+            log_error(error_msg)
+            raise Exception(error_msg)
+
+        data = resp.json()
+        if not data.get("succeeded"):
+            error_code = data.get("code")
+            error_message = data.get("error_message", "未知错误")
+
+            if error_code == 1059:
+                if retry < max_retries - 1:
+                    await sleep(retry_wait_seconds(retry))
+                    continue
+                log_error(f"{action_label}重试{max_retries}次后仍失败: {retry_identity}, code={error_code}")
+                raise Exception(f"{action_label}失败，重试{max_retries}次后仍遇到反爬限制")
+
+            error_msg = f"{action_label}失败: code={error_code}, message={error_message}, {failure_context}"
+            log_error(error_msg)
+            raise Exception(f"{action_label}失败: {error_message} (code={error_code})")
+
+        return data.get("resp_data", {}).get(response_field)
+
+    return None
+
+
+async def fetch_column_file_download_url(
+    *,
+    file_id: int,
+    file_name: str,
+    headers: Dict[str, str],
+    request_get: Callable[..., Any] = requests.get,
+    log_error: Callable[[str], None] = lambda _message: None,
+    log_exception: Callable[[str], None] = lambda _message: None,
+    sleep: Callable[[float], Any] = asyncio.sleep,
+) -> Optional[str]:
+    return await _fetch_column_signed_resource_url(
+        url=f"https://api.zsxq.com/v2/files/{file_id}/download_url",
+        headers=headers,
+        response_field="download_url",
+        action_label="获取下载链接",
+        retry_identity=f"file_id={file_id}",
+        failure_context=f"file_id={file_id}, file_name={file_name}",
+        request_get=request_get,
+        log_error=log_error,
+        log_exception=log_exception,
+        sleep=sleep,
+    )
+
+
+async def fetch_column_video_m3u8_url(
+    *,
+    video_id: int,
+    topic_id: int,
+    headers: Dict[str, str],
+    request_get: Callable[..., Any] = requests.get,
+    log_error: Callable[[str], None] = lambda _message: None,
+    log_exception: Callable[[str], None] = lambda _message: None,
+    sleep: Callable[[float], Any] = asyncio.sleep,
+) -> Optional[str]:
+    return await _fetch_column_signed_resource_url(
+        url=f"https://api.zsxq.com/v2/videos/{video_id}/url",
+        headers=headers,
+        response_field="url",
+        action_label="获取视频链接",
+        retry_identity=f"video_id={video_id}",
+        failure_context=f"video_id={video_id}, topic_id={topic_id}",
+        request_get=request_get,
+        log_error=log_error,
+        log_exception=log_exception,
+        sleep=sleep,
+    )
+
+
 async def fetch_columns_catalog(
     task_id: str,
     group_id: str,

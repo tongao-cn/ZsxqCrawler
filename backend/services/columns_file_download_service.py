@@ -6,7 +6,7 @@ from typing import Any, Callable
 
 import requests
 
-from backend.services.columns_remote_service import redact_response_for_log, retry_wait_seconds
+from backend.services.columns_remote_service import fetch_column_file_download_url
 from backend.services.file_local_paths import column_download_target_path
 
 
@@ -37,47 +37,15 @@ async def download_column_file(
                 add_task_log(task_id, f"         ⏭️ 文件已存在，跳过下载 ({existing_size/(1024*1024):.2f}MB)")
             return "skipped"
 
-    download_url = f"https://api.zsxq.com/v2/files/{file_id}/download_url"
-    max_retries = 10
-    real_url = None
-
-    for retry in range(max_retries):
-        try:
-            resp = request_get(download_url, headers=headers, timeout=30)
-        except Exception as req_err:
-            if retry < max_retries - 1:
-                await sleep(retry_wait_seconds(retry))
-                continue
-            log_exception(f"获取下载链接请求异常: file_id={file_id}")
-            raise Exception(f"获取下载链接请求异常: {req_err}")
-
-        if resp.status_code != 200:
-            if retry < max_retries - 1:
-                await sleep(retry_wait_seconds(retry))
-                continue
-            error_msg = f"获取下载链接失败: HTTP {resp.status_code}, URL={download_url}, Response={redact_response_for_log(resp.text)}"
-            log_error(error_msg)
-            raise Exception(error_msg)
-
-        data = resp.json()
-        if not data.get("succeeded"):
-            error_code = data.get("code")
-            error_message = data.get("error_message", "未知错误")
-
-            if error_code == 1059:
-                if retry < max_retries - 1:
-                    await sleep(retry_wait_seconds(retry))
-                    continue
-                log_error(f"获取下载链接重试{max_retries}次后仍失败: file_id={file_id}, code={error_code}")
-                raise Exception(f"获取下载链接失败，重试{max_retries}次后仍遇到反爬限制")
-
-            error_msg = f"获取下载链接失败: code={error_code}, message={error_message}, file_id={file_id}, file_name={file_name}"
-            log_error(error_msg)
-            raise Exception(f"获取下载链接失败: {error_message} (code={error_code})")
-
-        real_url = data.get("resp_data", {}).get("download_url")
-        break
-
+    real_url = await fetch_column_file_download_url(
+        file_id=file_id,
+        file_name=file_name,
+        headers=headers,
+        request_get=request_get,
+        log_error=log_error,
+        log_exception=log_exception,
+        sleep=sleep,
+    )
     if not real_url:
         raise Exception("下载链接为空")
 
