@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { toast } from 'sonner';
 
 import { apiClient, AShareAnalysisExportTdxResponse, AShareAnalysisStatus, Group } from '@/lib/api';
+import { useTaskLauncher } from '@/hooks/useTaskLauncher';
 
 interface UseAShareAnalysisActionsOptions {
   concurrency: number;
@@ -52,6 +53,9 @@ export function useAShareAnalysisActions({
   const [running, setRunning] = useState(false);
   const [resetting, setResetting] = useState(false);
   const [exportingTdx, setExportingTdx] = useState(false);
+  const { handleTaskCreateError, notifyTaskCreated } = useTaskLauncher({
+    onTaskCreated,
+  });
 
   const handleRunAnalysis = async () => {
     if (!selectedGroup) {
@@ -97,15 +101,16 @@ export function useAShareAnalysisActions({
             }
           : {}),
       });
-      toast.success('股票推荐池任务已创建，结果会在完成后自动刷新');
       const taskId = (response as { task_id?: string })?.task_id;
       if (taskId) {
         setActiveRunTaskId(taskId);
-        onTaskCreated?.(taskId);
+        notifyTaskCreated(taskId, '股票推荐池任务已创建，结果会在完成后自动刷新');
+      } else {
+        toast.success('股票推荐池任务已创建，结果会在完成后自动刷新');
       }
       await loadStatus(false, selectedGroup.group_id);
     } catch (error) {
-      toast.error(`创建股票推荐池任务失败: ${error instanceof Error ? error.message : '未知错误'}`);
+      handleTaskCreateError(error, '创建股票推荐池任务失败');
     } finally {
       setRunning(false);
     }
