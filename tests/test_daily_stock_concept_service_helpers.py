@@ -9,9 +9,9 @@ HAS_STOCK_CONCEPT_DEPS = find_spec("openai") is not None
 class DailyStockConceptServiceHelperTests(unittest.TestCase):
     @unittest.skipUnless(HAS_STOCK_CONCEPT_DEPS, "daily stock concept service dependencies are not installed")
     def test_parse_stock_concept_output_matches_stock_basic(self):
-        from backend.services.daily_stock_concept_service import _build_stock_lookup, _parse_stock_concept_output
+        from backend.services.daily_stock_concept_payload import build_stock_lookup, parse_stock_concept_output
 
-        lookup = _build_stock_lookup(
+        lookup = build_stock_lookup(
             [
                 {"ts_code": "300750.SZ", "symbol": "300750", "name": "宁德时代"},
             ]
@@ -32,7 +32,7 @@ class DailyStockConceptServiceHelperTests(unittest.TestCase):
         }
         """
 
-        stocks = _parse_stock_concept_output(message, stock_lookup=lookup)
+        stocks = parse_stock_concept_output(message, stock_lookup=lookup)
 
         self.assertEqual(1, len(stocks))
         self.assertEqual("宁德时代", stocks[0]["stock_name"])
@@ -43,7 +43,7 @@ class DailyStockConceptServiceHelperTests(unittest.TestCase):
 
     @unittest.skipUnless(HAS_STOCK_CONCEPT_DEPS, "daily stock concept service dependencies are not installed")
     def test_parse_stock_concept_output_keeps_unmatched_with_lower_confidence(self):
-        from backend.services.daily_stock_concept_service import _parse_stock_concept_output
+        from backend.services.daily_stock_concept_payload import parse_stock_concept_output
 
         message = {
             "stocks": [
@@ -59,7 +59,7 @@ class DailyStockConceptServiceHelperTests(unittest.TestCase):
             ]
         }
 
-        stocks = _parse_stock_concept_output(str(message).replace("'", '"'), stock_lookup={})
+        stocks = parse_stock_concept_output(str(message).replace("'", '"'), stock_lookup={})
 
         self.assertEqual(1, len(stocks))
         self.assertEqual("未知公司", stocks[0]["stock_name"])
@@ -68,9 +68,9 @@ class DailyStockConceptServiceHelperTests(unittest.TestCase):
 
     @unittest.skipUnless(HAS_STOCK_CONCEPT_DEPS, "daily stock concept service dependencies are not installed")
     def test_parse_stock_concept_output_handles_invalid_json(self):
-        from backend.services.daily_stock_concept_service import _parse_stock_concept_output
+        from backend.services.daily_stock_concept_payload import parse_stock_concept_output
 
-        self.assertEqual([], _parse_stock_concept_output("not json", stock_lookup={}))
+        self.assertEqual([], parse_stock_concept_output("not json", stock_lookup={}))
 
     @unittest.skipUnless(HAS_STOCK_CONCEPT_DEPS, "daily stock concept service dependencies are not installed")
     def test_generate_stock_concepts_with_ai_rejects_invalid_json(self):
@@ -94,9 +94,9 @@ class DailyStockConceptServiceHelperTests(unittest.TestCase):
 
     @unittest.skipUnless(HAS_STOCK_CONCEPT_DEPS, "daily stock concept service dependencies are not installed")
     def test_aggregate_topic_stock_extractions_merges_concepts_topics_and_confidence(self):
-        from backend.services.daily_stock_concept_service import _aggregate_topic_stock_extractions, _build_stock_lookup
+        from backend.services.daily_stock_concept_payload import aggregate_topic_stock_extractions, build_stock_lookup
 
-        lookup = _build_stock_lookup(
+        lookup = build_stock_lookup(
             [
                 {"ts_code": "300750.SZ", "symbol": "300750", "name": "宁德时代"},
             ]
@@ -118,7 +118,7 @@ class DailyStockConceptServiceHelperTests(unittest.TestCase):
             },
         ]
 
-        stocks = _aggregate_topic_stock_extractions(rows, stock_lookup=lookup)
+        stocks = aggregate_topic_stock_extractions(rows, stock_lookup=lookup)
 
         self.assertEqual(1, len(stocks))
         self.assertEqual("宁德时代", stocks[0]["stock_name"])
@@ -132,7 +132,7 @@ class DailyStockConceptServiceHelperTests(unittest.TestCase):
 
     @unittest.skipUnless(HAS_STOCK_CONCEPT_DEPS, "daily stock concept service dependencies are not installed")
     def test_aggregate_topic_stock_extractions_normalizes_aliases_and_keeps_signals(self):
-        from backend.services.daily_stock_concept_service import _aggregate_topic_stock_extractions
+        from backend.services.daily_stock_concept_payload import aggregate_topic_stock_extractions
 
         rows = [
             {
@@ -144,7 +144,7 @@ class DailyStockConceptServiceHelperTests(unittest.TestCase):
             },
         ]
 
-        stocks = _aggregate_topic_stock_extractions(rows, stock_lookup={})
+        stocks = aggregate_topic_stock_extractions(rows, stock_lookup={})
 
         self.assertEqual(1, len(stocks))
         self.assertEqual(["PCB", "涨价/供需", "未知细分"], stocks[0]["concepts"])
