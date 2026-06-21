@@ -9,7 +9,7 @@ from backend.core.ai_provider_config import (
     DEFAULT_FALLBACK_WIRE_API,
     get_openai_compatible_config,
 )
-from backend.services.ai_client import AITextRequest
+from backend.services.ai_client import AITextRequest, call_ai_text
 
 
 MISSING_OPENAI_RUNTIME_API_KEY_MESSAGE = "OPENAI_API_KEY not set and config.toml [ai].api_key is empty"
@@ -21,6 +21,12 @@ class AIRuntimeTextSettings:
     model: str
     api_base: str
     wire_api: str
+
+
+@dataclass(frozen=True)
+class AIRuntimeTextResult:
+    text: str
+    model: str
 
 
 def _text(value: Any) -> str:
@@ -90,3 +96,32 @@ def build_runtime_ai_text_request(
         responses_text_format=responses_text_format,
         chat_response_format=chat_response_format,
     )
+
+
+def call_runtime_ai_text(
+    messages: List[Dict[str, Any]],
+    *,
+    settings: Optional[AIRuntimeTextSettings] = None,
+    get_ai_config: Callable[[], Mapping[str, Any]] = get_openai_compatible_config,
+    model: Optional[str] = None,
+    api_base: Optional[str] = None,
+    wire_api: Optional[str] = None,
+    reasoning_effort: str = "",
+    timeout: int = 180,
+    responses_text_format: Optional[Dict[str, Any]] = None,
+    chat_response_format: Optional[Dict[str, Any]] = None,
+    call_text: Callable[[AITextRequest], str] = call_ai_text,
+) -> AIRuntimeTextResult:
+    request = build_runtime_ai_text_request(
+        messages,
+        settings=settings,
+        get_ai_config=get_ai_config,
+        model=model,
+        api_base=api_base,
+        wire_api=wire_api,
+        reasoning_effort=reasoning_effort,
+        timeout=timeout,
+        responses_text_format=responses_text_format,
+        chat_response_format=chat_response_format,
+    )
+    return AIRuntimeTextResult(text=call_text(request), model=request.model)

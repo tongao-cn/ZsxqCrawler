@@ -11,8 +11,8 @@ from backend.core.ai_provider_config import (
     get_summary_reasoning_effort,
 )
 from backend.core.image_cache_manager import get_image_cache_manager
-from backend.services.ai_client import call_ai_text, extract_response_text as extract_response_text
-from backend.services.ai_runtime_request import build_runtime_ai_text_request, resolve_runtime_text_settings
+from backend.services.ai_client import extract_response_text as extract_response_text
+from backend.services.ai_runtime_request import call_runtime_ai_text, resolve_runtime_text_settings
 
 
 def build_image_content_parts(
@@ -78,13 +78,13 @@ def call_report_ai(
             user_content.append({"type": "image_url", "image_url": {"url": image_part["image_url"]}})
         messages.append({"role": "user", "content": user_content if len(user_content) > 1 else user_prompt})
 
-    request = build_runtime_ai_text_request(
+    result = call_runtime_ai_text(
         messages,
         settings=settings,
         reasoning_effort=get_summary_reasoning_effort(),
         timeout=180,
     )
     return (
-        call_ai_text(request).strip(),
-        request.model,
+        result.text.strip(),
+        result.model,
     )

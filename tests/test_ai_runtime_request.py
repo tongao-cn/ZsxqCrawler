@@ -90,6 +90,36 @@ class AIRuntimeRequestTests(unittest.TestCase):
         self.assertEqual("responses", request.wire_api)
         self.assertEqual("medium", request.reasoning_effort)
 
+    @unittest.skipUnless(HAS_OPENAI, "openai dependency is not installed")
+    def test_call_runtime_ai_text_returns_text_and_model(self):
+        from backend.services.ai_runtime_request import call_runtime_ai_text
+
+        captured = {}
+
+        def fake_call(request):
+            captured["request"] = request
+            return " model output "
+
+        result = call_runtime_ai_text(
+            [{"role": "user", "content": "hello"}],
+            get_ai_config=lambda: {
+                "api_key": "sk-test",
+                "model": "model-a",
+                "base_url": "https://api.example.test",
+                "wire_api": "responses",
+            },
+            reasoning_effort=" high ",
+            timeout=42,
+            call_text=fake_call,
+        )
+
+        self.assertEqual(" model output ", result.text)
+        self.assertEqual("model-a", result.model)
+        request = captured["request"]
+        self.assertEqual("model-a", request.model)
+        self.assertEqual("high", request.reasoning_effort)
+        self.assertEqual(42, request.timeout)
+
 
 if __name__ == "__main__":
     unittest.main()

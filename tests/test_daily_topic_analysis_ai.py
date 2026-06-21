@@ -10,12 +10,14 @@ class DailyTopicAnalysisAITests(unittest.TestCase):
     @unittest.skipUnless(HAS_OPENAI, "openai dependency is not installed")
     def test_call_report_ai_builds_responses_image_request(self):
         from backend.services import daily_topic_analysis_ai as ai
+        from backend.services.ai_runtime_request import AIRuntimeTextResult
 
         captured = {}
 
-        def fake_call(request):
-            captured["request"] = request
-            return " report "
+        def fake_call_runtime(messages, **kwargs):
+            captured["messages"] = messages
+            captured["kwargs"] = kwargs
+            return AIRuntimeTextResult(" report ", "model-a")
 
         image_part = {"type": "input_image", "image_url": "data:image/jpeg;base64,abc"}
         with patch.object(
@@ -31,7 +33,7 @@ class DailyTopicAnalysisAITests(unittest.TestCase):
             ai,
             "build_image_content_parts",
             return_value=[image_part],
-        ) as build_images, patch.object(ai, "call_ai_text", side_effect=fake_call):
+        ) as build_images, patch.object(ai, "call_runtime_ai_text", side_effect=fake_call_runtime):
             result = ai.call_report_ai(
                 "daily prompt",
                 group_id="group-1",
@@ -40,19 +42,15 @@ class DailyTopicAnalysisAITests(unittest.TestCase):
             )
 
         self.assertEqual(("report", "model-a"), result)
-        request = captured["request"]
-        self.assertEqual("sk-test", request.api_key)
-        self.assertEqual("model-a", request.model)
-        self.assertEqual("https://api.example.test", request.api_base)
-        self.assertEqual("responses", request.wire_api)
-        self.assertEqual("high", request.reasoning_effort)
-        self.assertEqual(180, request.timeout)
+        self.assertEqual("model-a", captured["kwargs"]["settings"].model)
+        self.assertEqual(" high ", captured["kwargs"]["reasoning_effort"])
+        self.assertEqual(180, captured["kwargs"]["timeout"])
         self.assertEqual(
             [
                 {"type": "input_text", "text": "daily prompt"},
                 image_part,
             ],
-            request.messages[1]["content"],
+            captured["messages"][1]["content"],
         )
         build_images.assert_called_once_with(
             "group-1",
@@ -63,12 +61,14 @@ class DailyTopicAnalysisAITests(unittest.TestCase):
     @unittest.skipUnless(HAS_OPENAI, "openai dependency is not installed")
     def test_call_report_ai_builds_chat_image_request(self):
         from backend.services import daily_topic_analysis_ai as ai
+        from backend.services.ai_runtime_request import AIRuntimeTextResult
 
         captured = {}
 
-        def fake_call(request):
-            captured["request"] = request
-            return " chat report "
+        def fake_call_runtime(messages, **kwargs):
+            captured["messages"] = messages
+            captured["kwargs"] = kwargs
+            return AIRuntimeTextResult(" chat report ", "model-chat")
 
         with patch.object(
             ai,
@@ -83,7 +83,7 @@ class DailyTopicAnalysisAITests(unittest.TestCase):
             ai,
             "build_image_content_parts",
             return_value=[{"type": "input_image", "image_url": "data:image/png;base64,xyz"}],
-        ), patch.object(ai, "call_ai_text", side_effect=fake_call):
+        ), patch.object(ai, "call_runtime_ai_text", side_effect=fake_call_runtime):
             result = ai.call_report_ai(
                 "daily prompt",
                 group_id="group-1",
@@ -92,25 +92,25 @@ class DailyTopicAnalysisAITests(unittest.TestCase):
             )
 
         self.assertEqual(("chat report", "model-chat"), result)
-        request = captured["request"]
-        self.assertEqual("chat_completions", request.wire_api)
+        self.assertEqual("chat_completions", captured["kwargs"]["settings"].wire_api)
         self.assertEqual(
             [
                 {"type": "text", "text": "daily prompt"},
                 {"type": "image_url", "image_url": {"url": "data:image/png;base64,xyz"}},
             ],
-            request.messages[1]["content"],
+            captured["messages"][1]["content"],
         )
 
     @unittest.skipUnless(HAS_OPENAI, "openai dependency is not installed")
     def test_call_report_ai_keeps_chat_text_prompt_plain_without_images(self):
         from backend.services import daily_topic_analysis_ai as ai
+        from backend.services.ai_runtime_request import AIRuntimeTextResult
 
         captured = {}
 
-        def fake_call(request):
-            captured["request"] = request
-            return " text report "
+        def fake_call_runtime(messages, **kwargs):
+            captured["messages"] = messages
+            return AIRuntimeTextResult(" text report ", "model-chat")
 
         with patch.object(
             ai,
@@ -125,7 +125,7 @@ class DailyTopicAnalysisAITests(unittest.TestCase):
             ai,
             "build_image_content_parts",
             return_value=[],
-        ) as build_images, patch.object(ai, "call_ai_text", side_effect=fake_call):
+        ) as build_images, patch.object(ai, "call_runtime_ai_text", side_effect=fake_call_runtime):
             result = ai.call_report_ai(
                 "daily prompt",
                 group_id="group-1",
@@ -134,7 +134,7 @@ class DailyTopicAnalysisAITests(unittest.TestCase):
             )
 
         self.assertEqual(("text report", "model-chat"), result)
-        self.assertEqual("daily prompt", captured["request"].messages[1]["content"])
+        self.assertEqual("daily prompt", captured["messages"][1]["content"])
         build_images.assert_called_once_with("group-1", [], max_image_bytes=456)
 
 
