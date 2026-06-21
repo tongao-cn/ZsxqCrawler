@@ -8,6 +8,7 @@ from backend.services.file_downloader_runtime import _close_quietly
 from backend.services.file_task_lifecycle import (
     fail_file_task as _fail_file_task_impl,
     file_task_stopped_after_init as _file_task_stopped_after_init_impl,
+    finish_file_task as _finish_file_task_impl,
 )
 from backend.services.task_runtime import add_task_log, is_task_stopped, update_task
 from backend.storage.zsxq_database import ZSXQDatabase
@@ -39,7 +40,13 @@ def _file_task_stopped_after_init(task_id: str) -> bool:
 
 
 def _complete_sync_files_from_topics_task(task_id: str, stats: Dict[str, Any]) -> None:
-    update_task(task_id, "completed", "从话题同步文件记录完成", stats)
+    _finish_file_task_impl(
+        task_id,
+        "completed",
+        "从话题同步文件记录完成",
+        stats,
+        update=update_task,
+    )
 
 
 def run_sync_files_from_topics_task(task_id: str, group_id: str):

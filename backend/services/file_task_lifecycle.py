@@ -38,6 +38,35 @@ def fail_file_task(
         pass
 
 
+def finish_file_task(
+    task_id: str,
+    status: str,
+    task_message: str,
+    result: Any = None,
+    *,
+    log_message: Optional[str] = None,
+    skip_if_stopped: bool = False,
+    is_stopped: Optional[IsStopped] = None,
+    add_log: Optional[AddTaskLog] = None,
+    update: Optional[UpdateTask] = None,
+) -> bool:
+    if skip_if_stopped:
+        is_stopped = is_stopped or is_task_stopped
+        if is_stopped(task_id):
+            return False
+
+    if log_message is not None:
+        add_log = add_log or add_task_log
+        add_log(task_id, log_message)
+
+    update = update or update_task
+    if result is None:
+        update(task_id, status, task_message)
+    else:
+        update(task_id, status, task_message, result)
+    return True
+
+
 def file_task_stopped_after_init(
     task_id: str,
     *,

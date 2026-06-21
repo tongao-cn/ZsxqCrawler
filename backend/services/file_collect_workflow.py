@@ -13,6 +13,7 @@ from backend.services.file_downloader_runtime import (
 from backend.services.file_task_lifecycle import (
     fail_file_task as _fail_file_task_impl,
     file_task_stopped_after_init as _file_task_stopped_after_init_impl,
+    finish_file_task as _finish_file_task_impl,
 )
 from backend.services.task_runtime import add_task_log, is_task_stopped, update_task
 
@@ -64,8 +65,15 @@ def _collect_files_for_request(
 
 
 def _complete_collect_files_task(task_id: str, result: Any) -> None:
-    add_task_log(task_id, "✅ 文件列表收集完成！")
-    update_task(task_id, "completed", "文件列表收集完成", result)
+    _finish_file_task_impl(
+        task_id,
+        "completed",
+        "文件列表收集完成",
+        result,
+        log_message="✅ 文件列表收集完成！",
+        add_log=add_task_log,
+        update=update_task,
+    )
 
 
 def run_collect_files_task(task_id: str, group_id: str, request: FileCollectRequest):

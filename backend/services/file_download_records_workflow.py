@@ -12,6 +12,7 @@ from backend.services.file_downloader_runtime import (
 from backend.services.file_task_lifecycle import (
     fail_file_task as _fail_file_task_impl,
     file_task_stopped_after_init as _file_task_stopped_after_init_impl,
+    finish_file_task as _finish_file_task_impl,
 )
 from backend.services.task_runtime import add_task_log, is_task_stopped, update_task
 from backend.storage.zsxq_file_database import (
@@ -131,9 +132,15 @@ def _complete_download_records_if_running(
     stats: Dict[str, int],
     completed_message: str,
 ) -> None:
-    if is_task_stopped(task_id):
-        return
-    update_task(task_id, "completed", completed_message, {"downloaded_files": stats})
+    _finish_file_task_impl(
+        task_id,
+        "completed",
+        completed_message,
+        {"downloaded_files": stats},
+        skip_if_stopped=True,
+        is_stopped=is_task_stopped,
+        update=update_task,
+    )
 
 
 def _complete_download_records_task(
@@ -152,7 +159,13 @@ def _complete_empty_download_records_task(
     stats: Dict[str, int],
     completed_message: str,
 ) -> None:
-    update_task(task_id, "completed", completed_message, {"downloaded_files": stats})
+    _finish_file_task_impl(
+        task_id,
+        "completed",
+        completed_message,
+        {"downloaded_files": stats},
+        update=update_task,
+    )
 
 
 def run_selected_file_download_task(task_id: str, group_id: str, file_ids: Sequence[int]):

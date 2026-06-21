@@ -12,6 +12,7 @@ from backend.services.file_downloader_runtime import (
 from backend.services.file_task_lifecycle import (
     fail_file_task as _fail_file_task_impl,
     file_task_stopped_after_init as _file_task_stopped_after_init_impl,
+    finish_file_task as _finish_file_task_impl,
 )
 from backend.services.task_runtime import add_task_log, is_task_stopped, update_task
 
@@ -172,8 +173,15 @@ def _download_prepared_files(
 
 
 def _complete_file_download_task(task_id: str, result: Any) -> None:
-    add_task_log(task_id, "✅ 文件下载完成！")
-    update_task(task_id, "completed", "文件下载完成", {"downloaded_files": result})
+    _finish_file_task_impl(
+        task_id,
+        "completed",
+        "文件下载完成",
+        {"downloaded_files": result},
+        log_message="✅ 文件下载完成！",
+        add_log=add_task_log,
+        update=update_task,
+    )
 
 
 def run_file_download_task(
