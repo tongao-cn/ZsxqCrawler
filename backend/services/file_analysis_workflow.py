@@ -11,11 +11,14 @@ from backend.services.file_ai_analysis_service import (
     DEFAULT_FILE_ANALYSIS_WIRE_API,
     analyze_group_file,
 )
-from backend.services.file_task_lifecycle import (
-    fail_file_task as _fail_file_task_impl,
-    finish_file_task as _finish_file_task_impl,
+from backend.services.task_runtime import (
+    WorkflowCompletionDecision,
+    add_task_log,
+    finish_workflow,
+    is_task_stopped,
+    run_workflow,
+    skip_workflow_completion,
 )
-from backend.services.task_runtime import add_task_log, is_task_stopped, update_task
 
 
 def _analyze_group_file_with_defaults(group_id: str, file_id: int, force: bool) -> Dict[str, Any]:
@@ -37,23 +40,15 @@ def _record_file_analysis_result(stats: Dict[str, int], result: Dict[str, Any]) 
         stats["completed"] += 1
 
 
-def _finish_file_analysis_task(task_id: str, stats: Dict[str, int]) -> None:
+def _finish_file_analysis_task(stats: Dict[str, int]) -> WorkflowCompletionDecision:
+    result = {"analysis": stats}
     if stats["failed"] and stats["completed"] == 0 and stats["cached"] == 0:
-        _finish_file_task_impl(
-            task_id,
+        return finish_workflow(
             "failed",
             "文件分析全部失败",
-            {"analysis": stats},
-            update=update_task,
+            result,
         )
-    else:
-        _finish_file_task_impl(
-            task_id,
-            "completed",
-            "文件分析完成",
-            {"analysis": stats},
-            update=update_task,
-        )
+    return finish_workflow("completed", "文件分析完成", result)
 
 
 def _unique_file_analysis_ids(file_ids: Sequence[Any]) -> list[int]:
@@ -106,15 +101,14 @@ def _run_file_analysis_items(
     return True
 
 
-def _fail_file_analysis_task(task_id: str, message: str, stats: Dict[str, int]) -> None:
-    _fail_file_task_impl(
-        task_id,
-        message,
+def _fail_file_analysis_task(task_id: str, message: str, stats: Dict[str, int]) -> WorkflowCompletionDecision:
+    if is_task_stopped(task_id):
+        return skip_workflow_completion()
+    add_task_log(task_id, f"❌ {message}")
+    return finish_workflow(
+        "failed",
         message,
         {"analysis": stats},
-        is_stopped=is_task_stopped,
-        add_log=add_task_log,
-        update=update_task,
     )
 
 
@@ -126,11 +120,20 @@ def run_file_analysis_task(
 ) -> None:
     unique_file_ids = _unique_file_analysis_ids(file_ids)
     stats = _build_file_analysis_stats(len(unique_file_ids))
-    try:
-        update_task(task_id, "running", f"开始分析 {len(unique_file_ids)} 个文件...")
-        if not _run_file_analysis_items(task_id, group_id, unique_file_ids, stats, force):
-            return
 
-        _finish_file_analysis_task(task_id, stats)
-    except Exception as exc:
-        _fail_file_analysis_task(task_id, f"文件分析任务失败: {exc}", stats)
+    def work() -> WorkflowCompletionDecision:
+        try:
+            if not _run_file_analysis_items(task_id, group_id, unique_file_ids, stats, force):
+                return skip_workflow_completion()
+
+            return _finish_file_analysis_task(stats)
+        except Exception as exc:
+            return _fail_file_analysis_task(task_id, f"文件分析任务失败: {exc}", stats)
+
+    run_workflow(
+        task_id,
+        running_message=f"开始分析 {len(unique_file_ids)} 个文件...",
+        completed_message="文件分析完成",
+        failure_label="文件分析任务",
+        work=work,
+    )

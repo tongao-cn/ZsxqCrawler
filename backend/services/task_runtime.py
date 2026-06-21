@@ -45,6 +45,7 @@ from backend.services.task_workflow_lifecycle import (
     WorkflowRunningMessage,
     complete_task_unless_stopped as _complete_task_unless_stopped,
     fail_task_unless_stopped as _fail_task_unless_stopped,
+    finish_workflow,  # noqa: F401 - compatibility re-export for task runtime callers
     run_workflow_lifecycle,
     skip_workflow_completion,  # noqa: F401 - compatibility re-export for task runtime callers
 )

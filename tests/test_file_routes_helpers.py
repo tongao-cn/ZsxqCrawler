@@ -922,6 +922,7 @@ class FileRoutesHelperTests(unittest.TestCase):
 
     def test_run_file_analysis_task_dedupes_ids_and_preserves_mixed_stats(self):
         from backend.services import file_analysis_workflow
+        from backend.services.task_runtime import finish_workflow
 
         def analyze_side_effect(group_id, file_id, **_kwargs):
             if file_id == 3:
@@ -929,23 +930,31 @@ class FileRoutesHelperTests(unittest.TestCase):
             return {"cached": file_id == 2}
 
         with (
-            patch("backend.services.file_analysis_workflow.update_task") as update_task,
+            patch("backend.services.file_analysis_workflow.run_workflow") as run_workflow,
             patch("backend.services.file_analysis_workflow.add_task_log") as add_task_log,
             patch("backend.services.file_analysis_workflow.is_task_stopped", return_value=False),
             patch("backend.services.file_analysis_workflow.analyze_group_file", side_effect=analyze_side_effect) as analyze,
         ):
             file_analysis_workflow.run_file_analysis_task("task-1", "group-1", [1, 2, 1, 3], force=True)
+            decision = run_workflow.call_args.kwargs["work"]()
 
+        run_workflow.assert_called_once()
+        self.assertEqual("task-1", run_workflow.call_args.args[0])
+        self.assertEqual("开始分析 3 个文件...", run_workflow.call_args.kwargs["running_message"])
+        self.assertEqual("文件分析完成", run_workflow.call_args.kwargs["completed_message"])
+        self.assertEqual("文件分析任务", run_workflow.call_args.kwargs["failure_label"])
         self.assertEqual(
             [("group-1", 1), ("group-1", 2), ("group-1", 3)],
             [call.args[:2] for call in analyze.call_args_list],
         )
         self.assertTrue(all(call.kwargs["force"] is True for call in analyze.call_args_list))
-        update_task.assert_any_call(
-            "task-1",
-            "completed",
-            "文件分析完成",
-            {"analysis": {"total_files": 3, "completed": 1, "cached": 1, "failed": 1}},
+        self.assertEqual(
+            finish_workflow(
+                "completed",
+                "文件分析完成",
+                {"analysis": {"total_files": 3, "completed": 1, "cached": 1, "failed": 1}},
+            ),
+            decision,
         )
         self.assertIn(
             ("task-1", "❌ 文件分析失败: 3, boom"),
@@ -954,44 +963,46 @@ class FileRoutesHelperTests(unittest.TestCase):
 
     def test_run_file_analysis_task_preserves_pre_cast_deduplication_for_mixed_id_types(self):
         from backend.services import file_analysis_workflow
+        from backend.services.task_runtime import finish_workflow
 
         with (
-            patch("backend.services.file_analysis_workflow.update_task") as update_task,
+            patch("backend.services.file_analysis_workflow.run_workflow") as run_workflow,
             patch("backend.services.file_analysis_workflow.add_task_log"),
             patch("backend.services.file_analysis_workflow.is_task_stopped", return_value=False),
             patch("backend.services.file_analysis_workflow.analyze_group_file", return_value={"cached": False}) as analyze,
         ):
             file_analysis_workflow.run_file_analysis_task("task-1", "group-1", [1, "1"], force=False)
+            decision = run_workflow.call_args.kwargs["work"]()
 
         self.assertEqual(
             [("group-1", 1), ("group-1", 1)],
             [call.args[:2] for call in analyze.call_args_list],
         )
-        update_task.assert_any_call(
-            "task-1",
-            "completed",
-            "文件分析完成",
-            {"analysis": {"total_files": 2, "completed": 2, "cached": 0, "failed": 0}},
+        self.assertEqual(
+            finish_workflow(
+                "completed",
+                "文件分析完成",
+                {"analysis": {"total_files": 2, "completed": 2, "cached": 0, "failed": 0}},
+            ),
+            decision,
         )
 
     def test_run_file_analysis_task_stops_between_files_without_final_update(self):
         from backend.services import file_analysis_workflow
+        from backend.services.task_runtime import skip_workflow_completion
 
         with (
-            patch("backend.services.file_analysis_workflow.update_task") as update_task,
+            patch("backend.services.file_analysis_workflow.run_workflow") as run_workflow,
             patch("backend.services.file_analysis_workflow.add_task_log") as add_task_log,
             patch("backend.services.file_analysis_workflow.is_task_stopped", side_effect=[False, True]),
             patch("backend.services.file_analysis_workflow.analyze_group_file", return_value={"cached": False}) as analyze,
         ):
             file_analysis_workflow.run_file_analysis_task("task-1", "group-1", [1, 2], force=False)
+            decision = run_workflow.call_args.kwargs["work"]()
 
         self.assertEqual([("group-1", 1)], [call.args[:2] for call in analyze.call_args_list])
-        self.assertEqual(
-            [
-                ("task-1", "running", "开始分析 2 个文件..."),
-            ],
-            [call.args for call in update_task.call_args_list],
-        )
+        self.assertEqual("开始分析 2 个文件...", run_workflow.call_args.kwargs["running_message"])
+        self.assertEqual(skip_workflow_completion(), decision)
         self.assertIn(
             ("task-1", "🛑 文件分析任务被停止"),
             [call.args for call in add_task_log.call_args_list],
@@ -999,38 +1010,41 @@ class FileRoutesHelperTests(unittest.TestCase):
 
     def test_run_file_analysis_task_marks_task_failed_when_all_files_fail(self):
         from backend.services import file_analysis_workflow
+        from backend.services.task_runtime import finish_workflow
 
         with (
-            patch("backend.services.file_analysis_workflow.update_task") as update_task,
+            patch("backend.services.file_analysis_workflow.run_workflow") as run_workflow,
             patch("backend.services.file_analysis_workflow.add_task_log"),
             patch("backend.services.file_analysis_workflow.is_task_stopped", return_value=False),
             patch("backend.services.file_analysis_workflow.analyze_group_file", side_effect=RuntimeError("boom")),
         ):
             file_analysis_workflow.run_file_analysis_task("task-1", "group-1", [1], force=False)
+            decision = run_workflow.call_args.kwargs["work"]()
 
-        update_task.assert_any_call(
-            "task-1",
-            "failed",
-            "文件分析全部失败",
-            {"analysis": {"total_files": 1, "completed": 0, "cached": 0, "failed": 1}},
+        self.assertEqual(
+            finish_workflow(
+                "failed",
+                "文件分析全部失败",
+                {"analysis": {"total_files": 1, "completed": 0, "cached": 0, "failed": 1}},
+            ),
+            decision,
         )
 
-    def test_fail_file_analysis_task_uses_file_lifecycle_failure_payload(self):
+    def test_fail_file_analysis_task_returns_terminal_failure_payload(self):
+        from backend.services.task_runtime import finish_workflow
+
         stats = {"total_files": 1, "completed": 0, "cached": 0, "failed": 1}
 
         with (
-            patch("backend.services.file_analysis_workflow.update_task") as update_task,
             patch("backend.services.file_analysis_workflow.add_task_log") as add_task_log,
             patch("backend.services.file_analysis_workflow.is_task_stopped", return_value=False),
         ):
-            _fail_file_analysis_task("task-1", "文件分析任务失败: boom", stats)
+            decision = _fail_file_analysis_task("task-1", "文件分析任务失败: boom", stats)
 
         add_task_log.assert_called_once_with("task-1", "❌ 文件分析任务失败: boom")
-        update_task.assert_called_once_with(
-            "task-1",
-            "failed",
-            "文件分析任务失败: boom",
-            {"analysis": stats},
+        self.assertEqual(
+            finish_workflow("failed", "文件分析任务失败: boom", {"analysis": stats}),
+            decision,
         )
 
     def test_run_file_analysis_items_updates_stats_logs_and_continues_after_failure(self):

@@ -803,6 +803,32 @@ class TaskRuntimeHelperTests(unittest.TestCase):
         self.assertIn(("task-1", "状态更新: running dynamic"), store.logs)
         self.assertIn(("task-1", "状态更新: done dynamic"), store.logs)
 
+    def test_run_workflow_applies_explicit_terminal_decision(self):
+        from backend.services.task_runtime import finish_workflow, run_workflow
+
+        store = FakeTaskStore()
+        store.tasks["task-1"] = {"task_id": "task-1", "status": "pending", "message": "queued"}
+        result = {"analysis": {"failed": 1}}
+
+        def completed_message(_result):
+            self.fail("explicit terminal messages should bypass completed_message")
+
+        with patch("backend.services.task_runtime.get_task_store", return_value=store):
+            run_workflow(
+                "task-1",
+                running_message="running now",
+                completed_message=completed_message,
+                failure_label="文件分析任务",
+                work=lambda: finish_workflow("failed", "文件分析全部失败", result),
+            )
+
+        self.assertEqual("failed", store.tasks["task-1"]["status"])
+        self.assertEqual("文件分析全部失败", store.tasks["task-1"]["message"])
+        self.assertEqual(result, store.tasks["task-1"]["result"])
+        self.assertIn(("task-1", "状态更新: running now"), store.logs)
+        self.assertIn(("task-1", "状态更新: 文件分析全部失败"), store.logs)
+        self.assertEqual([("task-1", "failed")], store.released_locks)
+
     def test_run_workflow_logs_and_fails_unstopped_exception(self):
         from backend.services.task_runtime import run_workflow
 
