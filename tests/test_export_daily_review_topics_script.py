@@ -27,18 +27,31 @@ class ExportDailyReviewTopicsScriptTests(unittest.TestCase):
         morning_topic = {"topic_id": "morning", "matched_rule": "TMT早报", "group_name": "橙子不糊涂的科技花园"}
         evening_topic = {"topic_id": "evening", "matched_rule": "日报", "group_name": "橙子不糊涂的科技花园"}
 
-        def fake_load_review_topics(*, report_date, slot, **_kwargs):
+        def fake_load_review_topic_export(*, report_date, slot, **_kwargs):
             if slot == "morning":
                 self.assertEqual("2026-06-17", report_date.isoformat())
-                return [morning_topic]
-            self.assertEqual("evening", slot)
-            self.assertEqual("2026-06-16", report_date.isoformat())
-            return [evening_topic]
+                topics = [morning_topic]
+            else:
+                self.assertEqual("evening", slot)
+                self.assertEqual("2026-06-16", report_date.isoformat())
+                topics = [evening_topic]
+            return {
+                "level": "OK",
+                "group_ids": ["28888222124181"],
+                "report_date": report_date.isoformat(),
+                "slot": slot,
+                "slot_label": "早报" if slot == "morning" else "晚报",
+                "matched_count": len(topics),
+                "matched_rules": {},
+                "matched_groups": {},
+                "crawl_results": [],
+                "topics": topics,
+            }
 
         def fake_write(payload, output_dir=None):
             return {"summary_json": f"{payload['report_date']}-{payload['slot']}.json"}
 
-        with patch("scripts.export_daily_review_topics.load_review_topics", side_effect=fake_load_review_topics), patch(
+        with patch("scripts.export_daily_review_topics.load_review_topic_export", side_effect=fake_load_review_topic_export), patch(
             "scripts.export_daily_review_topics.write_review_topic_export", side_effect=fake_write
         ):
             payload = asyncio.run(_run(self._args(include_prior_evening=True)))

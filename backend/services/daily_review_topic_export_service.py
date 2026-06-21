@@ -435,6 +435,30 @@ def build_review_topic_export(
     }
 
 
+def load_review_topic_export(
+    *,
+    group_ids: Iterable[str],
+    report_date: date,
+    slot: ReviewTopicSlot,
+    max_topic_chars: int = 8000,
+    crawl_results: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    normalized_group_ids = normalize_group_ids(group_ids)
+    topics = load_review_topics(
+        group_ids=normalized_group_ids,
+        report_date=report_date,
+        slot=slot,
+        max_topic_chars=max_topic_chars,
+    )
+    return build_review_topic_export(
+        group_ids=normalized_group_ids,
+        report_date=report_date,
+        slot=slot,
+        topics=topics,
+        crawl_results=crawl_results,
+    )
+
+
 def _topic_markdown(topic: dict[str, Any], index: int) -> str:
     header = f"### {index}. {_topic_display_title(topic)}"
     metrics = topic.get("metrics") or {}
@@ -556,6 +580,7 @@ __all__ = [
     "ReviewTopicSlot",
     "build_review_topic_export",
     "fetch_review_topics",
+    "load_review_topic_export",
     "load_review_topics",
     "match_review_rule",
     "normalize_group_ids",

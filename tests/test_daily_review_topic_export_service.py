@@ -3,6 +3,7 @@ import tempfile
 import unittest
 from datetime import date
 from pathlib import Path
+from unittest.mock import patch
 
 
 class _Rows:
@@ -176,6 +177,41 @@ class DailyReviewTopicExportServiceTests(unittest.TestCase):
             self.assertIn("盘前热点事件", markdown)
             self.assertNotIn("一、昨日热点...", markdown)
             self.assertIn("![1 image 1](https://example.com/original.png)", markdown)
+
+    def test_load_review_topic_export_loads_topics_and_builds_payload(self):
+        from backend.services.daily_review_topic_export_service import load_review_topic_export
+
+        topic = {
+            "matched_rule": "盘前热点事件",
+            "group_name": "调研鹅纪要",
+            "topic_id": "1",
+        }
+        crawl_results = [{"group_id": "15552822451452", "status": "completed"}]
+
+        with patch(
+            "backend.services.daily_review_topic_export_service.load_review_topics",
+            return_value=[topic],
+        ) as load_topics:
+            payload = load_review_topic_export(
+                group_ids=["15552822451452", "15552822451452"],
+                report_date=date(2026, 5, 22),
+                slot="morning",
+                max_topic_chars=1234,
+                crawl_results=crawl_results,
+            )
+
+        load_topics.assert_called_once_with(
+            group_ids=["15552822451452"],
+            report_date=date(2026, 5, 22),
+            slot="morning",
+            max_topic_chars=1234,
+        )
+        self.assertEqual("OK", payload["level"])
+        self.assertEqual(["15552822451452"], payload["group_ids"])
+        self.assertEqual("2026-05-22", payload["report_date"])
+        self.assertEqual("morning", payload["slot"])
+        self.assertEqual([topic], payload["topics"])
+        self.assertEqual(crawl_results, payload["crawl_results"])
 
 
 if __name__ == "__main__":

@@ -17,8 +17,7 @@ if str(PROJECT_ROOT) not in sys.path:
 from backend.schemas.crawl import CrawlSettingsRequest
 from backend.services.daily_review_topic_export_service import (
     DEFAULT_GROUP_IDS,
-    build_review_topic_export,
-    load_review_topics,
+    load_review_topic_export,
     normalize_group_ids,
     normalize_review_slot,
     parse_report_date,
@@ -156,29 +155,6 @@ def _payload_without_topics(payload: dict[str, Any]) -> dict[str, Any]:
     return {key: value for key, value in payload.items() if key != "topics"}
 
 
-def _build_export_payload(
-    *,
-    group_ids: list[str],
-    report_date: Any,
-    slot: Any,
-    max_topic_chars: int,
-    crawl_results: list[dict[str, Any]],
-) -> dict[str, Any]:
-    topics = load_review_topics(
-        group_ids=group_ids,
-        report_date=report_date,
-        slot=slot,
-        max_topic_chars=max_topic_chars,
-    )
-    return build_review_topic_export(
-        group_ids=group_ids,
-        report_date=report_date,
-        slot=slot,
-        topics=topics,
-        crawl_results=crawl_results,
-    )
-
-
 async def _run(args: argparse.Namespace) -> dict[str, Any]:
     slot = normalize_review_slot(args.slot)
     if args.include_prior_evening and slot != "morning":
@@ -191,7 +167,7 @@ async def _run(args: argparse.Namespace) -> dict[str, Any]:
     if args.crawl_latest_first:
         crawl_results = await _pull_latest_topics(group_ids, args)
 
-    payload = _build_export_payload(
+    payload = load_review_topic_export(
         group_ids=group_ids,
         report_date=report_date,
         slot=slot,
@@ -202,7 +178,7 @@ async def _run(args: argparse.Namespace) -> dict[str, Any]:
 
     additional_exports: list[dict[str, Any]] = []
     if args.include_prior_evening:
-        prior_evening = _build_export_payload(
+        prior_evening = load_review_topic_export(
             group_ids=group_ids,
             report_date=report_date - timedelta(days=1),
             slot="evening",
