@@ -58,40 +58,6 @@ export function getStockTopicResultKey(result: StockTopicAnalysisResponse) {
   return result.stock_name.trim();
 }
 
-function mergeSearchAndLatestResult(
-  searchResult: StockTopicAnalysisResponse,
-  latestResult: StockTopicAnalysisResponse | null,
-): StockTopicAnalysisResponse {
-  const latestTopicIds = new Set(
-    (latestResult?.processed_topic_ids || latestResult?.analyzed_topic_ids || []).map(String),
-  );
-  const newTopicCount = searchResult.topics.filter((topic) => !latestTopicIds.has(String(topic.topic_id))).length;
-  if (!latestResult || latestResult.status === 'missing') {
-    return {
-      ...searchResult,
-      processed_topic_ids: [],
-      analyzed_topic_ids: [],
-      new_topic_count: searchResult.topic_count,
-      analysis_mode: 'initialize',
-    };
-  }
-  return {
-    ...searchResult,
-    concepts: latestResult.concepts.length > 0 ? latestResult.concepts : searchResult.concepts,
-    recommendation_count: latestResult.recommendation_count || searchResult.recommendation_count,
-    summary_markdown: latestResult.summary_markdown,
-    model: latestResult.model,
-    status: latestResult.status,
-    error: latestResult.error,
-    created_at: latestResult.created_at,
-    updated_at: latestResult.updated_at,
-    processed_topic_ids: Array.from(latestTopicIds),
-    analyzed_topic_ids: Array.from(latestTopicIds),
-    new_topic_count: newTopicCount,
-    analysis_mode: newTopicCount > 0 ? 'incremental' : 'up_to_date',
-  };
-}
-
 function getAnalyzeButtonLabel(
   results: StockTopicAnalysisResponse[],
   parsedStockCount: number,
@@ -178,17 +144,7 @@ export function useStockTopicAnalysisPanel({
   }, [cacheKey, stockInput, results]);
 
   const loadBatchResults = useCallback(async (stockNames: string[]) => {
-    const [searchResults, latestBatch] = await Promise.all([
-      Promise.all(stockNames.map((stockName) => apiClient.searchStockTopics(groupId, stockName))),
-      apiClient.getLatestStockTopicAnalyses(groupId, stockNames),
-    ]);
-    const latestByName = new Map(
-      latestBatch.stocks.map((item) => [item.stock_name.trim(), item]),
-    );
-    const mergedResults = searchResults.map((searchResult, index) => {
-      const latest = latestBatch.stocks[index] || latestByName.get(searchResult.stock_name.trim()) || latestByName.get(stockNames[index]) || null;
-      return mergeSearchAndLatestResult(searchResult, latest);
-    });
+    const mergedResults = await apiClient.loadStockTopicAnalysisReadModels(groupId, stockNames);
     setResults(mergedResults);
     setSelectedStockNames((current) => {
       const available = new Set(mergedResults.map(getStockTopicResultKey));
