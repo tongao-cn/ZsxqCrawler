@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Optional
+from typing import Any, Callable, Optional
 
 from fastapi import APIRouter, HTTPException
 
@@ -33,6 +33,13 @@ def _topic_route_error(message: str, error: Exception) -> HTTPException:
     return HTTPException(status_code=500, detail=f"{message}: {str(error)}")
 
 
+async def _run_topic_workflow(workflow: Callable[..., dict], *args: Any) -> dict:
+    try:
+        return await asyncio.to_thread(workflow, *args)
+    except TopicWorkflowError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
+
+
 async def _topics_page(page: int, per_page: int, search: Optional[str]) -> dict:
     return await asyncio.to_thread(_get_topics_response, page, per_page, search)
 
@@ -42,10 +49,7 @@ async def _group_topics_page(group_id: int, page: int, per_page: int, search: Op
 
 
 async def _topic_detail(topic_id: int, group_id: str) -> dict:
-    try:
-        return await asyncio.to_thread(_get_topic_detail_response, topic_id, group_id)
-    except TopicWorkflowError as exc:
-        raise HTTPException(status_code=exc.status_code, detail=exc.detail)
+    return await _run_topic_workflow(_get_topic_detail_response, topic_id, group_id)
 
 
 async def _cleared_topic_database(group_id: str) -> dict:
@@ -53,17 +57,11 @@ async def _cleared_topic_database(group_id: str) -> dict:
 
 
 async def _refreshed_topic(topic_id: int, group_id: str) -> dict:
-    try:
-        return await asyncio.to_thread(refresh_topic_stats_workflow, topic_id, group_id)
-    except TopicWorkflowError as exc:
-        raise HTTPException(status_code=exc.status_code, detail=exc.detail)
+    return await _run_topic_workflow(refresh_topic_stats_workflow, topic_id, group_id)
 
 
 async def _more_comments(topic_id: int, group_id: str) -> dict:
-    try:
-        return await asyncio.to_thread(fetch_more_comments_workflow, topic_id, group_id)
-    except TopicWorkflowError as exc:
-        raise HTTPException(status_code=exc.status_code, detail=exc.detail)
+    return await _run_topic_workflow(fetch_more_comments_workflow, topic_id, group_id)
 
 
 async def _deleted_single_topic(topic_id: int, group_id: int) -> dict:
@@ -71,10 +69,7 @@ async def _deleted_single_topic(topic_id: int, group_id: int) -> dict:
 
 
 async def _fetched_single_topic(group_id: str, topic_id: int, fetch_comments: bool) -> dict:
-    try:
-        return await asyncio.to_thread(fetch_single_topic_workflow, group_id, topic_id, fetch_comments)
-    except TopicWorkflowError as exc:
-        raise HTTPException(status_code=exc.status_code, detail=exc.detail)
+    return await _run_topic_workflow(fetch_single_topic_workflow, group_id, topic_id, fetch_comments)
 
 
 async def _group_tags(group_id: str) -> dict:
@@ -82,10 +77,7 @@ async def _group_tags(group_id: str) -> dict:
 
 
 async def _tagged_topics(group_id: int, tag_id: int, page: int, per_page: int) -> dict:
-    try:
-        return await asyncio.to_thread(_get_topics_by_tag_response, group_id, tag_id, page, per_page)
-    except TopicWorkflowError as exc:
-        raise HTTPException(status_code=exc.status_code, detail=exc.detail)
+    return await _run_topic_workflow(_get_topics_by_tag_response, group_id, tag_id, page, per_page)
 
 
 async def _deleted_group_topics(group_id: int) -> dict:
