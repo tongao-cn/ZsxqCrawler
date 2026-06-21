@@ -12,6 +12,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Textarea } from '@/components/ui/textarea';
+import { useTaskLauncher } from '@/hooks/useTaskLauncher';
 import { useTaskStatus } from '@/hooks/useTaskStatus';
 import { apiClient, StockQuestionResponse } from '@/lib/api';
 import { formatStockAnalysisDateTime } from '@/lib/stock-analysis-format';
@@ -31,6 +32,9 @@ export default function StockQuestionPanel({ groupId, onTaskCreated }: StockQues
   const normalizedQuestion = question.trim();
   const canSubmit = normalizedQuestion.length > 0;
   const answerSummary = useMemo(() => result?.summary_markdown?.trim() || '', [result]);
+  const { handleTaskCreateError, notifyTaskCreated } = useTaskLauncher({
+    onTaskCreated,
+  });
 
   const handleSearch = useCallback(async () => {
     if (!canSubmit) {
@@ -58,14 +62,13 @@ export default function StockQuestionPanel({ groupId, onTaskCreated }: StockQues
       setCreatingTask(true);
       const response = await apiClient.analyzeStockQuestion(groupId, normalizedQuestion);
       setActiveTaskId(response.task_id);
-      onTaskCreated?.(response.task_id);
-      toast.success(`A股问答任务已创建: ${response.task_id}`);
+      notifyTaskCreated(response.task_id, `A股问答任务已创建: ${response.task_id}`);
     } catch (error) {
-      toast.error(`创建A股问答任务失败: ${error instanceof Error ? error.message : '未知错误'}`);
+      handleTaskCreateError(error, '创建A股问答任务失败');
     } finally {
       setCreatingTask(false);
     }
-  }, [canSubmit, groupId, normalizedQuestion, onTaskCreated]);
+  }, [canSubmit, groupId, handleTaskCreateError, normalizedQuestion, notifyTaskCreated]);
 
   useTaskStatus(activeTaskId, {
     enabled: Boolean(activeTaskId),
