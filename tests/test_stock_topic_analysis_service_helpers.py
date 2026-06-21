@@ -296,7 +296,7 @@ class StockTopicAnalysisServiceHelperTests(unittest.TestCase):
 
     @unittest.skipUnless(HAS_SERVICE_DEPS, "stock topic analysis service dependencies are not installed")
     def test_call_question_keyword_ai_parses_ai_json(self):
-        from backend.services.ai_runtime_request import AIRuntimeTextResult
+        from backend.services.ai_runtime_request import AIRuntimeStructuredObjectResult
         from backend.services.stock_topic_analysis_service import _call_question_keyword_ai
 
         captured = {}
@@ -304,27 +304,56 @@ class StockTopicAnalysisServiceHelperTests(unittest.TestCase):
         def fake_call(messages, **kwargs):
             captured["messages"] = messages
             captured["kwargs"] = kwargs
-            return AIRuntimeTextResult('{"keywords":["商业航天","低空经济"]}', "test-model")
+            return AIRuntimeStructuredObjectResult(
+                {"keywords": ["商业航天", "低空经济"]},
+                '{"keywords":["商业航天","低空经济"]}',
+                "test-model",
+            )
 
-        with patch("backend.services.stock_topic_analysis_service.call_runtime_ai_text", side_effect=fake_call):
+        with patch("backend.services.stock_topic_analysis_service.call_structured_ai_object", side_effect=fake_call):
             keywords, model = _call_question_keyword_ai("商业航天板块最近怎么样，推荐吗")
 
         self.assertEqual(["商业航天", "低空经济"], keywords)
         self.assertEqual("test-model", model)
+        self.assertEqual("stock_question_keyword_extraction", captured["kwargs"]["schema_name"])
+        self.assertEqual("AI 问题关键词抽取结果", captured["kwargs"]["label"])
+        self.assertEqual(["keywords"], captured["kwargs"]["schema"]["required"])
         self.assertEqual("responses", captured["kwargs"]["wire_api"])
         self.assertEqual(120, captured["kwargs"]["timeout"])
         self.assertIn("商业航天板块最近怎么样，推荐吗", str(captured["messages"]))
 
     @unittest.skipUnless(HAS_SERVICE_DEPS, "stock topic analysis service dependencies are not installed")
     def test_call_question_keyword_ai_rejects_invalid_json(self):
-        from backend.services.ai_runtime_request import AIRuntimeTextResult
         from backend.services.stock_topic_analysis_service import _call_question_keyword_ai
 
         with patch(
-            "backend.services.stock_topic_analysis_service.call_runtime_ai_text",
-            return_value=AIRuntimeTextResult("not json", "test-model"),
+            "backend.services.stock_topic_analysis_service.call_structured_ai_object",
+            side_effect=RuntimeError("AI 问题关键词抽取结果不是合法 JSON: not json"),
         ):
             with self.assertRaisesRegex(ValueError, "AI 问题关键词抽取结果不是合法 JSON"):
+                _call_question_keyword_ai("商业航天板块最近怎么样，推荐吗")
+
+    @unittest.skipUnless(HAS_SERVICE_DEPS, "stock topic analysis service dependencies are not installed")
+    def test_call_question_keyword_ai_rejects_empty_keywords(self):
+        from backend.services.ai_runtime_request import AIRuntimeStructuredObjectResult
+        from backend.services.stock_topic_analysis_service import _call_question_keyword_ai
+
+        with patch(
+            "backend.services.stock_topic_analysis_service.call_structured_ai_object",
+            return_value=AIRuntimeStructuredObjectResult({"keywords": []}, '{"keywords":[]}', "test-model"),
+        ):
+            with self.assertRaisesRegex(ValueError, "AI 未能从问题中提取检索关键词"):
+                _call_question_keyword_ai("商业航天板块最近怎么样，推荐吗")
+
+    @unittest.skipUnless(HAS_SERVICE_DEPS, "stock topic analysis service dependencies are not installed")
+    def test_call_question_keyword_ai_preserves_runtime_errors(self):
+        from backend.services.stock_topic_analysis_service import _call_question_keyword_ai
+
+        with patch(
+            "backend.services.stock_topic_analysis_service.call_structured_ai_object",
+            side_effect=RuntimeError("OPENAI_API_KEY missing"),
+        ):
+            with self.assertRaisesRegex(RuntimeError, "OPENAI_API_KEY missing"):
                 _call_question_keyword_ai("商业航天板块最近怎么样，推荐吗")
 
     @unittest.skipUnless(HAS_SERVICE_DEPS, "stock topic analysis service dependencies are not installed")

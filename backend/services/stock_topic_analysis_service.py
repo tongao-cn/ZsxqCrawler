@@ -11,8 +11,8 @@ from backend.core.ai_provider_config import (
     get_openai_compatible_config,
     get_summary_reasoning_effort,
 )
-from backend.services.ai_json_utils import JsonObjectParseError, extract_json_object, require_json_object
-from backend.services.ai_runtime_request import call_runtime_ai_text
+from backend.services.ai_json_utils import extract_json_object
+from backend.services.ai_runtime_request import call_runtime_ai_text, call_structured_ai_object
 from backend.services.stock_topic_analysis_ai_prompts import (
     build_image_stock_extraction_input,
     build_question_analysis_messages,
@@ -73,6 +73,17 @@ MAX_BATCH_TRANSIENT_FAILURES = 5
 MAX_QUESTION_KEYWORDS = 8
 MAX_QUESTION_TOPICS = 60
 MAX_EXTRACT_IMAGE_BYTES = 4 * 1024 * 1024
+QUESTION_KEYWORD_EXTRACTION_SCHEMA: Dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "keywords": {
+            "type": "array",
+            "items": {"type": "string"},
+        },
+    },
+    "required": ["keywords"],
+    "additionalProperties": False,
+}
 STOCK_TOPIC_ANALYSIS_TABLE = "stock_topic_analyses"
 PROCESSED_TOPIC_STATUSES = {"analyzed", "skipped"}
 SUPPORTED_EXTRACT_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp"}
@@ -466,20 +477,22 @@ def _extract_json_object(text: str) -> Dict[str, Any]:
 
 def _call_question_keyword_ai(question: str) -> Tuple[List[str], str]:
     messages = build_question_keyword_messages(question)
-    result = call_runtime_ai_text(
-        messages,
-        get_ai_config=get_openai_compatible_config,
-        wire_api="responses",
-        reasoning_effort=get_summary_reasoning_effort(),
-        timeout=120,
-    )
-    text = result.text
-
     try:
-        parsed = require_json_object(text, label="AI 问题关键词抽取结果")
-    except JsonObjectParseError as exc:
+        result = call_structured_ai_object(
+            messages,
+            schema_name="stock_question_keyword_extraction",
+            schema=QUESTION_KEYWORD_EXTRACTION_SCHEMA,
+            label="AI 问题关键词抽取结果",
+            get_ai_config=get_openai_compatible_config,
+            wire_api="responses",
+            reasoning_effort=get_summary_reasoning_effort(),
+            timeout=120,
+        )
+    except RuntimeError as exc:
+        if not str(exc).startswith("AI 问题关键词抽取结果不是合法 JSON"):
+            raise
         raise ValueError("AI 问题关键词抽取结果不是合法 JSON") from exc
-    keywords = _normalize_question_keywords(parsed.get("keywords") or parsed.get("keyword") or [])
+    keywords = _normalize_question_keywords(result.payload.get("keywords") or result.payload.get("keyword") or [])
     if not keywords:
         raise ValueError("AI 未能从问题中提取检索关键词")
     return keywords, result.model
