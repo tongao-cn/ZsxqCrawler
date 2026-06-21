@@ -16,7 +16,7 @@ from backend.services.task_launch import (
     TaskLaunchRecipe,
     launch_task_recipe,
 )
-from backend.services.task_runtime import add_task_log, build_task_log_callback, run_workflow
+from backend.services.task_runtime import build_task_log_callback, run_workflow
 
 
 @dataclass(frozen=True)
@@ -35,10 +35,7 @@ class StockTopicAnalysisBatchTaskRequest:
 
 
 def _build_stock_topic_log_callback(task_id: str) -> Callable[[str], None]:
-    return build_task_log_callback(
-        task_id,
-        lambda current_task_id, message: add_task_log(current_task_id, message),
-    )
+    return build_task_log_callback(task_id)
 
 
 def _create_stock_task_response(

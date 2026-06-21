@@ -45,10 +45,7 @@ class AShareAnalysisTaskRequest:
 
 
 def _task_log_callback(task_id: str):
-    return build_task_log_callback(
-        task_id,
-        lambda current_task_id, message: add_task_log(current_task_id, message),
-    )
+    return build_task_log_callback(task_id)
 
 
 def _normalize_group_scope(group_id: Optional[str | int]) -> tuple[Optional[str], str]:

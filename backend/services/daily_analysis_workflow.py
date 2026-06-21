@@ -73,10 +73,7 @@ def _launch_daily_task(
 
 
 def _task_log_callback(task_id: str):
-    return build_task_log_callback(
-        task_id,
-        lambda current_task_id, message: add_task_log(current_task_id, message),
-    )
+    return build_task_log_callback(task_id)
 
 
 def run_daily_topic_analysis_task(

@@ -232,7 +232,7 @@ class StockTopicAnalysisRoutesHelperTests(unittest.IsolatedAsyncioTestCase):
                 "backend.services.stock_topic_analysis_workflow.answer_stock_question",
                 return_value={"answer": "ok"},
             ) as answer_stock_question,
-            patch("backend.services.stock_topic_analysis_workflow.add_task_log") as add_task_log,
+            patch("backend.services.task_runtime.add_task_log") as add_task_log,
         ):
             run_stock_question_task("task-qa", "51111112855254", request)
 
@@ -262,7 +262,7 @@ class StockTopicAnalysisRoutesHelperTests(unittest.IsolatedAsyncioTestCase):
                 "backend.services.stock_topic_analysis_workflow.analyze_stock_topics",
                 return_value={"summary": "ok"},
             ) as analyze_stock_topics,
-            patch("backend.services.stock_topic_analysis_workflow.add_task_log") as add_task_log,
+            patch("backend.services.task_runtime.add_task_log") as add_task_log,
         ):
             run_stock_topic_analysis_task("task-1", "51111112855254", request)
 
@@ -331,7 +331,7 @@ class StockTopicAnalysisRoutesHelperTests(unittest.IsolatedAsyncioTestCase):
                 "backend.services.stock_topic_analysis_workflow.analyze_stock_topics_batch",
                 side_effect=analyze_stock_topics_batch,
             ),
-            patch("backend.services.stock_topic_analysis_workflow.add_task_log") as add_task_log,
+            patch("backend.services.task_runtime.add_task_log") as add_task_log,
         ):
             run_stock_topic_analysis_batch_task("task-batch", "51111112855254", request)
 
