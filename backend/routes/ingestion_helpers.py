@@ -8,9 +8,10 @@ from backend.services.task_launch import (
     INGESTION_CONFLICT_MESSAGE,
     TASK_CREATED_MESSAGE,
     TaskLaunchConflict,
+    TaskLaunchRecipe,
     create_ingestion_task_or_raise as _create_ingestion_task_or_raise,
     ingestion_conflict_detail as _ingestion_conflict_detail,
-    launch_ingestion_task,
+    launch_task_recipe,
 )
 
 
@@ -39,13 +40,15 @@ def enqueue_ingestion_task(
     message: str = TASK_CREATED_MESSAGE,
 ) -> Dict[str, str]:
     try:
-        return launch_ingestion_task(
-            task_type,
-            description,
-            task_func,
-            group_id,
-            *task_args,
-            message=message,
+        return launch_task_recipe(
+            TaskLaunchRecipe.ingestion(
+                task_type,
+                description,
+                task_func,
+                group_id,
+                *task_args,
+                message=message,
+            )
         )
     except TaskLaunchConflict as exc:
         raise_ingestion_conflict(exc.existing)
