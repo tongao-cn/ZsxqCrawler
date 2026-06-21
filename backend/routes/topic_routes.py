@@ -5,6 +5,7 @@ from typing import Any, Callable, Optional
 
 from fastapi import APIRouter, HTTPException
 
+from backend.routes.task_http_errors import internal_route_error
 from backend.services.topic_local_service import (
     clear_topic_database_response as _clear_topic_database_response,
     delete_group_topics_response as _delete_group_topics_response,
@@ -30,7 +31,7 @@ def _log_topic_event(level: str, message: str) -> None:
 
 
 def _topic_route_error(message: str, error: Exception) -> HTTPException:
-    return HTTPException(status_code=500, detail=f"{message}: {str(error)}")
+    return internal_route_error(message, error)
 
 
 async def _run_topic_workflow(workflow: Callable[..., dict], *args: Any) -> dict:

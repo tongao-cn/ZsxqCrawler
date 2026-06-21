@@ -5,6 +5,7 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse, Response
 
+from backend.routes.task_http_errors import internal_route_error
 from backend.services.media_service import (
     MediaBytes,
     MediaServiceError,
@@ -19,7 +20,7 @@ router = APIRouter(prefix="/api", tags=["media"])
 
 
 def _media_route_error(message: str, error: Exception) -> HTTPException:
-    return HTTPException(status_code=500, detail=f"{message}: {str(error)}")
+    return internal_route_error(message, error)
 
 
 def _media_bytes_response(media: MediaBytes) -> Response:
