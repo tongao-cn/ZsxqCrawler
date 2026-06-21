@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { toast } from 'sonner';
 
 import { apiClient } from '@/lib/api';
 import DailyStockConceptsView from '@/components/DailyStockConceptsView';
@@ -12,6 +11,7 @@ import { useDailyTopicAnalysisData } from '@/hooks/useDailyTopicAnalysisData';
 import { useDailyStockConceptDerivedState } from '@/hooks/useDailyStockConceptDerivedState';
 import { useDailyStockTrendState } from '@/hooks/useDailyStockTrendState';
 import { useDailyTopicDetailState } from '@/hooks/useDailyTopicDetailState';
+import { useTaskLauncher } from '@/hooks/useTaskLauncher';
 import {
   getTodayText,
   normalizeCompanyName,
@@ -36,6 +36,9 @@ export default function DailyTopicAnalysisPanel({
   const [selectedConcept, setSelectedConcept] = useState<string | null>(null);
   const [selectedConceptDetail, setSelectedConceptDetail] = useState<string | null>(null);
   const [onlyRecommendationHits, setOnlyRecommendationHits] = useState(false);
+  const { handleTaskCreateError, notifyTaskCreated } = useTaskLauncher({
+    onTaskCreated,
+  });
   const {
     closeStockDetail,
     loadingStockTrend,
@@ -103,10 +106,9 @@ export default function DailyTopicAnalysisPanel({
         date: reportDate,
       });
       const taskId = response.task_id;
-      toast.success(`每日 AI 总结任务已创建: ${taskId}`);
-      onTaskCreated?.(taskId);
+      notifyTaskCreated(taskId, `每日 AI 总结任务已创建: ${taskId}`);
     } catch (error) {
-      toast.error(`创建每日 AI 总结任务失败: ${error instanceof Error ? error.message : '未知错误'}`);
+      handleTaskCreateError(error, '创建每日 AI 总结任务失败');
     } finally {
       setSubmitting(false);
     }
@@ -118,10 +120,9 @@ export default function DailyTopicAnalysisPanel({
       const response = await apiClient.createDailyStockConcepts(groupId, {
         date: reportDate,
       });
-      toast.success(`股票概念视图生成任务已创建: ${response.task_id}`);
-      onTaskCreated?.(response.task_id);
+      notifyTaskCreated(response.task_id, `股票概念视图生成任务已创建: ${response.task_id}`);
     } catch (error) {
-      toast.error(`创建股票概念视图任务失败: ${error instanceof Error ? error.message : '未知错误'}`);
+      handleTaskCreateError(error, '创建股票概念视图任务失败');
     } finally {
       setExtractingStocks(false);
     }
