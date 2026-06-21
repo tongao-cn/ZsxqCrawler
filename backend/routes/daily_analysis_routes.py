@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Optional
 
-from fastapi import APIRouter, BackgroundTasks, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from backend.schemas.crawl import CrawlSettingsRequest
@@ -31,7 +31,6 @@ class DailyRunTodayRequest(DailyAnalysisRequest):
 def _create_daily_report_task_response(
     group_id: str,
     request: DailyAnalysisRequest,
-    background_tasks: BackgroundTasks,
 ) -> dict[str, str]:
     return create_daily_topic_analysis_task(
         group_id,
@@ -43,7 +42,6 @@ def _create_daily_report_task_response(
 def _create_daily_today_task_response(
     group_id: str,
     request: DailyRunTodayRequest,
-    background_tasks: BackgroundTasks,
 ) -> dict[str, str]:
     return create_daily_topic_crawl_and_analysis_task(
         group_id,
@@ -65,17 +63,17 @@ def _daily_report_or_404(group_id: str, date: Optional[str]) -> dict:
     return report
 
 @router.post("/{group_id}")
-async def create_daily_report(group_id: str, request: DailyAnalysisRequest, background_tasks: BackgroundTasks):
+async def create_daily_report(group_id: str, request: DailyAnalysisRequest):
     try:
-        return _create_daily_report_task_response(group_id, request, background_tasks)
+        return _create_daily_report_task_response(group_id, request)
     except Exception as e:
         raise _daily_analysis_route_error("创建每日分析任务失败", e)
 
 
 @router.post("/run-today/{group_id}")
-async def run_today_report(group_id: str, request: DailyRunTodayRequest, background_tasks: BackgroundTasks):
+async def run_today_report(group_id: str, request: DailyRunTodayRequest):
     try:
-        return _create_daily_today_task_response(group_id, request, background_tasks)
+        return _create_daily_today_task_response(group_id, request)
     except Exception as e:
         raise _daily_analysis_route_error("创建每日抓取分析任务失败", e)
 

@@ -7,11 +7,6 @@ from unittest.mock import patch
 HAS_DAILY_ROUTE_DEPS = find_spec("fastapi") is not None and find_spec("pydantic") is not None
 
 
-class FakeBackgroundTasks:
-    def __init__(self):
-        self.tasks = []
-
-
 class DailyAnalysisRoutesHelperTests(unittest.TestCase):
     @unittest.skipUnless(HAS_DAILY_ROUTE_DEPS, "daily analysis route dependencies are not installed")
     def test_daily_analysis_route_error_preserves_status_and_detail_format(self):
@@ -37,7 +32,6 @@ class DailyAnalysisRoutesHelperTests(unittest.TestCase):
             result = daily_analysis_routes._create_daily_report_task_response(
                 "51111112855254",
                 request,
-                FakeBackgroundTasks(),
             )
 
         self.assertEqual(expected, result)
@@ -66,7 +60,6 @@ class DailyAnalysisRoutesHelperTests(unittest.TestCase):
                     daily_analysis_routes.create_daily_report(
                         "group-1",
                         request,
-                        FakeBackgroundTasks(),
                     )
                 )
 
@@ -95,7 +88,6 @@ class DailyAnalysisRoutesHelperTests(unittest.TestCase):
             result = daily_analysis_routes._create_daily_today_task_response(
                 "51111112855254",
                 request,
-                FakeBackgroundTasks(),
             )
 
         self.assertEqual(expected, result)
@@ -126,7 +118,6 @@ class DailyAnalysisRoutesHelperTests(unittest.TestCase):
                     daily_analysis_routes.run_today_report(
                         "group-1",
                         request,
-                        FakeBackgroundTasks(),
                     )
                 )
 
