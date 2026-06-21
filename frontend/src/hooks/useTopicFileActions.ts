@@ -3,8 +3,9 @@
 import { useCallback, useState } from 'react';
 import { toast } from 'sonner';
 
-import { apiClient, FileStatus, getTaskConflictDetail } from '@/lib/api';
+import { apiClient, FileStatus } from '@/lib/api';
 import { useSyncedRef } from '@/hooks/useSyncedRef';
+import { useTaskLauncher } from '@/hooks/useTaskLauncher';
 import { useTaskStatus } from '@/hooks/useTaskStatus';
 
 interface UseTopicFileActionsOptions {
@@ -27,6 +28,10 @@ export function useTopicFileActions({
     taskId: string;
   } | null>(null);
   const downloadingFilesRef = useSyncedRef(downloadingFiles);
+  const { handleTaskCreateError, notifyTaskCreated } = useTaskLauncher({
+    onTaskConflict,
+    onTaskCreated,
+  });
 
   useTaskStatus(activeDownload?.taskId, {
     enabled: Boolean(activeDownload),
@@ -100,23 +105,16 @@ export function useTopicFileActions({
 
     try {
       const response = await apiClient.downloadSingleFile(String(groupId), fileId, fileName, fileSize) as any;
-      toast.success(`文件下载任务已创建: ${response.task_id}`);
-      onTaskCreated(response.task_id);
+      notifyTaskCreated(response.task_id, `文件下载任务已创建: ${response.task_id}`);
       setActiveDownload({ fileId, fileName, fileSize, taskId: response.task_id });
     } catch (error) {
-      const conflict = getTaskConflictDetail(error);
-      if (conflict?.task_id) {
-        toast.error(`已有任务 ${conflict.task_id} 正在运行`);
-        onTaskConflict?.(conflict.task_id);
-      } else {
-        toast.error(`文件下载失败: ${error instanceof Error ? error.message : '未知错误'}`);
-      }
+      handleTaskCreateError(error, '文件下载失败');
       const next = new Set(downloadingFilesRef.current);
       next.delete(fileId);
       downloadingFilesRef.current = next;
       setDownloadingFiles(next);
     }
-  }, [downloadingFilesRef, groupId, onTaskConflict, onTaskCreated]);
+  }, [downloadingFilesRef, groupId, handleTaskCreateError, notifyTaskCreated]);
 
   return {
     fileStatuses,
