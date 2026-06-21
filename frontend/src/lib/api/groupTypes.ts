@@ -45,6 +45,40 @@ export interface FetchMoreCommentsResponse {
   comments_fetched: number;
 }
 
+export interface TopicStatsUpdate {
+  likes_count: number;
+  comments_count: number;
+  reading_count: number;
+  readers_count: number;
+}
+
+export type RefreshTopicResponse =
+  | {
+      success: true;
+      message: string;
+      updated_data: TopicStatsUpdate;
+    }
+  | {
+      success: false;
+      message: string;
+    };
+
+export interface DeleteSingleTopicResponse {
+  success: boolean;
+  message?: string;
+  deleted_topic_id?: number;
+  deleted?: Record<string, number>;
+}
+
+export interface FetchSingleTopicResponse {
+  success: true;
+  topic_id: number;
+  group_id: number;
+  imported: string;
+  comments_fetched: number;
+  message?: string;
+}
+
 export interface Group {
   account?: Account;
   group_id: number;

@@ -65,7 +65,7 @@ export function useTopicActions({
     setRefreshingTopics(new Set(refreshingTopicsRef.current));
 
     try {
-      const response = await apiClient.refreshTopic(topicKey, groupId) as any;
+      const response = await apiClient.refreshTopic(topicKey, groupId);
 
       if (response.success) {
         toast.success(`${response.message} - 点赞:${response.updated_data.likes_count} 评论:${response.updated_data.comments_count}`);
@@ -103,7 +103,7 @@ export function useTopicActions({
     setDeletingTopics((prev) => new Set(prev).add(topicKey));
 
     try {
-      const response = await apiClient.deleteSingleTopic(groupId, topicKey) as any;
+      const response = await apiClient.deleteSingleTopic(groupId, topicKey);
 
       if (response && response.success) {
         setTopics((prev) => prev.filter((topic) => String(topic.topic_id) !== topicKey));

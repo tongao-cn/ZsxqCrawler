@@ -194,7 +194,7 @@ export function useCrawlActions({
     try {
       const topicId = parseInt(singleTopicId);
       const response = await apiClient.fetchSingleTopic(groupId, topicId);
-      toast.success(`已采集话题 ${topicId}（${(response as any)?.imported || 'ok'}）`);
+      toast.success(`已采集话题 ${topicId}（${response.imported || 'ok'}）`);
       reloadAfterTaskCreated(800);
     } catch (error) {
       toast.error(`采集失败: ${error instanceof Error ? error.message : '未知错误'}`);

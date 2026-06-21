@@ -41,12 +41,16 @@ export type {
   Account,
   AccountSelf,
   DeleteGroupResponse,
+  DeleteSingleTopicResponse,
   FetchMoreCommentsResponse,
+  FetchSingleTopicResponse,
   Group,
   GroupStats,
+  RefreshTopicResponse,
   Topic,
   TopicDetail,
   TopicOwner,
+  TopicStatsUpdate,
 } from './groupTypes';
 export type { ApiErrorDetail, Task, TaskCreateResponse, TaskLogsResponse } from './taskTypes';
 

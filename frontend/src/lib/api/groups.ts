@@ -3,9 +3,12 @@ import type {
   Account,
   AccountSelf,
   DeleteGroupResponse,
+  DeleteSingleTopicResponse,
   FetchMoreCommentsResponse,
+  FetchSingleTopicResponse,
   Group,
   GroupStats,
+  RefreshTopicResponse,
   Topic,
   TopicDetail,
 } from './groupTypes';
@@ -102,7 +105,7 @@ export class GroupsApiClient extends FilesApiClient {
     return this.request(`/api/topics/${id}/${groupId}`);
   }
 
-  async refreshTopic(topicId: number | string, groupId: number) {
+  async refreshTopic(topicId: number | string, groupId: number): Promise<RefreshTopicResponse> {
     const id = String(topicId);
     return this.request(`/api/topics/${id}/${groupId}/refresh`, {
       method: 'POST',
@@ -116,13 +119,17 @@ export class GroupsApiClient extends FilesApiClient {
     });
   }
 
-  async deleteSingleTopic(groupId: number | string, topicId: number | string) {
+  async deleteSingleTopic(groupId: number | string, topicId: number | string): Promise<DeleteSingleTopicResponse> {
     return this.request(`/api/topics/${topicId}/${groupId}`, {
       method: 'DELETE',
     });
   }
 
-  async fetchSingleTopic(groupId: number | string, topicId: number | string, fetchComments: boolean = false) {
+  async fetchSingleTopic(
+    groupId: number | string,
+    topicId: number | string,
+    fetchComments: boolean = false,
+  ): Promise<FetchSingleTopicResponse> {
     const id = String(topicId);
     const params = new URLSearchParams();
     if (fetchComments) params.append('fetch_comments', 'true');
