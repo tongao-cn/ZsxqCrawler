@@ -10,11 +10,14 @@ from backend.services.file_downloader_runtime import (
     _safe_remove_file_downloader,
 )
 from backend.services.file_task_lifecycle import (
-    fail_file_task as _fail_file_task_impl,
     file_task_stopped_after_init as _file_task_stopped_after_init_impl,
-    finish_file_task as _finish_file_task_impl,
 )
-from backend.services.task_runtime import add_task_log, is_task_stopped, update_task
+from backend.services.task_runtime import (
+    add_task_log,
+    is_task_stopped,
+    run_workflow,
+    skip_workflow_completion,
+)
 from backend.storage.zsxq_file_database import (
     DownloadFileRecord,
     DownloadFileSelection,
@@ -47,23 +50,6 @@ def _download_result_stat_key(result: Any) -> str:
     if result:
         return "downloaded"
     return "failed"
-
-
-def _fail_file_task(
-    task_id: str,
-    log_message: str,
-    task_message: str,
-    result: Optional[Dict[str, Any]] = None,
-) -> None:
-    _fail_file_task_impl(
-        task_id,
-        log_message,
-        task_message,
-        result,
-        is_stopped=is_task_stopped,
-        add_log=add_task_log,
-        update=update_task,
-    )
 
 
 def _file_task_stopped_after_init(task_id: str) -> bool:
@@ -127,54 +113,35 @@ def _download_record_for_task(
     stats[_download_result_stat_key(result)] += 1
 
 
-def _complete_download_records_if_running(
-    task_id: str,
-    stats: Dict[str, int],
-    completed_message: str,
-) -> None:
-    _finish_file_task_impl(
-        task_id,
-        "completed",
-        completed_message,
-        {"downloaded_files": stats},
-        skip_if_stopped=True,
-        is_stopped=is_task_stopped,
-        update=update_task,
-    )
-
-
 def _complete_download_records_task(
     task_id: str,
     downloader: ZSXQFileDownloader,
     records: Sequence[DownloadFileRecord],
     stats: Dict[str, int],
-    completed_message: str,
-) -> None:
+) -> Any:
     _run_download_records(task_id, downloader, records, stats)
-    _complete_download_records_if_running(task_id, stats, completed_message)
+    if is_task_stopped(task_id):
+        return skip_workflow_completion()
+    return {"downloaded_files": stats}
 
 
 def _complete_empty_download_records_task(
-    task_id: str,
     stats: Dict[str, int],
-    completed_message: str,
-) -> None:
-    _finish_file_task_impl(
-        task_id,
-        "completed",
-        completed_message,
-        {"downloaded_files": stats},
-        update=update_task,
-    )
+) -> Dict[str, Dict[str, int]]:
+    return {"downloaded_files": stats}
 
 
-def run_selected_file_download_task(task_id: str, group_id: str, file_ids: Sequence[int]):
+def _download_selected_file_records(
+    task_id: str,
+    group_id: str,
+    file_ids: Sequence[int],
+    workflow_state: Dict[str, str],
+) -> Any:
     try:
-        update_task(task_id, "running", f"开始下载选中的 {len(file_ids)} 个文件...")
         downloader = _create_file_downloader(task_id, group_id)
 
         if _file_task_stopped_after_init(task_id):
-            return
+            return skip_workflow_completion()
 
         selection = _load_download_file_records(downloader, group_id, file_ids)
         stats = _build_download_task_stats(
@@ -185,12 +152,56 @@ def run_selected_file_download_task(task_id: str, group_id: str, file_ids: Seque
         if selection.missing:
             add_task_log(task_id, f"⚠️ {len(selection.missing)} 个文件未在文件库中找到，已跳过")
         if not selection.records:
-            _complete_empty_download_records_task(task_id, stats, "没有可下载的文件记录")
-            return
+            workflow_state["completed_message"] = "没有可下载的文件记录"
+            return _complete_empty_download_records_task(stats)
 
-        _complete_download_records_task(task_id, downloader, selection.records, stats, "选中文件下载完成")
-    except Exception as e:
-        _fail_file_task(task_id, f"选中文件下载失败: {e}", f"选中文件下载失败: {e}")
+        workflow_state["completed_message"] = "选中文件下载完成"
+        return _complete_download_records_task(task_id, downloader, selection.records, stats)
+    finally:
+        _safe_remove_file_downloader(task_id)
+
+
+def run_selected_file_download_task(task_id: str, group_id: str, file_ids: Sequence[int]):
+    workflow_state = {"completed_message": "选中文件下载完成"}
+
+    run_workflow(
+        task_id,
+        running_message=f"开始下载选中的 {len(file_ids)} 个文件...",
+        completed_message=lambda _result: workflow_state["completed_message"],
+        failure_label="选中文件下载",
+        work=lambda: _download_selected_file_records(task_id, group_id, file_ids, workflow_state),
+    )
+
+
+def _download_filtered_file_records(
+    task_id: str,
+    group_id: str,
+    workflow_state: Dict[str, str],
+    *,
+    status: Optional[str] = None,
+    search: Optional[str] = None,
+    max_files: Optional[int] = None,
+) -> Any:
+    try:
+        downloader = _create_file_downloader(task_id, group_id)
+
+        if _file_task_stopped_after_init(task_id):
+            return skip_workflow_completion()
+
+        records = _load_filtered_download_file_records(
+            downloader,
+            group_id,
+            status=status,
+            search=search,
+            max_files=max_files,
+        )
+        stats = _build_download_task_stats(total_files=len(records), found=len(records))
+        if not records:
+            workflow_state["completed_message"] = "当前筛选下没有可下载文件"
+            return _complete_empty_download_records_task(stats)
+
+        workflow_state["completed_message"] = "筛选结果下载完成"
+        return _complete_download_records_task(task_id, downloader, records, stats)
     finally:
         _safe_remove_file_downloader(task_id)
 
@@ -202,27 +213,19 @@ def run_filtered_file_download_task(
     search: Optional[str] = None,
     max_files: Optional[int] = None,
 ):
-    try:
-        update_task(task_id, "running", "开始下载当前筛选结果...")
-        downloader = _create_file_downloader(task_id, group_id)
+    workflow_state = {"completed_message": "筛选结果下载完成"}
 
-        if _file_task_stopped_after_init(task_id):
-            return
-
-        records = _load_filtered_download_file_records(
-            downloader,
+    run_workflow(
+        task_id,
+        running_message="开始下载当前筛选结果...",
+        completed_message=lambda _result: workflow_state["completed_message"],
+        failure_label="筛选结果下载",
+        work=lambda: _download_filtered_file_records(
+            task_id,
             group_id,
+            workflow_state,
             status=status,
             search=search,
             max_files=max_files,
-        )
-        stats = _build_download_task_stats(total_files=len(records), found=len(records))
-        if not records:
-            _complete_empty_download_records_task(task_id, stats, "当前筛选下没有可下载文件")
-            return
-
-        _complete_download_records_task(task_id, downloader, records, stats, "筛选结果下载完成")
-    except Exception as e:
-        _fail_file_task(task_id, f"筛选结果下载失败: {e}", f"筛选结果下载失败: {e}")
-    finally:
-        _safe_remove_file_downloader(task_id)
+        ),
+    )

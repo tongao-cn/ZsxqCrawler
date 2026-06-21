@@ -2144,109 +2144,107 @@ class FileRoutesHelperTests(unittest.TestCase):
 
     def test_run_selected_file_download_task_stops_after_downloader_creation(self):
         from backend.services.file_workflow_service import run_selected_file_download_task
+        from backend.services.task_runtime import skip_workflow_completion
 
         downloader = object()
 
         with (
+            patch("backend.services.file_download_records_workflow.run_workflow") as run_workflow,
             patch("backend.services.file_download_records_workflow._create_file_downloader", return_value=downloader) as create_downloader,
             patch("backend.services.file_download_records_workflow._load_download_file_records") as load_records,
             patch("backend.services.file_download_records_workflow._run_download_records") as run_download_records,
-            patch("backend.services.file_download_records_workflow.update_task") as update_task,
             patch("backend.services.file_download_records_workflow.add_task_log") as add_task_log,
             patch("backend.services.file_download_records_workflow.is_task_stopped", return_value=True),
             patch("backend.services.file_download_records_workflow._safe_remove_file_downloader") as safe_remove,
         ):
             run_selected_file_download_task("task-1", "123", [101, 102])
+            result = run_workflow.call_args.kwargs["work"]()
 
+        self.assertEqual(("task-1",), run_workflow.call_args.args)
+        self.assertEqual("开始下载选中的 2 个文件...", run_workflow.call_args.kwargs["running_message"])
+        self.assertEqual("选中文件下载", run_workflow.call_args.kwargs["failure_label"])
         create_downloader.assert_called_once_with("task-1", "123")
         load_records.assert_not_called()
         run_download_records.assert_not_called()
-        self.assertEqual(
-            [("task-1", "running", "开始下载选中的 2 个文件...")],
-            [call.args for call in update_task.call_args_list],
-        )
         add_task_log.assert_called_once_with("task-1", "🛑 任务在初始化过程中被停止")
+        self.assertEqual(skip_workflow_completion(), result)
         safe_remove.assert_called_once_with("task-1")
 
     def test_run_filtered_file_download_task_stops_after_downloader_creation(self):
         from backend.services.file_workflow_service import run_filtered_file_download_task
+        from backend.services.task_runtime import skip_workflow_completion
 
         downloader = object()
 
         with (
+            patch("backend.services.file_download_records_workflow.run_workflow") as run_workflow,
             patch("backend.services.file_download_records_workflow._create_file_downloader", return_value=downloader) as create_downloader,
             patch("backend.services.file_download_records_workflow._load_filtered_download_file_records") as load_records,
             patch("backend.services.file_download_records_workflow._run_download_records") as run_download_records,
-            patch("backend.services.file_download_records_workflow.update_task") as update_task,
             patch("backend.services.file_download_records_workflow.add_task_log") as add_task_log,
             patch("backend.services.file_download_records_workflow.is_task_stopped", return_value=True),
             patch("backend.services.file_download_records_workflow._safe_remove_file_downloader") as safe_remove,
         ):
             run_filtered_file_download_task("task-1", "123", status="pending", search="pdf", max_files=1)
+            result = run_workflow.call_args.kwargs["work"]()
 
+        self.assertEqual(("task-1",), run_workflow.call_args.args)
+        self.assertEqual("开始下载当前筛选结果...", run_workflow.call_args.kwargs["running_message"])
+        self.assertEqual("筛选结果下载", run_workflow.call_args.kwargs["failure_label"])
         create_downloader.assert_called_once_with("task-1", "123")
         load_records.assert_not_called()
         run_download_records.assert_not_called()
-        self.assertEqual(
-            [("task-1", "running", "开始下载当前筛选结果...")],
-            [call.args for call in update_task.call_args_list],
-        )
         add_task_log.assert_called_once_with("task-1", "🛑 任务在初始化过程中被停止")
+        self.assertEqual(skip_workflow_completion(), result)
         safe_remove.assert_called_once_with("task-1")
 
     def test_run_selected_file_download_task_skips_completion_when_stopped_after_records(self):
         from backend.services.file_workflow_service import run_selected_file_download_task
+        from backend.services.task_runtime import skip_workflow_completion
 
         downloader = object()
         records = [DownloadFileRecord(101, "Report.pdf", 123, 7)]
 
         with (
+            patch("backend.services.file_download_records_workflow.run_workflow") as run_workflow,
             patch("backend.services.file_download_records_workflow._create_file_downloader", return_value=downloader),
             patch(
                 "backend.services.file_download_records_workflow._load_download_file_records",
                 return_value=DownloadFileSelection(records, [], len(records)),
             ),
             patch("backend.services.file_download_records_workflow._run_download_records") as run_download_records,
-            patch("backend.services.file_download_records_workflow.update_task") as update_task,
             patch("backend.services.file_download_records_workflow.add_task_log"),
             patch("backend.services.file_download_records_workflow.is_task_stopped", side_effect=[False, True]),
             patch("backend.services.file_download_records_workflow._safe_remove_file_downloader") as safe_remove,
         ):
             run_selected_file_download_task("task-1", "123", [101])
+            result = run_workflow.call_args.kwargs["work"]()
 
         run_download_records.assert_called_once()
-        self.assertEqual(
-            [
-                ("task-1", "running", "开始下载选中的 1 个文件..."),
-            ],
-            [call.args for call in update_task.call_args_list],
-        )
+        self.assertEqual(skip_workflow_completion(), result)
         safe_remove.assert_called_once_with("task-1")
 
     def test_run_filtered_file_download_task_skips_completion_when_stopped_after_records(self):
         from backend.services.file_workflow_service import run_filtered_file_download_task
+        from backend.services.task_runtime import skip_workflow_completion
 
         downloader = object()
         records = [DownloadFileRecord(101, "Report.pdf", 123, 7)]
 
         with (
+            patch("backend.services.file_download_records_workflow.run_workflow") as run_workflow,
             patch("backend.services.file_download_records_workflow._create_file_downloader", return_value=downloader),
             patch("backend.services.file_download_records_workflow._load_filtered_download_file_records", return_value=records),
             patch("backend.services.file_download_records_workflow._run_download_records") as run_download_records,
-            patch("backend.services.file_download_records_workflow.update_task") as update_task,
             patch("backend.services.file_download_records_workflow.add_task_log"),
             patch("backend.services.file_download_records_workflow.is_task_stopped", side_effect=[False, True]),
             patch("backend.services.file_download_records_workflow._safe_remove_file_downloader") as safe_remove,
         ):
             run_filtered_file_download_task("task-1", "123", status="pending", search="pdf", max_files=1)
+            result = run_workflow.call_args.kwargs["work"]()
 
         run_download_records.assert_called_once()
-        self.assertEqual(
-            [
-                ("task-1", "running", "开始下载当前筛选结果..."),
-            ],
-            [call.args for call in update_task.call_args_list],
-        )
+        self.assertEqual(skip_workflow_completion(), result)
         safe_remove.assert_called_once_with("task-1")
 
     def test_run_selected_file_download_task_completes_empty_records_with_missing_stats(self):
@@ -2255,40 +2253,37 @@ class FileRoutesHelperTests(unittest.TestCase):
         downloader = object()
 
         with (
+            patch("backend.services.file_download_records_workflow.run_workflow") as run_workflow,
             patch("backend.services.file_download_records_workflow._create_file_downloader", return_value=downloader),
             patch(
                 "backend.services.file_download_records_workflow._load_download_file_records",
                 return_value=DownloadFileSelection([], [101, 102], 2),
             ),
             patch("backend.services.file_download_records_workflow._run_download_records") as run_download_records,
-            patch("backend.services.file_download_records_workflow.update_task") as update_task,
             patch("backend.services.file_download_records_workflow.add_task_log") as add_task_log,
             patch("backend.services.file_download_records_workflow.is_task_stopped", return_value=False),
             patch("backend.services.file_download_records_workflow._safe_remove_file_downloader") as safe_remove,
         ):
             run_selected_file_download_task("task-1", "123", [101, 102, 101])
+            result = run_workflow.call_args.kwargs["work"]()
 
         run_download_records.assert_not_called()
         self.assertEqual(
-            [
-                ("task-1", "running", "开始下载选中的 3 个文件..."),
-                (
-                    "task-1",
-                    "completed",
-                    "没有可下载的文件记录",
-                    {
-                        "downloaded_files": {
-                            "total_files": 2,
-                            "found": 0,
-                            "missing": 2,
-                            "downloaded": 0,
-                            "skipped": 0,
-                            "failed": 0,
-                        }
-                    },
-                ),
-            ],
-            [call.args for call in update_task.call_args_list],
+            "没有可下载的文件记录",
+            run_workflow.call_args.kwargs["completed_message"](result),
+        )
+        self.assertEqual(
+            {
+                "downloaded_files": {
+                    "total_files": 2,
+                    "found": 0,
+                    "missing": 2,
+                    "downloaded": 0,
+                    "skipped": 0,
+                    "failed": 0,
+                }
+            },
+            result,
         )
         add_task_log.assert_called_once_with("task-1", "⚠️ 2 个文件未在文件库中找到，已跳过")
         safe_remove.assert_called_once_with("task-1")
@@ -2299,37 +2294,34 @@ class FileRoutesHelperTests(unittest.TestCase):
         downloader = object()
 
         with (
+            patch("backend.services.file_download_records_workflow.run_workflow") as run_workflow,
             patch("backend.services.file_download_records_workflow._create_file_downloader", return_value=downloader),
             patch("backend.services.file_download_records_workflow._load_filtered_download_file_records", return_value=[]),
             patch("backend.services.file_download_records_workflow._run_download_records") as run_download_records,
-            patch("backend.services.file_download_records_workflow.update_task") as update_task,
             patch("backend.services.file_download_records_workflow.add_task_log") as add_task_log,
             patch("backend.services.file_download_records_workflow.is_task_stopped", return_value=False),
             patch("backend.services.file_download_records_workflow._safe_remove_file_downloader") as safe_remove,
         ):
             run_filtered_file_download_task("task-1", "123", status="pending", search="pdf", max_files=1)
+            result = run_workflow.call_args.kwargs["work"]()
 
         run_download_records.assert_not_called()
         self.assertEqual(
-            [
-                ("task-1", "running", "开始下载当前筛选结果..."),
-                (
-                    "task-1",
-                    "completed",
-                    "当前筛选下没有可下载文件",
-                    {
-                        "downloaded_files": {
-                            "total_files": 0,
-                            "found": 0,
-                            "missing": 0,
-                            "downloaded": 0,
-                            "skipped": 0,
-                            "failed": 0,
-                        }
-                    },
-                ),
-            ],
-            [call.args for call in update_task.call_args_list],
+            "当前筛选下没有可下载文件",
+            run_workflow.call_args.kwargs["completed_message"](result),
+        )
+        self.assertEqual(
+            {
+                "downloaded_files": {
+                    "total_files": 0,
+                    "found": 0,
+                    "missing": 0,
+                    "downloaded": 0,
+                    "skipped": 0,
+                    "failed": 0,
+                }
+            },
+            result,
         )
         add_task_log.assert_not_called()
         safe_remove.assert_called_once_with("task-1")
@@ -2342,14 +2334,15 @@ class FileRoutesHelperTests(unittest.TestCase):
         with (
             patch("backend.services.file_download_records_workflow._run_download_records") as run_download_records,
             patch("backend.services.file_download_records_workflow.is_task_stopped", return_value=False),
-            patch("backend.services.file_download_records_workflow.update_task") as update_task,
         ):
-            _complete_download_records_task("task-1", downloader, records, stats, "下载完成")
+            result = _complete_download_records_task("task-1", downloader, records, stats)
 
         run_download_records.assert_called_once_with("task-1", downloader, records, stats)
-        update_task.assert_called_once_with("task-1", "completed", "下载完成", {"downloaded_files": stats})
+        self.assertEqual({"downloaded_files": stats}, result)
 
     def test_complete_download_records_task_skips_completion_when_stopped_after_records(self):
+        from backend.services.task_runtime import skip_workflow_completion
+
         downloader = object()
         records = [DownloadFileRecord(101, "Report.pdf", 123, 7)]
         stats = _build_download_task_stats(total_files=1, found=1)
@@ -2357,12 +2350,11 @@ class FileRoutesHelperTests(unittest.TestCase):
         with (
             patch("backend.services.file_download_records_workflow._run_download_records") as run_download_records,
             patch("backend.services.file_download_records_workflow.is_task_stopped", return_value=True),
-            patch("backend.services.file_download_records_workflow.update_task") as update_task,
         ):
-            _complete_download_records_task("task-1", downloader, records, stats, "下载完成")
+            result = _complete_download_records_task("task-1", downloader, records, stats)
 
         run_download_records.assert_called_once_with("task-1", downloader, records, stats)
-        update_task.assert_not_called()
+        self.assertEqual(skip_workflow_completion(), result)
 
     def test_run_download_records_updates_stats_logs_and_payloads(self):
         class FakeDownloader:
