@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Any, Dict, Optional
+from inspect import isawaitable
+from typing import Any, Callable, Dict, Optional
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
@@ -46,6 +47,28 @@ def _columns_route_error(message: str, error: Exception) -> HTTPException:
     return task_launch_route_error(message, error)
 
 
+async def _run_columns_route(
+    operation: Callable[[], Any],
+    failure_message: str,
+    *,
+    passthrough_http: bool = False,
+    log_exception_message: str | None = None,
+) -> Any:
+    try:
+        result = operation()
+        if isawaitable(result):
+            return await result
+        return result
+    except HTTPException as exc:
+        if passthrough_http:
+            raise
+        raise _columns_route_error(failure_message, exc) from exc
+    except Exception as exc:
+        if log_exception_message:
+            log_exception(log_exception_message)
+        raise _columns_route_error(failure_message, exc) from exc
+
+
 @router.get("/groups/{group_id}/columns/summary")
 async def get_group_columns_summary(group_id: str):
     """获取群组专栏摘要信息，检查是否存在专栏内容"""
@@ -59,10 +82,7 @@ async def _group_columns(group_id: str) -> Dict[str, Any]:
 @router.get("/groups/{group_id}/columns")
 async def get_group_columns(group_id: str):
     """获取群组的专栏目录列表（从本地数据库）"""
-    try:
-        return await _group_columns(group_id)
-    except Exception as exc:
-        raise _columns_route_error("获取专栏目录失败", exc) from exc
+    return await _run_columns_route(lambda: _group_columns(group_id), "获取专栏目录失败")
 
 
 async def _column_topics(group_id: str, column_id: int) -> Dict[str, Any]:
@@ -72,10 +92,7 @@ async def _column_topics(group_id: str, column_id: int) -> Dict[str, Any]:
 @router.get("/groups/{group_id}/columns/{column_id}/topics")
 async def get_column_topics(group_id: str, column_id: int):
     """获取专栏下的文章列表（从本地数据库）"""
-    try:
-        return await _column_topics(group_id, column_id)
-    except Exception as exc:
-        raise _columns_route_error("获取专栏文章列表失败", exc) from exc
+    return await _run_columns_route(lambda: _column_topics(group_id, column_id), "获取专栏文章列表失败")
 
 
 async def _column_topic_detail_or_404(group_id: str, topic_id: int) -> Dict[str, Any]:
@@ -88,23 +105,21 @@ async def _column_topic_detail_or_404(group_id: str, topic_id: int) -> Dict[str,
 @router.get("/groups/{group_id}/columns/topics/{topic_id}")
 async def get_column_topic_detail(group_id: str, topic_id: int):
     """获取专栏文章详情（从本地数据库）"""
-    try:
-        return await _column_topic_detail_or_404(group_id, topic_id)
-    except HTTPException:
-        raise
-    except Exception as exc:
-        raise _columns_route_error("获取文章详情失败", exc) from exc
+    return await _run_columns_route(
+        lambda: _column_topic_detail_or_404(group_id, topic_id),
+        "获取文章详情失败",
+        passthrough_http=True,
+    )
 
 
 @router.post("/groups/{group_id}/columns/fetch")
 async def fetch_group_columns(group_id: str, request: ColumnsSettingsRequest):
     """采集群组的所有专栏内容（后台任务）"""
-    try:
-        return _create_columns_fetch_task_response(group_id, request)
-    except HTTPException:
-        raise
-    except Exception as exc:
-        raise _columns_route_error("启动专栏采集失败", exc) from exc
+    return await _run_columns_route(
+        lambda: _create_columns_fetch_task_response(group_id, request),
+        "启动专栏采集失败",
+        passthrough_http=True,
+    )
 
 
 async def _columns_stats(group_id: str) -> Dict[str, Any]:
@@ -114,10 +129,7 @@ async def _columns_stats(group_id: str) -> Dict[str, Any]:
 @router.get("/groups/{group_id}/columns/stats")
 async def get_columns_stats(group_id: str):
     """获取专栏统计信息"""
-    try:
-        return await _columns_stats(group_id)
-    except Exception as exc:
-        raise _columns_route_error("获取专栏统计失败", exc) from exc
+    return await _run_columns_route(lambda: _columns_stats(group_id), "获取专栏统计失败")
 
 
 async def _delete_all_columns(group_id: str) -> Dict[str, Any]:
@@ -127,10 +139,7 @@ async def _delete_all_columns(group_id: str) -> Dict[str, Any]:
 @router.delete("/groups/{group_id}/columns/all")
 async def delete_all_columns(group_id: str):
     """删除群组的所有专栏数据"""
-    try:
-        return await _delete_all_columns(group_id)
-    except Exception as exc:
-        raise _columns_route_error("删除专栏数据失败", exc) from exc
+    return await _run_columns_route(lambda: _delete_all_columns(group_id), "删除专栏数据失败")
 
 
 async def _column_topic_full_comments(group_id: str, topic_id: int) -> Dict[str, Any]:
@@ -140,10 +149,9 @@ async def _column_topic_full_comments(group_id: str, topic_id: int) -> Dict[str,
 @router.get("/groups/{group_id}/columns/topics/{topic_id}/comments")
 async def get_column_topic_full_comments(group_id: str, topic_id: int):
     """获取专栏文章的完整评论列表（从API实时获取并持久化到数据库）"""
-    try:
-        return await _column_topic_full_comments(group_id, topic_id)
-    except HTTPException:
-        raise
-    except Exception as exc:
-        log_exception(f"获取专栏完整评论失败: topic_id={topic_id}")
-        raise _columns_route_error("获取完整评论失败", exc) from exc
+    return await _run_columns_route(
+        lambda: _column_topic_full_comments(group_id, topic_id),
+        "获取完整评论失败",
+        passthrough_http=True,
+        log_exception_message=f"获取专栏完整评论失败: topic_id={topic_id}",
+    )
