@@ -2,6 +2,7 @@ import asyncio
 import os
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from backend.services.columns_video_download_service import download_column_video
 
@@ -75,6 +76,43 @@ class ColumnsVideoDownloadServiceTests(unittest.TestCase):
                 )
 
         self.assertEqual([], db.status_updates)
+
+    def test_download_column_video_writes_m3u8_link_file_when_ffmpeg_missing(self):
+        db = FakeColumnsDb()
+        m3u8_url = "https://example.test/video.m3u8"
+        response = FakeResponse({"succeeded": True, "resp_data": {"url": m3u8_url}})
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            with (
+                patch("backend.services.columns_video_download_service.subprocess.run", side_effect=FileNotFoundError),
+                self.assertRaisesRegex(Exception, "ffmpeg未安装"),
+            ):
+                asyncio.run(
+                    download_column_video(
+                        db=db,
+                        group_dir=tmp_dir,
+                        headers={},
+                        request_get=lambda *args, **kwargs: response,
+                        sleep=no_sleep,
+                        topic_id=456,
+                        video_duration=10,
+                        video_id=123,
+                        video_size=5,
+                    )
+                )
+
+            m3u8_link_file = os.path.join(tmp_dir, "column_videos", "video_123.m3u8.txt")
+            with open(m3u8_link_file, encoding="utf-8") as file_obj:
+                link_text = file_obj.read()
+
+        self.assertIn(f"M3U8 URL: {m3u8_url}", link_text)
+        self.assertEqual(
+            [
+                (123, "downloading", m3u8_url, None),
+                (123, "pending_manual", m3u8_url, None),
+            ],
+            db.status_updates,
+        )
 
 
 if __name__ == "__main__":

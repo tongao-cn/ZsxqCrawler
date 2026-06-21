@@ -11,6 +11,7 @@ from typing import Any, Callable
 import requests
 
 from backend.services.columns_remote_service import redact_response_for_log, retry_wait_seconds
+from backend.services.file_local_paths import column_video_m3u8_link_path, column_video_target_path
 
 
 async def download_column_video(
@@ -30,9 +31,8 @@ async def download_column_video(
     video_size: int,
     topic_id: int,
 ) -> str:
-    videos_dir = os.path.join(group_dir, "column_videos")
-    video_filename = f"video_{video_id}.mp4"
-    local_path = os.path.join(videos_dir, video_filename)
+    _video_filename, local_path = column_video_target_path(group_dir, video_id)
+    videos_dir = os.path.dirname(local_path)
 
     if os.path.exists(local_path):
         existing_size = os.path.getsize(local_path)
@@ -216,7 +216,7 @@ async def download_column_video(
 
     except FileNotFoundError:
         db.update_video_download_status(video_id, "pending_manual", m3u8_url)
-        m3u8_link_file = os.path.join(videos_dir, f"video_{video_id}.m3u8.txt")
+        _m3u8_filename, m3u8_link_file = column_video_m3u8_link_path(group_dir, video_id)
         with open(m3u8_link_file, "w", encoding="utf-8") as file_obj:
             file_obj.write(f"Video ID: {video_id}\n")
             file_obj.write(f"Duration: {video_duration} seconds\n")

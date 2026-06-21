@@ -37,6 +37,26 @@ class FileLocalPathTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 column_download_target_path(temp_dir, "..", 101)
 
+    def test_column_video_target_path_uses_video_id_under_column_dir(self):
+        from backend.services.file_local_paths import column_video_target_path
+
+        with TemporaryDirectory() as temp_dir:
+            safe_filename, target_path = column_video_target_path(temp_dir, 123)
+            expected_path = (Path(temp_dir) / "column_videos" / "video_123.mp4").resolve()
+
+        self.assertEqual("video_123.mp4", safe_filename)
+        self.assertEqual(expected_path, Path(target_path))
+
+    def test_column_video_m3u8_link_path_uses_video_id_under_column_dir(self):
+        from backend.services.file_local_paths import column_video_m3u8_link_path
+
+        with TemporaryDirectory() as temp_dir:
+            safe_filename, target_path = column_video_m3u8_link_path(temp_dir, 123)
+            expected_path = (Path(temp_dir) / "column_videos" / "video_123.m3u8.txt").resolve()
+
+        self.assertEqual("video_123.m3u8.txt", safe_filename)
+        self.assertEqual(expected_path, Path(target_path))
+
     def test_resolve_local_file_path_prefers_existing_stored_path(self):
         from backend.services.file_local_paths import resolve_local_file_path
 

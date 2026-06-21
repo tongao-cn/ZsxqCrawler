@@ -34,6 +34,16 @@ def download_target_path_with_fallback(download_dir: str, file_name: Any, fallba
     return safe_filename, os.path.join(download_dir, safe_filename)
 
 
+def _resolve_child_path(base_dir: str, child_name: str, label: str) -> str:
+    base_path = Path(base_dir).resolve()
+    resolved_child_path = Path(base_dir, child_name).resolve()
+
+    if resolved_child_path == base_path or base_path not in resolved_child_path.parents:
+        raise ValueError(f"{label} path escapes target directory")
+
+    return str(resolved_child_path)
+
+
 def group_download_dir(group_id: str) -> str:
     return os.path.join(get_db_path_manager().get_group_dir(group_id), "downloads")
 
@@ -44,14 +54,26 @@ def expected_group_download_path(group_id: str, file_name: Any, file_id: Any) ->
 
 def column_download_target_path(group_dir: str, file_name: Any, file_id: Any) -> tuple[str, str]:
     download_dir = os.path.join(group_dir, "column_downloads")
-    safe_filename, target_path = download_target_path(download_dir, file_name, file_id)
-    base_path = Path(download_dir).resolve()
-    resolved_target_path = Path(target_path).resolve()
+    safe_filename = safe_download_filename(file_name, file_id)
+    target_path = _resolve_child_path(download_dir, safe_filename, "column download target")
 
-    if resolved_target_path == base_path or base_path not in resolved_target_path.parents:
-        raise ValueError("column download target path escapes column_downloads")
+    return safe_filename, target_path
 
-    return safe_filename, str(resolved_target_path)
+
+def column_video_target_path(group_dir: str, video_id: Any) -> tuple[str, str]:
+    video_dir = os.path.join(group_dir, "column_videos")
+    safe_filename = safe_download_filename(f"video_{video_id}.mp4", video_id)
+    target_path = _resolve_child_path(video_dir, safe_filename, "column video target")
+
+    return safe_filename, target_path
+
+
+def column_video_m3u8_link_path(group_dir: str, video_id: Any) -> tuple[str, str]:
+    video_dir = os.path.join(group_dir, "column_videos")
+    safe_filename = safe_download_filename(f"video_{video_id}.m3u8.txt", video_id)
+    target_path = _resolve_child_path(video_dir, safe_filename, "column video m3u8 link")
+
+    return safe_filename, target_path
 
 
 def resolve_local_file_path(
