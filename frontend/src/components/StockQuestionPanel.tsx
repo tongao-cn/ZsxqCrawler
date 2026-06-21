@@ -32,7 +32,7 @@ export default function StockQuestionPanel({ groupId, onTaskCreated }: StockQues
   const normalizedQuestion = question.trim();
   const canSubmit = normalizedQuestion.length > 0;
   const answerSummary = useMemo(() => result?.summary_markdown?.trim() || '', [result]);
-  const { handleTaskCreateError, notifyTaskCreated } = useTaskLauncher({
+  const { handleTaskCreateError, notifyTaskLaunch } = useTaskLauncher({
     onTaskCreated,
   });
 
@@ -61,14 +61,14 @@ export default function StockQuestionPanel({ groupId, onTaskCreated }: StockQues
     try {
       setCreatingTask(true);
       const response = await apiClient.analyzeStockQuestion(groupId, normalizedQuestion);
-      setActiveTaskId(response.task_id);
-      notifyTaskCreated(response.task_id, `A股问答任务已创建: ${response.task_id}`);
+      const taskId = notifyTaskLaunch(response, (createdTaskId) => `A股问答任务已创建: ${createdTaskId}`);
+      setActiveTaskId(taskId);
     } catch (error) {
       handleTaskCreateError(error, '创建A股问答任务失败');
     } finally {
       setCreatingTask(false);
     }
-  }, [canSubmit, groupId, handleTaskCreateError, normalizedQuestion, notifyTaskCreated]);
+  }, [canSubmit, groupId, handleTaskCreateError, normalizedQuestion, notifyTaskLaunch]);
 
   useTaskStatus(activeTaskId, {
     enabled: Boolean(activeTaskId),

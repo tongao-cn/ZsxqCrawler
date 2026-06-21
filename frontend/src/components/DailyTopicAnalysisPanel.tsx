@@ -36,7 +36,7 @@ export default function DailyTopicAnalysisPanel({
   const [selectedConcept, setSelectedConcept] = useState<string | null>(null);
   const [selectedConceptDetail, setSelectedConceptDetail] = useState<string | null>(null);
   const [onlyRecommendationHits, setOnlyRecommendationHits] = useState(false);
-  const { handleTaskCreateError, notifyTaskCreated } = useTaskLauncher({
+  const { handleTaskCreateError, notifyTaskLaunch } = useTaskLauncher({
     onTaskCreated,
   });
   const {
@@ -105,8 +105,7 @@ export default function DailyTopicAnalysisPanel({
       const response = await apiClient.createDailyTopicAnalysis(groupId, {
         date: reportDate,
       });
-      const taskId = response.task_id;
-      notifyTaskCreated(taskId, `每日 AI 总结任务已创建: ${taskId}`);
+      notifyTaskLaunch(response, (taskId) => `每日 AI 总结任务已创建: ${taskId}`);
     } catch (error) {
       handleTaskCreateError(error, '创建每日 AI 总结任务失败');
     } finally {
@@ -120,7 +119,7 @@ export default function DailyTopicAnalysisPanel({
       const response = await apiClient.createDailyStockConcepts(groupId, {
         date: reportDate,
       });
-      notifyTaskCreated(response.task_id, `股票概念视图生成任务已创建: ${response.task_id}`);
+      notifyTaskLaunch(response, (taskId) => `股票概念视图生成任务已创建: ${taskId}`);
     } catch (error) {
       handleTaskCreateError(error, '创建股票概念视图任务失败');
     } finally {

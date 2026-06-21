@@ -31,7 +31,7 @@ export default function GroupFileAnalysisPanel({
   const [selectedFile, setSelectedFile] = useState<FileItem | null>(null);
   const [analysisLoading, setAnalysisLoading] = useState(false);
   const [analysis, setAnalysis] = useState<FileAIAnalysis | null>(null);
-  const { handleTaskCreateError, notifyTaskCreated } = useTaskLauncher({
+  const { handleTaskCreateError, notifyTaskLaunch } = useTaskLauncher({
     onTaskConflict,
     onTaskCreated,
   });
@@ -114,8 +114,8 @@ export default function GroupFileAnalysisPanel({
 
       taskState.markFileAnalyzing(file.file_id, true);
       const response = await apiClient.analyzeFileTask(groupId, file.file_id, force);
-      taskState.trackAnalysisTask(file.file_id, response.task_id);
-      notifyTaskCreated(response.task_id, `文件分析任务已创建: ${response.task_id}`);
+      const taskId = notifyTaskLaunch(response, (createdTaskId) => `文件分析任务已创建: ${createdTaskId}`);
+      taskState.trackAnalysisTask(file.file_id, taskId);
     } catch (error) {
       handleTaskCreateError(error, '文件 AI 分析失败');
       setAnalysis({
@@ -216,7 +216,7 @@ export default function GroupFileAnalysisPanel({
         analyzingFileIds={taskState.analyzingFileIds}
         fileTasks={taskState.fileTasks}
         onOpenAnalysis={(file, force) => void openAnalysisDialog(file, force)}
-        onDownloadFile={(file) => void taskState.handleDownloadFile(file, () => loadFiles(page))}
+        onDownloadFile={(file) => void taskState.handleDownloadFile(file)}
       />
 
       <GroupFilePagination

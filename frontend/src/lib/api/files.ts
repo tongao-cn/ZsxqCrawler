@@ -8,7 +8,7 @@ export class FilesApiClient extends AnalysisApiClient {
                      downloadInterval: number = 1.0, longSleepInterval: number = 60.0,
                      filesPerBatch: number = 10, downloadIntervalMin?: number,
                      downloadIntervalMax?: number, longSleepIntervalMin?: number,
-                     longSleepIntervalMax?: number) {
+                     longSleepIntervalMax?: number): Promise<TaskCreateResponse> {
     const requestBody: any = {
       max_files: maxFiles,
       sort_by: sortBy,
@@ -42,7 +42,7 @@ export class FilesApiClient extends AnalysisApiClient {
     downloadIntervalMax?: number;
     longSleepIntervalMin?: number;
     longSleepIntervalMax?: number;
-  }) {
+  }): Promise<TaskCreateResponse> {
     const requestBody: any = {
       sort_by: 'create_time',
       start_time: params.startTime,
@@ -103,7 +103,7 @@ export class FilesApiClient extends AnalysisApiClient {
     });
   }
 
-  async downloadSingleFile(groupId: string, fileId: number, fileName?: string, fileSize?: number) {
+  async downloadSingleFile(groupId: string, fileId: number, fileName?: string, fileSize?: number): Promise<TaskCreateResponse> {
     const params = new URLSearchParams();
     if (fileName) params.append('file_name', fileName);
     if (fileSize !== undefined) params.append('file_size', fileSize.toString());

@@ -39,7 +39,7 @@ export function useGroupFileTasks({
   const [batchAnalysisTaskId, setBatchAnalysisTaskId] = useState<string | null>(null);
   const [batchAnalysisFileIds, setBatchAnalysisFileIds] = useState<number[]>([]);
   const [batchAnalyzing, setBatchAnalyzing] = useState(false);
-  const { handleTaskCreateError, notifyTaskCreated } = useTaskLauncher({
+  const { handleTaskCreateError, notifyTaskLaunch } = useTaskLauncher({
     onTaskConflict,
     onTaskCreated,
   });
@@ -206,7 +206,7 @@ export function useGroupFileTasks({
     await refreshFiles();
   }, [batchAnalysisFileIds]);
 
-  const handleDownloadFile = useCallback(async (file: FileItem, refreshFiles: RefreshFiles) => {
+  const handleDownloadFile = useCallback(async (file: FileItem) => {
     if (downloadingFiles.has(file.file_id)) {
       return;
     }
@@ -218,16 +218,9 @@ export function useGroupFileTasks({
         file.file_id,
         file.name,
         file.size,
-      ) as { task_id?: string };
-
-      if (response.task_id) {
-        notifyTaskCreated(response.task_id, `文件下载任务已创建: ${response.task_id}`);
-        updateFileTaskStatus(file.file_id, response.task_id, 'pending', '下载任务已创建');
-      } else {
-        toast.success('文件下载任务已创建');
-        await refreshFiles();
-        markFileDownloading(file.file_id, false);
-      }
+      );
+      const taskId = notifyTaskLaunch(response, (createdTaskId) => `文件下载任务已创建: ${createdTaskId}`);
+      updateFileTaskStatus(file.file_id, taskId, 'pending', '下载任务已创建');
     } catch (error) {
       handleTaskCreateError(error, '文件下载失败');
       markFileDownloading(file.file_id, false);
@@ -237,7 +230,7 @@ export function useGroupFileTasks({
     groupId,
     handleTaskCreateError,
     markFileDownloading,
-    notifyTaskCreated,
+    notifyTaskLaunch,
     updateFileTaskStatus,
   ]);
 
@@ -256,8 +249,8 @@ export function useGroupFileTasks({
 
     try {
       const response = await apiClient.downloadSelectedFiles(groupId, fileIds);
-      notifyTaskCreated(response.task_id, `当前页下载任务已创建: ${response.task_id}`);
-      setBatchDownloadTaskId(response.task_id);
+      const taskId = notifyTaskLaunch(response, (createdTaskId) => `当前页下载任务已创建: ${createdTaskId}`);
+      setBatchDownloadTaskId(taskId);
       setBatchDownloadFileIds(fileIds);
     } catch (error) {
       handleTaskCreateError(error, '当前页下载任务创建失败');
@@ -267,7 +260,7 @@ export function useGroupFileTasks({
         return next;
       });
     }
-  }, [groupId, handleTaskCreateError, notifyTaskCreated]);
+  }, [groupId, handleTaskCreateError, notifyTaskLaunch]);
 
   const handleDownloadFilteredResults = useCallback(async (filters: {
     searchQuery: string;
@@ -282,13 +275,13 @@ export function useGroupFileTasks({
         status: filters.statusFilter === 'all' ? undefined : filters.statusFilter,
         search: filters.searchQuery || undefined,
       });
-      notifyTaskCreated(response.task_id, `筛选结果下载任务已创建: ${response.task_id}`);
-      setBatchDownloadTaskId(response.task_id);
+      const taskId = notifyTaskLaunch(response, (createdTaskId) => `筛选结果下载任务已创建: ${createdTaskId}`);
+      setBatchDownloadTaskId(taskId);
       setBatchDownloadFileIds([]);
     } catch (error) {
       handleTaskCreateError(error, '筛选结果下载任务创建失败');
     }
-  }, [batchDownloadTaskId, groupId, handleTaskCreateError, notifyTaskCreated]);
+  }, [batchDownloadTaskId, groupId, handleTaskCreateError, notifyTaskLaunch]);
 
   const handleBatchAnalyzeCurrentPage = useCallback(async (pendingAnalysisFiles: FileItem[]) => {
     if (pendingAnalysisFiles.length === 0 || batchAnalyzing) {
@@ -305,8 +298,8 @@ export function useGroupFileTasks({
 
     try {
       const response = await apiClient.analyzeSelectedFiles(groupId, fileIds, false);
-      notifyTaskCreated(response.task_id, `当前页分析任务已创建: ${response.task_id}`);
-      setBatchAnalysisTaskId(response.task_id);
+      const taskId = notifyTaskLaunch(response, (createdTaskId) => `当前页分析任务已创建: ${createdTaskId}`);
+      setBatchAnalysisTaskId(taskId);
       setBatchAnalysisFileIds(fileIds);
     } catch (error) {
       handleTaskCreateError(error, '当前页分析任务创建失败');
@@ -317,7 +310,7 @@ export function useGroupFileTasks({
         return next;
       });
     }
-  }, [batchAnalyzing, groupId, handleTaskCreateError, notifyTaskCreated]);
+  }, [batchAnalyzing, groupId, handleTaskCreateError, notifyTaskLaunch]);
 
   return {
     analysisTasks,

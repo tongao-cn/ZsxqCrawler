@@ -28,7 +28,7 @@ export function useTopicFileActions({
     taskId: string;
   } | null>(null);
   const downloadingFilesRef = useSyncedRef(downloadingFiles);
-  const { handleTaskCreateError, notifyTaskCreated } = useTaskLauncher({
+  const { handleTaskCreateError, notifyTaskLaunch } = useTaskLauncher({
     onTaskConflict,
     onTaskCreated,
   });
@@ -104,9 +104,9 @@ export function useTopicFileActions({
     setDownloadingFiles(new Set(downloadingFilesRef.current));
 
     try {
-      const response = await apiClient.downloadSingleFile(String(groupId), fileId, fileName, fileSize) as any;
-      notifyTaskCreated(response.task_id, `文件下载任务已创建: ${response.task_id}`);
-      setActiveDownload({ fileId, fileName, fileSize, taskId: response.task_id });
+      const response = await apiClient.downloadSingleFile(String(groupId), fileId, fileName, fileSize);
+      const taskId = notifyTaskLaunch(response, (createdTaskId) => `文件下载任务已创建: ${createdTaskId}`);
+      setActiveDownload({ fileId, fileName, fileSize, taskId });
     } catch (error) {
       handleTaskCreateError(error, '文件下载失败');
       const next = new Set(downloadingFilesRef.current);
@@ -114,7 +114,7 @@ export function useTopicFileActions({
       downloadingFilesRef.current = next;
       setDownloadingFiles(next);
     }
-  }, [downloadingFilesRef, groupId, handleTaskCreateError, notifyTaskCreated]);
+  }, [downloadingFilesRef, groupId, handleTaskCreateError, notifyTaskLaunch]);
 
   return {
     fileStatuses,

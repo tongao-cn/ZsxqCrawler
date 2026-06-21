@@ -147,7 +147,7 @@ export function useStockTopicAnalysisPanel({
   const active = Boolean(activeBatchAnalysis);
   const analyzeButtonLabel = getAnalyzeButtonLabel(results, parsedStockNames.length, active, analyzing);
   const allResultsSelected = results.length > 0 && selectedResults.length === results.length;
-  const { handleTaskCreateError, notifyTaskCreated } = useTaskLauncher({
+  const { handleTaskCreateError, notifyTaskLaunch } = useTaskLauncher({
     onTaskCreated,
   });
 
@@ -201,14 +201,14 @@ export function useStockTopicAnalysisPanel({
     try {
       setAnalyzing(true);
       const response = await apiClient.analyzeStockTopicsBatch(groupId, stockNames);
-      setActiveBatchAnalysis({ taskId: response.task_id, stockNames: [...stockNames] });
-      notifyTaskCreated(response.task_id, `${successPrefix}: ${response.task_id}`);
+      const taskId = notifyTaskLaunch(response, (createdTaskId) => `${successPrefix}: ${createdTaskId}`);
+      setActiveBatchAnalysis({ taskId, stockNames: [...stockNames] });
     } catch (error) {
       handleTaskCreateError(error, '创建分析任务失败');
     } finally {
       setAnalyzing(false);
     }
-  }, [groupId, handleTaskCreateError, notifyTaskCreated]);
+  }, [groupId, handleTaskCreateError, notifyTaskLaunch]);
 
   const handleSearch = useCallback(async () => {
     if (parsedStockNames.length === 0) {
