@@ -1,39 +1,43 @@
 import unittest
 from pathlib import Path
 
-from backend.services.tdx_a_share_export_service import (
+from backend.services.tdx_a_share_export_plan import (
     DEFAULT_TDX_EXPORT_SPECS,
     DEFAULT_TDX_EXPORT_WINDOWS,
     TdxBlock,
+    build_block_export_result,
+    build_export_block_name,
+    build_pending_block_sync,
+    build_ranking_block_name,
+    build_tdx_export_plan,
+    build_tdx_export_ranking_selection,
+    collect_ranking_companies,
+    ensure_tdx_api_blocks,
+    next_tdx_block_code,
+    normalize_tdx_api_code,
+)
+from backend.services.tdx_a_share_export_service import (
     TdxBlockClient,
-    _build_block_export_result,
-    _build_export_block_name,
     _build_export_result,
-    _build_pending_block_sync,
-    _build_ranking_block_name,
-    _collect_ranking_companies,
-    _ensure_tdx_api_blocks,
-    _next_tdx_block_code,
-    _normalize_tdx_api_code,
     resolve_company_codes,
 )
 
 
 class TdxAShareExportServiceHelperTests(unittest.TestCase):
     def test_build_ranking_block_name_uses_group_prefix_without_recommendation_pool_suffix(self):
-        self.assertEqual(_build_ranking_block_name(3, "纪要又要"), "纪要又要-3日")
+        self.assertEqual(build_ranking_block_name(3, "纪要又要"), "纪要又要-3日")
 
     def test_build_ranking_block_name_keeps_legacy_name_without_group_name(self):
-        self.assertEqual(_build_ranking_block_name(3), "3日推荐池")
-        self.assertEqual(_build_ranking_block_name(30), "30日推荐池")
+        self.assertEqual(build_ranking_block_name(3), "3日推荐池")
+        self.assertEqual(build_ranking_block_name(30), "30日推荐池")
 
     def test_default_tdx_export_uses_coverage_pool_specs(self):
         self.assertEqual(((30, 300), (14, 150), (7, 100)), DEFAULT_TDX_EXPORT_SPECS)
         self.assertEqual((30, 14, 7), DEFAULT_TDX_EXPORT_WINDOWS)
 
     def test_build_export_block_name_includes_top_n(self):
-        self.assertEqual(_build_export_block_name(30, 300, "纪要又要"), "纪要又要-30日Top300")
-        self.assertEqual(_build_export_block_name(14, 150), "14日Top150")
+        self.assertEqual(build_export_block_name(30, 300, "纪要又要"), "纪要又要-30日Top300")
+        self.assertEqual(build_export_block_name(14, 150), "14日Top150")
 
     def test_next_tdx_block_code_uses_next_available_zx_number(self):
         records = [
@@ -42,7 +46,7 @@ class TdxAShareExportServiceHelperTests(unittest.TestCase):
             {"name": "其他", "code": "OTHER"},
         ]
 
-        self.assertEqual("ZX010", _next_tdx_block_code(records))
+        self.assertEqual("ZX010", next_tdx_block_code(records))
 
     def test_collect_ranking_companies_preserves_existing_filtering(self):
         rankings = {
@@ -57,7 +61,7 @@ class TdxAShareExportServiceHelperTests(unittest.TestCase):
             ],
         }
 
-        self.assertEqual(_collect_ranking_companies(rankings, [3, 7]), ["平安银行", "万科A"])
+        self.assertEqual(collect_ranking_companies(rankings, [3, 7]), ["平安银行", "万科A"])
 
     def test_resolve_company_codes_handles_a_share_name_markers_and_short_names(self):
         records = [
@@ -91,11 +95,11 @@ class TdxAShareExportServiceHelperTests(unittest.TestCase):
         self.assertEqual({}, ambiguous)
 
     def test_normalize_tdx_api_code_keeps_official_code_shape(self):
-        self.assertEqual("000001.SZ", _normalize_tdx_api_code("000001.sz"))
-        self.assertEqual("920522.BJ", _normalize_tdx_api_code("920522.BJ"))
+        self.assertEqual("000001.SZ", normalize_tdx_api_code("000001.sz"))
+        self.assertEqual("920522.BJ", normalize_tdx_api_code("920522.BJ"))
 
     def test_ensure_tdx_api_blocks_reuses_names_and_allocates_next_zx(self):
-        cfg_by_name, created_records = _ensure_tdx_api_blocks(
+        cfg_by_name, created_records = ensure_tdx_api_blocks(
             [
                 TdxBlock(code="ZX001", name="已有"),
                 TdxBlock(code="ZX009", name="纪要又要-30日Top300"),
@@ -128,7 +132,7 @@ class TdxAShareExportServiceHelperTests(unittest.TestCase):
             }
         }
 
-        pending = _build_pending_block_sync(
+        pending = build_pending_block_sync(
             3,
             100,
             rankings,
@@ -137,20 +141,46 @@ class TdxAShareExportServiceHelperTests(unittest.TestCase):
             "纪要又要",
         )
 
-        self.assertEqual(
-            pending,
-            (
-                3,
-                "纪要又要-3日Top100",
-                "ZX001",
-                "tdx-api://ZX001",
-                ["000001.SZ", "600036.SH"],
-                ["坏代码"],
-            ),
+        self.assertEqual(pending.window, 3)
+        self.assertEqual(pending.block_name, "纪要又要-3日Top100")
+        self.assertEqual(pending.block_code, "ZX001")
+        self.assertEqual(pending.block_path, "tdx-api://ZX001")
+        self.assertEqual(pending.converted_codes, ("000001.SZ", "600036.SH"))
+        self.assertEqual(pending.skipped_companies, ("坏代码",))
+
+    def test_build_tdx_export_plan_slices_rankings_and_allocates_missing_blocks(self):
+        selection = build_tdx_export_ranking_selection(
+            {
+                "3": [
+                    {"company": "平安银行"},
+                    {"company": "招商银行"},
+                    {"company": "超出TopN"},
+                ]
+            },
+            ((3, 2),),
         )
 
+        plan = build_tdx_export_plan(
+            selection=selection,
+            export_specs=((3, 2),),
+            resolved_codes={
+                "平安银行": "000001.SZ",
+                "招商银行": "600036.SH",
+                "超出TopN": "300000.SZ",
+            },
+            existing_blocks=[TdxBlock(code="ZX009", name="已有")],
+            group_name="纪要又要",
+        )
+
+        self.assertEqual(selection.companies, ("平安银行", "招商银行"))
+        self.assertEqual(plan.expected_block_names, ("纪要又要-3日Top2",))
+        self.assertEqual(plan.created_cfg_records, ({"name": "纪要又要-3日Top2", "code": "ZX010"},))
+        self.assertEqual(len(plan.pending_writes), 1)
+        self.assertEqual(plan.pending_writes[0].block_code, "ZX010")
+        self.assertEqual(plan.pending_writes[0].converted_codes, ("000001.SZ", "600036.SH"))
+
     def test_build_block_export_result_keeps_response_shape(self):
-        result = _build_block_export_result(
+        result = build_block_export_result(
             7,
             "7日推荐池",
             "ZX007",
@@ -173,7 +203,7 @@ class TdxAShareExportServiceHelperTests(unittest.TestCase):
         )
 
     def test_build_block_export_result_can_include_verified_count(self):
-        result = _build_block_export_result(
+        result = build_block_export_result(
             7,
             "7日推荐池",
             "ZX007",

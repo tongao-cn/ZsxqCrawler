@@ -7,7 +7,6 @@ import os
 import re
 import sys
 import unicodedata
-from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Set, Tuple
@@ -23,6 +22,26 @@ from backend.services.a_share_analysis_db_storage import (
     load_stock_basic_records as load_stock_basic_records_from_db,
     log_tdx_export,
     get_latest_tdx_export as get_latest_tdx_export_from_db,
+)
+from backend.services.tdx_a_share_export_plan import (
+    DEFAULT_TDX_EXPORT_SPECS,
+    DEFAULT_TDX_EXPORT_WINDOWS,
+    RANKING_BLOCK_NAMES,
+    TdxBlock,
+    build_block_export_result as _build_block_export_result,
+    build_export_block_name as _build_export_block_name,  # noqa: F401
+    build_pending_block_sync as _build_pending_block_sync,  # noqa: F401
+    build_ranking_block_name as _build_ranking_block_name,  # noqa: F401
+    build_tdx_export_plan,
+    build_tdx_export_ranking_selection,
+    collect_ranking_companies as _collect_ranking_companies,  # noqa: F401
+    dedupe_keep_order as _dedupe_keep_order,
+    ensure_tdx_api_blocks as _ensure_tdx_api_blocks,  # noqa: F401
+    export_spec_windows,
+    max_export_top_n,
+    next_tdx_block_code as _next_tdx_block_code,  # noqa: F401
+    normalize_export_specs as _normalize_export_specs,
+    normalize_tdx_api_code as _normalize_tdx_api_code,  # noqa: F401
 )
 
 
@@ -43,27 +62,9 @@ COMMON_TDX_ROOTS = (
 )
 
 TDXQUANT_RELATIVE_PATH = Path("PYPlugins") / "user"
-TS_CODE_PATTERN = re.compile(r"^(?P<code>\d{6})\.(?P<market>SH|SZ|BJ)$", re.IGNORECASE)
-
-RANKING_BLOCK_NAMES = {
-    3: "3日推荐池",
-    7: "7日推荐池",
-    14: "14日推荐池",
-    21: "21日推荐池",
-    30: "30日推荐池",
-}
-DEFAULT_TDX_EXPORT_SPECS = ((30, 300), (14, 150), (7, 100))
-DEFAULT_TDX_EXPORT_WINDOWS = tuple(window for window, _top_n in DEFAULT_TDX_EXPORT_SPECS)
-TDX_BLOCK_CODE_PATTERN = re.compile(r"^ZX(?P<number>\d+)$", re.IGNORECASE)
 COMPANY_NAME_ALIASES = {
     "斯菱智驱": ("斯菱股份",),
 }
-
-
-@dataclass(frozen=True)
-class TdxBlock:
-    code: str
-    name: str
 
 
 class TdxBlockApiError(RuntimeError):
@@ -188,33 +189,6 @@ class TdxBlockClient:
         return {"clear_result": clear_result, "send_result": send_result}
 
 
-def _normalize_tdx_group_name(group_name: Optional[str]) -> Optional[str]:
-    normalized = str(group_name or "").strip()
-    return normalized or None
-
-
-def _build_ranking_block_name(window: int, group_name: Optional[str] = None) -> str:
-    normalized_group_name = _normalize_tdx_group_name(group_name)
-    if normalized_group_name:
-        return f"{normalized_group_name}-{int(window)}日"
-    return RANKING_BLOCK_NAMES.get(int(window), f"{int(window)}日推荐池")
-
-
-def _build_export_block_name(window: int, top_n: int, group_name: Optional[str] = None) -> str:
-    normalized_group_name = _normalize_tdx_group_name(group_name)
-    prefix = normalized_group_name or RANKING_BLOCK_NAMES.get(int(window), f"{int(window)}日推荐池")
-    return f"{prefix}-{int(window)}日Top{int(top_n)}" if normalized_group_name else f"{int(window)}日Top{int(top_n)}"
-
-
-def _normalize_export_specs(
-    ranking_windows: Sequence[int],
-    ranking_top_n: Optional[int],
-) -> Tuple[Tuple[int, int], ...]:
-    if ranking_top_n is None:
-        return tuple((int(window), top_n) for window, top_n in DEFAULT_TDX_EXPORT_SPECS if int(window) in {int(item) for item in ranking_windows})
-    return tuple((int(window), int(ranking_top_n)) for window in ranking_windows)
-
-
 def _get_group_latest_export_path(group_id: str) -> Path:
     group_paths = get_group_analysis_paths(group_id)
     return Path(group_paths["analysis_dir"]) / "latest_tdx_export.json"
@@ -243,17 +217,6 @@ def get_latest_tdx_export(group_id: Optional[str] = None) -> Optional[Dict[str, 
     if not isinstance(payload, dict):
         return None
     return payload
-
-
-def _dedupe_keep_order(values: Iterable[str]) -> List[str]:
-    seen: Set[str] = set()
-    result: List[str] = []
-    for value in values:
-        if value in seen:
-            continue
-        seen.add(value)
-        result.append(value)
-    return result
 
 
 def _parse_tdx_api_result(payload: Any) -> Dict[str, Any]:
@@ -339,53 +302,6 @@ def _build_company_name_aliases(name: str) -> Set[str]:
     }
     candidates.update(COMPANY_NAME_ALIASES.get(str(name or "").strip(), ()))
     return {alias for candidate in candidates if (alias := _normalize_company_name(candidate))}
-
-
-def _normalize_tdx_api_code(ts_code: str) -> Optional[str]:
-    match = TS_CODE_PATTERN.fullmatch(str(ts_code or "").strip())
-    if match is None:
-        return None
-    return f"{match.group('code')}.{match.group('market').upper()}"
-
-
-def _next_tdx_block_code(records: Sequence[Mapping[str, str]]) -> str:
-    used_codes = {str(record.get("code") or "").strip().upper() for record in records}
-    max_number = 0
-    for code in used_codes:
-        match = TDX_BLOCK_CODE_PATTERN.fullmatch(code)
-        if match is not None:
-            max_number = max(max_number, int(match.group("number")))
-
-    next_number = max_number + 1
-    while f"ZX{next_number:03d}" in used_codes:
-        next_number += 1
-    return f"ZX{next_number:03d}"
-
-
-def _ensure_tdx_api_blocks(
-    existing_blocks: Sequence[TdxBlock],
-    block_names: Sequence[str],
-) -> Tuple[Dict[str, Dict[str, str]], List[Dict[str, str]]]:
-    records = [{"name": block.name, "code": block.code} for block in existing_blocks]
-    cfg_by_name = {
-        block.name: {"name": block.name, "code": block.code}
-        for block in existing_blocks
-        if block.name and block.code
-    }
-    created_records: List[Dict[str, str]] = []
-
-    for block_name in block_names:
-        if block_name in cfg_by_name:
-            continue
-        record = {
-            "name": block_name,
-            "code": _next_tdx_block_code(records),
-        }
-        records.append(record)
-        cfg_by_name[block_name] = record
-        created_records.append(record)
-
-    return cfg_by_name, created_records
 
 
 def _read_stock_basic_cache(cache_path: Path = DEFAULT_STOCK_BASIC_CACHE_PATH) -> Optional[Dict[str, Any]]:
@@ -573,85 +489,6 @@ def resolve_company_codes(
     return resolved, unresolved, ambiguous
 
 
-def _collect_ranking_companies(rankings: Mapping[str, Any], ranking_windows: Sequence[int]) -> List[str]:
-    all_companies: List[str] = []
-    for window in ranking_windows:
-        window_rows = rankings.get(str(window)) or []
-        all_companies.extend(
-            str(item.get("company") or "").strip()
-            for item in window_rows
-            if str(item.get("company") or "").strip()
-        )
-    return all_companies
-
-
-def _build_pending_block_sync(
-    window: int,
-    top_n: int,
-    rankings: Mapping[str, Any],
-    resolved_codes: Mapping[str, str],
-    cfg_by_name: Mapping[str, Mapping[str, str]],
-    group_name: Optional[str] = None,
-) -> Tuple[int, str, str, str, List[str], List[str]]:
-    block_name = _build_export_block_name(window, top_n, group_name)
-    cfg_record = cfg_by_name[block_name]
-    block_code = str(cfg_record.get("code") or "").strip().upper()
-    if not block_code:
-        raise RuntimeError(f"板块 {block_name} 没有有效代码")
-
-    ranking_rows = rankings.get(str(window)) or []
-    converted_codes: List[str] = []
-    skipped_companies: List[str] = []
-
-    for item in ranking_rows:
-        company = str(item.get("company") or "").strip()
-        if not company:
-            continue
-
-        ts_code = resolved_codes.get(company)
-        if not ts_code:
-            skipped_companies.append(company)
-            continue
-
-        tdx_api_code = _normalize_tdx_api_code(ts_code)
-        if not tdx_api_code:
-            skipped_companies.append(company)
-            continue
-        converted_codes.append(tdx_api_code)
-
-    return (
-        int(window),
-        block_name,
-        block_code,
-        f"tdx-api://{block_code}",
-        _dedupe_keep_order(converted_codes),
-        _dedupe_keep_order(skipped_companies),
-    )
-
-
-def _build_block_export_result(
-    window: int,
-    block_name: str,
-    block_code: str,
-    blk_path: Path | str,
-    converted_codes: Sequence[str],
-    skipped_companies: Sequence[str],
-    verified_count: Optional[int] = None,
-) -> Dict[str, Any]:
-    result = {
-        "window_days": window,
-        "block_name": block_name,
-        "block_code": block_code,
-        "block_path": str(blk_path),
-        "written_count": len(converted_codes),
-        "skipped_count": len(skipped_companies),
-        "skipped_companies": list(skipped_companies),
-    }
-    if verified_count is not None:
-        result["verified_count"] = int(verified_count)
-    return result
-
-
 def _build_export_result(
     *,
     normalized_group_id: Optional[str],
@@ -733,61 +570,55 @@ def export_a_share_rankings_to_tdx(
 ) -> Dict[str, Any]:
     normalized_group_id = normalize_group_id(group_id)
     export_specs = _normalize_export_specs(ranking_windows, ranking_top_n)
-    max_ranking_top_n = max((top_n for _window, top_n in export_specs), default=0)
+    max_ranking_top_n = max_export_top_n(export_specs)
     chart_payload = build_chart_payload(
         start_date=start_date,
         end_date=end_date,
-        ranking_windows=tuple(window for window, _top_n in export_specs),
+        ranking_windows=export_spec_windows(export_specs),
         ranking_top_n=max_ranking_top_n,
         group_id=normalized_group_id,
     )
 
     rankings = chart_payload.get("rankings") or {}
-    sliced_rankings = {
-        str(window): list(rankings.get(str(window)) or [])[:top_n]
-        for window, top_n in export_specs
-    }
-    all_companies = _collect_ranking_companies(sliced_rankings, [window for window, _top_n in export_specs])
+    selection = build_tdx_export_ranking_selection(rankings, export_specs)
 
     stock_records, stock_basic_source, source_detail = load_stock_basic_records(env_path=env_path)
-    resolved_codes, unresolved_companies, ambiguous_companies = resolve_company_codes(all_companies, stock_records)
+    resolved_codes, unresolved_companies, ambiguous_companies = resolve_company_codes(selection.companies, stock_records)
 
     resolved_root = _resolve_tdx_root(tdx_root, env_path)
-    expected_block_names = [
-        _build_export_block_name(window, top_n, group_name)
-        for window, top_n in export_specs
-    ]
     client = TdxBlockClient(tdx_root=resolved_root)
     client.initialize()
     try:
         existing_blocks = client.list_user_blocks()
-        cfg_by_name, _created_cfg_records = _ensure_tdx_api_blocks(existing_blocks, expected_block_names)
-        pending_writes = [
-            _build_pending_block_sync(window, top_n, sliced_rankings, resolved_codes, cfg_by_name, group_name)
-            for window, top_n in export_specs
-        ]
+        plan = build_tdx_export_plan(
+            selection=selection,
+            export_specs=export_specs,
+            resolved_codes=resolved_codes,
+            existing_blocks=existing_blocks,
+            group_name=group_name,
+        )
 
         block_results: List[Dict[str, Any]] = []
         total_written = 0
         aggregate_skipped: List[str] = list(unresolved_companies)
 
-        for window, block_name, block_code, block_path, converted_codes, skipped_companies in pending_writes:
+        for pending in plan.pending_writes:
             client.replace_block_stocks(
-                block_name=block_name,
-                block_code=block_code,
-                ts_codes=converted_codes,
+                block_name=pending.block_name,
+                block_code=pending.block_code,
+                ts_codes=pending.converted_codes,
             )
-            verified_codes = client.get_block_stocks(block_code)
-            total_written += len(converted_codes)
-            aggregate_skipped.extend(skipped_companies)
+            verified_codes = client.get_block_stocks(pending.block_code)
+            total_written += len(pending.converted_codes)
+            aggregate_skipped.extend(pending.skipped_companies)
             block_results.append(
                 _build_block_export_result(
-                    window,
-                    block_name,
-                    block_code,
-                    block_path,
-                    converted_codes,
-                    skipped_companies,
+                    pending.window,
+                    pending.block_name,
+                    pending.block_code,
+                    pending.block_path,
+                    pending.converted_codes,
+                    pending.skipped_companies,
                     verified_count=len(verified_codes),
                 )
             )
