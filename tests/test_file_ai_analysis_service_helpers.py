@@ -53,27 +53,17 @@ class FileAIAnalysisServiceHelperTests(unittest.TestCase):
 
     @unittest.skipUnless(HAS_FILE_AI_DEPS, "file AI service dependencies are not installed")
     def test_summarize_text_with_ai_uses_deep_summary_prompt(self):
+        from backend.services.ai_runtime_request import AIRuntimeTextResult
         from backend.services.file_ai_content_analysis import summarize_text_with_ai
 
-        class FakeResponses:
-            def __init__(self):
-                self.kwargs = None
+        captured = {}
 
-            def create(self, **kwargs):
-                self.kwargs = kwargs
+        def fake_call(messages, **kwargs):
+            captured["messages"] = messages
+            captured["kwargs"] = kwargs
+            return AIRuntimeTextResult(" Deep summary ", "gpt-5.5")
 
-                class Response:
-                    output_text = "Deep summary"
-
-                return Response()
-
-        class FakeClient:
-            def __init__(self):
-                self.responses = FakeResponses()
-
-        fake_client = FakeClient()
-
-        with patch("backend.services.ai_client.OpenAI", return_value=fake_client):
+        with patch("backend.services.file_ai_content_analysis.call_runtime_ai_text", side_effect=fake_call):
             summary = summarize_text_with_ai(
                 "正文内容",
                 file_name="report.txt",
@@ -85,8 +75,12 @@ class FileAIAnalysisServiceHelperTests(unittest.TestCase):
             )
 
         self.assertEqual("Deep summary", summary)
-        self.assertEqual({"effort": "high"}, fake_client.responses.kwargs["reasoning"])
-        messages = fake_client.responses.kwargs["input"]
+        self.assertEqual("gpt-5.5", captured["kwargs"]["model"])
+        self.assertEqual("https://api.openai.com/v1", captured["kwargs"]["api_base"])
+        self.assertEqual("responses", captured["kwargs"]["wire_api"])
+        self.assertEqual("high", captured["kwargs"]["reasoning_effort"])
+        self.assertEqual(120, captured["kwargs"]["timeout"])
+        messages = captured["messages"]
         self.assertIn("深入、结构化、可执行", messages[0]["content"])
         user_prompt = messages[1]["content"]
         self.assertIn("请深度阅读并总结文件《report.txt》", user_prompt)
@@ -96,31 +90,21 @@ class FileAIAnalysisServiceHelperTests(unittest.TestCase):
 
     @unittest.skipUnless(HAS_FILE_AI_DEPS, "file AI service dependencies are not installed")
     def test_summarize_pdf_with_ai_sends_pdf_file_input(self):
+        from backend.services.ai_runtime_request import AIRuntimeTextResult
         from backend.services.file_ai_content_analysis import summarize_pdf_with_ai
 
-        class FakeResponses:
-            def __init__(self):
-                self.kwargs = None
+        captured = {}
 
-            def create(self, **kwargs):
-                self.kwargs = kwargs
-
-                class Response:
-                    output_text = "PDF summary"
-
-                return Response()
-
-        class FakeClient:
-            def __init__(self):
-                self.responses = FakeResponses()
-
-        fake_client = FakeClient()
+        def fake_call(messages, **kwargs):
+            captured["messages"] = messages
+            captured["kwargs"] = kwargs
+            return AIRuntimeTextResult(" PDF summary ", "gpt-5.5")
 
         with TemporaryDirectory() as temp_dir:
             pdf_path = Path(temp_dir) / "report.pdf"
             pdf_path.write_bytes(b"%PDF-1.4\nfake pdf")
 
-            with patch("backend.services.ai_client.OpenAI", return_value=fake_client):
+            with patch("backend.services.file_ai_content_analysis.call_runtime_ai_text", side_effect=fake_call):
                 summary = summarize_pdf_with_ai(
                     pdf_path,
                     file_name="report.pdf",
@@ -132,9 +116,10 @@ class FileAIAnalysisServiceHelperTests(unittest.TestCase):
                 )
 
         self.assertEqual("PDF summary", summary)
-        self.assertEqual("gpt-5.5", fake_client.responses.kwargs["model"])
-        self.assertEqual({"effort": "medium"}, fake_client.responses.kwargs["reasoning"])
-        content = fake_client.responses.kwargs["input"][0]["content"]
+        self.assertEqual("gpt-5.5", captured["kwargs"]["model"])
+        self.assertEqual("medium", captured["kwargs"]["reasoning_effort"])
+        self.assertEqual(180, captured["kwargs"]["timeout"])
+        content = captured["messages"][0]["content"]
         self.assertEqual("input_file", content[0]["type"])
         self.assertEqual("report.pdf", content[0]["filename"])
         self.assertTrue(content[0]["file_data"].startswith("data:application/pdf;base64,"))

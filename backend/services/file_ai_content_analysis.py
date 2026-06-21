@@ -23,8 +23,8 @@ from backend.core.ai_provider_config import (
     get_openai_compatible_config,
     get_summary_reasoning_effort,
 )
-from backend.services.ai_client import call_ai_text, extract_response_text
-from backend.services.ai_runtime_request import build_runtime_ai_text_request
+from backend.services.ai_client import extract_response_text
+from backend.services.ai_runtime_request import call_runtime_ai_text
 
 
 _CUDA_DLL_DIRECTORY_HANDLES: list[Any] = []
@@ -207,7 +207,7 @@ def summarize_text_with_ai(
         },
     ]
 
-    request = build_runtime_ai_text_request(
+    result = call_runtime_ai_text(
         messages,
         get_ai_config=get_ai_config,
         model=model,
@@ -216,7 +216,7 @@ def summarize_text_with_ai(
         reasoning_effort=reasoning_effort,
         timeout=120,
     )
-    return call_ai_text(request).strip()
+    return result.text.strip()
 
 
 def summarize_pdf_with_ai(
@@ -239,7 +239,7 @@ def summarize_pdf_with_ai(
         )
 
     base64_string = base64.b64encode(path.read_bytes()).decode("utf-8")
-    request = build_runtime_ai_text_request(
+    result = call_runtime_ai_text(
         [
             {
                 "role": "user",
@@ -266,7 +266,7 @@ def summarize_pdf_with_ai(
         reasoning_effort=reasoning_effort,
         timeout=180,
     )
-    return call_ai_text(request).strip()
+    return result.text.strip()
 
 
 def get_faster_whisper_model():
