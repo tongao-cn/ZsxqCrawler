@@ -3,6 +3,7 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 
+from backend.routes.task_http_errors import route_error
 from backend.services.stock_external_summary_service import get_external_stock_summaries
 from backend.services.stock_topic_analysis_service import (
     extract_stock_names_from_image,
@@ -22,7 +23,7 @@ router = APIRouter(prefix="/api/analysis/stock-topics", tags=["stock-topic-analy
 
 
 def _stock_topic_route_error(message: str, error: Exception) -> HTTPException:
-    return HTTPException(status_code=500, detail=f"{message}: {str(error)}")
+    return route_error(message, error)
 
 
 class StockTopicAnalysisRequest(BaseModel):
@@ -92,8 +93,6 @@ async def read_stock_question_matches(
 ):
     try:
         return _stock_question_matches(group_id, question)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
     except Exception as exc:
         raise _stock_topic_route_error("搜索A股问答相关话题失败", exc)
 
@@ -107,8 +106,6 @@ async def create_stock_question_analysis(
         if not request.question.strip():
             raise ValueError("question 不能为空")
         return _create_stock_question_task_response(group_id, request)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
     except Exception as exc:
         raise _stock_topic_route_error("创建A股问答任务失败", exc)
 
@@ -120,8 +117,6 @@ async def read_stock_topic_matches(
 ):
     try:
         return _stock_topic_matches(group_id, stock_name)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
     except Exception as exc:
         raise _stock_topic_route_error("搜索股票相关话题失败", exc)
 
@@ -130,8 +125,6 @@ async def read_stock_topic_matches(
 async def extract_stock_topics_from_image(request: StockTopicImageExtractRequest):
     try:
         return _stock_names_from_image(request)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
     except Exception as exc:
         raise _stock_topic_route_error("从图片提取股票失败", exc)
 
@@ -145,8 +138,6 @@ async def create_stock_topic_analysis(
         if not request.stockName.strip():
             raise ValueError("stock_name 不能为空")
         return _create_stock_topic_task_response(group_id, request)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
     except Exception as exc:
         raise _stock_topic_route_error("创建个股话题分析任务失败", exc)
 
@@ -158,8 +149,6 @@ async def create_stock_topic_analysis_batch(
 ):
     try:
         return _create_stock_topic_batch_task_response(group_id, request.stockNames)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
     except Exception as exc:
         raise _stock_topic_route_error("创建批量个股话题分析任务失败", exc)
 
@@ -171,8 +160,6 @@ async def read_external_stock_summaries(
 ):
     try:
         return _external_stock_summaries(group_id, request)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
     except Exception as exc:
         raise _stock_topic_route_error("获取外部股票汇总失败", exc)
 
@@ -184,10 +171,6 @@ async def read_latest_stock_topic_analysis(
 ):
     try:
         return _latest_stock_topic_analysis_or_404(group_id, stock_name)
-    except HTTPException:
-        raise
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
     except Exception as exc:
         raise _stock_topic_route_error("获取个股话题分析结果失败", exc)
 
@@ -199,7 +182,5 @@ async def read_latest_stock_topic_analyses(
 ):
     try:
         return _latest_stock_topic_analyses(group_id, stock_names)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
     except Exception as exc:
         raise _stock_topic_route_error("获取批量个股话题分析结果失败", exc)
