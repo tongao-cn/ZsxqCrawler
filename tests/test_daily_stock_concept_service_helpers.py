@@ -1,6 +1,6 @@
 import unittest
 from importlib.util import find_spec
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 
 HAS_STOCK_CONCEPT_DEPS = find_spec("openai") is not None
@@ -185,7 +185,7 @@ class DailyStockConceptServiceHelperTests(unittest.TestCase):
             patch.object(service, "load_daily_topic_material", return_value=material) as load_material,
             patch.object(service, "load_topic_stock_extractions", return_value=[]),
             patch.object(service, "_generate_stock_concepts_with_ai", return_value=(stocks, "model-a")) as generate,
-            patch.object(service, "_save_stock_concepts") as save_stock_concepts,
+            patch.object(service, "save_daily_stock_concepts") as save_stock_concepts,
         ):
             result = service.extract_daily_stock_concepts("303", "2026-05-07", comments_per_topic=5)
 
@@ -205,6 +205,120 @@ class DailyStockConceptServiceHelperTests(unittest.TestCase):
         )
         conn.close.assert_called_once_with()
         self.assertEqual(stocks, result["stocks"])
+
+    def test_save_daily_stock_concepts_writes_empty_sentinel(self):
+        from backend.services.daily_stock_concept_store import save_daily_stock_concepts
+
+        conn = Mock()
+
+        save_daily_stock_concepts(
+            conn,
+            group_id="303",
+            report_date="2026-05-07",
+            stocks=[],
+            model="model-a",
+            status="failed",
+            error="boom",
+        )
+
+        executed = conn.execute.call_args_list
+        self.assertIn("DELETE FROM daily_stock_concepts", executed[0].args[0])
+        self.assertIn("INSERT INTO daily_stock_concepts", executed[1].args[0])
+        params = executed[1].args[1]
+        self.assertEqual(("303", "2026-05-07", "", "", "", "[]", "boom", "[]", 0, "model-a", "failed", "boom"), params[:12])
+        conn.commit.assert_called_once_with()
+
+    def test_save_daily_stock_concepts_serializes_stock_rows(self):
+        from backend.services.daily_stock_concept_store import save_daily_stock_concepts
+
+        conn = Mock()
+        stocks = [
+            {
+                "stock_name": "宁德时代",
+                "stock_code": "300750",
+                "market": "SZ",
+                "concepts": ["储能", "固态电池"],
+                "reason": "topic 101",
+                "topic_ids": ["101"],
+                "confidence": 0.8,
+            }
+        ]
+
+        save_daily_stock_concepts(
+            conn,
+            group_id="303",
+            report_date="2026-05-07",
+            stocks=stocks,
+            model="model-a",
+            status="completed",
+        )
+
+        insert_params = conn.execute.call_args_list[1].args[1]
+        self.assertEqual("宁德时代", insert_params[2])
+        self.assertEqual('["储能", "固态电池"]', insert_params[5])
+        self.assertEqual('["101"]', insert_params[7])
+        self.assertEqual(0.8, insert_params[8])
+        self.assertEqual("completed", insert_params[10])
+        conn.commit.assert_called_once_with()
+
+    def test_load_daily_stock_concepts_maps_rows_and_skips_empty_sentinel(self):
+        from backend.services.daily_stock_concept_store import load_daily_stock_concepts
+
+        cursor = Mock()
+        cursor.fetchall.return_value = [
+            {
+                "stock_name": "",
+                "stock_code": "",
+                "market": "",
+                "concepts_json": "[]",
+                "reason": "no data",
+                "topic_ids_json": "[]",
+                "confidence": 0,
+                "model": "model-a",
+                "status": "completed",
+                "error": "",
+                "updated_at": "2026-05-07T09:00:00",
+            },
+            {
+                "stock_name": "宁德时代",
+                "stock_code": "300750",
+                "market": "SZ",
+                "concepts_json": '["储能"]',
+                "reason": "topic 101",
+                "topic_ids_json": '["101"]',
+                "confidence": "0.8",
+                "model": "model-a",
+                "status": "completed",
+                "error": "",
+                "updated_at": "2026-05-07T09:01:00",
+            },
+        ]
+        conn = Mock()
+        conn.execute.return_value = cursor
+
+        result = load_daily_stock_concepts(conn, group_id="303", report_date="2026-05-07")
+
+        self.assertEqual("303", result["group_id"])
+        self.assertEqual("2026-05-07", result["report_date"])
+        self.assertEqual("completed", result["status"])
+        self.assertEqual("2026-05-07T09:00:00", result["updated_at"])
+        self.assertEqual(
+            [
+                {
+                    "stock_name": "宁德时代",
+                    "stock_code": "300750",
+                    "market": "SZ",
+                    "concepts": ["储能"],
+                    "reason": "topic 101",
+                    "topic_ids": ["101"],
+                    "confidence": 0.8,
+                    "model": "model-a",
+                }
+            ],
+            result["stocks"],
+        )
+        self.assertIn("FROM daily_stock_concepts", conn.execute.call_args.args[0])
+        self.assertEqual(("303", "2026-05-07"), conn.execute.call_args.args[1])
 
 
 if __name__ == "__main__":
