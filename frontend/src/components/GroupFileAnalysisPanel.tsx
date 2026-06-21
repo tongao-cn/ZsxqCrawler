@@ -14,6 +14,7 @@ import { GroupFileTable } from '@/components/GroupFileTable';
 import { GroupFileTaskWatchers } from '@/components/GroupFileTaskWatchers';
 import { useGroupFileList } from '@/hooks/useGroupFileList';
 import { useGroupFileTasks } from '@/hooks/useGroupFileTasks';
+import { useTaskLauncher } from '@/hooks/useTaskLauncher';
 
 interface GroupFileAnalysisPanelProps {
   groupId: number;
@@ -30,6 +31,10 @@ export default function GroupFileAnalysisPanel({
   const [selectedFile, setSelectedFile] = useState<FileItem | null>(null);
   const [analysisLoading, setAnalysisLoading] = useState(false);
   const [analysis, setAnalysis] = useState<FileAIAnalysis | null>(null);
+  const { handleTaskCreateError, notifyTaskCreated } = useTaskLauncher({
+    onTaskConflict,
+    onTaskCreated,
+  });
   const taskState = useGroupFileTasks({
     groupId,
     onTaskConflict,
@@ -109,11 +114,10 @@ export default function GroupFileAnalysisPanel({
 
       taskState.markFileAnalyzing(file.file_id, true);
       const response = await apiClient.analyzeFileTask(groupId, file.file_id, force);
-      onTaskCreated?.(response.task_id);
       taskState.trackAnalysisTask(file.file_id, response.task_id);
-      toast.success(`文件分析任务已创建: ${response.task_id}`);
+      notifyTaskCreated(response.task_id, `文件分析任务已创建: ${response.task_id}`);
     } catch (error) {
-      toast.error(`文件 AI 分析失败: ${error instanceof Error ? error.message : '未知错误'}`);
+      handleTaskCreateError(error, '文件 AI 分析失败');
       setAnalysis({
         file_id: file.file_id,
         status: 'failed',
