@@ -1,15 +1,20 @@
 from __future__ import annotations
 
 import asyncio
-import json
 import queue
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Query
-from fastapi.encoders import jsonable_encoder
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
+from backend.routes.task_stream_events import (
+    streaming_response_headers,
+    task_heartbeat_event,
+    task_log_event,
+    task_removed_event,
+    task_status_event,
+)
 from backend.services.task_runtime import (
     cleanup_tasks as cleanup_task_history,
     get_task_logs_state,
@@ -26,35 +31,6 @@ router = APIRouter(prefix="/api/tasks", tags=["tasks"])
 
 class TaskCleanupRequest(BaseModel):
     keep_latest: int = Field(default=100, description="保留最近多少条终态任务")
-
-
-def _sse_event(payload: dict) -> str:
-    return f"data: {json.dumps(jsonable_encoder(payload))}\n\n"
-
-
-def _task_status_payload(task: dict) -> dict:
-    return {"type": "status", "status": task["status"], "message": task["message"], "task": task}
-
-
-def _task_log_payload(message: str) -> dict:
-    return {"type": "log", "message": message}
-
-
-def _task_removed_payload() -> dict:
-    return {"type": "status", "status": "cancelled", "message": "任务记录已被清理"}
-
-
-def _task_heartbeat_payload() -> dict:
-    return {"type": "heartbeat"}
-
-
-def _streaming_response_headers() -> dict:
-    return {
-        "Cache-Control": "no-cache",
-        "Connection": "keep-alive",
-        "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Headers": "*",
-    }
 
 
 def _wait_for_task_log(subscription: queue.Queue[str], timeout: float = 0.5) -> Optional[str]:
@@ -133,34 +109,34 @@ async def stream_task_logs(task_id: str):
             # 发送历史日志
             logs = get_task_logs_state(task_id) or []
             for log in logs:
-                yield _sse_event(_task_log_payload(log))
+                yield task_log_event(log)
 
             # 发送任务状态
             task = get_task_state(task_id)
             if task:
-                yield _sse_event(_task_status_payload(task))
+                yield task_status_event(task)
 
             # 保持连接活跃
             while True:
                 log = await asyncio.to_thread(_wait_for_task_log, subscription, 0.5)
                 if log is not None:
-                    yield _sse_event(_task_log_payload(log))
+                    yield task_log_event(log)
                 for queued_log in _drain_task_logs(subscription):
-                    yield _sse_event(_task_log_payload(queued_log))
+                    yield task_log_event(queued_log)
 
                 # 检查任务状态变化
                 task = get_task_state(task_id)
                 if task:
-                    yield _sse_event(_task_status_payload(task))
+                    yield task_status_event(task)
 
                     if is_terminal_task_status(task["status"]):
                         break
                 else:
-                    yield _sse_event(_task_removed_payload())
+                    yield task_removed_event()
                     break
 
                 # 发送心跳
-                yield _sse_event(_task_heartbeat_payload())
+                yield task_heartbeat_event()
 
         except asyncio.CancelledError:
             # 客户端断开连接
@@ -171,5 +147,5 @@ async def stream_task_logs(task_id: str):
     return StreamingResponse(
         event_stream(),
         media_type="text/event-stream",
-        headers=_streaming_response_headers(),
+        headers=streaming_response_headers(),
     )

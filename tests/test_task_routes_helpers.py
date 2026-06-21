@@ -10,22 +10,41 @@ HAS_TASK_ROUTE_DEPS = find_spec("fastapi") is not None and find_spec("pydantic")
 
 
 class TaskRoutesHelperTests(unittest.TestCase):
-    @unittest.skipUnless(HAS_TASK_ROUTE_DEPS, "task route dependencies are not installed")
-    def test_sse_event_formats_json_data_frame(self):
-        from backend.routes.task_routes import _sse_event
+    def _event_payload(self, event):
+        return json.loads(event.removeprefix("data: ").strip())
 
-        event = _sse_event({"type": "log", "message": "hello", "created_at": datetime(2026, 6, 21, 9, 30)})
+    @unittest.skipUnless(HAS_TASK_ROUTE_DEPS, "task route dependencies are not installed")
+    def test_task_status_event_formats_json_data_frame(self):
+        from backend.routes.task_stream_events import task_status_event
+
+        task = {
+            "task_id": "task-1",
+            "status": "running",
+            "message": "处理中",
+            "created_at": datetime(2026, 6, 21, 9, 30),
+        }
+        event = task_status_event(task)
 
         self.assertTrue(event.startswith("data: "))
         self.assertTrue(event.endswith("\n\n"))
         self.assertEqual(
-            {"type": "log", "message": "hello", "created_at": "2026-06-21T09:30:00"},
-            json.loads(event.removeprefix("data: ").strip()),
+            {
+                "type": "status",
+                "status": "running",
+                "message": "处理中",
+                "task": {
+                    "task_id": "task-1",
+                    "status": "running",
+                    "message": "处理中",
+                    "created_at": "2026-06-21T09:30:00",
+                },
+            },
+            self._event_payload(event),
         )
 
     @unittest.skipUnless(HAS_TASK_ROUTE_DEPS, "task route dependencies are not installed")
-    def test_task_status_payload_keeps_existing_fields(self):
-        from backend.routes.task_routes import _task_status_payload
+    def test_task_status_event_keeps_existing_fields(self):
+        from backend.routes.task_stream_events import task_status_event
 
         task = {
             "task_id": "task-1",
@@ -36,7 +55,7 @@ class TaskRoutesHelperTests(unittest.TestCase):
             "cancellable": False,
         }
 
-        payload = _task_status_payload(task)
+        payload = self._event_payload(task_status_event(task))
 
         self.assertEqual("status", payload["type"])
         self.assertEqual("running", payload["status"])
@@ -44,19 +63,19 @@ class TaskRoutesHelperTests(unittest.TestCase):
         self.assertEqual(task, payload["task"])
 
     @unittest.skipUnless(HAS_TASK_ROUTE_DEPS, "task route dependencies are not installed")
-    def test_task_stream_payload_helpers_keep_existing_shapes(self):
-        from backend.routes.task_routes import _task_heartbeat_payload, _task_log_payload, _task_removed_payload
+    def test_task_stream_events_keep_existing_shapes(self):
+        from backend.routes.task_stream_events import task_heartbeat_event, task_log_event, task_removed_event
 
-        self.assertEqual({"type": "log", "message": "hello"}, _task_log_payload("hello"))
-        self.assertEqual({"type": "heartbeat"}, _task_heartbeat_payload())
+        self.assertEqual({"type": "log", "message": "hello"}, self._event_payload(task_log_event("hello")))
+        self.assertEqual({"type": "heartbeat"}, self._event_payload(task_heartbeat_event()))
         self.assertEqual(
             {"type": "status", "status": "cancelled", "message": "任务记录已被清理"},
-            _task_removed_payload(),
+            self._event_payload(task_removed_event()),
         )
 
     @unittest.skipUnless(HAS_TASK_ROUTE_DEPS, "task route dependencies are not installed")
     def test_streaming_response_headers_keep_sse_defaults(self):
-        from backend.routes.task_routes import _streaming_response_headers
+        from backend.routes.task_stream_events import streaming_response_headers
 
         self.assertEqual(
             {
@@ -65,7 +84,7 @@ class TaskRoutesHelperTests(unittest.TestCase):
                 "Access-Control-Allow-Origin": "*",
                 "Access-Control-Allow-Headers": "*",
             },
-            _streaming_response_headers(),
+            streaming_response_headers(),
         )
 
     @unittest.skipUnless(HAS_TASK_ROUTE_DEPS, "task route dependencies are not installed")
@@ -79,6 +98,41 @@ class TaskRoutesHelperTests(unittest.TestCase):
         self.assertEqual("first", _wait_for_task_log(subscription, timeout=0.01))
         self.assertEqual(["second"], _drain_task_logs(subscription))
         self.assertIsNone(_wait_for_task_log(subscription, timeout=0.01))
+
+    @unittest.skipUnless(HAS_TASK_ROUTE_DEPS, "task route dependencies are not installed")
+    def test_task_stream_emits_logs_status_and_terminal_without_heartbeat_after_terminal(self):
+        import asyncio
+
+        from backend.routes import task_routes
+
+        subscription = queue.Queue()
+        subscription.put("live log")
+        running_task = {"task_id": "task-1", "status": "running", "message": "处理中"}
+        completed_task = {"task_id": "task-1", "status": "completed", "message": "完成"}
+
+        async def collect_events():
+            response = await task_routes.stream_task_logs("task-1")
+            return [self._event_payload(event) async for event in response.body_iterator]
+
+        with (
+            patch.object(task_routes, "subscribe_task_logs", return_value=subscription) as subscribe,
+            patch.object(task_routes, "unsubscribe_task_logs") as unsubscribe,
+            patch.object(task_routes, "get_task_logs_state", return_value=["old log"]),
+            patch.object(task_routes, "get_task_state", side_effect=[running_task, completed_task]),
+        ):
+            payloads = asyncio.run(collect_events())
+
+        self.assertEqual(
+            [
+                {"type": "log", "message": "old log"},
+                {"type": "status", "status": "running", "message": "处理中", "task": running_task},
+                {"type": "log", "message": "live log"},
+                {"type": "status", "status": "completed", "message": "完成", "task": completed_task},
+            ],
+            payloads,
+        )
+        subscribe.assert_called_once_with("task-1")
+        unsubscribe.assert_called_once_with("task-1", subscription)
 
     @unittest.skipUnless(HAS_TASK_ROUTE_DEPS, "task route dependencies are not installed")
     def test_get_tasks_delegates_filtering_to_task_runtime(self):
