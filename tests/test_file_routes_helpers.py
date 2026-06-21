@@ -23,10 +23,9 @@ from backend.services.file_read_model import (
     _build_check_local_file_status_response,
     _build_file_status_response,
     _build_sync_files_response,
-    _get_download_file_status,
-    _resolve_download_record_status,
     get_file_status_response,
 )
+from backend.services.file_local_status import get_download_file_status, resolve_download_record_status
 from backend.services.file_workflow_service import (
     _close_crawler_file_databases,
     create_filtered_file_download_task,
@@ -1110,8 +1109,8 @@ class FileRoutesHelperTests(unittest.TestCase):
         )
 
     def test_get_download_file_status_handles_missing_file(self):
-        with patch("backend.services.file_read_model.group_download_dir", return_value=r"C:\tmp\group-1\downloads"):
-            status = _get_download_file_status("group-1", "missing.pdf", 123, "fallback.pdf")
+        with patch("backend.services.file_local_status.group_download_dir", return_value=r"C:\tmp\group-1\downloads"):
+            status = get_download_file_status("group-1", "missing.pdf", 123, "fallback.pdf")
 
         self.assertEqual("missing.pdf", status["safe_filename"])
         self.assertFalse(status["local_exists"])
@@ -1120,10 +1119,10 @@ class FileRoutesHelperTests(unittest.TestCase):
         self.assertFalse(status["is_complete"])
 
     def test_resolve_download_record_status_marks_existing_file_completed(self):
-        with patch("backend.services.file_read_model.resolve_local_file_path") as mocked_resolve:
+        with patch("backend.services.file_local_status.resolve_local_file_path") as mocked_resolve:
             mocked_resolve.return_value = r"C:\tmp\group-1\downloads\file.pdf"
 
-            status = _resolve_download_record_status(
+            status = resolve_download_record_status(
                 "group-1",
                 123,
                 "file.pdf",
@@ -1203,7 +1202,7 @@ class FileRoutesHelperTests(unittest.TestCase):
         with (
             patch("backend.services.file_read_model._file_db", return_value=fake_db),
             patch(
-                "backend.services.file_read_model._get_download_file_status",
+                "backend.services.file_read_model.get_download_file_status",
                 return_value=local_status,
             ) as get_download_file_status,
         ):
@@ -1243,7 +1242,7 @@ class FileRoutesHelperTests(unittest.TestCase):
         fake_db = FakeFileDb()
         with (
             patch("backend.services.file_read_model._file_db", return_value=fake_db),
-            patch("backend.services.file_read_model._get_download_file_status") as get_download_file_status,
+            patch("backend.services.file_read_model.get_download_file_status") as get_download_file_status,
         ):
             response = get_file_status_response("group-1", 123)
 
@@ -1713,8 +1712,12 @@ class FileRoutesHelperTests(unittest.TestCase):
         with (
             patch("backend.services.file_read_model._file_db", return_value=fake_db),
             patch(
-                "backend.services.file_read_model.resolve_local_file_path",
-                return_value=r"C:\resolved\Report.PDF",
+                "backend.services.file_read_model.resolve_download_record_status",
+                return_value={
+                    "download_status": "completed",
+                    "local_exists": True,
+                    "local_path": r"C:\resolved\Report.PDF",
+                },
             ),
         ):
             response = file_read_model.get_files_response(

@@ -2,15 +2,13 @@
 
 from __future__ import annotations
 
-import os
 from contextlib import contextmanager
 from typing import Any, Dict, Iterator, Optional, Sequence
 
 from backend.services.file_clear_workflow import _clear_file_database_response
-from backend.services.file_local_paths import (
-    download_target_path_with_fallback,
-    group_download_dir,
-    resolve_local_file_path,
+from backend.services.file_local_status import (
+    get_download_file_status,
+    resolve_download_record_status,
 )
 from backend.storage.zsxq_file_database import ZSXQFileDatabase
 
@@ -26,38 +24,6 @@ def _file_db(group_id: str) -> Iterator[ZSXQFileDatabase]:
         yield file_db
     finally:
         file_db.close()
-
-
-def _get_download_file_status(group_id: str, file_name: str, file_size: int, fallback: str) -> Dict[str, Any]:
-    download_dir = group_download_dir(group_id)
-    safe_filename, file_path = download_target_path_with_fallback(download_dir, file_name, fallback)
-    local_exists = os.path.exists(file_path)
-    local_size = os.path.getsize(file_path) if local_exists else 0
-    return {
-        "safe_filename": safe_filename,
-        "local_exists": local_exists,
-        "local_size": local_size,
-        "local_path": file_path if local_exists else None,
-        "is_complete": local_exists and (file_size == 0 or local_size == file_size),
-        "download_dir": download_dir,
-    }
-
-
-def _resolve_download_record_status(
-    group_id: str,
-    file_id: int,
-    file_name: str,
-    stored_status: Optional[str],
-    stored_local_path: Optional[str],
-) -> Dict[str, Any]:
-    resolved_local_path = resolve_local_file_path(group_id, file_id, file_name, stored_local_path)
-    local_exists = resolved_local_path is not None
-    effective_local_path = str(resolved_local_path) if resolved_local_path else None
-    return {
-        "download_status": "completed" if local_exists else (stored_status or "unknown"),
-        "local_exists": local_exists,
-        "local_path": effective_local_path,
-    }
 
 
 def _build_file_status_response(
@@ -137,12 +103,12 @@ def get_file_status_response(group_id: str, file_id: int) -> dict:
             return _build_file_status_response(file_id, result)
 
         file_name, file_size, _download_status = result
-        local_status = _get_download_file_status(group_id, file_name, file_size, f"file_{file_id}")
+        local_status = get_download_file_status(group_id, file_name, file_size, f"file_{file_id}")
         return _build_file_status_response(file_id, result, local_status)
 
 
 def check_local_file_status_response(group_id: str, file_name: str, file_size: int) -> dict:
-    local_status = _get_download_file_status(group_id, file_name, file_size, file_name)
+    local_status = get_download_file_status(group_id, file_name, file_size, file_name)
     return _build_check_local_file_status_response(file_name, file_size, local_status)
 
 
@@ -163,7 +129,7 @@ def normalize_file_list_row(group_id: str, file: Any) -> Dict[str, Any]:
     stored_status = file.download_status
     stored_local_path = file.local_path
 
-    local_status = _resolve_download_record_status(
+    local_status = resolve_download_record_status(
         group_id,
         file_id,
         file_name,
