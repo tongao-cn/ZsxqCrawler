@@ -19,6 +19,7 @@ from backend.services.ai_client import (
 from backend.services.ai_json_utils import JsonObjectParseError, require_json_object
 from backend.services.ai_runtime_request import AIRuntimeTextSettings, call_runtime_ai_text
 from backend.services.stock_concept_taxonomy import normalize_stock_concept_term
+from backend.services.stock_extraction_payload import safe_confidence, safe_text_list
 
 
 DEFAULT_API_BASE = get_default_base_url()
@@ -86,27 +87,11 @@ def _extract_json_object(text: str) -> Dict[str, Any]:
 
 
 def _safe_float(value: Any, default: float = 0.0) -> float:
-    try:
-        parsed = float(value)
-    except Exception:
-        return default
-    return max(0.0, min(1.0, parsed))
+    return safe_confidence(value, default)
 
 
 def _safe_text_list(value: Any, *, limit: int = 10) -> List[str]:
-    if not isinstance(value, list):
-        return []
-    cleaned: List[str] = []
-    seen: Set[str] = set()
-    for raw in value:
-        text = str(raw or "").strip()[:80]
-        if not text or text in seen:
-            continue
-        cleaned.append(text)
-        seen.add(text)
-        if len(cleaned) >= limit:
-            break
-    return cleaned
+    return safe_text_list(value, limit=limit, dedupe_after_truncate=True)
 
 
 def _normalize_extracted_concepts(raw: Dict[str, Any]) -> List[str]:
