@@ -99,68 +99,40 @@ def create_ingestion_task_or_raise(task_type: str, description: str, group_id: s
     return task_id
 
 
-def launch_ingestion_task(
-    task_type: str,
-    description: str,
-    task_func: Callable[..., Any],
-    group_id: str,
-    *task_args: Any,
-    message: str = TASK_CREATED_MESSAGE,
-    prepend_group_id_to_args: bool = True,
-    on_created: Optional[Callable[[str], None]] = None,
-) -> Dict[str, str]:
-    task_id = create_ingestion_task_or_raise(task_type, description, group_id)
-    if on_created:
-        on_created(task_id)
-    runtime_args = (group_id, *task_args) if prepend_group_id_to_args else task_args
-    enqueue_runtime_task(task_func, task_id, *runtime_args)
-    return task_created_response(task_id, message)
-
-
 def _create_runtime_task(task_type: str, description: str, metadata: Optional[Dict[str, Any]]) -> str:
     if metadata:
         return create_task(task_type, description, metadata=metadata)
     return create_task(task_type, description)
 
 
-def launch_task(
-    task_type: str,
-    description: str,
-    task_func: Callable[..., Any],
-    *task_args: Any,
-    metadata: Optional[Dict[str, Any]] = None,
-    group_id: Optional[Any] = None,
-    message: str = TASK_CREATED_MESSAGE,
-    on_created: Optional[Callable[[str], None]] = None,
-) -> Dict[str, str]:
-    _require_workflow(task_type)
-    task_metadata = group_task_metadata(group_id, metadata) if group_id is not None else metadata
-    task_id = _create_runtime_task(task_type, description, task_metadata)
-    if on_created:
-        on_created(task_id)
-    enqueue_runtime_task(task_func, task_id, *task_args)
-    return task_created_response(task_id, message)
+def _launch_ingestion_recipe(recipe: TaskLaunchRecipe) -> Dict[str, str]:
+    group_id = recipe.ingestion_group_id
+    if group_id is None:
+        raise ValueError("采集/同步任务缺少群组 ID")
+
+    task_id = create_ingestion_task_or_raise(recipe.task_type, recipe.description, group_id)
+    if recipe.on_created:
+        recipe.on_created(task_id)
+    runtime_args = (group_id, *recipe.args) if recipe.prepend_group_id_to_args else recipe.args
+    enqueue_runtime_task(recipe.task_func, task_id, *runtime_args)
+    return task_created_response(task_id, recipe.message)
+
+
+def _launch_runtime_recipe(recipe: TaskLaunchRecipe) -> Dict[str, str]:
+    _require_workflow(recipe.task_type)
+    task_metadata = (
+        group_task_metadata(recipe.group_id, recipe.metadata)
+        if recipe.group_id is not None
+        else recipe.metadata
+    )
+    task_id = _create_runtime_task(recipe.task_type, recipe.description, task_metadata)
+    if recipe.on_created:
+        recipe.on_created(task_id)
+    enqueue_runtime_task(recipe.task_func, task_id, *recipe.args)
+    return task_created_response(task_id, recipe.message)
 
 
 def launch_task_recipe(recipe: TaskLaunchRecipe) -> Dict[str, str]:
     if recipe.ingestion_group_id is not None:
-        return launch_ingestion_task(
-            recipe.task_type,
-            recipe.description,
-            recipe.task_func,
-            recipe.ingestion_group_id,
-            *recipe.args,
-            message=recipe.message,
-            prepend_group_id_to_args=recipe.prepend_group_id_to_args,
-            on_created=recipe.on_created,
-        )
-    return launch_task(
-        recipe.task_type,
-        recipe.description,
-        recipe.task_func,
-        *recipe.args,
-        metadata=recipe.metadata,
-        group_id=recipe.group_id,
-        message=recipe.message,
-        on_created=recipe.on_created,
-    )
+        return _launch_ingestion_recipe(recipe)
+    return _launch_runtime_recipe(recipe)

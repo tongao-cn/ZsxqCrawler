@@ -22,47 +22,51 @@ class TaskLaunchTests(unittest.TestCase):
             detail,
         )
 
-    def test_launch_ingestion_task_creates_locked_task_and_enqueues_with_group_first(self):
-        from backend.services.task_launch import launch_ingestion_task
+    def test_launch_task_recipe_creates_locked_task_and_enqueues_with_group_first(self):
+        from backend.services.task_launch import TaskLaunchRecipe, launch_task_recipe
 
         with (
             patch("backend.services.task_launch.create_ingestion_task", return_value=("task-1", None)) as create_task,
             patch("backend.services.task_launch.enqueue_runtime_task") as enqueue_runtime_task,
         ):
-            response = launch_ingestion_task(
-                "collect_files",
-                "收集文件列表",
-                fake_task,
-                "group-1",
-                "request",
-                message="已启动",
+            response = launch_task_recipe(
+                TaskLaunchRecipe.ingestion(
+                    "collect_files",
+                    "收集文件列表",
+                    fake_task,
+                    "group-1",
+                    "request",
+                    message="已启动",
+                )
             )
 
         create_task.assert_called_once_with("collect_files", "收集文件列表", "group-1")
         enqueue_runtime_task.assert_called_once_with(fake_task, "task-1", "group-1", "request")
         self.assertEqual({"task_id": "task-1", "message": "已启动"}, response)
 
-    def test_launch_ingestion_task_can_keep_explicit_runtime_args(self):
-        from backend.services.task_launch import launch_ingestion_task
+    def test_launch_task_recipe_can_keep_explicit_runtime_args(self):
+        from backend.services.task_launch import TaskLaunchRecipe, launch_task_recipe
 
         with (
             patch("backend.services.task_launch.create_ingestion_task", return_value=("task-1", None)),
             patch("backend.services.task_launch.enqueue_runtime_task") as enqueue_runtime_task,
         ):
-            launch_ingestion_task(
-                "collect_files",
-                "收集文件列表",
-                fake_task,
-                "group-1",
-                "group-1",
-                "request",
-                prepend_group_id_to_args=False,
+            launch_task_recipe(
+                TaskLaunchRecipe.ingestion(
+                    "collect_files",
+                    "收集文件列表",
+                    fake_task,
+                    "group-1",
+                    "group-1",
+                    "request",
+                    prepend_group_id_to_args=False,
+                )
             )
 
         enqueue_runtime_task.assert_called_once_with(fake_task, "task-1", "group-1", "request")
 
-    def test_launch_ingestion_task_runs_on_created_before_enqueue(self):
-        from backend.services.task_launch import launch_ingestion_task
+    def test_launch_task_recipe_runs_on_created_before_enqueue(self):
+        from backend.services.task_launch import TaskLaunchRecipe, launch_task_recipe
 
         events = []
 
@@ -76,19 +80,21 @@ class TaskLaunchTests(unittest.TestCase):
             patch("backend.services.task_launch.create_ingestion_task", return_value=("task-1", None)),
             patch("backend.services.task_launch.enqueue_runtime_task", side_effect=enqueue_task),
         ):
-            launch_ingestion_task(
-                "columns_fetch",
-                "采集专栏内容",
-                fake_task,
-                "group-1",
-                "request",
-                on_created=on_created,
+            launch_task_recipe(
+                TaskLaunchRecipe.ingestion(
+                    "columns_fetch",
+                    "采集专栏内容",
+                    fake_task,
+                    "group-1",
+                    "request",
+                    on_created=on_created,
+                )
             )
 
         self.assertEqual([("created", "task-1"), ("enqueue", "task-1")], events)
 
-    def test_launch_ingestion_task_raises_conflict_without_enqueuing(self):
-        from backend.services.task_launch import TaskLaunchConflict, launch_ingestion_task
+    def test_launch_task_recipe_raises_conflict_without_enqueuing(self):
+        from backend.services.task_launch import TaskLaunchConflict, TaskLaunchRecipe, launch_task_recipe
 
         existing = {"task_id": "task-0", "type": "crawl_all", "status": "running"}
 
@@ -97,32 +103,47 @@ class TaskLaunchTests(unittest.TestCase):
             patch("backend.services.task_launch.enqueue_runtime_task") as enqueue_runtime_task,
         ):
             with self.assertRaises(TaskLaunchConflict) as raised:
-                launch_ingestion_task("collect_files", "收集文件列表", fake_task, "group-1")
+                launch_task_recipe(
+                    TaskLaunchRecipe.ingestion(
+                        "collect_files",
+                        "收集文件列表",
+                        fake_task,
+                        "group-1",
+                    )
+                )
 
         self.assertEqual(existing, raised.exception.existing)
         enqueue_runtime_task.assert_not_called()
 
-    def test_launch_ingestion_task_rejects_non_ingestion_workflow(self):
-        from backend.services.task_launch import launch_ingestion_task
+    def test_launch_task_recipe_rejects_non_ingestion_workflow(self):
+        from backend.services.task_launch import TaskLaunchRecipe, launch_task_recipe
 
         with self.assertRaises(ValueError):
-            launch_ingestion_task("daily_stock_concepts", "提取每日股票概念", fake_task, "group-1")
+            launch_task_recipe(
+                TaskLaunchRecipe.ingestion(
+                    "daily_stock_concepts",
+                    "提取每日股票概念",
+                    fake_task,
+                    "group-1",
+                )
+            )
 
-    def test_launch_task_attaches_group_metadata_and_enqueues_args(self):
-        from backend.services.task_launch import launch_task
+    def test_launch_task_recipe_attaches_group_metadata_and_enqueues_args(self):
+        from backend.services.task_launch import TaskLaunchRecipe, launch_task_recipe
 
         with (
             patch("backend.services.task_launch.create_task", return_value="task-2") as create_task,
             patch("backend.services.task_launch.enqueue_runtime_task") as enqueue_runtime_task,
         ):
-            response = launch_task(
-                "daily_topic_analysis",
-                "生成每日话题 AI 报告",
-                fake_task,
-                "group-1",
-                "request",
-                group_id="group-1",
-                metadata={"report_date": "2026-06-20"},
+            response = launch_task_recipe(
+                TaskLaunchRecipe(
+                    "daily_topic_analysis",
+                    "生成每日话题 AI 报告",
+                    fake_task,
+                    args=("group-1", "request"),
+                    group_id="group-1",
+                    metadata={"report_date": "2026-06-20"},
+                )
             )
 
         create_task.assert_called_once_with(
@@ -133,11 +154,11 @@ class TaskLaunchTests(unittest.TestCase):
         enqueue_runtime_task.assert_called_once_with(fake_task, "task-2", "group-1", "request")
         self.assertEqual({"task_id": "task-2", "message": "任务已创建，正在后台执行"}, response)
 
-    def test_launch_task_rejects_unregistered_workflow(self):
-        from backend.services.task_launch import launch_task
+    def test_launch_task_recipe_rejects_unregistered_workflow(self):
+        from backend.services.task_launch import TaskLaunchRecipe, launch_task_recipe
 
         with self.assertRaises(ValueError):
-            launch_task("missing_task_type", "missing", fake_task)
+            launch_task_recipe(TaskLaunchRecipe("missing_task_type", "missing", fake_task))
 
     def test_launch_task_recipe_launches_ingestion_recipe(self):
         from backend.services.task_launch import TaskLaunchRecipe, launch_task_recipe
@@ -150,23 +171,15 @@ class TaskLaunchTests(unittest.TestCase):
             "request",
         )
 
-        with patch(
-            "backend.services.task_launch.launch_ingestion_task",
-            return_value={"task_id": "task-1"},
-        ) as launch_ingestion_task:
+        with (
+            patch("backend.services.task_launch.create_ingestion_task", return_value=("task-1", None)) as create_task,
+            patch("backend.services.task_launch.enqueue_runtime_task") as enqueue_runtime_task,
+        ):
             response = launch_task_recipe(recipe)
 
-        self.assertEqual({"task_id": "task-1"}, response)
-        launch_ingestion_task.assert_called_once_with(
-            "crawl_all",
-            "全量爬取",
-            fake_task,
-            "group-1",
-            "request",
-            message="任务已创建，正在后台执行",
-            prepend_group_id_to_args=True,
-            on_created=None,
-        )
+        create_task.assert_called_once_with("crawl_all", "全量爬取", "group-1")
+        enqueue_runtime_task.assert_called_once_with(fake_task, "task-1", "group-1", "request")
+        self.assertEqual({"task_id": "task-1", "message": "任务已创建，正在后台执行"}, response)
 
     def test_launch_task_recipe_launches_runtime_recipe(self):
         from backend.services.task_launch import TaskLaunchRecipe, launch_task_recipe
@@ -181,21 +194,19 @@ class TaskLaunchTests(unittest.TestCase):
             message="已创建",
         )
 
-        with patch("backend.services.task_launch.launch_task", return_value={"task_id": "task-2"}) as launch:
+        with (
+            patch("backend.services.task_launch.create_task", return_value="task-2") as create_task,
+            patch("backend.services.task_launch.enqueue_runtime_task") as enqueue_runtime_task,
+        ):
             response = launch_task_recipe(recipe)
 
-        self.assertEqual({"task_id": "task-2"}, response)
-        launch.assert_called_once_with(
+        create_task.assert_called_once_with(
             "daily_topic_analysis",
             "生成日报",
-            fake_task,
-            "group-1",
-            "request",
-            metadata={"report_date": "2026-06-20"},
-            group_id="group-1",
-            message="已创建",
-            on_created=None,
+            metadata={"group_id": "group-1", "report_date": "2026-06-20"},
         )
+        enqueue_runtime_task.assert_called_once_with(fake_task, "task-2", "group-1", "request")
+        self.assertEqual({"task_id": "task-2", "message": "已创建"}, response)
 
 
 if __name__ == "__main__":
