@@ -23,7 +23,8 @@ from backend.core.ai_provider_config import (
     get_openai_compatible_config,
     get_summary_reasoning_effort,
 )
-from backend.services.ai_client import AITextRequest, call_ai_text, extract_response_text
+from backend.services.ai_client import call_ai_text, extract_response_text
+from backend.services.ai_runtime_request import build_runtime_ai_text_request
 
 
 _CUDA_DLL_DIRECTORY_HANDLES: list[Any] = []
@@ -187,11 +188,6 @@ def summarize_text_with_ai(
     reasoning_effort: str,
     get_ai_config: Callable[[], dict[str, Any]] = get_openai_compatible_config,
 ) -> str:
-    runtime_ai_config = get_ai_config()
-    api_key = str(runtime_ai_config.get("api_key") or "").strip()
-    if not api_key:
-        raise RuntimeError("OPENAI_API_KEY not set and config.toml [ai].api_key is empty")
-
     clipped_text = text[:MAX_TEXT_CHARS]
     messages = [
         {
@@ -211,17 +207,16 @@ def summarize_text_with_ai(
         },
     ]
 
-    return call_ai_text(
-        AITextRequest(
-            api_key=api_key,
-            model=model,
-            api_base=api_base,
-            messages=messages,
-            wire_api=wire_api,
-            reasoning_effort=reasoning_effort,
-            timeout=120,
-        )
-    ).strip()
+    request = build_runtime_ai_text_request(
+        messages,
+        get_ai_config=get_ai_config,
+        model=model,
+        api_base=api_base,
+        wire_api=wire_api,
+        reasoning_effort=reasoning_effort,
+        timeout=120,
+    )
+    return call_ai_text(request).strip()
 
 
 def summarize_pdf_with_ai(
@@ -243,41 +238,35 @@ def summarize_pdf_with_ai(
             f"PDF 文件超过 input_file 直传上限 {MAX_DIRECT_PDF_BYTES // (1024 * 1024)} MB，无法进行 AI 分析"
         )
 
-    runtime_ai_config = get_ai_config()
-    api_key = str(runtime_ai_config.get("api_key") or "").strip()
-    if not api_key:
-        raise RuntimeError("OPENAI_API_KEY not set and config.toml [ai].api_key is empty")
-
     base64_string = base64.b64encode(path.read_bytes()).decode("utf-8")
-    return call_ai_text(
-        AITextRequest(
-            api_key=api_key,
-            model=model,
-            api_base=api_base,
-            messages=[
-                {
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "input_file",
-                            "filename": file_name,
-                            "file_data": f"data:application/pdf;base64,{base64_string}",
-                        },
-                        {
-                            "type": "input_text",
-                            "text": (
-                                f"{build_deep_summary_prompt(file_name)}\n\n"
-                                "请直接基于 PDF 页面内容分析；如果 PDF 是扫描件，也请尽量读取页面图像中的文字。"
-                            ),
-                        },
-                    ],
-                }
-            ],
-            wire_api=wire_api,
-            reasoning_effort=reasoning_effort,
-            timeout=180,
-        )
-    ).strip()
+    request = build_runtime_ai_text_request(
+        [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "input_file",
+                        "filename": file_name,
+                        "file_data": f"data:application/pdf;base64,{base64_string}",
+                    },
+                    {
+                        "type": "input_text",
+                        "text": (
+                            f"{build_deep_summary_prompt(file_name)}\n\n"
+                            "请直接基于 PDF 页面内容分析；如果 PDF 是扫描件，也请尽量读取页面图像中的文字。"
+                        ),
+                    },
+                ],
+            }
+        ],
+        get_ai_config=get_ai_config,
+        model=model,
+        api_base=api_base,
+        wire_api=wire_api,
+        reasoning_effort=reasoning_effort,
+        timeout=180,
+    )
+    return call_ai_text(request).strip()
 
 
 def get_faster_whisper_model():
