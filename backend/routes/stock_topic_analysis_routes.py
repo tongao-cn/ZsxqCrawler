@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Any, Callable
+
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 
@@ -25,6 +27,13 @@ router = APIRouter(prefix="/api/analysis/stock-topics", tags=["stock-topic-analy
 
 def _stock_topic_route_error(message: str, error: Exception) -> HTTPException:
     return route_error(message, error)
+
+
+def _run_stock_topic_route(operation: Callable[[], Any], failure_message: str) -> Any:
+    try:
+        return operation()
+    except Exception as exc:
+        raise _stock_topic_route_error(failure_message, exc)
 
 
 class StockTopicAnalysisRequest(BaseModel):
@@ -80,10 +89,14 @@ def _stock_names_from_image(request: StockTopicImageExtractRequest) -> dict:
 
 
 def _create_stock_question_task_response(group_id: str, request: StockQuestionRequest) -> dict[str, str]:
+    if not request.question.strip():
+        raise ValueError("question 不能为空")
     return create_stock_question_task(group_id, request.question)
 
 
 def _create_stock_topic_task_response(group_id: str, request: StockTopicAnalysisRequest) -> dict[str, str]:
+    if not request.stockName.strip():
+        raise ValueError("stock_name 不能为空")
     return create_stock_topic_task(group_id, request.stockName)
 
 
@@ -96,10 +109,7 @@ async def read_stock_question_matches(
     group_id: str,
     question: str = Query(..., min_length=1, description="A股问题"),
 ):
-    try:
-        return _stock_question_matches(group_id, question)
-    except Exception as exc:
-        raise _stock_topic_route_error("搜索A股问答相关话题失败", exc)
+    return _run_stock_topic_route(lambda: _stock_question_matches(group_id, question), "搜索A股问答相关话题失败")
 
 
 @router.post("/{group_id}/questions/analyze")
@@ -107,12 +117,7 @@ async def create_stock_question_analysis(
     group_id: str,
     request: StockQuestionRequest,
 ):
-    try:
-        if not request.question.strip():
-            raise ValueError("question 不能为空")
-        return _create_stock_question_task_response(group_id, request)
-    except Exception as exc:
-        raise _stock_topic_route_error("创建A股问答任务失败", exc)
+    return _run_stock_topic_route(lambda: _create_stock_question_task_response(group_id, request), "创建A股问答任务失败")
 
 
 @router.get("/{group_id}")
@@ -120,18 +125,12 @@ async def read_stock_topic_matches(
     group_id: str,
     stock_name: str = Query(..., min_length=1, description="股票名称"),
 ):
-    try:
-        return _stock_topic_matches(group_id, stock_name)
-    except Exception as exc:
-        raise _stock_topic_route_error("搜索股票相关话题失败", exc)
+    return _run_stock_topic_route(lambda: _stock_topic_matches(group_id, stock_name), "搜索股票相关话题失败")
 
 
 @router.post("/extract-stocks-from-image")
 async def extract_stock_topics_from_image(request: StockTopicImageExtractRequest):
-    try:
-        return _stock_names_from_image(request)
-    except Exception as exc:
-        raise _stock_topic_route_error("从图片提取股票失败", exc)
+    return _run_stock_topic_route(lambda: _stock_names_from_image(request), "从图片提取股票失败")
 
 
 @router.post("/{group_id}/analyze")
@@ -139,12 +138,7 @@ async def create_stock_topic_analysis(
     group_id: str,
     request: StockTopicAnalysisRequest,
 ):
-    try:
-        if not request.stockName.strip():
-            raise ValueError("stock_name 不能为空")
-        return _create_stock_topic_task_response(group_id, request)
-    except Exception as exc:
-        raise _stock_topic_route_error("创建个股话题分析任务失败", exc)
+    return _run_stock_topic_route(lambda: _create_stock_topic_task_response(group_id, request), "创建个股话题分析任务失败")
 
 
 @router.post("/{group_id}/analyze-batch")
@@ -152,10 +146,10 @@ async def create_stock_topic_analysis_batch(
     group_id: str,
     request: StockTopicAnalysisBatchRequest,
 ):
-    try:
-        return _create_stock_topic_batch_task_response(group_id, request.stockNames)
-    except Exception as exc:
-        raise _stock_topic_route_error("创建批量个股话题分析任务失败", exc)
+    return _run_stock_topic_route(
+        lambda: _create_stock_topic_batch_task_response(group_id, request.stockNames),
+        "创建批量个股话题分析任务失败",
+    )
 
 
 @router.post("/{group_id}/external-summary")
@@ -163,10 +157,7 @@ async def read_external_stock_summaries(
     group_id: str,
     request: ExternalStockSummaryRequest,
 ):
-    try:
-        return _external_stock_summaries(group_id, request)
-    except Exception as exc:
-        raise _stock_topic_route_error("获取外部股票汇总失败", exc)
+    return _run_stock_topic_route(lambda: _external_stock_summaries(group_id, request), "获取外部股票汇总失败")
 
 
 @router.get("/{group_id}/latest")
@@ -174,10 +165,7 @@ async def read_latest_stock_topic_analysis(
     group_id: str,
     stock_name: str = Query(..., min_length=1, description="股票名称"),
 ):
-    try:
-        return _latest_stock_topic_analysis_or_404(group_id, stock_name)
-    except Exception as exc:
-        raise _stock_topic_route_error("获取个股话题分析结果失败", exc)
+    return _run_stock_topic_route(lambda: _latest_stock_topic_analysis_or_404(group_id, stock_name), "获取个股话题分析结果失败")
 
 
 @router.get("/{group_id}/latest-batch")
@@ -185,10 +173,7 @@ async def read_latest_stock_topic_analyses(
     group_id: str,
     stock_names: str = Query(..., min_length=1, description="股票名称，支持逗号、顿号、空格或换行分隔"),
 ):
-    try:
-        return _latest_stock_topic_analyses(group_id, stock_names)
-    except Exception as exc:
-        raise _stock_topic_route_error("获取批量个股话题分析结果失败", exc)
+    return _run_stock_topic_route(lambda: _latest_stock_topic_analyses(group_id, stock_names), "获取批量个股话题分析结果失败")
 
 
 @router.get("/{group_id}/read-models")
@@ -196,7 +181,4 @@ async def read_stock_topic_read_models(
     group_id: str,
     stock_names: str = Query(..., min_length=1, description="股票名称，支持逗号、顿号、空格或换行分隔"),
 ):
-    try:
-        return _stock_topic_read_models(group_id, stock_names)
-    except Exception as exc:
-        raise _stock_topic_route_error("获取个股话题读模型失败", exc)
+    return _run_stock_topic_route(lambda: _stock_topic_read_models(group_id, stock_names), "获取个股话题读模型失败")
