@@ -7,14 +7,12 @@ import mimetypes
 from typing import Any, Dict, List, Optional, Tuple
 
 from backend.core.ai_provider_config import (
-    get_default_base_url,
-    get_default_model,
-    get_default_wire_api,
     get_openai_compatible_config,
     get_summary_reasoning_effort,
 )
 from backend.core.image_cache_manager import get_image_cache_manager
-from backend.services.ai_client import AITextRequest, call_ai_text, extract_response_text as extract_response_text
+from backend.services.ai_client import call_ai_text, extract_response_text as extract_response_text
+from backend.services.ai_runtime_request import build_runtime_ai_text_request, resolve_runtime_text_settings
 
 
 def build_image_content_parts(
@@ -54,15 +52,8 @@ def call_report_ai(
     image_inputs: Optional[List[Dict[str, Any]]] = None,
     max_image_bytes: int,
 ) -> Tuple[str, str]:
-    runtime_ai_config = get_openai_compatible_config()
-    api_key = str(runtime_ai_config.get("api_key") or "").strip()
-    if not api_key:
-        raise RuntimeError("OPENAI_API_KEY not set and config.toml [ai].api_key is empty")
-
-    model = str(runtime_ai_config.get("model") or get_default_model())
-    api_base = str(runtime_ai_config.get("base_url") or get_default_base_url())
-    wire_api = str(runtime_ai_config.get("wire_api") or get_default_wire_api())
-    reasoning_effort = get_summary_reasoning_effort()
+    settings = resolve_runtime_text_settings(get_ai_config=get_openai_compatible_config)
+    wire_api = settings.wire_api.strip().lower()
     image_inputs = image_inputs or []
 
     messages = [
@@ -76,40 +67,24 @@ def call_report_ai(
         },
     ]
 
-    if wire_api.strip().lower() == "responses":
+    if wire_api == "responses":
         user_content: List[Dict[str, Any]] = [{"type": "input_text", "text": user_prompt}]
         user_content.extend(build_image_content_parts(group_id, image_inputs, max_image_bytes=max_image_bytes))
         messages.append({"role": "user", "content": user_content})
-        return (
-            call_ai_text(
-                AITextRequest(
-                    api_key=api_key,
-                    model=model,
-                    api_base=api_base,
-                    messages=messages,
-                    wire_api=wire_api,
-                    reasoning_effort=reasoning_effort,
-                    timeout=180,
-                )
-            ).strip(),
-            model,
-        )
 
-    user_content = [{"type": "text", "text": user_prompt}]
-    for image_part in build_image_content_parts(group_id, image_inputs, max_image_bytes=max_image_bytes):
-        user_content.append({"type": "image_url", "image_url": {"url": image_part["image_url"]}})
-    messages.append({"role": "user", "content": user_content if len(user_content) > 1 else user_prompt})
+    else:
+        user_content = [{"type": "text", "text": user_prompt}]
+        for image_part in build_image_content_parts(group_id, image_inputs, max_image_bytes=max_image_bytes):
+            user_content.append({"type": "image_url", "image_url": {"url": image_part["image_url"]}})
+        messages.append({"role": "user", "content": user_content if len(user_content) > 1 else user_prompt})
+
+    request = build_runtime_ai_text_request(
+        messages,
+        settings=settings,
+        reasoning_effort=get_summary_reasoning_effort(),
+        timeout=180,
+    )
     return (
-        call_ai_text(
-            AITextRequest(
-                api_key=api_key,
-                model=model,
-                api_base=api_base,
-                messages=messages,
-                wire_api=wire_api,
-                reasoning_effort=reasoning_effort,
-                timeout=180,
-            )
-        ).strip(),
-        model,
+        call_ai_text(request).strip(),
+        request.model,
     )

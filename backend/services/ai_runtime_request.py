@@ -55,6 +55,7 @@ def resolve_runtime_text_settings(
 def build_runtime_ai_text_request(
     messages: List[Dict[str, Any]],
     *,
+    settings: Optional[AIRuntimeTextSettings] = None,
     get_ai_config: Callable[[], Mapping[str, Any]] = get_openai_compatible_config,
     model: Optional[str] = None,
     api_base: Optional[str] = None,
@@ -64,12 +65,20 @@ def build_runtime_ai_text_request(
     responses_text_format: Optional[Dict[str, Any]] = None,
     chat_response_format: Optional[Dict[str, Any]] = None,
 ) -> AITextRequest:
-    settings = resolve_runtime_text_settings(
-        get_ai_config=get_ai_config,
-        model=model,
-        api_base=api_base,
-        wire_api=wire_api,
-    )
+    if settings is None:
+        settings = resolve_runtime_text_settings(
+            get_ai_config=get_ai_config,
+            model=model,
+            api_base=api_base,
+            wire_api=wire_api,
+        )
+    else:
+        settings = AIRuntimeTextSettings(
+            api_key=settings.api_key,
+            model=_text(model) or settings.model,
+            api_base=_text(api_base) or settings.api_base,
+            wire_api=_text(wire_api) or settings.wire_api,
+        )
     return AITextRequest(
         api_key=settings.api_key,
         model=settings.model,

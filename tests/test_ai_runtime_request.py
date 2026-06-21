@@ -65,6 +65,31 @@ class AIRuntimeRequestTests(unittest.TestCase):
         self.assertEqual("chat_completions", request.wire_api)
         self.assertEqual({"type": "json_object"}, request.chat_response_format)
 
+    @unittest.skipUnless(HAS_OPENAI, "openai dependency is not installed")
+    def test_build_runtime_ai_text_request_can_reuse_resolved_settings(self):
+        from backend.services.ai_runtime_request import AIRuntimeTextSettings, build_runtime_ai_text_request
+
+        def fail_config():
+            raise AssertionError("config should already be resolved")
+
+        request = build_runtime_ai_text_request(
+            [{"role": "user", "content": "hello"}],
+            settings=AIRuntimeTextSettings(
+                api_key="sk-test",
+                model="model-a",
+                api_base="https://api.example.test",
+                wire_api="responses",
+            ),
+            get_ai_config=fail_config,
+            reasoning_effort=" medium ",
+        )
+
+        self.assertEqual("sk-test", request.api_key)
+        self.assertEqual("model-a", request.model)
+        self.assertEqual("https://api.example.test", request.api_base)
+        self.assertEqual("responses", request.wire_api)
+        self.assertEqual("medium", request.reasoning_effort)
+
 
 if __name__ == "__main__":
     unittest.main()
