@@ -26,7 +26,7 @@ class FileAIAnalysisEntryHelperTests(unittest.TestCase):
         self.assertEqual({"analysis": analysis}, result)
         get_analysis.assert_called_once_with("group-1", 123)
 
-    def test_create_file_analysis_response_preserves_defaults_and_payload(self):
+    def test_create_file_analysis_response_delegates_file_defaults_and_payload(self):
         from backend.services import file_ai_analysis_entry as entry
 
         analysis = {"summary": "created"}
@@ -42,10 +42,6 @@ class FileAIAnalysisEntryHelperTests(unittest.TestCase):
             "group-1",
             456,
             force=True,
-            model=entry.A_SHARE_DEFAULT_MODEL,
-            api_base=entry.A_SHARE_DEFAULT_API_BASE,
-            wire_api=entry.A_SHARE_DEFAULT_WIRE_API,
-            reasoning_effort=entry.DEFAULT_FILE_ANALYSIS_REASONING_EFFORT,
         )
 
     def test_create_file_analysis_response_checks_key_before_analysis(self):

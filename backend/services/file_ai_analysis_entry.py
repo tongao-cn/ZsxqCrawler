@@ -3,13 +3,7 @@ from __future__ import annotations
 from typing import Any, Dict
 
 from backend.services.ai_workflow_preflight import require_openai_api_key
-from backend.services.a_share_analysis_service import (
-    DEFAULT_API_BASE as A_SHARE_DEFAULT_API_BASE,
-    DEFAULT_MODEL as A_SHARE_DEFAULT_MODEL,
-    DEFAULT_WIRE_API as A_SHARE_DEFAULT_WIRE_API,
-)
 from backend.services.file_ai_analysis_service import (
-    DEFAULT_FILE_ANALYSIS_REASONING_EFFORT,
     analyze_group_file,
     get_group_file_analysis,
 )
@@ -34,10 +28,6 @@ def create_file_analysis_response(group_id: str, file_id: int, force: bool) -> D
         group_id,
         file_id,
         force=force,
-        model=A_SHARE_DEFAULT_MODEL,
-        api_base=A_SHARE_DEFAULT_API_BASE,
-        wire_api=A_SHARE_DEFAULT_WIRE_API,
-        reasoning_effort=DEFAULT_FILE_ANALYSIS_REASONING_EFFORT,
     )
     return {"analysis": result}
 
