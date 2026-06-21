@@ -122,6 +122,47 @@ async def fetch_column_video_m3u8_url(
     )
 
 
+def _request_column_json_once(
+    task_id: str,
+    url: str,
+    headers: Dict[str, str],
+    *,
+    request_get: Callable[..., Any] = requests.get,
+    add_task_log: Callable[[str, str], None] = lambda _task_id, _message: None,
+    log_error: Callable[[str], None] = lambda _message: None,
+    log_exception: Callable[[str], None] = lambda _message: None,
+    context: str,
+    log_action: str,
+    parse_label: str,
+    user_action: str,
+    user_parse_label: str,
+) -> tuple[Optional[Dict[str, Any]], int]:
+    request_count = 0
+
+    try:
+        resp = request_get(url, headers=headers, timeout=30)
+        request_count += 1
+    except Exception as req_err:
+        log_exception(f"{log_action}请求异常: {context}, url={url}")
+        add_task_log(task_id, f"   ⚠️ {user_action}请求异常: {req_err}")
+        return None, request_count
+
+    if resp.status_code != 200:
+        log_error(
+            f"{log_action}失败: {context}, HTTP {resp.status_code}, "
+            f"response={redact_response_for_log(resp.text)}"
+        )
+        add_task_log(task_id, f"   ⚠️ {user_action}失败: HTTP {resp.status_code}")
+        return None, request_count
+
+    try:
+        return resp.json(), request_count
+    except Exception as json_err:
+        log_exception(f"解析{parse_label}JSON失败: {context}, response={redact_response_for_log(resp.text)}")
+        add_task_log(task_id, f"   ⚠️ 解析{user_parse_label}失败: {json_err}")
+        return None, request_count
+
+
 async def fetch_columns_catalog(
     task_id: str,
     group_id: str,
@@ -213,29 +254,21 @@ def fetch_column_topics(
     log_error: Callable[[str], None] = lambda _message: None,
     log_exception: Callable[[str], None] = lambda _message: None,
 ) -> tuple[Optional[List[Dict[str, Any]]], int]:
-    request_count = 0
-
-    try:
-        topics_resp = request_get(topics_url, headers=headers, timeout=30)
-        request_count += 1
-    except Exception as req_err:
-        log_exception(f"获取专栏文章列表请求异常: column_id={column_id}, url={topics_url}")
-        add_task_log(task_id, f"   ⚠️ 获取文章列表请求异常: {req_err}")
-        return None, request_count
-
-    if topics_resp.status_code != 200:
-        log_error(
-            f"获取专栏文章列表失败: column_id={column_id}, HTTP {topics_resp.status_code}, "
-            f"response={redact_response_for_log(topics_resp.text)}"
-        )
-        add_task_log(task_id, f"   ⚠️ 获取文章列表失败: HTTP {topics_resp.status_code}")
-        return None, request_count
-
-    try:
-        topics_data = topics_resp.json()
-    except Exception as json_err:
-        log_exception(f"解析专栏文章列表JSON失败: column_id={column_id}, response={redact_response_for_log(topics_resp.text)}")
-        add_task_log(task_id, f"   ⚠️ 解析文章列表失败: {json_err}")
+    topics_data, request_count = _request_column_json_once(
+        task_id,
+        topics_url,
+        headers,
+        request_get=request_get,
+        add_task_log=add_task_log,
+        log_error=log_error,
+        log_exception=log_exception,
+        context=f"column_id={column_id}",
+        log_action="获取专栏文章列表",
+        parse_label="专栏文章列表",
+        user_action="获取文章列表",
+        user_parse_label="文章列表",
+    )
+    if topics_data is None:
         return None, request_count
 
     if not topics_data.get("succeeded"):

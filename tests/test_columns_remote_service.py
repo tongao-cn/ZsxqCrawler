@@ -1,7 +1,11 @@
 import asyncio
 import unittest
 
-from backend.services.columns_remote_service import fetch_column_file_download_url, fetch_column_video_m3u8_url
+from backend.services.columns_remote_service import (
+    fetch_column_file_download_url,
+    fetch_column_topics,
+    fetch_column_video_m3u8_url,
+)
 
 
 class FakeResponse:
@@ -11,6 +15,8 @@ class FakeResponse:
         self.text = text
 
     def json(self):
+        if isinstance(self.payload, Exception):
+            raise self.payload
         return self.payload
 
 
@@ -98,6 +104,72 @@ class ColumnsRemoteServiceTests(unittest.TestCase):
         self.assertEqual(
             ["获取下载链接失败: code=403, message=denied, file_id=12, file_name=secret.pdf"],
             log_errors,
+        )
+
+    def test_fetch_column_topics_returns_topics_and_request_count(self):
+        task_logs = []
+
+        def request_get(url, **kwargs):
+            self.assertEqual("https://example.test/topics", url)
+            self.assertEqual({"Cookie": "redacted"}, kwargs["headers"])
+            self.assertEqual(30, kwargs["timeout"])
+            return FakeResponse({"succeeded": True, "resp_data": {"topics": [{"topic_id": 1}]}})
+
+        topics, request_count = fetch_column_topics(
+            "task-1",
+            3,
+            "https://example.test/topics",
+            {"Cookie": "redacted"},
+            request_get=request_get,
+            add_task_log=lambda task_id, message: task_logs.append((task_id, message)),
+        )
+
+        self.assertEqual([{"topic_id": 1}], topics)
+        self.assertEqual(1, request_count)
+        self.assertEqual([("task-1", "   📝 获取到 1 篇文章")], task_logs)
+
+    def test_fetch_column_topics_preserves_http_failure_logs(self):
+        task_logs = []
+        log_errors = []
+
+        topics, request_count = fetch_column_topics(
+            "task-1",
+            3,
+            "https://example.test/topics",
+            {},
+            request_get=lambda *args, **kwargs: FakeResponse(status_code=503, text="service unavailable"),
+            add_task_log=lambda task_id, message: task_logs.append((task_id, message)),
+            log_error=log_errors.append,
+        )
+
+        self.assertIsNone(topics)
+        self.assertEqual(1, request_count)
+        self.assertEqual([("task-1", "   ⚠️ 获取文章列表失败: HTTP 503")], task_logs)
+        self.assertEqual(
+            ["获取专栏文章列表失败: column_id=3, HTTP 503, response=service unavailable"],
+            log_errors,
+        )
+
+    def test_fetch_column_topics_preserves_json_failure_logs(self):
+        task_logs = []
+        log_exceptions = []
+
+        topics, request_count = fetch_column_topics(
+            "task-1",
+            3,
+            "https://example.test/topics",
+            {},
+            request_get=lambda *args, **kwargs: FakeResponse(ValueError("bad json"), text="not-json"),
+            add_task_log=lambda task_id, message: task_logs.append((task_id, message)),
+            log_exception=log_exceptions.append,
+        )
+
+        self.assertIsNone(topics)
+        self.assertEqual(1, request_count)
+        self.assertEqual([("task-1", "   ⚠️ 解析文章列表失败: bad json")], task_logs)
+        self.assertEqual(
+            ["解析专栏文章列表JSON失败: column_id=3, response=not-json"],
+            log_exceptions,
         )
 
 
