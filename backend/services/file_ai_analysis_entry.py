@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Dict
 
-from backend.core.ai_provider_config import has_openai_api_key
+from backend.services.ai_workflow_preflight import require_openai_api_key
 from backend.services.a_share_analysis_service import (
     DEFAULT_API_BASE as A_SHARE_DEFAULT_API_BASE,
     DEFAULT_MODEL as A_SHARE_DEFAULT_MODEL,
@@ -18,24 +18,9 @@ from backend.services.file_workflow_service import (
     create_selected_file_ai_analysis_task,
 )
 
-FILE_ANALYSIS_MISSING_API_KEY_MESSAGE = (
-    "未配置 OpenAI API Key，请设置环境变量 OPENAI_API_KEY 或 config.toml [ai].api_key"
-)
-
-
-class FileAIAnalysisEntryError(Exception):
-    def __init__(self, status_code: int, detail: str):
-        super().__init__(detail)
-        self.status_code = status_code
-        self.detail = detail
-
-    def __str__(self) -> str:
-        return f"{self.status_code}: {self.detail}"
-
 
 def ensure_file_analysis_api_key() -> None:
-    if not has_openai_api_key():
-        raise FileAIAnalysisEntryError(400, FILE_ANALYSIS_MISSING_API_KEY_MESSAGE)
+    require_openai_api_key()
 
 
 def get_file_analysis_response(group_id: str, file_id: int) -> Dict[str, Any]:

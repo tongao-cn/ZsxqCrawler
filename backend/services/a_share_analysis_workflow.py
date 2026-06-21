@@ -5,7 +5,11 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Optional
 
-from backend.core.ai_provider_config import has_openai_api_key
+from backend.services.ai_workflow_preflight import (
+    AIWorkflowPreflightError,
+    fail_task_if_openai_api_key_missing,
+    require_openai_api_key,
+)
 from backend.services.a_share_analysis_service import (
     DEFAULT_API_BASE as A_SHARE_DEFAULT_API_BASE,
     DEFAULT_CONCURRENCY as A_SHARE_DEFAULT_CONCURRENCY,
@@ -18,9 +22,6 @@ from backend.services.a_share_analysis_service import (
 from backend.services.task_launch import TaskLaunchRecipe, launch_task_recipe
 from backend.services.task_runtime import add_task_log, build_task_log_callback, is_task_stopped, update_task
 from backend.services.tdx_a_share_export_service import export_a_share_rankings_to_tdx
-
-
-A_SHARE_MISSING_API_KEY_MESSAGE = "未配置 OpenAI API Key，请设置环境变量 OPENAI_API_KEY 或 config.toml [ai].api_key"
 
 
 @dataclass(frozen=True)
@@ -88,12 +89,11 @@ def _a_share_analysis_task_context(
 
 
 def _a_share_api_key_available_or_fail_task(task_id: str) -> bool:
-    if has_openai_api_key():
-        return True
-
-    update_task(task_id, "failed", A_SHARE_MISSING_API_KEY_MESSAGE)
-    add_task_log(task_id, f"❌ {A_SHARE_MISSING_API_KEY_MESSAGE}")
-    return False
+    return not fail_task_if_openai_api_key_missing(
+        task_id,
+        update_task_state=update_task,
+        add_task_log=add_task_log,
+    )
 
 
 def _a_share_task_ready_to_start(task_id: str) -> bool:
@@ -192,8 +192,10 @@ def create_a_share_analysis_task(
     reset_start_date: Optional[str] = None,
     reset_end_date: Optional[str] = None,
 ) -> dict[str, str]:
-    if not has_openai_api_key():
-        raise RuntimeError(A_SHARE_MISSING_API_KEY_MESSAGE)
+    try:
+        require_openai_api_key()
+    except AIWorkflowPreflightError as exc:
+        raise RuntimeError(exc.detail) from exc
 
     request = AShareAnalysisTaskRequest(
         group_id=group_id,

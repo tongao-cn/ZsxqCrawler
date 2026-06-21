@@ -14,8 +14,8 @@ from backend.schemas.files import (
     FileIdListRequest,
 )
 from backend.routes.task_http_errors import task_launch_route_error
+from backend.services.ai_workflow_preflight import AIWorkflowPreflightError as FileAIAnalysisEntryError
 from backend.services.file_ai_analysis_entry import (
-    FileAIAnalysisEntryError,
     create_file_analysis_response,
     create_file_analysis_task_response,
     create_selected_file_analysis_task_response,

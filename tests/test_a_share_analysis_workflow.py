@@ -7,14 +7,14 @@ class AShareAnalysisWorkflowTests(unittest.TestCase):
     def test_create_a_share_analysis_task_requires_api_key(self):
         from backend.services import a_share_analysis_workflow as workflow
 
-        with patch("backend.services.a_share_analysis_workflow.has_openai_api_key", return_value=False):
+        with patch("backend.services.ai_workflow_preflight.has_openai_api_key", return_value=False):
             with self.assertRaisesRegex(RuntimeError, "OpenAI API Key"):
                 workflow.create_a_share_analysis_task(group_id="51111112855254")
 
     def test_create_a_share_analysis_task_uses_service_runner_and_metadata(self):
         from backend.services import a_share_analysis_workflow as workflow
 
-        with patch("backend.services.a_share_analysis_workflow.has_openai_api_key", return_value=True), patch(
+        with patch("backend.services.ai_workflow_preflight.has_openai_api_key", return_value=True), patch(
             "backend.services.a_share_analysis_workflow.launch_task_recipe",
             return_value={"task_id": "task-a-share"},
         ) as launch:
@@ -53,10 +53,11 @@ class AShareAnalysisWorkflowTests(unittest.TestCase):
 
     def test_run_a_share_analysis_task_fails_fast_without_api_key(self):
         from backend.services import a_share_analysis_workflow as workflow
+        from backend.services.ai_workflow_preflight import MISSING_OPENAI_API_KEY_MESSAGE
 
         request = workflow.AShareAnalysisTaskRequest(group_id="51111112855254")
         with (
-            patch("backend.services.a_share_analysis_workflow.has_openai_api_key", return_value=False),
+            patch("backend.services.ai_workflow_preflight.has_openai_api_key", return_value=False),
             patch("backend.services.a_share_analysis_workflow.update_task") as update_task,
             patch("backend.services.a_share_analysis_workflow.add_task_log") as add_task_log,
             patch("backend.services.a_share_analysis_workflow.run_analysis") as run_analysis,
@@ -66,9 +67,9 @@ class AShareAnalysisWorkflowTests(unittest.TestCase):
         update_task.assert_called_once_with(
             "task-a-share",
             "failed",
-            workflow.A_SHARE_MISSING_API_KEY_MESSAGE,
+            MISSING_OPENAI_API_KEY_MESSAGE,
         )
-        add_task_log.assert_called_once_with("task-a-share", f"❌ {workflow.A_SHARE_MISSING_API_KEY_MESSAGE}")
+        add_task_log.assert_called_once_with("task-a-share", f"❌ {MISSING_OPENAI_API_KEY_MESSAGE}")
         run_analysis.assert_not_called()
 
     def test_export_a_share_analysis_to_tdx_returns_success_payload(self):

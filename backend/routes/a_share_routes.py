@@ -20,10 +20,10 @@ from backend.services.a_share_analysis_service import (
 )
 from backend.services.a_share_analysis_status_service import get_a_share_analysis_status_payload
 from backend.services.a_share_analysis_workflow import (
-    A_SHARE_MISSING_API_KEY_MESSAGE,
     create_a_share_analysis_task,
     export_a_share_analysis_to_tdx as run_a_share_tdx_export,
 )
+from backend.services.ai_workflow_preflight import MISSING_OPENAI_API_KEY_MESSAGE as A_SHARE_MISSING_API_KEY_MESSAGE
 from backend.services.task_launch import TASK_CREATED_MESSAGE as _TASK_CREATED_MESSAGE
 
 router = APIRouter(prefix="/api/analytics/a-share", tags=["a-share"])

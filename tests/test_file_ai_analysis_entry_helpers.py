@@ -5,14 +5,15 @@ from unittest.mock import patch
 class FileAIAnalysisEntryHelperTests(unittest.TestCase):
     def test_ensure_file_analysis_api_key_preserves_missing_key_error(self):
         from backend.services import file_ai_analysis_entry as entry
+        from backend.services.ai_workflow_preflight import AIWorkflowPreflightError, MISSING_OPENAI_API_KEY_MESSAGE
 
-        with patch.object(entry, "has_openai_api_key", return_value=False):
-            with self.assertRaises(entry.FileAIAnalysisEntryError) as raised:
+        with patch("backend.services.ai_workflow_preflight.has_openai_api_key", return_value=False):
+            with self.assertRaises(AIWorkflowPreflightError) as raised:
                 entry.ensure_file_analysis_api_key()
 
         self.assertEqual(400, raised.exception.status_code)
-        self.assertEqual(entry.FILE_ANALYSIS_MISSING_API_KEY_MESSAGE, raised.exception.detail)
-        self.assertEqual(f"400: {entry.FILE_ANALYSIS_MISSING_API_KEY_MESSAGE}", str(raised.exception))
+        self.assertEqual(MISSING_OPENAI_API_KEY_MESSAGE, raised.exception.detail)
+        self.assertEqual(f"400: {MISSING_OPENAI_API_KEY_MESSAGE}", str(raised.exception))
 
     def test_get_file_analysis_response_preserves_payload_shape(self):
         from backend.services import file_ai_analysis_entry as entry
@@ -31,7 +32,7 @@ class FileAIAnalysisEntryHelperTests(unittest.TestCase):
         analysis = {"summary": "created"}
 
         with (
-            patch.object(entry, "has_openai_api_key", return_value=True),
+            patch("backend.services.ai_workflow_preflight.has_openai_api_key", return_value=True),
             patch.object(entry, "analyze_group_file", return_value=analysis) as analyze_file,
         ):
             result = entry.create_file_analysis_response("group-1", 456, True)
@@ -49,12 +50,13 @@ class FileAIAnalysisEntryHelperTests(unittest.TestCase):
 
     def test_create_file_analysis_response_checks_key_before_analysis(self):
         from backend.services import file_ai_analysis_entry as entry
+        from backend.services.ai_workflow_preflight import AIWorkflowPreflightError
 
         with (
-            patch.object(entry, "has_openai_api_key", return_value=False),
+            patch("backend.services.ai_workflow_preflight.has_openai_api_key", return_value=False),
             patch.object(entry, "analyze_group_file") as analyze_file,
         ):
-            with self.assertRaises(entry.FileAIAnalysisEntryError):
+            with self.assertRaises(AIWorkflowPreflightError):
                 entry.create_file_analysis_response("group-1", 456, True)
 
         analyze_file.assert_not_called()
@@ -63,7 +65,7 @@ class FileAIAnalysisEntryHelperTests(unittest.TestCase):
         from backend.services import file_ai_analysis_entry as entry
 
         with (
-            patch.object(entry, "has_openai_api_key", return_value=True),
+            patch("backend.services.ai_workflow_preflight.has_openai_api_key", return_value=True),
             patch.object(entry, "create_file_ai_analysis_task", return_value={"task_id": "task-1"}) as create_task,
         ):
             result = entry.create_file_analysis_task_response("group-1", 123, True)
@@ -77,7 +79,7 @@ class FileAIAnalysisEntryHelperTests(unittest.TestCase):
         request = object()
 
         with (
-            patch.object(entry, "has_openai_api_key", return_value=True),
+            patch("backend.services.ai_workflow_preflight.has_openai_api_key", return_value=True),
             patch.object(
                 entry,
                 "create_selected_file_ai_analysis_task",
