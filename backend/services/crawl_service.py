@@ -12,6 +12,17 @@ from backend.crawlers.official_topic_client import (
 )
 from backend.crawlers.topic_crawler import ZSXQTopicCrawler
 from backend.schemas.crawl import CrawlTimeRangeRequest
+from backend.services.official_topic_page_importer import (
+    add_official_import_result,
+    fetch_official_comments,
+    import_official_page_topics,
+    import_official_topic,
+    import_official_topics,
+    new_official_topics,
+    official_topic_comments_count,
+    official_topic_exists,
+    official_topic_id,
+)
 from backend.services.task_runtime import (
     add_task_log,
     is_task_stopped,
@@ -498,34 +509,28 @@ def _run_legacy_time_range_pages(
     return _LegacyTimeRangeRunResult(stats=total_stats, expired=False)
 
 def _official_import_topic(db: ZSXQDatabase, _group_id: str, topic_data: dict[str, Any]) -> str:
-    result = db.import_topic_data_with_result(topic_data)
-    if not result.succeeded:
-        return "error"
-    return "updated" if result.status == "existing" else "new"
+    return import_official_topic(db, _group_id, topic_data)
 
 def _official_topic_exists(db: ZSXQDatabase, _group_id: str, topic_id: Any) -> bool:
-    return db.topic_exists(topic_id)
+    return official_topic_exists(db, _group_id, topic_id)
 
 def _official_topic_id(topic: dict[str, Any]) -> int:
-    return int(topic.get("topic_id") or 0)
+    return official_topic_id(topic)
 
 def _official_topic_comments_count(topic: dict[str, Any]) -> int:
-    return int((topic.get("counts") or {}).get("comments") or 0)
+    return official_topic_comments_count(topic)
 
 def _add_official_import_result(stats: dict[str, int], imported: str) -> None:
-    if imported == "new":
-        stats["new_topics"] += 1
-    elif imported == "updated":
-        stats["updated_topics"] += 1
-    else:
-        stats["errors"] += 1
+    add_official_import_result(stats, imported)
 
 def _new_official_topics(db: ZSXQDatabase, group_id: str, topics: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    return [
-        topic
-        for topic in topics
-        if not _official_topic_exists(db, group_id, _official_topic_id(topic))
-    ]
+    return new_official_topics(
+        db,
+        group_id,
+        topics,
+        topic_exists=_official_topic_exists,
+        topic_id=_official_topic_id,
+    )
 
 def _fetch_official_comments(
     client: OfficialTopicClient,
@@ -533,15 +538,7 @@ def _fetch_official_comments(
     comments_count: int,
     task_id: str,
 ) -> list[dict[str, Any]]:
-    if comments_count <= 0:
-        return []
-    try:
-        comments = client.get_topic_comments(topic_id)
-        add_task_log(task_id, f"📝 话题 {topic_id} 官方评论拉取 {len(comments)}/{comments_count} 条")
-        return comments
-    except Exception as exc:
-        add_task_log(task_id, f"⚠️ 话题 {topic_id} 官方评论拉取失败: {exc}")
-        return []
+    return fetch_official_comments(client, topic_id, comments_count, task_id, add_task_log)
 
 def _official_import_topics(
     db: ZSXQDatabase,
@@ -550,16 +547,20 @@ def _official_import_topics(
     topics: list[dict[str, Any]],
     task_id: str,
 ) -> dict[str, int]:
-    stats = {"new_topics": 0, "updated_topics": 0, "errors": 0}
-    for topic in topics:
-        topic_id = _official_topic_id(topic)
-        comments_count = _official_topic_comments_count(topic)
-        comments = _fetch_official_comments(client, topic_id, comments_count, task_id)
-        normalized = normalize_official_topic(topic, group_id, comments=comments if comments_count else None)
-        imported = _official_import_topic(db, group_id, normalized)
-        _add_official_import_result(stats, imported)
-    db.conn.commit()
-    return stats
+    return import_official_topics(
+        db,
+        client,
+        group_id,
+        topics,
+        task_id,
+        add_task_log,
+        topic_id=_official_topic_id,
+        comments_count_for_topic=_official_topic_comments_count,
+        fetch_comments=_fetch_official_comments,
+        normalize_topic=normalize_official_topic,
+        import_topic=_official_import_topic,
+        add_import_result=_add_official_import_result,
+    )
 
 def _official_import_page_topics(
     total_stats: dict[str, Any],
@@ -569,9 +570,17 @@ def _official_import_page_topics(
     topics: list[dict[str, Any]],
     task_id: str,
 ) -> dict[str, int]:
-    page_stats = _official_import_topics(db, client, group_id, topics, task_id)
-    _add_official_page_stats(total_stats, page_stats)
-    return page_stats
+    return import_official_page_topics(
+        total_stats,
+        db,
+        client,
+        group_id,
+        topics,
+        task_id,
+        add_task_log,
+        _add_official_page_stats,
+        import_topics=_official_import_topics,
+    )
 
 def _official_topic_client(task_id: str) -> OfficialTopicClient:
     return OfficialTopicClient(log_callback=lambda message: add_task_log(task_id, message))
