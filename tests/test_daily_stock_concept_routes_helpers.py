@@ -6,11 +6,6 @@ from unittest.mock import patch
 HAS_ROUTE_DEPS = find_spec("fastapi") is not None and find_spec("pydantic") is not None
 
 
-class FakeBackgroundTasks:
-    def __init__(self):
-        self.tasks = []
-
-
 class DailyStockConceptRoutesHelperTests(unittest.TestCase):
     @unittest.skipUnless(HAS_ROUTE_DEPS, "daily stock concept route dependencies are not installed")
     def test_daily_stock_concept_route_error_preserves_status_and_detail_format(self):
@@ -60,7 +55,6 @@ class DailyStockConceptRoutesHelperTests(unittest.TestCase):
                     daily_stock_concept_routes.create_daily_stock_concepts(
                         "group-1",
                         request,
-                        FakeBackgroundTasks(),
                     )
                 )
 

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Optional
 
-from fastapi import APIRouter, BackgroundTasks, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from backend.services.daily_stock_concept_service import get_daily_stock_concepts
@@ -45,7 +45,6 @@ def _daily_stock_concepts_or_404(group_id: str, date: Optional[str]) -> dict:
 async def create_daily_stock_concepts(
     group_id: str,
     request: DailyStockConceptRequest,
-    background_tasks: BackgroundTasks,
 ):
     try:
         return _create_daily_stock_concept_task_response(group_id, request)
