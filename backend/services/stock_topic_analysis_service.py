@@ -11,7 +11,6 @@ from backend.core.ai_provider_config import (
     get_openai_compatible_config,
     get_summary_reasoning_effort,
 )
-from backend.services.ai_json_utils import extract_json_object
 from backend.services.ai_runtime_request import call_runtime_ai_text, call_structured_ai_object
 from backend.services.stock_topic_analysis_ai_prompts import (
     build_image_stock_extraction_input,
@@ -82,6 +81,17 @@ QUESTION_KEYWORD_EXTRACTION_SCHEMA: Dict[str, Any] = {
         },
     },
     "required": ["keywords"],
+    "additionalProperties": False,
+}
+IMAGE_STOCK_NAME_EXTRACTION_SCHEMA: Dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "stockNames": {
+            "type": "array",
+            "items": {"type": "string"},
+        },
+    },
+    "required": ["stockNames"],
     "additionalProperties": False,
 }
 STOCK_TOPIC_ANALYSIS_TABLE = "stock_topic_analyses"
@@ -471,10 +481,6 @@ def _call_stock_analysis_ai(prompt_payload: str, *, incremental: bool = False) -
     )
 
 
-def _extract_json_object(text: str) -> Dict[str, Any]:
-    return extract_json_object(text)
-
-
 def _call_question_keyword_ai(question: str) -> Tuple[List[str], str]:
     messages = build_question_keyword_messages(question)
     try:
@@ -518,26 +524,29 @@ def extract_stock_names_from_image(image_data_url: str) -> Dict[str, Any]:
     mime_type, normalized_data_url, image_bytes = _parse_image_data_url(image_data_url)
     prompt = (
         "请从这张图片中提取出现的 A 股股票名称。"
-        "只输出 JSON，不要 Markdown，不要解释。"
+        "只输出符合 schema 的 JSON，不要 Markdown，不要解释。"
         "如果识别到股票，JSON 结构为 {\"stockNames\": [\"股票名1\", \"股票名2\"]}。"
-        "如果图片中没有明确股票名称，JSON 结构为 {\"error\": \"NO_STOCKS\"}。"
+        "如果图片中没有明确股票名称，stockNames 返回空数组。"
         "要求：保留图片里的股票中文简称，去重，最多 50 个。"
     )
 
-    result = call_runtime_ai_text(
-        build_image_stock_extraction_input(prompt, normalized_data_url),
-        get_ai_config=get_openai_compatible_config,
-        wire_api="responses",
-        reasoning_effort=get_summary_reasoning_effort(),
-        timeout=120,
-    )
-    text = result.text
+    try:
+        result = call_structured_ai_object(
+            build_image_stock_extraction_input(prompt, normalized_data_url),
+            schema_name="stock_image_name_extraction",
+            schema=IMAGE_STOCK_NAME_EXTRACTION_SCHEMA,
+            label="AI 图片股票抽取结果",
+            get_ai_config=get_openai_compatible_config,
+            wire_api="responses",
+            reasoning_effort=get_summary_reasoning_effort(),
+            timeout=120,
+        )
+    except RuntimeError as exc:
+        if not str(exc).startswith("AI 图片股票抽取结果不是合法 JSON"):
+            raise
+        raise ValueError("AI 图片股票抽取结果不是合法 JSON") from exc
 
-    parsed = _extract_json_object(text)
-    if parsed:
-        stock_names = parse_stock_names(parsed.get("stockNames") or parsed.get("stock_names") or [])
-    else:
-        stock_names = parse_stock_names(text)
+    stock_names = parse_stock_names(result.payload.get("stockNames") or result.payload.get("stock_names") or [])
     if not stock_names:
         raise ValueError("图片里没有识别到明确股票名称")
     return {

@@ -372,7 +372,7 @@ class StockTopicAnalysisServiceHelperTests(unittest.TestCase):
 
     @unittest.skipUnless(HAS_SERVICE_DEPS, "stock topic analysis service dependencies are not installed")
     def test_extract_stock_names_from_image_parses_ai_json(self):
-        from backend.services.ai_runtime_request import AIRuntimeTextResult
+        from backend.services.ai_runtime_request import AIRuntimeStructuredObjectResult
         from backend.services.stock_topic_analysis_service import extract_stock_names_from_image
 
         stock_names = [f"股票{i}" for i in range(55)]
@@ -381,17 +381,22 @@ class StockTopicAnalysisServiceHelperTests(unittest.TestCase):
         def fake_call(messages, **kwargs):
             captured["messages"] = messages
             captured["kwargs"] = kwargs
-            return AIRuntimeTextResult(
-                json.dumps({"stockNames": [*stock_names, stock_names[0]]}, ensure_ascii=False),
+            payload = {"stockNames": [*stock_names, stock_names[0]]}
+            return AIRuntimeStructuredObjectResult(
+                payload,
+                json.dumps(payload, ensure_ascii=False),
                 "test-model",
             )
 
         encoded = base64.b64encode(b"image-bytes").decode("ascii")
-        with patch("backend.services.stock_topic_analysis_service.call_runtime_ai_text", side_effect=fake_call):
+        with patch("backend.services.stock_topic_analysis_service.call_structured_ai_object", side_effect=fake_call):
             result = extract_stock_names_from_image(f"data:image/png;base64,{encoded}")
 
         self.assertEqual(stock_names[:50], result["stockNames"])
         self.assertEqual("test-model", result["model"])
+        self.assertEqual("stock_image_name_extraction", captured["kwargs"]["schema_name"])
+        self.assertEqual("AI 图片股票抽取结果", captured["kwargs"]["label"])
+        self.assertEqual(["stockNames"], captured["kwargs"]["schema"]["required"])
         self.assertEqual("responses", captured["kwargs"]["wire_api"])
         self.assertEqual(120, captured["kwargs"]["timeout"])
         prompt_text = captured["messages"][0]["content"][0]["text"]
@@ -399,18 +404,42 @@ class StockTopicAnalysisServiceHelperTests(unittest.TestCase):
 
     @unittest.skipUnless(HAS_SERVICE_DEPS, "stock topic analysis service dependencies are not installed")
     def test_extract_stock_names_from_image_rejects_empty_result(self):
-        from backend.services.ai_runtime_request import AIRuntimeTextResult
+        from backend.services.ai_runtime_request import AIRuntimeStructuredObjectResult
         from backend.services.stock_topic_analysis_service import extract_stock_names_from_image
 
         encoded = base64.b64encode(b"image-bytes").decode("ascii")
         with patch(
-            "backend.services.stock_topic_analysis_service.call_runtime_ai_text",
-            return_value=AIRuntimeTextResult('{"stockNames":[]}', "test-model"),
+            "backend.services.stock_topic_analysis_service.call_structured_ai_object",
+            return_value=AIRuntimeStructuredObjectResult({"stockNames": []}, '{"stockNames":[]}', "test-model"),
         ):
             with self.assertRaises(ValueError) as raised:
                 extract_stock_names_from_image(f"data:image/png;base64,{encoded}")
 
         self.assertIn("没有识别到明确股票名称", str(raised.exception))
+
+    @unittest.skipUnless(HAS_SERVICE_DEPS, "stock topic analysis service dependencies are not installed")
+    def test_extract_stock_names_from_image_rejects_invalid_json(self):
+        from backend.services.stock_topic_analysis_service import extract_stock_names_from_image
+
+        encoded = base64.b64encode(b"image-bytes").decode("ascii")
+        with patch(
+            "backend.services.stock_topic_analysis_service.call_structured_ai_object",
+            side_effect=RuntimeError("AI 图片股票抽取结果不是合法 JSON: not json"),
+        ):
+            with self.assertRaisesRegex(ValueError, "AI 图片股票抽取结果不是合法 JSON"):
+                extract_stock_names_from_image(f"data:image/png;base64,{encoded}")
+
+    @unittest.skipUnless(HAS_SERVICE_DEPS, "stock topic analysis service dependencies are not installed")
+    def test_extract_stock_names_from_image_preserves_runtime_errors(self):
+        from backend.services.stock_topic_analysis_service import extract_stock_names_from_image
+
+        encoded = base64.b64encode(b"image-bytes").decode("ascii")
+        with patch(
+            "backend.services.stock_topic_analysis_service.call_structured_ai_object",
+            side_effect=RuntimeError("OPENAI_API_KEY missing"),
+        ):
+            with self.assertRaisesRegex(RuntimeError, "OPENAI_API_KEY missing"):
+                extract_stock_names_from_image(f"data:image/png;base64,{encoded}")
 
     @unittest.skipUnless(HAS_SERVICE_DEPS, "stock topic analysis service dependencies are not installed")
     def test_search_stock_topics_returns_empty_result_without_rows(self):
