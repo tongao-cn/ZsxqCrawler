@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Optional
 
 from backend.services.group_image_cache_clear import clear_group_image_cache
-from backend.services.topic_workflow_service import TopicWorkflowError, _clear_group_topic_data
+from backend.services.topic_workflow_service import TopicWorkflowError
 from backend.storage.zsxq_database import TagNotFoundInGroupError, ZSXQDatabase
 
 
@@ -53,6 +53,16 @@ def get_topic_detail_response(topic_id: int, group_id: str) -> dict:
         if not topic_detail:
             raise TopicWorkflowError(404, "话题不存在")
         return topic_detail
+    finally:
+        _close_topic_db(db)
+
+
+def _clear_group_topic_data(group_id: str) -> dict:
+    db = ZSXQDatabase(group_id)
+    try:
+        deleted_counts = db.delete_group_topic_records()
+        db.conn.commit()
+        return deleted_counts
     finally:
         _close_topic_db(db)
 

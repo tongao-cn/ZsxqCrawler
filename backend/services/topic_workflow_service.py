@@ -87,16 +87,6 @@ def _rollback_topic_db(db) -> None:
         pass
 
 
-def _clear_group_topic_data(group_id: str) -> dict:
-    db = ZSXQDatabase(group_id)
-    try:
-        deleted_counts = db.delete_group_topic_records()
-        db.conn.commit()
-        return deleted_counts
-    finally:
-        db.close()
-
-
 def refresh_topic_stats(topic_id: int, group_id: str) -> dict:
     db = None
     try:
