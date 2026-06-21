@@ -851,6 +851,27 @@ class TaskRuntimeHelperTests(unittest.TestCase):
         self.assertIsNone(store.tasks["task-1"]["result"])
         self.assertEqual([], store.released_locks)
 
+    def test_run_workflow_allows_work_to_skip_completion(self):
+        from backend.services.task_runtime import run_workflow, skip_workflow_completion
+
+        store = FakeTaskStore()
+        store.tasks["task-1"] = {"task_id": "task-1", "status": "pending", "message": "queued"}
+
+        with patch("backend.services.task_runtime.get_task_store", return_value=store):
+            run_workflow(
+                "task-1",
+                running_message="running now",
+                completed_message="done now",
+                failure_label="每日股票概念提取",
+                work=skip_workflow_completion,
+            )
+
+        self.assertEqual("running", store.tasks["task-1"]["status"])
+        self.assertEqual("running now", store.tasks["task-1"]["message"])
+        self.assertIsNone(store.tasks["task-1"]["result"])
+        self.assertEqual([("task-1", "状态更新: running now")], store.logs)
+        self.assertEqual([], store.released_locks)
+
     def test_run_workflow_skips_work_when_already_stopped(self):
         from backend.services.task_runtime import run_workflow
 

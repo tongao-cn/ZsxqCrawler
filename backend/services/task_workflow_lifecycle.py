@@ -1,10 +1,27 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Any, Callable
 
 
 WorkflowRunningMessage = str | Callable[[], str]
 WorkflowCompletedMessage = str | Callable[[Any], str]
+
+
+@dataclass(frozen=True)
+class WorkflowCompletionDecision:
+    should_complete: bool
+    result: Any = None
+
+
+def skip_workflow_completion() -> WorkflowCompletionDecision:
+    return WorkflowCompletionDecision(should_complete=False)
+
+
+def _workflow_completion_decision(result: Any) -> WorkflowCompletionDecision:
+    if isinstance(result, WorkflowCompletionDecision):
+        return result
+    return WorkflowCompletionDecision(should_complete=True, result=result)
 
 
 def _resolve_workflow_running_message(message: WorkflowRunningMessage) -> str:
@@ -60,12 +77,14 @@ def run_workflow_lifecycle(
             return
 
         update_task_state(task_id, "running", _resolve_workflow_running_message(running_message), None)
-        result = work()
+        completion = _workflow_completion_decision(work())
+        if not completion.should_complete:
+            return
 
         complete_task_unless_stopped(
             task_id,
-            completed_message=_resolve_workflow_completed_message(completed_message, result),
-            result=result,
+            completed_message=_resolve_workflow_completed_message(completed_message, completion.result),
+            result=completion.result,
             is_task_stopped=is_task_stopped,
             update_task_state=update_task_state,
         )

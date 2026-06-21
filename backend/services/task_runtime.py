@@ -41,10 +41,12 @@ from backend.services.task_runtime_status import (
 from backend.services.task_runtime_state import TaskRuntimeState
 from backend.services.task_workflow_lifecycle import (
     WorkflowCompletedMessage,
+    WorkflowCompletionDecision,  # noqa: F401 - compatibility re-export for task runtime callers
     WorkflowRunningMessage,
     complete_task_unless_stopped as _complete_task_unless_stopped,
     fail_task_unless_stopped as _fail_task_unless_stopped,
     run_workflow_lifecycle,
+    skip_workflow_completion,  # noqa: F401 - compatibility re-export for task runtime callers
 )
 from backend.services.workflow_registry import get_workflow_spec
 from backend.storage.task_store import TaskStore

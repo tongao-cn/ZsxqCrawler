@@ -11,11 +11,10 @@ from backend.services.task_launch import TaskLaunchRecipe, launch_task_recipe
 from backend.services.task_runtime import (
     add_task_log,
     build_task_log_callback,
-    complete_task_unless_stopped,
-    fail_task_unless_stopped,
     get_task_state,
     is_task_stopped,
     run_workflow,
+    skip_workflow_completion,
     update_task,
 )
 
@@ -144,22 +143,24 @@ def run_daily_topic_crawl_and_analysis_task(
     group_id: str,
     request: DailyTopicCrawlAndAnalysisTaskRequest,
 ) -> None:
-    try:
-        update_task(task_id, "running", "开始每日抓取与 AI 分析...")
-
+    def work() -> Any:
         if not _run_daily_crawl_first_step(task_id, group_id, request):
-            return
+            return skip_workflow_completion()
 
-        result = analyze_daily_topics(
+        return analyze_daily_topics(
             group_id,
             request.date,
             comments_per_topic=request.comments_per_topic,
             log_callback=_task_log_callback(task_id),
         )
 
-        complete_task_unless_stopped(task_id, "每日抓取与 AI 分析完成", result)
-    except Exception as exc:
-        fail_task_unless_stopped(task_id, "每日抓取与 AI 分析", exc)
+    run_workflow(
+        task_id,
+        running_message="开始每日抓取与 AI 分析...",
+        completed_message="每日抓取与 AI 分析完成",
+        failure_label="每日抓取与 AI 分析",
+        work=work,
+    )
 
 
 def create_daily_topic_crawl_and_analysis_task(
