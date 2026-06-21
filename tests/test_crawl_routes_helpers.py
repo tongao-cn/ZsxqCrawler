@@ -15,14 +15,6 @@ class FakeCrawler:
         self.interval_kwargs = kwargs
 
 
-class FakeBackgroundTasks:
-    def __init__(self):
-        self.tasks = []
-
-    def add_task(self, func, *args):
-        self.tasks.append((func, args))
-
-
 class EmptyPageCrawler:
     def __init__(self, cookie, group_id, log_callback):
         self.cookie = cookie
@@ -817,7 +809,6 @@ class CrawlRoutesHelperTests(unittest.TestCase):
 
         from backend.routes import crawl_routes
 
-        background_tasks = FakeBackgroundTasks()
         response_payload = {"task_id": "task-1", "message": "任务已创建，正在后台执行"}
         historical_request = crawl_routes.CrawlHistoricalRequest(pages=3, per_page=25)
         incremental_request = crawl_routes.CrawlHistoricalRequest(pages=4, per_page=30)
@@ -864,12 +855,10 @@ class CrawlRoutesHelperTests(unittest.TestCase):
                     f"backend.routes.crawl_routes.{launcher_name}",
                     return_value=response_payload,
                 ) as create_task:
-                    response = asyncio.run(route("group-1", request, background_tasks))
+                    response = asyncio.run(route("group-1", request))
 
                 self.assertEqual(response_payload, response)
                 create_task.assert_called_once_with("group-1", request)
-
-        self.assertEqual([], background_tasks.tasks)
 
     @unittest.skipUnless(HAS_CRAWL_ROUTE_DEPS, "crawl route dependencies are not installed")
     def test_crawl_route_error_preserves_status_and_detail_format(self):
@@ -886,7 +875,6 @@ class CrawlRoutesHelperTests(unittest.TestCase):
 
         from backend.routes import crawl_routes
 
-        background_tasks = FakeBackgroundTasks()
         historical_request = crawl_routes.CrawlHistoricalRequest()
         settings_request = crawl_routes.CrawlSettingsRequest()
         range_request = crawl_routes.CrawlTimeRangeRequest()
@@ -935,12 +923,10 @@ class CrawlRoutesHelperTests(unittest.TestCase):
                 side_effect=RuntimeError("boom"),
             ):
                 with self.assertRaises(crawl_routes.HTTPException) as raised:
-                    asyncio.run(route("group-1", request, background_tasks))
+                    asyncio.run(route("group-1", request))
 
                 self.assertEqual(500, raised.exception.status_code)
                 self.assertEqual(expected_detail, raised.exception.detail)
-
-        self.assertEqual([], background_tasks.tasks)
 
     @unittest.skipUnless(HAS_CRAWL_ROUTE_DEPS, "crawl route dependencies are not installed")
     def test_crawl_routes_preserve_http_exception_passthrough(self):
@@ -948,7 +934,6 @@ class CrawlRoutesHelperTests(unittest.TestCase):
 
         from backend.routes import crawl_routes
 
-        background_tasks = FakeBackgroundTasks()
         historical_request = crawl_routes.CrawlHistoricalRequest()
         settings_request = crawl_routes.CrawlSettingsRequest()
         range_request = crawl_routes.CrawlTimeRangeRequest()
@@ -968,13 +953,11 @@ class CrawlRoutesHelperTests(unittest.TestCase):
                 side_effect=original_error,
             ):
                 with self.assertRaises(crawl_routes.HTTPException) as raised:
-                    asyncio.run(route("group-1", request, background_tasks))
+                    asyncio.run(route("group-1", request))
 
                 self.assertIs(original_error, raised.exception)
                 self.assertEqual(409, raised.exception.status_code)
                 self.assertEqual("conflict", raised.exception.detail)
-
-        self.assertEqual([], background_tasks.tasks)
 
     @unittest.skipUnless(HAS_CRAWL_ROUTE_DEPS, "crawl route dependencies are not installed")
     def test_build_task_callbacks_logs_and_checks_stop(self):

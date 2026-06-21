@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, BackgroundTasks, HTTPException
+from fastapi import APIRouter, HTTPException
 
 from backend.schemas.crawl import CrawlHistoricalRequest, CrawlSettingsRequest, CrawlTimeRangeRequest
 from backend.services.workflow_task_launch import (
@@ -22,7 +22,7 @@ def _crawl_route_error(message: str, error: Exception) -> HTTPException:
 
 
 @router.post("/historical/{group_id}")
-async def crawl_historical(group_id: str, request: CrawlHistoricalRequest, background_tasks: BackgroundTasks):
+async def crawl_historical(group_id: str, request: CrawlHistoricalRequest):
     """爬取历史数据"""
     try:
         return create_historical_crawl_task(group_id, request)
@@ -33,7 +33,7 @@ async def crawl_historical(group_id: str, request: CrawlHistoricalRequest, backg
 
 
 @router.post("/all/{group_id}")
-async def crawl_all(group_id: str, request: CrawlSettingsRequest, background_tasks: BackgroundTasks):
+async def crawl_all(group_id: str, request: CrawlSettingsRequest):
     """全量爬取所有历史数据"""
     try:
         return create_all_crawl_task(group_id, request)
@@ -44,7 +44,7 @@ async def crawl_all(group_id: str, request: CrawlSettingsRequest, background_tas
 
 
 @router.post("/incremental/{group_id}")
-async def crawl_incremental(group_id: str, request: CrawlHistoricalRequest, background_tasks: BackgroundTasks):
+async def crawl_incremental(group_id: str, request: CrawlHistoricalRequest):
     """增量爬取历史数据"""
     try:
         return create_incremental_crawl_task(group_id, request)
@@ -55,7 +55,7 @@ async def crawl_incremental(group_id: str, request: CrawlHistoricalRequest, back
 
 
 @router.post("/latest-until-complete/{group_id}")
-async def crawl_latest_until_complete(group_id: str, request: CrawlSettingsRequest, background_tasks: BackgroundTasks):
+async def crawl_latest_until_complete(group_id: str, request: CrawlSettingsRequest):
     """获取最新记录：智能增量更新"""
     try:
         return launch_latest_crawl_task(group_id, request)
@@ -66,7 +66,7 @@ async def crawl_latest_until_complete(group_id: str, request: CrawlSettingsReque
 
 
 @router.post("/range/{group_id}")
-async def crawl_by_time_range(group_id: str, request: CrawlTimeRangeRequest, background_tasks: BackgroundTasks):
+async def crawl_by_time_range(group_id: str, request: CrawlTimeRangeRequest):
     """按时间区间爬取话题（支持最近N天或自定义开始/结束时间）"""
     try:
         return create_time_range_crawl_task(group_id, request)
