@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Iterable, List, Optional
 
 from backend.services.a_share_analysis_service import normalize_group_id
 from backend.services.workflow_registry import (
@@ -16,6 +17,23 @@ RUNTIME_TERMINAL_TASK_STATUSES = {"completed", "failed", "cancelled"}
 
 INGESTION_LOCK_TYPES = INGESTION_WORKFLOW_TYPES
 INGESTION_LOCK_KEY = INGESTION_LOCK_CATEGORY
+
+
+@dataclass(frozen=True)
+class TaskQuery:
+    task_type: Optional[str] = None
+    status: Optional[str] = None
+    group_id: Any = None
+    group_filter_provided: bool = False
+    limit: Optional[int] = None
+
+    @property
+    def normalized_group_id(self) -> Optional[str]:
+        return normalize_group_id(self.group_id) if self.group_filter_provided else None
+
+    @property
+    def has_filter(self) -> bool:
+        return self.group_filter_provided or bool(self.task_type) or bool(self.status)
 
 
 def _normalize_task_status(status: str) -> str:
@@ -86,3 +104,30 @@ def _matches_latest_task_query(
 
 def _task_created_at_sort_value(task: Dict[str, Any]) -> Any:
     return task.get("created_at") or datetime.min
+
+
+def query_tasks(tasks: Iterable[Dict[str, Any]], query: TaskQuery) -> List[Dict[str, Any]]:
+    normalized_group_id = query.normalized_group_id
+    filtered = [
+        normalized
+        for normalized in (_normalize_task(task) for task in tasks)
+        if normalized is not None
+        and _matches_latest_task_query(
+            normalized,
+            query.task_type or "",
+            query.status,
+            normalized_group_id,
+            query.group_filter_provided,
+        )
+    ]
+    if query.limit is not None:
+        return filtered[: query.limit]
+    return filtered
+
+
+def latest_task_for_query(tasks: Iterable[Dict[str, Any]], query: TaskQuery) -> Optional[Dict[str, Any]]:
+    candidates = query_tasks(tasks, query)
+    if not candidates:
+        return None
+    candidates.sort(key=_task_created_at_sort_value, reverse=True)
+    return candidates[0]

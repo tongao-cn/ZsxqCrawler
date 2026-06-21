@@ -114,10 +114,13 @@ class TaskRuntimeHelperTests(unittest.TestCase):
 
     def test_runtime_status_helpers_preserve_task_state_contract(self):
         from backend.services.task_runtime import (
+            TaskQuery,
             _is_active_task_status,
             _is_runtime_terminal_status,
             _normalize_task,
             is_terminal_task_status,
+            latest_task_for_query,
+            query_tasks,
         )
 
         self.assertTrue(_is_active_task_status("pending"))
@@ -136,6 +139,44 @@ class TaskRuntimeHelperTests(unittest.TestCase):
         self.assertEqual("cancelled", normalized["status"])
         self.assertEqual("股票推荐池", normalized["display_name"])
         self.assertFalse(normalized["cancellable"])
+
+        tasks = [
+            {
+                "task_id": "task-old",
+                "type": "daily_analysis",
+                "status": "completed",
+                "group_id": 155,
+                "created_at": datetime(2026, 1, 1, 9, 0, 0),
+            },
+            {
+                "task_id": "task-new",
+                "type": "daily_analysis",
+                "status": "stopped",
+                "group_id": "155",
+                "created_at": datetime(2026, 1, 2, 9, 0, 0),
+            },
+            {
+                "task_id": "task-other",
+                "type": "file_analysis",
+                "status": "completed",
+                "group_id": "155",
+                "created_at": datetime(2026, 1, 3, 9, 0, 0),
+            },
+        ]
+
+        query = TaskQuery(task_type="daily_analysis", group_id="155", group_filter_provided=True, limit=1)
+        self.assertEqual(["task-old"], [task["task_id"] for task in query_tasks(tasks, query)])
+        latest = latest_task_for_query(
+            tasks,
+            TaskQuery(
+                task_type="daily_analysis",
+                status="cancelled",
+                group_id=155,
+                group_filter_provided=True,
+            ),
+        )
+        self.assertEqual("task-new", latest["task_id"])
+        self.assertEqual("cancelled", latest["status"])
 
     def test_get_task_state_prefers_persisted_task_over_memory_fallback(self):
         from backend.services import task_runtime

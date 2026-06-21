@@ -28,15 +28,15 @@ from backend.services.task_runtime_resources import (
 from backend.services.task_runtime_status import (
     INGESTION_LOCK_KEY,
     INGESTION_LOCK_TYPES,  # noqa: F401 - compatibility re-export for task runtime callers
+    TaskQuery,
     _is_active_task_status,
     _is_runtime_terminal_status,  # noqa: F401 - compatibility re-export for task runtime callers
-    _matches_latest_task_query,
     _matches_running_ingestion_task,
-    _matches_task_query,
     _normalize_task,
     _normalize_task_status,
-    _task_created_at_sort_value,
     is_terminal_task_status,
+    latest_task_for_query,
+    query_tasks,
 )
 from backend.services.task_runtime_state import TaskRuntimeState
 from backend.services.task_workflow_lifecycle import (
@@ -114,22 +114,14 @@ def list_tasks(
     task_type: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
     group_filter_provided = group_id is not _GROUP_FILTER_UNSET
-    normalized_group_id = normalize_group_id(group_id) if group_filter_provided else None
-    has_filter = group_filter_provided or bool(task_type)
-    tasks = [
-        normalized
-        for normalized in (_normalize_task(task) for task in get_task_store().list_tasks(limit=None if has_filter else limit))
-        if normalized is not None
-    ]
-    if has_filter:
-        tasks = [
-            task
-            for task in tasks
-            if _matches_task_query(task, task_type, normalized_group_id, group_filter_provided)
-        ]
-        if limit is not None:
-            tasks = tasks[:limit]
-    return tasks
+    query = TaskQuery(
+        task_type=task_type,
+        group_id=group_id if group_filter_provided else None,
+        group_filter_provided=group_filter_provided,
+        limit=limit,
+    )
+    store_limit = None if query.has_filter else limit
+    return query_tasks(get_task_store().list_tasks(limit=store_limit), query)
 
 
 def _memory_task_state_locked(task_id: str) -> Optional[Dict[str, Any]]:
@@ -665,13 +657,12 @@ def get_latest_task_by_type(
     group_id: Any = _GROUP_FILTER_UNSET,
 ) -> Optional[Dict[str, Any]]:
     group_filter_provided = group_id is not _GROUP_FILTER_UNSET
-    normalized_group_id = normalize_group_id(group_id) if group_filter_provided else None
-    candidates = [
-        task
-        for task in list_tasks()
-        if _matches_latest_task_query(task, task_type, status, normalized_group_id, group_filter_provided)
-    ]
-    if not candidates:
-        return None
-    candidates.sort(key=_task_created_at_sort_value, reverse=True)
-    return candidates[0]
+    return latest_task_for_query(
+        get_task_store().list_tasks(),
+        TaskQuery(
+            task_type=task_type,
+            status=status,
+            group_id=group_id if group_filter_provided else None,
+            group_filter_provided=group_filter_provided,
+        ),
+    )
