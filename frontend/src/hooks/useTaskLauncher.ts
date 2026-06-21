@@ -10,6 +10,16 @@ interface UseTaskLauncherOptions {
   onTaskConflict?: (taskId: string) => void;
 }
 
+interface TaskLaunchResponse {
+  task_id: string;
+}
+
+type TaskLaunchMessage = string | ((taskId: string) => string);
+
+function resolveTaskLaunchMessage(message: TaskLaunchMessage | undefined, taskId: string) {
+  return typeof message === 'function' ? message(taskId) : message;
+}
+
 export function useTaskLauncher({
   onTaskCreated,
   onTaskConflict,
@@ -18,6 +28,12 @@ export function useTaskLauncher({
     toast.success(message ?? `任务已创建: ${taskId}`);
     onTaskCreated?.(taskId);
   }, [onTaskCreated]);
+
+  const notifyTaskLaunch = useCallback((response: TaskLaunchResponse, message?: TaskLaunchMessage) => {
+    const taskId = response.task_id;
+    notifyTaskCreated(taskId, resolveTaskLaunchMessage(message, taskId));
+    return taskId;
+  }, [notifyTaskCreated]);
 
   const handleTaskCreateError = useCallback((error: unknown, fallback: string) => {
     const conflict = getTaskConflictDetail(error);
@@ -32,6 +48,7 @@ export function useTaskLauncher({
 
   return {
     handleTaskCreateError,
+    notifyTaskLaunch,
     notifyTaskCreated,
   };
 }

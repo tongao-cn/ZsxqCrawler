@@ -62,7 +62,7 @@ export function useCrawlActions({
   const [latestDialogOpen, setLatestDialogOpen] = useState<boolean>(false);
   const [singleTopicId, setSingleTopicId] = useState<string>('');
   const [fetchingSingle, setFetchingSingle] = useState<boolean>(false);
-  const { handleTaskCreateError, notifyTaskCreated } = useTaskLauncher({
+  const { handleTaskCreateError, notifyTaskLaunch } = useTaskLauncher({
     onTaskCreated,
     onTaskConflict,
   });
@@ -95,65 +95,62 @@ export function useCrawlActions({
       setLatestDialogOpen(false);
       setCrawlLoading('latest');
 
-      const response = await apiClient.crawlLatestUntilComplete(groupId, buildCrawlSettings());
-      const taskId = (response as any).task_id;
-      notifyTaskCreated(taskId);
+      notifyTaskLaunch(await apiClient.crawlLatestUntilComplete(groupId, buildCrawlSettings()));
       reloadAfterTaskCreated(2000);
     } catch (error) {
       handleTaskCreateError(error, '创建任务失败');
     } finally {
       setCrawlLoading(null);
     }
-  }, [buildCrawlSettings, groupId, handleTaskCreateError, notifyTaskCreated, reloadAfterTaskCreated]);
+  }, [buildCrawlSettings, groupId, handleTaskCreateError, notifyTaskLaunch, reloadAfterTaskCreated]);
 
   const handleCrawlAll = useCallback(async () => {
     try {
       setCrawlLoading('all');
 
-      const response = await apiClient.crawlAll(groupId, buildCrawlSettings());
-      const taskId = (response as any).task_id;
-      notifyTaskCreated(taskId);
+      notifyTaskLaunch(await apiClient.crawlAll(groupId, buildCrawlSettings()));
       reloadAfterTaskCreated(2000);
     } catch (error) {
       handleTaskCreateError(error, '创建任务失败');
     } finally {
       setCrawlLoading(null);
     }
-  }, [buildCrawlSettings, groupId, handleTaskCreateError, notifyTaskCreated, reloadAfterTaskCreated]);
+  }, [buildCrawlSettings, groupId, handleTaskCreateError, notifyTaskLaunch, reloadAfterTaskCreated]);
 
   const handleIncrementalCrawl = useCallback(async () => {
     try {
       setCrawlLoading('incremental');
 
-      const response = await apiClient.crawlIncremental(groupId, 10, 20, buildCrawlSettings());
-      const taskId = (response as any).task_id;
-      notifyTaskCreated(taskId, `增量爬取任务已创建: ${taskId}`);
+      notifyTaskLaunch(
+        await apiClient.crawlIncremental(groupId, 10, 20, buildCrawlSettings()),
+        (taskId) => `增量爬取任务已创建: ${taskId}`,
+      );
       reloadAfterTaskCreated(2000);
     } catch (error) {
       handleTaskCreateError(error, '增量爬取失败');
     } finally {
       setCrawlLoading(null);
     }
-  }, [buildCrawlSettings, groupId, handleTaskCreateError, notifyTaskCreated, reloadAfterTaskCreated]);
+  }, [buildCrawlSettings, groupId, handleTaskCreateError, notifyTaskLaunch, reloadAfterTaskCreated]);
 
   const handleCrawlLastDays = useCallback(async () => {
     try {
       setLatestDialogOpen(false);
       setCrawlLoading('range');
 
-      const response = await apiClient.crawlByTimeRange(groupId, {
-        lastDays: Math.max(1, quickLastDays || 1),
-        ...buildCrawlSettings(),
-      });
-      const taskId = (response as any).task_id;
-      notifyTaskCreated(taskId);
+      notifyTaskLaunch(
+        await apiClient.crawlByTimeRange(groupId, {
+          lastDays: Math.max(1, quickLastDays || 1),
+          ...buildCrawlSettings(),
+        }),
+      );
       reloadAfterTaskCreated(2000);
     } catch (error) {
       handleTaskCreateError(error, '创建任务失败');
     } finally {
       setCrawlLoading(null);
     }
-  }, [buildCrawlSettings, groupId, handleTaskCreateError, notifyTaskCreated, quickLastDays, reloadAfterTaskCreated]);
+  }, [buildCrawlSettings, groupId, handleTaskCreateError, notifyTaskLaunch, quickLastDays, reloadAfterTaskCreated]);
 
   const handleCrawlMonth = useCallback(async () => {
     const range = buildMonthRange(crawlMonth);
@@ -166,12 +163,12 @@ export function useCrawlActions({
       setLatestDialogOpen(false);
       setCrawlLoading('range');
 
-      const response = await apiClient.crawlByTimeRange(groupId, {
-        ...range,
-        ...buildCrawlSettings(),
-      });
-      const taskId = (response as any).task_id;
-      notifyTaskCreated(taskId);
+      notifyTaskLaunch(
+        await apiClient.crawlByTimeRange(groupId, {
+          ...range,
+          ...buildCrawlSettings(),
+        }),
+      );
       reloadAfterTaskCreated(2000);
     } catch (error) {
       handleTaskCreateError(error, '创建任务失败');
@@ -183,7 +180,7 @@ export function useCrawlActions({
     crawlMonth,
     groupId,
     handleTaskCreateError,
-    notifyTaskCreated,
+    notifyTaskLaunch,
     reloadAfterTaskCreated,
   ]);
 

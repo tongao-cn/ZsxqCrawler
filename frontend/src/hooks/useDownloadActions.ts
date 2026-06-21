@@ -41,7 +41,7 @@ export function useDownloadActions({
   const [downloadQuickLastDays, setDownloadQuickLastDays] = useState<number>(30);
   const [downloadRangeStartDate, setDownloadRangeStartDate] = useState<string>('');
   const [downloadRangeEndDate, setDownloadRangeEndDate] = useState<string>('');
-  const { handleTaskCreateError, notifyTaskCreated } = useTaskLauncher({
+  const { handleTaskCreateError, notifyTaskLaunch } = useTaskLauncher({
     onTaskCreated,
     onTaskConflict,
   });
@@ -78,9 +78,10 @@ export function useDownloadActions({
         params.lastDays = Math.max(1, downloadQuickLastDays || 1);
       }
 
-      const response = await apiClient.downloadFilesByTimeRange(groupId, params);
-      const taskId = (response as any).task_id;
-      notifyTaskCreated(taskId, `文件下载任务已创建: ${taskId}`);
+      notifyTaskLaunch(
+        await apiClient.downloadFilesByTimeRange(groupId, params),
+        (taskId) => `文件下载任务已创建: ${taskId}`,
+      );
       setDownloadDialogOpen(false);
     } catch (error) {
       handleTaskCreateError(error, '文件下载失败');
@@ -101,7 +102,7 @@ export function useDownloadActions({
     longSleepInterval,
     longSleepIntervalMax,
     longSleepIntervalMin,
-    notifyTaskCreated,
+    notifyTaskLaunch,
     useRandomInterval,
   ]);
 
@@ -112,20 +113,21 @@ export function useDownloadActions({
 
     try {
       setFileLoading('download-count');
-      const response = await apiClient.downloadFiles(
-        groupId,
-        undefined,
-        'download_count',
-        downloadInterval,
-        longSleepInterval,
-        filesPerBatch,
-        useRandomInterval ? downloadIntervalMin : undefined,
-        useRandomInterval ? downloadIntervalMax : undefined,
-        useRandomInterval ? longSleepIntervalMin : undefined,
-        useRandomInterval ? longSleepIntervalMax : undefined,
+      notifyTaskLaunch(
+        await apiClient.downloadFiles(
+          groupId,
+          undefined,
+          'download_count',
+          downloadInterval,
+          longSleepInterval,
+          filesPerBatch,
+          useRandomInterval ? downloadIntervalMin : undefined,
+          useRandomInterval ? downloadIntervalMax : undefined,
+          useRandomInterval ? longSleepIntervalMin : undefined,
+          useRandomInterval ? longSleepIntervalMax : undefined,
+        ),
+        (taskId) => `文件下载任务已创建: ${taskId}`,
       );
-      const taskId = (response as any).task_id;
-      notifyTaskCreated(taskId, `文件下载任务已创建: ${taskId}`);
     } catch (error) {
       handleTaskCreateError(error, '文件下载失败');
     } finally {
@@ -142,7 +144,7 @@ export function useDownloadActions({
     longSleepInterval,
     longSleepIntervalMax,
     longSleepIntervalMin,
-    notifyTaskCreated,
+    notifyTaskLaunch,
     useRandomInterval,
   ]);
 
