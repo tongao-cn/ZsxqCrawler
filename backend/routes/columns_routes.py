@@ -7,6 +7,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 from backend.core.logger_config import log_exception
+from backend.routes.task_http_errors import task_launch_route_error
 from backend.services.columns_comment_service import fetch_column_topic_full_comments
 from backend.services.columns_fetch_task_service import (
     delete_all_columns_response,
@@ -17,7 +18,6 @@ from backend.services.columns_fetch_task_service import (
 )
 from backend.services.columns_summary_service import get_columns_summary
 from backend.services.columns_workflow import create_columns_fetch_task
-from backend.services.task_launch import TaskLaunchConflict, ingestion_conflict_detail
 
 router = APIRouter(prefix="/api", tags=["columns"])
 
@@ -43,9 +43,7 @@ def _create_columns_fetch_task_response(
 
 
 def _columns_route_error(message: str, error: Exception) -> HTTPException:
-    if isinstance(error, TaskLaunchConflict):
-        return HTTPException(status_code=409, detail=ingestion_conflict_detail(error.existing))
-    return HTTPException(status_code=500, detail=f"{message}: {str(error)}")
+    return task_launch_route_error(message, error)
 
 
 @router.get("/groups/{group_id}/columns/summary")

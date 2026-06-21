@@ -13,6 +13,7 @@ from backend.schemas.files import (
     FileFilteredDownloadRequest,
     FileIdListRequest,
 )
+from backend.routes.task_http_errors import task_launch_route_error
 from backend.services.file_ai_analysis_entry import (
     FileAIAnalysisEntryError,
     create_file_analysis_response,
@@ -27,7 +28,6 @@ from backend.services.file_read_model import (
     get_file_status_response,
     get_files_response,
 )
-from backend.services.task_launch import TaskLaunchConflict, ingestion_conflict_detail
 from backend.services.file_workflow_service import (
     create_filtered_file_download_task,
     create_file_collect_task,
@@ -41,9 +41,7 @@ router = APIRouter(prefix="/api/files", tags=["files"])
 
 
 def _file_route_error(message: str, error: Exception) -> HTTPException:
-    if isinstance(error, TaskLaunchConflict):
-        return HTTPException(status_code=409, detail=ingestion_conflict_detail(error.existing))
-    return HTTPException(status_code=500, detail=f"{message}: {str(error)}")
+    return task_launch_route_error(message, error)
 
 
 def _file_analysis_entry_http_error(error: FileAIAnalysisEntryError) -> HTTPException:

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException
 
+from backend.routes.task_http_errors import task_launch_route_error
 from backend.schemas.crawl import CrawlHistoricalRequest, CrawlSettingsRequest, CrawlTimeRangeRequest
 from backend.services.crawl_workflow import (
     create_all_crawl_task,
@@ -10,15 +11,12 @@ from backend.services.crawl_workflow import (
     create_time_range_crawl_task,
     launch_latest_crawl_task,
 )
-from backend.services.task_launch import TaskLaunchConflict, ingestion_conflict_detail
 
 router = APIRouter(prefix="/api/crawl", tags=["crawl"])
 
 
 def _crawl_route_error(message: str, error: Exception) -> HTTPException:
-    if isinstance(error, TaskLaunchConflict):
-        return HTTPException(status_code=409, detail=ingestion_conflict_detail(error.existing))
-    return HTTPException(status_code=500, detail=f"{message}: {str(error)}")
+    return task_launch_route_error(message, error)
 
 
 @router.post("/historical/{group_id}")
