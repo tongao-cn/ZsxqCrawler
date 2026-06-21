@@ -398,16 +398,16 @@ class AShareAnalysisServiceHelperTests(unittest.TestCase):
 
     def test_call_openai_extract_topic_stocks_builds_runtime_request(self):
         from backend.services import a_share_analysis_service as service
-        from backend.services.ai_runtime_request import AIRuntimeTextResult
+        from backend.services.ai_runtime_request import AIRuntimeStructuredObjectResult
 
         captured = {}
 
         def fake_call(messages, **kwargs):
             captured["messages"] = messages
             captured["kwargs"] = kwargs
-            return AIRuntimeTextResult('{"stocks":[]}', "test-model")
+            return AIRuntimeStructuredObjectResult({"stocks": []}, '{"stocks":[]}', "test-model")
 
-        with patch("backend.services.a_share_analysis_ai.call_runtime_ai_text", side_effect=fake_call):
+        with patch("backend.services.a_share_analysis_ai.call_structured_ai_object", side_effect=fake_call):
             self.assertEqual(
                 [],
                 service.call_openai_extract_topic_stocks(
@@ -428,8 +428,9 @@ class AShareAnalysisServiceHelperTests(unittest.TestCase):
         self.assertEqual("chat", settings.wire_api)
         self.assertEqual("low", captured["kwargs"]["reasoning_effort"])
         self.assertEqual(222, captured["kwargs"]["timeout"])
-        self.assertEqual("a_share_company_extraction", captured["kwargs"]["responses_text_format"]["format"]["name"])
-        self.assertEqual("a_share_company_extraction", captured["kwargs"]["chat_response_format"]["json_schema"]["name"])
+        self.assertEqual("a_share_company_extraction", captured["kwargs"]["schema_name"])
+        self.assertEqual("AI 公司抽取结果", captured["kwargs"]["label"])
+        self.assertEqual(["stocks"], captured["kwargs"]["schema"]["required"])
         self.assertIn("正向推荐或明确受益", captured["messages"][0]["content"])
 
     def test_call_openai_extract_topic_stocks_rejects_invalid_json(self):

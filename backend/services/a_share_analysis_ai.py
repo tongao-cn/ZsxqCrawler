@@ -11,13 +11,11 @@ from backend.core.ai_provider_config import (
 )
 from backend.core.logger_config import log_debug, log_warning
 from backend.services.ai_client import (
-    chat_json_schema_response_format,
     extract_response_text,
     is_retryable_ai_error,
-    responses_json_schema_text_format,
 )
-from backend.services.ai_json_utils import JsonObjectParseError, require_json_object
-from backend.services.ai_runtime_request import AIRuntimeTextSettings, call_runtime_ai_text
+from backend.services.ai_json_utils import require_json_object
+from backend.services.ai_runtime_request import AIRuntimeTextSettings, call_structured_ai_object
 from backend.services.stock_concept_taxonomy import normalize_stock_concept_term
 from backend.services.stock_extraction_payload import safe_confidence, safe_text_list
 
@@ -143,6 +141,10 @@ def _is_valid_company_name(company: str) -> bool:
 
 def _parse_topic_stock_extraction_output(message: str) -> List[Dict[str, Any]]:
     payload = _extract_json_object(message)
+    return _parse_topic_stock_extraction_payload(payload)
+
+
+def _parse_topic_stock_extraction_payload(payload: Dict[str, Any]) -> List[Dict[str, Any]]:
     raw_stocks = payload.get("stocks")
     if raw_stocks is None:
         raw_stocks = payload.get("companies")
@@ -187,14 +189,6 @@ def _parse_topic_stock_extraction_output(message: str) -> List[Dict[str, Any]]:
 
 def _parse_company_extraction_output(message: str) -> List[str]:
     return [stock["stock_name"] for stock in _parse_topic_stock_extraction_output(message)]
-
-
-def _get_chat_json_schema_response_format() -> Dict[str, Any]:
-    return chat_json_schema_response_format("a_share_company_extraction", A_SHARE_COMPANY_EXTRACTION_SCHEMA)
-
-
-def _get_responses_json_schema_text_format() -> Dict[str, Any]:
-    return responses_json_schema_text_format("a_share_company_extraction", A_SHARE_COMPANY_EXTRACTION_SCHEMA)
 
 
 def _is_retryable_openai_error(exc: Exception) -> bool:
@@ -273,18 +267,19 @@ def call_openai_extract_topic_stocks(
 
     last_error: Optional[Exception] = None
     attempts = max(1, int(max_retries or 1))
-    message = ""
+    payload: Dict[str, Any] = {}
     for attempt in range(1, attempts + 1):
         try:
-            result = call_runtime_ai_text(
+            result = call_structured_ai_object(
                 messages,
+                schema_name="a_share_company_extraction",
+                schema=A_SHARE_COMPANY_EXTRACTION_SCHEMA,
+                label="AI 公司抽取结果",
                 settings=runtime_settings,
                 reasoning_effort=str(reasoning_effort or DEFAULT_REASONING_EFFORT).strip() or DEFAULT_REASONING_EFFORT,
                 timeout=timeout,
-                responses_text_format=_get_responses_json_schema_text_format(),
-                chat_response_format=_get_chat_json_schema_response_format(),
             )
-            message = result.text
+            payload = result.payload
             last_error = None
             break
         except Exception as exc:
@@ -307,11 +302,7 @@ def call_openai_extract_topic_stocks(
     if last_error is not None:
         raise last_error
 
-    try:
-        cleaned = _parse_topic_stock_extraction_output(message)
-    except JsonObjectParseError as exc:
-        raise RuntimeError(f"AI 公司抽取结果不是合法 JSON: {message[:200]}") from exc
-
+    cleaned = _parse_topic_stock_extraction_payload(payload)
     debug_logger(f"openai-compatible model extracted topic stocks: {len(cleaned)}")
     return cleaned
 
