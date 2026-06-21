@@ -14,7 +14,7 @@ from backend.core.ai_provider_config import (
     get_summary_reasoning_effort,
 )
 from backend.core.image_cache_manager import get_image_cache_manager
-from backend.services.ai_client import AITextRequest, call_ai_text, extract_response_text
+from backend.services.ai_client import AITextRequest, call_ai_text, extract_response_text as extract_response_text
 
 
 def build_image_content_parts(

@@ -61,7 +61,7 @@ from backend.services.stock_topic_analysis_runner import (
 )
 from backend.services.daily_topic_analysis_topics import clip_text as _clip
 from backend.services.stock_topic_question_payload import build_question_topic_payload_from_rows, load_question_topic_payload
-from backend.storage.db_compat import connect
+from backend.storage.db_compat import connect as connect
 
 
 MAX_SEARCH_CANDIDATE_TOPICS = 500

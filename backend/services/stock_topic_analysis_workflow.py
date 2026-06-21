@@ -12,7 +12,7 @@ from backend.services.stock_topic_analysis_service import (
     analyze_stock_topics_batch,
 )
 from backend.services.task_launch import (
-    TASK_CREATED_MESSAGE,
+    TASK_CREATED_MESSAGE as TASK_CREATED_MESSAGE,
     TaskLaunchRecipe,
     launch_task_recipe,
 )
