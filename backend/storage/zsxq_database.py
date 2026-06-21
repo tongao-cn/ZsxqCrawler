@@ -83,6 +83,7 @@ from backend.storage.zsxq_database_helpers import (
     user_liked_emoji_insert_statement,
     user_insert_statement,
 )
+from backend.storage.topic_file_attachment_writer import sync_topic_file_attachment
 
 
 class TopicImportResult(NamedTuple):
@@ -1142,17 +1143,12 @@ class ZSXQDatabase:
         topic_id: Any,
         file_data: Dict[str, Any],
     ) -> Optional[int]:
-        file_id = _upsert_core_file(
-            self.cursor,
-            group_data.get('group_id') if group_data else None,
-            topic_id,
-            file_data,
+        return sync_topic_file_attachment(
+            self,
+            group_id=group_data.get('group_id') if group_data else None,
+            topic_id=topic_id,
+            file_data=file_data,
         )
-        if not file_id:
-            return None
-
-        _replace_file_topic_relation(self, file_id, topic_id)
-        return file_id
 
     def backfill_topic_files_to_core_tables(self, batch_size: int = 500) -> Dict[str, int]:
         """把当前 topic_files 回填到核心 files/file_topic_relations 表。"""

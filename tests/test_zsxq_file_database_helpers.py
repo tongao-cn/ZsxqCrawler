@@ -1,6 +1,6 @@
 import unittest
 
-from backend.storage.zsxq_file_database_helpers import _FILE_AI_ANALYSIS_FIELDS
+from backend.storage.zsxq_file_database_helpers import _FILE_AI_ANALYSIS_FIELDS, _file_topic_relation_params
 from backend.storage.zsxq_file_database import (
     _api_response_record_params,
     _close_connection,
@@ -11,7 +11,6 @@ from backend.storage.zsxq_file_database import (
     _file_attachment_params,
     _file_download_status_params,
     _file_record_params,
-    _file_topic_relation_params,
     _group_record_params,
     _image_record_params,
     _latest_like_record_params,
@@ -106,11 +105,14 @@ class FakeImportDatabase:
         self.cursor = self
         self.conn = self
         self.lastrowid = 1
+        self.rowcount = 1
 
     def execute(self, sql, params=()):
         normalized = " ".join(sql.split())
         if normalized.startswith("INSERT INTO api_responses"):
             self.calls.append(("api_response", params))
+        elif normalized.startswith("INSERT INTO files"):
+            self.calls.append(("file", params[0], params[1], params[2]))
         elif normalized.startswith("DELETE FROM file_topic_relations"):
             self.calls.append(("delete_relation", params))
         elif normalized.startswith("INSERT INTO file_topic_relations"):

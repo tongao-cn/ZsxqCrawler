@@ -11,7 +11,6 @@ from backend.storage.zsxq_file_database_helpers import (
     _file_attachment_params,
     _file_download_status_params,
     _file_record_params,
-    _file_topic_relation_params,
     _group_id_param,
     _image_record_params,
     _group_record_params,
@@ -29,6 +28,7 @@ from backend.storage.zsxq_file_database_helpers import (
     _user_liked_emoji_record_params,
     _user_record_params,
 )
+from backend.storage.topic_file_attachment_writer import sync_topic_file_attachment
 
 
 _COMPLETED_DOWNLOAD_STATUSES = ("completed", "downloaded", "skipped")
@@ -939,19 +939,13 @@ class ZSXQFileDatabase:
                         _record_imported_value(stats, 'solutions', solution_id)
 
                     group_id_for_file = (topic_data.get('group') or {}).get('group_id')
-                    file_id = self.insert_file(file_data, group_id=group_id_for_file, topic_id=topic_id)
+                    file_id = sync_topic_file_attachment(
+                        self,
+                        group_id=group_id_for_file,
+                        topic_id=topic_id,
+                        file_data=file_data,
+                    )
                     _record_imported_value(stats, 'files', file_id)
-
-                    self.cursor.execute('''
-                    DELETE FROM file_topic_relations
-                    WHERE file_id = ? AND topic_id = ?
-                    ''', _file_topic_relation_params(file_id, topic_id))
-
-                    self.cursor.execute('''
-                    INSERT INTO file_topic_relations (file_id, topic_id)
-                    VALUES (?, ?)
-                    ON CONFLICT(file_id, topic_id) DO NOTHING
-                    ''', _file_topic_relation_params(file_id, topic_id))
 
                     if file_id:
                         self.insert_topic_files(topic_id, [file_data])
