@@ -4,7 +4,7 @@ import asyncio
 from typing import Optional
 
 import requests
-from fastapi import APIRouter, BackgroundTasks, HTTPException
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 from backend.services.a_share_analysis_service import (
@@ -151,7 +151,7 @@ async def get_a_share_analysis_chart(
 
 
 @router.post("/run")
-async def start_a_share_analysis(request: AShareAnalysisRunRequest, background_tasks: BackgroundTasks):
+async def start_a_share_analysis(request: AShareAnalysisRunRequest):
     """启动A股公司提及分析后台任务"""
     try:
         return _create_a_share_analysis_task_response(request)

@@ -76,7 +76,7 @@ class AShareRoutesHelperTests(unittest.TestCase):
             side_effect=RuntimeError(a_share_routes.A_SHARE_MISSING_API_KEY_MESSAGE),
         ):
             with self.assertRaises(HTTPException) as raised:
-                asyncio.run(a_share_routes.start_a_share_analysis(request, None))
+                asyncio.run(a_share_routes.start_a_share_analysis(request))
 
         self.assertEqual(400, raised.exception.status_code)
         self.assertEqual(a_share_routes.A_SHARE_MISSING_API_KEY_MESSAGE, raised.exception.detail)
@@ -92,7 +92,7 @@ class AShareRoutesHelperTests(unittest.TestCase):
 
         with patch.object(a_share_routes, "create_a_share_analysis_task", side_effect=RuntimeError("boom")):
             with self.assertRaises(HTTPException) as raised:
-                asyncio.run(a_share_routes.start_a_share_analysis(AShareAnalysisRunRequest(), None))
+                asyncio.run(a_share_routes.start_a_share_analysis(AShareAnalysisRunRequest()))
 
         self.assertEqual(500, raised.exception.status_code)
         self.assertEqual("创建A股分析任务失败: boom", raised.exception.detail)
