@@ -1,5 +1,7 @@
 import csv
+from datetime import date
 import json
+import os
 import tempfile
 import unittest
 from pathlib import Path
@@ -7,6 +9,84 @@ from unittest.mock import patch
 
 
 class AShareResearchReturnSmokeServiceHelperTests(unittest.TestCase):
+    def test_get_knowaction_postgres_dsn_reads_env_file(self):
+        from backend.services.a_share_knowaction_market_data import get_knowaction_postgres_dsn
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            env_path = Path(temp_dir) / ".env"
+            env_path.write_text(
+                "\n".join(
+                    [
+                        "DB_HOST=localhost",
+                        "DB_PORT=15432",
+                        "DB_NAME=knowaction",
+                        "DB_USER=reader",
+                        "DB_PASSWORD=test-password",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+
+            with patch.dict(os.environ, {"KNOW_ACTION_POSTGRES_DSN": "", "KNOWACTION_POSTGRES_DSN": ""}):
+                dsn = get_knowaction_postgres_dsn(env_path)
+
+        self.assertEqual("dbname=knowaction user=reader password=test-password host=localhost port=15432", dsn)
+
+    def test_load_knowaction_quotes_normalizes_rows(self):
+        from backend.services import a_share_knowaction_market_data as market_data
+
+        class FakeCursor:
+            def __init__(self):
+                self.params = None
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, traceback):
+                return None
+
+            def execute(self, _sql, params):
+                self.params = params
+
+            def fetchall(self):
+                return [("300750.sz", date(2026, 5, 11), "100.5", "102", "3", "4")]
+
+        class FakeConnection:
+            def __init__(self, cursor):
+                self._cursor = cursor
+
+            def cursor(self):
+                return self._cursor
+
+        class FakeConnectionContext:
+            def __init__(self, cursor):
+                self._cursor = cursor
+
+            def __enter__(self):
+                return FakeConnection(self._cursor)
+
+            def __exit__(self, exc_type, exc, traceback):
+                return None
+
+        cursor = FakeCursor()
+        with patch.object(market_data, "get_knowaction_connection", return_value=FakeConnectionContext(cursor)):
+            rows = market_data.load_knowaction_quotes(["", "300750.sz"], date(2026, 5, 10), date(2026, 5, 12))
+
+        self.assertEqual((["300750.SZ"], date(2026, 5, 10), date(2026, 5, 12)), cursor.params)
+        self.assertEqual(
+            [
+                {
+                    "ts_code": "300750.SZ",
+                    "trade_date": "2026-05-11",
+                    "open": 100.5,
+                    "close": 102.0,
+                    "vol": 3.0,
+                    "amount": 4.0,
+                }
+            ],
+            rows,
+        )
+
     def test_resolve_signal_ts_code_prefers_explicit_code_and_market(self):
         from backend.services.a_share_research_return_smoke_service import resolve_signal_ts_code
 
