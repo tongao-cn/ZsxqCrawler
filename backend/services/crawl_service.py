@@ -10,7 +10,6 @@ from backend.crawlers.official_topic_client import (
 )
 from backend.crawlers.topic_crawler import ZSXQTopicCrawler
 from backend.services.crawl_time_range import (
-    filter_official_topics_by_time_range as _filter_official_topics_by_time_range,
     format_zsxq_time as _format_zsxq_time,
     is_date_only as _is_date_only,
     parse_user_time as _parse_user_time,
@@ -20,6 +19,13 @@ from backend.services.crawl_time_range import (
 from backend.services.legacy_time_range_runner import (
     LegacyTimeRangeRunResult,
     run_legacy_time_range_pages,
+)
+from backend.services.official_topic_crawl_runner import (
+    OfficialCrawlPagesTarget,
+    OfficialCrawlTimeRangeTarget,
+    OfficialTopicCrawlRuntime,
+    run_official_crawl_pages,
+    run_official_crawl_time_range,
 )
 from backend.services.crawl_topic_source import (
     LEGACY_TOPIC_SOURCE_ALIASES,
@@ -246,6 +252,15 @@ def _official_import_page_topics(
 def _official_topic_client(task_id: str) -> OfficialTopicClient:
     return OfficialTopicClient(log_callback=lambda message: add_task_log(task_id, message))
 
+def _official_topic_crawl_runtime() -> OfficialTopicCrawlRuntime:
+    return OfficialTopicCrawlRuntime(
+        add_task_log,
+        is_task_stopped,
+        complete_task_unless_stopped,
+        _official_topic_client,
+        ZSXQDatabase,
+    )
+
 def _empty_official_crawl_stats() -> dict[str, Any]:
     return empty_official_crawl_stats()
 
@@ -394,55 +409,10 @@ def _run_official_crawl_time_range_task(
     start_dt: datetime,
     end_dt: datetime,
 ) -> None:
-    add_task_log(task_id, "🔁 使用官方话题采集流程（MCP HTTP）")
-    client = _official_topic_client(task_id)
-    db = ZSXQDatabase(group_id)
-    per_page = _official_per_page_limit(request.perPage)
-    if request.perPage and request.perPage > 30:
-        add_task_log(task_id, "ℹ️ 官方接口单页上限按 30 处理")
-
-    cursor = _format_zsxq_time(end_dt)
-    seen_topic_ids: set[int] = set()
-    total_stats = _empty_official_crawl_stats()
-
-    while True:
-        if _task_stopped_with_log(task_id):
-            break
-
-        page = _fetch_unique_official_topic_page(
-            task_id,
-            client,
-            group_id,
-            per_page,
-            cursor,
-            seen_topic_ids,
-            total_stats,
-        )
-        if page is None:
-            break
-
-        payload = page.payload
-        topics = page.topics
-        filtered, oldest_dt = _filter_official_topics_by_time_range(
-            page.unique_topics,
-            start_dt,
-            end_dt,
-        )
-
-        add_task_log(task_id, f"📄 官方本页获取 {len(topics)} 个话题，区间内 {len(filtered)} 个")
-
-        _official_import_page_topics(total_stats, db, client, group_id, filtered, task_id)
-
-        next_cursor = _official_next_cursor_or_log_end(task_id, payload, cursor)
-        if not next_cursor:
-            break
-        cursor = next_cursor
-
-        if _official_reached_before_start(oldest_dt, start_dt):
-            add_task_log(task_id, "✅ 已到达起始时间之前，任务结束")
-            break
-
-    complete_task_unless_stopped(task_id, "官方时间区间采集完成", total_stats)
+    run_official_crawl_time_range(
+        _official_topic_crawl_runtime(),
+        OfficialCrawlTimeRangeTarget(task_id, group_id, request, start_dt, end_dt),
+    )
 
 def _run_official_crawl_pages_task(
     task_id: str,
@@ -452,49 +422,10 @@ def _run_official_crawl_pages_task(
     mode: str,
     start_cursor: Optional[str] = None,
 ) -> None:
-    client = _official_topic_client(task_id)
-    db = ZSXQDatabase(group_id)
-    per_page = _official_per_page_limit(per_page)
-    cursor = start_cursor
-    total_stats = _empty_official_crawl_stats()
-    seen_topic_ids: set[int] = set()
-
-    while _official_pages_remaining(pages, total_stats):
-        if _task_stopped_with_log(task_id):
-            break
-
-        page = _fetch_unique_official_topic_page(
-            task_id,
-            client,
-            group_id,
-            per_page,
-            cursor,
-            seen_topic_ids,
-            total_stats,
-        )
-        if page is None:
-            break
-
-        payload = page.payload
-
-        topics_to_import, should_stop = _official_topics_to_import_for_mode(
-            task_id,
-            db,
-            group_id,
-            mode,
-            page.unique_topics,
-        )
-        if should_stop:
-            break
-
-        _official_import_page_topics(total_stats, db, client, group_id, topics_to_import, task_id)
-
-        next_cursor = _official_next_cursor_or_log_end(task_id, payload, cursor)
-        if not next_cursor:
-            break
-        cursor = next_cursor
-
-    complete_task_unless_stopped(task_id, _official_crawl_completion_message(mode), total_stats)
+    run_official_crawl_pages(
+        _official_topic_crawl_runtime(),
+        OfficialCrawlPagesTarget(task_id, group_id, pages, per_page, mode, start_cursor),
+    )
 
 def run_crawl_historical_task(
     task_id: str,
