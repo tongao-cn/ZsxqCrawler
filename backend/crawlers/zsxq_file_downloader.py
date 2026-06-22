@@ -51,6 +51,17 @@ from backend.crawlers.file_database_download_runner import (
     DatabaseDownloadTarget,
     run_database_file_download,
 )
+from backend.crawlers.file_collection_runner import (
+    collect_all_files_to_database as run_collect_all_files_to_database,
+    create_file_collection_log as run_create_file_collection_log,
+    fetch_file_collection_page as run_fetch_file_collection_page,
+    file_collection_log_id as _file_collection_log_id,
+    import_file_collection_page as run_import_file_collection_page,
+    next_file_collection_index as run_next_file_collection_index,
+    run_file_collection_loop,
+    run_file_collection_page,
+    update_file_collection_log as run_update_file_collection_log,
+)
 from backend.crawlers.file_batch_download_runner import (
     apply_batch_download_next_page as run_apply_batch_download_next_page,
     apply_batch_download_result as run_apply_batch_download_result,
@@ -158,7 +169,6 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     API_FAILURE_RETRY,
     HTTP_FAILURE_NON_RETRY,
     HTTP_FAILURE_RETRY,
-    add_file_collection_page_stats,
     api_retry_user_agent_message,
     api_retry_wait_message,
     add_import_stats,
@@ -188,21 +198,6 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     download_url_success_plan,
     empty_import_stats,
     existing_file_matches,
-    file_collection_completion_messages,
-    file_collection_empty_page_message,
-    file_collection_exception_message,
-    file_collection_fetch_failed_messages,
-    file_collection_interrupted_message,
-    file_collection_log_insert_query,
-    file_collection_log_update_query,
-    file_collection_next_page_plan,
-    file_collection_page_files_message,
-    file_collection_page_import_messages,
-    file_collection_page_message,
-    file_collection_page_stored_message,
-    file_collection_start_message,
-    file_collection_stats,
-    file_collection_storage_failed_message,
     file_list_item_display_lines,
     file_list_next_index_message,
     file_list_response_page,
@@ -306,7 +301,6 @@ from backend.crawlers.zsxq_file_downloader_targets import (
     ExistingDownloadMatch,
     ExistingDownloadTarget,
     FetchFileListTarget,
-    FileCollectionLogRow,
     FileCollectionPage,
     FileCollectionTarget,
     FileListApiFailureResponseTarget,
@@ -348,19 +342,6 @@ DOWNLOAD_FILE_RESPONSE_TIMEOUT_SECONDS = 300
 
 def _query_group_id(group_id: str) -> Any:
     return download_query_group_id(group_id)
-
-
-def _file_collection_log_row(row: Any) -> Optional[FileCollectionLogRow]:
-    if not row:
-        return None
-    return FileCollectionLogRow(row[0])
-
-
-def _file_collection_log_id(row: Any) -> Optional[Any]:
-    collection_log = _file_collection_log_row(row)
-    if not collection_log:
-        return None
-    return collection_log.log_id
 
 
 def _http_failure_class_with_output(target: HttpFailureOutputTarget) -> str:
@@ -2319,47 +2300,17 @@ class ZSXQFileDownloader:
         page_count: int,
         stats: Dict[str, int],
     ) -> bool:
-        try:
-            page_stats = self.file_db.import_file_response(data)
-
-            add_file_collection_page_stats(stats, file_count, page_stats)
-
-            for message in file_collection_page_import_messages(page_stats):
-                print(message)
-
-        except Exception as e:
-            print(file_collection_storage_failed_message(page_count, e))
-            return False
-
-        print(file_collection_page_stored_message(page_count))
-        return True
+        return run_import_file_collection_page(self, data, file_count, page_count, stats)
 
     def _next_file_collection_index(self, next_index: Any) -> Optional[Any]:
-        next_page = file_collection_next_page_plan(next_index)
-        if not next_page["has_next"]:
-            return None
-
-        time.sleep(random.uniform(next_page["delay_min"], next_page["delay_max"]))
-        return next_page["next_index"]
+        return run_next_file_collection_index(next_index)
 
     def _fetch_file_collection_page(
         self,
         page_count: int,
         current_index: Optional[Any],
     ) -> Optional[FileCollectionPage]:
-        data = self.fetch_file_list(count=20, index=current_index)
-        if not data:
-            for message in file_collection_fetch_failed_messages(page_count):
-                print(message)
-            return None
-
-        files, next_index = file_list_response_page(data)
-        if not files:
-            print(file_collection_empty_page_message())
-            return None
-
-        print(file_collection_page_files_message(len(files)))
-        return FileCollectionPage(data, files, next_index)
+        return run_fetch_file_collection_page(self, page_count, current_index)
 
     def _run_file_collection_page(
         self,
@@ -2367,66 +2318,20 @@ class ZSXQFileDownloader:
         current_index: Optional[Any],
         stats: Dict[str, int],
     ) -> Optional[Any]:
-        page = self._fetch_file_collection_page(page_count, current_index)
-        if page is None:
-            return None
-
-        if not self._import_file_collection_page(
-            page.data,
-            len(page.files),
-            page_count,
-            stats,
-        ):
-            return None
-
-        return self._next_file_collection_index(page.next_index)
+        return run_file_collection_page(self, page_count, current_index, stats)
 
     def _run_file_collection_loop(self, stats: Dict[str, int]) -> int:
-        current_index = None
-        page_count = 0
-
-        try:
-            while True:
-                page_count += 1
-                print(file_collection_page_message(page_count))
-
-                current_index = self._run_file_collection_page(
-                    page_count,
-                    current_index,
-                    stats,
-                )
-                if current_index is None:
-                    break
-
-        except KeyboardInterrupt:
-            print(file_collection_interrupted_message())
-        except Exception as e:
-            print(file_collection_exception_message(e))
-
-        return page_count
+        return run_file_collection_loop(self, stats)
 
     def _create_file_collection_log(self) -> Optional[Any]:
-        insert_query, insert_params = file_collection_log_insert_query(
-            datetime.datetime.now().isoformat()
-        )
-        self.file_db.cursor.execute(insert_query, insert_params)
-        row = self.file_db.cursor.fetchone()
-        log_id = _file_collection_log_id(row)
-        self.file_db.conn.commit()
-        return log_id
+        return run_create_file_collection_log(self)
 
     def _update_file_collection_log(
         self,
         stats: Dict[str, int],
         log_id: Optional[Any],
     ) -> None:
-        update_query, update_params = file_collection_log_update_query(
-            datetime.datetime.now().isoformat(),
-            stats,
-            log_id,
-        )
-        self.file_db.cursor.execute(update_query, update_params)
-        self.file_db.conn.commit()
+        run_update_file_collection_log(self, stats, log_id)
 
     def collect_all_files_to_database(self) -> Dict[str, int]:
         """收集所有文件信息到数据库"""
@@ -2436,21 +2341,7 @@ class ZSXQFileDownloader:
         self,
         target: FileCollectionTarget,
     ) -> Dict[str, int]:
-        print(file_collection_start_message())
-
-        # 创建收集记录
-        log_id = self._create_file_collection_log()
-
-        stats = file_collection_stats()
-        page_count = self._run_file_collection_loop(stats)
-
-        # 更新收集记录
-        self._update_file_collection_log(stats, log_id)
-
-        for message in file_collection_completion_messages(stats, page_count):
-            print(message)
-
-        return stats
+        return run_collect_all_files_to_database(self, target)
 
     def get_database_time_range(self) -> Dict[str, Any]:
         """获取完整数据库中文件的时间范围信息"""

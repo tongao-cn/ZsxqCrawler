@@ -65,6 +65,10 @@ from backend.crawlers.file_database_download_runner import (
     run_database_download_after_initial_stop,
     run_database_download_rows,
 )
+from backend.crawlers.file_collection_runner import (
+    FileCollectionTarget,
+    collect_all_files_to_database as run_file_collection_to_database,
+)
 from backend.crawlers.file_download_url import (
     DownloadUrlResponseDecision as UrlDownloadUrlResponseDecision,
     DownloadUrlRetryLoopTarget as UrlDownloadUrlRetryLoopTarget,
@@ -703,32 +707,29 @@ class FileDownloaderPaginationTests(unittest.TestCase):
             return ("done-1", "done-2")
 
         with (
-            patch("backend.crawlers.zsxq_file_downloader.print", print_message),
-            patch.object(
-                ZSXQFileDownloader,
-                "_create_file_collection_log",
+            patch("backend.crawlers.file_collection_runner.print", print_message),
+            patch(
+                "backend.crawlers.file_collection_runner.create_file_collection_log",
                 create_file_collection_log,
             ),
             patch(
-                "backend.crawlers.zsxq_file_downloader.file_collection_stats",
+                "backend.crawlers.file_collection_runner.file_collection_stats",
                 file_collection_stats_target,
             ),
-            patch.object(
-                ZSXQFileDownloader,
-                "_run_file_collection_loop",
+            patch(
+                "backend.crawlers.file_collection_runner.run_file_collection_loop",
                 run_file_collection_loop,
             ),
-            patch.object(
-                ZSXQFileDownloader,
-                "_update_file_collection_log",
+            patch(
+                "backend.crawlers.file_collection_runner.update_file_collection_log",
                 update_file_collection_log,
             ),
             patch(
-                "backend.crawlers.zsxq_file_downloader.file_collection_completion_messages",
+                "backend.crawlers.file_collection_runner.file_collection_completion_messages",
                 completion_messages,
             ),
         ):
-            result = ZSXQFileDownloader.collect_all_files_to_database(downloader)
+            result = run_file_collection_to_database(downloader, FileCollectionTarget())
 
         self.assertIs(stats, result)
         self.assertEqual(
@@ -833,8 +834,8 @@ class FileDownloaderPaginationTests(unittest.TestCase):
 
         with (
             contextlib.redirect_stdout(io.StringIO()) as output,
-            patch("backend.crawlers.zsxq_file_downloader.random.uniform") as uniform,
-            patch("backend.crawlers.zsxq_file_downloader.time.sleep") as sleep,
+            patch("backend.crawlers.file_collection_runner.random.uniform") as uniform,
+            patch("backend.crawlers.file_collection_runner.time.sleep") as sleep,
         ):
             stats = ZSXQFileDownloader.collect_all_files_to_database(downloader)
 
@@ -916,8 +917,8 @@ class FileDownloaderPaginationTests(unittest.TestCase):
 
         with (
             contextlib.redirect_stdout(io.StringIO()),
-            patch("backend.crawlers.zsxq_file_downloader.random.uniform") as uniform,
-            patch("backend.crawlers.zsxq_file_downloader.time.sleep") as sleep,
+            patch("backend.crawlers.file_collection_runner.random.uniform") as uniform,
+            patch("backend.crawlers.file_collection_runner.time.sleep") as sleep,
         ):
             stats = ZSXQFileDownloader.collect_all_files_to_database(downloader)
 
@@ -944,8 +945,8 @@ class FileDownloaderPaginationTests(unittest.TestCase):
 
         with (
             contextlib.redirect_stdout(io.StringIO()),
-            patch("backend.crawlers.zsxq_file_downloader.random.uniform", return_value=2.5) as uniform,
-            patch("backend.crawlers.zsxq_file_downloader.time.sleep") as sleep,
+            patch("backend.crawlers.file_collection_runner.random.uniform", return_value=2.5) as uniform,
+            patch("backend.crawlers.file_collection_runner.time.sleep") as sleep,
         ):
             stats = ZSXQFileDownloader.collect_all_files_to_database(downloader)
 
