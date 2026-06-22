@@ -7,7 +7,6 @@ from backend.core.account_context import get_cookie_for_group
 from backend.crawlers.official_topic_client import (
     OfficialTopicClient,
     normalize_official_topic,
-    official_payload_topics,
 )
 from backend.crawlers.topic_crawler import ZSXQTopicCrawler
 from backend.schemas.crawl import CrawlTimeRangeRequest
@@ -40,6 +39,12 @@ from backend.services.official_topic_page_importer import (
     official_topic_comments_count,
     official_topic_exists,
     official_topic_id,
+)
+from backend.services.official_topic_page_fetcher import (
+    OfficialTopicPage,
+    OfficialUniqueTopicPage,
+    fetch_official_topic_page,
+    fetch_unique_official_topic_page,
 )
 from backend.services.official_topic_page_state import (
     OfficialStartCursorResult,
@@ -90,15 +95,6 @@ class _LegacyTimeRangePageResult(NamedTuple):
 class _LegacyTimeRangeRunResult(NamedTuple):
     stats: dict[str, int]
     expired: bool
-
-class _OfficialTopicPage(NamedTuple):
-    payload: dict[str, Any]
-    topics: list[dict[str, Any]]
-
-class _OfficialUniqueTopicPage(NamedTuple):
-    payload: dict[str, Any]
-    topics: list[dict[str, Any]]
-    unique_topics: list[dict[str, Any]]
 
 def _should_stop_task(task_id: str) -> bool:
     return is_task_stopped(task_id)
@@ -537,14 +533,8 @@ def _fetch_official_topic_page(
     group_id: str,
     per_page: int,
     cursor: Optional[str],
-) -> _OfficialTopicPage:
-    payload = client.get_group_topics(
-        group_id,
-        limit=per_page,
-        scope="all",
-        end_time=cursor,
-    )
-    return _OfficialTopicPage(payload=payload, topics=official_payload_topics(payload))
+) -> OfficialTopicPage:
+    return fetch_official_topic_page(client, group_id, per_page, cursor)
 
 def _fetch_unique_official_topic_page(
     task_id: str,
@@ -554,15 +544,17 @@ def _fetch_unique_official_topic_page(
     cursor: Optional[str],
     seen_topic_ids: set[int],
     total_stats: dict[str, Any],
-) -> Optional[_OfficialUniqueTopicPage]:
-    page = _fetch_official_topic_page(client, group_id, per_page, cursor)
-    if _official_topic_page_empty(task_id, page.topics):
-        return None
-    unique_topics = _dedupe_official_page_topics(page.topics, seen_topic_ids, total_stats)
-    return _OfficialUniqueTopicPage(
-        payload=page.payload,
-        topics=page.topics,
-        unique_topics=unique_topics,
+) -> Optional[OfficialUniqueTopicPage]:
+    return fetch_unique_official_topic_page(
+        task_id,
+        client,
+        group_id,
+        per_page,
+        cursor,
+        seen_topic_ids,
+        total_stats,
+        add_task_log,
+        fetch_page=_fetch_official_topic_page,
     )
 
 def _official_topic_page_empty(task_id: str, topics: list[dict[str, Any]]) -> bool:
