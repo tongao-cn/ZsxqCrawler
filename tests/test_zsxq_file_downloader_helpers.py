@@ -70,6 +70,10 @@ from backend.crawlers.file_download_url import (
     DownloadUrlRetryLoopTarget as UrlDownloadUrlRetryLoopTarget,
     run_download_url_retry_loop as run_download_url_loop,
 )
+from backend.crawlers.file_list_response_runner import (
+    handle_file_list_ok_response as run_file_list_ok_response,
+    handle_file_list_response as run_file_list_response,
+)
 from backend.crawlers.file_download_transfer import (
     DownloadAttemptResult as TransferDownloadAttemptResult,
     DownloadAttemptResultTarget as TransferDownloadAttemptResultTarget,
@@ -5700,74 +5704,48 @@ class FileDownloaderRetryHelperTests(unittest.TestCase):
     def test_handle_file_list_response_preserves_status_dispatch_and_output_order(self):
         ok_response = SimpleNamespace(status_code=200)
         failure_response = SimpleNamespace(status_code=429, text="temporary outage")
-        ok_decision = SimpleNamespace(
-            result={"resp_data": {}},
-            should_retry=False,
-            should_stop=False,
-        )
-        failure_decision = SimpleNamespace(result=None, should_retry=True, should_stop=False)
         operations = []
         downloader = object.__new__(ZSXQFileDownloader)
 
-        def handle_ok(target):
-            operations.append(
-                (
-                    "ok",
-                    target.response is ok_response,
-                    target.attempt,
-                    target.max_retries,
-                )
-            )
-            return ok_decision
+        def parse_response(response, attempt, max_retries):
+            operations.append(("parse", response is ok_response, attempt, max_retries))
+            return SimpleNamespace(data={"succeeded": True, "resp_data": {"files": []}}, should_retry=False)
 
-        def handle_http_failure(target):
-            operations.append(
-                (
-                    "http_failure",
-                    target.response is failure_response,
-                    target.attempt,
-                    target.max_retries,
-                )
-            )
-            return HTTP_FAILURE_RETRY
-
-        def http_failure_decision(failure_class):
-            operations.append(("decision", failure_class))
-            return failure_decision
-
-        downloader._handle_file_list_ok_response_target = handle_ok
-        downloader._handle_file_list_http_failure_response_target = handle_http_failure
-        downloader._file_list_http_failure_decision = http_failure_decision
+        downloader._parse_api_json_response = parse_response
 
         output = io.StringIO()
         with contextlib.redirect_stdout(output):
-            ok_result = ZSXQFileDownloader._handle_file_list_response(
+            ok_result = run_file_list_response(
                 downloader,
                 ok_response,
                 1,
                 4,
             )
-            failure_result = ZSXQFileDownloader._handle_file_list_response(
+            failure_result = run_file_list_response(
                 downloader,
                 failure_response,
                 2,
                 4,
             )
 
-        self.assertIs(ok_decision, ok_result)
-        self.assertIs(failure_decision, failure_result)
+        self.assertEqual({"succeeded": True, "resp_data": {"files": []}}, ok_result.result)
+        self.assertFalse(ok_result.should_retry)
+        self.assertFalse(ok_result.should_stop)
+        self.assertIsNone(failure_result.result)
+        self.assertTrue(failure_result.should_retry)
+        self.assertFalse(failure_result.should_stop)
         self.assertEqual(
-            [
-                ("ok", True, 1, 4),
-                ("http_failure", True, 2, 4),
-                ("decision", HTTP_FAILURE_RETRY),
-            ],
+            [("parse", True, 1, 4)],
             operations,
         )
         self.assertEqual(
             [
                 "   📊 响应状态: 200",
+                "   ✅ 重试成功！第1次重试获取到文件列表",
                 "   📊 响应状态: 429",
+                "   ❌ HTTP错误: 429",
+                "   📄 响应内容: temporary outage",
+                "   🔄 服务器错误，准备重试...",
             ],
             output.getvalue().splitlines(),
         )
@@ -7372,7 +7350,7 @@ class FileDownloaderRetryHelperTests(unittest.TestCase):
     def test_handle_file_list_ok_response_preserves_parsed_data_dispatch(self):
         response = object()
         success_data = {"succeeded": True, "resp_data": {"files": [], "index": None}}
-        failure_data = {"succeeded": False, "code": 1059, "message": "busy"}
+        failure_data = {"succeeded": False, "code": 1030, "message": "mobile only"}
         parsed_payloads = [success_data, failure_data, None]
         operations = []
         downloader = object.__new__(ZSXQFileDownloader)
@@ -7381,38 +7359,30 @@ class FileDownloaderRetryHelperTests(unittest.TestCase):
             operations.append(("parse", response_arg is response, attempt, max_retries))
             return SimpleNamespace(data=parsed_payloads.pop(0), should_retry=False)
 
-        def handle_success(data, attempt):
-            operations.append(("success", data, attempt))
-            return {"ok": "success"}
-
-        def handle_api_failure(target):
-            operations.append(("api_failure", target.data, target.attempt, target.max_retries))
-            return API_FAILURE_NON_RETRY
-
         downloader._parse_api_json_response = parse_response
-        downloader._handle_file_list_success_response = handle_success
-        downloader._handle_file_list_api_failure_response_target = handle_api_failure
 
-        success_decision = ZSXQFileDownloader._handle_file_list_ok_response(
-            downloader,
-            response,
-            1,
-            4,
-        )
-        failure_decision = ZSXQFileDownloader._handle_file_list_ok_response(
-            downloader,
-            response,
-            2,
-            4,
-        )
-        empty_decision = ZSXQFileDownloader._handle_file_list_ok_response(
-            downloader,
-            response,
-            3,
-            4,
-        )
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            success_decision = run_file_list_ok_response(
+                downloader,
+                response,
+                1,
+                4,
+            )
+            failure_decision = run_file_list_ok_response(
+                downloader,
+                response,
+                2,
+                4,
+            )
+            empty_decision = run_file_list_ok_response(
+                downloader,
+                response,
+                3,
+                4,
+            )
 
-        self.assertEqual({"ok": "success"}, success_decision.result)
+        self.assertEqual(success_data, success_decision.result)
         self.assertFalse(success_decision.should_retry)
         self.assertFalse(success_decision.should_stop)
         self.assertIsNone(failure_decision.result)
@@ -7425,12 +7395,18 @@ class FileDownloaderRetryHelperTests(unittest.TestCase):
         self.assertEqual(
             [
                 ("parse", True, 1, 4),
-                ("success", success_data, 1),
                 ("parse", True, 2, 4),
-                ("api_failure", failure_data, 2, 4),
                 ("parse", True, 3, 4),
             ],
             operations,
+        )
+        self.assertEqual(
+            [
+                "   ✅ 重试成功！第1次重试获取到文件列表",
+                "   ❌ API返回失败: mobile only (代码: 1030)",
+                "   🚫 非可重试错误，停止重试",
+            ],
+            output.getvalue().splitlines(),
         )
 
     def test_fetch_file_list_preserves_entry_url_params_logs_and_response_handoff(self):

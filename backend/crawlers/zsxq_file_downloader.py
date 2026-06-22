@@ -108,6 +108,22 @@ from backend.crawlers.file_list_request_runner import (
     run_file_list_request_loop,
     start_file_list_request as run_start_file_list_request,
 )
+from backend.crawlers.file_list_response_runner import (
+    file_list_api_failure_decision as run_file_list_api_failure_decision,
+    file_list_http_failure_decision as run_file_list_http_failure_decision,
+    file_list_ok_data_decision_target as run_file_list_ok_data_decision_target,
+    file_list_response_status_decision_target as run_file_list_response_status_decision_target,
+    handle_file_list_api_failure_response as run_handle_file_list_api_failure_response,
+    handle_file_list_api_failure_response_target as run_handle_file_list_api_failure_response_target,
+    handle_file_list_http_failure_response as run_handle_file_list_http_failure_response,
+    handle_file_list_http_failure_response_target as run_handle_file_list_http_failure_response_target,
+    handle_file_list_ok_response as run_handle_file_list_ok_response,
+    handle_file_list_ok_response_target as run_handle_file_list_ok_response_target,
+    handle_file_list_response as run_handle_file_list_response,
+    handle_file_list_response_target as run_handle_file_list_response_target,
+    handle_file_list_success_response as run_handle_file_list_success_response,
+    handle_file_list_success_response_target as run_handle_file_list_success_response_target,
+)
 from backend.crawlers.file_time_collection_runner import (
     TimeCollectionDatabaseState,
     TimeCollectionLoopContext,
@@ -187,7 +203,6 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     file_collection_start_message,
     file_collection_stats,
     file_collection_storage_failed_message,
-    file_list_api_failure_plan,
     file_list_item_display_lines,
     file_list_next_index_message,
     file_list_response_page,
@@ -843,20 +858,13 @@ class ZSXQFileDownloader:
         return ApiJsonParseResult(data, False)
 
     def _handle_file_list_success_response(self, data: Dict[str, Any], attempt: int) -> Dict[str, Any]:
-        return self._handle_file_list_success_response_target(
-            FileListSuccessResponseTarget(data, attempt),
-        )
+        return run_handle_file_list_success_response(self, data, attempt)
 
     def _handle_file_list_success_response_target(
         self,
         target: FileListSuccessResponseTarget,
     ) -> Dict[str, Any]:
-        files, _ = file_list_response_page(target.data)
-        if target.attempt > 0:
-            print(f"   ✅ 重试成功！第{target.attempt}次重试获取到文件列表")
-        else:
-            print(f"   ✅ 获取成功: {len(files)}个文件")
-        return target.data
+        return run_handle_file_list_success_response_target(target)
 
     def _handle_file_list_api_failure_response(
         self,
@@ -864,22 +872,13 @@ class ZSXQFileDownloader:
         attempt: int,
         max_retries: int,
     ) -> str:
-        return self._handle_file_list_api_failure_response_target(
-            FileListApiFailureResponseTarget(data, attempt, max_retries),
-        )
+        return run_handle_file_list_api_failure_response(self, data, attempt, max_retries)
 
     def _handle_file_list_api_failure_response_target(
         self,
         target: FileListApiFailureResponseTarget,
     ) -> str:
-        api_failure = file_list_api_failure_plan(
-            target.data,
-            target.attempt,
-            target.max_retries,
-        )
-        for message in api_failure["messages"]:
-            print(message)
-        return api_failure["failure_class"]
+        return run_handle_file_list_api_failure_response_target(target)
 
     def _handle_file_list_http_failure_response(
         self,
@@ -887,22 +886,13 @@ class ZSXQFileDownloader:
         attempt: int,
         max_retries: int,
     ) -> str:
-        return self._handle_file_list_http_failure_response_target(
-            FileListHttpFailureResponseTarget(response, attempt, max_retries),
-        )
+        return run_handle_file_list_http_failure_response(self, response, attempt, max_retries)
 
     def _handle_file_list_http_failure_response_target(
         self,
         target: FileListHttpFailureResponseTarget,
     ) -> str:
-        return _http_failure_class_with_output(
-            HttpFailureOutputTarget(
-                target.response.status_code,
-                target.response.text,
-                target.attempt,
-                target.max_retries,
-            ),
-        )
+        return run_handle_file_list_http_failure_response_target(target)
 
     def _handle_file_list_request_exception(
         self,
@@ -927,18 +917,10 @@ class ZSXQFileDownloader:
         )
 
     def _file_list_api_failure_decision(self, failure_class: str) -> FileListResponseDecision:
-        if failure_class == API_FAILURE_RETRY:
-            return FileListResponseDecision(None, True, False)
-        if failure_class in {API_FAILURE_NON_RETRY, API_FAILURE_PERMISSION_DENIED_1030}:
-            return FileListResponseDecision(None, False, True)
-        return FileListResponseDecision(None, False, False)
+        return run_file_list_api_failure_decision(failure_class)
 
     def _file_list_http_failure_decision(self, failure_class: str) -> FileListResponseDecision:
-        if failure_class == HTTP_FAILURE_RETRY:
-            return FileListResponseDecision(None, True, False)
-        if failure_class == HTTP_FAILURE_NON_RETRY:
-            return FileListResponseDecision(None, False, True)
-        return FileListResponseDecision(None, False, False)
+        return run_file_list_http_failure_decision(failure_class)
 
     def _handle_file_list_ok_response(
         self,
@@ -946,51 +928,19 @@ class ZSXQFileDownloader:
         attempt: int,
         max_retries: int,
     ) -> FileListResponseDecision:
-        return self._handle_file_list_ok_response_target(
-            FileListOkResponseTarget(response, attempt, max_retries),
-        )
+        return run_handle_file_list_ok_response(self, response, attempt, max_retries)
 
     def _handle_file_list_ok_response_target(
         self,
         target: FileListOkResponseTarget,
     ) -> FileListResponseDecision:
-        json_parse = self._parse_api_json_response(
-            target.response,
-            target.attempt,
-            target.max_retries,
-        )
-        if json_parse.should_retry:
-            return FileListResponseDecision(None, True, False)
-        return self._file_list_ok_data_decision_target(
-            FileListOkDataTarget(
-                json_parse.data,
-                target.attempt,
-                target.max_retries,
-            ),
-        )
+        return run_handle_file_list_ok_response_target(self, target)
 
     def _file_list_ok_data_decision_target(
         self,
         target: FileListOkDataTarget,
     ) -> FileListResponseDecision:
-        if not target.data:
-            return FileListResponseDecision(None, True, False)
-
-        if target.data.get('succeeded'):
-            return FileListResponseDecision(
-                self._handle_file_list_success_response(target.data, target.attempt),
-                False,
-                False,
-            )
-
-        failure_class = self._handle_file_list_api_failure_response_target(
-            FileListApiFailureResponseTarget(
-                target.data,
-                target.attempt,
-                target.max_retries,
-            ),
-        )
-        return self._file_list_api_failure_decision(failure_class)
+        return run_file_list_ok_data_decision_target(self, target)
 
     def _handle_file_list_response(
         self,
@@ -998,44 +948,19 @@ class ZSXQFileDownloader:
         attempt: int,
         max_retries: int,
     ) -> FileListResponseDecision:
-        return self._handle_file_list_response_target(
-            FileListResponseTarget(response, attempt, max_retries),
-        )
+        return run_handle_file_list_response(self, response, attempt, max_retries)
 
     def _handle_file_list_response_target(
         self,
         target: FileListResponseTarget,
     ) -> FileListResponseDecision:
-        print(f"   📊 响应状态: {target.response.status_code}")
-        return self._file_list_response_status_decision_target(
-            FileListResponseStatusTarget(
-                target.response,
-                target.attempt,
-                target.max_retries,
-            ),
-        )
+        return run_handle_file_list_response_target(self, target)
 
     def _file_list_response_status_decision_target(
         self,
         target: FileListResponseStatusTarget,
     ) -> FileListResponseDecision:
-        if target.response.status_code == 200:
-            return self._handle_file_list_ok_response_target(
-                FileListOkResponseTarget(
-                    target.response,
-                    target.attempt,
-                    target.max_retries,
-                ),
-            )
-
-        http_failure_class = self._handle_file_list_http_failure_response_target(
-            FileListHttpFailureResponseTarget(
-                target.response,
-                target.attempt,
-                target.max_retries,
-            ),
-        )
-        return self._file_list_http_failure_decision(http_failure_class)
+        return run_file_list_response_status_decision_target(self, target)
 
     def fetch_file_list(self, count: int = 20, index: Optional[str] = None, sort: str = "by_download_count") -> Optional[Dict[str, Any]]:
         """获取文件列表（带重试机制）"""
