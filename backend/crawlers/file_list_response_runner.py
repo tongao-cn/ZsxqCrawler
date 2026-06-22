@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any, Dict, Protocol
 
 from backend.core.console_output import safe_console_print as print
+from backend.crawlers.api_json_response_runner import parse_api_json_response
 from backend.crawlers.zsxq_file_downloader_helpers import (
     API_FAILURE_NON_RETRY,
     API_FAILURE_PERMISSION_DENIED_1030,
@@ -16,7 +17,6 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     http_failure_plan,
 )
 from backend.crawlers.zsxq_file_downloader_targets import (
-    ApiJsonParseResult,
     FileListApiFailureResponseTarget,
     FileListHttpFailureResponseTarget,
     FileListOkDataTarget,
@@ -29,13 +29,7 @@ from backend.crawlers.zsxq_file_downloader_targets import (
 
 
 class FileListResponseRuntime(Protocol):
-    def _parse_api_json_response(
-        self,
-        response: Any,
-        attempt: int,
-        max_retries: int,
-    ) -> ApiJsonParseResult:
-        ...
+    pass
 
 
 def handle_file_list_success_response(
@@ -131,7 +125,7 @@ def handle_file_list_ok_response_target(
     runtime: FileListResponseRuntime,
     target: FileListOkResponseTarget,
 ) -> FileListResponseDecision:
-    json_parse = runtime._parse_api_json_response(
+    json_parse = parse_api_json_response(
         target.response,
         target.attempt,
         target.max_retries,
@@ -139,7 +133,6 @@ def handle_file_list_ok_response_target(
     if json_parse.should_retry:
         return FileListResponseDecision(None, True, False)
     return file_list_ok_data_decision_target(
-        runtime,
         FileListOkDataTarget(
             json_parse.data,
             target.attempt,
@@ -149,7 +142,6 @@ def handle_file_list_ok_response_target(
 
 
 def file_list_ok_data_decision_target(
-    runtime: FileListResponseRuntime,
     target: FileListOkDataTarget,
 ) -> FileListResponseDecision:
     if not target.data:

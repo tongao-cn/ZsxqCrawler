@@ -8,7 +8,6 @@ Description: 专门用于下载知识星球文件的工具
 """
 
 import datetime
-import json
 import os
 import random
 import time
@@ -17,7 +16,9 @@ from typing import Dict, Optional, Any, Tuple
 import requests
 
 from backend.core.console_output import safe_console_print as print
-from backend.core.log_redaction import redact_json_like
+from backend.crawlers.api_json_response_runner import (
+    parse_api_json_response_target as run_parse_api_json_response_target,
+)
 from backend.crawlers.file_download_url import (
     DownloadUrlAttemptTarget,
     DownloadUrlResponseDecision,
@@ -281,7 +282,6 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     empty_import_stats,
     existing_file_matches,
     http_failure_plan,
-    json_decode_failure_plan,
     latest_file_create_time_query,
     page_crosses_stop_before,
     remove_partial_download,
@@ -289,7 +289,6 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     request_exception_plan,
     retry_exhausted_message,
     risk_event_header_user_agent,
-    should_log_full_response,
     summarize_page_time_range,
     time_dedupe_page_messages,
     time_collection_database_status_message,
@@ -374,7 +373,6 @@ from backend.crawlers.zsxq_file_downloader_targets import (
     HttpFailureOutputTarget,
     IncrementalCollectionTarget,
     IsStoppedTarget,
-    JsonDecodeFailureOutputTarget,
     ParseApiJsonResponseTarget,
     PrepareRetryApiRequestTarget,
     RequestExceptionOutputTarget,
@@ -422,20 +420,6 @@ def _request_exception_should_retry_with_output(
     for message in request_exception["messages"]:
         print(message)
     return request_exception["should_retry"]
-
-
-def _json_decode_failure_result_with_output(
-    target: JsonDecodeFailureOutputTarget,
-) -> ApiJsonParseResult:
-    decode_failure = json_decode_failure_plan(
-        target.exc,
-        target.response_text,
-        target.attempt,
-        target.max_retries,
-    )
-    for message in decode_failure["messages"]:
-        print(message)
-    return ApiJsonParseResult(None, decode_failure["should_retry"])
 
 
 class ZSXQFileDownloader:
@@ -750,21 +734,7 @@ class ZSXQFileDownloader:
         self,
         target: ParseApiJsonResponseTarget,
     ) -> ApiJsonParseResult:
-        try:
-            data = target.response.json()
-        except json.JSONDecodeError as e:
-            return _json_decode_failure_result_with_output(
-                JsonDecodeFailureOutputTarget(
-                    e,
-                    target.response.text,
-                    target.attempt,
-                    target.max_retries,
-                ),
-            )
-
-        if should_log_full_response(target.attempt, target.max_retries, data.get('succeeded')):
-            print(f"   📋 响应内容: {json.dumps(redact_json_like(data), ensure_ascii=False, indent=2)}")
-        return ApiJsonParseResult(data, False)
+        return run_parse_api_json_response_target(target)
 
     def _handle_file_list_success_response(self, data: Dict[str, Any], attempt: int) -> Dict[str, Any]:
         return run_handle_file_list_success_response(self, data, attempt)
@@ -849,7 +819,7 @@ class ZSXQFileDownloader:
         self,
         target: FileListOkDataTarget,
     ) -> FileListResponseDecision:
-        return run_file_list_ok_data_decision_target(self, target)
+        return run_file_list_ok_data_decision_target(target)
 
     def _handle_file_list_response(
         self,
