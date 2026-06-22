@@ -42,6 +42,7 @@ from backend.services.official_topic_page_importer import (
     official_topic_id,
 )
 from backend.services.official_topic_page_state import (
+    OfficialStartCursorResult,
     add_official_page_stats,
     dedupe_official_page_topics,
     empty_official_crawl_stats,
@@ -53,6 +54,7 @@ from backend.services.official_topic_page_state import (
     official_pages_remaining,
     official_per_page_limit,
     official_reached_before_start,
+    official_start_cursor_from_oldest,
     official_topic_page_empty,
 )
 from backend.services.task_runtime import (
@@ -594,20 +596,24 @@ def _official_crawl_completion_message(mode: str) -> str:
 def _official_cursor_before_timestamp(oldest_timestamp: str) -> str:
     return official_cursor_before_timestamp(oldest_timestamp, _format_zsxq_time)
 
-def _official_start_cursor_from_oldest(db: ZSXQDatabase, task_id: str, allow_empty: bool) -> Optional[str]:
-    timestamp_info = db.get_timestamp_range_info()
-    if not timestamp_info["has_data"]:
-        if allow_empty:
-            add_task_log(task_id, "📊 数据库为空，将从最新数据开始")
-            return None
-        add_task_log(task_id, "❌ 数据库中没有话题数据，请先采集最新或全量")
-        return ""
+def _official_start_cursor_from_oldest(
+    db: ZSXQDatabase,
+    task_id: str,
+    allow_empty: bool,
+) -> OfficialStartCursorResult:
+    return official_start_cursor_from_oldest(
+        db.get_timestamp_range_info(),
+        task_id,
+        allow_empty,
+        add_task_log,
+        cursor_before_timestamp=_official_cursor_before_timestamp,
+    )
 
-    oldest_timestamp = timestamp_info["oldest_timestamp"]
-    add_task_log(task_id, f"📊 当前最老时间戳: {oldest_timestamp}")
-    return _official_cursor_before_timestamp(oldest_timestamp)
-
-def _official_start_cursor_for_group_oldest(group_id: str, task_id: str, allow_empty: bool) -> Optional[str]:
+def _official_start_cursor_for_group_oldest(
+    group_id: str,
+    task_id: str,
+    allow_empty: bool,
+) -> OfficialStartCursorResult:
     db = ZSXQDatabase(group_id)
     return _official_start_cursor_from_oldest(db, task_id, allow_empty=allow_empty)
 
@@ -619,14 +625,21 @@ def _run_official_incremental_pages_from_oldest(
     empty_failure_message: str,
 ) -> None:
     start_cursor = _official_start_cursor_for_group_oldest(group_id, task_id, allow_empty=False)
-    if start_cursor == "":
+    if start_cursor.is_empty_failure:
         fail_task_with_message_unless_stopped(task_id, empty_failure_message)
         return
-    _run_official_crawl_pages_task(task_id, group_id, pages, per_page, "incremental", start_cursor=start_cursor)
+    _run_official_crawl_pages_task(
+        task_id,
+        group_id,
+        pages,
+        per_page,
+        "incremental",
+        start_cursor=start_cursor.cursor,
+    )
 
 def _run_official_all_pages_from_oldest(task_id: str, group_id: str) -> None:
     start_cursor = _official_start_cursor_for_group_oldest(group_id, task_id, allow_empty=True)
-    _run_official_crawl_pages_task(task_id, group_id, None, 20, "all", start_cursor=start_cursor)
+    _run_official_crawl_pages_task(task_id, group_id, None, 20, "all", start_cursor=start_cursor.cursor)
 
 def _run_official_crawl_time_range_task(
     task_id: str,

@@ -134,6 +134,57 @@ class OfficialTopicPageStateTests(unittest.TestCase):
             official_cursor_before_timestamp("not-a-time", lambda _dt: "unused"),
         )
 
+    def test_official_start_cursor_from_oldest_returns_cursor_and_empty_results(self):
+        from backend.services.official_topic_page_state import (
+            OfficialStartCursorResult,
+            official_start_cursor_from_oldest,
+        )
+
+        logs = []
+
+        result = official_start_cursor_from_oldest(
+            {"has_data": True, "oldest_timestamp": "2026-05-07T00:00:00.000+0800"},
+            "task-1",
+            allow_empty=False,
+            add_task_log=lambda task_id, message: logs.append((task_id, message)),
+            cursor_before_timestamp=lambda timestamp: f"cursor-before-{timestamp}",
+        )
+
+        self.assertEqual(
+            OfficialStartCursorResult("cursor-before-2026-05-07T00:00:00.000+0800", False),
+            result,
+        )
+        self.assertEqual(
+            [("task-1", "📊 当前最老时间戳: 2026-05-07T00:00:00.000+0800")],
+            logs,
+        )
+
+        logs.clear()
+
+        result = official_start_cursor_from_oldest(
+            {"has_data": False},
+            "task-2",
+            allow_empty=True,
+            add_task_log=lambda task_id, message: logs.append((task_id, message)),
+            cursor_before_timestamp=lambda _timestamp: "unused",
+        )
+
+        self.assertEqual(OfficialStartCursorResult(None, False), result)
+        self.assertEqual([("task-2", "📊 数据库为空，将从最新数据开始")], logs)
+
+        logs.clear()
+
+        result = official_start_cursor_from_oldest(
+            {"has_data": False},
+            "task-3",
+            allow_empty=False,
+            add_task_log=lambda task_id, message: logs.append((task_id, message)),
+            cursor_before_timestamp=lambda _timestamp: "unused",
+        )
+
+        self.assertEqual(OfficialStartCursorResult(None, True), result)
+        self.assertEqual([("task-3", "❌ 数据库中没有话题数据，请先采集最新或全量")], logs)
+
 
 if __name__ == "__main__":
     unittest.main()

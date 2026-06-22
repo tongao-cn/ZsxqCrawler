@@ -268,9 +268,13 @@ class CrawlRoutesHelperTests(unittest.TestCase):
     def test_official_all_branch_uses_oldest_cursor_and_skips_legacy_crawler(self):
         from backend.routes.crawl_routes import CrawlSettingsRequest
         from backend.services.crawl_service import run_crawl_all_task
+        from backend.services.official_topic_page_state import OfficialStartCursorResult
 
         with (
-            patch("backend.services.crawl_service._official_start_cursor_from_oldest", return_value="cursor-all") as start_cursor,
+            patch(
+                "backend.services.crawl_service._official_start_cursor_from_oldest",
+                return_value=OfficialStartCursorResult("cursor-all", False),
+            ) as start_cursor,
             patch("backend.services.crawl_service._run_official_crawl_pages_task") as official_runner,
             patch("backend.services.crawl_service.ZSXQDatabase") as database,
             patch("backend.services.crawl_service.ZSXQTopicCrawler") as legacy_crawler,
@@ -293,9 +297,13 @@ class CrawlRoutesHelperTests(unittest.TestCase):
     def test_official_historical_branch_uses_oldest_cursor_and_skips_legacy_crawler(self):
         from backend.routes.crawl_routes import CrawlHistoricalRequest
         from backend.services.crawl_service import run_crawl_historical_task
+        from backend.services.official_topic_page_state import OfficialStartCursorResult
 
         with (
-            patch("backend.services.crawl_service._official_start_cursor_from_oldest", return_value="cursor-1") as start_cursor,
+            patch(
+                "backend.services.crawl_service._official_start_cursor_from_oldest",
+                return_value=OfficialStartCursorResult("cursor-1", False),
+            ) as start_cursor,
             patch("backend.services.crawl_service._run_official_crawl_pages_task") as official_runner,
             patch("backend.services.crawl_service.ZSXQDatabase") as database,
             patch("backend.services.crawl_service.ZSXQTopicCrawler") as legacy_crawler,
@@ -323,9 +331,13 @@ class CrawlRoutesHelperTests(unittest.TestCase):
     def test_official_incremental_branch_uses_oldest_cursor_and_skips_legacy_crawler(self):
         from backend.routes.crawl_routes import CrawlHistoricalRequest
         from backend.services.crawl_service import run_crawl_incremental_task
+        from backend.services.official_topic_page_state import OfficialStartCursorResult
 
         with (
-            patch("backend.services.crawl_service._official_start_cursor_from_oldest", return_value="cursor-2") as start_cursor,
+            patch(
+                "backend.services.crawl_service._official_start_cursor_from_oldest",
+                return_value=OfficialStartCursorResult("cursor-2", False),
+            ) as start_cursor,
             patch("backend.services.crawl_service._run_official_crawl_pages_task") as official_runner,
             patch("backend.services.crawl_service.ZSXQDatabase") as database,
             patch("backend.services.crawl_service.ZSXQTopicCrawler") as legacy_crawler,
@@ -352,9 +364,13 @@ class CrawlRoutesHelperTests(unittest.TestCase):
     def test_official_incremental_empty_database_fails_without_legacy_crawler(self):
         from backend.routes.crawl_routes import CrawlHistoricalRequest
         from backend.services.crawl_service import run_crawl_incremental_task
+        from backend.services.official_topic_page_state import OfficialStartCursorResult
 
         with (
-            patch("backend.services.crawl_service._official_start_cursor_from_oldest", return_value=""),
+            patch(
+                "backend.services.crawl_service._official_start_cursor_from_oldest",
+                return_value=OfficialStartCursorResult(None, True),
+            ),
             patch("backend.services.crawl_service._run_official_crawl_pages_task") as official_runner,
             patch("backend.services.crawl_service.ZSXQDatabase"),
             patch("backend.services.crawl_service.ZSXQTopicCrawler") as legacy_crawler,
@@ -1739,16 +1755,18 @@ class CrawlRoutesHelperTests(unittest.TestCase):
     @unittest.skipUnless(HAS_CRAWL_ROUTE_DEPS, "crawl route dependencies are not installed")
     def test_official_start_cursor_for_group_oldest_preserves_db_construction_and_allow_empty(self):
         from backend.services.crawl_service import _official_start_cursor_for_group_oldest
+        from backend.services.official_topic_page_state import OfficialStartCursorResult
 
         db = object()
+        expected = OfficialStartCursorResult("cursor-1", False)
 
         with (
             patch("backend.services.crawl_service.ZSXQDatabase", return_value=db) as database_cls,
-            patch("backend.services.crawl_service._official_start_cursor_from_oldest", return_value="cursor-1") as start_cursor,
+            patch("backend.services.crawl_service._official_start_cursor_from_oldest", return_value=expected) as start_cursor,
         ):
             result = _official_start_cursor_for_group_oldest("group-1", "task-1", allow_empty=True)
 
-        self.assertEqual("cursor-1", result)
+        self.assertIs(expected, result)
         database_cls.assert_called_once_with("group-1")
         start_cursor.assert_called_once_with(db, "task-1", allow_empty=True)
 

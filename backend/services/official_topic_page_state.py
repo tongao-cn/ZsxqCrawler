@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta
-from typing import Any, Callable, Optional
+from typing import Any, Callable, NamedTuple, Optional
 
 from backend.services.official_topic_page_importer import official_topic_id
 
@@ -16,6 +16,11 @@ OFFICIAL_CRAWL_COMPLETION_MESSAGES = {
     "incremental": "官方增量采集完成",
     "all": "官方全量采集完成",
 }
+
+
+class OfficialStartCursorResult(NamedTuple):
+    cursor: Optional[str]
+    is_empty_failure: bool
 
 
 def empty_official_crawl_stats() -> dict[str, Any]:
@@ -128,3 +133,23 @@ def official_cursor_before_timestamp(
         return format_zsxq_time(dt - timedelta(milliseconds=1))
     except Exception:
         return oldest_timestamp
+
+
+def official_start_cursor_from_oldest(
+    timestamp_info: dict[str, Any],
+    task_id: str,
+    allow_empty: bool,
+    add_task_log: TaskLogWriter,
+    *,
+    cursor_before_timestamp: Callable[[str], str],
+) -> OfficialStartCursorResult:
+    if not timestamp_info["has_data"]:
+        if allow_empty:
+            add_task_log(task_id, "📊 数据库为空，将从最新数据开始")
+            return OfficialStartCursorResult(None, False)
+        add_task_log(task_id, "❌ 数据库中没有话题数据，请先采集最新或全量")
+        return OfficialStartCursorResult(None, True)
+
+    oldest_timestamp = timestamp_info["oldest_timestamp"]
+    add_task_log(task_id, f"📊 当前最老时间戳: {oldest_timestamp}")
+    return OfficialStartCursorResult(cursor_before_timestamp(oldest_timestamp), False)
