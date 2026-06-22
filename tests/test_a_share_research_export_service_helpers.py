@@ -22,7 +22,7 @@ class AShareResearchExportServiceHelperTests(unittest.TestCase):
             validate_date_range("2026-05-08", "2026-05-07")
 
     def test_build_research_dataset_aggregates_topic_metrics_and_mentions(self):
-        from backend.services.a_share_research_export_service import build_research_dataset
+        from backend.services.a_share_research_dataset import build_research_dataset
 
         rows = [
             {
