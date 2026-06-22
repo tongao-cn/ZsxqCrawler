@@ -20,6 +20,19 @@ from backend.services.legacy_time_range_runner import (
     LegacyTimeRangeRunResult,
     run_legacy_time_range_pages,
 )
+from backend.services.legacy_topic_crawl_runner import (
+    LEGACY_CRAWL_ALL,
+    LEGACY_CRAWL_HISTORICAL,
+    LEGACY_CRAWL_INCREMENTAL,
+    LEGACY_CRAWL_LATEST,
+    LegacyTopicCrawlRuntime,
+    LegacyTopicCrawlTarget,
+    legacy_task_stopped_with_log,
+    log_legacy_crawler_startup,
+    log_legacy_init_stopped,
+    mark_legacy_expired_task,
+    run_legacy_topic_crawl,
+)
 from backend.services.official_topic_crawl_runner import (
     OfficialCrawlPagesTarget,
     OfficialCrawlTimeRangeTarget,
@@ -80,10 +93,6 @@ from backend.services.task_runtime import (
 from backend.storage.zsxq_database import ZSXQDatabase
 
 
-INIT_STOPPED_MESSAGE = "🛑 任务在初始化过程中被停止"
-
-CRAWLER_STARTUP_LOGS = ("📡 连接到知识星球API...", "🔍 检查数据库状态...")
-
 def _should_stop_task(task_id: str) -> bool:
     return is_task_stopped(task_id)
 
@@ -97,11 +106,10 @@ def _build_task_callbacks(task_id: str) -> tuple[Callable[[str], None], Callable
     return log_callback, stop_check
 
 def _log_crawler_startup(task_id: str) -> None:
-    for message in CRAWLER_STARTUP_LOGS:
-        add_task_log(task_id, message)
+    log_legacy_crawler_startup(task_id, add_task_log)
 
 def _log_init_stopped(task_id: str) -> None:
-    add_task_log(task_id, INIT_STOPPED_MESSAGE)
+    log_legacy_init_stopped(task_id, add_task_log)
 
 def _crawl_interval_kwargs(crawl_settings: Any) -> dict[str, Any]:
     return {
@@ -125,13 +133,7 @@ def _apply_crawl_settings(crawler: Any, crawl_settings: Any, require_overrides: 
     return True
 
 def _mark_expired_task(task_id: str, result: dict[str, Any], default_message: str = "成员体验已到期") -> None:
-    message = result.get("message", default_message)
-    fail_task_with_message_unless_stopped(
-        task_id,
-        "会员已过期",
-        {"expired": True, "code": result.get("code"), "message": result.get("message")},
-        log_message=f"❌ 会员已过期: {message}",
-    )
+    mark_legacy_expired_task(task_id, result, fail_task_with_message_unless_stopped, default_message)
 
 def _create_task_crawler(task_id: str, group_id: str, log_callback: Callable[[str], None], stop_check: Callable[[], bool]) -> ZSXQTopicCrawler:
     cookie = get_cookie_for_group(group_id)
@@ -151,11 +153,31 @@ def _prepare_legacy_crawler(
     _apply_crawl_settings(crawler, crawl_settings, require_overrides=require_overrides)
     return crawler
 
+def _legacy_topic_crawl_runtime() -> LegacyTopicCrawlRuntime:
+    return LegacyTopicCrawlRuntime(
+        update_task,
+        add_task_log,
+        is_task_stopped,
+        complete_task_unless_stopped,
+        fail_task_with_message_unless_stopped,
+        _prepare_legacy_crawler,
+    )
+
+def _run_legacy_topic_crawl_task(
+    task_id: str,
+    group_id: str,
+    mode: str,
+    crawl_settings: Any = None,
+    pages: Optional[int] = None,
+    per_page: Optional[int] = None,
+) -> None:
+    run_legacy_topic_crawl(
+        _legacy_topic_crawl_runtime(),
+        LegacyTopicCrawlTarget(task_id, group_id, mode, crawl_settings, pages, per_page),
+    )
+
 def _task_stopped_with_log(task_id: str) -> bool:
-    if not is_task_stopped(task_id):
-        return False
-    add_task_log(task_id, "🛑 任务已停止")
-    return True
+    return legacy_task_stopped_with_log(task_id, is_task_stopped, add_task_log)
 
 def _run_legacy_time_range_pages(
     task_id: str,
@@ -436,14 +458,12 @@ def run_crawl_historical_task(
 ):
     """后台执行历史数据爬取任务"""
     try:
-
         if is_task_stopped(task_id):
             return
 
-        update_task(task_id, "running", f"开始爬取历史数据 {pages} 页...")
-        add_task_log(task_id, f"🚀 开始获取历史数据，{pages} 页，每页 {per_page} 条")
-
         if _uses_official_topic_source(crawl_settings):
+            update_task(task_id, "running", f"开始爬取历史数据 {pages} 页...")
+            add_task_log(task_id, f"🚀 开始获取历史数据，{pages} 页，每页 {per_page} 条")
             add_task_log(task_id, "🔁 使用官方历史增量采集流程（MCP HTTP）")
             _run_official_incremental_pages_from_oldest(
                 task_id,
@@ -454,31 +474,14 @@ def run_crawl_historical_task(
             )
             return
 
-        if is_task_stopped(task_id):
-            return
-
-        crawler = _prepare_legacy_crawler(task_id, group_id, crawl_settings)
-
-        if is_task_stopped(task_id):
-            _log_init_stopped(task_id)
-            return
-
-        _log_crawler_startup(task_id)
-
-        if is_task_stopped(task_id):
-            return
-
-        result = crawler.crawl_incremental(pages, per_page)
-
-        if is_task_stopped(task_id):
-            return
-
-        if result and result.get("expired"):
-            _mark_expired_task(task_id, result)
-            return
-
-        add_task_log(task_id, f"✅ 获取完成！新增话题: {result.get('new_topics', 0)}, 更新话题: {result.get('updated_topics', 0)}")
-        complete_task_unless_stopped(task_id, "历史数据爬取完成", result)
+        _run_legacy_topic_crawl_task(
+            task_id,
+            group_id,
+            LEGACY_CRAWL_HISTORICAL,
+            crawl_settings,
+            pages,
+            per_page,
+        )
     except Exception as e:
         fail_task_with_message_unless_stopped(
             task_id,
@@ -490,46 +493,15 @@ def run_crawl_historical_task(
 
 def run_crawl_all_task(task_id: str, group_id: str, crawl_settings: Any = None):
     try:
-
-        update_task(task_id, "running", "开始全量爬取...")
-        add_task_log(task_id, "🚀 开始全量爬取...")
-        add_task_log(task_id, "⚠️ 警告：此模式将持续爬取直到没有数据，可能需要很长时间")
-
         if _uses_official_topic_source(crawl_settings):
+            update_task(task_id, "running", "开始全量爬取...")
+            add_task_log(task_id, "🚀 开始全量爬取...")
+            add_task_log(task_id, "⚠️ 警告：此模式将持续爬取直到没有数据，可能需要很长时间")
             add_task_log(task_id, "🔁 使用官方全量采集流程（MCP HTTP）")
             _run_official_all_pages_from_oldest(task_id, group_id)
             return
 
-        crawler = _prepare_legacy_crawler(task_id, group_id, crawl_settings)
-
-        if is_task_stopped(task_id):
-            _log_init_stopped(task_id)
-            return
-
-        _log_crawler_startup(task_id)
-
-        if is_task_stopped(task_id):
-            return
-
-        db_stats = crawler.db.get_database_stats()
-        add_task_log(task_id, f"📊 当前数据库状态: 话题: {db_stats.get('topics', 0)}, 用户: {db_stats.get('users', 0)}")
-
-        if is_task_stopped(task_id):
-            return
-
-        add_task_log(task_id, "🌊 开始无限历史爬取...")
-        result = crawler.crawl_all_historical(per_page=20, auto_confirm=True)
-
-        if is_task_stopped(task_id):
-            return
-
-        if result and result.get("expired"):
-            _mark_expired_task(task_id, result)
-            return
-
-        add_task_log(task_id, "🎉 全量爬取完成！")
-        add_task_log(task_id, f"📊 最终统计: 新增话题: {result.get('new_topics', 0)}, 更新话题: {result.get('updated_topics', 0)}, 总页数: {result.get('pages', 0)}")
-        complete_task_unless_stopped(task_id, "全量爬取完成", result)
+        _run_legacy_topic_crawl_task(task_id, group_id, LEGACY_CRAWL_ALL, crawl_settings)
     except Exception as e:
         fail_task_with_message_unless_stopped(
             task_id,
@@ -547,10 +519,8 @@ def run_crawl_incremental_task(
     crawl_settings: Any = None,
 ):
     try:
-
-        update_task(task_id, "running", "开始增量爬取...")
-
         if _uses_official_topic_source(crawl_settings):
+            update_task(task_id, "running", "开始增量爬取...")
             add_task_log(task_id, "🔁 使用官方增量采集流程（MCP HTTP）")
             _run_official_incremental_pages_from_oldest(
                 task_id,
@@ -561,25 +531,14 @@ def run_crawl_incremental_task(
             )
             return
 
-        crawler = _prepare_legacy_crawler(task_id, group_id, crawl_settings)
-
-        if is_task_stopped(task_id):
-            _log_init_stopped(task_id)
-            return
-
-        _log_crawler_startup(task_id)
-
-        result = crawler.crawl_incremental(pages, per_page)
-
-        if is_task_stopped(task_id):
-            return
-
-        if result and result.get("expired"):
-            _mark_expired_task(task_id, result)
-            return
-
-        add_task_log(task_id, f"✅ 增量爬取完成！新增话题: {result.get('new_topics', 0)}, 更新话题: {result.get('updated_topics', 0)}")
-        complete_task_unless_stopped(task_id, "增量爬取完成", result)
+        _run_legacy_topic_crawl_task(
+            task_id,
+            group_id,
+            LEGACY_CRAWL_INCREMENTAL,
+            crawl_settings,
+            pages,
+            per_page,
+        )
     except Exception as e:
         fail_task_with_message_unless_stopped(
             task_id,
@@ -591,33 +550,13 @@ def run_crawl_incremental_task(
 
 def run_crawl_latest_task(task_id: str, group_id: str, crawl_settings: Any = None):
     try:
-
-        update_task(task_id, "running", "开始获取最新记录...")
-
         if _uses_official_topic_source(crawl_settings):
+            update_task(task_id, "running", "开始获取最新记录...")
             add_task_log(task_id, "🔁 使用官方最新采集流程（MCP HTTP）")
             _run_official_crawl_pages_task(task_id, group_id, None, 20, "latest")
             return
 
-        crawler = _prepare_legacy_crawler(task_id, group_id, crawl_settings)
-
-        if is_task_stopped(task_id):
-            _log_init_stopped(task_id)
-            return
-
-        _log_crawler_startup(task_id)
-
-        result = crawler.crawl_latest_until_complete()
-
-        if is_task_stopped(task_id):
-            return
-
-        if result and result.get("expired"):
-            _mark_expired_task(task_id, result)
-            return
-
-        add_task_log(task_id, f"✅ 获取最新记录完成！新增话题: {result.get('new_topics', 0)}, 更新话题: {result.get('updated_topics', 0)}")
-        complete_task_unless_stopped(task_id, "获取最新记录完成", result)
+        _run_legacy_topic_crawl_task(task_id, group_id, LEGACY_CRAWL_LATEST, crawl_settings)
     except Exception as e:
         fail_task_with_message_unless_stopped(
             task_id,
