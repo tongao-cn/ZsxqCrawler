@@ -54,6 +54,20 @@ from backend.crawlers.file_database_download_runner import (
 from backend.crawlers.file_database_time_range_runner import (
     get_database_time_range as run_get_database_time_range,
 )
+from backend.crawlers.file_database_stats_runner import (
+    database_stats_time_range as _database_stats_time_range,
+    database_stats_total_size as _database_stats_total_size,
+    fetch_database_api_response_stats as run_fetch_database_api_response_stats,
+    fetch_database_time_range as run_fetch_database_time_range,
+    fetch_database_total_size as run_fetch_database_total_size,
+    print_database_api_response_stats as run_print_database_api_response_stats,
+    print_database_core_stats as run_print_database_core_stats,
+    print_database_table_stats as run_print_database_table_stats,
+    print_database_time_range as run_print_database_time_range,
+    print_database_total_size as run_print_database_total_size,
+    show_database_stats_entry as run_show_database_stats_entry,
+    show_database_stats_target as run_show_database_stats_target,
+)
 from backend.crawlers.file_collection_runner import (
     collect_all_files_to_database as run_collect_all_files_to_database,
     create_file_collection_log as run_create_file_collection_log,
@@ -183,10 +197,6 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     api_retry_wait_message,
     add_import_stats,
     clean_cookie_result,
-    database_stats_api_response_query,
-    database_stats_table_emoji,
-    database_stats_time_range_query,
-    database_stats_total_size_query,
     download_settings_display_lines,
     download_file_data,
     download_exception_detail,
@@ -271,7 +281,6 @@ from backend.crawlers.zsxq_file_downloader_targets import (
     CleanCookieTarget,
     CloseTarget,
     DatabaseStatsTimeRange,
-    DatabaseStatsTotalSize,
     DatabaseTimeRangeTarget,
     DateRangeCollectionTarget,
     DownloadAttemptResponseTarget,
@@ -379,31 +388,6 @@ def _json_decode_failure_result_with_output(
     for message in decode_failure["messages"]:
         print(message)
     return ApiJsonParseResult(None, decode_failure["should_retry"])
-
-
-def _database_stats_total_size_row(result: Any) -> Optional[DatabaseStatsTotalSize]:
-    if not result or not result[0]:
-        return None
-    return DatabaseStatsTotalSize(result[0])
-
-
-def _database_stats_total_size(result: Any) -> Any:
-    total_size = _database_stats_total_size_row(result)
-    if not total_size:
-        return 0
-    return total_size.total_size
-
-
-def _database_stats_time_range_row(result: Any) -> Optional[DatabaseStatsTimeRange]:
-    if not result or result[2] <= 0:
-        return None
-
-    min_time, max_time, time_count = result
-    return DatabaseStatsTimeRange(min_time, max_time, time_count)
-
-
-def _database_stats_time_range(result: Any) -> Optional[DatabaseStatsTimeRange]:
-    return _database_stats_time_range_row(result)
 
 
 class ZSXQFileDownloader:
@@ -2616,63 +2600,28 @@ class ZSXQFileDownloader:
         return run_database_file_download(self, target)
 
     def _print_database_core_stats(self, stats: Dict[str, Any]) -> None:
-        total_files = stats.get('files', 0)
-        total_topics = stats.get('topics', 0)
-        total_users = stats.get('users', 0)
-        total_groups = stats.get('groups', 0)
-
-        print(f"📈 核心数据:")
-        print(f"   📄 文件数量: {total_files:,}")
-        print(f"   💬 话题数量: {total_topics:,}")
-        print(f"   👥 用户数量: {total_users:,}")
-        print(f"   🏠 群组数量: {total_groups:,}")
+        run_print_database_core_stats(stats)
 
     def _fetch_database_total_size(self) -> Any:
-        query, params = database_stats_total_size_query(_query_group_id(self.group_id))
-        self.file_db.cursor.execute(query, params)
-        result = self.file_db.cursor.fetchone()
-        return _database_stats_total_size(result)
+        return run_fetch_database_total_size(self)
 
     def _fetch_database_time_range(self) -> Optional[DatabaseStatsTimeRange]:
-        query, params = database_stats_time_range_query(_query_group_id(self.group_id))
-        self.file_db.cursor.execute(query, params)
-        time_result = self.file_db.cursor.fetchone()
-        return _database_stats_time_range(time_result)
+        return run_fetch_database_time_range(self)
 
     def _fetch_database_api_response_stats(self) -> Any:
-        self.file_db.cursor.execute(database_stats_api_response_query())
-        return self.file_db.cursor.fetchall()
+        return run_fetch_database_api_response_stats(self)
 
     def _print_database_total_size(self) -> None:
-        total_size = self._fetch_database_total_size()
-
-        if total_size > 0:
-            print(f"💾 总文件大小: {total_size/1024/1024:.2f} MB")
+        run_print_database_total_size(self)
 
     def _print_database_table_stats(self, stats: Dict[str, Any]) -> None:
-        print(f"\n📋 详细表统计:")
-        for table_name, count in stats.items():
-            if count > 0:
-                emoji = database_stats_table_emoji(table_name)
-                print(f"   {emoji} {table_name}: {count:,}")
+        run_print_database_table_stats(stats)
 
     def _print_database_time_range(self) -> None:
-        time_range = self._fetch_database_time_range()
-        if time_range:
-            print(f"\n⏰ 文件时间范围:")
-            print(f"   最早文件: {time_range.min_time}")
-            print(f"   最新文件: {time_range.max_time}")
-            print(f"   有时间信息的文件: {time_range.time_count:,}")
+        run_print_database_time_range(self)
 
     def _print_database_api_response_stats(self) -> None:
-        api_stats = self._fetch_database_api_response_stats()
-
-        if api_stats:
-            print(f"\n📡 API响应统计:")
-            for succeeded, count in api_stats:
-                status = "成功" if succeeded else "失败"
-                emoji = "✅" if succeeded else "❌"
-                print(f"   {emoji} {status}: {count:,}")
+        run_print_database_api_response_stats(self)
 
     def show_database_stats(self):
         """显示完整数据库统计信息"""
@@ -2682,32 +2631,10 @@ class ZSXQFileDownloader:
         self,
         target: ShowDatabaseStatsEntryTarget,
     ) -> None:
-        print(f"\n📊 完整数据库统计信息:")
-        print("="*60)
-        print(f"📁 PostgreSQL schema: {CORE_SCHEMA}")
-
-        # 使用新数据库的统计方法
-        stats = self.file_db.get_database_stats()
-
-        self._show_database_stats_target(ShowDatabaseStatsTarget(stats))
-
-        print("="*60)
+        run_show_database_stats_entry(self, target)
 
     def _show_database_stats_target(self, target: ShowDatabaseStatsTarget) -> None:
-        # 主要数据统计
-        self._print_database_core_stats(target.stats)
-
-        # 文件大小统计
-        self._print_database_total_size()
-
-        # 详细表统计
-        self._print_database_table_stats(target.stats)
-
-        # 文件创建时间范围
-        self._print_database_time_range()
-
-        # API响应统计
-        self._print_database_api_response_stats()
+        run_show_database_stats_target(self, target)
 
     def _print_download_settings(self) -> None:
         for line in download_settings_display_lines(

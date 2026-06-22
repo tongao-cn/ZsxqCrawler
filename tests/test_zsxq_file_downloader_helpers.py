@@ -4176,14 +4176,21 @@ class FileDownloaderDatabaseStatsTests(unittest.TestCase):
         downloader.file_db = SimpleNamespace(
             get_database_stats=lambda: calls.append(("get_stats",)) or stats
         )
-        downloader._show_database_stats_target = lambda target: calls.append(
-            ("target", target.stats)
-        )
+
+        def show_database_stats_target(downloader_self, target):
+            self.assertIs(downloader, downloader_self)
+            calls.append(("target", target.stats))
 
         def print_message(message=""):
             calls.append(("print", message))
 
-        with patch("builtins.print", print_message):
+        with (
+            patch("builtins.print", print_message),
+            patch(
+                "backend.crawlers.file_database_stats_runner.show_database_stats_target",
+                show_database_stats_target,
+            ),
+        ):
             ZSXQFileDownloader.show_database_stats(downloader)
 
         self.assertEqual(
@@ -4207,13 +4214,48 @@ class FileDownloaderDatabaseStatsTests(unittest.TestCase):
         downloader.file_db = SimpleNamespace(
             get_database_stats=lambda: calls.append(("get_stats", stats)) or stats
         )
-        downloader._print_database_core_stats = lambda value: calls.append(("core", value))
-        downloader._print_database_total_size = lambda: calls.append(("total_size", None))
-        downloader._print_database_table_stats = lambda value: calls.append(("tables", value))
-        downloader._print_database_time_range = lambda: calls.append(("time_range", None))
-        downloader._print_database_api_response_stats = lambda: calls.append(("api_stats", None))
 
-        with contextlib.redirect_stdout(io.StringIO()) as output:
+        def print_database_core_stats(value):
+            calls.append(("core", value))
+
+        def print_database_total_size(downloader_self):
+            self.assertIs(downloader, downloader_self)
+            calls.append(("total_size", None))
+
+        def print_database_table_stats(value):
+            calls.append(("tables", value))
+
+        def print_database_time_range(downloader_self):
+            self.assertIs(downloader, downloader_self)
+            calls.append(("time_range", None))
+
+        def print_database_api_response_stats(downloader_self):
+            self.assertIs(downloader, downloader_self)
+            calls.append(("api_stats", None))
+
+        with (
+            contextlib.redirect_stdout(io.StringIO()) as output,
+            patch(
+                "backend.crawlers.file_database_stats_runner.print_database_core_stats",
+                print_database_core_stats,
+            ),
+            patch(
+                "backend.crawlers.file_database_stats_runner.print_database_total_size",
+                print_database_total_size,
+            ),
+            patch(
+                "backend.crawlers.file_database_stats_runner.print_database_table_stats",
+                print_database_table_stats,
+            ),
+            patch(
+                "backend.crawlers.file_database_stats_runner.print_database_time_range",
+                print_database_time_range,
+            ),
+            patch(
+                "backend.crawlers.file_database_stats_runner.print_database_api_response_stats",
+                print_database_api_response_stats,
+            ),
+        ):
             ZSXQFileDownloader.show_database_stats(downloader)
 
         self.assertEqual(
