@@ -1006,11 +1006,11 @@ class FileDownloaderPaginationTests(unittest.TestCase):
 
         with (
             patch(
-                "backend.crawlers.zsxq_file_downloader.database_time_range_query",
+                "backend.crawlers.file_database_time_range_runner.database_time_range_query",
                 time_range_query,
             ),
             patch(
-                "backend.crawlers.zsxq_file_downloader.database_time_range_result",
+                "backend.crawlers.file_database_time_range_runner.database_time_range_result",
                 time_range_result,
             ),
         ):

@@ -51,6 +51,9 @@ from backend.crawlers.file_database_download_runner import (
     DatabaseDownloadTarget,
     run_database_file_download,
 )
+from backend.crawlers.file_database_time_range_runner import (
+    get_database_time_range as run_get_database_time_range,
+)
 from backend.crawlers.file_collection_runner import (
     collect_all_files_to_database as run_collect_all_files_to_database,
     create_file_collection_log as run_create_file_collection_log,
@@ -177,8 +180,6 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     database_stats_table_emoji,
     database_stats_time_range_query,
     database_stats_total_size_query,
-    database_time_range_query,
-    database_time_range_result,
     date_range_collection_start_messages,
     download_settings_display_lines,
     download_file_data,
@@ -2351,20 +2352,7 @@ class ZSXQFileDownloader:
         self,
         target: DatabaseTimeRangeTarget,
     ) -> Dict[str, Any]:
-        # 使用新数据库检查是否有数据
-        stats = self.file_db.get_database_stats()
-        total_files = stats.get('files', 0)
-
-        if total_files == 0:
-            return database_time_range_result(total_files, None)
-
-        # 获取时间范围
-        query, params = database_time_range_query(_query_group_id(self.group_id))
-        self.file_db.cursor.execute(query, params)
-
-        result = self.file_db.cursor.fetchone()
-
-        return database_time_range_result(total_files, result)
+        return run_get_database_time_range(self, target)
 
     def _load_time_collection_latest_file_time(
         self,
