@@ -196,7 +196,7 @@ class AShareAnalysisServiceHelperTests(unittest.TestCase):
         )
 
     def test_empty_chart_payload_preserves_existing_shape(self):
-        from backend.services.a_share_analysis_service import _empty_chart_payload
+        from backend.services.a_share_analysis_chart_payload import empty_chart_payload
 
         self.assertEqual(
             {
@@ -214,7 +214,7 @@ class AShareAnalysisServiceHelperTests(unittest.TestCase):
                 "top_n": 20,
                 "ranking_top_n": 35,
             },
-            _empty_chart_payload(" 12345 ", ["2026-05-01"], "2026-05-02", "2026-05-03", 20, 35),
+            empty_chart_payload(" 12345 ", ["2026-05-01"], "2026-05-02", "2026-05-03", 20, 35),
         )
 
     def test_default_recommendation_pool_strategy_is_single_30_day_top100(self):
@@ -224,20 +224,20 @@ class AShareAnalysisServiceHelperTests(unittest.TestCase):
         self.assertEqual(100, DEFAULT_RANKING_TOP_N)
 
     def test_build_chart_payload_includes_rank_movement(self):
-        from backend.services import a_share_analysis_service as service
+        from backend.services.a_share_analysis_chart_payload import build_chart_payload_from_daily
 
         daily = {
             "2026-05-01": {"宁德时代": 3, "贵州茅台": 2},
             "2026-05-02": {"宁德时代": 1, "贵州茅台": 4, "新易盛": 5},
         }
 
-        with patch.object(service, "read_existing_csv", return_value=daily):
-            payload = service.build_chart_payload(
-                start_date="2026-05-01",
-                end_date="2026-05-02",
-                ranking_windows=(2,),
-                ranking_top_n=3,
-            )
+        payload = build_chart_payload_from_daily(
+            daily,
+            start_date="2026-05-01",
+            end_date="2026-05-02",
+            ranking_windows=(2,),
+            ranking_top_n=3,
+        )
 
         self.assertEqual(
             [
@@ -271,7 +271,7 @@ class AShareAnalysisServiceHelperTests(unittest.TestCase):
         self.assertEqual(3, len(payload["coverage_pool"]))
 
     def test_build_chart_payload_includes_coverage_pool_short_cycle_supplements(self):
-        from backend.services import a_share_analysis_service as service
+        from backend.services.a_share_analysis_chart_payload import build_chart_payload_from_daily
 
         daily = {
             "2026-05-01": {"核心A": 10, "主池B": 9, "扩展C": 8},
@@ -279,11 +279,11 @@ class AShareAnalysisServiceHelperTests(unittest.TestCase):
             "2026-05-03": {"核心A": 6, "短期D": 20},
         }
 
-        with patch.object(service, "read_existing_csv", return_value=daily):
-            payload = service.build_chart_payload(
-                start_date="2026-05-01",
-                end_date="2026-05-03",
-            )
+        payload = build_chart_payload_from_daily(
+            daily,
+            start_date="2026-05-01",
+            end_date="2026-05-03",
+        )
 
         coverage_by_company = {
             item["company"]: item
@@ -295,6 +295,22 @@ class AShareAnalysisServiceHelperTests(unittest.TestCase):
         self.assertEqual(2, coverage_by_company["短期D"]["rank_30"])
         self.assertEqual(2, coverage_by_company["短期D"]["rank_7"])
         self.assertEqual("new", coverage_by_company["短期D"]["trend_30"])
+
+    def test_build_chart_payload_reads_existing_mentions_before_payload_build(self):
+        from backend.services import a_share_analysis_service as service
+
+        daily = {"2026-05-01": {"宁德时代": 2}}
+
+        with (
+            patch.object(service, "resolve_analysis_paths", return_value=("out.csv", "state.json")) as resolve_paths,
+            patch.object(service, "read_existing_csv", return_value=daily) as read_existing_csv,
+        ):
+            payload = service.build_chart_payload(output_path="custom.csv", group_id=" 511 ", top_n=1)
+
+        resolve_paths.assert_called_once_with("custom.csv", service.DEFAULT_STATE_PATH, " 511 ")
+        read_existing_csv.assert_called_once_with("out.csv", group_id=" 511 ")
+        self.assertEqual("511", payload["group_id"])
+        self.assertEqual([{"date": "2026-05-01", "宁德时代": 2}], payload["chart_data"])
 
     def test_parse_topic_stock_extraction_output_supports_new_schema(self):
         from backend.services.a_share_analysis_service import _parse_company_extraction_output, _parse_topic_stock_extraction_output
