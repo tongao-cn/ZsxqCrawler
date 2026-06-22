@@ -304,9 +304,9 @@ class AShareAnalysisDbStorageHelperTests(unittest.TestCase):
 
     @unittest.skipUnless(HAS_STORAGE_DEPS, "PostgreSQL storage dependencies are not installed")
     def test_topic_stock_extraction_rows_strip_nul_characters(self):
-        from backend.services import a_share_analysis_db_storage as storage
+        from backend.services.a_share_analysis_storage_rows import build_topic_stock_extraction_rows
 
-        rows = storage._build_topic_stock_extraction_rows(
+        rows = build_topic_stock_extraction_rows(
             [
                 {
                     "group_id": "5\x0011",

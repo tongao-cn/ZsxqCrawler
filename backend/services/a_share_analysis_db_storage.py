@@ -19,6 +19,13 @@ from backend.storage.postgres_core_schema import (
     quote_identifier,
     schema_not_ready_message,
 )
+from backend.services.a_share_analysis_storage_rows import (
+    build_processed_state_rows as _build_processed_state_rows,
+    build_topic_stock_extraction_rows as _build_topic_stock_extraction_rows,
+    clean_postgres_text as _clean_postgres_text,
+    normalize_group_id as _normalize_group_id,
+    parse_state_key as _parse_state_key,
+)
 from backend.services.a_share_tdx_export_payload import (
     dedupe_company_names as _dedupe_company_names,
     latest_tdx_export_payload as _latest_tdx_export_payload,
@@ -43,14 +50,6 @@ def _core_table_ref(table_name: str) -> str:
 
 def _public_table_ref(table_name: str) -> str:
     return f"{quote_identifier('public')}.{quote_identifier(table_name)}"
-
-
-def _normalize_group_id(group_id: Optional[str]) -> str:
-    return _clean_postgres_text(group_id).strip()
-
-
-def _clean_postgres_text(value: Any) -> str:
-    return str(value or "").replace("\x00", "")
 
 
 def _load_env_file(path: Path = DEFAULT_KNOW_ACTION_ENV_PATH) -> Dict[str, str]:
@@ -257,55 +256,6 @@ def save_topic_stock_extractions(
     return len(rows)
 
 
-def _build_topic_stock_extraction_rows(
-    extractions: Sequence[Dict[str, Any]],
-    group_id: Optional[str],
-    now: datetime,
-) -> List[Tuple[str, str, str, str, str, str, str, str, str, float, str, str, datetime]]:
-    normalized_group_id = _normalize_group_id(group_id)
-    rows: List[Tuple[str, str, str, str, str, str, str, str, str, float, str, str, datetime]] = []
-    for item in extractions:
-        stock_name = _clean_postgres_text(item.get("stock_name")).strip()
-        topic_id = _clean_postgres_text(item.get("topic_id")).strip()
-        topic_date = _clean_postgres_text(item.get("topic_date") or item.get("day")).strip()
-        if not stock_name or not topic_id or not topic_date:
-            continue
-        rows.append(
-            (
-                _clean_postgres_text(item.get("group_id") or normalized_group_id),
-                topic_id,
-                topic_date,
-                stock_name,
-                _clean_postgres_text(item.get("stock_code")),
-                _clean_postgres_text(item.get("market")),
-                _clean_postgres_text(json.dumps(list(item.get("concepts") or []), ensure_ascii=False)),
-                _clean_postgres_text(item.get("excerpt")),
-                _clean_postgres_text(item.get("reason")),
-                float(item.get("confidence") or 0),
-                _clean_postgres_text(item.get("model")),
-                _clean_postgres_text(item.get("prompt_version")),
-                now,
-            )
-        )
-    return rows
-
-
-def _build_processed_state_rows(
-    processed_keys: Iterable[str],
-    group_id: Optional[str],
-    now: datetime,
-) -> List[Tuple[str, str, str, str, datetime]]:
-    normalized_group_id = _normalize_group_id(group_id)
-    rows: List[Tuple[str, str, str, str, datetime]] = []
-    for key in sorted(set(processed_keys or [])):
-        parsed = _parse_state_key(key)
-        if parsed is None:
-            continue
-        source, topic_id, day = parsed
-        rows.append((normalized_group_id, source, topic_id, day, now))
-    return rows
-
-
 def save_recommendation_pool_checkpoint(
     *,
     daily_delta: Dict[str, Dict[str, int]],
@@ -455,18 +405,6 @@ def load_topic_stock_extractions(
                 }
                 for row in cur.fetchall()
             ]
-
-
-def _parse_state_key(key: str) -> Optional[Tuple[str, str, str]]:
-    parts = str(key or "").split(":")
-    if len(parts) < 3:
-        return None
-    source = _clean_postgres_text(parts[0]).strip()
-    topic_id = _clean_postgres_text(parts[1]).strip()
-    day = _clean_postgres_text(parts[-1]).strip()
-    if not source or not topic_id or len(day) != 10:
-        return None
-    return source, topic_id, day
 
 
 def load_processed_state(
