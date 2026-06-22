@@ -57,6 +57,64 @@ class StockTopicAnalysisServiceHelperTests(unittest.TestCase):
         self.assertEqual('["101", "102"]', _serialize_json_list(["101", "102", "101"]))
         self.assertEqual(["1", "2"], _merge_topic_ids([1, 2, 3], limit=2))
 
+    def test_stock_topic_batch_runner_aborts_after_transient_failures(self):
+        from backend.services.stock_topic_batch_runner import run_stock_topic_batch
+
+        calls = []
+        logs = []
+
+        def analyze_one(index, stock_name):
+            calls.append((index, stock_name))
+            return {"stock_name": stock_name, "error": "503 timeout"}, "failed"
+
+        result = run_stock_topic_batch(
+            group_id="group-1",
+            stock_names=["A", "B", "C"],
+            analyze_one=analyze_one,
+            log_callback=logs.append,
+            max_workers=1,
+            max_transient_failures=2,
+        )
+
+        self.assertEqual([(1, "A"), (2, "B")], calls)
+        self.assertEqual(["A", "B"], [stock["stock_name"] for stock in result["stocks"]])
+        self.assertEqual(
+            {
+                "total": 3,
+                "success": 0,
+                "failed": 2,
+                "no_topics": 0,
+                "skipped": 1,
+                "aborted": True,
+                "abort_reason": "连续 2 个临时错误，停止提交后续股票",
+            },
+            result["summary"],
+        )
+        self.assertIn("未提交 1", logs[-1])
+
+    def test_stock_topic_batch_runner_handles_empty_stock_list(self):
+        from backend.services.stock_topic_batch_runner import run_stock_topic_batch
+
+        result = run_stock_topic_batch(
+            group_id="group-1",
+            stock_names=[],
+            analyze_one=lambda index, stock_name: ({}, "success"),
+        )
+
+        self.assertEqual(
+            {
+                "total": 0,
+                "success": 0,
+                "failed": 0,
+                "no_topics": 0,
+                "skipped": 0,
+                "aborted": False,
+                "abort_reason": "",
+            },
+            result["summary"],
+        )
+        self.assertEqual([], result["stocks"])
+
     def test_stock_topic_store_json_list_wrappers_use_shared_normalization(self):
         from backend.services.stock_topic_analysis_helpers import parse_json_list, serialize_json_list
         from backend.services.stock_topic_analysis_store import (
