@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import re
 from datetime import date, timedelta
 from typing import Any, Callable, Dict, Iterable, List, Tuple
 
@@ -34,6 +33,11 @@ from backend.services.stock_topic_analysis_helpers import (
     _reconcile_processed_topic_ids,
     _stock_analysis_mode,
     parse_stock_names,
+)
+from backend.services.stock_topic_image_input import (
+    MAX_EXTRACT_IMAGE_BYTES,
+    SUPPORTED_EXTRACT_IMAGE_TYPES,
+    parse_image_data_url as _parse_image_data_url,
 )
 from backend.services.stock_topic_analysis_payloads import (
     build_analysis_topic_payload,
@@ -78,7 +82,6 @@ MAX_TOPIC_TEXT_CHARS = 1800
 MAX_ANALYSIS_PROMPT_CHARS = 50000
 MAX_QUESTION_KEYWORDS = 8
 MAX_QUESTION_TOPICS = 60
-MAX_EXTRACT_IMAGE_BYTES = 4 * 1024 * 1024
 QUESTION_KEYWORD_EXTRACTION_SCHEMA: Dict[str, Any] = {
     "type": "object",
     "properties": {
@@ -103,7 +106,6 @@ IMAGE_STOCK_NAME_EXTRACTION_SCHEMA: Dict[str, Any] = {
 }
 STOCK_TOPIC_ANALYSIS_TABLE = "stock_topic_analyses"
 PROCESSED_TOPIC_STATUSES = {"analyzed", "skipped"}
-SUPPORTED_EXTRACT_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp"}
 
 
 def _log(log_callback: Callable[[str], None] | None, message: str) -> None:
@@ -122,30 +124,6 @@ def _normalize_question_keywords(values: Any, *, limit: int = MAX_QUESTION_KEYWO
         (_normalize_text(value) for value in raw_values),
         limit=max(1, min(limit, MAX_QUESTION_KEYWORDS)),
     )
-
-
-def _parse_image_data_url(image_data_url: str) -> Tuple[str, str, bytes]:
-    value = _normalize_text(image_data_url)
-    match = re.fullmatch(r"data:([^;,]+);base64,(.+)", value, flags=re.DOTALL)
-    if not match:
-        raise ValueError("图片数据格式不正确")
-
-    mime_type = match.group(1).strip().lower()
-    if mime_type not in SUPPORTED_EXTRACT_IMAGE_TYPES:
-        raise ValueError("仅支持 JPG、PNG 或 WebP 图片")
-
-    import base64
-    import binascii
-
-    try:
-        image_bytes = base64.b64decode(match.group(2), validate=True)
-    except binascii.Error as exc:
-        raise ValueError("图片 base64 数据不正确") from exc
-    if not image_bytes:
-        raise ValueError("图片内容为空")
-    if len(image_bytes) > MAX_EXTRACT_IMAGE_BYTES:
-        raise ValueError("图片不能超过 4MB")
-    return mime_type, value, image_bytes
 
 
 def _empty_latest_result(group_id: str, stock_name: str) -> Dict[str, Any]:

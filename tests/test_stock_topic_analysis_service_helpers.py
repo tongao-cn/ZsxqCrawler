@@ -569,17 +569,17 @@ class StockTopicAnalysisServiceHelperTests(unittest.TestCase):
 
     @unittest.skipUnless(HAS_SERVICE_DEPS, "stock topic analysis service dependencies are not installed")
     def test_parse_image_data_url_validates_image_payload(self):
-        from backend.services.stock_topic_analysis_service import _parse_image_data_url
+        from backend.services.stock_topic_image_input import parse_image_data_url
 
         encoded = base64.b64encode(b"image-bytes").decode("ascii")
-        mime_type, data_url, image_bytes = _parse_image_data_url(f"data:image/png;base64,{encoded}")
+        mime_type, data_url, image_bytes = parse_image_data_url(f"data:image/png;base64,{encoded}")
 
         self.assertEqual("image/png", mime_type)
         self.assertTrue(data_url.startswith("data:image/png;base64,"))
         self.assertEqual(b"image-bytes", image_bytes)
 
         with self.assertRaises(ValueError):
-            _parse_image_data_url(f"data:text/plain;base64,{encoded}")
+            parse_image_data_url(f"data:text/plain;base64,{encoded}")
 
     @unittest.skipUnless(HAS_SERVICE_DEPS, "stock topic analysis service dependencies are not installed")
     def test_extract_stock_names_from_image_parses_ai_json(self):
