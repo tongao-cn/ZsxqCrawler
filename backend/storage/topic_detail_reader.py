@@ -4,13 +4,15 @@ from __future__ import annotations
 
 from typing import Any, Dict, Optional
 
-from backend.storage.zsxq_database_helpers import (
+from backend.storage.topic_detail_payloads import (
     load_topic_detail_base,
     load_topic_detail_comments,
     load_topic_detail_latest_likes,
     load_topic_detail_likes_detail,
     load_topic_detail_qa,
     load_topic_detail_talk_payload,
+)
+from backend.storage.zsxq_database_helpers import (
     topic_detail_scope,
 )
 
