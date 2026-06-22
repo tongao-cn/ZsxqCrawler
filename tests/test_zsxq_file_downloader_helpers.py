@@ -6655,25 +6655,25 @@ class FileDownloaderRetryHelperTests(unittest.TestCase):
         runtime = SimpleNamespace()
         headers = {"User-Agent": "unit-test-agent"}
         response = FakeJsonResponse()
-        expected_decision = (None, True, False)
+        expected_url = "https://files.example/from-runtime"
         operations = []
 
         def prepare_retry_api_request(attempt, file_id=None):
             operations.append(("prepare", attempt, file_id))
             return headers
 
-        def handle_download_url_response_target(target):
+        def handle_download_url_success_response_target(target):
             operations.append(
                 (
-                    "response",
-                    target.response,
+                    "success",
+                    target.data,
                     target.file_id,
                     target.attempt,
-                    target.max_retries,
                     target.headers,
+                    target.http_status,
                 )
             )
-            return expected_decision
+            return expected_url
 
         class RequestSession:
             def get(self, url, headers=None, timeout=None):
@@ -6682,25 +6682,35 @@ class FileDownloaderRetryHelperTests(unittest.TestCase):
 
         runtime.session = RequestSession()
         runtime._prepare_retry_api_request = prepare_retry_api_request
-        runtime._handle_download_url_response_target = handle_download_url_response_target
+        runtime._handle_download_url_success_response_target = handle_download_url_success_response_target
 
-        decision = run_download_url_attempt(
-            runtime,
-            UrlDownloadUrlAttemptTarget(
-                "https://api.example/v2/files/101/download_url",
-                101,
-                1,
-                3,
-            ),
-            timeout_seconds=12,
-        )
+        with contextlib.redirect_stdout(io.StringIO()):
+            decision = run_download_url_attempt(
+                runtime,
+                UrlDownloadUrlAttemptTarget(
+                    "https://api.example/v2/files/101/download_url",
+                    101,
+                    1,
+                    3,
+                ),
+                timeout_seconds=12,
+            )
 
-        self.assertIs(expected_decision, decision)
+        self.assertEqual(expected_url, decision.download_url)
+        self.assertFalse(decision.should_retry)
+        self.assertFalse(decision.should_stop)
         self.assertEqual(
             [
                 ("prepare", 1, 101),
                 ("request", "https://api.example/v2/files/101/download_url", headers, 12),
-                ("response", response, 101, 1, 3, headers),
+                (
+                    "success",
+                    {"succeeded": True, "resp_data": {"download_url": "https://files.example/signed-token"}},
+                    101,
+                    1,
+                    headers,
+                    200,
+                ),
             ],
             operations,
         )

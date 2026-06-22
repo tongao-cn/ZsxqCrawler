@@ -24,7 +24,16 @@ from backend.crawlers.file_download_url import (
     DownloadUrlResponseDecision,
     DownloadUrlRetryLoopStepDecision,
     DownloadUrlRetryLoopTarget,
+    download_url_api_failure_data_decision as run_download_url_api_failure_data_decision,
+    download_url_api_failure_decision as run_download_url_api_failure_decision,
+    download_url_data_decision_target as run_download_url_data_decision_target,
+    download_url_http_failure_decision as run_download_url_http_failure_decision,
+    download_url_json_parse_decision as run_download_url_json_parse_decision,
     download_url_retry_loop_step_decision,
+    download_url_status_decision as run_download_url_status_decision,
+    download_url_success_data_decision as run_download_url_success_data_decision,
+    handle_download_url_ok_response_target as run_handle_download_url_ok_response_target,
+    handle_download_url_response_target as run_handle_download_url_response_target,
     run_download_url_attempt,
     run_download_url_retry_loop,
 )
@@ -260,11 +269,7 @@ from backend.crawlers.file_time_collection_runner import (
     time_collection_page_import_result as run_time_collection_page_import_result,
 )
 from backend.crawlers.zsxq_file_downloader_helpers import (
-    API_FAILURE_NON_RETRY,
     API_FAILURE_PERMISSION_DENIED_1030,
-    API_FAILURE_RETRY,
-    HTTP_FAILURE_NON_RETRY,
-    HTTP_FAILURE_RETRY,
     api_retry_user_agent_message,
     api_retry_wait_message,
     add_import_stats,
@@ -1021,11 +1026,7 @@ class ZSXQFileDownloader:
         self,
         failure_class: str,
     ) -> DownloadUrlResponseDecision:
-        if failure_class == HTTP_FAILURE_RETRY:
-            return DownloadUrlResponseDecision(None, True, False)
-        if failure_class == HTTP_FAILURE_NON_RETRY:
-            return DownloadUrlResponseDecision(None, False, True)
-        return DownloadUrlResponseDecision(None, False, False)
+        return run_download_url_http_failure_decision(failure_class)
 
     def _handle_download_url_request_exception_target(
         self,
@@ -1043,119 +1044,50 @@ class ZSXQFileDownloader:
         self,
         failure_class: str,
     ) -> DownloadUrlResponseDecision:
-        if failure_class == API_FAILURE_PERMISSION_DENIED_1030:
-            return DownloadUrlResponseDecision(None, False, True)
-        if failure_class == API_FAILURE_RETRY:
-            return DownloadUrlResponseDecision(None, True, False)
-        if failure_class == API_FAILURE_NON_RETRY:
-            return DownloadUrlResponseDecision(None, False, True)
-        return DownloadUrlResponseDecision(None, False, False)
+        return run_download_url_api_failure_decision(failure_class)
 
     def _handle_download_url_ok_response_target(
         self,
         target: DownloadUrlOkResponseTarget,
     ) -> DownloadUrlResponseDecision:
-        json_parse = self._parse_api_json_response(
-            target.response,
-            target.attempt,
-            target.max_retries,
-        )
-        return self._download_url_json_parse_decision(target, json_parse)
+        return run_handle_download_url_ok_response_target(self, target)
 
     def _download_url_json_parse_decision(
         self,
         target: DownloadUrlOkResponseTarget,
         json_parse: ApiJsonParseResult,
     ) -> DownloadUrlResponseDecision:
-        if json_parse.should_retry:
-            return DownloadUrlResponseDecision(None, True, False)
-        data = json_parse.data
-        if not data:
-            return DownloadUrlResponseDecision(None, True, False)
-
-        return self._download_url_data_decision_target(
-            DownloadUrlDataDecisionTarget(
-                data,
-                target.file_id,
-                target.attempt,
-                target.max_retries,
-                target.headers,
-                target.response.status_code,
-            ),
-        )
+        return run_download_url_json_parse_decision(self, target, json_parse)
 
     def _download_url_data_decision_target(
         self,
         target: DownloadUrlDataDecisionTarget,
     ) -> DownloadUrlResponseDecision:
-        if target.data.get('succeeded'):
-            return self._download_url_success_data_decision(target)
-
-        return self._download_url_api_failure_data_decision(target)
+        return run_download_url_data_decision_target(self, target)
 
     def _download_url_success_data_decision(
         self,
         target: DownloadUrlDataDecisionTarget,
     ) -> DownloadUrlResponseDecision:
-        download_url = self._handle_download_url_success_response_target(
-            DownloadUrlSuccessResponseTarget(
-                target.data,
-                target.file_id,
-                target.attempt,
-                target.headers,
-                target.http_status,
-            ),
-        )
-        return DownloadUrlResponseDecision(download_url, False, False)
+        return run_download_url_success_data_decision(self, target)
 
     def _download_url_api_failure_data_decision(
         self,
         target: DownloadUrlDataDecisionTarget,
     ) -> DownloadUrlResponseDecision:
-        failure_class = self._handle_download_url_api_failure_response_target(
-            DownloadUrlApiFailureResponseTarget(
-                target.data,
-                target.file_id,
-                target.attempt,
-                target.max_retries,
-                target.headers,
-                target.http_status,
-            ),
-        )
-
-        return self._download_url_api_failure_decision(failure_class)
+        return run_download_url_api_failure_data_decision(self, target)
 
     def _handle_download_url_response_target(
         self,
         target: DownloadUrlResponseTarget,
     ) -> DownloadUrlResponseDecision:
-        print(f"   📊 响应状态: {target.response.status_code}")
-        return self._download_url_status_decision(target)
+        return run_handle_download_url_response_target(self, target)
 
     def _download_url_status_decision(
         self,
         target: DownloadUrlResponseTarget,
     ) -> DownloadUrlResponseDecision:
-        if target.response.status_code == 200:
-            return self._handle_download_url_ok_response_target(
-                DownloadUrlOkResponseTarget(
-                    target.response,
-                    target.file_id,
-                    target.attempt,
-                    target.max_retries,
-                    target.headers,
-                ),
-            )
-
-        http_failure_class = self._handle_download_url_http_failure_response_target(
-            DownloadUrlHttpFailureResponseTarget(
-                target.response.status_code,
-                target.response.text,
-                target.attempt,
-                target.max_retries,
-            ),
-        )
-        return self._download_url_http_failure_decision(http_failure_class)
+        return run_download_url_status_decision(self, target)
 
     def _start_download_url_request(self, file_id: int) -> str:
         url = f"{self.base_url}/v2/files/{file_id}/download_url"
