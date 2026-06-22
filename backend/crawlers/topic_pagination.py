@@ -3,6 +3,11 @@ from __future__ import annotations
 from typing import Any, Dict, List, Optional
 
 from backend.core.console_output import safe_console_print as print
+from backend.crawlers.topic_time_cursor import (
+    next_topic_end_time,
+    offset_zsxq_end_time as _offset_zsxq_end_time,
+    offset_zsxq_end_time_by_hours as _offset_zsxq_end_time_by_hours,
+)
 
 
 TOPIC_PAGINATION_MAX_RETRIES_PER_PAGE = 10
@@ -12,40 +17,10 @@ def _empty_topic_pagination_stats() -> Dict[str, int]:
     return {'new_topics': 0, 'updated_topics': 0, 'errors': 0, 'pages': 0}
 
 
-def _format_offset_zsxq_end_time(value: str, delta: Any) -> str:
-    from datetime import datetime
-
-    dt = datetime.fromisoformat(value.replace('+0800', '+08:00'))
-    dt = dt - delta
-    return dt.strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + '+0800'
-
-
-def _offset_zsxq_end_time(value: str, offset_ms: int) -> str:
-    from datetime import timedelta
-
-    return _format_offset_zsxq_end_time(value, timedelta(milliseconds=offset_ms))
-
-
-def _offset_zsxq_end_time_by_hours(value: str, hours: int) -> str:
-    from datetime import timedelta
-
-    return _format_offset_zsxq_end_time(value, timedelta(hours=hours))
-
-
 class TopicPaginationMixin:
     """Pagination strategies for ZSXQ topic crawlers."""
     def _topic_next_end_time(self, topics: List[Dict[str, Any]]) -> Optional[str]:
-        if not topics:
-            return None
-        original_time = topics[-1].get('create_time')
-        if not original_time:
-            self.log("   ⚠️ 最后一条话题缺少 create_time，停止继续翻页")
-            return None
-        try:
-            return _offset_zsxq_end_time(original_time, self.timestamp_offset_ms)
-        except Exception as e:
-            self.log(f"   ⚠️ 时间戳调整失败: {e}")
-            return original_time
+        return next_topic_end_time(topics, self.timestamp_offset_ms, self.log)
 
     def crawl_latest(self, count: int = 20) -> Dict[str, int]:
         """爬取最新话题"""

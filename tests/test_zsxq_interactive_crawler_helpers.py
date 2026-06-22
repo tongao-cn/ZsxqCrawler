@@ -8,6 +8,7 @@ from backend.crawlers.topic_pagination import (
     _offset_zsxq_end_time,
     _offset_zsxq_end_time_by_hours,
 )
+from backend.crawlers.topic_time_cursor import next_topic_end_time
 from backend.crawlers.topic_crawler import ZSXQTopicCrawler
 from backend.storage.zsxq_database import TopicImportResult
 
@@ -257,6 +258,18 @@ class TopicCrawlerPaginationTests(unittest.TestCase):
 
         self.assertIsNone(next_end_time)
         self.assertIn("缺少 create_time", crawler.logs[-1])
+
+    def test_topic_time_cursor_next_end_time_exposes_cursor_interface(self):
+        logs = []
+
+        next_end_time = next_topic_end_time(
+            [{"create_time": "2026-02-01T10:00:00.000+0800"}],
+            1,
+            logs.append,
+        )
+
+        self.assertEqual("2026-02-01T09:59:59.999+0800", next_end_time)
+        self.assertEqual([], logs)
 
     def test_topic_next_end_time_moves_before_last_topic_time(self):
         crawler = object.__new__(ZSXQTopicCrawler)
