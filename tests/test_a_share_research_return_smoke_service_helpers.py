@@ -101,6 +101,107 @@ class AShareResearchReturnSmokeServiceHelperTests(unittest.TestCase):
         self.assertEqual(0.333333, summary["win_rate"])
         self.assertEqual(1, summary["status_counts"]["skipped_no_tradable_entry"])
 
+    def test_build_recommendation_pool_memberships_keeps_service_defaults(self):
+        from backend.services.a_share_research_return_smoke_service import (
+            DEFAULT_POOL_ROTATION_WINDOWS,
+            build_recommendation_pool_memberships,
+        )
+
+        rows = build_recommendation_pool_memberships({"2026-05-10": {"宁德时代": 2}}, group_id="511")
+
+        self.assertEqual(set(DEFAULT_POOL_ROTATION_WINDOWS), {row["window_days"] for row in rows})
+        self.assertEqual("511", rows[0]["group_id"])
+        self.assertEqual("宁德时代", rows[0]["stock_name"])
+
+    def test_build_recommendation_pool_memberships_uses_rolling_windows_and_top_n(self):
+        from backend.services.a_share_research_return_smoke_service import build_recommendation_pool_memberships
+
+        rows = build_recommendation_pool_memberships(
+            {
+                "2026-05-10": {"A": 2, "B": 1},
+                "2026-05-11": {"B": 3, "C": 4},
+            },
+            group_id="511",
+            start_date="2026-05-11",
+            end_date="2026-05-11",
+            windows=[2],
+            ranking_top_n=2,
+        )
+
+        self.assertEqual(
+            [
+                {
+                    "group_id": "511",
+                    "window_days": 2,
+                    "signal_date": "2026-05-11",
+                    "rank": 1,
+                    "stock_name": "B",
+                    "mention_count": 4,
+                },
+                {
+                    "group_id": "511",
+                    "window_days": 2,
+                    "signal_date": "2026-05-11",
+                    "rank": 2,
+                    "stock_name": "C",
+                    "mention_count": 4,
+                },
+            ],
+            rows,
+        )
+
+    def test_pool_rotation_daily_rows_and_summaries_use_next_trade_open(self):
+        from backend.services.a_share_research_return_smoke_service import (
+            build_pool_rotation_daily_rows,
+            summarize_pool_rotation_backtest,
+            summarize_pool_rotation_period_returns,
+        )
+
+        rows = build_pool_rotation_daily_rows(
+            [
+                {
+                    "group_id": "511",
+                    "window_days": 2,
+                    "signal_date": "2026-05-10",
+                    "rank": 1,
+                    "stock_name": "宁德时代",
+                    "stock_code": "300750",
+                    "market": "SZ",
+                    "mention_count": 4,
+                },
+                {
+                    "group_id": "511",
+                    "window_days": 2,
+                    "signal_date": "2026-05-10",
+                    "rank": 2,
+                    "stock_name": "未知公司",
+                    "mention_count": 1,
+                },
+            ],
+            [
+                {"ts_code": "300750.SZ", "trade_date": "2026-05-11", "open": 100, "close": 101, "vol": 1, "amount": 1},
+                {"ts_code": "300750.SZ", "trade_date": "2026-05-12", "open": 110, "close": 111, "vol": 1, "amount": 1},
+            ],
+            trade_dates=["2026-05-11", "2026-05-12"],
+        )
+
+        self.assertEqual(1, len(rows))
+        self.assertEqual("completed", rows[0]["status"])
+        self.assertEqual("2026-05-11", rows[0]["entry_date"])
+        self.assertEqual("2026-05-12", rows[0]["exit_date"])
+        self.assertEqual(2, rows[0]["pool_size"])
+        self.assertEqual(1, rows[0]["resolved_count"])
+        self.assertEqual(1, rows[0]["unresolved_count"])
+        self.assertEqual(0.1, rows[0]["portfolio_return"])
+
+        summary = summarize_pool_rotation_backtest(rows)
+        self.assertEqual(1, summary["completed"])
+        self.assertEqual(0.1, summary["by_window"]["2"]["mean_daily_return"])
+
+        period_rows = summarize_pool_rotation_period_returns(rows)
+        self.assertEqual({"week", "month"}, {row["period_type"] for row in period_rows})
+        self.assertEqual({0.1}, {row["mean_daily_return"] for row in period_rows})
+
     def test_run_a_share_return_smoke_loads_signals_and_quotes(self):
         from backend.services import a_share_research_return_smoke_service as service
 
