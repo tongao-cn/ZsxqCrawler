@@ -74,10 +74,10 @@ def download_batch_file_item_target(
     runtime: BatchDownloadRuntime,
     target: BatchDownloadFileItemTarget,
 ) -> int:
-    runtime._log_batch_download_file_item(target)  # type: ignore[attr-defined]
+    log_batch_download_file_item(runtime, target)
     result = runtime.download_file(target.file_info)
-    downloaded_in_batch = runtime._apply_batch_file_item_result(target, result)  # type: ignore[attr-defined]
-    runtime._record_batch_file_item_attempt(target.stats)  # type: ignore[attr-defined]
+    downloaded_in_batch = apply_batch_file_item_result(runtime, target, result)
+    record_batch_file_item_attempt(target.stats)
     return downloaded_in_batch
 
 
@@ -94,7 +94,8 @@ def apply_batch_file_item_result(
     target: BatchDownloadFileItemTarget,
     result: Any,
 ) -> int:
-    return runtime._apply_batch_download_result_target(  # type: ignore[attr-defined]
+    return apply_batch_download_result_target(
+        runtime,
         BatchDownloadResultTarget(
             result,
             target.has_more_in_batch,
@@ -117,7 +118,8 @@ def apply_batch_download_result(
     max_files: Optional[int],
     stats: Dict[str, int],
 ) -> int:
-    return runtime._apply_batch_download_result_target(  # type: ignore[attr-defined]
+    return apply_batch_download_result_target(
+        runtime,
         BatchDownloadResultTarget(
             result,
             has_more_in_batch,
@@ -135,9 +137,10 @@ def apply_batch_download_result_target(
     downloaded_in_batch = target.downloaded_in_batch
     result_status = record_file_download_result(target.result, target.stats)
     if result_status == "skipped":
-        runtime._log_batch_download_skipped()  # type: ignore[attr-defined]
+        log_batch_download_skipped(runtime)
     elif result_status == "downloaded":
-        downloaded_in_batch = runtime._apply_successful_batch_download_result(  # type: ignore[attr-defined]
+        downloaded_in_batch = apply_successful_batch_download_result(
+            runtime,
             target,
             downloaded_in_batch,
         )
@@ -156,7 +159,7 @@ def apply_successful_batch_download_result(
 ) -> int:
     downloaded_in_batch += 1
     runtime.check_long_delay()
-    if runtime._should_delay_after_batch_download(target, downloaded_in_batch):  # type: ignore[attr-defined]
+    if should_delay_after_batch_download(target, downloaded_in_batch):
         runtime.download_delay()
     return downloaded_in_batch
 

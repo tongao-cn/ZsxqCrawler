@@ -2681,19 +2681,22 @@ class FileDownloaderBatchDownloadTests(unittest.TestCase):
             return 3
 
         downloader.download_file = download_file
-        downloader._apply_batch_download_result_target = apply_result
 
-        downloaded = ZSXQFileDownloader._download_batch_file_item_target(
-            downloader,
-            BatchDownloadFileItemTarget(
-                file_info,
-                3,
-                5,
-                True,
-                2,
-                stats,
-            ),
-        )
+        with patch(
+            "backend.crawlers.file_batch_download_runner.apply_batch_download_result_target",
+            lambda _runtime, target: apply_result(target),
+        ):
+            downloaded = ZSXQFileDownloader._download_batch_file_item_target(
+                downloader,
+                BatchDownloadFileItemTarget(
+                    file_info,
+                    3,
+                    5,
+                    True,
+                    2,
+                    stats,
+                ),
+            )
 
         self.assertEqual(3, downloaded)
         self.assertEqual({"total_files": 5, "downloaded": 2, "skipped": 1, "failed": 1}, stats)
