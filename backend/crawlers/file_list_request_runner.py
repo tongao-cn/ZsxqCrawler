@@ -8,8 +8,10 @@ from backend.core.console_output import safe_console_print as print
 from backend.crawlers.zsxq_file_downloader_helpers import (
     file_list_request_params,
     file_list_start_messages,
+    request_exception_plan,
     retry_exhausted_message,
 )
+from backend.crawlers.file_list_response_runner import handle_file_list_response_target
 from backend.crawlers.zsxq_file_downloader_targets import (
     FetchFileListTarget,
     FileListRequestAttemptTarget,
@@ -37,8 +39,8 @@ def fetch_file_list_target(
     runtime: FileListRequestRuntime,
     target: FetchFileListTarget,
 ) -> Optional[Dict[str, Any]]:
-    request_context = runtime._start_file_list_request(target)  # type: ignore[attr-defined]
-    return runtime._run_file_list_request_loop(request_context)  # type: ignore[attr-defined]
+    request_context = start_file_list_request(runtime, target)
+    return run_file_list_request_loop(runtime, request_context)
 
 
 def run_file_list_request_loop(
@@ -46,7 +48,8 @@ def run_file_list_request_loop(
     request_context: FileListRequestContext,
 ) -> Optional[Dict[str, Any]]:
     for attempt in range(request_context.max_retries):
-        decision = runtime._run_file_list_request_attempt(  # type: ignore[attr-defined]
+        decision = run_file_list_request_attempt(
+            runtime,
             FileListRequestAttemptTarget(request_context, attempt),
         )
         if decision.result is not None:
@@ -90,12 +93,12 @@ def run_file_list_request_attempt(
     runtime: FileListRequestRuntime,
     target: FileListRequestAttemptTarget,
 ) -> FileListResponseDecision:
-    headers = runtime._file_list_request_attempt_headers(target)  # type: ignore[attr-defined]
+    headers = file_list_request_attempt_headers(runtime, target)
 
     try:
-        return runtime._file_list_request_attempt_decision(target, headers)  # type: ignore[attr-defined]
+        return file_list_request_attempt_decision(runtime, target, headers)
     except Exception as e:
-        return runtime._handle_file_list_request_attempt_exception(target, e)  # type: ignore[attr-defined]
+        return handle_file_list_request_attempt_exception(runtime, target, e)
 
 
 def file_list_request_attempt_headers(
@@ -110,8 +113,8 @@ def file_list_request_attempt_decision(
     target: FileListRequestAttemptTarget,
     headers: Dict[str, str],
 ) -> FileListResponseDecision:
-    response = runtime._request_file_list_attempt_response(target, headers)  # type: ignore[attr-defined]
-    return runtime._handle_file_list_request_attempt_response(target, response)  # type: ignore[attr-defined]
+    response = request_file_list_attempt_response(runtime, target, headers)
+    return handle_file_list_request_attempt_response(runtime, target, response)
 
 
 def request_file_list_attempt_response(
@@ -119,8 +122,9 @@ def request_file_list_attempt_response(
     target: FileListRequestAttemptTarget,
     headers: Dict[str, str],
 ) -> Any:
-    return runtime._request_file_list_response_target(  # type: ignore[attr-defined]
-        runtime._file_list_request_target_for_attempt(target, headers),  # type: ignore[attr-defined]
+    return request_file_list_response_target(
+        runtime,
+        file_list_request_target_for_attempt(target, headers),
     )
 
 
@@ -140,7 +144,8 @@ def handle_file_list_request_attempt_response(
     target: FileListRequestAttemptTarget,
     response: Any,
 ) -> FileListResponseDecision:
-    return runtime._handle_file_list_response_target(  # type: ignore[attr-defined]
+    return handle_file_list_response_target(
+        runtime,
         FileListResponseTarget(
             response,
             target.attempt,
@@ -154,14 +159,27 @@ def handle_file_list_request_attempt_exception(
     target: FileListRequestAttemptTarget,
     exc: Exception,
 ) -> FileListResponseDecision:
-    should_retry = runtime._handle_file_list_request_exception_target(  # type: ignore[attr-defined]
+    should_retry = handle_file_list_request_exception_target(
         FileListRequestExceptionTarget(
             exc,
             target.attempt,
             target.request_context.max_retries,
         ),
     )
-    return runtime._file_list_request_exception_decision(should_retry)  # type: ignore[attr-defined]
+    return file_list_request_exception_decision(should_retry)
+
+
+def handle_file_list_request_exception_target(
+    target: FileListRequestExceptionTarget,
+) -> bool:
+    request_exception = request_exception_plan(
+        target.exc,
+        target.attempt,
+        target.max_retries,
+    )
+    for message in request_exception["messages"]:
+        print(message)
+    return request_exception["should_retry"]
 
 
 def file_list_request_exception_decision(

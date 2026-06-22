@@ -7486,17 +7486,18 @@ class FileDownloaderRetryHelperTests(unittest.TestCase):
         downloader._prepare_retry_api_request = (
             lambda attempt: prepare_calls.append(attempt) or {"X-Test": "header"}
         )
-        downloader._handle_file_list_response_target = (
-            lambda target: response_targets.append(target)
-            or SimpleNamespace(result=expected_result, should_retry=False, should_stop=False)
-        )
 
-        result = ZSXQFileDownloader.fetch_file_list(
-            downloader,
-            count=7,
-            index="cursor",
-            sort="by_create_time",
-        )
+        with patch(
+            "backend.crawlers.file_list_request_runner.handle_file_list_response_target",
+            lambda _runtime, target: response_targets.append(target)
+            or SimpleNamespace(result=expected_result, should_retry=False, should_stop=False),
+        ):
+            result = ZSXQFileDownloader.fetch_file_list(
+                downloader,
+                count=7,
+                index="cursor",
+                sort="by_create_time",
+            )
 
         self.assertIs(expected_result, result)
         self.assertEqual([0], prepare_calls)
@@ -7559,19 +7560,21 @@ class FileDownloaderRetryHelperTests(unittest.TestCase):
             )
             return expected_decision
 
-        downloader._handle_file_list_response_target = handle_response
-
-        decision = ZSXQFileDownloader._run_file_list_request_attempt(
-            downloader,
-            FileListRequestAttemptTarget(
-                FileListRequestContext(
-                    "https://api.example/v2/groups/group-1/files",
-                    {"count": "7", "sort": "by_create_time", "index": "cursor"},
-                    10,
+        with patch(
+            "backend.crawlers.file_list_request_runner.handle_file_list_response_target",
+            lambda _runtime, target: handle_response(target),
+        ):
+            decision = ZSXQFileDownloader._run_file_list_request_attempt(
+                downloader,
+                FileListRequestAttemptTarget(
+                    FileListRequestContext(
+                        "https://api.example/v2/groups/group-1/files",
+                        {"count": "7", "sort": "by_create_time", "index": "cursor"},
+                        10,
+                    ),
+                    1,
                 ),
-                1,
-            ),
-        )
+            )
 
         self.assertIs(expected_decision, decision)
         self.assertEqual(
@@ -7610,22 +7613,30 @@ class FileDownloaderRetryHelperTests(unittest.TestCase):
             operations.append(("request", target.url, target.headers, target.params))
             return response
 
-        downloader._request_file_list_response_target = request_response
-        downloader._handle_file_list_request_attempt_response = (
-            lambda target, actual_response: operations.append(
+        def handle_attempt_response(_runtime, target, actual_response):
+            operations.append(
                 (
                     "response",
                     target.attempt,
                     actual_response is response,
                 )
             )
-            or expected_decision
-        )
+            return expected_decision
 
-        decision = ZSXQFileDownloader._run_file_list_request_attempt(
-            downloader,
-            FileListRequestAttemptTarget(request_context, 4),
-        )
+        with (
+            patch(
+                "backend.crawlers.file_list_request_runner.request_file_list_response_target",
+                lambda _runtime, target: request_response(target),
+            ),
+            patch(
+                "backend.crawlers.file_list_request_runner.handle_file_list_request_attempt_response",
+                handle_attempt_response,
+            ),
+        ):
+            decision = ZSXQFileDownloader._run_file_list_request_attempt(
+                downloader,
+                FileListRequestAttemptTarget(request_context, 4),
+            )
 
         self.assertIs(expected_decision, decision)
         self.assertEqual(
@@ -7674,23 +7685,34 @@ class FileDownloaderRetryHelperTests(unittest.TestCase):
             operations.append(("request", target is request_target))
             return response
 
-        downloader._file_list_request_target_for_attempt = build_request_target
-        downloader._request_file_list_response_target = request_response
-        downloader._handle_file_list_request_attempt_response = (
-            lambda target, actual_response: operations.append(
+        def handle_attempt_response(_runtime, target, actual_response):
+            operations.append(
                 (
                     "response",
                     target.attempt,
                     actual_response is response,
                 )
             )
-            or expected_decision
-        )
+            return expected_decision
 
-        decision = ZSXQFileDownloader._run_file_list_request_attempt(
-            downloader,
-            FileListRequestAttemptTarget(request_context, 5),
-        )
+        with (
+            patch(
+                "backend.crawlers.file_list_request_runner.file_list_request_target_for_attempt",
+                build_request_target,
+            ),
+            patch(
+                "backend.crawlers.file_list_request_runner.request_file_list_response_target",
+                lambda _runtime, target: request_response(target),
+            ),
+            patch(
+                "backend.crawlers.file_list_request_runner.handle_file_list_request_attempt_response",
+                handle_attempt_response,
+            ),
+        ):
+            decision = ZSXQFileDownloader._run_file_list_request_attempt(
+                downloader,
+                FileListRequestAttemptTarget(request_context, 5),
+            )
 
         self.assertIs(expected_decision, decision)
         self.assertEqual(
@@ -7723,13 +7745,20 @@ class FileDownloaderRetryHelperTests(unittest.TestCase):
             operations.append(("exception", str(target.exc), target.attempt, target.max_retries))
             return True
 
-        downloader._request_file_list_response_target = request_response
-        downloader._handle_file_list_request_exception_target = handle_exception
-
-        decision = ZSXQFileDownloader._run_file_list_request_attempt(
-            downloader,
-            FileListRequestAttemptTarget(request_context, 2),
-        )
+        with (
+            patch(
+                "backend.crawlers.file_list_request_runner.request_file_list_response_target",
+                lambda _runtime, target: request_response(target),
+            ),
+            patch(
+                "backend.crawlers.file_list_request_runner.handle_file_list_request_exception_target",
+                handle_exception,
+            ),
+        ):
+            decision = ZSXQFileDownloader._run_file_list_request_attempt(
+                downloader,
+                FileListRequestAttemptTarget(request_context, 2),
+            )
 
         self.assertIsNone(decision.result)
         self.assertTrue(decision.should_retry)
@@ -7773,14 +7802,24 @@ class FileDownloaderRetryHelperTests(unittest.TestCase):
             operations.append(("exception", str(target.exc), target.attempt, target.max_retries))
             return True
 
-        downloader._request_file_list_attempt_response = request_attempt_response
-        downloader._handle_file_list_request_attempt_response = handle_response
-        downloader._handle_file_list_request_exception_target = handle_exception
-
-        decision = ZSXQFileDownloader._run_file_list_request_attempt(
-            downloader,
-            FileListRequestAttemptTarget(request_context, 6),
-        )
+        with (
+            patch(
+                "backend.crawlers.file_list_request_runner.request_file_list_attempt_response",
+                lambda _runtime, target, headers: request_attempt_response(target, headers),
+            ),
+            patch(
+                "backend.crawlers.file_list_request_runner.handle_file_list_request_attempt_response",
+                lambda _runtime, target, actual_response: handle_response(target, actual_response),
+            ),
+            patch(
+                "backend.crawlers.file_list_request_runner.handle_file_list_request_exception_target",
+                handle_exception,
+            ),
+        ):
+            decision = ZSXQFileDownloader._run_file_list_request_attempt(
+                downloader,
+                FileListRequestAttemptTarget(request_context, 6),
+            )
 
         self.assertIsNone(decision.result)
         self.assertTrue(decision.should_retry)
@@ -7809,12 +7848,6 @@ class FileDownloaderRetryHelperTests(unittest.TestCase):
             raise RuntimeError("header unavailable")
 
         downloader._prepare_retry_api_request = prepare
-        downloader._file_list_request_attempt_decision = (
-            lambda target, headers: operations.append(("decision", target.attempt, headers))
-        )
-        downloader._handle_file_list_request_exception_target = (
-            lambda target: operations.append(("exception", str(target.exc))) or True
-        )
 
         with self.assertRaisesRegex(RuntimeError, "header unavailable"):
             ZSXQFileDownloader._run_file_list_request_attempt(
@@ -7846,13 +7879,15 @@ class FileDownloaderRetryHelperTests(unittest.TestCase):
             )
             return False
 
-        downloader._handle_file_list_request_exception_target = handle_exception
-
-        decision = ZSXQFileDownloader._handle_file_list_request_attempt_exception(
-            downloader,
-            FileListRequestAttemptTarget(request_context, 3),
-            exc,
-        )
+        with patch(
+            "backend.crawlers.file_list_request_runner.handle_file_list_request_exception_target",
+            handle_exception,
+        ):
+            decision = ZSXQFileDownloader._handle_file_list_request_attempt_exception(
+                downloader,
+                FileListRequestAttemptTarget(request_context, 3),
+                exc,
+            )
 
         self.assertIsNone(decision.result)
         self.assertFalse(decision.should_retry)
@@ -7882,8 +7917,8 @@ class FileDownloaderRetryHelperTests(unittest.TestCase):
         downloader._prepare_retry_api_request = (
             lambda attempt: events.append(("prepare", attempt)) or {"X-Test": "header"}
         )
-        downloader._handle_file_list_response_target = (
-            lambda target: events.append(
+        def handle_response(_runtime, target):
+            events.append(
                 (
                     "response",
                     target.response is session.response,
@@ -7891,13 +7926,16 @@ class FileDownloaderRetryHelperTests(unittest.TestCase):
                     target.max_retries,
                 )
             )
-            or SimpleNamespace(result=expected_result, should_retry=False, should_stop=False)
-        )
+            return SimpleNamespace(result=expected_result, should_retry=False, should_stop=False)
 
-        result = ZSXQFileDownloader._fetch_file_list_target(
-            downloader,
-            FetchFileListTarget(7, "cursor", "by_create_time"),
-        )
+        with patch(
+            "backend.crawlers.file_list_request_runner.handle_file_list_response_target",
+            handle_response,
+        ):
+            result = ZSXQFileDownloader._fetch_file_list_target(
+                downloader,
+                FetchFileListTarget(7, "cursor", "by_create_time"),
+            )
 
         self.assertIs(expected_result, result)
         self.assertEqual(
@@ -7949,12 +7987,14 @@ class FileDownloaderRetryHelperTests(unittest.TestCase):
                 return SimpleNamespace(result=None, should_retry=False, should_stop=False)
             return SimpleNamespace(result=expected_result, should_retry=False, should_stop=False)
 
-        downloader._handle_file_list_response_target = handle_response
-
-        result = ZSXQFileDownloader._fetch_file_list_target(
-            downloader,
-            FetchFileListTarget(7, "cursor", "by_create_time"),
-        )
+        with patch(
+            "backend.crawlers.file_list_request_runner.handle_file_list_response_target",
+            lambda _runtime, target: handle_response(target),
+        ):
+            result = ZSXQFileDownloader._fetch_file_list_target(
+                downloader,
+                FetchFileListTarget(7, "cursor", "by_create_time"),
+            )
 
         self.assertIs(expected_result, result)
         self.assertEqual([], session.responses)
@@ -7988,9 +8028,6 @@ class FileDownloaderRetryHelperTests(unittest.TestCase):
         request_context = SimpleNamespace(max_retries=2)
         events = []
         downloader = object.__new__(ZSXQFileDownloader)
-        downloader._start_file_list_request = (
-            lambda target: events.append(("start", target)) or request_context
-        )
 
         def run_attempt(target):
             events.append(
@@ -8002,9 +8039,17 @@ class FileDownloaderRetryHelperTests(unittest.TestCase):
             )
             return SimpleNamespace(result=None, should_retry=False, should_stop=False)
 
-        downloader._run_file_list_request_attempt = run_attempt
-
-        with contextlib.redirect_stdout(io.StringIO()) as output:
+        with (
+            patch(
+                "backend.crawlers.file_list_request_runner.start_file_list_request",
+                lambda _runtime, target: events.append(("start", target)) or request_context,
+            ),
+            patch(
+                "backend.crawlers.file_list_request_runner.run_file_list_request_attempt",
+                lambda _runtime, target: run_attempt(target),
+            ),
+            contextlib.redirect_stdout(io.StringIO()) as output,
+        ):
             result = ZSXQFileDownloader._fetch_file_list_target(
                 downloader,
                 FetchFileListTarget(7, "cursor", "by_create_time"),
