@@ -2043,8 +2043,8 @@ class FileDownloaderPaginationTests(unittest.TestCase):
         downloader.fetch_file_list = fetch_file_list
 
         with (
-            patch("backend.crawlers.zsxq_file_downloader.random.uniform", return_value=2.5) as uniform,
-            patch("backend.crawlers.zsxq_file_downloader.time.sleep") as sleep,
+            patch("backend.crawlers.file_time_collection_runner.random.uniform", return_value=2.5) as uniform,
+            patch("backend.crawlers.file_time_collection_runner.time.sleep") as sleep,
         ):
             stats = ZSXQFileDownloader.collect_files_by_time(downloader)
 
@@ -2091,8 +2091,8 @@ class FileDownloaderPaginationTests(unittest.TestCase):
         downloader.fetch_file_list = fetch_file_list
 
         with (
-            patch("backend.crawlers.zsxq_file_downloader.random.uniform", return_value=2.5) as uniform,
-            patch("backend.crawlers.zsxq_file_downloader.time.sleep") as sleep,
+            patch("backend.crawlers.file_time_collection_runner.random.uniform", return_value=2.5) as uniform,
+            patch("backend.crawlers.file_time_collection_runner.time.sleep") as sleep,
         ):
             stats = ZSXQFileDownloader.collect_files_by_time(downloader)
 

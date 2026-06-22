@@ -51,6 +51,34 @@ from backend.crawlers.file_database_download_runner import (
     DatabaseDownloadTarget,
     run_database_file_download,
 )
+from backend.crawlers.file_time_collection_runner import (
+    TimeCollectionDatabaseState,
+    TimeCollectionLoopContext,
+    TimeCollectionPage,
+    TimeCollectionPageImportResult,
+    TimeCollectionTarget,
+    _latest_file_create_time,
+    apply_time_collection_dedupe_plan as run_time_collection_dedupe_plan,
+    collect_time_collection_page as run_time_collection_page,
+    crossed_time_collection_stop_before as run_crossed_time_collection_stop_before,
+    dedupe_and_import_time_collection_page as run_dedupe_and_import_time_collection_page,
+    fetch_time_collection_page as run_fetch_time_collection_page,
+    finalize_time_collection_result as run_finalize_time_collection_result,
+    import_time_collection_page as run_import_time_collection_page,
+    initialize_time_collection_mode as run_initialize_time_collection_mode,
+    load_time_collection_database_state as run_load_time_collection_database_state,
+    load_time_collection_latest_file_time as run_load_time_collection_latest_file_time,
+    next_time_collection_index as run_next_time_collection_index,
+    next_time_collection_page_after_import as run_next_time_collection_page_after_import,
+    prepare_time_collection_loop_context as run_prepare_time_collection_loop_context,
+    run_file_time_collection,
+    run_time_collection_after_initial_stop,
+    run_time_collection_loop,
+    should_stop_time_collection_initially as run_should_stop_time_collection_initially,
+    should_stop_time_collection_loop as run_should_stop_time_collection_loop,
+    time_collection_dedupe_result as run_time_collection_dedupe_result,
+    time_collection_page_import_result as run_time_collection_page_import_result,
+)
 from backend.crawlers.zsxq_file_downloader_helpers import (
     API_FAILURE_NON_RETRY,
     API_FAILURE_PERMISSION_DENIED_1030,
@@ -465,34 +493,9 @@ class FileCollectionPage(NamedTuple):
     next_index: Optional[Any]
 
 
-class TimeCollectionPage(NamedTuple):
-    data: Dict[str, Any]
-    files: list[Dict[str, Any]]
-    next_index: Optional[Any]
-
-
 class ShowFileListTarget(NamedTuple):
     count: int
     index: Optional[str]
-
-
-class TimeCollectionPageImportResult(NamedTuple):
-    should_stop_after_insert: bool
-
-
-class TimeCollectionLoopContext(NamedTuple):
-    sort: str
-    enable_time_dedupe: bool
-    db_latest_time: Optional[Any]
-    total_imported_stats: Dict[str, int]
-    stop_before_time: Optional[datetime.datetime]
-
-
-class TimeCollectionTarget(NamedTuple):
-    sort: str
-    start_time: Optional[str]
-    stop_before_time: Optional[datetime.datetime]
-    force_refresh: bool
 
 
 class IncrementalCollectionTarget(NamedTuple):
@@ -566,11 +569,6 @@ class BatchDownloadResultTarget(NamedTuple):
     stats: Dict[str, int]
 
 
-class TimeCollectionDatabaseState(NamedTuple):
-    initial_files: Any
-    db_latest_time: Optional[Any]
-
-
 class DatabaseStatsTotalSize(NamedTuple):
     total_size: Any
 
@@ -634,10 +632,6 @@ class FileCollectionLogRow(NamedTuple):
     log_id: Any
 
 
-class LatestFileCreateTimeRow(NamedTuple):
-    create_time: Any
-
-
 def _query_group_id(group_id: str) -> Any:
     return download_query_group_id(group_id)
 
@@ -653,19 +647,6 @@ def _file_collection_log_id(row: Any) -> Optional[Any]:
     if not collection_log:
         return None
     return collection_log.log_id
-
-
-def _latest_file_create_time_row(row: Any) -> Optional[LatestFileCreateTimeRow]:
-    if not row or not row[0]:
-        return None
-    return LatestFileCreateTimeRow(row[0])
-
-
-def _latest_file_create_time(row: Any) -> Optional[Any]:
-    latest_file = _latest_file_create_time_row(row)
-    if not latest_file:
-        return None
-    return latest_file.create_time
 
 
 def _http_failure_class_with_output(target: HttpFailureOutputTarget) -> str:
@@ -3079,41 +3060,20 @@ class ZSXQFileDownloader:
         enable_time_dedupe: bool,
         initial_files: int,
     ) -> Optional[Any]:
-        if not enable_time_dedupe or initial_files <= 0:
-            return None
-
-        query, params = latest_file_create_time_query(_query_group_id(self.group_id))
-        self.file_db.cursor.execute(query, params)
-        result = self.file_db.cursor.fetchone()
-        db_latest_time = _latest_file_create_time(result)
-        if db_latest_time:
-            self.log(time_collection_latest_file_time_message(db_latest_time))
-            return db_latest_time
-
-        return None
+        return run_load_time_collection_latest_file_time(self, enable_time_dedupe, initial_files)
 
     def _load_time_collection_database_state(
         self,
         enable_time_dedupe: bool,
     ) -> TimeCollectionDatabaseState:
-        initial_stats = self.file_db.get_database_stats()
-        initial_files = initial_stats.get('files', 0)
-        self.log(time_collection_database_status_message(initial_files))
-        db_latest_time = self._load_time_collection_latest_file_time(
-            enable_time_dedupe,
-            initial_files,
-        )
-        return TimeCollectionDatabaseState(initial_files, db_latest_time)
+        return run_load_time_collection_database_state(self, enable_time_dedupe)
 
     def _time_collection_dedupe_result(
         self,
         should_stop_before_insert: bool = False,
         should_stop_after_insert: bool = False,
     ) -> Dict[str, bool]:
-        return {
-            "should_stop_before_insert": should_stop_before_insert,
-            "should_stop_after_insert": should_stop_after_insert,
-        }
+        return run_time_collection_dedupe_result(should_stop_before_insert, should_stop_after_insert)
 
     def _apply_time_collection_dedupe_plan(
         self,
@@ -3122,25 +3082,7 @@ class ZSXQFileDownloader:
         enable_time_dedupe: bool,
         db_latest_time: Optional[Any],
     ) -> Dict[str, bool]:
-        if not enable_time_dedupe or not db_latest_time:
-            return self._time_collection_dedupe_result()
-
-        dedupe_plan = time_dedupe_page_plan(files, db_latest_time)
-        for message in time_dedupe_page_messages(dedupe_plan):
-            self.log(message)
-
-        if dedupe_plan["should_stop_before_insert"]:
-            return self._time_collection_dedupe_result(
-                should_stop_before_insert=True,
-            )
-
-        if dedupe_plan["should_filter_before_insert"]:
-            data['resp_data']['files'] = dedupe_plan["newer_files"]
-            return self._time_collection_dedupe_result(
-                should_stop_after_insert=dedupe_plan["should_stop_after_insert"],
-            )
-
-        return self._time_collection_dedupe_result()
+        return run_time_collection_dedupe_plan(self, data, files, enable_time_dedupe, db_latest_time)
 
     def _import_time_collection_page(
         self,
@@ -3149,45 +3091,17 @@ class ZSXQFileDownloader:
         should_stop_after_insert: bool,
         total_imported_stats: Dict[str, int],
     ) -> bool:
-        try:
-            page_stats = self.file_db.import_file_response(data)
-            add_import_stats(total_imported_stats, page_stats)
-
-            for message in time_collection_page_import_messages(
-                page_count,
-                page_stats,
-                should_stop_after_insert,
-            ):
-                self.log(message)
-            return True
-
-        except Exception as e:
-            self.log(time_collection_storage_failed_message(page_count, e))
-            return False
+        return run_import_time_collection_page(self, data, page_count, should_stop_after_insert, total_imported_stats)
 
     def _crossed_time_collection_stop_before(
         self,
         files: list[Dict[str, Any]],
         stop_before_time: Optional[datetime.datetime],
     ) -> bool:
-        if not stop_before_time:
-            return False
-
-        crossed_stop_before, oldest_page_time = page_crosses_stop_before(files, stop_before_time)
-        if crossed_stop_before and oldest_page_time:
-            self.log(time_collection_stop_before_boundary_message(oldest_page_time, stop_before_time))
-            return True
-
-        return False
+        return run_crossed_time_collection_stop_before(self, files, stop_before_time)
 
     def _next_time_collection_index(self, next_index: Optional[Any]) -> Optional[Any]:
-        next_page = time_collection_next_page_plan(next_index)
-        self.log(next_page["message"])
-        if not next_page["has_next"]:
-            return None
-
-        time.sleep(random.uniform(2, 5))
-        return next_page["next_index"]
+        return run_next_time_collection_index(self, next_index)
 
     def _fetch_time_collection_page(
         self,
@@ -3195,24 +3109,7 @@ class ZSXQFileDownloader:
         current_index: Optional[Any],
         sort: str,
     ) -> Optional[TimeCollectionPage]:
-        data = self.fetch_file_list(count=20, index=current_index, sort=sort)
-        if not data:
-            for message in time_collection_fetch_failed_messages(page_count):
-                self.log(message)
-            return None
-
-        files, next_index = file_list_response_page(data)
-        if not files:
-            self.log(time_collection_empty_page_message())
-            return None
-
-        self.log(time_collection_page_files_message(len(files)))
-        page_oldest, page_newest = summarize_page_time_range(files)
-        time_range_message = time_collection_page_time_range_message(page_oldest, page_newest)
-        if time_range_message:
-            self.log(time_range_message)
-
-        return TimeCollectionPage(data, files, next_index)
+        return run_fetch_time_collection_page(self, page_count, current_index, sort)
 
     def _next_time_collection_page_after_import(
         self,
@@ -3220,13 +3117,7 @@ class ZSXQFileDownloader:
         should_stop_after_insert: bool,
         stop_before_time: Optional[datetime.datetime],
     ) -> Optional[Any]:
-        if should_stop_after_insert:
-            return None
-
-        if self._crossed_time_collection_stop_before(page.files, stop_before_time):
-            return None
-
-        return self._next_time_collection_index(page.next_index)
+        return run_next_time_collection_page_after_import(self, page, should_stop_after_insert, stop_before_time)
 
     def _collect_time_collection_page(
         self,
@@ -3234,27 +3125,7 @@ class ZSXQFileDownloader:
         current_index: Optional[Any],
         context: TimeCollectionLoopContext,
     ) -> Optional[Any]:
-        self.log(time_collection_page_message(page_count))
-
-        page = self._fetch_time_collection_page(page_count, current_index, context.sort)
-        if page is None:
-            return None
-
-        import_result = self._dedupe_and_import_time_collection_page(
-            page,
-            page_count,
-            context.enable_time_dedupe,
-            context.db_latest_time,
-            context.total_imported_stats,
-        )
-        if import_result is None:
-            return None
-
-        return self._next_time_collection_page_after_import(
-            page,
-            import_result.should_stop_after_insert,
-            context.stop_before_time,
-        )
+        return run_time_collection_page(self, page_count, current_index, context)
 
     def _time_collection_page_import_result(
         self,
@@ -3263,15 +3134,13 @@ class ZSXQFileDownloader:
         should_stop_after_insert: bool,
         total_imported_stats: Dict[str, int],
     ) -> Optional[TimeCollectionPageImportResult]:
-        if not self._import_time_collection_page(
-            page.data,
+        return run_time_collection_page_import_result(
+            self,
+            page,
             page_count,
             should_stop_after_insert,
             total_imported_stats,
-        ):
-            return None
-
-        return TimeCollectionPageImportResult(should_stop_after_insert)
+        )
 
     def _dedupe_and_import_time_collection_page(
         self,
@@ -3281,58 +3150,24 @@ class ZSXQFileDownloader:
         db_latest_time: Optional[Any],
         total_imported_stats: Dict[str, int],
     ) -> Optional[TimeCollectionPageImportResult]:
-        dedupe_result = self._apply_time_collection_dedupe_plan(
-            page.data,
-            page.files,
-            enable_time_dedupe,
-            db_latest_time,
-        )
-        if dedupe_result["should_stop_before_insert"]:
-            return None
-        should_stop_after_insert = dedupe_result["should_stop_after_insert"]
-
-        return self._time_collection_page_import_result(
+        return run_dedupe_and_import_time_collection_page(
+            self,
             page,
             page_count,
-            should_stop_after_insert,
+            enable_time_dedupe,
+            db_latest_time,
             total_imported_stats,
         )
 
     def _should_stop_time_collection_loop(self) -> bool:
-        if self.check_stop():
-            self.log(time_collection_loop_stop_message())
-            return True
-
-        return False
+        return run_should_stop_time_collection_loop(self)
 
     def _run_time_collection_loop(
         self,
         start_time: Optional[str],
         context: TimeCollectionLoopContext,
     ) -> int:
-        current_index = start_time
-        page_count = 0
-
-        try:
-            while True:
-                if self._should_stop_time_collection_loop():
-                    break
-
-                page_count += 1
-                current_index = self._collect_time_collection_page(
-                    page_count,
-                    current_index,
-                    context,
-                )
-                if current_index is None:
-                    break
-
-        except KeyboardInterrupt:
-            self.log(time_collection_interrupted_message())
-        except Exception as e:
-            self.log(time_collection_exception_message(e))
-
-        return page_count
+        return run_time_collection_loop(self, start_time, context)
 
     def _finalize_time_collection_result(
         self,
@@ -3340,18 +3175,7 @@ class ZSXQFileDownloader:
         total_imported_stats: Dict[str, int],
         page_count: int,
     ) -> Dict[str, int]:
-        final_stats = self.file_db.get_database_stats()
-        summary = time_collection_final_summary(
-            final_stats,
-            initial_files,
-            total_imported_stats,
-            page_count,
-        )
-
-        for message in time_collection_summary_messages(summary, page_count):
-            self.log(message)
-
-        return summary["result"]
+        return run_finalize_time_collection_result(self, initial_files, total_imported_stats, page_count)
 
     def _collect_incremental_from_oldest_time(self, oldest_time: Any) -> Dict[str, int]:
         self.log(incremental_collection_target_message())
@@ -3406,20 +3230,10 @@ class ZSXQFileDownloader:
         stop_before_time: Optional[datetime.datetime],
         force_refresh: bool,
     ) -> bool:
-        for message in time_collection_start_messages(sort, start_time, stop_before_time):
-            self.log(message)
-
-        mode = time_collection_mode(sort, force_refresh, stop_before_time)
-        if mode["mode_message"]:
-            self.log(mode["mode_message"])
-        return mode["enable_time_dedupe"]
+        return run_initialize_time_collection_mode(self, sort, start_time, stop_before_time, force_refresh)
 
     def _should_stop_time_collection_initially(self) -> bool:
-        if self.check_stop():
-            self.log(time_collection_initial_stop_message())
-            return True
-
-        return False
+        return run_should_stop_time_collection_initially(self)
 
     def _prepare_time_collection_loop_context(
         self,
@@ -3428,12 +3242,10 @@ class ZSXQFileDownloader:
         db_latest_time: Optional[Any],
         stop_before_time: Optional[datetime.datetime],
     ) -> tuple[Dict[str, int], TimeCollectionLoopContext]:
-        total_imported_stats = empty_import_stats()
-        return total_imported_stats, TimeCollectionLoopContext(
+        return run_prepare_time_collection_loop_context(
             sort,
             enable_time_dedupe,
             db_latest_time,
-            total_imported_stats,
             stop_before_time,
         )
 
@@ -3444,49 +3256,19 @@ class ZSXQFileDownloader:
         enable_time_dedupe: bool,
         stop_before_time: Optional[datetime.datetime],
     ) -> Dict[str, int]:
-        database_state = self._load_time_collection_database_state(
-            enable_time_dedupe,
-        )
-
-        total_imported_stats, loop_context = self._prepare_time_collection_loop_context(
+        return run_time_collection_after_initial_stop(
+            self,
+            start_time,
             sort,
             enable_time_dedupe,
-            database_state.db_latest_time,
             stop_before_time,
-        )
-        page_count = self._run_time_collection_loop(
-            start_time,
-            loop_context,
-        )
-
-        return self._finalize_time_collection_result(
-            database_state.initial_files,
-            total_imported_stats,
-            page_count,
         )
 
     def _collect_files_by_time_target(
         self,
         target: TimeCollectionTarget,
     ) -> Dict[str, int]:
-        enable_time_dedupe = self._initialize_time_collection_mode(
-            target.sort,
-            target.start_time,
-            target.stop_before_time,
-            target.force_refresh,
-        )
-
-        # 检查是否需要停止
-        if self._should_stop_time_collection_initially():
-            return {'total_files': 0, 'new_files': 0}
-
-        # 使用完整数据库的统计信息
-        return self._run_time_collection_after_initial_stop(
-            target.start_time,
-            target.sort,
-            enable_time_dedupe,
-            target.stop_before_time,
-        )
+        return run_file_time_collection(self, target)
 
     def collect_files_by_time(
         self,
