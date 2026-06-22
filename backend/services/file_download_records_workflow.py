@@ -5,6 +5,15 @@ from __future__ import annotations
 from typing import Any, Dict, Optional, Sequence
 
 from backend.crawlers.zsxq_file_downloader import ZSXQFileDownloader
+from backend.services.file_record_download_batch import (
+    build_download_file_info,
+    build_download_task_stats,
+    complete_download_records_task,
+    complete_empty_download_records_task,
+    download_record_for_task,
+    download_result_stat_key,
+    run_download_records,
+)
 from backend.services.file_downloader_runtime import (
     _create_file_downloader,
     _safe_remove_file_downloader,
@@ -25,14 +34,7 @@ from backend.storage.zsxq_file_database import (
 
 
 def _build_download_task_stats(total_files: int, found: int, missing: int = 0) -> Dict[str, int]:
-    return {
-        "total_files": int(total_files),
-        "found": int(found),
-        "missing": int(missing),
-        "downloaded": 0,
-        "skipped": 0,
-        "failed": 0,
-    }
+    return build_download_task_stats(total_files, found, missing)
 
 
 def _build_download_file_info(
@@ -41,15 +43,11 @@ def _build_download_file_info(
     file_size: int,
     download_count: int = 0,
 ) -> Dict[str, Dict[str, Any]]:
-    return DownloadFileRecord(file_id, file_name, file_size, download_count).to_downloader_payload()
+    return build_download_file_info(file_id, file_name, file_size, download_count)
 
 
 def _download_result_stat_key(result: Any) -> str:
-    if result == "skipped":
-        return "skipped"
-    if result:
-        return "downloaded"
-    return "failed"
+    return download_result_stat_key(result)
 
 
 def _file_task_stopped_after_init(task_id: str) -> bool:
@@ -90,14 +88,14 @@ def _run_download_records(
     records: Sequence[DownloadFileRecord],
     stats: Dict[str, int],
 ) -> Dict[str, int]:
-    total_records = len(records)
-    for index, record in enumerate(records, 1):
-        if is_task_stopped(task_id):
-            add_task_log(task_id, "🛑 下载任务被停止")
-            return stats
-
-        _download_record_for_task(task_id, downloader, record, index, total_records, stats)
-    return stats
+    return run_download_records(
+        task_id,
+        downloader,
+        records,
+        stats,
+        is_stopped=is_task_stopped,
+        add_log=add_task_log,
+    )
 
 
 def _download_record_for_task(
@@ -108,9 +106,15 @@ def _download_record_for_task(
     total_records: int,
     stats: Dict[str, int],
 ) -> None:
-    add_task_log(task_id, f"【{index}/{total_records}】{record.name}")
-    result = downloader.download_file(record.to_downloader_payload())
-    stats[_download_result_stat_key(result)] += 1
+    download_record_for_task(
+        task_id,
+        downloader,
+        record,
+        index,
+        total_records,
+        stats,
+        add_log=add_task_log,
+    )
 
 
 def _complete_download_records_task(
@@ -119,16 +123,21 @@ def _complete_download_records_task(
     records: Sequence[DownloadFileRecord],
     stats: Dict[str, int],
 ) -> Any:
-    _run_download_records(task_id, downloader, records, stats)
-    if is_task_stopped(task_id):
-        return skip_workflow_completion()
-    return {"downloaded_files": stats}
+    return complete_download_records_task(
+        task_id,
+        downloader,
+        records,
+        stats,
+        is_stopped=is_task_stopped,
+        run_records=_run_download_records,
+        skip_completion=skip_workflow_completion,
+    )
 
 
 def _complete_empty_download_records_task(
     stats: Dict[str, int],
 ) -> Dict[str, Dict[str, int]]:
-    return {"downloaded_files": stats}
+    return complete_empty_download_records_task(stats)
 
 
 def _download_selected_file_records(

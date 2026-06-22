@@ -18,6 +18,7 @@ from backend.services.file_download_records_workflow import (
     _load_filtered_download_file_records,
     _run_download_records,
 )
+from backend.services.file_record_download_batch import run_download_records as run_file_record_download_batch
 from backend.services.file_single_download_workflow import _complete_successful_single_file_download
 from backend.services.file_read_model import (
     _build_check_local_file_status_response,
@@ -2431,6 +2432,37 @@ class FileRoutesHelperTests(unittest.TestCase):
             ],
             [call.args for call in add_task_log.call_args_list],
         )
+
+    def test_file_record_download_batch_runs_through_injected_interface(self):
+        class FakeDownloader:
+            def __init__(self):
+                self.download_calls = []
+
+            def download_file(self, file_info):
+                self.download_calls.append(file_info)
+                return True
+
+        downloader = FakeDownloader()
+        records = [DownloadFileRecord(101, "First.pdf", 123, 7)]
+        stats = _build_download_task_stats(total_files=1, found=1)
+        logs = []
+
+        result = run_file_record_download_batch(
+            "task-1",
+            downloader,
+            records,
+            stats,
+            is_stopped=lambda _task_id: False,
+            add_log=lambda task_id, message: logs.append((task_id, message)),
+        )
+
+        self.assertIs(result, stats)
+        self.assertEqual(1, stats["downloaded"])
+        self.assertEqual(
+            [{"file": {"id": 101, "name": "First.pdf", "size": 123, "download_count": 7}}],
+            downloader.download_calls,
+        )
+        self.assertEqual([("task-1", "【1/1】First.pdf")], logs)
 
     def test_run_download_records_stops_before_next_record(self):
         class FakeDownloader:
