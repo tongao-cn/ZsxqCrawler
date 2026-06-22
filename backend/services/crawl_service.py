@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, NamedTuple, Optional
 
@@ -22,6 +21,13 @@ from backend.services.crawl_time_range import (
     parse_user_time as _parse_user_time,
     resolve_time_range as _resolve_time_range,
     topic_time as _topic_time,
+)
+from backend.services.crawl_topic_source import (
+    LEGACY_TOPIC_SOURCE_ALIASES,
+    OFFICIAL_TOPIC_SOURCE_ALIASES,
+    normalize_topic_source as _normalize_topic_source,
+    resolve_topic_source as _resolve_topic_source,
+    uses_official_topic_source as _uses_official_topic_source,
 )
 from backend.services.official_topic_page_importer import (
     add_official_import_result,
@@ -63,11 +69,6 @@ from backend.storage.zsxq_database import ZSXQDatabase
 INIT_STOPPED_MESSAGE = "🛑 任务在初始化过程中被停止"
 
 CRAWLER_STARTUP_LOGS = ("📡 连接到知识星球API...", "🔍 检查数据库状态...")
-# official means the MCP HTTP flow; "cli" is accepted only as an old spelling
-# and does not shell out to zsxq-cli.
-OFFICIAL_TOPIC_SOURCE_ALIASES = {"official", "cli", "mcp"}
-# legacy means the cookie-based ZSXQTopicCrawler fallback.
-LEGACY_TOPIC_SOURCE_ALIASES = {"legacy", "crawler", "cookie"}
 LEGACY_TIME_RANGE_DEFAULT_PER_PAGE = 20
 LEGACY_TIME_RANGE_MAX_RETRIES_PER_PAGE = 10
 
@@ -135,26 +136,6 @@ def _apply_crawl_settings(crawler: Any, crawl_settings: Any, require_overrides: 
 
     crawler.set_custom_intervals(**_crawl_interval_kwargs(crawl_settings))
     return True
-
-def _normalize_topic_source(value: Optional[str]) -> Optional[str]:
-    text = (value or "").strip().lower()
-    if not text:
-        return None
-    if text in OFFICIAL_TOPIC_SOURCE_ALIASES:
-        return "official"
-    if text in LEGACY_TOPIC_SOURCE_ALIASES:
-        return "legacy"
-    return None
-
-def _resolve_topic_source(request: Any) -> str:
-    return (
-        _normalize_topic_source(getattr(request, "topicSource", None))
-        or _normalize_topic_source(os.getenv("ZSXQ_TOPIC_SOURCE"))
-        or "official"
-    )
-
-def _uses_official_topic_source(request: Any) -> bool:
-    return _resolve_topic_source(request) == "official"
 
 def _mark_expired_task(task_id: str, result: dict[str, Any], default_message: str = "成员体验已到期") -> None:
     message = result.get("message", default_message)
