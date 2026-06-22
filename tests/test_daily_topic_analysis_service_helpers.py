@@ -82,12 +82,12 @@ class DailyTopicAnalysisServiceHelperTests(unittest.TestCase):
 
     @unittest.skipUnless(HAS_DAILY_SERVICE_DEPS, "daily topic analysis service dependencies are not installed")
     def test_generate_daily_report_summary_uses_single_request_for_small_payload(self):
-        from backend.services import daily_topic_analysis_service as service
+        from backend.services import daily_topic_report_generation as generation
 
         topics = [{"topic_id": "1", "talk_text": "small", "comments": [], "images": []}]
 
-        with patch.object(service, "_generate_report_with_ai", return_value=("# report", "model-a")) as generate_report:
-            summary, model, meta = service._generate_daily_report_summary(
+        with patch.object(generation, "generate_report_with_ai", return_value=("# report", "model-a")) as generate_report:
+            summary, model, meta = generation.generate_daily_report_summary(
                 group_id="group-1",
                 report_date="2026-05-07",
                 topics=topics,
@@ -100,20 +100,20 @@ class DailyTopicAnalysisServiceHelperTests(unittest.TestCase):
 
     @unittest.skipUnless(HAS_DAILY_SERVICE_DEPS, "daily topic analysis service dependencies are not installed")
     def test_generate_daily_report_summary_retries_without_images(self):
-        from backend.services import daily_topic_analysis_service as service
+        from backend.services import daily_topic_report_generation as generation
 
         topics = [{"topic_id": "1", "talk_text": "small", "comments": [], "images": [{"url": "https://example.com/a.jpg"}]}]
 
         with patch.object(
-            service,
-            "_collect_report_images",
+            generation,
+            "collect_report_images",
             return_value=[{"image_ref": "topic_1_image_1", "url": "https://example.com/a.jpg"}],
         ), patch.object(
-            service,
-            "_generate_report_with_ai",
+            generation,
+            "generate_report_with_ai",
             side_effect=[RuntimeError("upstream failed"), ("# report", "model-a")],
         ) as generate_report:
-            summary, model, meta = service._generate_daily_report_summary(
+            summary, model, meta = generation.generate_daily_report_summary(
                 group_id="group-1",
                 report_date="2026-05-07",
                 topics=topics,
@@ -127,27 +127,27 @@ class DailyTopicAnalysisServiceHelperTests(unittest.TestCase):
 
     @unittest.skipUnless(HAS_DAILY_SERVICE_DEPS, "daily topic analysis service dependencies are not installed")
     def test_generate_daily_report_summary_chunks_large_payload(self):
-        from backend.services import daily_topic_analysis_service as service
+        from backend.services import daily_topic_report_generation as generation
 
         topics = [
             {"topic_id": "1", "talk_text": "a" * 40, "comments": [], "images": []},
             {"topic_id": "2", "talk_text": "b" * 40, "comments": [], "images": []},
         ]
 
-        with patch.object(service, "MAX_PROMPT_CHARS", 100), patch.object(
-            service,
-            "_split_topics_for_report_chunks",
+        with patch.object(generation, "MAX_PROMPT_CHARS", 100), patch.object(
+            generation,
+            "split_topics_for_report_chunks",
             return_value=[[topics[0]], [topics[1]]],
         ) as generate_chunk, patch.object(
-            service,
-            "_generate_chunk_summaries_concurrently",
+            generation,
+            "generate_chunk_summaries_concurrently",
             return_value=(["chunk-1", "chunk-2"], "model-a", 2),
         ) as generate_chunks, patch.object(
-            service,
-            "_generate_final_report_from_chunks_with_retry",
+            generation,
+            "generate_final_report_from_chunks_with_retry",
             return_value=("# final", "model-a", False, False),
         ) as generate_final:
-            summary, model, meta = service._generate_daily_report_summary(
+            summary, model, meta = generation.generate_daily_report_summary(
                 group_id="group-1",
                 report_date="2026-05-07",
                 topics=topics,
@@ -167,24 +167,25 @@ class DailyTopicAnalysisServiceHelperTests(unittest.TestCase):
 
     @unittest.skipUnless(HAS_DAILY_SERVICE_DEPS, "daily topic analysis service dependencies are not installed")
     def test_generate_final_report_from_chunks_retries_with_shorter_summaries(self):
-        from backend.services import daily_topic_analysis_service as service
+        from backend.services import daily_topic_report_generation as generation
 
         prompts = []
 
-        def fake_call(prompt, *, group_id, image_inputs):
+        def fake_call(prompt, *, group_id, image_inputs, max_image_bytes):
             prompts.append(prompt)
             self.assertEqual("group-1", group_id)
             self.assertEqual([], image_inputs)
+            self.assertEqual(generation.MAX_IMAGE_BYTES, max_image_bytes)
             if len(prompts) == 1:
                 raise RuntimeError("upstream failed")
             return "# final", "model-a"
 
-        with patch.object(service, "MAX_FINAL_CHUNK_SUMMARY_CHARS", 20), patch.object(
-            service,
+        with patch.object(generation, "MAX_FINAL_CHUNK_SUMMARY_CHARS", 20), patch.object(
+            generation,
             "MAX_FINAL_RETRY_CHUNK_SUMMARY_CHARS",
             8,
-        ), patch.object(service, "_call_report_ai", side_effect=fake_call):
-            summary, model, clipped, retried = service._generate_final_report_from_chunks_with_retry(
+        ), patch.object(generation, "call_report_ai", side_effect=fake_call):
+            summary, model, clipped, retried = generation.generate_final_report_from_chunks_with_retry(
                 ["a" * 40, "b" * 40],
                 "2026-05-07",
                 group_id="group-1",
@@ -199,7 +200,7 @@ class DailyTopicAnalysisServiceHelperTests(unittest.TestCase):
 
     @unittest.skipUnless(HAS_DAILY_SERVICE_DEPS, "daily topic analysis service dependencies are not installed")
     def test_generate_chunk_summaries_concurrently_preserves_chunk_order(self):
-        from backend.services import daily_topic_analysis_service as service
+        from backend.services import daily_topic_report_generation as generation
 
         chunks = [
             [{"topic_id": "1", "talk_text": "a", "comments": [], "images": []}],
@@ -212,12 +213,12 @@ class DailyTopicAnalysisServiceHelperTests(unittest.TestCase):
             self.assertEqual(3, chunk_count)
             return f"chunk-{chunk_index}", f"model-{chunk_index}"
 
-        with patch.object(service, "MAX_REPORT_CHUNK_WORKERS", 2), patch.object(
-            service,
-            "_generate_chunk_summary_with_ai",
+        with patch.object(generation, "MAX_REPORT_CHUNK_WORKERS", 2), patch.object(
+            generation,
+            "generate_chunk_summary_with_ai",
             side_effect=fake_generate,
         ):
-            summaries, model, workers = service._generate_chunk_summaries_concurrently(
+            summaries, model, workers = generation.generate_chunk_summaries_concurrently(
                 chunks,
                 "2026-05-07",
                 group_id="group-1",
