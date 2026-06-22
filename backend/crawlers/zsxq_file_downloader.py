@@ -65,6 +65,13 @@ from backend.crawlers.file_collection_runner import (
     run_file_collection_page,
     update_file_collection_log as run_update_file_collection_log,
 )
+from backend.crawlers.file_incremental_collection_runner import (
+    collect_files_for_date_range as run_collect_files_for_date_range,
+    collect_files_for_normalized_date_range as run_collect_files_for_normalized_date_range,
+    collect_incremental_files as run_collect_incremental_files,
+    collect_incremental_from_oldest_time as run_collect_incremental_from_oldest_time,
+    collect_incremental_from_time_info as run_collect_incremental_from_time_info,
+)
 from backend.crawlers.file_batch_download_runner import (
     apply_batch_download_next_page as run_apply_batch_download_next_page,
     apply_batch_download_result as run_apply_batch_download_result,
@@ -180,7 +187,6 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     database_stats_table_emoji,
     database_stats_time_range_query,
     database_stats_total_size_query,
-    date_range_collection_start_messages,
     download_settings_display_lines,
     download_file_data,
     download_exception_detail,
@@ -203,17 +209,8 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     file_list_next_index_message,
     file_list_response_page,
     http_failure_plan,
-    incremental_collection_empty_database_message,
-    incremental_collection_missing_time_message,
-    incremental_collection_start_index_message,
-    incremental_collection_start_message,
-    incremental_collection_status_messages,
-    incremental_collection_target_message,
-    incremental_collection_timestamp_failure_messages,
-    incremental_start_index,
     json_decode_failure_plan,
     latest_file_create_time_query,
-    normalize_date_range,
     page_crosses_stop_before,
     partial_download_path,
     remove_partial_download,
@@ -2477,36 +2474,10 @@ class ZSXQFileDownloader:
         return run_finalize_time_collection_result(self, initial_files, total_imported_stats, page_count)
 
     def _collect_incremental_from_oldest_time(self, oldest_time: Any) -> Dict[str, int]:
-        self.log(incremental_collection_target_message())
-
-        try:
-            start_index = incremental_start_index(oldest_time)
-            self.log(incremental_collection_start_index_message(start_index))
-
-            return self.collect_files_by_time(start_time=start_index)
-
-        except Exception as e:
-            for message in incremental_collection_timestamp_failure_messages(e):
-                self.log(message)
-            return self.collect_files_by_time()
+        return run_collect_incremental_from_oldest_time(self, oldest_time)
 
     def _collect_incremental_from_time_info(self, time_info: Dict[str, Any]) -> Dict[str, int]:
-        if not time_info['has_data']:
-            self.log(incremental_collection_empty_database_message())
-            return self.collect_files_by_time()
-
-        oldest_time = time_info['oldest_time']
-        # Preserve historical key validation before emitting status logs.
-        _ = (time_info['newest_time'], time_info['total_files'])
-
-        for message in incremental_collection_status_messages(time_info):
-            self.log(message)
-
-        if not oldest_time:
-            self.log(incremental_collection_missing_time_message())
-            return self.collect_files_by_time()
-
-        return self._collect_incremental_from_oldest_time(oldest_time)
+        return run_collect_incremental_from_time_info(self, time_info)
 
     def _collect_files_for_normalized_date_range(
         self,
@@ -2514,12 +2485,11 @@ class ZSXQFileDownloader:
         normalized_end: Optional[str],
         stop_before_dt: Optional[datetime.datetime],
     ) -> Dict[str, int]:
-        for message in date_range_collection_start_messages(normalized_start, normalized_end):
-            self.log(message)
-        return self.collect_files_by_time(
-            sort="by_create_time",
-            start_time=None,
-            stop_before_time=stop_before_dt,
+        return run_collect_files_for_normalized_date_range(
+            self,
+            normalized_start,
+            normalized_end,
+            stop_before_dt,
         )
 
     def _initialize_time_collection_mode(
@@ -2594,31 +2564,13 @@ class ZSXQFileDownloader:
         self,
         target: IncrementalCollectionTarget,
     ) -> Dict[str, int]:
-        self.log(incremental_collection_start_message())
-
-        # 检查是否需要停止
-        if self._should_stop_time_collection_initially():
-            return {'total_files': 0, 'new_files': 0}
-
-        # 获取数据库时间范围
-        time_info = self.get_database_time_range()
-
-        return self._collect_incremental_from_time_info(time_info)
+        return run_collect_incremental_files(self, target)
 
     def _collect_files_for_date_range_target(
         self,
         target: DateRangeCollectionTarget,
     ) -> Dict[str, int]:
-        normalized_start, normalized_end, stop_before_dt = normalize_date_range(
-            start_date=target.start_date,
-            end_date=target.end_date,
-            last_days=target.last_days,
-        )
-        return self._collect_files_for_normalized_date_range(
-            normalized_start,
-            normalized_end,
-            stop_before_dt,
-        )
+        return run_collect_files_for_date_range(self, target)
 
     def collect_files_for_date_range(
         self,

@@ -1114,14 +1114,12 @@ class FileDownloaderPaginationTests(unittest.TestCase):
         downloader.get_database_time_range = get_database_time_range
 
         with (
-            patch.object(
-                ZSXQFileDownloader,
-                "_should_stop_time_collection_initially",
+            patch(
+                "backend.crawlers.file_incremental_collection_runner.should_stop_time_collection_initially",
                 should_stop_time_collection_initially,
             ),
-            patch.object(
-                ZSXQFileDownloader,
-                "_collect_incremental_from_time_info",
+            patch(
+                "backend.crawlers.file_incremental_collection_runner.collect_incremental_from_time_info",
                 collect_incremental_from_time_info,
             ),
         ):
@@ -1262,12 +1260,11 @@ class FileDownloaderPaginationTests(unittest.TestCase):
 
         with (
             patch(
-                "backend.crawlers.zsxq_file_downloader.normalize_date_range",
+                "backend.crawlers.file_incremental_collection_runner.normalize_date_range",
                 normalize_date_range_target,
             ),
-            patch.object(
-                ZSXQFileDownloader,
-                "_collect_files_for_normalized_date_range",
+            patch(
+                "backend.crawlers.file_incremental_collection_runner.collect_files_for_normalized_date_range",
                 collect_files_for_normalized_date_range,
             ),
         ):
