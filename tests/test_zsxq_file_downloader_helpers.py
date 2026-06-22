@@ -1403,11 +1403,13 @@ class FileDownloaderPaginationTests(unittest.TestCase):
         calls = []
         loop_import_stats = []
 
-        def load_database_state(enable_time_dedupe):
+        def load_database_state(runtime, enable_time_dedupe):
+            self.assertIs(downloader, runtime)
             calls.append(("load_state", enable_time_dedupe))
             return TimeCollectionDatabaseState(10, "latest-time")
 
-        def run_loop(start_time, context):
+        def run_loop(runtime, start_time, context):
+            self.assertIs(downloader, runtime)
             loop_import_stats.append(context.total_imported_stats)
             calls.append(
                 (
@@ -1422,7 +1424,8 @@ class FileDownloaderPaginationTests(unittest.TestCase):
             context.total_imported_stats["files"] = 2
             return 4
 
-        def finalize(initial_files, total_imported_stats, page_count):
+        def finalize(runtime, initial_files, total_imported_stats, page_count):
+            self.assertIs(downloader, runtime)
             calls.append(
                 (
                     "finalize",
@@ -1433,17 +1436,18 @@ class FileDownloaderPaginationTests(unittest.TestCase):
             )
             return expected_stats
 
-        downloader._load_time_collection_database_state = load_database_state
-        downloader._run_time_collection_loop = run_loop
-        downloader._finalize_time_collection_result = finalize
-
-        stats = ZSXQFileDownloader._run_time_collection_after_initial_stop(
-            downloader,
-            start_time="cursor-1",
-            sort="by_create_time",
-            enable_time_dedupe=True,
-            stop_before_time=stop_before_time,
-        )
+        with (
+            patch("backend.crawlers.file_time_collection_runner.load_time_collection_database_state", load_database_state),
+            patch("backend.crawlers.file_time_collection_runner.run_time_collection_loop", run_loop),
+            patch("backend.crawlers.file_time_collection_runner.finalize_time_collection_result", finalize),
+        ):
+            stats = ZSXQFileDownloader._run_time_collection_after_initial_stop(
+                downloader,
+                start_time="cursor-1",
+                sort="by_create_time",
+                enable_time_dedupe=True,
+                stop_before_time=stop_before_time,
+            )
 
         self.assertIs(expected_stats, stats)
         self.assertEqual("load_state", calls[0][0])
@@ -1477,19 +1481,19 @@ class FileDownloaderPaginationTests(unittest.TestCase):
         downloader.log = downloader.logs.append
         downloader.check_stop = lambda: stop_calls.append("check") or False
 
-        def collect_page(page_count, current_index, context_arg):
+        def collect_page(runtime, page_count, current_index, context_arg):
+            self.assertIs(downloader, runtime)
             collect_calls.append((page_count, current_index, context_arg))
             if page_count == 1:
                 return "cursor-2"
             return None
 
-        downloader._collect_time_collection_page = collect_page
-
-        page_count = ZSXQFileDownloader._run_time_collection_loop(
-            downloader,
-            "cursor-1",
-            context,
-        )
+        with patch("backend.crawlers.file_time_collection_runner.collect_time_collection_page", collect_page):
+            page_count = ZSXQFileDownloader._run_time_collection_loop(
+                downloader,
+                "cursor-1",
+                context,
+            )
 
         self.assertEqual(2, page_count)
         self.assertEqual(["check", "check"], stop_calls)
@@ -1504,15 +1508,16 @@ class FileDownloaderPaginationTests(unittest.TestCase):
         downloader.logs = []
         downloader.log = downloader.logs.append
         downloader.check_stop = lambda: True
-        downloader._collect_time_collection_page = lambda *args: self.fail(
-            "stopped loop should not collect a page"
-        )
 
-        page_count = ZSXQFileDownloader._run_time_collection_loop(
-            downloader,
-            "cursor-1",
-            context,
-        )
+        with patch(
+            "backend.crawlers.file_time_collection_runner.collect_time_collection_page",
+            lambda *args: self.fail("stopped loop should not collect a page"),
+        ):
+            page_count = ZSXQFileDownloader._run_time_collection_loop(
+                downloader,
+                "cursor-1",
+                context,
+            )
 
         self.assertEqual(0, page_count)
         self.assertEqual([time_collection_loop_stop_message()], downloader.logs)
@@ -1524,19 +1529,19 @@ class FileDownloaderPaginationTests(unittest.TestCase):
         downloader.log = downloader.logs.append
         downloader.check_stop = lambda: False
 
-        def collect_page(page_count, current_index, context_arg):
+        def collect_page(runtime, page_count, current_index, context_arg):
+            self.assertIs(downloader, runtime)
             self.assertEqual(1, page_count)
             self.assertEqual("cursor-1", current_index)
             self.assertIs(context, context_arg)
             raise RuntimeError("stable collection failure")
 
-        downloader._collect_time_collection_page = collect_page
-
-        page_count = ZSXQFileDownloader._run_time_collection_loop(
-            downloader,
-            "cursor-1",
-            context,
-        )
+        with patch("backend.crawlers.file_time_collection_runner.collect_time_collection_page", collect_page):
+            page_count = ZSXQFileDownloader._run_time_collection_loop(
+                downloader,
+                "cursor-1",
+                context,
+            )
 
         self.assertEqual(1, page_count)
         self.assertEqual(
@@ -1553,26 +1558,29 @@ class FileDownloaderPaginationTests(unittest.TestCase):
         )
         calls = []
 
-        def apply_dedupe(data, files, enable_time_dedupe, db_latest_time):
+        def apply_dedupe(runtime, data, files, enable_time_dedupe, db_latest_time):
+            self.assertIs(downloader, runtime)
             calls.append(("dedupe", data, files, enable_time_dedupe, db_latest_time))
             return {
                 "should_stop_before_insert": True,
                 "should_stop_after_insert": False,
             }
 
-        downloader._apply_time_collection_dedupe_plan = apply_dedupe
-        downloader._import_time_collection_page = lambda *args: self.fail(
-            "stop-before dedupe should skip page import"
-        )
-
-        result = ZSXQFileDownloader._dedupe_and_import_time_collection_page(
-            downloader,
-            page,
-            3,
-            True,
-            "latest-time",
-            {"files": 0},
-        )
+        with (
+            patch("backend.crawlers.file_time_collection_runner.apply_time_collection_dedupe_plan", apply_dedupe),
+            patch(
+                "backend.crawlers.file_time_collection_runner.import_time_collection_page",
+                lambda *args: self.fail("stop-before dedupe should skip page import"),
+            ),
+        ):
+            result = ZSXQFileDownloader._dedupe_and_import_time_collection_page(
+                downloader,
+                page,
+                3,
+                True,
+                "latest-time",
+                {"files": 0},
+            )
 
         self.assertIsNone(result)
         self.assertEqual([("dedupe", page.data, page.files, True, "latest-time")], calls)
@@ -1583,25 +1591,31 @@ class FileDownloaderPaginationTests(unittest.TestCase):
         total_stats = {"files": 0}
         calls = []
 
-        downloader._apply_time_collection_dedupe_plan = lambda data, files, enabled, latest: {
-            "should_stop_before_insert": False,
-            "should_stop_after_insert": True,
-        }
-        downloader._import_time_collection_page = (
-            lambda data, page_count, should_stop_after_insert, total_imported_stats: calls.append(
+        def import_page(runtime, data, page_count, should_stop_after_insert, total_imported_stats):
+            self.assertIs(downloader, runtime)
+            calls.append(
                 (data, page_count, should_stop_after_insert, total_imported_stats)
             )
-            or False
-        )
+            return False
 
-        result = ZSXQFileDownloader._dedupe_and_import_time_collection_page(
-            downloader,
-            page,
-            4,
-            False,
-            None,
-            total_stats,
-        )
+        with (
+            patch(
+                "backend.crawlers.file_time_collection_runner.apply_time_collection_dedupe_plan",
+                lambda _runtime, data, files, enabled, latest: {
+                    "should_stop_before_insert": False,
+                    "should_stop_after_insert": True,
+                },
+            ),
+            patch("backend.crawlers.file_time_collection_runner.import_time_collection_page", import_page),
+        ):
+            result = ZSXQFileDownloader._dedupe_and_import_time_collection_page(
+                downloader,
+                page,
+                4,
+                False,
+                None,
+                total_stats,
+            )
 
         self.assertIsNone(result)
         self.assertEqual([(page.data, 4, True, total_stats)], calls)
@@ -1612,25 +1626,31 @@ class FileDownloaderPaginationTests(unittest.TestCase):
         total_stats = {"files": 0}
         calls = []
 
-        downloader._apply_time_collection_dedupe_plan = lambda data, files, enabled, latest: {
-            "should_stop_before_insert": False,
-            "should_stop_after_insert": False,
-        }
-        downloader._import_time_collection_page = (
-            lambda data, page_count, should_stop_after_insert, total_imported_stats: calls.append(
+        def import_page(runtime, data, page_count, should_stop_after_insert, total_imported_stats):
+            self.assertIs(downloader, runtime)
+            calls.append(
                 (data, page_count, should_stop_after_insert, total_imported_stats)
             )
-            or True
-        )
+            return True
 
-        result = ZSXQFileDownloader._dedupe_and_import_time_collection_page(
-            downloader,
-            page,
-            5,
-            True,
-            "latest-time",
-            total_stats,
-        )
+        with (
+            patch(
+                "backend.crawlers.file_time_collection_runner.apply_time_collection_dedupe_plan",
+                lambda _runtime, data, files, enabled, latest: {
+                    "should_stop_before_insert": False,
+                    "should_stop_after_insert": False,
+                },
+            ),
+            patch("backend.crawlers.file_time_collection_runner.import_time_collection_page", import_page),
+        ):
+            result = ZSXQFileDownloader._dedupe_and_import_time_collection_page(
+                downloader,
+                page,
+                5,
+                True,
+                "latest-time",
+                total_stats,
+            )
 
         self.assertEqual((False,), result)
         self.assertFalse(result.should_stop_after_insert)
@@ -1686,19 +1706,16 @@ class FileDownloaderPaginationTests(unittest.TestCase):
             return expected_stats
 
         with (
-            patch.object(
-                ZSXQFileDownloader,
-                "_initialize_time_collection_mode",
+            patch(
+                "backend.crawlers.file_time_collection_runner.initialize_time_collection_mode",
                 initialize_time_collection_mode,
             ),
-            patch.object(
-                ZSXQFileDownloader,
-                "_should_stop_time_collection_initially",
+            patch(
+                "backend.crawlers.file_time_collection_runner.should_stop_time_collection_initially",
                 should_stop_time_collection_initially,
             ),
-            patch.object(
-                ZSXQFileDownloader,
-                "_run_time_collection_after_initial_stop",
+            patch(
+                "backend.crawlers.file_time_collection_runner.run_time_collection_after_initial_stop",
                 run_time_collection_after_initial_stop,
             ),
         ):

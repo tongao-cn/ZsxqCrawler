@@ -126,7 +126,8 @@ def load_time_collection_database_state(
     initial_stats = runtime.file_db.get_database_stats()
     initial_files = initial_stats.get("files", 0)
     runtime.log(time_collection_database_status_message(initial_files))
-    db_latest_time = runtime._load_time_collection_latest_file_time(  # type: ignore[attr-defined]
+    db_latest_time = load_time_collection_latest_file_time(
+        runtime,
         enable_time_dedupe,
         initial_files,
     )
@@ -151,24 +152,24 @@ def apply_time_collection_dedupe_plan(
     db_latest_time: Optional[Any],
 ) -> Dict[str, bool]:
     if not enable_time_dedupe or not db_latest_time:
-        return runtime._time_collection_dedupe_result()  # type: ignore[attr-defined]
+        return time_collection_dedupe_result()
 
     dedupe_plan = time_dedupe_page_plan(files, db_latest_time)
     for message in time_dedupe_page_messages(dedupe_plan):
         runtime.log(message)
 
     if dedupe_plan["should_stop_before_insert"]:
-        return runtime._time_collection_dedupe_result(  # type: ignore[attr-defined]
+        return time_collection_dedupe_result(
             should_stop_before_insert=True,
         )
 
     if dedupe_plan["should_filter_before_insert"]:
         data["resp_data"]["files"] = dedupe_plan["newer_files"]
-        return runtime._time_collection_dedupe_result(  # type: ignore[attr-defined]
+        return time_collection_dedupe_result(
             should_stop_after_insert=dedupe_plan["should_stop_after_insert"],
         )
 
-    return runtime._time_collection_dedupe_result()  # type: ignore[attr-defined]
+    return time_collection_dedupe_result()
 
 
 def import_time_collection_page(
@@ -256,10 +257,10 @@ def next_time_collection_page_after_import(
     if should_stop_after_insert:
         return None
 
-    if runtime._crossed_time_collection_stop_before(page.files, stop_before_time):  # type: ignore[attr-defined]
+    if crossed_time_collection_stop_before(runtime, page.files, stop_before_time):
         return None
 
-    return runtime._next_time_collection_index(page.next_index)  # type: ignore[attr-defined]
+    return next_time_collection_index(runtime, page.next_index)
 
 
 def time_collection_page_import_result(
@@ -269,7 +270,8 @@ def time_collection_page_import_result(
     should_stop_after_insert: bool,
     total_imported_stats: Dict[str, int],
 ) -> Optional[TimeCollectionPageImportResult]:
-    if not runtime._import_time_collection_page(  # type: ignore[attr-defined]
+    if not import_time_collection_page(
+        runtime,
         page.data,
         page_count,
         should_stop_after_insert,
@@ -288,7 +290,8 @@ def dedupe_and_import_time_collection_page(
     db_latest_time: Optional[Any],
     total_imported_stats: Dict[str, int],
 ) -> Optional[TimeCollectionPageImportResult]:
-    dedupe_result = runtime._apply_time_collection_dedupe_plan(  # type: ignore[attr-defined]
+    dedupe_result = apply_time_collection_dedupe_plan(
+        runtime,
         page.data,
         page.files,
         enable_time_dedupe,
@@ -298,7 +301,8 @@ def dedupe_and_import_time_collection_page(
         return None
     should_stop_after_insert = dedupe_result["should_stop_after_insert"]
 
-    return runtime._time_collection_page_import_result(  # type: ignore[attr-defined]
+    return time_collection_page_import_result(
+        runtime,
         page,
         page_count,
         should_stop_after_insert,
@@ -314,11 +318,12 @@ def collect_time_collection_page(
 ) -> Optional[Any]:
     runtime.log(time_collection_page_message(page_count))
 
-    page = runtime._fetch_time_collection_page(page_count, current_index, context.sort)  # type: ignore[attr-defined]
+    page = fetch_time_collection_page(runtime, page_count, current_index, context.sort)
     if page is None:
         return None
 
-    import_result = runtime._dedupe_and_import_time_collection_page(  # type: ignore[attr-defined]
+    import_result = dedupe_and_import_time_collection_page(
+        runtime,
         page,
         page_count,
         context.enable_time_dedupe,
@@ -328,7 +333,8 @@ def collect_time_collection_page(
     if import_result is None:
         return None
 
-    return runtime._next_time_collection_page_after_import(  # type: ignore[attr-defined]
+    return next_time_collection_page_after_import(
+        runtime,
         page,
         import_result.should_stop_after_insert,
         context.stop_before_time,
@@ -353,11 +359,12 @@ def run_time_collection_loop(
 
     try:
         while True:
-            if runtime._should_stop_time_collection_loop():  # type: ignore[attr-defined]
+            if should_stop_time_collection_loop(runtime):
                 break
 
             page_count += 1
-            current_index = runtime._collect_time_collection_page(  # type: ignore[attr-defined]
+            current_index = collect_time_collection_page(
+                runtime,
                 page_count,
                 current_index,
                 context,
@@ -440,22 +447,25 @@ def run_time_collection_after_initial_stop(
     enable_time_dedupe: bool,
     stop_before_time: Optional[datetime.datetime],
 ) -> Dict[str, int]:
-    database_state = runtime._load_time_collection_database_state(  # type: ignore[attr-defined]
+    database_state = load_time_collection_database_state(
+        runtime,
         enable_time_dedupe,
     )
 
-    total_imported_stats, loop_context = runtime._prepare_time_collection_loop_context(  # type: ignore[attr-defined]
+    total_imported_stats, loop_context = prepare_time_collection_loop_context(
         sort,
         enable_time_dedupe,
         database_state.db_latest_time,
         stop_before_time,
     )
-    page_count = runtime._run_time_collection_loop(  # type: ignore[attr-defined]
+    page_count = run_time_collection_loop(
+        runtime,
         start_time,
         loop_context,
     )
 
-    return runtime._finalize_time_collection_result(  # type: ignore[attr-defined]
+    return finalize_time_collection_result(
+        runtime,
         database_state.initial_files,
         total_imported_stats,
         page_count,
@@ -466,17 +476,19 @@ def run_file_time_collection(
     runtime: TimeCollectionRuntime,
     target: TimeCollectionTarget,
 ) -> Dict[str, int]:
-    enable_time_dedupe = runtime._initialize_time_collection_mode(  # type: ignore[attr-defined]
+    enable_time_dedupe = initialize_time_collection_mode(
+        runtime,
         target.sort,
         target.start_time,
         target.stop_before_time,
         target.force_refresh,
     )
 
-    if runtime._should_stop_time_collection_initially():  # type: ignore[attr-defined]
+    if should_stop_time_collection_initially(runtime):
         return {"total_files": 0, "new_files": 0}
 
-    return runtime._run_time_collection_after_initial_stop(  # type: ignore[attr-defined]
+    return run_time_collection_after_initial_stop(
+        runtime,
         target.start_time,
         target.sort,
         enable_time_dedupe,
