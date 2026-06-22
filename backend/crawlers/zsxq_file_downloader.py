@@ -24,6 +24,7 @@ from backend.crawlers.file_download_url import (
     DownloadUrlRetryLoopStepDecision,
     DownloadUrlRetryLoopTarget,
     download_url_retry_loop_step_decision,
+    run_download_url_attempt,
     run_download_url_retry_loop,
 )
 from backend.crawlers.file_download_transfer import (
@@ -349,7 +350,6 @@ from backend.crawlers.zsxq_file_downloader_targets import (
     DownloadUrlHttpFailureResponseTarget,
     DownloadUrlOkResponseTarget,
     DownloadUrlRequestExceptionTarget,
-    DownloadUrlRequestTarget,
     DownloadUrlResponseTarget,
     DownloadUrlSuccessEventTarget,
     DownloadUrlSuccessResponseTarget,
@@ -391,7 +391,6 @@ from backend.storage.zsxq_file_database import ZSXQFileDatabase
 
 
 DOWNLOAD_URL_MAX_RETRIES = 10
-DOWNLOAD_URL_REQUEST_TIMEOUT_SECONDS = 30
 DOWNLOAD_FILE_MAX_RETRIES = 3
 DOWNLOAD_FILE_RESPONSE_TIMEOUT_SECONDS = 300
 
@@ -1195,56 +1194,11 @@ class ZSXQFileDownloader:
         self.log(f"   🌐 请求URL: {url}")
         return url
 
-    def _request_download_url_response_target(
-        self,
-        target: DownloadUrlRequestTarget,
-    ) -> Any:
-        return self.session.get(
-            target.url,
-            headers=target.headers,
-            timeout=DOWNLOAD_URL_REQUEST_TIMEOUT_SECONDS,
-        )
-
     def _run_download_url_attempt_target(
         self,
         target: DownloadUrlAttemptTarget,
     ) -> DownloadUrlResponseDecision:
-        headers = self._prepare_retry_api_request(target.attempt, file_id=target.file_id)
-
-        try:
-            response = self._request_download_url_response_target(
-                DownloadUrlRequestTarget(target.url, headers),
-            )
-            return self._handle_download_url_attempt_response(target, headers, response)
-        except Exception as e:
-            return self._handle_download_url_attempt_exception(target, e)
-
-    def _handle_download_url_attempt_response(
-        self,
-        target: DownloadUrlAttemptTarget,
-        headers: Dict[str, str],
-        response: Any,
-    ) -> DownloadUrlResponseDecision:
-        return self._handle_download_url_response_target(
-            DownloadUrlResponseTarget(
-                response,
-                target.file_id,
-                target.attempt,
-                target.max_retries,
-                headers,
-            ),
-        )
-
-    def _handle_download_url_attempt_exception(
-        self,
-        target: DownloadUrlAttemptTarget,
-        exc: Exception,
-    ) -> DownloadUrlResponseDecision:
-        if self._handle_download_url_request_exception_target(
-            DownloadUrlRequestExceptionTarget(exc, target.attempt, target.max_retries),
-        ):
-            return DownloadUrlResponseDecision(None, True, False)
-        return DownloadUrlResponseDecision(None, False, False)
+        return run_download_url_attempt(self, target)
 
     def _download_url_retry_loop_step_decision(
         self,

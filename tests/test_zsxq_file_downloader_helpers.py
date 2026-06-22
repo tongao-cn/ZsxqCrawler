@@ -70,8 +70,10 @@ from backend.crawlers.file_collection_runner import (
     collect_all_files_to_database as run_file_collection_to_database,
 )
 from backend.crawlers.file_download_url import (
+    DownloadUrlAttemptTarget as UrlDownloadUrlAttemptTarget,
     DownloadUrlResponseDecision as UrlDownloadUrlResponseDecision,
     DownloadUrlRetryLoopTarget as UrlDownloadUrlRetryLoopTarget,
+    run_download_url_attempt,
     run_download_url_retry_loop as run_download_url_loop,
 )
 from backend.crawlers.file_list_response_runner import (
@@ -6661,7 +6663,7 @@ class FileDownloaderRetryHelperTests(unittest.TestCase):
         )
 
     def test_run_download_url_attempt_preserves_success_handoff_order(self):
-        downloader = object.__new__(ZSXQFileDownloader)
+        runtime = SimpleNamespace()
         headers = {"User-Agent": "unit-test-agent"}
         response = FakeJsonResponse()
         expected_decision = (None, True, False)
@@ -6670,10 +6672,6 @@ class FileDownloaderRetryHelperTests(unittest.TestCase):
         def prepare_retry_api_request(attempt, file_id=None):
             operations.append(("prepare", attempt, file_id))
             return headers
-
-        def request_download_url_response_target(target):
-            operations.append(("request", target.url, target.headers))
-            return response
 
         def handle_download_url_response_target(target):
             operations.append(
@@ -6688,58 +6686,66 @@ class FileDownloaderRetryHelperTests(unittest.TestCase):
             )
             return expected_decision
 
-        downloader._prepare_retry_api_request = prepare_retry_api_request
-        downloader._request_download_url_response_target = request_download_url_response_target
-        downloader._handle_download_url_response_target = handle_download_url_response_target
+        class RequestSession:
+            def get(self, url, headers=None, timeout=None):
+                operations.append(("request", url, headers, timeout))
+                return response
 
-        decision = ZSXQFileDownloader._run_download_url_attempt_target(
-            downloader,
-            DownloadUrlAttemptTarget(
+        runtime.session = RequestSession()
+        runtime._prepare_retry_api_request = prepare_retry_api_request
+        runtime._handle_download_url_response_target = handle_download_url_response_target
+
+        decision = run_download_url_attempt(
+            runtime,
+            UrlDownloadUrlAttemptTarget(
                 "https://api.example/v2/files/101/download_url",
                 101,
                 1,
                 3,
             ),
+            timeout_seconds=12,
         )
 
         self.assertIs(expected_decision, decision)
         self.assertEqual(
             [
                 ("prepare", 1, 101),
-                ("request", "https://api.example/v2/files/101/download_url", headers),
+                ("request", "https://api.example/v2/files/101/download_url", headers, 12),
                 ("response", response, 101, 1, 3, headers),
             ],
             operations,
         )
 
     def test_run_download_url_attempt_preserves_exception_retry_decision(self):
-        downloader = object.__new__(ZSXQFileDownloader)
+        runtime = SimpleNamespace()
         operations = []
 
         def prepare_retry_api_request(attempt, file_id=None):
             operations.append(("prepare", attempt, file_id))
             return {"User-Agent": "unit-test-agent"}
 
-        def request_download_url_response_target(target):
-            operations.append(("request", target.url, target.headers))
-            raise RuntimeError("socket reset")
-
         def handle_download_url_request_exception_target(target):
             operations.append(("exception", str(target.exc), target.attempt, target.max_retries))
             return True
 
-        downloader._prepare_retry_api_request = prepare_retry_api_request
-        downloader._request_download_url_response_target = request_download_url_response_target
-        downloader._handle_download_url_request_exception_target = handle_download_url_request_exception_target
+        class RequestSession:
+            def get(self, url, headers=None, timeout=None):
+                operations.append(("request", url, headers, timeout))
+                raise RuntimeError("socket reset")
 
-        decision = ZSXQFileDownloader._run_download_url_attempt_target(
-            downloader,
-            DownloadUrlAttemptTarget(
+        runtime.session = RequestSession()
+        runtime._prepare_retry_api_request = prepare_retry_api_request
+        runtime._handle_download_url_request_exception_target = handle_download_url_request_exception_target
+
+        decision = run_download_url_attempt(
+            runtime,
+            UrlDownloadUrlAttemptTarget(
                 "https://api.example/v2/files/202/download_url",
                 202,
                 0,
                 2,
             ),
+            timeout_seconds=12,
         )
 
         self.assertIsNone(decision.download_url)
@@ -6748,7 +6754,7 @@ class FileDownloaderRetryHelperTests(unittest.TestCase):
         self.assertEqual(
             [
                 ("prepare", 0, 202),
-                ("request", "https://api.example/v2/files/202/download_url", {"User-Agent": "unit-test-agent"}),
+                ("request", "https://api.example/v2/files/202/download_url", {"User-Agent": "unit-test-agent"}, 12),
                 ("exception", "socket reset", 0, 2),
             ],
             operations,
