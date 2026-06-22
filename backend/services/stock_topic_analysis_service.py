@@ -3,20 +3,15 @@
 from __future__ import annotations
 
 from datetime import date, timedelta
-from typing import Any, Callable, Dict, Iterable, List, Tuple
+from typing import Any, Callable, Dict, List, Tuple
 
 from backend.core.ai_provider_config import (
     get_openai_compatible_config,
     get_summary_reasoning_effort,
 )
-from backend.services.ai_runtime_request import (
-    AIRuntimeStructuredObjectParseError,
-    call_runtime_ai_text,
-    call_structured_ai_object,
-)
+from backend.services.ai_runtime_request import call_runtime_ai_text
 from backend.services.stock_topic_analysis_ai_prompts import (
     build_question_analysis_messages,
-    build_question_keyword_messages,
     build_stock_analysis_messages,
 )
 from backend.services.stock_topic_analysis_helpers import (
@@ -27,7 +22,6 @@ from backend.services.stock_topic_analysis_helpers import (
     _merge_topic_ids,
     _normalize_company_name,
     _normalize_text,
-    _ordered_unique,
     _parse_json_list,
     _reconcile_processed_topic_ids,
     _stock_analysis_mode,
@@ -41,6 +35,12 @@ from backend.services.stock_topic_image_input import (
 from backend.services.stock_topic_image_extraction import (
     IMAGE_STOCK_NAME_EXTRACTION_SCHEMA,
     extract_stock_names_from_image,
+)
+from backend.services.stock_topic_question_keywords import (
+    MAX_QUESTION_KEYWORDS,
+    QUESTION_KEYWORD_EXTRACTION_SCHEMA,
+    extract_question_keywords as _call_question_keyword_ai,
+    normalize_question_keywords as _normalize_question_keywords,
 )
 from backend.services.stock_topic_analysis_payloads import (
     build_analysis_topic_payload,
@@ -83,19 +83,7 @@ MAX_ANALYSIS_TOPICS_PER_CALL = 10
 MAX_TRACKED_TOPIC_IDS = 5000
 MAX_TOPIC_TEXT_CHARS = 1800
 MAX_ANALYSIS_PROMPT_CHARS = 50000
-MAX_QUESTION_KEYWORDS = 8
 MAX_QUESTION_TOPICS = 60
-QUESTION_KEYWORD_EXTRACTION_SCHEMA: Dict[str, Any] = {
-    "type": "object",
-    "properties": {
-        "keywords": {
-            "type": "array",
-            "items": {"type": "string"},
-        },
-    },
-    "required": ["keywords"],
-    "additionalProperties": False,
-}
 STOCK_TOPIC_ANALYSIS_TABLE = "stock_topic_analyses"
 PROCESSED_TOPIC_STATUSES = {"analyzed", "skipped"}
 
@@ -103,19 +91,6 @@ PROCESSED_TOPIC_STATUSES = {"analyzed", "skipped"}
 def _log(log_callback: Callable[[str], None] | None, message: str) -> None:
     if log_callback:
         log_callback(message)
-
-
-def _normalize_question_keywords(values: Any, *, limit: int = MAX_QUESTION_KEYWORDS) -> List[str]:
-    if isinstance(values, str):
-        raw_values = [values]
-    elif isinstance(values, Iterable):
-        raw_values = list(values)
-    else:
-        raw_values = []
-    return _ordered_unique(
-        (_normalize_text(value) for value in raw_values),
-        limit=max(1, min(limit, MAX_QUESTION_KEYWORDS)),
-    )
 
 
 def _empty_latest_result(group_id: str, stock_name: str) -> Dict[str, Any]:
@@ -276,27 +251,6 @@ def _call_stock_analysis_ai(prompt_payload: str, *, incremental: bool = False) -
         result.text.strip(),
         result.model,
     )
-
-
-def _call_question_keyword_ai(question: str) -> Tuple[List[str], str]:
-    messages = build_question_keyword_messages(question)
-    try:
-        result = call_structured_ai_object(
-            messages,
-            schema_name="stock_question_keyword_extraction",
-            schema=QUESTION_KEYWORD_EXTRACTION_SCHEMA,
-            label="AI 问题关键词抽取结果",
-            get_ai_config=get_openai_compatible_config,
-            wire_api="responses",
-            reasoning_effort=get_summary_reasoning_effort(),
-            timeout=120,
-        )
-    except AIRuntimeStructuredObjectParseError as exc:
-        raise ValueError("AI 问题关键词抽取结果不是合法 JSON") from exc
-    keywords = _normalize_question_keywords(result.payload.get("keywords") or result.payload.get("keyword") or [])
-    if not keywords:
-        raise ValueError("AI 未能从问题中提取检索关键词")
-    return keywords, result.model
 
 
 def _call_question_analysis_ai(question: str, prompt_payload: str) -> Tuple[str, str]:

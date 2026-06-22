@@ -499,15 +499,15 @@ class StockTopicAnalysisServiceHelperTests(unittest.TestCase):
 
     @unittest.skipUnless(HAS_SERVICE_DEPS, "stock topic analysis service dependencies are not installed")
     def test_normalize_question_keywords_dedupes_and_limits(self):
-        from backend.services.stock_topic_analysis_service import _normalize_question_keywords
+        from backend.services.stock_topic_question_keywords import normalize_question_keywords
 
-        keywords = _normalize_question_keywords(["商业航天", "商业航天", "", "低空经济"])
+        keywords = normalize_question_keywords(["商业航天", "商业航天", "", "低空经济"])
         self.assertEqual(["商业航天", "低空经济"], keywords)
 
     @unittest.skipUnless(HAS_SERVICE_DEPS, "stock topic analysis service dependencies are not installed")
     def test_call_question_keyword_ai_parses_ai_json(self):
         from backend.services.ai_runtime_request import AIRuntimeStructuredObjectResult
-        from backend.services.stock_topic_analysis_service import _call_question_keyword_ai
+        from backend.services.stock_topic_question_keywords import extract_question_keywords
 
         captured = {}
 
@@ -520,8 +520,8 @@ class StockTopicAnalysisServiceHelperTests(unittest.TestCase):
                 "test-model",
             )
 
-        with patch("backend.services.stock_topic_analysis_service.call_structured_ai_object", side_effect=fake_call):
-            keywords, model = _call_question_keyword_ai("商业航天板块最近怎么样，推荐吗")
+        with patch("backend.services.stock_topic_question_keywords.call_structured_ai_object", side_effect=fake_call):
+            keywords, model = extract_question_keywords("商业航天板块最近怎么样，推荐吗")
 
         self.assertEqual(["商业航天", "低空经济"], keywords)
         self.assertEqual("test-model", model)
@@ -535,37 +535,37 @@ class StockTopicAnalysisServiceHelperTests(unittest.TestCase):
     @unittest.skipUnless(HAS_SERVICE_DEPS, "stock topic analysis service dependencies are not installed")
     def test_call_question_keyword_ai_rejects_invalid_json(self):
         from backend.services.ai_runtime_request import AIRuntimeStructuredObjectParseError
-        from backend.services.stock_topic_analysis_service import _call_question_keyword_ai
+        from backend.services.stock_topic_question_keywords import extract_question_keywords
 
         with patch(
-            "backend.services.stock_topic_analysis_service.call_structured_ai_object",
+            "backend.services.stock_topic_question_keywords.call_structured_ai_object",
             side_effect=AIRuntimeStructuredObjectParseError("AI 问题关键词抽取结果", "not json"),
         ):
             with self.assertRaisesRegex(ValueError, "AI 问题关键词抽取结果不是合法 JSON"):
-                _call_question_keyword_ai("商业航天板块最近怎么样，推荐吗")
+                extract_question_keywords("商业航天板块最近怎么样，推荐吗")
 
     @unittest.skipUnless(HAS_SERVICE_DEPS, "stock topic analysis service dependencies are not installed")
     def test_call_question_keyword_ai_rejects_empty_keywords(self):
         from backend.services.ai_runtime_request import AIRuntimeStructuredObjectResult
-        from backend.services.stock_topic_analysis_service import _call_question_keyword_ai
+        from backend.services.stock_topic_question_keywords import extract_question_keywords
 
         with patch(
-            "backend.services.stock_topic_analysis_service.call_structured_ai_object",
+            "backend.services.stock_topic_question_keywords.call_structured_ai_object",
             return_value=AIRuntimeStructuredObjectResult({"keywords": []}, '{"keywords":[]}', "test-model"),
         ):
             with self.assertRaisesRegex(ValueError, "AI 未能从问题中提取检索关键词"):
-                _call_question_keyword_ai("商业航天板块最近怎么样，推荐吗")
+                extract_question_keywords("商业航天板块最近怎么样，推荐吗")
 
     @unittest.skipUnless(HAS_SERVICE_DEPS, "stock topic analysis service dependencies are not installed")
     def test_call_question_keyword_ai_preserves_runtime_errors(self):
-        from backend.services.stock_topic_analysis_service import _call_question_keyword_ai
+        from backend.services.stock_topic_question_keywords import extract_question_keywords
 
         with patch(
-            "backend.services.stock_topic_analysis_service.call_structured_ai_object",
+            "backend.services.stock_topic_question_keywords.call_structured_ai_object",
             side_effect=RuntimeError("OPENAI_API_KEY missing"),
         ):
             with self.assertRaisesRegex(RuntimeError, "OPENAI_API_KEY missing"):
-                _call_question_keyword_ai("商业航天板块最近怎么样，推荐吗")
+                extract_question_keywords("商业航天板块最近怎么样，推荐吗")
 
     @unittest.skipUnless(HAS_SERVICE_DEPS, "stock topic analysis service dependencies are not installed")
     def test_parse_image_data_url_validates_image_payload(self):
