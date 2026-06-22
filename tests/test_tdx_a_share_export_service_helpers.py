@@ -1,5 +1,6 @@
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from backend.services.tdx_a_share_export_plan import (
     DEFAULT_TDX_EXPORT_SPECS,
@@ -21,6 +22,7 @@ from backend.services.tdx_a_share_export_service import (
     _build_export_result,
     resolve_company_codes,
 )
+from backend.services.tdx_stock_catalog import resolve_stock_catalog
 
 
 class TdxAShareExportServiceHelperTests(unittest.TestCase):
@@ -93,6 +95,26 @@ class TdxAShareExportServiceHelperTests(unittest.TestCase):
         )
         self.assertEqual([], unresolved)
         self.assertEqual({}, ambiguous)
+
+    def test_resolve_stock_catalog_returns_source_and_resolution_facts(self):
+        records = [
+            {"ts_code": "000001.SZ", "name": "平安银行"},
+        ]
+
+        with patch(
+            "backend.services.tdx_stock_catalog.load_stock_basic_records",
+            return_value=(records, "cache", "cache.json"),
+        ) as load_records:
+            result = resolve_stock_catalog(["平安银行", "未知公司"], env_path=Path("custom.env"))
+
+        load_records.assert_called_once()
+        self.assertEqual(Path("custom.env"), load_records.call_args.kwargs["env_path"])
+        self.assertEqual(records, result.records)
+        self.assertEqual("cache", result.stock_basic_source)
+        self.assertEqual("cache.json", result.source_detail)
+        self.assertEqual({"平安银行": "000001.SZ"}, result.resolved_codes)
+        self.assertEqual(["未知公司"], result.unresolved_companies)
+        self.assertEqual({}, result.ambiguous_companies)
 
     def test_normalize_tdx_api_code_keeps_official_code_shape(self):
         self.assertEqual("000001.SZ", normalize_tdx_api_code("000001.sz"))
