@@ -10938,7 +10938,7 @@ class FileDownloaderDownloadTests(unittest.TestCase):
         downloader.long_sleep_interval_min = 300
         downloader.long_sleep_interval_max = 900
 
-        with patch("backend.crawlers.zsxq_file_downloader.random.uniform", return_value=480.0) as uniform:
+        with patch("backend.crawlers.file_download_interval_runner.random.uniform", return_value=480.0) as uniform:
             values = ZSXQFileDownloader._download_interval_values(downloader)
 
         uniform.assert_called_once_with(300, 900)
@@ -10950,7 +10950,7 @@ class FileDownloaderDownloadTests(unittest.TestCase):
         downloader.logs = []
         downloader.log = downloader.logs.append
 
-        with patch("backend.crawlers.zsxq_file_downloader.time.sleep") as sleep:
+        with patch("backend.crawlers.file_download_interval_runner.time.sleep") as sleep:
             ZSXQFileDownloader._apply_download_interval_plan_target(
                 downloader,
                 DownloadIntervalPlanTarget(
@@ -10979,7 +10979,7 @@ class FileDownloaderDownloadTests(unittest.TestCase):
         downloader.logs = []
         downloader.log = downloader.logs.append
 
-        with patch("backend.crawlers.zsxq_file_downloader.time.sleep") as sleep:
+        with patch("backend.crawlers.file_download_interval_runner.time.sleep") as sleep:
             ZSXQFileDownloader._apply_download_intervals(downloader)
 
         sleep.assert_called_once_with(60)
@@ -11006,8 +11006,8 @@ class FileDownloaderDownloadTests(unittest.TestCase):
         downloader.logs = []
         downloader.log = downloader.logs.append
 
-        with patch("backend.crawlers.zsxq_file_downloader.random.uniform", return_value=12.5) as uniform:
-            with patch("backend.crawlers.zsxq_file_downloader.time.sleep") as sleep:
+        with patch("backend.crawlers.file_download_interval_runner.random.uniform", return_value=12.5) as uniform:
+            with patch("backend.crawlers.file_download_interval_runner.time.sleep") as sleep:
                 ZSXQFileDownloader._apply_download_intervals(downloader)
 
         uniform.assert_called_once_with(8, 20)
@@ -11028,8 +11028,8 @@ class FileDownloaderDownloadTests(unittest.TestCase):
         downloader.logs = []
         downloader.log = downloader.logs.append
 
-        with patch("backend.crawlers.zsxq_file_downloader.random.uniform", return_value=480.0) as uniform:
-            with patch("backend.crawlers.zsxq_file_downloader.time.sleep") as sleep:
+        with patch("backend.crawlers.file_download_interval_runner.random.uniform", return_value=480.0) as uniform:
+            with patch("backend.crawlers.file_download_interval_runner.time.sleep") as sleep:
                 ZSXQFileDownloader._apply_download_intervals(downloader)
 
         uniform.assert_called_once_with(300, 900)

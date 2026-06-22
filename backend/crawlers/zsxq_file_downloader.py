@@ -47,6 +47,19 @@ from backend.crawlers.file_download_transfer import (
     run_download_retry_loop,
     write_download_response_body_stream,
 )
+from backend.crawlers.file_download_interval_runner import (
+    apply_download_interval_delay as run_apply_download_interval_delay,
+    apply_download_interval_plan as run_apply_download_interval_plan,
+    apply_download_interval_plan_target as run_apply_download_interval_plan_target,
+    apply_download_intervals as run_apply_download_intervals,
+    download_interval_plan_for_target as run_download_interval_plan_for_target,
+    download_interval_values as run_download_interval_values,
+    has_random_download_interval_range as run_has_random_download_interval_range,
+    random_download_interval as run_random_download_interval,
+    random_long_sleep_interval as run_random_long_sleep_interval,
+    should_use_random_interval as run_should_use_random_interval,
+    should_use_random_long_sleep_interval as run_should_use_random_long_sleep_interval,
+)
 from backend.crawlers.file_database_download_runner import (
     DatabaseDownloadTarget,
     run_database_file_download,
@@ -206,7 +219,6 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     download_exception_detail,
     download_final_failure_detail,
     download_http_failure_detail,
-    download_interval_plan,
     download_progress_message,
     download_query_group_id,
     download_result_stats,
@@ -1909,67 +1921,40 @@ class ZSXQFileDownloader:
         remove_partial_download(target.temp_path)
 
     def _download_interval_values(self) -> DownloadIntervalValues:
-        download_interval = self.download_interval
-        long_sleep_interval = self.long_sleep_interval
-        if self._should_use_random_interval():
-            if self._should_use_random_long_sleep_interval():
-                long_sleep_interval = self._random_long_sleep_interval()
-            elif self._has_random_download_interval_range():
-                download_interval = self._random_download_interval()
-        return DownloadIntervalValues(download_interval, long_sleep_interval)
+        return run_download_interval_values(self)
 
     def _should_use_random_interval(self) -> bool:
-        return bool(getattr(self, "use_random_interval", False))
+        return run_should_use_random_interval(self)
 
     def _should_use_random_long_sleep_interval(self) -> bool:
-        return (
-            self.current_batch_count >= self.files_per_batch
-            and self.long_sleep_interval_min is not None
-            and self.long_sleep_interval_max is not None
-        )
+        return run_should_use_random_long_sleep_interval(self)
 
     def _has_random_download_interval_range(self) -> bool:
-        return self.download_interval_min is not None and self.download_interval_max is not None
+        return run_has_random_download_interval_range(self)
 
     def _random_long_sleep_interval(self) -> float:
-        return random.uniform(
-            self.long_sleep_interval_min,
-            self.long_sleep_interval_max,
-        )
+        return run_random_long_sleep_interval(self)
 
     def _random_download_interval(self) -> float:
-        return random.uniform(self.download_interval_min, self.download_interval_max)
+        return run_random_download_interval(self)
 
     def _apply_download_interval_plan(
         self,
         interval_values: DownloadIntervalValues,
     ) -> None:
-        self._apply_download_interval_plan_target(
-            DownloadIntervalPlanTarget(
-                self.current_batch_count,
-                self.files_per_batch,
-                interval_values,
-            ),
-        )
+        run_apply_download_interval_plan(self, interval_values)
 
     def _apply_download_interval_plan_target(
         self,
         target: DownloadIntervalPlanTarget,
     ) -> None:
-        delay, messages, should_reset_batch = self._download_interval_plan_for_target(target)
-        self._apply_download_interval_delay(delay, messages, should_reset_batch)
+        run_apply_download_interval_plan_target(self, target)
 
     def _download_interval_plan_for_target(
         self,
         target: DownloadIntervalPlanTarget,
     ) -> Tuple[Optional[float], Tuple[str, ...], bool]:
-        interval_values = target.interval_values
-        return download_interval_plan(
-            target.current_batch_count,
-            target.files_per_batch,
-            interval_values.download_interval,
-            interval_values.long_sleep_interval,
-        )
+        return run_download_interval_plan_for_target(target)
 
     def _apply_download_interval_delay(
         self,
@@ -1977,24 +1962,11 @@ class ZSXQFileDownloader:
         messages: Tuple[str, ...],
         should_reset_batch: bool,
     ) -> None:
-        if delay is None:
-            return
-
-        self.log(messages[0])
-        time.sleep(delay)
-        if should_reset_batch:
-            self.current_batch_count = 0  # 重置批次计数
-            self.log(messages[1])
+        run_apply_download_interval_delay(self, delay, messages, should_reset_batch)
 
     def _apply_download_intervals(self):
         """应用下载间隔控制"""
-        self._apply_download_interval_plan_target(
-            DownloadIntervalPlanTarget(
-                self.current_batch_count,
-                self.files_per_batch,
-                self._download_interval_values(),
-            ),
-        )
+        run_apply_download_intervals(self)
 
     def _download_batch_file_item_target(
         self,
