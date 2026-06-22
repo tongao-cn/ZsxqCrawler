@@ -60,6 +60,37 @@ from backend.crawlers.file_download_interval_runner import (
     should_use_random_interval as run_should_use_random_interval,
     should_use_random_long_sleep_interval as run_should_use_random_long_sleep_interval,
 )
+from backend.crawlers.file_download_outcome_runner import (
+    cleanup_stopped_download as run_cleanup_stopped_download,
+    complete_successful_download_target as run_complete_successful_download_target,
+    download_exception_detail_for_target as run_download_exception_detail,
+    download_failure_detail_from_raw_mismatch as run_download_failure_detail_from_raw_mismatch,
+    download_final_failure_detail_for_target as run_download_final_failure_detail,
+    download_http_failure_detail_for_target as run_download_http_failure_detail,
+    download_size_mismatch_failure_detail as run_download_size_mismatch_failure_detail,
+    download_stop_failure_detail as run_download_stop_failure_detail,
+    download_url_unavailable_failure_detail as run_download_url_unavailable_failure_detail,
+    handle_download_size_mismatch_target as run_handle_download_size_mismatch_target,
+    handle_download_stop_target as run_handle_download_stop_target,
+    increment_successful_download_counters as run_increment_successful_download_counters,
+    log_download_exception as run_log_download_exception,
+    log_download_http_failure as run_log_download_http_failure,
+    log_download_stop as run_log_download_stop,
+    log_successful_download_target as run_log_successful_download_target,
+    mark_download_failed_after_retries_target as run_mark_download_failed_after_retries_target,
+    mark_download_url_unavailable_target as run_mark_download_url_unavailable_target,
+    mark_successful_download_completed as run_mark_successful_download_completed,
+    raw_download_size_mismatch_detail_for_target as run_raw_download_size_mismatch_detail_for_target,
+    record_download_exception_target as run_record_download_exception_target,
+    record_download_http_failure_target as run_record_download_http_failure_target,
+    record_download_size_mismatch_failure as run_record_download_size_mismatch_failure,
+    record_download_stop_target as run_record_download_stop_target,
+    remove_partial_download_after_exception as run_remove_partial_download_after_exception,
+    replace_successful_download_file as run_replace_successful_download_file,
+    update_download_final_failure_status as run_update_download_final_failure_status,
+    update_download_stop_status as run_update_download_stop_status,
+    update_download_url_unavailable_status as run_update_download_url_unavailable_status,
+)
 from backend.crawlers.file_runtime_state_runner import (
     check_long_delay_target as run_check_long_delay_target,
     check_stop_target as run_check_stop_target,
@@ -238,17 +269,12 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     clean_cookie_result,
     download_settings_display_lines,
     download_file_data,
-    download_exception_detail,
-    download_final_failure_detail,
-    download_http_failure_detail,
     download_progress_message,
     download_query_group_id,
     download_result_stats,
     download_retry_wait,
-    download_size_mismatch_detail,
     download_target_path,
     download_url_api_failure_plan,
-    download_url_failure_detail,
     download_url_from_response_data,
     download_url_success_plan,
     empty_import_stats,
@@ -257,7 +283,6 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     json_decode_failure_plan,
     latest_file_create_time_query,
     page_crosses_stop_before,
-    partial_download_path,
     remove_partial_download,
     response_filename_override,
     request_exception_plan,
@@ -1453,95 +1478,66 @@ class ZSXQFileDownloader:
         self,
         target: DownloadUrlUnavailableTarget,
     ) -> None:
-        self.log(f"   ❌ 无法获取下载链接")
-        failure_detail = self._download_url_unavailable_failure_detail(target)
-        self._update_download_url_unavailable_status(target.file_id, failure_detail)
+        run_mark_download_url_unavailable_target(self, target)
 
     def _download_url_unavailable_failure_detail(
         self,
         target: DownloadUrlUnavailableTarget,
     ) -> DownloadFailureDetail:
-        error_code, error_message = download_url_failure_detail(target.last_download_url_error)
-        return DownloadFailureDetail(error_code, error_message)
+        return run_download_url_unavailable_failure_detail(target)
 
     def _update_download_url_unavailable_status(
         self,
         file_id: int,
         failure_detail: DownloadFailureDetail,
     ) -> None:
-        self.file_db.update_file_download_status(
-            file_id,
-            'failed',
-            error_code=failure_detail.error_code,
-            error_message=failure_detail.error_message,
-        )
+        run_update_download_url_unavailable_status(self, file_id, failure_detail)
 
     def _mark_download_failed_after_retries_target(
         self,
         target: DownloadFinalFailureTarget,
     ) -> None:
-        self.log(f"   🚫 文件下载重试{target.download_retries}次仍失败: {target.last_error}")
-        failure_detail = self._download_final_failure_detail(target)
-        self._update_download_final_failure_status(target.file_id, failure_detail)
+        run_mark_download_failed_after_retries_target(self, target)
 
     def _download_final_failure_detail(
         self,
         target: DownloadFinalFailureTarget,
     ) -> DownloadFailureDetail:
-        error_code, error_message = download_final_failure_detail(
-            target.last_error_code,
-            target.last_error,
-        )
-        return DownloadFailureDetail(error_code, error_message)
+        return run_download_final_failure_detail(target)
 
     def _update_download_final_failure_status(
         self,
         file_id: int,
         failure_detail: DownloadFailureDetail,
     ) -> None:
-        self.file_db.update_file_download_status(
-            file_id,
-            'failed',
-            error_code=failure_detail.error_code,
-            error_message=failure_detail.error_message,
-        )
+        run_update_download_final_failure_status(self, file_id, failure_detail)
 
     def _complete_successful_download_target(
         self,
         target: DownloadCompletionTarget,
     ) -> None:
-        self._replace_successful_download_file(target)
-        self._log_successful_download_target(target)
-        self._mark_successful_download_completed(target)
-        self._increment_successful_download_counters()
-        self._apply_download_intervals()
+        run_complete_successful_download_target(self, target)
 
     def _replace_successful_download_file(
         self,
         target: DownloadCompletionTarget,
     ) -> None:
-        os.replace(target.temp_path, target.file_path)
+        run_replace_successful_download_file(target)
 
     def _log_successful_download_target(
         self,
         target: DownloadCompletionTarget,
     ) -> None:
-        self.log(f"   ✅ 下载完成: {target.safe_filename}")
-        self.log(f"   💾 保存路径: {target.file_path}")
+        run_log_successful_download_target(self, target)
 
     def _mark_successful_download_completed(
         self,
         target: DownloadCompletionTarget,
     ) -> None:
-        self.file_db.update_file_download_status(
-            target.file_id,
-            'completed',
-            target.file_path,
-        )
+        run_mark_successful_download_completed(self, target)
 
     def _increment_successful_download_counters(self) -> None:
-        self.download_count += 1
-        self.current_batch_count += 1
+        run_increment_successful_download_counters(self)
 
     def _write_download_response_body_result_target(
         self,
@@ -1653,41 +1649,34 @@ class ZSXQFileDownloader:
         self,
         target: DownloadHttpFailureTarget,
     ) -> DownloadFailureDetail:
-        error_code, error_message = self._download_http_failure_detail(target)
-        self._log_download_http_failure(error_message)
-        return DownloadFailureDetail(error_code, error_message)
+        return run_record_download_http_failure_target(self, target)
 
     def _download_http_failure_detail(
         self,
         target: DownloadHttpFailureTarget,
     ) -> Tuple[str, str]:
-        return download_http_failure_detail(target.status_code)
+        return run_download_http_failure_detail(target)
 
     def _log_download_http_failure(self, error_message: str) -> None:
-        self.log(f"   ❌ 下载失败: {error_message}")
+        run_log_download_http_failure(self, error_message)
 
     def _record_download_exception_target(
         self,
         target: DownloadExceptionTarget,
     ) -> DownloadFailureDetail:
-        error_code, error_message = self._download_exception_detail(target)
-        self._log_download_exception(target.exc)
-        self._remove_partial_download_after_exception(target.file_path)
-        return DownloadFailureDetail(error_code, error_message)
+        return run_record_download_exception_target(self, target)
 
     def _download_exception_detail(
         self,
         target: DownloadExceptionTarget,
     ) -> Tuple[str, str]:
-        return download_exception_detail(target.exc)
+        return run_download_exception_detail(target)
 
     def _log_download_exception(self, exc: Exception) -> None:
-        self.log(f"   ❌ 下载异常: {exc}")
+        run_log_download_exception(self, exc)
 
     def _remove_partial_download_after_exception(self, file_path: str) -> None:
-        temp_path = partial_download_path(file_path)
-        if remove_partial_download(temp_path):
-            self.log(f"   🗑️ 删除不完整文件")
+        run_remove_partial_download_after_exception(self, file_path)
 
     def _wait_before_download_retry_target(
         self,
@@ -1757,77 +1746,61 @@ class ZSXQFileDownloader:
         self,
         target: DownloadSizeMismatchTarget,
     ) -> Optional[DownloadFailureDetail]:
-        raw_mismatch_detail = self._raw_download_size_mismatch_detail_for_target(target)
-        if not raw_mismatch_detail:
-            return None
-
-        return self._download_size_mismatch_failure_detail(target, raw_mismatch_detail)
+        return run_handle_download_size_mismatch_target(self, target)
 
     def _raw_download_size_mismatch_detail_for_target(
         self,
         target: DownloadSizeMismatchTarget,
     ) -> Optional[Tuple[str, str]]:
-        final_size = os.path.getsize(target.temp_path)
-        return download_size_mismatch_detail(target.expected_size, final_size)
+        return run_raw_download_size_mismatch_detail_for_target(target)
 
     def _download_size_mismatch_failure_detail(
         self,
         target: DownloadSizeMismatchTarget,
         raw_mismatch_detail: Tuple[str, str],
     ) -> DownloadFailureDetail:
-        mismatch_detail = self._download_failure_detail_from_raw_mismatch(raw_mismatch_detail)
-        self._record_download_size_mismatch_failure(target, mismatch_detail)
-        return mismatch_detail
+        return run_download_size_mismatch_failure_detail(self, target, raw_mismatch_detail)
 
     def _download_failure_detail_from_raw_mismatch(
         self,
         raw_mismatch_detail: Tuple[str, str],
     ) -> DownloadFailureDetail:
-        return DownloadFailureDetail(*raw_mismatch_detail)
+        return run_download_failure_detail_from_raw_mismatch(raw_mismatch_detail)
 
     def _record_download_size_mismatch_failure(
         self,
         target: DownloadSizeMismatchTarget,
         mismatch_detail: DownloadFailureDetail,
     ) -> None:
-        self.log(f"   ⚠️ {mismatch_detail.error_message}")
-        os.remove(target.temp_path)
+        run_record_download_size_mismatch_failure(self, target, mismatch_detail)
 
     def _handle_download_stop_target(
         self,
         target: DownloadStopTarget,
     ) -> None:
-        self._record_download_stop_target(target)
+        run_handle_download_stop_target(self, target)
 
     def _record_download_stop_target(
         self,
         target: DownloadStopTarget,
     ) -> None:
-        failure_detail = self._download_stop_failure_detail()
-        self._log_download_stop(failure_detail)
-        self._update_download_stop_status(target, failure_detail)
-        self._cleanup_stopped_download(target)
+        run_record_download_stop_target(self, target)
 
     def _download_stop_failure_detail(self) -> DownloadFailureDetail:
-        return DownloadFailureDetail("stopped", "下载过程中被停止")
+        return run_download_stop_failure_detail()
 
     def _log_download_stop(self, failure_detail: DownloadFailureDetail) -> None:
-        self.log(f"🛑 {failure_detail.error_message}")
+        run_log_download_stop(self, failure_detail)
 
     def _update_download_stop_status(
         self,
         target: DownloadStopTarget,
         failure_detail: DownloadFailureDetail,
     ) -> None:
-        self.file_db.update_file_download_status(
-            target.file_id,
-            'failed',
-            error_code=failure_detail.error_code,
-            error_message=failure_detail.error_message,
-        )
+        run_update_download_stop_status(self, target, failure_detail)
 
     def _cleanup_stopped_download(self, target: DownloadStopTarget) -> None:
-        remove_partial_download(target.temp_path)
+        run_cleanup_stopped_download(target)
 
     def _download_interval_values(self) -> DownloadIntervalValues:
         return run_download_interval_values(self)

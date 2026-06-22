@@ -9927,7 +9927,7 @@ class FileDownloaderDownloadTests(unittest.TestCase):
         downloader.log = log
         downloader._apply_download_intervals = apply_intervals
 
-        with patch("backend.crawlers.zsxq_file_downloader.os.replace") as replace:
+        with patch("backend.crawlers.file_download_outcome_runner.os.replace") as replace:
             replace.side_effect = lambda temp_path, file_path: events.append(
                 ("replace", temp_path, file_path)
             )
@@ -10155,7 +10155,7 @@ class FileDownloaderDownloadTests(unittest.TestCase):
             downloader.check_stop = lambda: True
 
             with patch(
-                "backend.crawlers.zsxq_file_downloader.remove_partial_download",
+                "backend.crawlers.file_download_outcome_runner.remove_partial_download",
                 return_value=True,
             ) as remove_partial:
                 self.assertIsNone(
@@ -10279,7 +10279,7 @@ class FileDownloaderDownloadTests(unittest.TestCase):
             downloader.check_stop = lambda: True
 
             with patch(
-                "backend.crawlers.zsxq_file_downloader.remove_partial_download",
+                "backend.crawlers.file_download_outcome_runner.remove_partial_download",
                 return_value=True,
             ) as remove_partial:
                 downloaded_size = ZSXQFileDownloader._write_download_response_body_result_target(
@@ -10363,10 +10363,16 @@ class FileDownloaderDownloadTests(unittest.TestCase):
             downloader.check_stop = lambda: next(stop_checks)
             expected_partial_path = str(Path(temp_dir) / "memo.pdf.part")
 
-            with patch(
-                "backend.crawlers.zsxq_file_downloader.remove_partial_download",
-                return_value=True,
-            ) as remove_partial:
+            with (
+                patch(
+                    "backend.crawlers.zsxq_file_downloader.remove_partial_download",
+                    return_value=True,
+                ) as remove_partial,
+                patch(
+                    "backend.crawlers.file_download_outcome_runner.remove_partial_download",
+                    remove_partial,
+                ),
+            ):
                 result = ZSXQFileDownloader.download_file(
                     downloader,
                     {"file": {"id": 101, "name": "memo.pdf", "size": 4, "download_count": 0}},
@@ -10795,19 +10801,19 @@ class FileDownloaderDownloadTests(unittest.TestCase):
             calls.append(("detail", expected_size, final_size))
             return ("size_mismatch", "bad size")
 
-        def download_size_mismatch_failure_detail(detail_target, raw_mismatch_detail):
-            calls.append(("failure", detail_target, raw_mismatch_detail))
+        def download_size_mismatch_failure_detail(runtime, detail_target, raw_mismatch_detail):
+            calls.append(("failure", runtime, detail_target, raw_mismatch_detail))
             return failure_detail
 
-        downloader._download_size_mismatch_failure_detail = (
-            download_size_mismatch_failure_detail
-        )
-
         with (
-            patch("backend.crawlers.zsxq_file_downloader.os.path.getsize", getsize),
+            patch("backend.crawlers.file_download_outcome_runner.os.path.getsize", getsize),
             patch(
-                "backend.crawlers.zsxq_file_downloader.download_size_mismatch_detail",
+                "backend.crawlers.file_download_outcome_runner.download_size_mismatch_detail",
                 size_mismatch_detail,
+            ),
+            patch(
+                "backend.crawlers.file_download_outcome_runner.download_size_mismatch_failure_detail",
+                download_size_mismatch_failure_detail,
             ),
         ):
             result = ZSXQFileDownloader._handle_download_size_mismatch_target(
@@ -10820,7 +10826,7 @@ class FileDownloaderDownloadTests(unittest.TestCase):
             [
                 ("getsize", "C:\\Downloads\\memo.pdf.part"),
                 ("detail", 17, 13),
-                ("failure", target, ("size_mismatch", "bad size")),
+                ("failure", downloader, target, ("size_mismatch", "bad size")),
             ],
             calls,
         )
@@ -10835,7 +10841,7 @@ class FileDownloaderDownloadTests(unittest.TestCase):
         def remove(temp_path):
             calls.append(("remove", temp_path))
 
-        with patch("backend.crawlers.zsxq_file_downloader.os.remove", remove):
+        with patch("backend.crawlers.file_download_outcome_runner.os.remove", remove):
             result = ZSXQFileDownloader._download_size_mismatch_failure_detail(
                 downloader,
                 target,
@@ -10909,7 +10915,7 @@ class FileDownloaderDownloadTests(unittest.TestCase):
             return True
 
         with patch(
-            "backend.crawlers.zsxq_file_downloader.remove_partial_download",
+            "backend.crawlers.file_download_outcome_runner.remove_partial_download",
             remove_partial,
         ):
             ZSXQFileDownloader._record_download_stop_target(
