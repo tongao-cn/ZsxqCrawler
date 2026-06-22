@@ -94,6 +94,20 @@ from backend.crawlers.file_batch_download_runner import (
     should_continue_batch_download_loop as run_should_continue_batch_download_loop,
     should_delay_after_batch_download as run_should_delay_after_batch_download,
 )
+from backend.crawlers.file_list_request_runner import (
+    fetch_file_list_target as run_fetch_file_list_target,
+    file_list_request_attempt_decision as run_file_list_request_attempt_decision,
+    file_list_request_attempt_headers as run_file_list_request_attempt_headers,
+    file_list_request_exception_decision as run_file_list_request_exception_decision,
+    file_list_request_target_for_attempt as run_file_list_request_target_for_attempt,
+    handle_file_list_request_attempt_exception as run_handle_file_list_request_attempt_exception,
+    handle_file_list_request_attempt_response as run_handle_file_list_request_attempt_response,
+    request_file_list_attempt_response as run_request_file_list_attempt_response,
+    request_file_list_response_target as run_request_file_list_response_target,
+    run_file_list_request_attempt,
+    run_file_list_request_loop,
+    start_file_list_request as run_start_file_list_request,
+)
 from backend.crawlers.file_time_collection_runner import (
     TimeCollectionDatabaseState,
     TimeCollectionLoopContext,
@@ -176,9 +190,7 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     file_list_api_failure_plan,
     file_list_item_display_lines,
     file_list_next_index_message,
-    file_list_request_params,
     file_list_response_page,
-    file_list_start_messages,
     http_failure_plan,
     incremental_collection_empty_database_message,
     incremental_collection_missing_time_message,
@@ -1030,125 +1042,75 @@ class ZSXQFileDownloader:
         return self._fetch_file_list_target(FetchFileListTarget(count, index, sort))
 
     def _fetch_file_list_target(self, target: FetchFileListTarget) -> Optional[Dict[str, Any]]:
-        request_context = self._start_file_list_request(target)
-        return self._run_file_list_request_loop(request_context)
+        return run_fetch_file_list_target(self, target)
 
     def _run_file_list_request_loop(
         self,
         request_context: FileListRequestContext,
     ) -> Optional[Dict[str, Any]]:
-        for attempt in range(request_context.max_retries):
-            decision = self._run_file_list_request_attempt(
-                FileListRequestAttemptTarget(request_context, attempt),
-            )
-            if decision.result is not None:
-                return decision.result
-            if decision.should_retry:
-                continue
-            if decision.should_stop:
-                return None
-
-        print(retry_exhausted_message(request_context.max_retries))
-        return None
+        return run_file_list_request_loop(self, request_context)
 
     def _start_file_list_request(self, target: FetchFileListTarget) -> FileListRequestContext:
-        url = f"{self.base_url}/v2/groups/{self.group_id}/files"
-        params = file_list_request_params(target.count, target.sort, target.index)
-        max_retries = 10
-
-        for message in file_list_start_messages(target.count, target.sort, target.index, url):
-            self.log(message)
-
-        return FileListRequestContext(url, params, max_retries)
+        return run_start_file_list_request(self, target)
 
     def _request_file_list_response_target(
         self,
         target: FileListRequestTarget,
     ) -> Any:
-        return self.session.get(
-            target.url,
-            headers=target.headers,
-            params=target.params,
-            timeout=30,
-        )
+        return run_request_file_list_response_target(self, target)
 
     def _run_file_list_request_attempt(
         self,
         target: FileListRequestAttemptTarget,
     ) -> FileListResponseDecision:
-        headers = self._file_list_request_attempt_headers(target)
-
-        try:
-            return self._file_list_request_attempt_decision(target, headers)
-        except Exception as e:
-            return self._handle_file_list_request_attempt_exception(target, e)
+        return run_file_list_request_attempt(self, target)
 
     def _file_list_request_attempt_headers(
         self,
         target: FileListRequestAttemptTarget,
     ) -> Dict[str, str]:
-        return self._prepare_retry_api_request(target.attempt)
+        return run_file_list_request_attempt_headers(self, target)
 
     def _file_list_request_attempt_decision(
         self,
         target: FileListRequestAttemptTarget,
         headers: Dict[str, str],
     ) -> FileListResponseDecision:
-        response = self._request_file_list_attempt_response(target, headers)
-        return self._handle_file_list_request_attempt_response(target, response)
+        return run_file_list_request_attempt_decision(self, target, headers)
 
     def _request_file_list_attempt_response(
         self,
         target: FileListRequestAttemptTarget,
         headers: Dict[str, str],
     ) -> Any:
-        return self._request_file_list_response_target(
-            self._file_list_request_target_for_attempt(target, headers),
-        )
+        return run_request_file_list_attempt_response(self, target, headers)
 
     def _file_list_request_target_for_attempt(
         self,
         target: FileListRequestAttemptTarget,
         headers: Dict[str, str],
     ) -> FileListRequestTarget:
-        return FileListRequestTarget(
-            target.request_context.url,
-            headers,
-            target.request_context.params,
-        )
+        return run_file_list_request_target_for_attempt(target, headers)
 
     def _handle_file_list_request_attempt_response(
         self,
         target: FileListRequestAttemptTarget,
         response: Any,
     ) -> FileListResponseDecision:
-        return self._handle_file_list_response_target(
-            FileListResponseTarget(
-                response,
-                target.attempt,
-                target.request_context.max_retries,
-            ),
-        )
+        return run_handle_file_list_request_attempt_response(self, target, response)
 
     def _handle_file_list_request_attempt_exception(
         self,
         target: FileListRequestAttemptTarget,
         exc: Exception,
     ) -> FileListResponseDecision:
-        should_retry = self._handle_file_list_request_exception_target(
-            FileListRequestExceptionTarget(
-                exc,
-                target.attempt,
-                target.request_context.max_retries,
-            ),
-        )
-        return self._file_list_request_exception_decision(should_retry)
+        return run_handle_file_list_request_attempt_exception(self, target, exc)
 
     def _file_list_request_exception_decision(
         self,
         should_retry: bool,
     ) -> FileListResponseDecision:
-        return FileListResponseDecision(None, should_retry, False)
+        return run_file_list_request_exception_decision(should_retry)
 
     def _handle_download_url_success_response_target(
         self,
