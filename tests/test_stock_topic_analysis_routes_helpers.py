@@ -339,8 +339,9 @@ class StockTopicAnalysisRoutesHelperTests(unittest.IsolatedAsyncioTestCase):
             args, kwargs = run_workflow.call_args
             self.assertEqual(("task-batch",), args)
             self.assertEqual("个股话题分析", kwargs["failure_label"])
+            self.assertEqual("开始批量个股话题分析，共 2 只股票...", kwargs["running_message"])
+            self.assertEqual([("parse", ["宁德时代", "德龙激光", "宁德时代"])], events)
 
-            self.assertEqual("开始批量个股话题分析，共 2 只股票...", kwargs["running_message"]())
             result = kwargs["work"]()
             self.assertEqual(
                 "批量个股话题分析完成：成功 2，失败 0，无话题 0",

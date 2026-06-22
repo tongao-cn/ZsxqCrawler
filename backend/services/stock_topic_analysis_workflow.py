@@ -34,6 +34,13 @@ class StockTopicAnalysisBatchTaskRequest:
     stock_names: list[str]
 
 
+@dataclass(frozen=True)
+class _StockTopicBatchTaskContext:
+    stock_names: list[str]
+    log_callback: Callable[[str], None]
+    running_message: str
+
+
 def _build_stock_topic_log_callback(task_id: str) -> Callable[[str], None]:
     return build_task_log_callback(task_id)
 
@@ -67,6 +74,18 @@ def _stock_topic_batch_completed_message(result: dict[str, Any]) -> str:
 
 def _stock_topic_batch_running_message(stock_count: int) -> str:
     return f"开始批量个股话题分析，共 {stock_count} 只股票..."
+
+
+def _prepare_stock_topic_batch_task_context(
+    task_id: str,
+    request: StockTopicAnalysisBatchTaskRequest,
+) -> _StockTopicBatchTaskContext:
+    stock_names = parse_stock_names(request.stock_names)
+    return _StockTopicBatchTaskContext(
+        stock_names=stock_names,
+        log_callback=_build_stock_topic_log_callback(task_id),
+        running_message=_stock_topic_batch_running_message(len(stock_names)),
+    )
 
 
 def run_stock_question_task(task_id: str, group_id: str, request: StockQuestionTaskRequest) -> None:
@@ -104,25 +123,18 @@ def run_stock_topic_analysis_batch_task(
     group_id: str,
     request: StockTopicAnalysisBatchTaskRequest,
 ) -> None:
-    workflow_state: dict[str, Any] = {}
-
-    def running_message() -> str:
-        log_callback = _build_stock_topic_log_callback(task_id)
-        stock_names = parse_stock_names(request.stock_names)
-        workflow_state["log_callback"] = log_callback
-        workflow_state["stock_names"] = stock_names
-        return _stock_topic_batch_running_message(len(stock_names))
+    context = _prepare_stock_topic_batch_task_context(task_id, request)
 
     def work() -> dict[str, Any]:
         return analyze_stock_topics_batch(
             group_id,
-            workflow_state["stock_names"],
-            log_callback=workflow_state["log_callback"],
+            context.stock_names,
+            log_callback=context.log_callback,
         )
 
     run_workflow(
         task_id,
-        running_message=running_message,
+        running_message=context.running_message,
         completed_message=_stock_topic_batch_completed_message,
         failure_label="个股话题分析",
         work=work,
