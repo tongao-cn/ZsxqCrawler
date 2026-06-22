@@ -7,6 +7,16 @@ import urllib.parse
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Iterator, Optional
 
+from backend.storage.zsxq_database_scope import group_id_param, nullable_group_id_param
+from backend.storage.zsxq_database_stats_queries import (
+    database_stats_count_query,
+    group_stats_queries,
+    local_group_topic_count_query,
+    local_group_topic_time_range_query,
+    newest_topic_create_time_query,
+    oldest_topic_create_time_query,
+    topic_count_query,
+)
 from backend.storage.topic_detail_payloads import (
     build_topic_detail_comments,
     build_topic_detail_latest_likes,
@@ -941,18 +951,6 @@ def refresh_tag_topic_count_statement(tag_id: int) -> tuple[str, tuple[Any, ...]
     )
 
 
-def group_id_param(group_id: Optional[str]) -> Any:
-    value = str(group_id or "").strip()
-    return int(value) if value.isdigit() else value
-
-
-def nullable_group_id_param(group_id: Optional[str]) -> Any:
-    value = str(group_id or "").strip()
-    if not value:
-        return None
-    return int(value) if value.isdigit() else value
-
-
 def topic_detail_scope(topic_id: int, group_id: Optional[str]) -> tuple[Any, str, list[Any]]:
     scoped_group_id = group_id_param(group_id) if group_id is not None else None
     topic_scope_sql = "t.topic_id = ?"
@@ -987,86 +985,6 @@ def topic_create_time_by_id_query(topic_id: int) -> tuple[str, tuple[Any, ...]]:
     return "SELECT create_time FROM topics WHERE topic_id = ?", (topic_id,)
 
 
-def newest_topic_create_time_query(group_id: Optional[str], *, nullable_scope: bool = False) -> tuple[str, tuple[Any, ...]]:
-    scoped_group_id = nullable_group_id_param(group_id) if nullable_scope else group_id_param(group_id)
-    return (
-        """
-                SELECT create_time FROM topics
-                WHERE (? IS NULL OR group_id = ?)
-                  AND create_time IS NOT NULL AND create_time != ''
-                ORDER BY create_time DESC LIMIT 1
-            """,
-        (scoped_group_id, scoped_group_id),
-    )
-
-
-def oldest_topic_create_time_query(group_id: Optional[str], *, nullable_scope: bool = False) -> tuple[str, tuple[Any, ...]]:
-    scoped_group_id = nullable_group_id_param(group_id) if nullable_scope else group_id_param(group_id)
-    return (
-        """
-                SELECT create_time FROM topics
-                WHERE (? IS NULL OR group_id = ?)
-                  AND create_time IS NOT NULL AND create_time != ''
-                ORDER BY create_time ASC LIMIT 1
-            """,
-        (scoped_group_id, scoped_group_id),
-    )
-
-
-def topic_count_query(group_id: Optional[str]) -> tuple[str, tuple[Any, ...]]:
-    scoped_group_id = nullable_group_id_param(group_id)
-    return (
-        "SELECT COUNT(*) FROM topics WHERE (? IS NULL OR group_id = ?)",
-        (scoped_group_id, scoped_group_id),
-    )
-
-
-def group_stats_queries(group_id: Optional[str]) -> tuple[tuple[str, str, tuple[Any, ...]], ...]:
-    scoped_group_id = group_id_param(group_id)
-    return (
-        (
-            "topics_count",
-            "SELECT COUNT(*) FROM topics WHERE group_id = ?",
-            (scoped_group_id,),
-        ),
-        (
-            "users_count",
-            """
-            SELECT COUNT(DISTINCT t.owner_user_id)
-            FROM talks t
-            JOIN topics tp ON t.topic_id = tp.topic_id
-            WHERE tp.group_id = ?
-            """,
-            (scoped_group_id,),
-        ),
-        (
-            "latest_topic_time",
-            "SELECT MAX(create_time) FROM topics WHERE group_id = ?",
-            (scoped_group_id,),
-        ),
-        (
-            "earliest_topic_time",
-            "SELECT MIN(create_time) FROM topics WHERE group_id = ?",
-            (scoped_group_id,),
-        ),
-        (
-            "total_likes",
-            "SELECT SUM(likes_count) FROM topics WHERE group_id = ?",
-            (scoped_group_id,),
-        ),
-        (
-            "total_comments",
-            "SELECT SUM(comments_count) FROM topics WHERE group_id = ?",
-            (scoped_group_id,),
-        ),
-        (
-            "total_readings",
-            "SELECT SUM(reading_count) FROM topics WHERE group_id = ?",
-            (scoped_group_id,),
-        ),
-    )
-
-
 def local_group_record_query(group_id: Optional[str]) -> tuple[str, tuple[Any, ...]]:
     return (
         "SELECT name, type, background_url FROM groups WHERE group_id = ? LIMIT 1",
@@ -1074,60 +992,8 @@ def local_group_record_query(group_id: Optional[str]) -> tuple[str, tuple[Any, .
     )
 
 
-def local_group_topic_time_range_query(group_id: Optional[str]) -> tuple[str, tuple[Any, ...]]:
-    return (
-        """
-        SELECT MIN(create_time), MAX(create_time)
-        FROM topics
-        WHERE group_id = ? AND create_time IS NOT NULL AND create_time != ''
-        """,
-        (group_id_param(group_id),),
-    )
-
-
-def local_group_topic_count_query(group_id: Optional[str]) -> tuple[str, tuple[Any, ...]]:
-    return (
-        "SELECT COUNT(*) FROM topics WHERE group_id = ?",
-        (group_id_param(group_id),),
-    )
-
-
 def local_group_ids_query(limit: int) -> tuple[str, tuple[Any, ...]]:
     return "SELECT group_id FROM groups LIMIT ?", (int(limit),)
-
-
-def database_stats_count_query(table: str, group_id: Optional[str]) -> tuple[str, tuple[Any, ...]]:
-    if group_id is None:
-        return f"SELECT COUNT(*) FROM {table}", ()
-
-    scoped_group_id = group_id_param(group_id)
-    if table in {"groups", "topics", "comments"}:
-        return f"SELECT COUNT(*) FROM {table} WHERE group_id = ?", (scoped_group_id,)
-
-    if table == "users":
-        return (
-            """
-                        SELECT COUNT(DISTINCT user_id)
-                        FROM (
-                            SELECT owner_user_id AS user_id FROM talks WHERE topic_id IN (SELECT topic_id FROM topics WHERE group_id = ?)
-                            UNION
-                            SELECT owner_user_id AS user_id FROM comments WHERE topic_id IN (SELECT topic_id FROM topics WHERE group_id = ?)
-                            UNION
-                            SELECT owner_user_id AS user_id FROM questions WHERE topic_id IN (SELECT topic_id FROM topics WHERE group_id = ?)
-                            UNION
-                            SELECT questionee_user_id AS user_id FROM questions WHERE topic_id IN (SELECT topic_id FROM topics WHERE group_id = ?)
-                            UNION
-                            SELECT owner_user_id AS user_id FROM answers WHERE topic_id IN (SELECT topic_id FROM topics WHERE group_id = ?)
-                        ) scoped_users
-                        WHERE user_id IS NOT NULL
-                        """,
-            (scoped_group_id, scoped_group_id, scoped_group_id, scoped_group_id, scoped_group_id),
-        )
-
-    return (
-        f"SELECT COUNT(*) FROM {table} WHERE topic_id IN (SELECT topic_id FROM topics WHERE group_id = ?)",
-        (scoped_group_id,),
-    )
 
 
 def replace_file_topic_relation(file_db, file_id: int, topic_id: int) -> int:
