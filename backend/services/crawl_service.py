@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import os
-from datetime import time, datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, NamedTuple, Optional
 
 from backend.core.account_context import get_cookie_for_group
@@ -12,6 +12,17 @@ from backend.crawlers.official_topic_client import (
 )
 from backend.crawlers.topic_crawler import ZSXQTopicCrawler
 from backend.schemas.crawl import CrawlTimeRangeRequest
+from backend.services.crawl_time_range import (
+    filter_legacy_topics_by_time_range as _filter_legacy_topics_by_time_range,
+    filter_official_topics_by_time_range as _filter_official_topics_by_time_range,
+    format_zsxq_time as _format_zsxq_time,
+    is_date_only as _is_date_only,
+    legacy_next_end_time as _legacy_next_end_time,
+    legacy_time_range_initial_cursors as _legacy_time_range_initial_cursors,
+    parse_user_time as _parse_user_time,
+    resolve_time_range as _resolve_time_range,
+    topic_time as _topic_time,
+)
 from backend.services.official_topic_page_importer import (
     add_official_import_result,
     fetch_official_comments,
@@ -154,57 +165,6 @@ def _mark_expired_task(task_id: str, result: dict[str, Any], default_message: st
         log_message=f"❌ 会员已过期: {message}",
     )
 
-def _is_date_only(value: Optional[str]) -> bool:
-    text = (value or "").strip()
-    return len(text) == 10 and text[4] == "-" and text[7] == "-"
-
-def _parse_user_time(value: Optional[str], date_end: bool = False) -> Optional[datetime]:
-    if not value:
-        return None
-    text = value.strip()
-    try:
-        if _is_date_only(text):
-            dt = datetime.combine(datetime.strptime(text, "%Y-%m-%d").date(), time.max if date_end else time.min)
-            return dt.replace(tzinfo=timezone(timedelta(hours=8)))
-        if "T" in text and len(text) == 16:
-            text = text + ":00"
-        if text.endswith("Z"):
-            text = text.replace("Z", "+00:00")
-        if len(text) >= 24 and (text[-5] in ["+", "-"]) and text[-3] != ":":
-            text = text[:-2] + ":" + text[-2:]
-        dt = datetime.fromisoformat(text)
-        if dt.tzinfo is None:
-            dt = dt.replace(tzinfo=timezone(timedelta(hours=8)))
-        return dt
-    except Exception:
-        return None
-
-def _resolve_time_range(request: CrawlTimeRangeRequest, now_bj: datetime) -> tuple[datetime, datetime]:
-    start_dt = _parse_user_time(request.startTime)
-    end_dt = _parse_user_time(request.endTime, date_end=True) if request.endTime else None
-
-    if request.lastDays and request.lastDays > 0:
-        if end_dt is None:
-            end_dt = now_bj
-        start_dt = end_dt - timedelta(days=request.lastDays)
-
-    if end_dt is None:
-        end_dt = now_bj
-    if start_dt is None:
-        start_dt = end_dt - timedelta(days=30)
-
-    if start_dt > end_dt:
-        if _is_date_only(request.startTime) and _is_date_only(request.endTime):
-            start_dt = _parse_user_time(request.endTime)
-            end_dt = _parse_user_time(request.startTime, date_end=True)
-        else:
-            start_dt, end_dt = end_dt, start_dt
-
-    return start_dt, end_dt
-
-def _format_zsxq_time(dt: datetime) -> str:
-    return dt.astimezone(timezone(timedelta(hours=8))).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "+0800"
-
 def _create_task_crawler(task_id: str, group_id: str, log_callback: Callable[[str], None], stop_check: Callable[[], bool]) -> ZSXQTopicCrawler:
     cookie = get_cookie_for_group(group_id)
     crawler = ZSXQTopicCrawler(cookie, group_id, log_callback)
@@ -222,55 +182,6 @@ def _prepare_legacy_crawler(
     crawler = _create_task_crawler(task_id, group_id, log_callback, stop_check)
     _apply_crawl_settings(crawler, crawl_settings, require_overrides=require_overrides)
     return crawler
-
-def _topic_time(topic: dict[str, Any]) -> Optional[datetime]:
-    ts = topic.get("create_time")
-    if not ts:
-        return None
-    try:
-        ts_fixed = ts.replace("+0800", "+08:00") if ts.endswith("+0800") else ts
-        return datetime.fromisoformat(ts_fixed)
-    except Exception:
-        return None
-
-def _filter_official_topics_by_time_range(
-    topics: list[dict[str, Any]],
-    start_dt: datetime,
-    end_dt: datetime,
-) -> tuple[list[dict[str, Any]], Optional[datetime]]:
-    filtered: list[dict[str, Any]] = []
-    oldest_dt = None
-    for topic in topics:
-        dt = _topic_time(topic)
-        if dt:
-            oldest_dt = dt
-            if start_dt <= dt <= end_dt:
-                filtered.append(topic)
-    return filtered, oldest_dt
-
-def _filter_legacy_topics_by_time_range(
-    topics: list[dict[str, Any]],
-    start_dt: datetime,
-    end_dt: datetime,
-) -> tuple[list[dict[str, Any]], Optional[datetime]]:
-    filtered: list[dict[str, Any]] = []
-    last_time_dt_in_page = None
-    for topic in topics:
-        dt = _topic_time(topic)
-        if dt:
-            last_time_dt_in_page = dt
-            if start_dt <= dt <= end_dt:
-                filtered.append(topic)
-    return filtered, last_time_dt_in_page
-
-def _legacy_next_end_time(topics: list[dict[str, Any]], timestamp_offset_ms: int) -> Optional[str]:
-    oldest_in_page = topics[-1].get("create_time")
-    try:
-        dt_oldest = datetime.fromisoformat(oldest_in_page.replace("+0800", "+08:00"))
-        dt_oldest = dt_oldest - timedelta(milliseconds=timestamp_offset_ms)
-        return dt_oldest.strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "+0800"
-    except Exception:
-        return oldest_in_page
 
 def _store_legacy_time_range_page(
     crawler: Any,
@@ -478,9 +389,6 @@ def _process_legacy_time_range_page(
 
 def _empty_legacy_time_range_stats() -> dict[str, int]:
     return {"new_topics": 0, "updated_topics": 0, "errors": 0, "pages": 0}
-
-def _legacy_time_range_initial_cursors(start_dt: datetime, end_dt: datetime) -> tuple[str, str]:
-    return _format_zsxq_time(start_dt), _format_zsxq_time(end_dt)
 
 def _legacy_time_range_per_page(request: CrawlTimeRangeRequest) -> int:
     return request.perPage or LEGACY_TIME_RANGE_DEFAULT_PER_PAGE

@@ -168,37 +168,37 @@ class CrawlRoutesHelperTests(unittest.TestCase):
 
     @unittest.skipUnless(HAS_CRAWL_ROUTE_DEPS, "crawl route dependencies are not installed")
     def test_parse_user_time_accepts_date_and_iso_variants(self):
-        from backend.services.crawl_service import _parse_user_time
+        from backend.services.crawl_time_range import parse_user_time
 
         self.assertEqual(
             datetime(2026, 5, 7, tzinfo=timezone(timedelta(hours=8))),
-            _parse_user_time("2026-05-07"),
+            parse_user_time("2026-05-07"),
         )
         self.assertEqual(
             datetime(2026, 5, 7, 23, 59, 59, 999999, tzinfo=timezone(timedelta(hours=8))),
-            _parse_user_time("2026-05-07", date_end=True),
+            parse_user_time("2026-05-07", date_end=True),
         )
         self.assertEqual(
             datetime(2026, 5, 7, 12, 30, tzinfo=timezone.utc),
-            _parse_user_time("2026-05-07T12:30Z"),
+            parse_user_time("2026-05-07T12:30Z"),
         )
         self.assertEqual(
             datetime(2026, 5, 7, 12, 30, tzinfo=timezone(timedelta(hours=8))),
-            _parse_user_time("2026-05-07T12:30"),
+            parse_user_time("2026-05-07T12:30"),
         )
 
     @unittest.skipUnless(HAS_CRAWL_ROUTE_DEPS, "crawl route dependencies are not installed")
     def test_resolve_time_range_uses_last_days_and_swaps_reversed_bounds(self):
         from backend.routes.crawl_routes import CrawlTimeRangeRequest
-        from backend.services.crawl_service import _resolve_time_range
+        from backend.services.crawl_time_range import resolve_time_range
 
         now_bj = datetime(2026, 5, 7, 12, tzinfo=timezone(timedelta(hours=8)))
 
-        start_dt, end_dt = _resolve_time_range(CrawlTimeRangeRequest(lastDays=7), now_bj)
+        start_dt, end_dt = resolve_time_range(CrawlTimeRangeRequest(lastDays=7), now_bj)
         self.assertEqual(now_bj - timedelta(days=7), start_dt)
         self.assertEqual(now_bj, end_dt)
 
-        start_dt, end_dt = _resolve_time_range(
+        start_dt, end_dt = resolve_time_range(
             CrawlTimeRangeRequest(startTime="2026-05-07", endTime="2026-05-01"),
             now_bj,
         )
@@ -208,11 +208,11 @@ class CrawlRoutesHelperTests(unittest.TestCase):
 
     @unittest.skipUnless(HAS_CRAWL_ROUTE_DEPS, "crawl route dependencies are not installed")
     def test_format_zsxq_time_uses_bj_timezone_without_colon(self):
-        from backend.services.crawl_service import _format_zsxq_time
+        from backend.services.crawl_time_range import format_zsxq_time
 
         self.assertEqual(
             "2026-02-01T08:00:00.000+0800",
-            _format_zsxq_time(datetime(2026, 2, 1, 0, tzinfo=timezone.utc)),
+            format_zsxq_time(datetime(2026, 2, 1, 0, tzinfo=timezone.utc)),
         )
 
     @unittest.skipUnless(HAS_CRAWL_ROUTE_DEPS, "crawl route dependencies are not installed")
@@ -1750,7 +1750,7 @@ class CrawlRoutesHelperTests(unittest.TestCase):
 
     @unittest.skipUnless(HAS_CRAWL_ROUTE_DEPS, "crawl route dependencies are not installed")
     def test_filter_official_topics_by_time_range_preserves_bounds_and_oldest_time(self):
-        from backend.services.crawl_service import _filter_official_topics_by_time_range
+        from backend.services.crawl_time_range import filter_official_topics_by_time_range
 
         start_dt = datetime(2026, 5, 1, tzinfo=timezone(timedelta(hours=8)))
         end_dt = datetime(2026, 5, 7, 23, 59, 59, tzinfo=timezone(timedelta(hours=8)))
@@ -1758,7 +1758,7 @@ class CrawlRoutesHelperTests(unittest.TestCase):
         middle_topic = {"topic_id": 2, "create_time": "2026-05-03T12:00:00.000+0800"}
         end_topic = {"topic_id": 3, "create_time": "2026-05-07T23:59:59.000+0800"}
 
-        filtered, oldest_dt = _filter_official_topics_by_time_range(
+        filtered, oldest_dt = filter_official_topics_by_time_range(
             [
                 {"topic_id": 0, "create_time": "not-a-time"},
                 start_topic,
