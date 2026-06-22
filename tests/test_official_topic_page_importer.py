@@ -2,6 +2,77 @@ import unittest
 
 
 class OfficialTopicPageImporterTests(unittest.TestCase):
+    def test_official_topics_to_import_for_mode_returns_latest_and_page_plans(self):
+        from backend.services.official_topic_page_importer import official_topics_to_import_for_mode
+
+        db = object()
+        topics = [{"topic_id": 1}, {"topic_id": 2}]
+        new_topics = [topics[1]]
+        logs = []
+        calls = []
+
+        def add_task_log(task_id, message):
+            logs.append((task_id, message))
+
+        def find_new_topics(_db, group_id, candidate_topics):
+            calls.append((_db, group_id, candidate_topics))
+            return new_topics
+
+        plan = official_topics_to_import_for_mode(
+            db,
+            "group-1",
+            "latest",
+            topics,
+            "task-1",
+            add_task_log,
+            find_new_topics=find_new_topics,
+        )
+
+        self.assertEqual(new_topics, plan.topics_to_import)
+        self.assertFalse(plan.should_stop)
+        self.assertEqual([(db, "group-1", topics)], calls)
+        self.assertEqual([("task-1", "📊 官方页面分析: 2 个话题，1 个新话题")], logs)
+
+        logs.clear()
+        calls.clear()
+
+        plan = official_topics_to_import_for_mode(
+            db,
+            "group-1",
+            "incremental",
+            topics,
+            "task-1",
+            add_task_log,
+            find_new_topics=find_new_topics,
+        )
+
+        self.assertIs(topics, plan.topics_to_import)
+        self.assertFalse(plan.should_stop)
+        self.assertEqual([], calls)
+        self.assertEqual([("task-1", "📄 官方本页获取 2 个话题")], logs)
+
+        logs.clear()
+
+        plan = official_topics_to_import_for_mode(
+            db,
+            "group-1",
+            "latest",
+            topics,
+            "task-1",
+            add_task_log,
+            find_new_topics=lambda _db, _group_id, _topics: [],
+        )
+
+        self.assertEqual([], plan.topics_to_import)
+        self.assertTrue(plan.should_stop)
+        self.assertEqual(
+            [
+                ("task-1", "📊 官方页面分析: 2 个话题，0 个新话题"),
+                ("task-1", "✅ 本页话题均已存在，最新采集完成"),
+            ],
+            logs,
+        )
+
     def test_import_official_topics_fetches_comments_imports_stats_and_commits(self):
         from backend.services.official_topic_page_importer import import_official_topics
 

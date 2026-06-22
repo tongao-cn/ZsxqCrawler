@@ -2,13 +2,18 @@
 
 from __future__ import annotations
 
-from typing import Any, Callable
+from typing import Any, Callable, NamedTuple
 
 from backend.crawlers.official_topic_client import OfficialTopicClient, normalize_official_topic
 from backend.storage.zsxq_database import ZSXQDatabase
 
 
 TaskLogWriter = Callable[[str, str], None]
+
+
+class OfficialTopicImportPlan(NamedTuple):
+    topics_to_import: list[dict[str, Any]]
+    should_stop: bool
 
 
 def import_official_topic(db: ZSXQDatabase, _group_id: str, topic_data: dict[str, Any]) -> str:
@@ -52,6 +57,28 @@ def new_official_topics(
         for topic in topics
         if not topic_exists(db, group_id, topic_id(topic))
     ]
+
+
+def official_topics_to_import_for_mode(
+    db: ZSXQDatabase,
+    group_id: str,
+    mode: str,
+    unique_topics: list[dict[str, Any]],
+    task_id: str,
+    add_task_log: TaskLogWriter,
+    *,
+    find_new_topics: Callable[[ZSXQDatabase, str, list[dict[str, Any]]], list[dict[str, Any]]] = new_official_topics,
+) -> OfficialTopicImportPlan:
+    if mode != "latest":
+        add_task_log(task_id, f"📄 官方本页获取 {len(unique_topics)} 个话题")
+        return OfficialTopicImportPlan(unique_topics, False)
+
+    new_topics = find_new_topics(db, group_id, unique_topics)
+    add_task_log(task_id, f"📊 官方页面分析: {len(unique_topics)} 个话题，{len(new_topics)} 个新话题")
+    if not new_topics:
+        add_task_log(task_id, "✅ 本页话题均已存在，最新采集完成")
+        return OfficialTopicImportPlan([], True)
+    return OfficialTopicImportPlan(new_topics, False)
 
 
 def fetch_official_comments(

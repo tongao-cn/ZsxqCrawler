@@ -36,6 +36,7 @@ from backend.services.official_topic_page_importer import (
     import_official_topic,
     import_official_topics,
     new_official_topics,
+    official_topics_to_import_for_mode,
     official_topic_comments_count,
     official_topic_exists,
     official_topic_id,
@@ -518,16 +519,16 @@ def _official_topics_to_import_for_mode(
     mode: str,
     unique_topics: list[dict[str, Any]],
 ) -> tuple[list[dict[str, Any]], bool]:
-    if mode != "latest":
-        add_task_log(task_id, f"📄 官方本页获取 {len(unique_topics)} 个话题")
-        return unique_topics, False
-
-    new_topics = _new_official_topics(db, group_id, unique_topics)
-    add_task_log(task_id, f"📊 官方页面分析: {len(unique_topics)} 个话题，{len(new_topics)} 个新话题")
-    if not new_topics:
-        add_task_log(task_id, "✅ 本页话题均已存在，最新采集完成")
-        return [], True
-    return new_topics, False
+    plan = official_topics_to_import_for_mode(
+        db,
+        group_id,
+        mode,
+        unique_topics,
+        task_id,
+        add_task_log,
+        find_new_topics=_new_official_topics,
+    )
+    return plan.topics_to_import, plan.should_stop
 
 def _fetch_official_topic_page(
     client: OfficialTopicClient,
