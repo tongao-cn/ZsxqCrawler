@@ -57,9 +57,9 @@ def _fake_execute_values(cursor, sql, rows, template=None):
 class AShareAnalysisDbStorageHelperTests(unittest.TestCase):
     @unittest.skipUnless(HAS_STORAGE_DEPS, "PostgreSQL storage dependencies are not installed")
     def test_tdx_export_block_payload_normalizes_row_values(self):
-        from backend.services.a_share_analysis_db_storage import _tdx_export_block_payload
+        from backend.services.a_share_tdx_export_payload import tdx_export_block_payload
 
-        payload = _tdx_export_block_payload((3, "3日推荐池", "block3", r"C:\tdx\block3.blk", 5, 2, '["A", "B"]'))
+        payload = tdx_export_block_payload((3, "3日推荐池", "block3", r"C:\tdx\block3.blk", 5, 2, '["A", "B"]'))
 
         self.assertEqual(
             {
@@ -76,7 +76,7 @@ class AShareAnalysisDbStorageHelperTests(unittest.TestCase):
 
     @unittest.skipUnless(HAS_STORAGE_DEPS, "PostgreSQL storage dependencies are not installed")
     def test_latest_tdx_export_payload_keeps_existing_shape(self):
-        from backend.services.a_share_analysis_db_storage import _latest_tdx_export_payload
+        from backend.services.a_share_tdx_export_payload import latest_tdx_export_payload
 
         exported_at = datetime(2026, 5, 7, 10, 30)
         row = (
@@ -97,7 +97,7 @@ class AShareAnalysisDbStorageHelperTests(unittest.TestCase):
             {"skipped_companies": ["A", ""]},
         ]
 
-        payload = _latest_tdx_export_payload(row, blocks)
+        payload = latest_tdx_export_payload(row, blocks)
 
         self.assertEqual(12, payload["export_id"])
         self.assertEqual(exported_at.isoformat(), payload["exported_at"])
