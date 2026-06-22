@@ -7165,18 +7165,18 @@ class FileDownloaderRetryHelperTests(unittest.TestCase):
 
         with (
             patch(
-                "backend.crawlers.zsxq_file_downloader.random.choice",
+                "backend.crawlers.file_stealth_headers_runner.random.choice",
                 side_effect=[selected_ua, selected_language, selected_platform],
             ) as random_choice,
             patch(
-                "backend.crawlers.zsxq_file_downloader.random.random",
+                "backend.crawlers.file_stealth_headers_runner.random.random",
                 side_effect=[0.6, 0.4, 0.8, 0.51, 0.8, 0.7],
             ) as random_value,
             patch(
-                "backend.crawlers.zsxq_file_downloader.random.randint",
+                "backend.crawlers.file_stealth_headers_runner.random.randint",
                 side_effect=[5, 123456789012],
             ) as random_int,
-            patch("backend.crawlers.zsxq_file_downloader.time.time", return_value=1700000000),
+            patch("backend.crawlers.file_stealth_headers_runner.time.time", return_value=1700000000),
         ):
             headers = ZSXQFileDownloader.get_stealth_headers(downloader)
 

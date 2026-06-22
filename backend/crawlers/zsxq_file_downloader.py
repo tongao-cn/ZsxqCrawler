@@ -103,6 +103,12 @@ from backend.crawlers.file_list_display_runner import (
     print_file_list_page as run_print_file_list_page,
     show_file_list as run_show_file_list,
 )
+from backend.crawlers.file_stealth_headers_runner import (
+    apply_dynamic_stealth_headers as run_apply_dynamic_stealth_headers,
+    apply_optional_stealth_headers as run_apply_optional_stealth_headers,
+    get_stealth_headers as run_get_stealth_headers,
+    select_stealth_header_values as run_select_stealth_header_values,
+)
 from backend.crawlers.file_batch_download_runner import (
     apply_batch_download_next_page as run_apply_batch_download_next_page,
     apply_batch_download_result as run_apply_batch_download_result,
@@ -244,15 +250,7 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     risk_event_header_profile_label,
     risk_event_row,
     risk_event_user_agent_label,
-    sec_ch_ua_for_user_agent,
     should_log_full_response,
-    stealth_accept_languages,
-    stealth_base_headers,
-    stealth_optional_headers,
-    stealth_platforms,
-    stealth_request_id_header_value,
-    stealth_timestamp_header_value,
-    stealth_user_agents,
     summarize_page_time_range,
     time_dedupe_page_messages,
     time_collection_database_status_message,
@@ -573,49 +571,17 @@ class ZSXQFileDownloader:
         return cookie
 
     def _select_stealth_header_values(self) -> StealthHeaderSelection:
-        user_agents = stealth_user_agents()
-        selected_ua = random.choice(user_agents)
-        sec_ch_ua = sec_ch_ua_for_user_agent(selected_ua)
-
-        accept_languages = stealth_accept_languages()
-        platforms = stealth_platforms()
-        accept_language = random.choice(accept_languages)
-        platform = random.choice(platforms)
-
-        return StealthHeaderSelection(selected_ua, sec_ch_ua, accept_language, platform)
+        return run_select_stealth_header_values()
 
     def _apply_optional_stealth_headers(self, headers: Dict[str, str]) -> None:
-        optional_headers = stealth_optional_headers()
-        for key, value in optional_headers.items():
-            if random.random() > 0.5:  # 50%概率添加
-                headers[key] = value
+        run_apply_optional_stealth_headers(headers)
 
     def _apply_dynamic_stealth_headers(self, headers: Dict[str, str]) -> None:
-        if random.random() > 0.7:  # 30%概率添加
-            headers['X-Timestamp'] = stealth_timestamp_header_value(
-                int(time.time()),
-                random.randint(-30, 30),
-            )
-
-        if random.random() > 0.6:  # 40%概率添加
-            headers['X-Request-Id'] = stealth_request_id_header_value(
-                random.randint(100000000000, 999999999999),
-            )
+        run_apply_dynamic_stealth_headers(headers)
 
     def get_stealth_headers(self) -> Dict[str, str]:
         """获取反检测请求头（每次调用随机化）"""
-        selection = self._select_stealth_header_values()
-        headers = stealth_base_headers(
-            self.cookie,
-            self.group_id,
-            selection.user_agent,
-            selection.sec_ch_ua,
-            selection.accept_language,
-            selection.platform,
-        )
-        self._apply_optional_stealth_headers(headers)
-        self._apply_dynamic_stealth_headers(headers)
-        return headers
+        return run_get_stealth_headers(self)
 
     def smart_delay(self):
         """智能延迟"""
