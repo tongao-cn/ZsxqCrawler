@@ -2335,7 +2335,7 @@ class FileDownloaderBatchDownloadTests(unittest.TestCase):
         downloader.logs = []
         downloader.log = downloader.logs.append
 
-        with patch("backend.crawlers.zsxq_file_downloader.time.sleep") as sleep:
+        with patch("backend.crawlers.file_batch_download_runner.time.sleep") as sleep:
             next_index = ZSXQFileDownloader._next_batch_download_index_target(
                 downloader,
                 BatchDownloadNextIndexTarget("next-page", 1, 2),
@@ -10003,7 +10003,7 @@ class FileDownloaderDownloadTests(unittest.TestCase):
         downloader.logs = []
         downloader.log = downloader.logs.append
 
-        with patch("backend.crawlers.zsxq_file_downloader.time.sleep") as sleep:
+        with patch("backend.crawlers.file_batch_download_runner.time.sleep") as sleep:
             ZSXQFileDownloader._wait_before_download_retry_target(
                 downloader,
                 DownloadRetryWaitTarget(2, 5),

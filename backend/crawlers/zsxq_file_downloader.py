@@ -51,6 +51,49 @@ from backend.crawlers.file_database_download_runner import (
     DatabaseDownloadTarget,
     run_database_file_download,
 )
+from backend.crawlers.file_batch_download_runner import (
+    apply_batch_download_next_page as run_apply_batch_download_next_page,
+    apply_batch_download_result as run_apply_batch_download_result,
+    apply_batch_download_result_target as run_apply_batch_download_result_target,
+    apply_batch_file_item_result as run_apply_batch_file_item_result,
+    apply_successful_batch_download_result as run_apply_successful_batch_download_result,
+    advance_batch_download_loop_step as run_advance_batch_download_loop_step,
+    batch_download_loop_step_from_page as run_batch_download_loop_step_from_page,
+    batch_download_next_page_plan_for_target as run_batch_download_next_page_plan_for_target,
+    batch_download_page_from_response as run_batch_download_page_from_response,
+    batch_page_file_item_target as run_batch_page_file_item_target,
+    batch_page_files_target_for_page as run_batch_page_files_target_for_page,
+    download_batch_file_item_target as run_download_batch_file_item_target,
+    download_batch_page_file_for_target as run_download_batch_page_file_for_target,
+    download_batch_page_files_for_run_target as run_download_batch_page_files_for_run_target,
+    download_batch_page_files_target as run_download_batch_page_files_target,
+    fetch_batch_download_page_data as run_fetch_batch_download_page_data,
+    fetch_batch_download_page_for_run_target as run_fetch_batch_download_page_for_run_target,
+    fetch_batch_download_page_target as run_fetch_batch_download_page_target,
+    handle_batch_download_page_fetch_failure as run_handle_batch_download_page_fetch_failure,
+    handle_empty_batch_download_page as run_handle_empty_batch_download_page,
+    has_reached_batch_page_file_download_limit as run_has_reached_batch_page_file_download_limit,
+    initial_batch_download_loop_step as run_initial_batch_download_loop_step,
+    is_batch_download_loop_stopped as run_is_batch_download_loop_stopped,
+    is_batch_page_file_download_stopped as run_is_batch_page_file_download_stopped,
+    is_initial_batch_download_stopped as run_is_initial_batch_download_stopped,
+    is_missing_batch_download_loop_step as run_is_missing_batch_download_loop_step,
+    is_terminal_batch_download_loop_step as run_is_terminal_batch_download_loop_step,
+    log_batch_download_completion as run_log_batch_download_completion,
+    log_batch_download_file_item as run_log_batch_download_file_item,
+    log_batch_download_skipped as run_log_batch_download_skipped,
+    log_batch_download_start as run_log_batch_download_start,
+    next_batch_download_index_for_run_target as run_next_batch_download_index_for_run_target,
+    next_batch_download_index_target as run_next_batch_download_index_target,
+    record_batch_file_item_attempt as run_record_batch_file_item_attempt,
+    run_batch_download_loop_iteration,
+    run_batch_download_loop_target,
+    run_batch_download_page_target,
+    run_batch_file_download,
+    run_next_batch_download_loop_step,
+    should_continue_batch_download_loop as run_should_continue_batch_download_loop,
+    should_delay_after_batch_download as run_should_delay_after_batch_download,
+)
 from backend.crawlers.file_time_collection_runner import (
     TimeCollectionDatabaseState,
     TimeCollectionLoopContext,
@@ -89,17 +132,6 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     api_retry_user_agent_message,
     api_retry_wait_message,
     add_import_stats,
-    batch_download_completion_messages,
-    batch_download_empty_page_message,
-    batch_download_fetch_failed_message,
-    batch_download_file_stop_message,
-    batch_download_initial_stop_message,
-    batch_download_item_message,
-    batch_download_loop_stop_message,
-    batch_download_next_page_plan,
-    batch_download_page_files_message,
-    batch_download_skipped_message,
-    batch_download_start_messages,
     clean_cookie_result,
     database_stats_api_response_query,
     database_stats_table_emoji,
@@ -366,22 +398,6 @@ def _database_stats_time_range_row(result: Any) -> Optional[DatabaseStatsTimeRan
 
 def _database_stats_time_range(result: Any) -> Optional[DatabaseStatsTimeRange]:
     return _database_stats_time_range_row(result)
-
-
-def _record_file_download_result(result: Any, stats: Dict[str, int]) -> str:
-    if result == "skipped":
-        stats['skipped'] += 1
-        return "skipped"
-    if result:
-        stats['downloaded'] += 1
-        return "downloaded"
-    stats['failed'] += 1
-    return "failed"
-
-
-def _batch_download_file_name(file_info: Dict[str, Any]) -> Any:
-    file_data = file_info.get('file', {})
-    return file_data.get('name', 'Unknown')
 
 
 class ZSXQFileDownloader:
@@ -2133,33 +2149,20 @@ class ZSXQFileDownloader:
         self,
         target: BatchDownloadFileItemTarget,
     ) -> int:
-        self._log_batch_download_file_item(target)
-        result = self.download_file(target.file_info)
-        downloaded_in_batch = self._apply_batch_file_item_result(target, result)
-        self._record_batch_file_item_attempt(target.stats)
-        return downloaded_in_batch
+        return run_download_batch_file_item_target(self, target)
 
     def _log_batch_download_file_item(self, target: BatchDownloadFileItemTarget) -> None:
-        file_name = _batch_download_file_name(target.file_info)
-        self.log(batch_download_item_message(target.item_number, target.max_files, file_name))
+        run_log_batch_download_file_item(self, target)
 
     def _apply_batch_file_item_result(
         self,
         target: BatchDownloadFileItemTarget,
         result: Any,
     ) -> int:
-        return self._apply_batch_download_result_target(
-            BatchDownloadResultTarget(
-                result,
-                target.has_more_in_batch,
-                target.downloaded_in_batch,
-                target.max_files,
-                target.stats,
-            ),
-        )
+        return run_apply_batch_file_item_result(self, target, result)
 
     def _record_batch_file_item_attempt(self, stats: Dict[str, int]) -> None:
-        stats['total_files'] += 1
+        run_record_batch_file_item_attempt(stats)
 
     def _apply_batch_download_result(
         self,
@@ -2169,112 +2172,68 @@ class ZSXQFileDownloader:
         max_files: Optional[int],
         stats: Dict[str, int],
     ) -> int:
-        return self._apply_batch_download_result_target(
-            BatchDownloadResultTarget(
-                result,
-                has_more_in_batch,
-                downloaded_in_batch,
-                max_files,
-                stats,
-            ),
+        return run_apply_batch_download_result(
+            self,
+            result,
+            has_more_in_batch,
+            downloaded_in_batch,
+            max_files,
+            stats,
         )
 
     def _apply_batch_download_result_target(
         self,
         target: BatchDownloadResultTarget,
     ) -> int:
-        downloaded_in_batch = target.downloaded_in_batch
-        result_status = _record_file_download_result(target.result, target.stats)
-        if result_status == "skipped":
-            self._log_batch_download_skipped()
-        elif result_status == "downloaded":
-            downloaded_in_batch = self._apply_successful_batch_download_result(target, downloaded_in_batch)
-
-        return downloaded_in_batch
+        return run_apply_batch_download_result_target(self, target)
 
     def _log_batch_download_skipped(self) -> None:
-        self.log(batch_download_skipped_message())
+        run_log_batch_download_skipped(self)
 
     def _apply_successful_batch_download_result(
         self,
         target: BatchDownloadResultTarget,
         downloaded_in_batch: int,
     ) -> int:
-        downloaded_in_batch += 1
-        self.check_long_delay()
-        if self._should_delay_after_batch_download(target, downloaded_in_batch):
-            self.download_delay()
-        return downloaded_in_batch
+        return run_apply_successful_batch_download_result(self, target, downloaded_in_batch)
 
     def _should_delay_after_batch_download(
         self,
         target: BatchDownloadResultTarget,
         downloaded_in_batch: int,
     ) -> bool:
-        not_reached_limit = target.max_files is None or downloaded_in_batch < target.max_files
-        return target.has_more_in_batch and not_reached_limit
+        return run_should_delay_after_batch_download(target, downloaded_in_batch)
 
     def _next_batch_download_index_target(
         self,
         target: BatchDownloadNextIndexTarget,
     ) -> Optional[str]:
-        next_page = self._batch_download_next_page_plan_for_target(target)
-        return self._apply_batch_download_next_page(next_page)
+        return run_next_batch_download_index_target(self, target)
 
     def _batch_download_next_page_plan_for_target(
         self,
         target: BatchDownloadNextIndexTarget,
     ) -> Dict[str, Any]:
-        return batch_download_next_page_plan(
-            target.next_index,
-            target.downloaded_in_batch,
-            target.max_files,
-        )
+        return run_batch_download_next_page_plan_for_target(target)
 
     def _apply_batch_download_next_page(self, next_page: Dict[str, Any]) -> Optional[str]:
-        if not next_page["should_continue"]:
-            return None
-
-        self.log(next_page["message"])
-        time.sleep(next_page["delay"])  # 页面间短暂延迟
-        return next_page["next_index"]
+        return run_apply_batch_download_next_page(self, next_page)
 
     def _download_batch_page_files_target(
         self,
         target: BatchDownloadPageFilesTarget,
     ) -> int:
-        downloaded_in_batch = target.downloaded_in_batch
-
-        for i, file_info in enumerate(target.files):
-            # 检查是否需要停止
-            if self._is_batch_page_file_download_stopped():
-                break
-
-            if self._has_reached_batch_page_file_download_limit(target, downloaded_in_batch):
-                break
-
-            downloaded_in_batch = self._download_batch_page_file_for_target(
-                target,
-                file_info,
-                i,
-                downloaded_in_batch,
-            )
-
-        return downloaded_in_batch
+        return run_download_batch_page_files_target(self, target)
 
     def _is_batch_page_file_download_stopped(self) -> bool:
-        if not self.check_stop():
-            return False
-
-        self.log(batch_download_file_stop_message())
-        return True
+        return run_is_batch_page_file_download_stopped(self)
 
     def _has_reached_batch_page_file_download_limit(
         self,
         target: BatchDownloadPageFilesTarget,
         downloaded_in_batch: int,
     ) -> bool:
-        return target.max_files is not None and downloaded_in_batch >= target.max_files
+        return run_has_reached_batch_page_file_download_limit(target, downloaded_in_batch)
 
     def _download_batch_page_file_for_target(
         self,
@@ -2283,8 +2242,12 @@ class ZSXQFileDownloader:
         file_index: int,
         downloaded_in_batch: int,
     ) -> int:
-        return self._download_batch_file_item_target(
-            self._batch_page_file_item_target(target, file_info, file_index, downloaded_in_batch),
+        return run_download_batch_page_file_for_target(
+            self,
+            target,
+            file_info,
+            file_index,
+            downloaded_in_batch,
         )
 
     def _batch_page_file_item_target(
@@ -2294,87 +2257,57 @@ class ZSXQFileDownloader:
         file_index: int,
         downloaded_in_batch: int,
     ) -> BatchDownloadFileItemTarget:
-        return BatchDownloadFileItemTarget(
-            file_info,
-            downloaded_in_batch + 1,
-            target.max_files,
-            (file_index + 1) < len(target.files),
-            downloaded_in_batch,
-            target.stats,
-        )
+        return run_batch_page_file_item_target(target, file_info, file_index, downloaded_in_batch)
 
     def _fetch_batch_download_page_target(
         self,
         target: BatchDownloadFetchTarget,
     ) -> Optional[BatchDownloadPage]:
-        data = self._fetch_batch_download_page_data(target)
-        if not data:
-            return self._handle_batch_download_page_fetch_failure()
-
-        return self._batch_download_page_from_response(data)
+        return run_fetch_batch_download_page_target(self, target)
 
     def _fetch_batch_download_page_data(
         self,
         target: BatchDownloadFetchTarget,
     ) -> Optional[Dict[str, Any]]:
-        return self.fetch_file_list(count=20, index=target.current_index)
+        return run_fetch_batch_download_page_data(self, target)
 
     def _handle_batch_download_page_fetch_failure(self) -> Optional[BatchDownloadPage]:
-        self.log(batch_download_fetch_failed_message())
-        return None
+        return run_handle_batch_download_page_fetch_failure(self)
 
     def _batch_download_page_from_response(
         self,
         data: Dict[str, Any],
     ) -> Optional[BatchDownloadPage]:
-        files, next_index = file_list_response_page(data)
-
-        if not files:
-            return self._handle_empty_batch_download_page()
-
-        self.log(batch_download_page_files_message(len(files)))
-        return BatchDownloadPage(files, next_index)
+        return run_batch_download_page_from_response(self, data)
 
     def _handle_empty_batch_download_page(self) -> Optional[BatchDownloadPage]:
-        self.log(batch_download_empty_page_message())
-        return None
+        return run_handle_empty_batch_download_page(self)
 
     def _run_batch_download_page_target(
         self,
         target: BatchDownloadPageRunTarget,
     ) -> Optional[BatchDownloadLoopStep]:
-        page = self._fetch_batch_download_page_for_run_target(target)
-        if page is None:
-            return None
-
-        return self._batch_download_loop_step_from_page(target, page)
+        return run_batch_download_page_target(self, target)
 
     def _batch_download_loop_step_from_page(
         self,
         target: BatchDownloadPageRunTarget,
         page: BatchDownloadPage,
     ) -> BatchDownloadLoopStep:
-        downloaded_in_batch = self._download_batch_page_files_for_run_target(target, page)
-
-        next_index = self._next_batch_download_index_for_run_target(target, page, downloaded_in_batch)
-        return BatchDownloadLoopStep(downloaded_in_batch, next_index)
+        return run_batch_download_loop_step_from_page(self, target, page)
 
     def _fetch_batch_download_page_for_run_target(
         self,
         target: BatchDownloadPageRunTarget,
     ) -> Optional[BatchDownloadPage]:
-        return self._fetch_batch_download_page_target(
-            BatchDownloadFetchTarget(target.step.next_index),
-        )
+        return run_fetch_batch_download_page_for_run_target(self, target)
 
     def _download_batch_page_files_for_run_target(
         self,
         target: BatchDownloadPageRunTarget,
         page: BatchDownloadPage,
     ) -> int:
-        return self._download_batch_page_files_target(
-            self._batch_page_files_target_for_page(target, page),
-        )
+        return run_download_batch_page_files_for_run_target(self, target, page)
 
     def _next_batch_download_index_for_run_target(
         self,
@@ -2382,102 +2315,66 @@ class ZSXQFileDownloader:
         page: BatchDownloadPage,
         downloaded_in_batch: int,
     ) -> Optional[str]:
-        return self._next_batch_download_index_target(
-            BatchDownloadNextIndexTarget(
-                page.next_index,
-                downloaded_in_batch,
-                target.max_files,
-            ),
-        )
+        return run_next_batch_download_index_for_run_target(self, target, page, downloaded_in_batch)
 
     def _batch_page_files_target_for_page(
         self,
         target: BatchDownloadPageRunTarget,
         page: BatchDownloadPage,
     ) -> BatchDownloadPageFilesTarget:
-        return BatchDownloadPageFilesTarget(
-            page.files,
-            target.step.downloaded_in_batch,
-            target.max_files,
-            target.stats,
-        )
+        return run_batch_page_files_target_for_page(target, page)
 
     def _run_batch_download_loop_target(
         self,
         target: BatchDownloadLoopTarget,
     ) -> None:
-        step = self._initial_batch_download_loop_step(target)
-
-        while self._should_continue_batch_download_loop(target, step):
-            step = self._run_batch_download_loop_iteration(target, step)
-            if step is None:
-                break
+        run_batch_download_loop_target(self, target)
 
     def _should_continue_batch_download_loop(
         self,
         target: BatchDownloadLoopTarget,
         step: BatchDownloadLoopStep,
     ) -> bool:
-        return target.max_files is None or step.downloaded_in_batch < target.max_files
+        return run_should_continue_batch_download_loop(target, step)
 
     def _run_batch_download_loop_iteration(
         self,
         target: BatchDownloadLoopTarget,
         step: BatchDownloadLoopStep,
     ) -> Optional[BatchDownloadLoopStep]:
-        if self._is_batch_download_loop_stopped():
-            return None
-
-        next_step = self._advance_batch_download_loop_step(target, step)
-        if next_step is None:
-            return None
-
-        if self._is_terminal_batch_download_loop_step(next_step):
-            return None
-
-        return next_step
+        return run_batch_download_loop_iteration(self, target, step)
 
     def _is_batch_download_loop_stopped(self) -> bool:
-        if not self.check_stop():
-            return False
-
-        self.log(batch_download_loop_stop_message())
-        return True
+        return run_is_batch_download_loop_stopped(self)
 
     def _run_next_batch_download_loop_step(
         self,
         target: BatchDownloadLoopTarget,
         step: BatchDownloadLoopStep,
     ) -> Optional[BatchDownloadLoopStep]:
-        return self._run_batch_download_page_target(
-            BatchDownloadPageRunTarget(step, target.max_files, target.stats),
-        )
+        return run_next_batch_download_loop_step(self, target, step)
 
     def _advance_batch_download_loop_step(
         self,
         target: BatchDownloadLoopTarget,
         step: BatchDownloadLoopStep,
     ) -> Optional[BatchDownloadLoopStep]:
-        next_step = self._run_next_batch_download_loop_step(target, step)
-        if self._is_missing_batch_download_loop_step(next_step):
-            return None
-
-        return next_step
+        return run_advance_batch_download_loop_step(self, target, step)
 
     def _is_missing_batch_download_loop_step(
         self,
         step: Optional[BatchDownloadLoopStep],
     ) -> bool:
-        return step is None
+        return run_is_missing_batch_download_loop_step(step)
 
     def _is_terminal_batch_download_loop_step(self, step: BatchDownloadLoopStep) -> bool:
-        return step.next_index is None
+        return run_is_terminal_batch_download_loop_step(step)
 
     def _initial_batch_download_loop_step(
         self,
         target: BatchDownloadLoopTarget,
     ) -> BatchDownloadLoopStep:
-        return BatchDownloadLoopStep(0, target.start_index)
+        return run_initial_batch_download_loop_step(target)
 
     def download_files_batch(self, max_files: Optional[int] = None, start_index: Optional[str] = None) -> Dict[str, int]:
         return self._download_files_batch_target(
@@ -2489,35 +2386,16 @@ class ZSXQFileDownloader:
         target: BatchDownloadTarget,
     ) -> Dict[str, int]:
         """批量下载文件"""
-        self._log_batch_download_start(target.max_files)
-
-        # 检查是否需要停止
-        if self._is_initial_batch_download_stopped():
-            return download_result_stats()
-
-        stats = download_result_stats()
-        self._run_batch_download_loop_target(
-            BatchDownloadLoopTarget(stats, target.max_files, target.start_index),
-        )
-
-        self._log_batch_download_completion(stats)
-
-        return stats
+        return run_batch_file_download(self, target)
 
     def _is_initial_batch_download_stopped(self) -> bool:
-        if not self.check_stop():
-            return False
-
-        self.log(batch_download_initial_stop_message())
-        return True
+        return run_is_initial_batch_download_stopped(self)
 
     def _log_batch_download_start(self, max_files: Optional[int]) -> None:
-        for message in batch_download_start_messages(max_files):
-            self.log(message)
+        run_log_batch_download_start(self, max_files)
 
     def _log_batch_download_completion(self, stats: Dict[str, int]) -> None:
-        for message in batch_download_completion_messages(stats):
-            self.log(message)
+        run_log_batch_download_completion(self, stats)
 
     def _print_file_list_page(
         self,
