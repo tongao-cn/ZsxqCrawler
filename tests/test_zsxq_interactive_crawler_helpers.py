@@ -8,6 +8,7 @@ from backend.crawlers.topic_pagination import (
     _offset_zsxq_end_time,
     _offset_zsxq_end_time_by_hours,
 )
+from backend.crawlers.topic_page_novelty import analyze_topic_page_novelty
 from backend.crawlers.topic_time_cursor import next_topic_end_time
 from backend.crawlers.topic_crawler import ZSXQTopicCrawler
 from backend.storage.zsxq_database import TopicImportResult
@@ -124,6 +125,21 @@ class FakeTopicPaginationCrawler(TopicPaginationMixin):
 
 
 class TopicCrawlerPaginationTests(unittest.TestCase):
+    def test_analyze_topic_page_novelty_preserves_existing_count_new_topics_and_call_order(self):
+        topics = [_topic(101), _topic(102), _topic(103)]
+        calls = []
+
+        def topic_exists(topic_id):
+            calls.append(topic_id)
+            return topic_id in {101, 103}
+
+        novelty = analyze_topic_page_novelty(topics, topic_exists)
+
+        self.assertEqual(2, novelty.existing_count)
+        self.assertEqual(1, novelty.new_count)
+        self.assertEqual([topics[1]], novelty.new_topics)
+        self.assertEqual([101, 102, 103], calls)
+
     def test_store_batch_data_uses_topic_import_result_for_stats(self):
         db = FakeTopicIngestionDb(
             [

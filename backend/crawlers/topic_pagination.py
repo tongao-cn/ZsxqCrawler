@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any, Dict, List, Optional
 
 from backend.core.console_output import safe_console_print as print
+from backend.crawlers.topic_page_novelty import analyze_topic_page_novelty
 from backend.crawlers.topic_time_cursor import (
     next_topic_end_time,
     offset_zsxq_end_time as _offset_zsxq_end_time,
@@ -262,11 +263,7 @@ class TopicPaginationMixin:
                         consecutive_empty_pages = 0  # 重置连续空页面计数
 
                     # 检查是否有新数据（避免重复爬取已有数据）
-                    new_topics_count = 0
-                    for topic in topics:
-                        topic_id = topic.get('topic_id')
-                        if not self.db.topic_exists(topic_id):
-                            new_topics_count += 1
+                    novelty = analyze_topic_page_novelty(topics, self.db.topic_exists)
 
                     # 存储数据
                     page_stats = self.store_batch_data(data)
@@ -279,7 +276,7 @@ class TopicPaginationMixin:
                     total_stats['pages'] += 1
 
                     # 显示进度信息
-                    print(f"   📊 获取到 {len(topics)} 个话题，其中 {new_topics_count} 个为新话题")
+                    print(f"   📊 获取到 {len(topics)} 个话题，其中 {novelty.new_count} 个为新话题")
                     print(f"   📈 累计: 新增{total_stats['new_topics']}, 更新{total_stats['updated_topics']}, 页数{total_stats['pages']}")
 
                     # 调试：显示时间戳信息（简化版）
@@ -299,7 +296,7 @@ class TopicPaginationMixin:
                         print(f"   ⚠️ 返回数据量({len(topics)})小于预期({per_page})，可能接近历史底部")
 
                     # 如果没有新话题且数据量不足，可能已达历史底部
-                    if new_topics_count == 0 and len(topics) < per_page:
+                    if novelty.new_count == 0 and len(topics) < per_page:
                         print(f"   📭 无新话题且数据量不足，可能已达历史底部")
                         return total_stats
 
@@ -411,16 +408,12 @@ class TopicPaginationMixin:
                         return total_stats
 
                     # 检查是否有新数据（避免重复爬取已有数据）
-                    new_topics_count = 0
-                    for topic in topics:
-                        topic_id = topic.get('topic_id')
-                        if not self.db.topic_exists(topic_id):
-                            new_topics_count += 1
+                    novelty = analyze_topic_page_novelty(topics, self.db.topic_exists)
 
-                    print(f"   📊 获取到 {len(topics)} 个话题，其中 {new_topics_count} 个为新话题")
+                    print(f"   📊 获取到 {len(topics)} 个话题，其中 {novelty.new_count} 个为新话题")
 
                     # 如果没有新话题且当前页话题数少于预期，可能已到达历史底部
-                    if new_topics_count == 0 and len(topics) < per_page:
+                    if novelty.new_count == 0 and len(topics) < per_page:
                         print(f"   📭 无新话题且数据量不足，可能已达历史底部")
                         return total_stats
 
@@ -560,21 +553,13 @@ class TopicPaginationMixin:
                         break
 
                     # 检查这一页的话题是否在数据库中全部存在
-                    existing_count = 0
-                    new_topics_list = []
+                    novelty = analyze_topic_page_novelty(topics, self.db.topic_exists)
 
-                    for topic in topics:
-                        topic_id = topic.get('topic_id')
-                        if self.db.topic_exists(topic_id):
-                            existing_count += 1
-                        else:
-                            new_topics_list.append(topic)
-
-                    print(f"   📊 页面分析: {len(topics)}个话题，{existing_count}个已存在，{len(new_topics_list)}个新话题")
-                    self.log(f"📊 页面分析: {len(topics)}个话题，{existing_count}个已存在，{len(new_topics_list)}个新话题")
+                    print(f"   📊 页面分析: {len(topics)}个话题，{novelty.existing_count}个已存在，{novelty.new_count}个新话题")
+                    self.log(f"📊 页面分析: {len(topics)}个话题，{novelty.existing_count}个已存在，{novelty.new_count}个新话题")
 
                     # 判断是否需要停止
-                    if existing_count == len(topics):
+                    if novelty.existing_count == len(topics):
                         # 整页话题全部存在于数据库中
                         print(f"   ✅ 整页话题全部存在于数据库，增量更新完成")
                         print(f"\n🎉 获取最新记录完成总结:")
@@ -593,7 +578,7 @@ class TopicPaginationMixin:
 
                         return total_stats
 
-                    elif existing_count == 0:
+                    elif novelty.existing_count == 0:
                         # 整页话题都是新的，全部存储
                         self.log(f"💾 开始整页入库: {len(topics)}个话题")
                         page_stats = self.store_batch_data(data)
@@ -602,12 +587,12 @@ class TopicPaginationMixin:
 
                     else:
                         # 部分话题是新的，只存储新话题
-                        print(f"   💾 部分存储: 只处理{len(new_topics_list)}个新话题")
-                        self.log(f"💾 开始部分入库: {len(new_topics_list)}个新话题")
+                        print(f"   💾 部分存储: 只处理{novelty.new_count}个新话题")
+                        self.log(f"💾 开始部分入库: {novelty.new_count}个新话题")
                         new_topics_count = 0
                         updated_topics_count = 0
 
-                        for new_topic in new_topics_list:
+                        for new_topic in novelty.new_topics:
                             try:
                                 topic_id = new_topic.get('topic_id')
                                 # 检查是否已存在（双重检查）
@@ -638,7 +623,7 @@ class TopicPaginationMixin:
                         total_stats['updated_topics'] += updated_topics_count
 
                     # 累计统计（如果是整页存储）
-                    if existing_count == 0:
+                    if novelty.existing_count == 0:
                         total_stats['new_topics'] += page_stats['new_topics']
                         total_stats['updated_topics'] += page_stats['updated_topics']
                         total_stats['errors'] += page_stats['errors']
