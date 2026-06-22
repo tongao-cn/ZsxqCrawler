@@ -68,6 +68,14 @@ from backend.crawlers.file_runtime_state_runner import (
     set_stop_flag_target as run_set_stop_flag_target,
     smart_delay_target as run_smart_delay_target,
 )
+from backend.crawlers.file_risk_event_runner import (
+    header_profile_label as run_risk_event_header_profile_label,
+    prepare_risk_event_log_path as run_prepare_risk_event_log_path,
+    record_risk_event as run_record_risk_event,
+    risk_event_row_for_runtime as run_risk_event_row,
+    user_agent_label as run_risk_event_user_agent_label,
+    write_risk_event_row as run_write_risk_event_row,
+)
 from backend.crawlers.file_database_download_runner import (
     DatabaseDownloadTarget,
     run_database_file_download,
@@ -255,9 +263,6 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     request_exception_plan,
     retry_exhausted_message,
     risk_event_header_user_agent,
-    risk_event_header_profile_label,
-    risk_event_row,
-    risk_event_user_agent_label,
     should_log_full_response,
     summarize_page_time_range,
     time_dedupe_page_messages,
@@ -595,32 +600,17 @@ class ZSXQFileDownloader:
 
     @staticmethod
     def _user_agent_label(user_agent: str) -> str:
-        return risk_event_user_agent_label(user_agent)
+        return run_risk_event_user_agent_label(user_agent)
 
     @staticmethod
     def _header_profile_label(headers: Dict[str, str]) -> str:
-        return risk_event_header_profile_label(headers)
+        return run_risk_event_header_profile_label(headers)
 
     def _prepare_risk_event_log_path(self) -> Optional[Any]:
-        if not getattr(self, "risk_event_log_path", None):
-            return None
-
-        from pathlib import Path
-
-        path = Path(self.risk_event_log_path)
-        path.parent.mkdir(parents=True, exist_ok=True)
-        return path
+        return run_prepare_risk_event_log_path(self)
 
     def _write_risk_event_row(self, path: Any, row: Dict[str, Any]) -> None:
-        import csv
-
-        fieldnames = tuple(row.keys())
-        write_header = not path.exists()
-        with path.open("a", encoding="utf-8-sig", newline="") as file_obj:
-            writer = csv.DictWriter(file_obj, fieldnames=fieldnames)
-            if write_header:
-                writer.writeheader()
-            writer.writerow(row)
+        run_write_risk_event_row(path, row)
 
     def _risk_event_row(
         self,
@@ -634,17 +624,16 @@ class ZSXQFileDownloader:
         api_message: Optional[str] = None,
         status: str = "observed",
     ) -> Dict[str, Any]:
-        return risk_event_row(
-            datetime.datetime.now().isoformat(timespec="seconds"),
-            self.group_id,
-            file_id,
-            phase,
-            attempt,
-            headers,
-            http_status,
-            api_code,
-            api_message,
-            status,
+        return run_risk_event_row(
+            self,
+            file_id=file_id,
+            phase=phase,
+            attempt=attempt,
+            headers=headers,
+            http_status=http_status,
+            api_code=api_code,
+            api_message=api_message,
+            status=status,
         )
 
     def _record_risk_event(
@@ -659,11 +648,8 @@ class ZSXQFileDownloader:
         api_message: Optional[str] = None,
         status: str = "observed",
     ) -> None:
-        path = self._prepare_risk_event_log_path()
-        if path is None:
-            return
-
-        row = self._risk_event_row(
+        run_record_risk_event(
+            self,
             file_id=file_id,
             phase=phase,
             attempt=attempt,
@@ -673,7 +659,6 @@ class ZSXQFileDownloader:
             api_message=api_message,
             status=status,
         )
-        self._write_risk_event_row(path, row)
 
     def download_delay(self):
         """下载间隔延迟"""

@@ -6967,7 +6967,7 @@ class FileDownloaderRetryHelperTests(unittest.TestCase):
         downloader._write_risk_event_row = lambda *args: self.fail("risk event write should be skipped")
 
         with patch(
-            "backend.crawlers.zsxq_file_downloader.risk_event_row",
+            "backend.crawlers.file_risk_event_runner.risk_event_row",
             side_effect=AssertionError("risk event row should be skipped"),
         ):
             ZSXQFileDownloader._record_risk_event(
@@ -6982,26 +6982,34 @@ class FileDownloaderRetryHelperTests(unittest.TestCase):
         downloader.group_id = "group-1"
         path = object()
         writes = []
-        downloader._prepare_risk_event_log_path = lambda: path
-        downloader._write_risk_event_row = lambda write_path, row: writes.append((write_path, row))
 
-        ZSXQFileDownloader._record_risk_event(
-            downloader,
-            file_id=101,
-            phase="download_url_retry_response",
-            attempt=2,
-            headers={
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/131.0.0.0",
-                "Referer": "https://wx.zsxq.com/dweb2/index/group/group-1",
-                "Origin": "https://wx.zsxq.com",
-                "Sec-Fetch-Site": "same-site",
-                "X-Request-Id": "req-1",
-            },
-            http_status=200,
-            api_code="1059",
-            api_message="slow down",
-            status="api_failed",
-        )
+        with (
+            patch(
+                "backend.crawlers.file_risk_event_runner.prepare_risk_event_log_path",
+                return_value=path,
+            ),
+            patch(
+                "backend.crawlers.file_risk_event_runner.write_risk_event_row",
+                side_effect=lambda write_path, row: writes.append((write_path, row)),
+            ),
+        ):
+            ZSXQFileDownloader._record_risk_event(
+                downloader,
+                file_id=101,
+                phase="download_url_retry_response",
+                attempt=2,
+                headers={
+                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/131.0.0.0",
+                    "Referer": "https://wx.zsxq.com/dweb2/index/group/group-1",
+                    "Origin": "https://wx.zsxq.com",
+                    "Sec-Fetch-Site": "same-site",
+                    "X-Request-Id": "req-1",
+                },
+                http_status=200,
+                api_code="1059",
+                api_message="slow down",
+                status="api_failed",
+            )
 
         self.assertEqual(1, len(writes))
         self.assertIs(path, writes[0][0])
