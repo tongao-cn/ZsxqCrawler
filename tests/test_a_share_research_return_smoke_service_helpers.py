@@ -101,6 +101,20 @@ class AShareResearchReturnSmokeServiceHelperTests(unittest.TestCase):
         self.assertEqual(0.333333, summary["win_rate"])
         self.assertEqual(1, summary["status_counts"]["skipped_no_tradable_entry"])
 
+    def test_return_smoke_quote_range_bounds_extends_hold_window(self):
+        from backend.services.a_share_return_smoke_backtest import return_smoke_quote_range_bounds
+
+        start_day, end_day = return_smoke_quote_range_bounds(
+            [
+                {"signal_date": "2026-05-10"},
+                {"signal_date": "2026-05-12"},
+            ],
+            hold_days=2,
+        )
+
+        self.assertEqual("2026-05-10", start_day.isoformat())
+        self.assertEqual("2026-05-28", end_day.isoformat())
+
     def test_build_recommendation_pool_memberships_keeps_service_defaults(self):
         from backend.services.a_share_research_return_smoke_service import (
             DEFAULT_POOL_ROTATION_WINDOWS,
