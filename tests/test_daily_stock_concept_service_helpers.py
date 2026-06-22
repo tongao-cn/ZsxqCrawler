@@ -74,11 +74,11 @@ class DailyStockConceptServiceHelperTests(unittest.TestCase):
 
     @unittest.skipUnless(HAS_STOCK_CONCEPT_DEPS, "daily stock concept service dependencies are not installed")
     def test_generate_stock_concepts_with_ai_rejects_invalid_json(self):
-        from backend.services import daily_stock_concept_service as service
+        from backend.services import daily_stock_concept_sources as sources
 
         with (
             patch.object(
-                service,
+                sources,
                 "get_openai_compatible_config",
                 return_value={
                     "api_key": "test-key",
@@ -88,13 +88,13 @@ class DailyStockConceptServiceHelperTests(unittest.TestCase):
                 },
             ),
             patch.object(
-                service,
+                sources,
                 "call_structured_ai_object",
                 side_effect=RuntimeError("AI 股票概念抽取结果不是合法 JSON: not json"),
             ),
         ):
             with self.assertRaisesRegex(RuntimeError, "AI 股票概念抽取结果不是合法 JSON"):
-                service._generate_stock_concepts_with_ai("topic payload", "2026-05-20")
+                sources.generate_stock_concepts_with_ai("topic payload", "2026-05-20")
 
     @unittest.skipUnless(HAS_STOCK_CONCEPT_DEPS, "daily stock concept service dependencies are not installed")
     def test_aggregate_topic_stock_extractions_merges_concepts_topics_and_confidence(self):
@@ -155,12 +155,69 @@ class DailyStockConceptServiceHelperTests(unittest.TestCase):
         self.assertEqual(["201"], stocks[0]["topic_ids"])
 
     @unittest.skipUnless(HAS_STOCK_CONCEPT_DEPS, "daily stock concept service dependencies are not installed")
-    def test_extract_daily_stock_concepts_uses_material_snapshot_payload_for_ai_fallback(self):
+    def test_resolve_daily_stock_concepts_uses_topic_extractions_before_ai_fallback(self):
+        from backend.services import daily_stock_concept_sources as sources
+
+        rows = [
+            {
+                "topic_id": "101",
+                "stock_name": "宁德时代",
+                "concepts": ["固态电池"],
+                "reason": "提到固态电池。",
+                "confidence": 0.7,
+                "model": "topic-model",
+            },
+        ]
+
+        with (
+            patch.object(sources, "load_topic_stock_extractions", return_value=rows) as load_extractions,
+            patch.object(sources, "generate_stock_concepts_with_ai") as generate,
+        ):
+            result = sources.resolve_daily_stock_concepts(
+                group_id="303",
+                report_date="2026-05-07",
+                prompt_payload="snapshot payload",
+            )
+
+        load_extractions.assert_called_once_with(
+            group_id="303",
+            start_date="2026-05-07",
+            end_date="2026-05-07",
+        )
+        generate.assert_not_called()
+        self.assertEqual("topic_stock_extractions", result.source)
+        self.assertEqual("topic-model", result.model)
+        self.assertEqual("宁德时代", result.stocks[0]["stock_name"])
+
+    @unittest.skipUnless(HAS_STOCK_CONCEPT_DEPS, "daily stock concept service dependencies are not installed")
+    def test_resolve_daily_stock_concepts_falls_back_to_ai(self):
+        from backend.services import daily_stock_concept_sources as sources
+
+        stocks = [{"stock_name": "宁德时代"}]
+
+        with (
+            patch.object(sources, "load_topic_stock_extractions", return_value=[]),
+            patch.object(sources, "generate_stock_concepts_with_ai", return_value=(stocks, "model-a")) as generate,
+        ):
+            result = sources.resolve_daily_stock_concepts(
+                group_id="303",
+                report_date="2026-05-07",
+                prompt_payload="snapshot payload",
+            )
+
+        generate.assert_called_once_with("snapshot payload", "2026-05-07")
+        self.assertEqual("ai_fallback", result.source)
+        self.assertEqual("model-a", result.model)
+        self.assertEqual(stocks, result.stocks)
+
+    @unittest.skipUnless(HAS_STOCK_CONCEPT_DEPS, "daily stock concept service dependencies are not installed")
+    def test_extract_daily_stock_concepts_uses_material_snapshot_payload_for_resolution(self):
         from datetime import date
         from types import SimpleNamespace
         from unittest.mock import Mock
 
         from backend.services import daily_stock_concept_service as service
+        from backend.services.daily_stock_concept_sources import DailyStockConceptResolution
 
         conn = Mock()
         material = SimpleNamespace(
@@ -179,12 +236,12 @@ class DailyStockConceptServiceHelperTests(unittest.TestCase):
                 "confidence": 0.8,
             }
         ]
+        resolution = DailyStockConceptResolution(stocks=stocks, model="model-a", source="ai_fallback")
 
         with (
             patch.object(service, "connect_topic_material_db", return_value=conn),
             patch.object(service, "load_daily_topic_material", return_value=material) as load_material,
-            patch.object(service, "load_topic_stock_extractions", return_value=[]),
-            patch.object(service, "_generate_stock_concepts_with_ai", return_value=(stocks, "model-a")) as generate,
+            patch.object(service, "resolve_daily_stock_concepts", return_value=resolution) as resolve,
             patch.object(service, "save_daily_stock_concepts") as save_stock_concepts,
         ):
             result = service.extract_daily_stock_concepts("303", "2026-05-07", comments_per_topic=5)
@@ -194,7 +251,12 @@ class DailyStockConceptServiceHelperTests(unittest.TestCase):
             report_date=date(2026, 5, 7),
             comments_per_topic=5,
         )
-        generate.assert_called_once_with("snapshot payload", "2026-05-07")
+        resolve.assert_called_once_with(
+            group_id="303",
+            report_date="2026-05-07",
+            prompt_payload="snapshot payload",
+            log_callback=None,
+        )
         save_stock_concepts.assert_called_once_with(
             conn,
             group_id="303",
