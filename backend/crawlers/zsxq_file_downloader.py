@@ -60,6 +60,14 @@ from backend.crawlers.file_download_interval_runner import (
     should_use_random_interval as run_should_use_random_interval,
     should_use_random_long_sleep_interval as run_should_use_random_long_sleep_interval,
 )
+from backend.crawlers.file_runtime_state_runner import (
+    check_long_delay_target as run_check_long_delay_target,
+    check_stop_target as run_check_stop_target,
+    download_delay_target as run_download_delay_target,
+    is_stopped_target as run_is_stopped_target,
+    set_stop_flag_target as run_set_stop_flag_target,
+    smart_delay_target as run_smart_delay_target,
+)
 from backend.crawlers.file_database_download_runner import (
     DatabaseDownloadTarget,
     run_database_file_download,
@@ -520,8 +528,7 @@ class ZSXQFileDownloader:
         self,
         target: SetStopFlagTarget,
     ) -> None:
-        self.stop_flag = True
-        self.log("🛑 收到停止信号，任务将在下一个检查点停止")
+        run_set_stop_flag_target(self, target)
 
     def is_stopped(self):
         """检查是否被停止（综合检查本地标志和外部函数）"""
@@ -531,14 +538,7 @@ class ZSXQFileDownloader:
         self,
         target: IsStoppedTarget,
     ) -> bool:
-        # 首先检查本地停止标志
-        if self.stop_flag:
-            return True
-        # 然后检查外部停止检查函数
-        if self.stop_check_func and self.stop_check_func():
-            self.stop_flag = True  # 同步本地标志
-            return True
-        return False
+        return run_is_stopped_target(self, target)
 
     def check_stop(self):
         """检查是否需要停止（兼容旧方法名）"""
@@ -548,7 +548,7 @@ class ZSXQFileDownloader:
         self,
         target: CheckStopTarget,
     ) -> Any:
-        return self.is_stopped()
+        return run_check_stop_target(self, target)
 
     def clean_cookie(self, cookie: str) -> str:
         """清理Cookie字符串，去除不合法字符
@@ -591,10 +591,7 @@ class ZSXQFileDownloader:
         self,
         target: SmartDelayTarget,
     ) -> None:
-        delay = random.uniform(self.min_delay, self.max_delay)
-        if self.debug_mode:
-            print(f"   ⏱️ 延迟 {delay:.1f}秒")
-        time.sleep(delay)
+        run_smart_delay_target(self, target)
 
     @staticmethod
     def _user_agent_label(user_agent: str) -> str:
@@ -686,25 +683,7 @@ class ZSXQFileDownloader:
         self,
         target: DownloadDelayTarget,
     ) -> None:
-        if self.use_random_interval:
-            # 使用API传入的随机间隔范围
-            delay = random.uniform(self.download_interval_min, self.download_interval_max)
-            print(f"⏳ 下载间隔: {delay:.0f}秒 ({delay/60:.1f}分钟) [随机范围: {self.download_interval_min}-{self.download_interval_max}秒]")
-        else:
-            # 使用固定间隔
-            delay = self.download_interval
-            print(f"⏳ 下载间隔: {delay:.1f}秒 [固定间隔]")
-
-        start_time = datetime.datetime.now()
-        end_time = start_time + datetime.timedelta(seconds=delay)
-
-        print(f"   ⏰ 开始时间: {start_time.strftime('%H:%M:%S')}")
-        print(f"   🕐 预计恢复: {end_time.strftime('%H:%M:%S')}")
-
-        time.sleep(delay)
-
-        actual_end_time = datetime.datetime.now()
-        print(f"   🕐 实际结束: {actual_end_time.strftime('%H:%M:%S')}")
+        run_download_delay_target(self, target)
 
     def check_long_delay(self):
         """检查是否需要长休眠"""
@@ -714,28 +693,7 @@ class ZSXQFileDownloader:
         self,
         target: CheckLongDelayTarget,
     ) -> None:
-        if self.download_count > 0 and self.download_count % self.long_delay_interval == 0:
-            if self.use_random_interval:
-                # 使用API传入的随机长休眠间隔范围
-                delay = random.uniform(self.long_sleep_interval_min, self.long_sleep_interval_max)
-                print(f"🛌 长休眠开始: {delay:.0f}秒 ({delay/60:.1f}分钟) [随机范围: {self.long_sleep_interval_min/60:.1f}-{self.long_sleep_interval_max/60:.1f}分钟]")
-            else:
-                # 使用固定长休眠间隔
-                delay = self.long_sleep_interval
-                print(f"🛌 长休眠开始: {delay:.0f}秒 ({delay/60:.1f}分钟) [固定间隔]")
-
-            start_time = datetime.datetime.now()
-            end_time = start_time + datetime.timedelta(seconds=delay)
-
-            print(f"   已下载 {self.download_count} 个文件，进入长休眠模式...")
-            print(f"   ⏰ 开始时间: {start_time.strftime('%H:%M:%S')}")
-            print(f"   🕐 预计恢复: {end_time.strftime('%H:%M:%S')}")
-
-            time.sleep(delay)
-
-            actual_end_time = datetime.datetime.now()
-            print(f"😴 长休眠结束，继续下载...")
-            print(f"   🕐 实际结束: {actual_end_time.strftime('%H:%M:%S')}")
+        run_check_long_delay_target(self, target)
 
     def _prepare_retry_api_request(self, attempt: int, file_id: Optional[int] = None) -> Dict[str, str]:
         return self._prepare_retry_api_request_target(

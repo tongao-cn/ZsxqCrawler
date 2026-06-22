@@ -5012,8 +5012,8 @@ class FileDownloaderRuntimeStateTests(unittest.TestCase):
 
         output = io.StringIO()
         with (
-            patch("backend.crawlers.zsxq_file_downloader.random.uniform", return_value=3.4) as uniform,
-            patch("backend.crawlers.zsxq_file_downloader.time.sleep") as sleep,
+            patch("backend.crawlers.file_runtime_state_runner.random.uniform", return_value=3.4) as uniform,
+            patch("backend.crawlers.file_runtime_state_runner.time.sleep") as sleep,
             contextlib.redirect_stdout(output),
         ):
             result = ZSXQFileDownloader.smart_delay(downloader)
@@ -5031,8 +5031,8 @@ class FileDownloaderRuntimeStateTests(unittest.TestCase):
 
         output = io.StringIO()
         with (
-            patch("backend.crawlers.zsxq_file_downloader.random.uniform", return_value=1.25),
-            patch("backend.crawlers.zsxq_file_downloader.time.sleep") as sleep,
+            patch("backend.crawlers.file_runtime_state_runner.random.uniform", return_value=1.25),
+            patch("backend.crawlers.file_runtime_state_runner.time.sleep") as sleep,
             contextlib.redirect_stdout(output),
         ):
             result = ZSXQFileDownloader.smart_delay(downloader)
@@ -5048,8 +5048,8 @@ class FileDownloaderRuntimeStateTests(unittest.TestCase):
 
         output = io.StringIO()
         with (
-            patch("backend.crawlers.zsxq_file_downloader.random.uniform") as uniform,
-            patch("backend.crawlers.zsxq_file_downloader.time.sleep") as sleep,
+            patch("backend.crawlers.file_runtime_state_runner.random.uniform") as uniform,
+            patch("backend.crawlers.file_runtime_state_runner.time.sleep") as sleep,
             contextlib.redirect_stdout(output),
         ):
             result = ZSXQFileDownloader.check_long_delay(downloader)
@@ -5078,9 +5078,9 @@ class FileDownloaderRuntimeStateTests(unittest.TestCase):
 
         output = io.StringIO()
         with (
-            patch("backend.crawlers.zsxq_file_downloader.datetime.datetime", FakeDateTime),
-            patch("backend.crawlers.zsxq_file_downloader.random.uniform") as uniform,
-            patch("backend.crawlers.zsxq_file_downloader.time.sleep") as sleep,
+            patch("backend.crawlers.file_runtime_state_runner.datetime.datetime", FakeDateTime),
+            patch("backend.crawlers.file_runtime_state_runner.random.uniform") as uniform,
+            patch("backend.crawlers.file_runtime_state_runner.time.sleep") as sleep,
             contextlib.redirect_stdout(output),
         ):
             result = ZSXQFileDownloader.check_long_delay(downloader)
@@ -5121,9 +5121,9 @@ class FileDownloaderRuntimeStateTests(unittest.TestCase):
 
         output = io.StringIO()
         with (
-            patch("backend.crawlers.zsxq_file_downloader.datetime.datetime", FakeDateTime),
-            patch("backend.crawlers.zsxq_file_downloader.random.uniform", return_value=90) as uniform,
-            patch("backend.crawlers.zsxq_file_downloader.time.sleep") as sleep,
+            patch("backend.crawlers.file_runtime_state_runner.datetime.datetime", FakeDateTime),
+            patch("backend.crawlers.file_runtime_state_runner.random.uniform", return_value=90) as uniform,
+            patch("backend.crawlers.file_runtime_state_runner.time.sleep") as sleep,
             contextlib.redirect_stdout(output),
         ):
             result = ZSXQFileDownloader.check_long_delay(downloader)
@@ -5161,9 +5161,9 @@ class FileDownloaderRuntimeStateTests(unittest.TestCase):
 
         output = io.StringIO()
         with (
-            patch("backend.crawlers.zsxq_file_downloader.datetime.datetime", FakeDateTime),
-            patch("backend.crawlers.zsxq_file_downloader.random.uniform") as uniform,
-            patch("backend.crawlers.zsxq_file_downloader.time.sleep") as sleep,
+            patch("backend.crawlers.file_runtime_state_runner.datetime.datetime", FakeDateTime),
+            patch("backend.crawlers.file_runtime_state_runner.random.uniform") as uniform,
+            patch("backend.crawlers.file_runtime_state_runner.time.sleep") as sleep,
             contextlib.redirect_stdout(output),
         ):
             result = ZSXQFileDownloader.download_delay(downloader)
@@ -5200,9 +5200,9 @@ class FileDownloaderRuntimeStateTests(unittest.TestCase):
 
         output = io.StringIO()
         with (
-            patch("backend.crawlers.zsxq_file_downloader.datetime.datetime", FakeDateTime),
-            patch("backend.crawlers.zsxq_file_downloader.random.uniform", return_value=45) as uniform,
-            patch("backend.crawlers.zsxq_file_downloader.time.sleep") as sleep,
+            patch("backend.crawlers.file_runtime_state_runner.datetime.datetime", FakeDateTime),
+            patch("backend.crawlers.file_runtime_state_runner.random.uniform", return_value=45) as uniform,
+            patch("backend.crawlers.file_runtime_state_runner.time.sleep") as sleep,
             contextlib.redirect_stdout(output),
         ):
             result = ZSXQFileDownloader.download_delay(downloader)
