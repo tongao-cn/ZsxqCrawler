@@ -2199,9 +2199,12 @@ class FileDownloaderPaginationTests(unittest.TestCase):
             calls.append(("print", page_files, next_index))
 
         downloader.fetch_file_list = fetch_file_list
-        downloader._print_file_list_page = print_file_list_page
 
-        next_index = ZSXQFileDownloader.show_file_list(downloader, count=7, index="cursor")
+        with patch(
+            "backend.crawlers.file_list_display_runner.print_file_list_page",
+            print_file_list_page,
+        ):
+            next_index = ZSXQFileDownloader.show_file_list(downloader, count=7, index="cursor")
 
         self.assertEqual("next-page", next_index)
         self.assertEqual("fetch", calls[0][0])

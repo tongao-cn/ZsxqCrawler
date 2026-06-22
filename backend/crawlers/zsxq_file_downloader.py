@@ -86,6 +86,10 @@ from backend.crawlers.file_incremental_collection_runner import (
     collect_incremental_from_oldest_time as run_collect_incremental_from_oldest_time,
     collect_incremental_from_time_info as run_collect_incremental_from_time_info,
 )
+from backend.crawlers.file_list_display_runner import (
+    print_file_list_page as run_print_file_list_page,
+    show_file_list as run_show_file_list,
+)
 from backend.crawlers.file_batch_download_runner import (
     apply_batch_download_next_page as run_apply_batch_download_next_page,
     apply_batch_download_result as run_apply_batch_download_result,
@@ -215,9 +219,6 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     download_url_success_plan,
     empty_import_stats,
     existing_file_matches,
-    file_list_item_display_lines,
-    file_list_next_index_message,
-    file_list_response_page,
     http_failure_plan,
     json_decode_failure_plan,
     latest_file_create_time_query,
@@ -2252,28 +2253,14 @@ class ZSXQFileDownloader:
         files: list[Dict[str, Any]],
         next_index: Any,
     ) -> None:
-        print(f"\n📋 文件列表 ({len(files)} 个文件):")
-        print("="*80)
-
-        for i, file_info in enumerate(files, 1):
-            for line in file_list_item_display_lines(i, file_info):
-                print(line)
-
-        print(file_list_next_index_message(next_index))
+        run_print_file_list_page(files, next_index)
 
     def show_file_list(self, count: int = 20, index: Optional[str] = None) -> Optional[str]:
         """显示文件列表"""
         return self._show_file_list_target(ShowFileListTarget(count, index))
 
     def _show_file_list_target(self, target: ShowFileListTarget) -> Optional[str]:
-        data = self.fetch_file_list(count=target.count, index=target.index)
-        if not data:
-            return None
-
-        files, next_index = file_list_response_page(data)
-        self._print_file_list_page(files, next_index)
-
-        return next_index
+        return run_show_file_list(self, target)
 
     def _import_file_collection_page(
         self,
