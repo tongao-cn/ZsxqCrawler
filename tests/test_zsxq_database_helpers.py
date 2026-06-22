@@ -1,6 +1,7 @@
 import unittest
 from unittest.mock import patch
 
+from backend.storage.topic_detail_reader import read_topic_detail
 from backend.storage.zsxq_database import (
     _answer_insert_statement,
     _article_insert_statement,
@@ -1821,6 +1822,31 @@ class ZSXQDatabaseHelperTests(unittest.TestCase):
         self.assertEqual(
             ("", "t.topic_id = ? AND t.group_id = ?", [202, ""]),
             _topic_detail_scope(202, ""),
+        )
+
+    def test_topic_detail_reader_preserves_scoped_payload_assembly(self):
+        cursor = FakeTopicDetailTalkCursor()
+
+        detail = read_topic_detail(cursor, 202, "303")
+
+        self.assertEqual(202, detail["topic_id"])
+        self.assertEqual("body", detail["talk"]["text"])
+        self.assertEqual([], detail["latest_likes"])
+        self.assertEqual([], detail["show_comments"])
+        self.assertEqual({"emojis": []}, detail["likes_detail"])
+        scoped_calls = [
+            params
+            for sql, params in cursor.calls
+            if (
+                "FROM topics t" in sql
+                or "FROM images WHERE topic_id = ?" in sql
+                or "FROM topic_files tf" in sql
+                or "FROM articles" in sql
+            )
+        ]
+        self.assertEqual(
+            [(202, 303), (202, 303, 303), (202, 303, 303), (202, 303, 303)],
+            scoped_calls,
         )
 
     def test_existence_query_helpers_preserve_group_id_param_semantics(self):

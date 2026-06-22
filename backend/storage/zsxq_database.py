@@ -38,12 +38,6 @@ from backend.storage.zsxq_database_helpers import (
     latest_like_insert_statement,
     like_insert_statement,
     like_insert_statement_pair,
-    load_topic_detail_base,
-    load_topic_detail_comments,
-    load_topic_detail_latest_likes,
-    load_topic_detail_likes_detail,
-    load_topic_detail_qa,
-    load_topic_detail_talk_payload,
     local_group_ids_query,
     local_group_record_query,
     local_group_topic_count_query,
@@ -83,6 +77,7 @@ from backend.storage.zsxq_database_helpers import (
     user_liked_emoji_insert_statement,
     user_insert_statement,
 )
+from backend.storage.topic_detail_reader import read_topic_detail
 from backend.storage.topic_file_attachment_writer import sync_topic_file_attachment
 
 
@@ -1196,32 +1191,7 @@ class ZSXQDatabase:
     def get_topic_detail(self, topic_id: int):
         """获取完整的话题详情"""
         try:
-            scoped_group_id, topic_scope_sql, topic_scope_params = _topic_detail_scope(topic_id, self.group_id)
-
-            # 1. 获取基本话题信息和群组信息
-            topic_detail = load_topic_detail_base(self.cursor, topic_scope_sql, topic_scope_params)
-            if topic_detail is None:
-                return None
-
-            # 2. 获取话题内容（talk）
-            talk_payload = load_topic_detail_talk_payload(self.cursor, topic_id, scoped_group_id)
-            if talk_payload is not None:
-                topic_detail["talk"] = talk_payload
-
-            # 3. 获取最新点赞
-            topic_detail["latest_likes"] = load_topic_detail_latest_likes(self.cursor, topic_id, scoped_group_id)
-
-            # 4. 获取评论 - 不再限制为10条，返回所有评论
-            topic_detail["show_comments"] = load_topic_detail_comments(self.cursor, topic_id, scoped_group_id)
-
-            # 5. 获取点赞详情（表情）
-            topic_detail["likes_detail"] = load_topic_detail_likes_detail(self.cursor, topic_id, scoped_group_id)
-
-            # 6. 获取问答数据（如果是问答类型话题）
-            if topic_detail["type"] == "q&a":
-                topic_detail.update(load_topic_detail_qa(self.cursor, topic_id, scoped_group_id))
-
-            return topic_detail
+            return read_topic_detail(self.cursor, topic_id, self.group_id)
 
         except Exception as e:
             print(f"获取话题详情失败: {e}")
