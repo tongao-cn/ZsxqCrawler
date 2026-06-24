@@ -7,6 +7,7 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
+from backend.core.console_output import safe_console_print
 from backend.services import stock_topic_analysis_service as stock_topic_service
 from backend.storage.db_compat import connect
 
@@ -164,7 +165,7 @@ def main(argv: list[str] | None = None) -> int:
 
     def log(message: str) -> None:
         line = f"{_now_text()} {message}"
-        print(line, flush=True)
+        safe_console_print(line, flush=True)
         output_dir.mkdir(parents=True, exist_ok=True)
         with run_log_path.open("a", encoding="utf-8") as handle:
             handle.write(line + "\n")
