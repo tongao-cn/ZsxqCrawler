@@ -3969,6 +3969,39 @@ class FileDownloaderDatabaseDownloadTests(unittest.TestCase):
         self.assertEqual((511, "failed", "2026-05-01", "2026-05-07", 5), params)
         self.assertIn("   📌 下载排序: 按时间倒序", downloader.logs)
 
+    def test_download_files_from_database_accepts_datetime_range_bounds(self):
+        downloader = self._downloader_for_query_capture()
+
+        stats = ZSXQFileDownloader.download_files_from_database(
+            downloader,
+            status_filter="pending",
+            sort_by="create_time",
+            start_date="2026-06-23T14:00:00.000+0800",
+            end_date="2026-06-24T14:00:00.000+0800",
+        )
+
+        query, params = downloader.file_db.executed[-1]
+        compact_query = self._compact_sql(query)
+        self.assertEqual({"total_files": 0, "downloaded": 0, "skipped": 0, "failed": 0}, stats)
+        self.assertIn(
+            "WHERE group_id = ? AND download_status = ? AND create_time >= ? AND create_time <= ?",
+            compact_query,
+        )
+        self.assertNotIn("substr(create_time, 1, 10)", compact_query)
+        self.assertEqual(
+            (
+                511,
+                "pending",
+                "2026-06-23T14:00:00.000+0800",
+                "2026-06-24T14:00:00.000+0800",
+            ),
+            params,
+        )
+        self.assertIn(
+            "   📅 下载区间: 2026-06-23T14:00:00.000+0800 ~ 2026-06-24T14:00:00.000+0800",
+            downloader.logs,
+        )
+
     def test_download_files_from_database_preserves_unfiltered_heat_sort_query_shape(self):
         downloader = self._downloader_for_query_capture(group_id="group-1")
 

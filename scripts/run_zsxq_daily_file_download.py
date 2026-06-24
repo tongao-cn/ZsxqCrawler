@@ -67,6 +67,23 @@ def _today_text() -> str:
     return datetime.now(SHANGHAI_TZ).date().isoformat()
 
 
+def _format_zsxq_time(value: datetime) -> str:
+    return value.astimezone(SHANGHAI_TZ).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "+0800"
+
+
+def _download_window(args: argparse.Namespace) -> tuple[str, str, str]:
+    if args.lookback_hours:
+        end_dt = datetime.now(SHANGHAI_TZ)
+        start_dt = end_dt - timedelta(hours=args.lookback_hours)
+        return (
+            _format_zsxq_time(start_dt),
+            _format_zsxq_time(end_dt),
+            f"last {args.lookback_hours} hours",
+        )
+    run_date = args.date or _today_text()
+    return run_date, run_date, run_date
+
+
 def _group_ids(args: argparse.Namespace) -> list[str]:
     seen: set[str] = set()
     group_ids: list[str] = []
@@ -126,7 +143,7 @@ def _record_task(label: str, task: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _write_run_record(summary: WorkflowSummary, args: argparse.Namespace, run_date: str) -> None:
+def _write_run_record(summary: WorkflowSummary, args: argparse.Namespace, run_window: tuple[str, str, str]) -> None:
     summary.finished_at = datetime.now(SHANGHAI_TZ).isoformat()
     run_dir = (
         PROJECT_ROOT
@@ -137,14 +154,21 @@ def _write_run_record(summary: WorkflowSummary, args: argparse.Namespace, run_da
     )
     run_dir.mkdir(parents=True, exist_ok=True)
     record_path = run_dir / "summary.json"
+    start_time, end_time, label = run_window
     payload = {
         "level": summary.level,
         "started_at": summary.started_at,
         "finished_at": summary.finished_at,
-        "run_date": run_date,
+        "run_date": label,
+        "run_window": {
+            "start_time": start_time,
+            "end_time": end_time,
+            "label": label,
+        },
         "args": {
             "group_ids": _group_ids(args),
             "max_files_per_group": args.max_files_per_group,
+            "lookback_hours": args.lookback_hours,
             "download_interval": args.download_interval,
             "long_sleep_interval": args.long_sleep_interval,
             "files_per_batch": args.files_per_batch,
@@ -174,7 +198,8 @@ def _print_health_summary(summary: WorkflowSummary) -> None:
 
 
 async def _run(args: argparse.Namespace) -> None:
-    run_date = args.date or _today_text()
+    run_window = _download_window(args)
+    start_time, end_time, _ = run_window
     summary = WorkflowSummary()
     try:
         for group_id in _group_ids(args):
@@ -199,8 +224,8 @@ async def _run(args: argparse.Namespace) -> None:
                 request = FileDownloadRequest(
                     max_files=args.max_files_per_group,
                     sort_by="create_time",
-                    start_time=run_date,
-                    end_time=run_date,
+                    start_time=start_time,
+                    end_time=end_time,
                     download_interval=args.download_interval,
                     long_sleep_interval=args.long_sleep_interval,
                     files_per_batch=args.files_per_batch,
@@ -225,11 +250,11 @@ async def _run(args: argparse.Namespace) -> None:
                 summary.warn(f"download files group {group_id} failed: {exc}")
 
         _print_health_summary(summary)
-        _write_run_record(summary, args, run_date)
+        _write_run_record(summary, args, run_window)
     except Exception as exc:
         summary.warn(str(exc))
         _print_health_summary(summary)
-        _write_run_record(summary, args, run_date)
+        _write_run_record(summary, args, run_window)
         raise
 
 
@@ -237,7 +262,8 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Download today's ZSXQ files for configured groups.")
     parser.add_argument("--group-id", action="append", default=[])
     parser.add_argument("--date", help="Date to download, YYYY-MM-DD. Defaults to today in Asia/Shanghai.")
-    parser.add_argument("--max-files-per-group", type=int, default=20)
+    parser.add_argument("--lookback-hours", type=int, help="Download files created in the last N hours.")
+    parser.add_argument("--max-files-per-group", type=int)
     parser.add_argument("--poll-seconds", type=float, default=5)
     parser.add_argument("--task-timeout-seconds", type=int, default=0)
     parser.add_argument("--download-interval", type=float, default=2.0)

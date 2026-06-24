@@ -625,10 +625,18 @@ def normalize_date_range(
     end = str(end_date or "").strip() or None
     stop_before_dt = None
     if start:
-        stop_before_dt = datetime.datetime.strptime(start, "%Y-%m-%d")
+        stop_before_dt = (
+            parse_create_time(start)
+            if _is_datetime_bound(start)
+            else datetime.datetime.strptime(start, "%Y-%m-%d")
+        )
     if start and end and start > end:
         start, end = end, start
     return start, end, stop_before_dt
+
+
+def _is_datetime_bound(value: Optional[str]) -> bool:
+    return bool(value and len(value.strip()) > 10)
 
 
 def database_download_query_plan(
@@ -659,10 +667,14 @@ def database_download_query_plan(
         conditions.append("download_status = ?")
         params.append(status_filter)
     if normalized_start:
-        conditions.append("substr(create_time, 1, 10) >= ?")
+        conditions.append(
+            "create_time >= ?" if _is_datetime_bound(normalized_start) else "substr(create_time, 1, 10) >= ?"
+        )
         params.append(normalized_start)
     if normalized_end:
-        conditions.append("substr(create_time, 1, 10) <= ?")
+        conditions.append(
+            "create_time <= ?" if _is_datetime_bound(normalized_end) else "substr(create_time, 1, 10) <= ?"
+        )
         params.append(normalized_end)
 
     where_clause = f"WHERE {' AND '.join(conditions)}"

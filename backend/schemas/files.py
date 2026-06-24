@@ -8,8 +8,8 @@ from pydantic import BaseModel, Field
 class FileDownloadRequest(BaseModel):
     max_files: Optional[int] = Field(default=None, description="最大下载文件数")
     sort_by: str = Field(default="download_count", description="排序方式: download_count 或 time")
-    start_time: Optional[str] = Field(default=None, description="下载时间范围开始日期 YYYY-MM-DD")
-    end_time: Optional[str] = Field(default=None, description="下载时间范围结束日期 YYYY-MM-DD")
+    start_time: Optional[str] = Field(default=None, description="下载时间范围开始时间 YYYY-MM-DD 或 ISO 时间")
+    end_time: Optional[str] = Field(default=None, description="下载时间范围结束时间 YYYY-MM-DD 或 ISO 时间")
     last_days: Optional[int] = Field(default=None, ge=1, le=3650, description="下载最近多少天的文件")
     download_interval: float = Field(default=1.0, ge=0.1, le=300.0, description="单次下载间隔（秒）")
     long_sleep_interval: float = Field(default=60.0, ge=10.0, le=3600.0, description="长休眠间隔（秒）")
