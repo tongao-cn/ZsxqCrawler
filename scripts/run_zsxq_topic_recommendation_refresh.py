@@ -17,6 +17,7 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from backend.schemas.crawl import CrawlSettingsRequest
 from backend.services.a_share_analysis_service import build_chart_payload, normalize_group_id
+from backend.services.a_share_analysis_db_storage import save_recommendation_pool_checkpoint
 from backend.services.a_share_research_return_smoke_service import load_knowaction_trade_dates
 from backend.services.task_runtime import get_task_logs_state, get_task_state, request_runtime_shutdown
 from backend.services.tdx_a_share_export_service import DEFAULT_TDX_EXPORT_SPECS
@@ -33,6 +34,7 @@ from backend.services.daily_analysis_workflow import (
 
 TERMINAL_STATUSES = {"completed", "failed", "cancelled"}
 SHANGHAI_TZ = timezone(timedelta(hours=8))
+DEFAULT_COMPLETE_FAILED_AFTER = 3
 
 
 def _safe_text(value: Any, encoding: str | None) -> str:
@@ -354,6 +356,90 @@ def _extra_crawl_group_ids(args: argparse.Namespace) -> list[str]:
     return group_ids
 
 
+def _summary_a_share_failed_items(record: dict[str, Any]) -> list[dict[str, Any]]:
+    failed_items: list[dict[str, Any]] = []
+    for task in record.get("tasks") or []:
+        if task.get("label") != "a-share":
+            continue
+        result = task.get("result") or {}
+        for item in result.get("failed_items") or []:
+            if isinstance(item, dict):
+                failed_items.append(item)
+    return failed_items
+
+
+def _iter_run_records(run_root: Path) -> list[dict[str, Any]]:
+    records: list[dict[str, Any]] = []
+    for record_path in sorted(run_root.glob("*/summary.json")):
+        try:
+            records.append(json.loads(record_path.read_text(encoding="utf-8")))
+        except Exception as exc:
+            _safe_print(f"WARNING: cannot read run record {record_path}: {exc}", file=sys.stderr)
+    return records
+
+
+def _historical_failed_item_counts(records: list[dict[str, Any]], group_id: str) -> dict[str, dict[str, Any]]:
+    normalized_group_id = normalize_group_id(group_id)
+    counts: dict[str, dict[str, Any]] = {}
+    for record in records:
+        for item in _summary_a_share_failed_items(record):
+            item_group_id = normalize_group_id(item.get("group_id"))
+            if item_group_id and item_group_id != normalized_group_id:
+                continue
+            item_key = str(item.get("item_key") or "").strip()
+            if not item_key:
+                topic_id = str(item.get("topic_id") or "").strip()
+                day = str(item.get("day") or "").strip()
+                if not topic_id or not day:
+                    continue
+                item_key = f"topics:{topic_id}:{day}"
+            entry = counts.setdefault(item_key, {"count": 0, "item": item})
+            entry["count"] = int(entry["count"]) + 1
+            entry["item"] = item
+    return counts
+
+
+def _item_keys_exceeding_failure_limit(
+    counts: dict[str, dict[str, Any]],
+    *,
+    complete_failed_after: int,
+) -> set[str]:
+    threshold = max(0, int(complete_failed_after))
+    if threshold <= 0:
+        return set(counts.keys())
+    return {item_key for item_key, entry in counts.items() if int(entry.get("count") or 0) > threshold}
+
+
+def _mark_failed_items_completed(group_id: str, item_keys: set[str]) -> int:
+    if not item_keys:
+        return 0
+    result = save_recommendation_pool_checkpoint(
+        daily_delta={},
+        processed_keys=item_keys,
+        topic_stock_extractions=[],
+        group_id=group_id,
+    )
+    return int(result.get("processed_state") or 0)
+
+
+def _complete_historical_failed_items(args: argparse.Namespace, *, include_current: dict[str, Any] | None = None) -> int:
+    records = _iter_run_records(PROJECT_ROOT / "output" / "exports" / "automation_runs")
+    if include_current:
+        records.append({"tasks": [_record_task("a-share", include_current)]})
+    counts = _historical_failed_item_counts(records, args.group_id)
+    item_keys = _item_keys_exceeding_failure_limit(
+        counts,
+        complete_failed_after=args.complete_failed_after,
+    )
+    marked = _mark_failed_items_completed(args.group_id, item_keys)
+    if marked:
+        _safe_print(
+            f"completed historical failed items: marked={marked}, "
+            f"threshold=>{args.complete_failed_after} failures"
+        )
+    return marked
+
+
 def _write_run_record(summary: WorkflowSummary, args: argparse.Namespace) -> None:
     summary.finished_at = datetime.now(SHANGHAI_TZ).isoformat()
     run_dir = (
@@ -381,6 +467,7 @@ def _write_run_record(summary: WorkflowSummary, args: argparse.Namespace) -> Non
             "skip_tdx_when_no_new_mentions": args.skip_tdx_when_no_new_mentions,
             "tdx_min_preview_total": args.tdx_min_preview_total,
             "tdx_min_preview_block_count": args.tdx_min_preview_block_count,
+            "complete_failed_after": args.complete_failed_after,
         },
         "tasks": [_record_task(label, task) for label, task in summary.tasks],
         "warnings": summary.warnings,
@@ -435,6 +522,8 @@ async def _run(args: argparse.Namespace) -> None:
             except Exception as exc:
                 summary.warn(f"extra crawl group {extra_group_id} failed: {exc}")
 
+        _complete_historical_failed_items(args)
+
         a_share_task_id = await _create_a_share_task(args.group_id, args.days, args.concurrency)
         _safe_print(f"a_share_task_id={a_share_task_id}")
         a_share_task = _wait_task(
@@ -445,6 +534,7 @@ async def _run(args: argparse.Namespace) -> None:
         )
         summary.add_task("a-share", a_share_task)
         _raise_for_task(a_share_task, "a-share")
+        _complete_historical_failed_items(args, include_current=a_share_task)
 
         if args.daily_stock_concepts:
             try:
@@ -521,6 +611,7 @@ def main() -> None:
     parser.add_argument("--skip-tdx-when-no-new-mentions", action=argparse.BooleanOptionalAction, default=True)
     parser.add_argument("--tdx-min-preview-total", type=int, default=10)
     parser.add_argument("--tdx-min-preview-block-count", type=int, default=1)
+    parser.add_argument("--complete-failed-after", type=int, default=DEFAULT_COMPLETE_FAILED_AFTER)
     parser.add_argument("--group-name", default="纪要又要")
     parser.add_argument("--log-tail", type=int, default=20)
     args = parser.parse_args()
