@@ -71,7 +71,7 @@ class ResearchRadarSignalTests(unittest.TestCase):
         self.assertEqual("101", candidate["evidence"][0]["topic_id"])
         self.assertIn("AI服务器需求", candidate["evidence"][0]["excerpt"])
 
-    def test_build_candidates_marks_single_evidence_with_enough_confidence_as_medium_signal(self):
+    def test_build_candidates_marks_low_confidence_single_evidence_as_weak_signal(self):
         from backend.services.research_radar_signal import build_research_radar_candidates
 
         candidates = build_research_radar_candidates(
@@ -98,11 +98,43 @@ class ResearchRadarSignalTests(unittest.TestCase):
         )
 
         self.assertEqual(1, len(candidates))
+        self.assertLess(candidates[0]["confidence"], 0.58)
+        self.assertEqual(1, candidates[0]["evidence_count"])
+        self.assertEqual(1, len(candidates[0]["stocks"]))
+        self.assertEqual("weak", candidates[0]["tier"])
+        self.assertEqual(["国产替代/自主可控"], candidates[0]["catalysts"])
+
+    def test_build_candidates_marks_single_evidence_with_enough_confidence_as_medium_signal(self):
+        from backend.services.research_radar_signal import build_research_radar_candidates
+
+        candidates = build_research_radar_candidates(
+            topics=[
+                {
+                    "topic_id": "202",
+                    "title": "算力设备线索",
+                    "create_time": "2026-06-26T10:30:00.000+0800",
+                    "talk_text": "算力设备方向出现订单扩产讨论。",
+                    "comments": [],
+                }
+            ],
+            current_stock_rows=[
+                {
+                    "topic_id": "202",
+                    "stock_name": "设备公司",
+                    "concepts": ["算力设备", "订单/扩产"],
+                    "reason": "订单扩产讨论明确。",
+                    "confidence": 0.85,
+                }
+            ],
+            baseline_stock_rows=[],
+            max_candidates=5,
+        )
+
+        self.assertEqual(1, len(candidates))
         self.assertGreaterEqual(candidates[0]["confidence"], 0.58)
         self.assertEqual(1, candidates[0]["evidence_count"])
         self.assertEqual(1, len(candidates[0]["stocks"]))
         self.assertEqual("medium", candidates[0]["tier"])
-        self.assertEqual(["国产替代/自主可控"], candidates[0]["catalysts"])
 
     def test_build_candidates_returns_empty_without_stock_rows(self):
         from backend.services.research_radar_signal import build_research_radar_candidates

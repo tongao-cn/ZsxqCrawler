@@ -108,10 +108,10 @@ def _evidence_for_topic(topic: Dict[str, Any], row: Dict[str, Any], direction: s
 
 
 def _confidence(topic_count: int, stock_count: int, catalyst_count: int, is_new: bool, row_confidence: float) -> float:
-    score = 0.35 + min(topic_count, 4) * 0.1 + min(stock_count, 4) * 0.08 + min(catalyst_count, 3) * 0.08
+    score = 0.12 + min(topic_count, 4) * 0.07 + min(stock_count, 4) * 0.05 + min(catalyst_count, 3) * 0.04
     if is_new:
-        score += 0.08
-    score += min(max(row_confidence, 0), 1) * 0.2
+        score += 0.03
+    score += min(max(row_confidence, 0), 1) * 0.5
     return round(min(score, 0.99), 3)
 
 
