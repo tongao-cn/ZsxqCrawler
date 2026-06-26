@@ -155,8 +155,8 @@ def create_research_radar_task(
     date: Optional[str] = None,
     comments_per_topic: int = DEFAULT_COMMENTS_PER_TOPIC,
 ) -> Dict[str, str]:
-    request = ResearchRadarTaskRequest(date=date, comments_per_topic=comments_per_topic)
-    report_date = parse_topic_material_date(request.date).isoformat()
+    report_date = parse_topic_material_date(date).isoformat()
+    request = ResearchRadarTaskRequest(date=report_date, comments_per_topic=comments_per_topic)
     return launch_task_recipe(
         TaskLaunchRecipe(
             task_type="research_radar",

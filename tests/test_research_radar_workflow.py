@@ -53,6 +53,23 @@ class ResearchRadarWorkflowTests(unittest.TestCase):
         self.assertEqual(("303", recipe.args[1]), recipe.args)
         self.assertEqual("2026-06-26", recipe.metadata["report_date"])
 
+    def test_create_research_radar_task_freezes_default_date_in_queued_request(self):
+        from backend.services import research_radar_workflow as workflow
+
+        with (
+            patch.object(workflow, "parse_topic_material_date", return_value=date(2026, 6, 26)),
+            patch.object(
+                workflow,
+                "launch_task_recipe",
+                return_value={"task_id": "task-radar", "message": "任务已创建，正在后台执行"},
+            ) as launch,
+        ):
+            workflow.create_research_radar_task("303", comments_per_topic=5)
+
+        recipe = launch.call_args.args[0]
+        self.assertEqual("2026-06-26", recipe.args[1].date)
+        self.assertEqual("2026-06-26", recipe.metadata["report_date"])
+
 
 if __name__ == "__main__":
     unittest.main()
