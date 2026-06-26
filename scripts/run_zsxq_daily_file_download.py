@@ -168,27 +168,34 @@ def _load_downloaded_pdf_rows(
     start_time: str,
     end_time: str,
     max_files: int | None,
+    pending_any_date: bool,
 ) -> list[dict[str, Any]]:
-    params: list[Any] = [_query_value(group_id), "%.pdf", "completed", "downloaded", "skipped"]
+    params: list[Any] = [_query_value(group_id), "%.pdf", "completed", "downloaded"]
     conditions = [
-        "group_id = ?",
-        "lower(name) like ?",
-        "download_status in (?, ?, ?)",
-        "create_time is not null",
-        "create_time != ''",
+        "f.group_id = ?",
+        "lower(f.name) like ?",
+        "f.download_status in (?, ?)",
     ]
-    if len(start_time) == 10 and len(end_time) == 10:
-        conditions.append("substr(create_time, 1, 10) >= ?")
-        conditions.append("substr(create_time, 1, 10) <= ?")
+    if pending_any_date:
+        conditions.append(
+            "(faa.file_id is null or faa.status != ? or faa.summary is null or trim(faa.summary) = '')"
+        )
+        params.append("completed")
     else:
-        conditions.append("create_time >= ?")
-        conditions.append("create_time <= ?")
-    params.extend([start_time, end_time])
+        conditions.extend(["f.create_time is not null", "f.create_time != ''"])
+        if len(start_time) == 10 and len(end_time) == 10:
+            conditions.append("substr(f.create_time, 1, 10) >= ?")
+            conditions.append("substr(f.create_time, 1, 10) <= ?")
+        else:
+            conditions.append("f.create_time >= ?")
+            conditions.append("f.create_time <= ?")
+        params.extend([start_time, end_time])
     sql = f"""
-        SELECT file_id, name, coalesce(size, 0), create_time, download_status, local_path
-        FROM files
+        SELECT f.file_id, f.name, coalesce(f.size, 0), f.create_time, f.download_status, f.local_path
+        FROM files f
+        LEFT JOIN file_ai_analyses faa ON faa.file_id = f.file_id
         WHERE {' AND '.join(conditions)}
-        ORDER BY create_time DESC, file_id DESC
+        ORDER BY f.create_time DESC, f.file_id DESC
     """
     if max_files is not None and max_files > 0:
         sql += " LIMIT ?"
@@ -218,6 +225,12 @@ def _load_downloaded_pdf_rows(
 def _markdown_output_dir(group_id: str, label: str) -> Path:
     safe_label = _safe_filename(label, limit=40)
     return PROJECT_ROOT / "output" / "exports" / "file_ai_markdown" / str(group_id) / safe_label
+
+
+def _pdf_analysis_label(args: argparse.Namespace, run_window: tuple[str, str, str]) -> str:
+    if args.pdf_analysis_pending_any_date:
+        return f"pending-any-date-{_today_text()}"
+    return run_window[2]
 
 
 def _write_file_markdown(output_dir: Path, row: dict[str, Any], analysis: dict[str, Any]) -> Path:
@@ -307,12 +320,15 @@ def _analyze_downloaded_pdfs(args: argparse.Namespace, run_window: tuple[str, st
         start_time=start_time,
         end_time=end_time,
         max_files=args.max_pdf_analyses,
+        pending_any_date=args.pdf_analysis_pending_any_date,
     )
+    label = _pdf_analysis_label(args, run_window)
     output_dir = _markdown_output_dir(group_id, label)
     results: list[dict[str, Any] | None] = [None] * len(rows)
     max_workers = max(1, int(args.pdf_analysis_concurrency or 1))
     _safe_print(
         f"pdf_analysis_group_id={group_id}, candidate_pdfs={len(rows)}, "
+        f"pending_any_date={args.pdf_analysis_pending_any_date}, "
         f"concurrency={max_workers}, output_dir={output_dir}"
     )
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
@@ -377,6 +393,7 @@ def _write_run_record(summary: WorkflowSummary, args: argparse.Namespace, run_wi
             "pdf_analysis_group_id": args.pdf_analysis_group_id,
             "max_pdf_analyses": args.max_pdf_analyses,
             "pdf_analysis_concurrency": args.pdf_analysis_concurrency,
+            "pdf_analysis_pending_any_date": args.pdf_analysis_pending_any_date,
             "force_pdf_analysis": args.force_pdf_analysis,
         },
         "tasks": [_record_task(label, task) for label, task in summary.tasks],
@@ -490,6 +507,11 @@ def main() -> None:
     parser.add_argument("--pdf-analysis-group-id", default="51111112855254")
     parser.add_argument("--max-pdf-analyses", type=int, default=50)
     parser.add_argument("--pdf-analysis-concurrency", type=int, default=1)
+    parser.add_argument(
+        "--pdf-analysis-pending-any-date",
+        action="store_true",
+        help="Analyze downloaded PDFs from any date that do not already have a completed summary.",
+    )
     parser.add_argument("--force-pdf-analysis", action="store_true")
     parser.add_argument("--log-tail", type=int, default=20)
     args = parser.parse_args()
