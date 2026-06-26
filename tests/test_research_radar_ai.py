@@ -119,6 +119,15 @@ class ResearchRadarAITests(unittest.TestCase):
         self.assertEqual("old", result[0]["title"])
         self.assertEqual("old", result[0]["summary"])
 
+    def test_apply_ai_logic_summaries_ignores_empty_wording_updates(self):
+        from backend.services.research_radar_ai import apply_ai_logic_summaries
+
+        candidates = [{"candidate_id": "direction:PCB", "title": "old title", "summary": "old summary"}]
+        payload = {"logic_items": [{"candidate_id": "direction:PCB", "title": "  ", "summary": ""}]}
+        result = apply_ai_logic_summaries(candidates, payload)
+        self.assertEqual("old title", result[0]["title"])
+        self.assertEqual("old summary", result[0]["summary"])
+
     def test_summarize_radar_candidates_calls_structured_ai_object(self):
         from backend.services import research_radar_ai as ai
 
