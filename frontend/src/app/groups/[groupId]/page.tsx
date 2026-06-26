@@ -44,6 +44,10 @@ const DailyTopicAnalysisPanel = dynamic(() => import('@/components/DailyTopicAna
   loading: LazyPanelFallback,
   ssr: false,
 });
+const ResearchRadarPanel = dynamic(() => import('@/components/ResearchRadarPanel'), {
+  loading: LazyPanelFallback,
+  ssr: false,
+});
 const StockTopicAnalysisPanel = dynamic(() => import('@/components/StockTopicAnalysisPanel'), {
   loading: LazyPanelFallback,
   ssr: false,
@@ -431,6 +435,13 @@ export default function GroupDetailPage() {
                 groupId={groupId}
                 onTaskCreated={handleTaskCreated}
                 mode="stock-concepts"
+              />
+            </GroupScrollableTabContent>
+
+            <GroupScrollableTabContent value="research-radar">
+              <ResearchRadarPanel
+                groupId={groupId}
+                onTaskCreated={handleTaskCreated}
               />
             </GroupScrollableTabContent>
 

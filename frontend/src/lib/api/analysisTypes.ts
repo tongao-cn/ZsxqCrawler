@@ -44,6 +44,81 @@ export interface DailyStockConceptResponse {
   updated_at?: string | null;
 }
 
+export interface ResearchRadarRequestPayload {
+  date?: string;
+  commentsPerTopic?: number;
+}
+
+export interface ResearchRadarEvidence {
+  id?: number;
+  source_type: string;
+  source_id: string;
+  topic_id: string;
+  source_time: string;
+  excerpt: string;
+  matched_entities: Record<string, unknown>;
+  support_reason: string;
+  navigation: {
+    type?: string;
+    topic_id?: string | number;
+    [key: string]: unknown;
+  };
+}
+
+export interface ResearchRadarEntity {
+  entity_type: string;
+  name: string;
+  code?: string;
+  market?: string;
+  weight: number;
+  evidence_count: number;
+}
+
+export interface ResearchRadarLogicItem {
+  id?: number;
+  rank: number;
+  tier: 'strong' | 'medium' | 'weak' | string;
+  title: string;
+  summary: string;
+  direction: string;
+  concepts: string[];
+  stocks: Array<{
+    name: string;
+    code?: string;
+    market?: string;
+    confidence?: number;
+  }>;
+  catalysts: string[];
+  risks: string[];
+  evidence_count: number;
+  confidence: number;
+  evidence: ResearchRadarEvidence[];
+  entities: ResearchRadarEntity[];
+}
+
+export interface ResearchRadarRun {
+  id: number;
+  group_id: string;
+  report_date: string;
+  window_days: number;
+  status: string;
+  model?: string | null;
+  summary: {
+    logic_count?: number;
+    strong_count?: number;
+    medium_count?: number;
+    weak_count?: number;
+    direction_count?: number;
+    stock_count?: number;
+    [key: string]: unknown;
+  };
+  task_id?: string | null;
+  error?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+  logic_items: ResearchRadarLogicItem[];
+}
+
 export interface StockTopicMatch {
   topic_id: string;
   title: string;

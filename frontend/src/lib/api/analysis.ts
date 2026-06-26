@@ -9,6 +9,8 @@ import type {
   DailyStockConceptResponse,
   DailyTopicAnalysisPayload,
   DailyTopicReport,
+  ResearchRadarRequestPayload,
+  ResearchRadarRun,
   StockTopicAnalysisResponse,
   StockTopicImageExtractResponse,
   StockQuestionResponse,
@@ -152,6 +154,34 @@ export class AnalysisApiClient extends TasksApiClient {
     }
     const query = search.toString();
     return this.request(`/api/analysis/daily-stock-concepts/${groupId}${query ? `?${query}` : ''}`, {
+      signal: options.signal,
+    });
+  }
+
+  async createResearchRadar(
+    groupId: number | string,
+    payload: ResearchRadarRequestPayload = {}
+  ): Promise<TaskCreateResponse> {
+    return this.request(`/api/analysis/research-radar/${groupId}`, {
+      method: 'POST',
+      body: JSON.stringify({
+        commentsPerTopic: payload.commentsPerTopic ?? 8,
+        ...(payload.date ? { date: payload.date } : {}),
+      }),
+    });
+  }
+
+  async getResearchRadar(
+    groupId: number | string,
+    date?: string,
+    options: ApiRequestOptions = {}
+  ): Promise<ResearchRadarRun> {
+    const search = new URLSearchParams();
+    if (date) {
+      search.set('date', date);
+    }
+    const query = search.toString();
+    return this.request(`/api/analysis/research-radar/${groupId}${query ? `?${query}` : ''}`, {
       signal: options.signal,
     });
   }
