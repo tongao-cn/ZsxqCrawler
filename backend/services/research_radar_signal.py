@@ -69,6 +69,10 @@ def _row_catalysts(row: Dict[str, Any]) -> List[str]:
     return catalysts
 
 
+def _canonical_catalysts(catalysts: List[str]) -> List[str]:
+    return [term for term in CATALYST_TERMS if term in catalysts]
+
+
 def _row_directions(row: Dict[str, Any]) -> List[str]:
     return [concept for concept in _row_concepts(row) if concept not in CATALYST_TERMS]
 
@@ -160,6 +164,7 @@ def build_research_radar_candidates(
             if topic and topic_id not in {item["topic_id"] for item in evidence}:
                 evidence.append(_evidence_for_topic(topic, row, direction))
 
+        catalysts = _canonical_catalysts(catalysts)
         confidence = _confidence(
             len(topic_ids),
             len(stocks_by_name),

@@ -165,6 +165,46 @@ class ResearchRadarSignalTests(unittest.TestCase):
         self.assertEqual(1, len(candidates))
         self.assertEqual(["出海/出口", "订单/扩产"], candidates[0]["catalysts"])
 
+    def test_build_candidates_orders_explicit_catalysts_independent_of_row_order(self):
+        from backend.services.research_radar_signal import build_research_radar_candidates
+
+        topics = [
+            {
+                "topic_id": "204",
+                "title": "消费电子线索",
+                "create_time": "2026-06-26T11:30:00.000+0800",
+                "talk_text": "消费电子方向有出海和订单扩产讨论。",
+                "comments": [],
+            }
+        ]
+        rows = [
+            {
+                "topic_id": "204",
+                "stock_name": "出口公司",
+                "concepts": ["消费电子", "订单/扩产"],
+                "reason": "订单扩产明确。",
+                "confidence": 0.8,
+            },
+            {
+                "topic_id": "204",
+                "stock_name": "出海公司",
+                "concepts": ["消费电子", "出海/出口"],
+                "reason": "出海出口机会明确。",
+                "confidence": 0.8,
+            },
+        ]
+
+        expected = ["出海/出口", "订单/扩产"]
+        for current_rows in (rows, list(reversed(rows))):
+            candidates = build_research_radar_candidates(
+                topics=topics,
+                current_stock_rows=current_rows,
+                baseline_stock_rows=[],
+                max_candidates=5,
+            )
+            self.assertEqual(1, len(candidates))
+            self.assertEqual(expected, candidates[0]["catalysts"])
+
     def test_build_candidates_returns_empty_without_stock_rows(self):
         from backend.services.research_radar_signal import build_research_radar_candidates
 
