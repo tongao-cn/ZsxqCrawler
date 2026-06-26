@@ -136,6 +136,35 @@ class ResearchRadarSignalTests(unittest.TestCase):
         self.assertEqual(1, len(candidates[0]["stocks"]))
         self.assertEqual("medium", candidates[0]["tier"])
 
+    def test_build_candidates_orders_inferred_catalysts_deterministically(self):
+        from backend.services.research_radar_signal import build_research_radar_candidates
+
+        candidates = build_research_radar_candidates(
+            topics=[
+                {
+                    "topic_id": "203",
+                    "title": "半导体设备线索",
+                    "create_time": "2026-06-26T11:00:00.000+0800",
+                    "talk_text": "半导体设备方向出现出海和订单讨论。",
+                    "comments": [],
+                }
+            ],
+            current_stock_rows=[
+                {
+                    "topic_id": "203",
+                    "stock_name": "设备材料",
+                    "concepts": ["半导体设备"],
+                    "reason": "订单/扩产预期叠加出海/出口机会。",
+                    "confidence": 0.8,
+                }
+            ],
+            baseline_stock_rows=[],
+            max_candidates=5,
+        )
+
+        self.assertEqual(1, len(candidates))
+        self.assertEqual(["出海/出口", "订单/扩产"], candidates[0]["catalysts"])
+
     def test_build_candidates_returns_empty_without_stock_rows(self):
         from backend.services.research_radar_signal import build_research_radar_candidates
 

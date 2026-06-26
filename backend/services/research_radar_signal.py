@@ -4,7 +4,7 @@ from collections import defaultdict
 from typing import Any, Dict, Iterable, List
 
 
-CATALYST_TERMS = {
+CATALYST_TERMS = (
     "涨价/供需",
     "国产替代/自主可控",
     "出海/出口",
@@ -13,7 +13,7 @@ CATALYST_TERMS = {
     "业绩",
     "并购",
     "供需紧张",
-}
+)
 
 
 def _text(value: Any) -> str:
