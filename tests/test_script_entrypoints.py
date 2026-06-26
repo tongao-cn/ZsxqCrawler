@@ -7,6 +7,7 @@ class ScriptEntrypointTests(unittest.TestCase):
         root = Path(__file__).resolve().parents[1]
         for relative_path in (
             "scripts/export_daily_review_topics.py",
+            "scripts/run_retention_cleanup.py",
             "scripts/run_zsxq_topic_recommendation_refresh.py",
         ):
             text = (root / relative_path).read_text(encoding="utf-8")

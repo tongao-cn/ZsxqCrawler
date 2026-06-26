@@ -19,6 +19,7 @@ class WorkflowRegistryTests(unittest.TestCase):
                 "download_selected_files",
                 "download_single_file",
                 "sync_files_from_topics",
+                "retention_cleanup",
                 "analyze_file",
                 "analyze_files",
                 "daily_stock_concepts",

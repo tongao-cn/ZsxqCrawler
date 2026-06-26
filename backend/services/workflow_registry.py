@@ -58,6 +58,7 @@ WORKFLOW_SPECS: Dict[str, WorkflowSpec] = {
         _spec("download_selected_files", "选中文件下载", lock_category=INGESTION_LOCK_CATEGORY),
         _spec("download_single_file", "单文件下载", lock_category=INGESTION_LOCK_CATEGORY),
         _spec("sync_files_from_topics", "同步文件", lock_category=INGESTION_LOCK_CATEGORY),
+        _spec("retention_cleanup", "超期内容清理", lock_category=INGESTION_LOCK_CATEGORY),
         _spec("analyze_file", "文件分析"),
         _spec("analyze_files", "批量文件分析"),
         _spec("daily_stock_concepts", "每日股票概念"),
