@@ -67,7 +67,7 @@ Frontend verification:
 - Modify: `tests/test_postgres_core_schema.py`
 - Modify: `tests/test_workflow_registry.py`
 
-- [ ] **Step 1: Write failing schema assertions**
+- [x] **Step 1: Write failing schema assertions**
 
 Add these assertions to `PostgresCoreSchemaTests.test_core_schema_sql_contains_schema_tables_and_indexes` in `tests/test_postgres_core_schema.py`:
 
@@ -89,7 +89,7 @@ Add this assertion to `PostgresCoreSchemaTests.test_no_indexes_keeps_unique_cons
 self.assertIn('CREATE UNIQUE INDEX IF NOT EXISTS "research_radar_runs_group_id_report_date_key"', sql)
 ```
 
-- [ ] **Step 2: Write failing workflow registry assertion**
+- [x] **Step 2: Write failing workflow registry assertion**
 
 Add this test to `tests/test_workflow_registry.py`:
 
@@ -106,7 +106,7 @@ def test_research_radar_workflow_is_registered_as_group_runtime_task(self):
     self.assertTrue(spec.cancellable)
 ```
 
-- [ ] **Step 3: Run the failing tests**
+- [x] **Step 3: Run the failing tests**
 
 Run:
 
@@ -116,7 +116,7 @@ uv run python -m unittest tests.test_postgres_core_schema tests.test_workflow_re
 
 Expected: failures mention missing `research_radar_*` schema strings and missing `research_radar` workflow registration.
 
-- [ ] **Step 4: Add schema specs**
+- [x] **Step 4: Add schema specs**
 
 In `backend/storage/postgres_core_schema.py`, add these `CoreTableSpec` entries after `daily_stock_concepts`:
 
@@ -136,7 +136,7 @@ Add these index specs to `CORE_INDEX_SPECS` near the analysis indexes:
 ("research_radar_entities", ("run_id", "entity_type", "name")),
 ```
 
-- [ ] **Step 5: Register workflow**
+- [x] **Step 5: Register workflow**
 
 In `backend/services/workflow_registry.py`, add the spec near other analysis tasks:
 
@@ -146,7 +146,7 @@ _spec("research_radar", "研究雷达"),
 
 If there are existing staged retention changes in this file, keep them and insert the new spec without moving unrelated entries.
 
-- [ ] **Step 6: Run tests and commit**
+- [x] **Step 6: Run tests and commit**
 
 Run:
 
@@ -175,7 +175,7 @@ git commit --only backend/storage/postgres_core_schema.py backend/services/workf
 - Create: `backend/services/research_radar_signal.py`
 - Create: `tests/test_research_radar_signal.py`
 
-- [ ] **Step 1: Write failing signal tests**
+- [x] **Step 1: Write failing signal tests**
 
 Create `tests/test_research_radar_signal.py`:
 
@@ -300,7 +300,7 @@ if __name__ == "__main__":
     unittest.main()
 ```
 
-- [ ] **Step 2: Run failing signal tests**
+- [x] **Step 2: Run failing signal tests**
 
 Run:
 
@@ -310,7 +310,7 @@ uv run python -m unittest tests.test_research_radar_signal -v
 
 Expected: FAIL with `ModuleNotFoundError: No module named 'backend.services.research_radar_signal'`.
 
-- [ ] **Step 3: Implement signal module**
+- [x] **Step 3: Implement signal module**
 
 Create `backend/services/research_radar_signal.py`:
 
@@ -508,7 +508,7 @@ def build_research_radar_candidates(
     )[:max_candidates]
 ```
 
-- [ ] **Step 4: Run tests and commit**
+- [x] **Step 4: Run tests and commit**
 
 Run:
 
@@ -531,7 +531,7 @@ git commit -m "Add research radar signal candidates"
 - Create: `backend/services/research_radar_store.py`
 - Create: `tests/test_research_radar_store.py`
 
-- [ ] **Step 1: Write failing store tests**
+- [x] **Step 1: Write failing store tests**
 
 Create `tests/test_research_radar_store.py`:
 
@@ -682,7 +682,7 @@ if __name__ == "__main__":
     unittest.main()
 ```
 
-- [ ] **Step 2: Run failing store tests**
+- [x] **Step 2: Run failing store tests**
 
 Run:
 
@@ -692,7 +692,7 @@ uv run python -m unittest tests.test_research_radar_store -v
 
 Expected: FAIL with missing module.
 
-- [ ] **Step 3: Implement store module**
+- [x] **Step 3: Implement store module**
 
 Create `backend/services/research_radar_store.py` with these public functions:
 
@@ -1041,7 +1041,7 @@ def load_research_radar_run_by_date(conn: Any, *, group_id: str, report_date: st
     return _map_run(conn, row) if row else None
 ```
 
-- [ ] **Step 4: Run tests and commit**
+- [x] **Step 4: Run tests and commit**
 
 Run:
 
@@ -1064,7 +1064,7 @@ git commit -m "Add research radar persistence"
 - Create: `backend/services/research_radar_ai.py`
 - Create: `tests/test_research_radar_ai.py`
 
-- [ ] **Step 1: Write failing AI helper tests**
+- [x] **Step 1: Write failing AI helper tests**
 
 Create `tests/test_research_radar_ai.py`:
 
@@ -1160,7 +1160,7 @@ if __name__ == "__main__":
     unittest.main()
 ```
 
-- [ ] **Step 2: Run failing AI tests**
+- [x] **Step 2: Run failing AI tests**
 
 Run:
 
@@ -1170,7 +1170,7 @@ uv run python -m unittest tests.test_research_radar_ai -v
 
 Expected: FAIL with missing module.
 
-- [ ] **Step 3: Implement AI helper**
+- [x] **Step 3: Implement AI helper**
 
 Create `backend/services/research_radar_ai.py`:
 
@@ -1299,7 +1299,7 @@ def summarize_radar_candidates(
     return apply_ai_logic_summaries(candidates, result.payload), result.model
 ```
 
-- [ ] **Step 4: Run tests and commit**
+- [x] **Step 4: Run tests and commit**
 
 Run:
 
@@ -1326,7 +1326,7 @@ git commit -m "Add research radar AI wording"
 - Modify: `backend/main.py`
 - Modify: `tests/test_app_factory.py`
 
-- [ ] **Step 1: Write failing workflow tests**
+- [x] **Step 1: Write failing workflow tests**
 
 Create `tests/test_research_radar_workflow.py`:
 
@@ -1391,7 +1391,7 @@ if __name__ == "__main__":
     unittest.main()
 ```
 
-- [ ] **Step 2: Write failing route helper tests**
+- [x] **Step 2: Write failing route helper tests**
 
 Create `tests/test_research_radar_routes_helpers.py`:
 
@@ -1437,7 +1437,7 @@ if __name__ == "__main__":
     unittest.main()
 ```
 
-- [ ] **Step 3: Add failing app factory assertion**
+- [x] **Step 3: Add failing app factory assertion**
 
 In `tests/test_app_factory.py`, add:
 
@@ -1445,7 +1445,7 @@ In `tests/test_app_factory.py`, add:
 self.assertIn("/api/analysis/research-radar/{group_id}", paths)
 ```
 
-- [ ] **Step 4: Run failing tests**
+- [x] **Step 4: Run failing tests**
 
 Run:
 
@@ -1455,7 +1455,7 @@ uv run python -m unittest tests.test_research_radar_workflow tests.test_research
 
 Expected: FAIL with missing workflow/route module and missing app path.
 
-- [ ] **Step 5: Implement workflow**
+- [x] **Step 5: Implement workflow**
 
 Create `backend/services/research_radar_workflow.py`:
 
@@ -1637,7 +1637,7 @@ def get_research_radar(group_id: str, report_date: Optional[str] = None) -> Opti
         conn.close()
 ```
 
-- [ ] **Step 6: Implement route**
+- [x] **Step 6: Implement route**
 
 Create `backend/routes/research_radar_routes.py`:
 
@@ -1701,7 +1701,7 @@ async def read_research_radar(
         raise _research_radar_route_error("获取研究雷达失败", exc)
 ```
 
-- [ ] **Step 7: Register app route**
+- [x] **Step 7: Register app route**
 
 In `backend/main.py`, add import:
 
@@ -1717,7 +1717,7 @@ research_radar_router,
 
 If retention router changes are present, keep them intact.
 
-- [ ] **Step 8: Run tests and commit**
+- [x] **Step 8: Run tests and commit**
 
 Run:
 
@@ -1745,7 +1745,7 @@ Use `git commit --only ...` if unrelated staged files exist.
 - Modify: `frontend/src/components/GroupWorkbenchTabList.tsx`
 - Modify: `frontend/src/app/groups/[groupId]/page.tsx`
 
-- [ ] **Step 1: Add frontend types**
+- [x] **Step 1: Add frontend types**
 
 In `frontend/src/lib/api/analysisTypes.ts`, add these interfaces after `DailyStockConceptResponse`:
 
@@ -1826,7 +1826,7 @@ export interface ResearchRadarRun {
 }
 ```
 
-- [ ] **Step 2: Add API client methods**
+- [x] **Step 2: Add API client methods**
 
 In `frontend/src/lib/api/analysis.ts`, add imports:
 
@@ -1867,7 +1867,7 @@ async getResearchRadar(
 }
 ```
 
-- [ ] **Step 3: Create ResearchRadarPanel**
+- [x] **Step 3: Create ResearchRadarPanel**
 
 Create `frontend/src/components/ResearchRadarPanel.tsx`:
 
@@ -2134,7 +2134,7 @@ export default function ResearchRadarPanel({ groupId, onTaskCreated }: ResearchR
 }
 ```
 
-- [ ] **Step 4: Add tab trigger**
+- [x] **Step 4: Add tab trigger**
 
 In `frontend/src/components/GroupWorkbenchTabList.tsx`, import `Radar`:
 
@@ -2150,7 +2150,7 @@ Add the tab after topics:
 
 Change `grid-cols-7` to `grid-cols-8`.
 
-- [ ] **Step 5: Render panel in group page**
+- [x] **Step 5: Render panel in group page**
 
 In `frontend/src/app/groups/[groupId]/page.tsx`, add dynamic import:
 
@@ -2172,7 +2172,7 @@ Add content before the files tab:
 </GroupScrollableTabContent>
 ```
 
-- [ ] **Step 6: Run frontend build and commit**
+- [x] **Step 6: Run frontend build and commit**
 
 Run:
 
@@ -2196,7 +2196,7 @@ Use `git commit --only ...` if unrelated staged files exist.
 **Files:**
 - Read-only verification across backend and frontend files touched by this plan.
 
-- [ ] **Step 1: Run focused backend tests**
+- [x] **Step 1: Run focused backend tests**
 
 Run:
 
@@ -2206,7 +2206,7 @@ uv run python -m unittest tests.test_research_radar_signal tests.test_research_r
 
 Expected: PASS.
 
-- [ ] **Step 2: Run PostgreSQL compatibility debt scan**
+- [x] **Step 2: Run PostgreSQL compatibility debt scan**
 
 Run:
 
@@ -2216,7 +2216,7 @@ uv run python scripts\scan_postgres_compat_debt.py
 
 Expected: no SQLite compatibility debt reported.
 
-- [ ] **Step 3: Run frontend build**
+- [x] **Step 3: Run frontend build**
 
 Run:
 
@@ -2226,7 +2226,7 @@ npm --prefix frontend run build
 
 Expected: PASS.
 
-- [ ] **Step 4: Review own diff**
+- [x] **Step 4: Review own diff**
 
 Run:
 
@@ -2243,7 +2243,7 @@ Expected:
 - No changes to existing daily stock concept or A-share output shapes.
 - No unrelated retention files in any Research Radar commit.
 
-- [ ] **Step 5: Final commit only if verification edits were made**
+- [x] **Step 5: Final commit only if verification edits were made**
 
 If Task 7 required any fix, commit only the files changed for that fix:
 
