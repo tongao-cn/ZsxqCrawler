@@ -264,7 +264,7 @@ def summarize_pdf_with_ai(
         api_base=api_base,
         wire_api=wire_api,
         reasoning_effort=reasoning_effort,
-        timeout=180,
+        timeout=600,
     )
     return result.text.strip()
 
