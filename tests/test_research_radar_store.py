@@ -79,6 +79,8 @@ class ResearchRadarStoreTests(unittest.TestCase):
         self.assertEqual(9, conn.execute.call_args_list[7].args[1][0])
         self.assertEqual(9, conn.execute.call_args_list[8].args[1][1])
         self.assertEqual(9, conn.execute.call_args_list[9].args[1][1])
+        self.assertEqual(1, conn.execute.call_args_list[8].args[1][7])
+        self.assertEqual(1, conn.execute.call_args_list[9].args[1][7])
         conn.commit.assert_called_once_with()
 
     def test_load_research_radar_run_maps_logic_evidence_and_entities(self):

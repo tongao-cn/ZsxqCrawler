@@ -30,6 +30,10 @@ def _row_id(row: Any) -> int:
     return int(row["id"])
 
 
+def _evidence_count(item: Dict[str, Any]) -> int:
+    return int(item.get("evidence_count") or len(item.get("evidence") or []))
+
+
 def _existing_run_ids(conn: Any, group_id: str, report_date: str) -> List[int]:
     rows = conn.execute(
         "SELECT id FROM research_radar_runs WHERE group_id = ? AND report_date = ?",
@@ -100,7 +104,7 @@ def _insert_logic_item(conn: Any, *, run_id: int, rank: int, item: Dict[str, Any
             _json(item.get("stocks") or []),
             _json(item.get("catalysts") or []),
             _json(item.get("risks") or []),
-            int(item.get("evidence_count") or len(item.get("evidence") or [])),
+            _evidence_count(item),
             float(item.get("confidence") or 0),
             _now(),
         ),
@@ -151,7 +155,7 @@ def _insert_entities(conn: Any, *, run_id: int, logic_id: int, item: Dict[str, A
                 "",
                 "",
                 float(item.get("confidence") or 0),
-                int(item.get("evidence_count") or 0),
+                _evidence_count(item),
                 _now(),
             ),
         )
@@ -174,7 +178,7 @@ def _insert_entities(conn: Any, *, run_id: int, logic_id: int, item: Dict[str, A
                 str(stock.get("code") or ""),
                 str(stock.get("market") or ""),
                 float(stock.get("confidence") or item.get("confidence") or 0),
-                int(item.get("evidence_count") or 0),
+                _evidence_count(item),
                 _now(),
             ),
         )
