@@ -432,6 +432,7 @@ def _write_run_record(summary: WorkflowSummary, args: argparse.Namespace, run_wi
             "group_ids": _group_ids(args),
             "max_files_per_group": args.max_files_per_group,
             "download_pdf_only": args.download_pdf_only,
+            "download_concurrency": args.download_concurrency,
             "lookback_hours": args.lookback_hours,
             "download_interval": args.download_interval,
             "long_sleep_interval": args.long_sleep_interval,
@@ -491,7 +492,10 @@ async def _download_group_files(
         if not file_ids:
             return []
         responses = [
-            await download_selected_files(group_id, FileIdListRequest(file_ids=chunk))
+            await download_selected_files(
+                group_id,
+                FileIdListRequest(file_ids=chunk, concurrency=args.download_concurrency),
+            )
             for chunk in _chunks(file_ids, 200)
         ]
     else:
@@ -586,6 +590,7 @@ def main() -> None:
     parser.add_argument("--lookback-hours", type=int, help="Download files created in the last N hours.")
     parser.add_argument("--max-files-per-group", type=int)
     parser.add_argument("--download-pdf-only", action="store_true")
+    parser.add_argument("--download-concurrency", type=int, default=1)
     parser.add_argument("--poll-seconds", type=float, default=5)
     parser.add_argument("--task-timeout-seconds", type=int, default=0)
     parser.add_argument("--download-interval", type=float, default=2.0)

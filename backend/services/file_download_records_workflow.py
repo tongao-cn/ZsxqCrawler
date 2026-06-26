@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, Optional, Sequence
 
+from backend.core.account_context import get_cookie_for_group
 from backend.crawlers.zsxq_file_downloader import ZSXQFileDownloader
 from backend.services.file_record_download_batch import (
     build_download_file_info,
@@ -13,6 +14,7 @@ from backend.services.file_record_download_batch import (
     download_record_for_task,
     download_result_stat_key,
     run_download_records,
+    run_download_records_concurrent,
 )
 from backend.services.file_downloader_runtime import (
     _create_file_downloader,
@@ -98,6 +100,46 @@ def _run_download_records(
     )
 
 
+def _create_download_worker(task_id: str, group_id: str) -> ZSXQFileDownloader:
+    downloader = ZSXQFileDownloader(
+        cookie=get_cookie_for_group(group_id),
+        group_id=group_id,
+        download_interval=0,
+        long_sleep_interval=10,
+        files_per_batch=100,
+    )
+    downloader.log_callback = lambda message: add_task_log(task_id, message)
+    downloader.stop_check_func = lambda: is_task_stopped(task_id)
+    return downloader
+
+
+def _safe_close_worker_downloader(downloader: ZSXQFileDownloader) -> None:
+    try:
+        if getattr(downloader, "file_db", None):
+            downloader.file_db.close()
+    finally:
+        pass
+
+
+def _run_download_records_concurrent(
+    task_id: str,
+    group_id: str,
+    records: Sequence[DownloadFileRecord],
+    stats: Dict[str, int],
+    concurrency: int,
+) -> Dict[str, int]:
+    return run_download_records_concurrent(
+        task_id,
+        lambda: _create_download_worker(task_id, group_id),
+        _safe_close_worker_downloader,
+        records,
+        stats,
+        concurrency=concurrency,
+        is_stopped=is_task_stopped,
+        add_log=add_task_log,
+    )
+
+
 def _download_record_for_task(
     task_id: str,
     downloader: ZSXQFileDownloader,
@@ -134,6 +176,19 @@ def _complete_download_records_task(
     )
 
 
+def _complete_download_records_task_concurrent(
+    task_id: str,
+    group_id: str,
+    records: Sequence[DownloadFileRecord],
+    stats: Dict[str, int],
+    concurrency: int,
+) -> Any:
+    _run_download_records_concurrent(task_id, group_id, records, stats, concurrency)
+    if is_task_stopped(task_id):
+        return skip_workflow_completion()
+    return {"downloaded_files": stats}
+
+
 def _complete_empty_download_records_task(
     stats: Dict[str, int],
 ) -> Dict[str, Dict[str, int]]:
@@ -144,6 +199,7 @@ def _download_selected_file_records(
     task_id: str,
     group_id: str,
     file_ids: Sequence[int],
+    concurrency: int,
     workflow_state: Dict[str, str],
 ) -> Any:
     try:
@@ -165,20 +221,26 @@ def _download_selected_file_records(
             return _complete_empty_download_records_task(stats)
 
         workflow_state["completed_message"] = "选中文件下载完成"
-        return _complete_download_records_task(task_id, downloader, selection.records, stats)
+        if int(concurrency or 1) <= 1:
+            return _complete_download_records_task(task_id, downloader, selection.records, stats)
+        return _complete_download_records_task_concurrent(task_id, group_id, selection.records, stats, concurrency)
     finally:
         _safe_remove_file_downloader(task_id)
 
 
-def run_selected_file_download_task(task_id: str, group_id: str, file_ids: Sequence[int]):
+def run_selected_file_download_task(task_id: str, group_id: str, file_ids: Sequence[int], concurrency: int = 1):
     workflow_state = {"completed_message": "选中文件下载完成"}
+    worker_count = max(1, int(concurrency or 1))
+    running_message = f"开始下载选中的 {len(file_ids)} 个文件..."
+    if worker_count > 1:
+        running_message = f"开始下载选中的 {len(file_ids)} 个文件，并发={worker_count}..."
 
     run_workflow(
         task_id,
-        running_message=f"开始下载选中的 {len(file_ids)} 个文件...",
+        running_message=running_message,
         completed_message=lambda _result: workflow_state["completed_message"],
         failure_label="选中文件下载",
-        work=lambda: _download_selected_file_records(task_id, group_id, file_ids, workflow_state),
+        work=lambda: _download_selected_file_records(task_id, group_id, file_ids, concurrency, workflow_state),
     )
 
 

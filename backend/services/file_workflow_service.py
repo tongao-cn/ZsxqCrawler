@@ -125,6 +125,7 @@ def create_selected_file_download_task(group_id: str, request: Any) -> Dict[str,
         run_selected_file_download_task,
         group_id,
         request.file_ids,
+        request.concurrency,
         message="选中文件下载任务已创建",
     )
 

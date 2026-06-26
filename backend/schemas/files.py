@@ -32,6 +32,7 @@ class FileAIAnalysisRequest(BaseModel):
 
 class FileIdListRequest(BaseModel):
     file_ids: list[int] = Field(..., min_length=1, max_length=200, description="文件 ID 列表")
+    concurrency: int = Field(default=1, ge=1, le=10, description="并发下载数")
 
 
 class FileAIAnalysisBatchRequest(FileIdListRequest):

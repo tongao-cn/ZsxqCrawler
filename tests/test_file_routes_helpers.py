@@ -19,6 +19,7 @@ from backend.services.file_download_records_workflow import (
     _run_download_records,
 )
 from backend.services.file_record_download_batch import run_download_records as run_file_record_download_batch
+from backend.services.file_record_download_batch import run_download_records_concurrent
 from backend.services.file_single_download_workflow import _complete_successful_single_file_download
 from backend.services.file_read_model import (
     _build_check_local_file_status_response,
@@ -311,10 +312,24 @@ class FileRoutesHelperTests(unittest.TestCase):
         self.assertEqual("下载选中文件 (2 个)", recipe.description)
         self.assertEqual(run_selected_file_download_task, recipe.task_func)
         self.assertEqual("group-1", recipe.ingestion_group_id)
-        self.assertEqual(("group-1", [123, 456]), recipe.args)
+        self.assertEqual(("group-1", [123, 456], 1), recipe.args)
         self.assertEqual("选中文件下载任务已创建", recipe.message)
         self.assertFalse(recipe.prepend_group_id_to_args)
         self.assertEqual({"task_id": "task-1", "message": "选中文件下载任务已创建"}, response)
+
+    def test_create_selected_file_download_task_passes_requested_concurrency(self):
+        from backend.schemas.files import FileIdListRequest
+
+        request = FileIdListRequest(file_ids=[123, 456], concurrency=5)
+
+        with patch(
+            "backend.services.file_workflow_service.launch_task_recipe",
+            return_value={"task_id": "task-1", "message": "选中文件下载任务已创建"},
+        ) as launch:
+            create_selected_file_download_task("group-1", request)
+
+        recipe = launch.call_args.args[0]
+        self.assertEqual(("group-1", [123, 456], 5), recipe.args)
 
     def test_create_filtered_file_download_task_uses_ingestion_launch_recipe(self):
         from backend.schemas.files import FileFilteredDownloadRequest
@@ -2463,6 +2478,54 @@ class FileRoutesHelperTests(unittest.TestCase):
             downloader.download_calls,
         )
         self.assertEqual([("task-1", "【1/1】First.pdf")], logs)
+
+    def test_file_record_download_batch_can_run_concurrently(self):
+        class FakeDownloader:
+            def __init__(self, result):
+                self.result = result
+                self.download_calls = []
+
+            def download_file(self, file_info):
+                self.download_calls.append(file_info)
+                return self.result
+
+        created = []
+        results = iter([True, "skipped", False])
+        records = [
+            DownloadFileRecord(101, "First.pdf", 123, 7),
+            DownloadFileRecord(102, "Second.pdf", 456, 0),
+            DownloadFileRecord(103, "Third.pdf", 789, 2),
+        ]
+        stats = _build_download_task_stats(total_files=3, found=3)
+        logs = []
+        cleaned = []
+
+        def factory():
+            downloader = FakeDownloader(next(results))
+            created.append(downloader)
+            return downloader
+
+        result = run_download_records_concurrent(
+            "task-1",
+            factory,
+            lambda downloader: cleaned.append(downloader),
+            records,
+            stats,
+            concurrency=3,
+            is_stopped=lambda _task_id: False,
+            add_log=lambda task_id, message: logs.append((task_id, message)),
+        )
+
+        self.assertIs(result, stats)
+        self.assertEqual(3, len(created))
+        self.assertEqual(created, cleaned)
+        self.assertEqual(1, stats["downloaded"])
+        self.assertEqual(1, stats["skipped"])
+        self.assertEqual(1, stats["failed"])
+        self.assertEqual(
+            sorted([message for _task_id, message in logs]),
+            ["【1/3】First.pdf", "【2/3】Second.pdf", "【3/3】Third.pdf"],
+        )
 
     def test_run_download_records_stops_before_next_record(self):
         class FakeDownloader:
