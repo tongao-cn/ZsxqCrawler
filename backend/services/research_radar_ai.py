@@ -30,7 +30,10 @@ RESEARCH_RADAR_AI_SCHEMA: Dict[str, Any] = {
 
 
 def _text(value: Any, limit: int = 1000) -> str:
-    text = str(value or "").strip()
+    if value is None:
+        text = ""
+    else:
+        text = str(value).strip()
     if limit >= 0 and len(text) > limit:
         return text[:limit].rstrip()
     return text
@@ -47,11 +50,8 @@ def _safe_stock_payload(stock: Any) -> Dict[str, Any]:
 
 
 def _safe_evidence_payload(evidence: Any) -> Dict[str, Any]:
-    if not isinstance(evidence, dict):
-        return {"excerpt": _text(evidence)}
     return {
-        "topic_id": _text(evidence.get("topic_id") or evidence.get("source_id"), 120),
-        "source_time": _text(evidence.get("source_time"), 120),
+        "topic_id": _text(evidence.get("topic_id"), 120),
         "excerpt": _text(evidence.get("excerpt")),
         "support_reason": _text(evidence.get("support_reason")),
     }
@@ -64,16 +64,14 @@ def _candidate_prompt_payload(candidates: List[Dict[str, Any]]) -> str:
             {
                 "candidate_id": _text(candidate.get("candidate_id"), 200),
                 "direction": _text(candidate.get("direction"), 200),
-                "title": _text(candidate.get("title"), 200),
-                "summary": _text(candidate.get("summary")),
                 "tier": _text(candidate.get("tier"), 60),
                 "confidence": candidate.get("confidence"),
                 "concepts": [_text(item, 120) for item in candidate.get("concepts") or []],
                 "stocks": [_safe_stock_payload(item) for item in candidate.get("stocks") or []],
                 "catalysts": [_text(item, 120) for item in candidate.get("catalysts") or []],
-                "risks": [_text(item, 200) for item in candidate.get("risks") or []],
-                "evidence_count": candidate.get("evidence_count"),
-                "evidence": [_safe_evidence_payload(item) for item in candidate.get("evidence") or []],
+                "evidence": [
+                    _safe_evidence_payload(item) for item in candidate.get("evidence") or [] if isinstance(item, dict)
+                ],
             }
         )
     return json.dumps(prompt_candidates, ensure_ascii=False)
@@ -92,8 +90,8 @@ def apply_ai_logic_summaries(candidates: List[Dict[str, Any]], payload: Dict[str
         candidate = by_id.get(_text(item.get("candidate_id")))
         if candidate is None:
             continue
-        title = _text(item.get("title"), 200)
-        summary = _text(item.get("summary"))
+        title = _text(item.get("title"), 120)
+        summary = _text(item.get("summary"), 800)
         if title:
             candidate["title"] = title
         if summary:
