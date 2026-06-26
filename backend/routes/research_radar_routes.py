@@ -36,6 +36,8 @@ def _research_radar_or_404(group_id: str, date: Optional[str]) -> dict:
 async def create_research_radar(group_id: str, request: ResearchRadarRequest):
     try:
         return _create_research_radar_task_response(group_id, request)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
     except Exception as exc:
         raise _research_radar_route_error("创建研究雷达任务失败", exc)
 
@@ -49,5 +51,7 @@ async def read_research_radar(
         return _research_radar_or_404(group_id, date)
     except HTTPException:
         raise
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
     except Exception as exc:
         raise _research_radar_route_error("获取研究雷达失败", exc)
