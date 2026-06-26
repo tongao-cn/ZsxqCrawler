@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import re
 import sys
 import time
 from dataclasses import dataclass, field
@@ -19,7 +20,9 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from backend.routes.file_routes import download_files, sync_files_from_topics
 from backend.schemas.files import FileDownloadRequest
+from backend.services.file_ai_analysis_entry import create_file_analysis_response
 from backend.services.task_runtime import get_task_logs_state, get_task_state, request_runtime_shutdown
+from backend.storage.db_compat import connect
 
 
 DEFAULT_GROUP_IDS = ("51111112855254", "28888222124181", "15552822451452")
@@ -47,6 +50,7 @@ def _safe_print(*values: Any, sep: str = " ", end: str = "\n", file: Any = None,
 class WorkflowSummary:
     started_at: str = field(default_factory=lambda: datetime.now(SHANGHAI_TZ).isoformat())
     tasks: list[tuple[str, dict[str, Any]]] = field(default_factory=list)
+    file_analyses: list[dict[str, Any]] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
     finished_at: str | None = None
     run_record_path: str | None = None
@@ -57,6 +61,9 @@ class WorkflowSummary:
     def warn(self, message: str) -> None:
         self.warnings.append(message)
         _safe_print(f"WARNING: {message}")
+
+    def add_file_analysis(self, result: dict[str, Any]) -> None:
+        self.file_analyses.append(result)
 
     @property
     def level(self) -> str:
@@ -143,6 +150,163 @@ def _record_task(label: str, task: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _query_value(group_id: str) -> int | str:
+    text = str(group_id or "").strip()
+    return int(text) if text.isdigit() else text
+
+
+def _safe_filename(value: str, limit: int = 80) -> str:
+    name = re.sub(r'[<>:"/\\|?*\x00-\x1f]+', "_", str(value or "").strip())
+    name = re.sub(r"\s+", " ", name).strip(" ._")
+    return (name[:limit].strip(" ._") or "file")
+
+
+def _load_downloaded_pdf_rows(
+    *,
+    group_id: str,
+    start_time: str,
+    end_time: str,
+    max_files: int | None,
+) -> list[dict[str, Any]]:
+    params: list[Any] = [_query_value(group_id), "%.pdf", "completed", "downloaded", "skipped"]
+    conditions = [
+        "group_id = ?",
+        "lower(name) like ?",
+        "download_status in (?, ?, ?)",
+        "create_time is not null",
+        "create_time != ''",
+    ]
+    if len(start_time) == 10 and len(end_time) == 10:
+        conditions.append("substr(create_time, 1, 10) >= ?")
+        conditions.append("substr(create_time, 1, 10) <= ?")
+    else:
+        conditions.append("create_time >= ?")
+        conditions.append("create_time <= ?")
+    params.extend([start_time, end_time])
+    sql = f"""
+        SELECT file_id, name, coalesce(size, 0), create_time, download_status, local_path
+        FROM files
+        WHERE {' AND '.join(conditions)}
+        ORDER BY create_time DESC, file_id DESC
+    """
+    if max_files is not None and max_files > 0:
+        sql += " LIMIT ?"
+        params.append(int(max_files))
+
+    conn = connect()
+    try:
+        cursor = conn.cursor()
+        cursor.execute(sql, tuple(params))
+        rows = cursor.fetchall()
+    finally:
+        conn.close()
+
+    return [
+        {
+            "file_id": int(row[0]),
+            "name": str(row[1] or f"file_{row[0]}.pdf"),
+            "size": int(row[2] or 0),
+            "create_time": str(row[3] or ""),
+            "download_status": str(row[4] or ""),
+            "local_path": str(row[5] or ""),
+        }
+        for row in rows
+    ]
+
+
+def _markdown_output_dir(group_id: str, label: str) -> Path:
+    safe_label = _safe_filename(label, limit=40)
+    return PROJECT_ROOT / "output" / "exports" / "file_ai_markdown" / str(group_id) / safe_label
+
+
+def _write_file_markdown(output_dir: Path, row: dict[str, Any], analysis: dict[str, Any]) -> Path:
+    output_dir.mkdir(parents=True, exist_ok=True)
+    file_id = int(row["file_id"])
+    file_name = str(row.get("name") or f"file_{file_id}.pdf")
+    output_path = output_dir / f"{file_id}-{_safe_filename(file_name)}.md"
+    summary = str(analysis.get("summary") or "").strip()
+    body = [
+        f"# {file_name}",
+        "",
+        f"- file_id: `{file_id}`",
+        f"- create_time: `{row.get('create_time') or ''}`",
+        f"- size: `{row.get('size') or 0}`",
+        f"- source_path: `{analysis.get('source_path') or row.get('local_path') or ''}`",
+        f"- model: `{analysis.get('model') or ''}`",
+        "",
+        "## AI Summary",
+        "",
+        summary or "_No summary returned._",
+        "",
+    ]
+    output_path.write_text("\n".join(body), encoding="utf-8")
+    return output_path
+
+
+def _write_index_markdown(output_dir: Path, group_id: str, label: str, results: list[dict[str, Any]]) -> Path:
+    output_dir.mkdir(parents=True, exist_ok=True)
+    index_path = output_dir / "index.md"
+    lines = [
+        f"# PDF AI Summaries - {group_id} - {label}",
+        "",
+        f"- generated_at: `{datetime.now(SHANGHAI_TZ).isoformat()}`",
+        f"- total: `{len(results)}`",
+        "",
+    ]
+    for item in results:
+        md_path = item.get("markdown_path") or ""
+        name = item.get("name") or f"file_{item.get('file_id')}"
+        status = item.get("status") or ""
+        rel = Path(md_path).name if md_path else ""
+        line = f"- `{status}` [{name}]({rel})" if rel else f"- `{status}` {name}"
+        lines.append(line)
+    lines.append("")
+    index_path.write_text("\n".join(lines), encoding="utf-8")
+    return index_path
+
+
+def _analyze_downloaded_pdfs(args: argparse.Namespace, run_window: tuple[str, str, str]) -> list[dict[str, Any]]:
+    start_time, end_time, label = run_window
+    group_id = args.pdf_analysis_group_id
+    rows = _load_downloaded_pdf_rows(
+        group_id=group_id,
+        start_time=start_time,
+        end_time=end_time,
+        max_files=args.max_pdf_analyses,
+    )
+    output_dir = _markdown_output_dir(group_id, label)
+    results: list[dict[str, Any]] = []
+    _safe_print(f"pdf_analysis_group_id={group_id}, candidate_pdfs={len(rows)}, output_dir={output_dir}")
+    for index, row in enumerate(rows, start=1):
+        file_id = int(row["file_id"])
+        file_name = str(row["name"])
+        try:
+            _safe_print(f"[{index}/{len(rows)}] analyzing file_id={file_id} name={file_name}")
+            response = create_file_analysis_response(group_id, file_id, force=args.force_pdf_analysis)
+            analysis = response.get("analysis") or {}
+            markdown_path = _write_file_markdown(output_dir, row, analysis)
+            result = {
+                "file_id": file_id,
+                "name": file_name,
+                "status": "completed",
+                "cached": bool(analysis.get("cached")),
+                "markdown_path": str(markdown_path),
+            }
+        except Exception as exc:
+            result = {
+                "file_id": file_id,
+                "name": file_name,
+                "status": "failed",
+                "error": str(exc),
+            }
+            _safe_print(f"WARNING: pdf analysis failed file_id={file_id}: {exc}")
+        results.append(result)
+    if results:
+        index_path = _write_index_markdown(output_dir, group_id, label, results)
+        _safe_print(f"pdf_analysis_index={index_path}")
+    return results
+
+
 def _write_run_record(summary: WorkflowSummary, args: argparse.Namespace, run_window: tuple[str, str, str]) -> None:
     summary.finished_at = datetime.now(SHANGHAI_TZ).isoformat()
     run_dir = (
@@ -177,8 +341,13 @@ def _write_run_record(summary: WorkflowSummary, args: argparse.Namespace, run_wi
             "long_sleep_interval_min": args.long_sleep_interval_min,
             "long_sleep_interval_max": args.long_sleep_interval_max,
             "sync_files_from_topics": args.sync_files_from_topics,
+            "analyze_pdf_after_download": args.analyze_pdf_after_download,
+            "pdf_analysis_group_id": args.pdf_analysis_group_id,
+            "max_pdf_analyses": args.max_pdf_analyses,
+            "force_pdf_analysis": args.force_pdf_analysis,
         },
         "tasks": [_record_task(label, task) for label, task in summary.tasks],
+        "file_analyses": summary.file_analyses,
         "warnings": summary.warnings,
     }
     record_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2, default=str), encoding="utf-8")
@@ -191,6 +360,10 @@ def _print_health_summary(summary: WorkflowSummary) -> None:
     _safe_print(f"level={summary.level}")
     for label, task in summary.tasks:
         _safe_print(f"{label}: task_id={task.get('task_id')}, status={task.get('status')}, result={task.get('result')}")
+    if summary.file_analyses:
+        completed = sum(1 for item in summary.file_analyses if item.get("status") == "completed")
+        failed = sum(1 for item in summary.file_analyses if item.get("status") == "failed")
+        _safe_print(f"pdf_analyses: completed={completed}, failed={failed}")
     if summary.warnings:
         _safe_print("warnings:")
         for warning in summary.warnings:
@@ -249,6 +422,12 @@ async def _run(args: argparse.Namespace) -> None:
             except Exception as exc:
                 summary.warn(f"download files group {group_id} failed: {exc}")
 
+        if args.analyze_pdf_after_download:
+            for result in _analyze_downloaded_pdfs(args, run_window):
+                summary.add_file_analysis(result)
+                if result.get("status") == "failed":
+                    summary.warn(f"pdf analysis failed file_id={result.get('file_id')}: {result.get('error')}")
+
         _print_health_summary(summary)
         _write_run_record(summary, args, run_window)
     except Exception as exc:
@@ -274,6 +453,10 @@ def main() -> None:
     parser.add_argument("--long-sleep-interval-min", type=float, default=90.0)
     parser.add_argument("--long-sleep-interval-max", type=float, default=180.0)
     parser.add_argument("--sync-files-from-topics", action=argparse.BooleanOptionalAction, default=True)
+    parser.add_argument("--analyze-pdf-after-download", action="store_true")
+    parser.add_argument("--pdf-analysis-group-id", default="51111112855254")
+    parser.add_argument("--max-pdf-analyses", type=int, default=50)
+    parser.add_argument("--force-pdf-analysis", action="store_true")
     parser.add_argument("--log-tail", type=int, default=20)
     args = parser.parse_args()
 
