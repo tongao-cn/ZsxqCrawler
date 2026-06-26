@@ -19,8 +19,8 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from backend.routes.file_routes import download_files, sync_files_from_topics
-from backend.schemas.files import FileDownloadRequest
+from backend.routes.file_routes import download_files, download_selected_files, sync_files_from_topics
+from backend.schemas.files import FileDownloadRequest, FileIdListRequest
 from backend.services.file_ai_analysis_entry import create_file_analysis_response
 from backend.services.task_runtime import get_task_logs_state, get_task_state, request_runtime_shutdown
 from backend.storage.db_compat import connect
@@ -160,6 +160,57 @@ def _safe_filename(value: str, limit: int = 80) -> str:
     name = re.sub(r'[<>:"/\\|?*\x00-\x1f]+', "_", str(value or "").strip())
     name = re.sub(r"\s+", " ", name).strip(" ._")
     return (name[:limit].strip(" ._") or "file")
+
+
+def _load_pending_pdf_file_ids(
+    *,
+    group_id: str,
+    start_time: str,
+    end_time: str,
+    max_files: int | None,
+) -> list[int]:
+    params: list[Any] = [_query_value(group_id), _query_value(group_id), "%.pdf", "pending"]
+    conditions = [
+        "f.group_id = ?",
+        "t.group_id = ?",
+        "lower(f.name) like ?",
+        "f.download_status = ?",
+        "t.create_time is not null",
+        "t.create_time != ''",
+    ]
+    if len(start_time) == 10 and len(end_time) == 10:
+        conditions.append("substr(t.create_time, 1, 10) >= ?")
+        conditions.append("substr(t.create_time, 1, 10) <= ?")
+    else:
+        conditions.append("t.create_time >= ?")
+        conditions.append("t.create_time <= ?")
+    params.extend([start_time, end_time])
+
+    sql = f"""
+        SELECT f.file_id, max(t.create_time) AS latest_topic_create_time
+        FROM files f
+        JOIN file_topic_relations fr ON fr.file_id = f.file_id
+        JOIN topics t ON t.topic_id = fr.topic_id
+        WHERE {' AND '.join(conditions)}
+        GROUP BY f.file_id
+        ORDER BY latest_topic_create_time DESC, f.file_id DESC
+    """
+    if max_files is not None and max_files > 0:
+        sql += " LIMIT ?"
+        params.append(int(max_files))
+
+    conn = connect()
+    try:
+        cursor = conn.cursor()
+        cursor.execute(sql, tuple(params))
+        return [int(row[0]) for row in cursor.fetchall()]
+    finally:
+        conn.close()
+
+
+def _chunks(values: list[int], size: int) -> list[list[int]]:
+    chunk_size = max(1, int(size))
+    return [values[index : index + chunk_size] for index in range(0, len(values), chunk_size)]
 
 
 def _load_downloaded_pdf_rows(
@@ -380,6 +431,7 @@ def _write_run_record(summary: WorkflowSummary, args: argparse.Namespace, run_wi
         "args": {
             "group_ids": _group_ids(args),
             "max_files_per_group": args.max_files_per_group,
+            "download_pdf_only": args.download_pdf_only,
             "lookback_hours": args.lookback_hours,
             "download_interval": args.download_interval,
             "long_sleep_interval": args.long_sleep_interval,
@@ -420,6 +472,58 @@ def _print_health_summary(summary: WorkflowSummary) -> None:
             _safe_print(f"- {warning}")
 
 
+async def _download_group_files(
+    group_id: str,
+    args: argparse.Namespace,
+    *,
+    start_time: str,
+    end_time: str,
+) -> list[dict[str, Any]]:
+    tasks: list[dict[str, Any]] = []
+    if args.download_pdf_only:
+        file_ids = _load_pending_pdf_file_ids(
+            group_id=group_id,
+            start_time=start_time,
+            end_time=end_time,
+            max_files=args.max_files_per_group,
+        )
+        _safe_print(f"group_id={group_id} pending_pdf_files={len(file_ids)}")
+        if not file_ids:
+            return []
+        responses = [
+            await download_selected_files(group_id, FileIdListRequest(file_ids=chunk))
+            for chunk in _chunks(file_ids, 200)
+        ]
+    else:
+        request = FileDownloadRequest(
+            max_files=args.max_files_per_group,
+            sort_by="create_time",
+            start_time=start_time,
+            end_time=end_time,
+            download_interval=args.download_interval,
+            long_sleep_interval=args.long_sleep_interval,
+            files_per_batch=args.files_per_batch,
+            download_interval_min=args.download_interval_min,
+            download_interval_max=args.download_interval_max,
+            long_sleep_interval_min=args.long_sleep_interval_min,
+            long_sleep_interval_max=args.long_sleep_interval_max,
+        )
+        responses = [await download_files(group_id, request)]
+
+    for response in responses:
+        download_task_id = response["task_id"]
+        _safe_print(f"group_id={group_id} download_files_task_id={download_task_id}")
+        tasks.append(
+            _wait_task(
+                download_task_id,
+                poll_seconds=args.poll_seconds,
+                timeout_seconds=args.task_timeout_seconds,
+                log_tail=args.log_tail,
+            )
+        )
+    return tasks
+
+
 async def _run(args: argparse.Namespace) -> None:
     run_window = _download_window(args)
     start_time, end_time, _ = run_window
@@ -444,31 +548,19 @@ async def _run(args: argparse.Namespace) -> None:
                     summary.warn(f"sync files group {group_id} failed: {exc}")
 
             try:
-                request = FileDownloadRequest(
-                    max_files=args.max_files_per_group,
-                    sort_by="create_time",
+                download_tasks = await _download_group_files(
+                    group_id,
+                    args,
                     start_time=start_time,
                     end_time=end_time,
-                    download_interval=args.download_interval,
-                    long_sleep_interval=args.long_sleep_interval,
-                    files_per_batch=args.files_per_batch,
-                    download_interval_min=args.download_interval_min,
-                    download_interval_max=args.download_interval_max,
-                    long_sleep_interval_min=args.long_sleep_interval_min,
-                    long_sleep_interval_max=args.long_sleep_interval_max,
                 )
-                download_response = await download_files(group_id, request)
-                download_task_id = download_response["task_id"]
-                _safe_print(f"group_id={group_id} download_files_task_id={download_task_id}")
-                download_task = _wait_task(
-                    download_task_id,
-                    poll_seconds=args.poll_seconds,
-                    timeout_seconds=args.task_timeout_seconds,
-                    log_tail=args.log_tail,
-                )
-                summary.add_task(f"download files {group_id}", download_task)
-                if download_task.get("status") != "completed":
-                    summary.warn(f"download files group {group_id} did not complete: {download_task.get('status')}")
+                for index, download_task in enumerate(download_tasks, start=1):
+                    label = f"download files {group_id}"
+                    if len(download_tasks) > 1:
+                        label = f"{label} batch {index}"
+                    summary.add_task(label, download_task)
+                    if download_task.get("status") != "completed":
+                        summary.warn(f"download files group {group_id} did not complete: {download_task.get('status')}")
             except Exception as exc:
                 summary.warn(f"download files group {group_id} failed: {exc}")
 
@@ -493,6 +585,7 @@ def main() -> None:
     parser.add_argument("--date", help="Date to download, YYYY-MM-DD. Defaults to today in Asia/Shanghai.")
     parser.add_argument("--lookback-hours", type=int, help="Download files created in the last N hours.")
     parser.add_argument("--max-files-per-group", type=int)
+    parser.add_argument("--download-pdf-only", action="store_true")
     parser.add_argument("--poll-seconds", type=float, default=5)
     parser.add_argument("--task-timeout-seconds", type=int, default=0)
     parser.add_argument("--download-interval", type=float, default=2.0)
