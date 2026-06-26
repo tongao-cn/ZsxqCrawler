@@ -164,6 +164,9 @@ def build_research_radar_candidates(
             if topic and topic_id not in {item["topic_id"] for item in evidence}:
                 evidence.append(_evidence_for_topic(topic, row, direction))
 
+        if not evidence:
+            continue
+
         catalysts = _canonical_catalysts(catalysts)
         confidence = _confidence(
             len(topic_ids),

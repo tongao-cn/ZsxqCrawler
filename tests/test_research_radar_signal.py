@@ -205,6 +205,26 @@ class ResearchRadarSignalTests(unittest.TestCase):
             self.assertEqual(1, len(candidates))
             self.assertEqual(expected, candidates[0]["catalysts"])
 
+    def test_build_candidates_skips_rows_without_bound_topic_evidence(self):
+        from backend.services.research_radar_signal import build_research_radar_candidates
+
+        candidates = build_research_radar_candidates(
+            topics=[{"topic_id": "301", "title": "PCB", "talk_text": "PCB涨价"}],
+            current_stock_rows=[
+                {
+                    "topic_id": "missing-topic",
+                    "stock_name": "沪电股份",
+                    "concepts": ["PCB", "涨价/供需"],
+                    "reason": "孤儿抽取行不应生成无证据雷达。",
+                    "confidence": 0.9,
+                }
+            ],
+            baseline_stock_rows=[],
+            max_candidates=5,
+        )
+
+        self.assertEqual([], candidates)
+
     def test_build_candidates_returns_empty_without_stock_rows(self):
         from backend.services.research_radar_signal import build_research_radar_candidates
 
