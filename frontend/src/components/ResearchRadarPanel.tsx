@@ -1,9 +1,10 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Radar, RefreshCw, Search, Sparkles } from 'lucide-react';
+import { toast } from 'sonner';
 
-import { apiClient } from '@/lib/api';
+import { ApiClientError, apiClient } from '@/lib/api';
 import type { ResearchRadarLogicItem, ResearchRadarRun } from '@/lib/api';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -174,20 +175,38 @@ export default function ResearchRadarPanel({
   const [reportDate, setReportDate] = useState(getTodayText);
   const [loading, setLoading] = useState(false);
   const [generating, setGenerating] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [radar, setRadar] = useState<ResearchRadarRun | null>(null);
+  const latestLoadIdRef = useRef(0);
   const { handleTaskCreateError, notifyTaskLaunch } = useTaskLauncher({
     onTaskCreated,
   });
 
   const loadRadar = useCallback(async (signal?: AbortSignal) => {
+    const loadId = latestLoadIdRef.current + 1;
+    latestLoadIdRef.current = loadId;
     setLoading(true);
+    setLoadError(null);
     try {
       const response = await apiClient.getResearchRadar(groupId, reportDate, { signal });
+      if (signal?.aborted || latestLoadIdRef.current !== loadId) {
+        return;
+      }
       setRadar(response);
-    } catch {
+    } catch (error) {
+      if (signal?.aborted || latestLoadIdRef.current !== loadId) {
+        return;
+      }
       setRadar(null);
+      if (error instanceof ApiClientError && error.status === 404) {
+        return;
+      }
+      const message = error instanceof Error ? error.message : '未知错误';
+      const nextLoadError = `加载研究雷达失败: ${message}`;
+      setLoadError(nextLoadError);
+      toast.error(nextLoadError);
     } finally {
-      if (!signal?.aborted) {
+      if (!signal?.aborted && latestLoadIdRef.current === loadId) {
         setLoading(false);
       }
     }
@@ -270,6 +289,14 @@ export default function ResearchRadarPanel({
         {loading ? (
           <div className="flex h-40 items-center justify-center rounded-md border border-dashed border-gray-300 text-sm text-muted-foreground">
             正在加载研究雷达...
+          </div>
+        ) : loadError ? (
+          <div className="flex h-56 flex-col items-center justify-center gap-3 rounded-md border border-red-200 bg-red-50 px-4 text-center text-sm text-red-700">
+            <div className="break-words">{loadError}</div>
+            <Button variant="outline" onClick={() => void loadRadar()} disabled={loading}>
+              <RefreshCw className="h-4 w-4" />
+              重试
+            </Button>
           </div>
         ) : radar ? (
           <>
@@ -373,11 +400,13 @@ export default function ResearchRadarPanel({
               </div>
             )}
 
-            <div className="rounded-md bg-gray-50 p-3 text-xs leading-5 text-muted-foreground">
-              模型：{radar?.model || '暂无'}
-              <br />
-              更新时间：{formatDateTime(radar?.updated_at)}
-            </div>
+            {radar && (
+              <div className="rounded-md bg-gray-50 p-3 text-xs leading-5 text-muted-foreground">
+                模型：{radar.model || '暂无'}
+                <br />
+                更新时间：{formatDateTime(radar.updated_at)}
+              </div>
+            )}
           </CardContent>
         </Card>
       </aside>

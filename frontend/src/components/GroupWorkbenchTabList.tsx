@@ -17,11 +17,15 @@ const GROUP_WORKBENCH_TABS = [
 
 export default function GroupWorkbenchTabList() {
   return (
-    <div className="flex-shrink-0 mb-4">
-      <TabsList className="grid w-full grid-cols-8">
+    <div className="mb-4 flex-shrink-0 overflow-x-auto pb-1">
+      <TabsList className="grid min-w-max grid-cols-8">
         {GROUP_WORKBENCH_TABS.map(({ value, label, Icon }) => (
-          <TabsTrigger key={value} value={value} className="flex items-center gap-2">
-            <Icon className="h-4 w-4" />
+          <TabsTrigger
+            key={value}
+            value={value}
+            className="flex-none gap-1 px-2 text-xs sm:min-w-[6.5rem] sm:text-sm"
+          >
+            <Icon className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
             {label}
           </TabsTrigger>
         ))}
