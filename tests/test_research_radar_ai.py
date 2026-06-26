@@ -128,6 +128,16 @@ class ResearchRadarAITests(unittest.TestCase):
         self.assertEqual("old title", result[0]["title"])
         self.assertEqual("old summary", result[0]["summary"])
 
+    def test_summarize_radar_candidates_returns_empty_without_calling_ai(self):
+        from backend.services import research_radar_ai as ai
+
+        with patch.object(ai, "call_structured_ai_object") as call_ai:
+            items, model = ai.summarize_radar_candidates([], report_date="2026-06-26")
+
+        self.assertEqual([], items)
+        self.assertEqual("", model)
+        call_ai.assert_not_called()
+
     def test_summarize_radar_candidates_calls_structured_ai_object(self):
         from backend.services import research_radar_ai as ai
 
