@@ -138,10 +138,6 @@ def build_ranking_block_name(window: int, group_name: Optional[str] = None) -> s
 
 
 def build_export_block_name(window: int, top_n: int, group_name: Optional[str] = None) -> str:
-    normalized_group_name = _normalize_tdx_group_name(group_name)
-    prefix = normalized_group_name or RANKING_BLOCK_NAMES.get(int(window), f"{int(window)}日推荐池")
-    if normalized_group_name:
-        return f"{prefix}-{int(window)}日Top{int(top_n)}"
     return f"{int(window)}日Top{int(top_n)}"
 
 

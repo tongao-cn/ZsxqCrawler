@@ -21,6 +21,7 @@ from backend.services.a_share_analysis_db_storage import save_recommendation_poo
 from backend.services.a_share_research_return_smoke_service import load_knowaction_trade_dates
 from backend.services.task_runtime import get_task_logs_state, get_task_state, request_runtime_shutdown
 from backend.services.tdx_a_share_export_service import DEFAULT_TDX_EXPORT_SPECS
+from backend.services.tdx_a_share_export_plan import build_export_block_name
 from backend.services.a_share_analysis_workflow import (
     create_a_share_analysis_task,
     export_a_share_analysis_to_tdx,
@@ -200,7 +201,7 @@ def _build_tdx_preview(group_id: str, group_name: str | None) -> dict[str, Any]:
     for window, top_n in specs:
         rows = rankings.get(str(window)) or []
         candidate_count = min(len(rows), top_n)
-        block_name = f"{group_name}-{window}日Top{top_n}" if group_name else f"{window}日Top{top_n}"
+        block_name = build_export_block_name(window, top_n, group_name)
         blocks.append(
             {
                 "window_days": window,
