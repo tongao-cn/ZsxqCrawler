@@ -26,6 +26,7 @@ from backend.routes.group_routes import router as group_router
 from backend.routes.file_routes import router as file_router
 from backend.routes.media_routes import router as media_router
 from backend.routes.retention_routes import router as retention_router
+from backend.routes.research_radar_routes import router as research_radar_router
 from backend.routes.settings_routes import router as settings_router
 from backend.routes.stock_topic_analysis_routes import router as stock_topic_analysis_router
 from backend.routes.topic_routes import router as topic_router
@@ -86,6 +87,7 @@ def create_app() -> FastAPI:
         file_router,
         media_router,
         retention_router,
+        research_radar_router,
         settings_router,
         stock_topic_analysis_router,
         topic_router,
