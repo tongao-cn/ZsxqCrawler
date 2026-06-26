@@ -118,8 +118,6 @@ def _confidence(topic_count: int, stock_count: int, catalyst_count: int, is_new:
 def _tier(confidence: float, evidence_count: int, stock_count: int) -> str:
     if confidence >= 0.75 and (evidence_count >= 2 or stock_count >= 2):
         return "strong"
-    if evidence_count <= 1 and stock_count <= 1:
-        return "weak"
     if confidence >= 0.58 and evidence_count >= 1:
         return "medium"
     return "weak"
