@@ -2,6 +2,14 @@ import unittest
 from unittest.mock import Mock
 
 
+class RowDouble:
+    def __init__(self, **values):
+        self.values = values
+
+    def __getitem__(self, key):
+        return self.values[key]
+
+
 class ResearchRadarStoreTests(unittest.TestCase):
     def test_save_research_radar_run_replaces_existing_date_and_serializes_children(self):
         from backend.services.research_radar_store import save_research_radar_run
@@ -10,7 +18,9 @@ class ResearchRadarStoreTests(unittest.TestCase):
         existing_cursor = Mock()
         existing_cursor.fetchall.return_value = [{"id": 7}]
         insert_cursor = Mock()
-        insert_cursor.fetchone.return_value = {"id": 8}
+        insert_cursor.fetchone.return_value = RowDouble(id=8)
+        logic_insert_cursor = Mock()
+        logic_insert_cursor.fetchone.return_value = RowDouble(id=9)
         conn.execute.side_effect = [
             existing_cursor,
             Mock(),
@@ -18,7 +28,7 @@ class ResearchRadarStoreTests(unittest.TestCase):
             Mock(),
             Mock(),
             insert_cursor,
-            Mock(),
+            logic_insert_cursor,
             Mock(),
             Mock(),
             Mock(),
@@ -66,6 +76,9 @@ class ResearchRadarStoreTests(unittest.TestCase):
         self.assertIn("INSERT INTO research_radar_logic_items", conn.execute.call_args_list[6].args[0])
         self.assertIn("INSERT INTO research_radar_evidence", conn.execute.call_args_list[7].args[0])
         self.assertIn("INSERT INTO research_radar_entities", conn.execute.call_args_list[8].args[0])
+        self.assertEqual(9, conn.execute.call_args_list[7].args[1][0])
+        self.assertEqual(9, conn.execute.call_args_list[8].args[1][1])
+        self.assertEqual(9, conn.execute.call_args_list[9].args[1][1])
         conn.commit.assert_called_once_with()
 
     def test_load_research_radar_run_maps_logic_evidence_and_entities(self):

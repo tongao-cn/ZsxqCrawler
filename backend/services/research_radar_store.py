@@ -26,6 +26,10 @@ def _parse_json(value: Any, default: Any) -> Any:
         return default
 
 
+def _row_id(row: Any) -> int:
+    return int(row["id"])
+
+
 def _existing_run_ids(conn: Any, group_id: str, report_date: str) -> List[int]:
     rows = conn.execute(
         "SELECT id FROM research_radar_runs WHERE group_id = ? AND report_date = ?",
@@ -71,7 +75,7 @@ def _insert_run(
         """,
         (group_id, report_date, 1, status, model, _json_obj(summary), task_id, error, now, now),
     ).fetchone()
-    return int(row["id"])
+    return _row_id(row)
 
 
 def _insert_logic_item(conn: Any, *, run_id: int, rank: int, item: Dict[str, Any]) -> int:
@@ -101,7 +105,7 @@ def _insert_logic_item(conn: Any, *, run_id: int, rank: int, item: Dict[str, Any
             _now(),
         ),
     ).fetchone()
-    return int(row["id"]) if isinstance(row, dict) else 0
+    return _row_id(row)
 
 
 def _insert_evidence(conn: Any, *, logic_id: int, evidence: Dict[str, Any]) -> None:
