@@ -25,6 +25,7 @@ class WorkflowRegistryTests(unittest.TestCase):
                 "daily_stock_concepts",
                 "daily_topic_analysis",
                 "daily_topic_crawl_and_analysis",
+                "research_radar",
                 "a_share_analysis",
                 "stock_question_analysis",
                 "stock_topic_analysis",
@@ -73,6 +74,17 @@ class WorkflowRegistryTests(unittest.TestCase):
         self.assertEqual("business_state", a_share_spec.checkpoint_policy)
 
         self.assertIsNone(get_workflow_spec("unknown_task"))
+
+    def test_research_radar_workflow_is_registered_as_group_runtime_task(self):
+        from backend.services.workflow_registry import get_workflow_spec
+
+        spec = get_workflow_spec("research_radar")
+
+        self.assertIsNotNone(spec)
+        self.assertEqual("研究雷达", spec.display_name)
+        self.assertEqual("group", spec.scope)
+        self.assertIsNone(spec.lock_category)
+        self.assertTrue(spec.cancellable)
 
 
 if __name__ == "__main__":

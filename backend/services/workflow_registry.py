@@ -64,6 +64,7 @@ WORKFLOW_SPECS: Dict[str, WorkflowSpec] = {
         _spec("daily_stock_concepts", "每日股票概念"),
         _spec("daily_topic_analysis", "每日话题分析"),
         _spec("daily_topic_crawl_and_analysis", "采集并分析日报"),
+        _spec("research_radar", "研究雷达"),
         _spec(
             "a_share_analysis",
             "股票推荐池",
