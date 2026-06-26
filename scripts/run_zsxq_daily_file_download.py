@@ -7,6 +7,7 @@ import json
 import re
 import sys
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -265,6 +266,39 @@ def _write_index_markdown(output_dir: Path, group_id: str, label: str, results: 
     return index_path
 
 
+def _analyze_pdf_row(
+    *,
+    group_id: str,
+    output_dir: Path,
+    row: dict[str, Any],
+    index: int,
+    total: int,
+    force: bool,
+) -> dict[str, Any]:
+    file_id = int(row["file_id"])
+    file_name = str(row["name"])
+    try:
+        _safe_print(f"[{index}/{total}] analyzing file_id={file_id} name={file_name}")
+        response = create_file_analysis_response(group_id, file_id, force=force)
+        analysis = response.get("analysis") or {}
+        markdown_path = _write_file_markdown(output_dir, row, analysis)
+        return {
+            "file_id": file_id,
+            "name": file_name,
+            "status": "completed",
+            "cached": bool(analysis.get("cached")),
+            "markdown_path": str(markdown_path),
+        }
+    except Exception as exc:
+        _safe_print(f"WARNING: pdf analysis failed file_id={file_id}: {exc}")
+        return {
+            "file_id": file_id,
+            "name": file_name,
+            "status": "failed",
+            "error": str(exc),
+        }
+
+
 def _analyze_downloaded_pdfs(args: argparse.Namespace, run_window: tuple[str, str, str]) -> list[dict[str, Any]]:
     start_time, end_time, label = run_window
     group_id = args.pdf_analysis_group_id
@@ -275,36 +309,34 @@ def _analyze_downloaded_pdfs(args: argparse.Namespace, run_window: tuple[str, st
         max_files=args.max_pdf_analyses,
     )
     output_dir = _markdown_output_dir(group_id, label)
-    results: list[dict[str, Any]] = []
-    _safe_print(f"pdf_analysis_group_id={group_id}, candidate_pdfs={len(rows)}, output_dir={output_dir}")
-    for index, row in enumerate(rows, start=1):
-        file_id = int(row["file_id"])
-        file_name = str(row["name"])
-        try:
-            _safe_print(f"[{index}/{len(rows)}] analyzing file_id={file_id} name={file_name}")
-            response = create_file_analysis_response(group_id, file_id, force=args.force_pdf_analysis)
-            analysis = response.get("analysis") or {}
-            markdown_path = _write_file_markdown(output_dir, row, analysis)
-            result = {
-                "file_id": file_id,
-                "name": file_name,
-                "status": "completed",
-                "cached": bool(analysis.get("cached")),
-                "markdown_path": str(markdown_path),
-            }
-        except Exception as exc:
-            result = {
-                "file_id": file_id,
-                "name": file_name,
-                "status": "failed",
-                "error": str(exc),
-            }
-            _safe_print(f"WARNING: pdf analysis failed file_id={file_id}: {exc}")
-        results.append(result)
-    if results:
-        index_path = _write_index_markdown(output_dir, group_id, label, results)
+    results: list[dict[str, Any] | None] = [None] * len(rows)
+    max_workers = max(1, int(args.pdf_analysis_concurrency or 1))
+    _safe_print(
+        f"pdf_analysis_group_id={group_id}, candidate_pdfs={len(rows)}, "
+        f"concurrency={max_workers}, output_dir={output_dir}"
+    )
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        future_to_index = {
+            executor.submit(
+                _analyze_pdf_row,
+                group_id=group_id,
+                output_dir=output_dir,
+                row=row,
+                index=index,
+                total=len(rows),
+                force=args.force_pdf_analysis,
+            ): index - 1
+            for index, row in enumerate(rows, start=1)
+        }
+        for future in as_completed(future_to_index):
+            index = future_to_index[future]
+            results[index] = future.result()
+
+    completed_results = [item for item in results if item is not None]
+    if completed_results:
+        index_path = _write_index_markdown(output_dir, group_id, label, completed_results)
         _safe_print(f"pdf_analysis_index={index_path}")
-    return results
+    return completed_results
 
 
 def _write_run_record(summary: WorkflowSummary, args: argparse.Namespace, run_window: tuple[str, str, str]) -> None:
@@ -344,6 +376,7 @@ def _write_run_record(summary: WorkflowSummary, args: argparse.Namespace, run_wi
             "analyze_pdf_after_download": args.analyze_pdf_after_download,
             "pdf_analysis_group_id": args.pdf_analysis_group_id,
             "max_pdf_analyses": args.max_pdf_analyses,
+            "pdf_analysis_concurrency": args.pdf_analysis_concurrency,
             "force_pdf_analysis": args.force_pdf_analysis,
         },
         "tasks": [_record_task(label, task) for label, task in summary.tasks],
@@ -456,6 +489,7 @@ def main() -> None:
     parser.add_argument("--analyze-pdf-after-download", action="store_true")
     parser.add_argument("--pdf-analysis-group-id", default="51111112855254")
     parser.add_argument("--max-pdf-analyses", type=int, default=50)
+    parser.add_argument("--pdf-analysis-concurrency", type=int, default=1)
     parser.add_argument("--force-pdf-analysis", action="store_true")
     parser.add_argument("--log-tail", type=int, default=20)
     args = parser.parse_args()
