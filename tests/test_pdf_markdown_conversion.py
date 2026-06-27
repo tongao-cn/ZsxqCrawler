@@ -171,7 +171,7 @@ class PdfMarkdownConversionTests(unittest.TestCase):
         self.assertEqual("https://example.test/v1", captured["client"]["base_url"])
         self.assertEqual(45, captured["client"]["timeout"])
         self.assertEqual("gpt-5.4-mini", captured["kwargs"]["model"])
-        self.assertEqual({"effort": "low"}, captured["kwargs"]["reasoning"])
+        self.assertEqual({"effort": "medium"}, captured["kwargs"]["reasoning"])
         content = captured["kwargs"]["input"][0]["content"]
         self.assertEqual("input_text", content[0]["type"])
         self.assertIn("Page number: 7", content[0]["text"])

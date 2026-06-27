@@ -69,7 +69,7 @@ def _detect_faster_whisper_device() -> str:
 DEFAULT_FILE_ANALYSIS_MODEL = get_default_model()
 DEFAULT_FILE_ANALYSIS_API_BASE = get_default_base_url()
 DEFAULT_FILE_ANALYSIS_WIRE_API = get_default_wire_api()
-DEFAULT_FILE_ANALYSIS_REASONING_EFFORT = "low"
+DEFAULT_FILE_ANALYSIS_REASONING_EFFORT = "medium"
 DEFAULT_FASTER_WHISPER_MODEL = os.environ.get("FASTER_WHISPER_MODEL", "medium")
 FASTER_WHISPER_DEVICE_CONFIGURED = bool(os.environ.get("FASTER_WHISPER_DEVICE", "").strip())
 DEFAULT_FASTER_WHISPER_DEVICE = _detect_faster_whisper_device()

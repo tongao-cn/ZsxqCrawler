@@ -10,12 +10,12 @@ HAS_FILE_AI_DEPS = find_spec("openai") is not None
 
 class FileAIAnalysisServiceHelperTests(unittest.TestCase):
     @unittest.skipUnless(HAS_FILE_AI_DEPS, "file AI service dependencies are not installed")
-    def test_file_ai_analysis_default_reasoning_effort_is_low(self):
+    def test_file_ai_analysis_default_reasoning_effort_is_medium(self):
         from backend.services.file_ai_content_analysis import (
             DEFAULT_FILE_ANALYSIS_REASONING_EFFORT,
         )
 
-        self.assertEqual("low", DEFAULT_FILE_ANALYSIS_REASONING_EFFORT)
+        self.assertEqual("medium", DEFAULT_FILE_ANALYSIS_REASONING_EFFORT)
 
     @unittest.skipUnless(HAS_FILE_AI_DEPS, "file AI service dependencies are not installed")
     def test_cached_analysis_result_marks_completed_summary_as_cached(self):
