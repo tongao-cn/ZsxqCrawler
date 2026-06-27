@@ -10,6 +10,14 @@ HAS_FILE_AI_DEPS = find_spec("openai") is not None
 
 class FileAIAnalysisServiceHelperTests(unittest.TestCase):
     @unittest.skipUnless(HAS_FILE_AI_DEPS, "file AI service dependencies are not installed")
+    def test_file_ai_analysis_default_reasoning_effort_is_low(self):
+        from backend.services.file_ai_content_analysis import (
+            DEFAULT_FILE_ANALYSIS_REASONING_EFFORT,
+        )
+
+        self.assertEqual("low", DEFAULT_FILE_ANALYSIS_REASONING_EFFORT)
+
+    @unittest.skipUnless(HAS_FILE_AI_DEPS, "file AI service dependencies are not installed")
     def test_cached_analysis_result_marks_completed_summary_as_cached(self):
         from backend.services.file_ai_analysis_service import _cached_analysis_result
 
@@ -165,6 +173,42 @@ class FileAIAnalysisServiceHelperTests(unittest.TestCase):
         self.assertEqual("text/markdown", result.content_type)
         extract_pdf_markdown.assert_called_once()
         summarize_text.assert_called_once()
+
+    @unittest.skipUnless(HAS_FILE_AI_DEPS, "file AI service dependencies are not installed")
+    def test_extract_pdf_markdown_for_analysis_passes_reasoning_effort_to_conversion(self):
+        from backend.services.file_ai_content_analysis import extract_pdf_markdown_for_analysis
+
+        captured = {}
+
+        class FakeConversionResult:
+            markdown = "markdown"
+            pages = []
+
+        def fake_convert_pdf(path, output_dir, **kwargs):
+            captured["path"] = path
+            captured["output_dir"] = output_dir
+            captured["kwargs"] = kwargs
+            return FakeConversionResult()
+
+        with TemporaryDirectory() as temp_dir:
+            pdf_path = Path(temp_dir) / "report.pdf"
+            pdf_path.write_bytes(b"%PDF-1.4\nfake pdf")
+
+            markdown = extract_pdf_markdown_for_analysis(
+                pdf_path,
+                file_name="report.pdf",
+                model="gpt-5.5",
+                api_base="https://api.openai.com/v1",
+                wire_api="responses",
+                reasoning_effort="low",
+                convert_pdf=fake_convert_pdf,
+            )
+
+        self.assertEqual("markdown", markdown)
+        self.assertEqual(pdf_path, captured["path"])
+        self.assertEqual("gpt-5.5", captured["kwargs"]["model"])
+        self.assertEqual("https://api.openai.com/v1", captured["kwargs"]["api_base"])
+        self.assertEqual("low", captured["kwargs"]["reasoning_effort"])
 
     @unittest.skipUnless(HAS_FILE_AI_DEPS, "file AI service dependencies are not installed")
     def test_analyze_file_content_returns_summary_preview_and_source_size(self):

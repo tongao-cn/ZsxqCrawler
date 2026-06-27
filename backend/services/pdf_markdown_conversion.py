@@ -15,6 +15,7 @@ DEFAULT_PDF_MARKDOWN_MODEL = "gpt-5.4-mini"
 DEFAULT_RENDER_DPI = 300
 DEFAULT_IMAGE_FORMAT = "jpg"
 DEFAULT_TIMEOUT_SECONDS = 120
+DEFAULT_PDF_MARKDOWN_REASONING_EFFORT = "low"
 
 
 @dataclass(frozen=True)
@@ -91,6 +92,7 @@ def transcribe_page_image_with_responses(
     model: str = DEFAULT_PDF_MARKDOWN_MODEL,
     api_base: Optional[str] = None,
     timeout_seconds: int = DEFAULT_TIMEOUT_SECONDS,
+    reasoning_effort: str = DEFAULT_PDF_MARKDOWN_REASONING_EFFORT,
     get_ai_config: Callable[[], dict[str, Any]] = get_openai_compatible_config,
 ) -> str:
     config = get_ai_config()
@@ -118,9 +120,9 @@ def transcribe_page_image_with_responses(
     )
 
     client = OpenAI(api_key=api_key, base_url=base_url, timeout=timeout_seconds)
-    response = client.responses.create(
-        model=model,
-        input=[
+    kwargs: dict[str, Any] = {
+        "model": model,
+        "input": [
             {
                 "role": "user",
                 "content": [
@@ -135,7 +137,11 @@ def transcribe_page_image_with_responses(
                 ],
             }
         ],
-    )
+    }
+    normalized_reasoning_effort = str(reasoning_effort or "").strip()
+    if normalized_reasoning_effort:
+        kwargs["reasoning"] = {"effort": normalized_reasoning_effort}
+    response = client.responses.create(**kwargs)
     return extract_response_text(response).strip()
 
 
@@ -173,6 +179,7 @@ def convert_pdf_to_markdown(
     model: str = DEFAULT_PDF_MARKDOWN_MODEL,
     api_base: Optional[str] = None,
     timeout_seconds: int = DEFAULT_TIMEOUT_SECONDS,
+    reasoning_effort: str = DEFAULT_PDF_MARKDOWN_REASONING_EFFORT,
     dpi: int = DEFAULT_RENDER_DPI,
     image_format: str = DEFAULT_IMAGE_FORMAT,
     force: bool = False,
@@ -227,6 +234,7 @@ def convert_pdf_to_markdown(
                 model=model,
                 api_base=api_base,
                 timeout_seconds=timeout_seconds,
+                reasoning_effort=reasoning_effort,
             ).strip()
             if not markdown:
                 raise RuntimeError("empty markdown returned")

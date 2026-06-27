@@ -21,7 +21,6 @@ from backend.core.ai_provider_config import (
     get_default_model,
     get_default_wire_api,
     get_openai_compatible_config,
-    get_summary_reasoning_effort,
 )
 from backend.services.ai_client import extract_response_text
 from backend.services.ai_runtime_request import call_runtime_ai_text
@@ -70,7 +69,7 @@ def _detect_faster_whisper_device() -> str:
 DEFAULT_FILE_ANALYSIS_MODEL = get_default_model()
 DEFAULT_FILE_ANALYSIS_API_BASE = get_default_base_url()
 DEFAULT_FILE_ANALYSIS_WIRE_API = get_default_wire_api()
-DEFAULT_FILE_ANALYSIS_REASONING_EFFORT = get_summary_reasoning_effort()
+DEFAULT_FILE_ANALYSIS_REASONING_EFFORT = "low"
 DEFAULT_FASTER_WHISPER_MODEL = os.environ.get("FASTER_WHISPER_MODEL", "medium")
 FASTER_WHISPER_DEVICE_CONFIGURED = bool(os.environ.get("FASTER_WHISPER_DEVICE", "").strip())
 DEFAULT_FASTER_WHISPER_DEVICE = _detect_faster_whisper_device()
@@ -281,6 +280,7 @@ def extract_pdf_markdown_for_analysis(
         default_pdf_markdown_output_dir(path),
         model=model,
         api_base=api_base,
+        reasoning_effort=reasoning_effort,
     )
     markdown = str(result.markdown or "").strip()
     if not markdown:

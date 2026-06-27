@@ -171,11 +171,40 @@ class PdfMarkdownConversionTests(unittest.TestCase):
         self.assertEqual("https://example.test/v1", captured["client"]["base_url"])
         self.assertEqual(45, captured["client"]["timeout"])
         self.assertEqual("gpt-5.4-mini", captured["kwargs"]["model"])
+        self.assertEqual({"effort": "low"}, captured["kwargs"]["reasoning"])
         content = captured["kwargs"]["input"][0]["content"]
         self.assertEqual("input_text", content[0]["type"])
         self.assertIn("Page number: 7", content[0]["text"])
         self.assertEqual("input_image", content[1]["type"])
         self.assertTrue(content[1]["image_url"].startswith("data:image/jpeg;base64,"))
+
+    def test_convert_pdf_to_markdown_passes_reasoning_effort_to_image_transcriber(self):
+        from backend.services.pdf_markdown_conversion import convert_pdf_to_markdown
+
+        with TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            pdf_path = temp_path / "report.pdf"
+            pdf_path.write_bytes(b"%PDF-1.4")
+            captured = {}
+
+            def fake_render(_pdf_path, _page_number, image_path, **_kwargs):
+                image_path.write_bytes(b"image")
+                return image_path
+
+            def fake_transcribe(_image_path, **kwargs):
+                captured["kwargs"] = kwargs
+                return "markdown"
+
+            convert_pdf_to_markdown(
+                pdf_path,
+                temp_path / "out",
+                reasoning_effort="low",
+                page_count_reader=lambda _path: 1,
+                page_renderer=fake_render,
+                image_to_markdown=fake_transcribe,
+            )
+
+        self.assertEqual("low", captured["kwargs"]["reasoning_effort"])
 
 
 if __name__ == "__main__":
