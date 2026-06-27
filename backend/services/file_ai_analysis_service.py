@@ -14,10 +14,10 @@ from backend.services.file_ai_content_analysis import (
     FileContentAnalysis,
     analyze_file_content,
     build_deep_summary_prompt,
+    extract_pdf_markdown_for_analysis,
     extract_file_text as _content_extract_file_text,
     extract_file_content_for_analysis,
     response_text,
-    summarize_pdf_with_ai,
     summarize_text_with_ai,
     transcribe_audio_with_faster_whisper,
 )
@@ -61,7 +61,7 @@ def _summarize_text_with_ai(
     )
 
 
-def _summarize_pdf_with_ai(
+def _extract_pdf_markdown_for_analysis(
     path: Path,
     *,
     file_name: str,
@@ -70,14 +70,13 @@ def _summarize_pdf_with_ai(
     wire_api: str,
     reasoning_effort: str,
 ) -> str:
-    return summarize_pdf_with_ai(
+    return extract_pdf_markdown_for_analysis(
         path,
         file_name=file_name,
         model=model,
         api_base=api_base,
         wire_api=wire_api,
         reasoning_effort=reasoning_effort,
-        get_ai_config=get_openai_compatible_config,
     )
 
 
@@ -116,8 +115,8 @@ def _analyze_file_content(
         wire_api=wire_api,
         reasoning_effort=reasoning_effort,
         extract_content=_extract_file_content_for_analysis,
+        extract_pdf_markdown=_extract_pdf_markdown_for_analysis,
         summarize_text=_summarize_text_with_ai,
-        summarize_pdf=_summarize_pdf_with_ai,
     )
 
 

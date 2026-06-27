@@ -89,44 +89,82 @@ class FileAIAnalysisServiceHelperTests(unittest.TestCase):
         self.assertNotIn("3-8条", user_prompt)
 
     @unittest.skipUnless(HAS_FILE_AI_DEPS, "file AI service dependencies are not installed")
-    def test_summarize_pdf_with_ai_sends_pdf_file_input(self):
-        from backend.services.ai_runtime_request import AIRuntimeTextResult
-        from backend.services.file_ai_content_analysis import summarize_pdf_with_ai
+    def test_analyze_file_content_converts_pdf_to_markdown_before_summarizing(self):
+        from backend.services.file_ai_content_analysis import analyze_file_content
 
         captured = {}
 
-        def fake_call(messages, **kwargs):
-            captured["messages"] = messages
-            captured["kwargs"] = kwargs
-            return AIRuntimeTextResult(" PDF summary ", "gpt-5.5")
+        def fake_extract_pdf_markdown(path, **kwargs):
+            captured["pdf_path"] = path
+            captured["pdf_kwargs"] = kwargs
+            return "## Page 1\n\nPDF markdown"
+
+        def fake_summarize_text(text, **kwargs):
+            captured["summary_text"] = text
+            captured["summary_kwargs"] = kwargs
+            return "summary from markdown"
 
         with TemporaryDirectory() as temp_dir:
             pdf_path = Path(temp_dir) / "report.pdf"
             pdf_path.write_bytes(b"%PDF-1.4\nfake pdf")
 
-            with patch("backend.services.file_ai_content_analysis.call_runtime_ai_text", side_effect=fake_call):
-                summary = summarize_pdf_with_ai(
+            result = analyze_file_content(
+                pdf_path,
+                file_name="report.pdf",
+                model="gpt-5.5",
+                api_base="https://api.openai.com/v1",
+                wire_api="responses",
+                reasoning_effort="medium",
+                extract_pdf_markdown=fake_extract_pdf_markdown,
+                summarize_text=fake_summarize_text,
+            )
+
+        self.assertEqual("summary from markdown", result.summary)
+        self.assertEqual("## Page 1\n\nPDF markdown", result.extracted_text)
+        self.assertEqual("text/markdown", result.content_type)
+        self.assertEqual(pdf_path, captured["pdf_path"])
+        self.assertEqual("report.pdf", captured["pdf_kwargs"]["file_name"])
+        self.assertEqual("gpt-5.5", captured["pdf_kwargs"]["model"])
+        self.assertEqual("https://api.openai.com/v1", captured["pdf_kwargs"]["api_base"])
+        self.assertEqual("responses", captured["pdf_kwargs"]["wire_api"])
+        self.assertEqual("medium", captured["pdf_kwargs"]["reasoning_effort"])
+        self.assertEqual("## Page 1\n\nPDF markdown", captured["summary_text"])
+        self.assertEqual("report.pdf", captured["summary_kwargs"]["file_name"])
+        self.assertEqual("gpt-5.5", captured["summary_kwargs"]["model"])
+        self.assertEqual("medium", captured["summary_kwargs"]["reasoning_effort"])
+
+    @unittest.skipUnless(HAS_FILE_AI_DEPS, "file AI service dependencies are not installed")
+    def test_file_ai_analysis_service_pdf_wrapper_uses_markdown_conversion(self):
+        from backend.services import file_ai_analysis_service
+
+        with TemporaryDirectory() as temp_dir:
+            pdf_path = Path(temp_dir) / "report.pdf"
+            pdf_path.write_bytes(b"%PDF-1.4\nfake pdf")
+
+            with (
+                patch(
+                    "backend.services.file_ai_analysis_service._extract_pdf_markdown_for_analysis",
+                    return_value="## Page 1\n\nPDF markdown",
+                ) as extract_pdf_markdown,
+                patch(
+                    "backend.services.file_ai_analysis_service._summarize_text_with_ai",
+                    return_value="summary from markdown",
+                ) as summarize_text,
+            ):
+                result = file_ai_analysis_service._analyze_file_content(
                     pdf_path,
                     file_name="report.pdf",
                     model="gpt-5.5",
                     api_base="https://api.openai.com/v1",
                     wire_api="responses",
                     reasoning_effort="medium",
-                    get_ai_config=lambda: {"api_key": "sk-test"},
                 )
 
-        self.assertEqual("PDF summary", summary)
-        self.assertEqual("gpt-5.5", captured["kwargs"]["model"])
-        self.assertEqual("medium", captured["kwargs"]["reasoning_effort"])
-        self.assertNotIn("timeout", captured["kwargs"])
-        content = captured["messages"][0]["content"]
-        self.assertEqual("input_file", content[0]["type"])
-        self.assertEqual("report.pdf", content[0]["filename"])
-        self.assertTrue(content[0]["file_data"].startswith("data:application/pdf;base64,"))
-        self.assertEqual("input_text", content[1]["type"])
-        self.assertIn("请深度阅读并总结文件《report.pdf》", content[1]["text"])
-        self.assertIn("不要为了简洁省略重要信息", content[1]["text"])
-        self.assertNotIn("3-8条", content[1]["text"])
+        self.assertEqual("summary from markdown", result.summary)
+        self.assertEqual("## Page 1\n\nPDF markdown", result.extracted_text)
+        self.assertEqual("text/markdown", result.content_type)
+        extract_pdf_markdown.assert_called_once()
+        summarize_text.assert_called_once()
 
     @unittest.skipUnless(HAS_FILE_AI_DEPS, "file AI service dependencies are not installed")
     def test_analyze_file_content_returns_summary_preview_and_source_size(self):

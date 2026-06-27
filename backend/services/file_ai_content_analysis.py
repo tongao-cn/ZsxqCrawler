@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-import base64
 import csv
+import hashlib
 import io
 import json
 import os
@@ -25,6 +25,7 @@ from backend.core.ai_provider_config import (
 )
 from backend.services.ai_client import extract_response_text
 from backend.services.ai_runtime_request import call_runtime_ai_text
+from backend.services.pdf_markdown_conversion import convert_pdf_to_markdown
 
 
 _CUDA_DLL_DIRECTORY_HANDLES: list[Any] = []
@@ -86,8 +87,7 @@ TEXT_EXTENSIONS = {
 AUDIO_EXTENSIONS = {".mp3", ".wav", ".m4a", ".mpeg", ".mpga", ".webm"}
 MAX_TEXT_CHARS = 30000
 PREVIEW_CHARS = 4000
-MAX_DIRECT_PDF_BYTES = 50 * 1024 * 1024
-PDF_DIRECT_ANALYSIS_NOTE = "PDF 已作为 input_file 直接传给模型分析，未执行本地文本抽取。"
+PDF_MARKDOWN_CONTENT_TYPE = "text/markdown"
 _WHISPER_MODEL_CACHE: dict[tuple[str, str, str], Any] = {}
 _WHISPER_MODEL_LOCK = threading.Lock()
 
@@ -228,43 +228,70 @@ def summarize_pdf_with_ai(
     reasoning_effort: str,
     get_ai_config: Callable[[], dict[str, Any]] = get_openai_compatible_config,
 ) -> str:
-    if str(wire_api or "").strip().lower() != "responses":
-        raise ValueError("PDF 分析默认使用 input_file 直传；当前接口不支持，请切换为 responses 接口")
-
-    source_size = path.stat().st_size
-    if source_size > MAX_DIRECT_PDF_BYTES:
-        raise ValueError(
-            f"PDF 文件超过 input_file 直传上限 {MAX_DIRECT_PDF_BYTES // (1024 * 1024)} MB，无法进行 AI 分析"
-        )
-
-    base64_string = base64.b64encode(path.read_bytes()).decode("utf-8")
-    result = call_runtime_ai_text(
-        [
-            {
-                "role": "user",
-                "content": [
-                    {
-                        "type": "input_file",
-                        "filename": file_name,
-                        "file_data": f"data:application/pdf;base64,{base64_string}",
-                    },
-                    {
-                        "type": "input_text",
-                        "text": (
-                            f"{build_deep_summary_prompt(file_name)}\n\n"
-                            "请直接基于 PDF 页面内容分析；如果 PDF 是扫描件，也请尽量读取页面图像中的文字。"
-                        ),
-                    },
-                ],
-            }
-        ],
-        get_ai_config=get_ai_config,
+    markdown = extract_pdf_markdown_for_analysis(
+        path,
+        file_name=file_name,
         model=model,
         api_base=api_base,
         wire_api=wire_api,
         reasoning_effort=reasoning_effort,
     )
-    return result.text.strip()
+    return summarize_text_with_ai(
+        markdown,
+        file_name=file_name,
+        model=model,
+        api_base=api_base,
+        wire_api=wire_api,
+        reasoning_effort=reasoning_effort,
+        get_ai_config=get_ai_config,
+    )
+
+
+def default_pdf_markdown_output_dir(path: Path) -> Path:
+    project_root = Path(__file__).resolve().parents[2]
+    source_key = hashlib.sha1(str(path.resolve()).encode("utf-8")).hexdigest()[:16]
+    safe_stem = re.sub(r"[^A-Za-z0-9._-]+", "_", path.stem).strip("._")[:80] or "pdf"
+    return (
+        project_root
+        / "output"
+        / "exports"
+        / "file_ai_markdown"
+        / "pdf_to_markdown"
+        / f"{source_key}_{safe_stem}"
+    )
+
+
+def extract_pdf_markdown_for_analysis(
+    path: Path,
+    *,
+    file_name: str,
+    model: str,
+    api_base: str,
+    wire_api: str,
+    reasoning_effort: str,
+    convert_pdf: Callable[..., Any] = convert_pdf_to_markdown,
+) -> str:
+    if str(wire_api or "").strip().lower() != "responses":
+        raise ValueError(
+            "PDF 转 Markdown 当前使用 Responses 图像输入，请切换为 responses 接口"
+        )
+
+    result = convert_pdf(
+        path,
+        default_pdf_markdown_output_dir(path),
+        model=model,
+        api_base=api_base,
+    )
+    markdown = str(result.markdown or "").strip()
+    if not markdown:
+        failed_pages = [
+            f"page {page.page_number}: {page.error}"
+            for page in getattr(result, "pages", [])
+            if getattr(page, "status", "") == "failed"
+        ]
+        detail = "；".join(failed_pages) if failed_pages else "未生成有效 Markdown"
+        raise ValueError(f"PDF 转 Markdown 结果为空，无法进行 AI 分析：{detail}")
+    return markdown
 
 
 def get_faster_whisper_model():
@@ -361,11 +388,11 @@ def analyze_file_content(
     wire_api: str,
     reasoning_effort: str,
     extract_content: Callable[[Path], Tuple[str, str]] = extract_file_content_for_analysis,
+    extract_pdf_markdown: Callable[..., str] = extract_pdf_markdown_for_analysis,
     summarize_text: Callable[..., str] = summarize_text_with_ai,
-    summarize_pdf: Callable[..., str] = summarize_pdf_with_ai,
 ) -> FileContentAnalysis:
     if path.suffix.lower() == ".pdf":
-        summary = summarize_pdf(
+        extracted_text = extract_pdf_markdown(
             path,
             file_name=file_name,
             model=model,
@@ -373,8 +400,18 @@ def analyze_file_content(
             wire_api=wire_api,
             reasoning_effort=reasoning_effort,
         )
-        extracted_text = PDF_DIRECT_ANALYSIS_NOTE
-        content_type = "application/pdf"
+        content_type = PDF_MARKDOWN_CONTENT_TYPE
+        if not extracted_text.strip():
+            raise ValueError("PDF 转 Markdown 结果为空，无法进行 AI 分析")
+
+        summary = summarize_text(
+            extracted_text,
+            file_name=file_name,
+            model=model,
+            api_base=api_base,
+            wire_api=wire_api,
+            reasoning_effort=reasoning_effort,
+        )
     else:
         extracted_text, content_type = extract_content(path)
         if not extracted_text.strip():
