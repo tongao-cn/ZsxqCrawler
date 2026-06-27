@@ -55,12 +55,12 @@ def normalize_page_range(
 
 def read_pdf_page_count(pdf_path: Path) -> int:
     try:
-        import PyPDF2
+        import fitz
     except ImportError as exc:
-        raise RuntimeError("缺少 PyPDF2 依赖，无法读取 PDF 页数") from exc
+        raise RuntimeError("缺少 PyMuPDF 依赖，无法读取 PDF 页数") from exc
 
-    with pdf_path.open("rb") as file_obj:
-        return len(PyPDF2.PdfReader(file_obj).pages)
+    with fitz.open(pdf_path) as doc:
+        return doc.page_count
 
 
 def render_pdf_page_image(

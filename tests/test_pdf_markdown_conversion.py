@@ -22,6 +22,21 @@ class PdfMarkdownConversionTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             normalize_page_range(8, start_page=1, end_page=9)
 
+    def test_read_pdf_page_count_uses_pymupdf(self):
+        import fitz
+
+        from backend.services.pdf_markdown_conversion import read_pdf_page_count
+
+        with TemporaryDirectory() as temp_dir:
+            pdf_path = Path(temp_dir) / "report.pdf"
+            doc = fitz.open()
+            doc.new_page()
+            doc.new_page()
+            doc.save(pdf_path)
+            doc.close()
+
+            self.assertEqual(2, read_pdf_page_count(pdf_path))
+
     def test_convert_pdf_to_markdown_caches_pages_and_combines_successes(self):
         from backend.services.pdf_markdown_conversion import convert_pdf_to_markdown
 
