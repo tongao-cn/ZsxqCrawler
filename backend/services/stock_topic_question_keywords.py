@@ -55,7 +55,6 @@ def extract_question_keywords(question: str) -> Tuple[List[str], str]:
             get_ai_config=get_openai_compatible_config,
             wire_api="responses",
             reasoning_effort=get_summary_reasoning_effort(),
-            timeout=120,
         )
     except AIRuntimeStructuredObjectParseError as exc:
         raise ValueError("AI 问题关键词抽取结果不是合法 JSON") from exc

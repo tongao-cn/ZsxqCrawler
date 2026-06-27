@@ -44,7 +44,7 @@ class DailyTopicAnalysisAITests(unittest.TestCase):
         self.assertEqual(("report", "model-a"), result)
         self.assertEqual("model-a", captured["kwargs"]["settings"].model)
         self.assertEqual(" high ", captured["kwargs"]["reasoning_effort"])
-        self.assertEqual(180, captured["kwargs"]["timeout"])
+        self.assertNotIn("timeout", captured["kwargs"])
         self.assertEqual(
             [
                 {"type": "input_text", "text": "daily prompt"},

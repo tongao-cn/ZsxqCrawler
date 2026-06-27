@@ -88,7 +88,6 @@ def build_runtime_ai_text_request(
     api_base: Optional[str] = None,
     wire_api: Optional[str] = None,
     reasoning_effort: str = "",
-    timeout: int = 180,
     responses_text_format: Optional[Dict[str, Any]] = None,
     chat_response_format: Optional[Dict[str, Any]] = None,
 ) -> AITextRequest:
@@ -113,7 +112,6 @@ def build_runtime_ai_text_request(
         messages=messages,
         wire_api=settings.wire_api,
         reasoning_effort=_text(reasoning_effort),
-        timeout=timeout,
         responses_text_format=responses_text_format,
         chat_response_format=chat_response_format,
     )
@@ -128,7 +126,6 @@ def call_runtime_ai_text(
     api_base: Optional[str] = None,
     wire_api: Optional[str] = None,
     reasoning_effort: str = "",
-    timeout: int = 180,
     responses_text_format: Optional[Dict[str, Any]] = None,
     chat_response_format: Optional[Dict[str, Any]] = None,
     call_text: Callable[[AITextRequest], str] = call_ai_text,
@@ -141,7 +138,6 @@ def call_runtime_ai_text(
         api_base=api_base,
         wire_api=wire_api,
         reasoning_effort=reasoning_effort,
-        timeout=timeout,
         responses_text_format=responses_text_format,
         chat_response_format=chat_response_format,
     )
@@ -160,7 +156,6 @@ def call_structured_ai_object(
     api_base: Optional[str] = None,
     wire_api: Optional[str] = None,
     reasoning_effort: str = "",
-    timeout: int = 180,
     call_text: Callable[[AITextRequest], str] = call_ai_text,
 ) -> AIRuntimeStructuredObjectResult:
     result = call_runtime_ai_text(
@@ -171,7 +166,6 @@ def call_structured_ai_object(
         api_base=api_base,
         wire_api=wire_api,
         reasoning_effort=reasoning_effort,
-        timeout=timeout,
         responses_text_format=responses_json_schema_text_format(schema_name, schema),
         chat_response_format=chat_json_schema_response_format(schema_name, schema),
         call_text=call_text,

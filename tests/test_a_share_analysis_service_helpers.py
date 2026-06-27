@@ -433,7 +433,6 @@ class AShareAnalysisServiceHelperTests(unittest.TestCase):
                     api_base="https://api.example.test",
                     wire_api=" Chat ",
                     reasoning_effort=" low ",
-                    timeout=222,
                 ),
             )
 
@@ -443,7 +442,6 @@ class AShareAnalysisServiceHelperTests(unittest.TestCase):
         self.assertEqual("https://api.example.test", settings.api_base)
         self.assertEqual("chat", settings.wire_api)
         self.assertEqual("low", captured["kwargs"]["reasoning_effort"])
-        self.assertEqual(222, captured["kwargs"]["timeout"])
         self.assertEqual("a_share_company_extraction", captured["kwargs"]["schema_name"])
         self.assertEqual("AI 公司抽取结果", captured["kwargs"]["label"])
         self.assertEqual(["stocks"], captured["kwargs"]["schema"]["required"])

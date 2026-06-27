@@ -529,7 +529,7 @@ class StockTopicAnalysisServiceHelperTests(unittest.TestCase):
         self.assertEqual("AI 问题关键词抽取结果", captured["kwargs"]["label"])
         self.assertEqual(["keywords"], captured["kwargs"]["schema"]["required"])
         self.assertEqual("responses", captured["kwargs"]["wire_api"])
-        self.assertEqual(120, captured["kwargs"]["timeout"])
+        self.assertNotIn("timeout", captured["kwargs"])
         self.assertIn("商业航天板块最近怎么样，推荐吗", str(captured["messages"]))
 
     @unittest.skipUnless(HAS_SERVICE_DEPS, "stock topic analysis service dependencies are not installed")
@@ -609,7 +609,7 @@ class StockTopicAnalysisServiceHelperTests(unittest.TestCase):
         self.assertEqual("AI 图片股票抽取结果", captured["kwargs"]["label"])
         self.assertEqual(["stockNames"], captured["kwargs"]["schema"]["required"])
         self.assertEqual("responses", captured["kwargs"]["wire_api"])
-        self.assertEqual(120, captured["kwargs"]["timeout"])
+        self.assertNotIn("timeout", captured["kwargs"])
         prompt_text = captured["messages"][0]["content"][0]["text"]
         self.assertIn("最多 50 个", prompt_text)
 
@@ -2083,7 +2083,7 @@ class StockTopicAnalysisServiceHelperTests(unittest.TestCase):
             _call_stock_analysis_ai('{"new_topics":[]}')
 
         self.assertEqual("responses", captured["kwargs"]["wire_api"])
-        self.assertEqual(180, captured["kwargs"]["timeout"])
+        self.assertNotIn("timeout", captured["kwargs"])
         prompt = captured["messages"][1]["content"]
         self.assertIn("输入原文摘录", prompt)
         self.assertIn("输入中的 excerpt", prompt)

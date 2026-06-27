@@ -79,7 +79,7 @@ class FileAIAnalysisServiceHelperTests(unittest.TestCase):
         self.assertEqual("https://api.openai.com/v1", captured["kwargs"]["api_base"])
         self.assertEqual("responses", captured["kwargs"]["wire_api"])
         self.assertEqual("high", captured["kwargs"]["reasoning_effort"])
-        self.assertEqual(120, captured["kwargs"]["timeout"])
+        self.assertNotIn("timeout", captured["kwargs"])
         messages = captured["messages"]
         self.assertIn("深入、结构化、可执行", messages[0]["content"])
         user_prompt = messages[1]["content"]
@@ -118,7 +118,7 @@ class FileAIAnalysisServiceHelperTests(unittest.TestCase):
         self.assertEqual("PDF summary", summary)
         self.assertEqual("gpt-5.5", captured["kwargs"]["model"])
         self.assertEqual("medium", captured["kwargs"]["reasoning_effort"])
-        self.assertEqual(180, captured["kwargs"]["timeout"])
+        self.assertNotIn("timeout", captured["kwargs"])
         content = captured["messages"][0]["content"]
         self.assertEqual("input_file", content[0]["type"])
         self.assertEqual("report.pdf", content[0]["filename"])

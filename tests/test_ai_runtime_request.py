@@ -30,7 +30,6 @@ class AIRuntimeRequestTests(unittest.TestCase):
                 "wire_api": " responses ",
             },
             reasoning_effort=" high ",
-            timeout=33,
             responses_text_format={"format": {"type": "text"}},
         )
 
@@ -39,7 +38,6 @@ class AIRuntimeRequestTests(unittest.TestCase):
         self.assertEqual("https://api.example.test", request.api_base)
         self.assertEqual("responses", request.wire_api)
         self.assertEqual("high", request.reasoning_effort)
-        self.assertEqual(33, request.timeout)
         self.assertEqual({"format": {"type": "text"}}, request.responses_text_format)
 
     @unittest.skipUnless(HAS_OPENAI, "openai dependency is not installed")
@@ -109,7 +107,6 @@ class AIRuntimeRequestTests(unittest.TestCase):
                 "wire_api": "responses",
             },
             reasoning_effort=" high ",
-            timeout=42,
             call_text=fake_call,
         )
 
@@ -118,7 +115,6 @@ class AIRuntimeRequestTests(unittest.TestCase):
         request = captured["request"]
         self.assertEqual("model-a", request.model)
         self.assertEqual("high", request.reasoning_effort)
-        self.assertEqual(42, request.timeout)
 
     @unittest.skipUnless(HAS_OPENAI, "openai dependency is not installed")
     def test_call_structured_ai_object_builds_schema_formats_and_parses_payload(self):

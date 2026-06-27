@@ -49,7 +49,6 @@ def extract_stock_names_from_image(image_data_url: str) -> Dict[str, Any]:
             get_ai_config=get_openai_compatible_config,
             wire_api="responses",
             reasoning_effort=get_summary_reasoning_effort(),
-            timeout=120,
         )
     except AIRuntimeStructuredObjectParseError as exc:
         raise ValueError("AI 图片股票抽取结果不是合法 JSON") from exc

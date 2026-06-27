@@ -82,7 +82,6 @@ def call_report_ai(
         messages,
         settings=settings,
         reasoning_effort=get_summary_reasoning_effort(),
-        timeout=180,
     )
     return (
         result.text.strip(),

@@ -182,7 +182,7 @@ class ResearchRadarAITests(unittest.TestCase):
         self.assertEqual("研究雷达 AI 摘要结果", kwargs["label"])
         self.assertIs(ai.get_openai_compatible_config, kwargs["get_ai_config"])
         self.assertEqual("medium", kwargs["reasoning_effort"])
-        self.assertEqual(180, kwargs["timeout"])
+        self.assertNotIn("timeout", kwargs)
         self.assertIn("direction:PCB", args[0][1]["content"])
 
 

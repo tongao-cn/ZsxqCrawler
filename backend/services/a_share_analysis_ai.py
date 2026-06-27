@@ -230,7 +230,6 @@ def call_openai_extract_topic_stocks(
     max_retries: int = DEFAULT_OPENAI_MAX_RETRIES,
     item_context: Optional[str] = None,
     log_callback: LogCallback = None,
-    timeout: int = 200,
     debug_logger: Callable[[str], None] = log_debug,
     warning_logger: Callable[[str], None] = log_warning,
 ) -> List[Dict[str, Any]]:
@@ -277,7 +276,6 @@ def call_openai_extract_topic_stocks(
                 label="AI 公司抽取结果",
                 settings=runtime_settings,
                 reasoning_effort=str(reasoning_effort or DEFAULT_REASONING_EFFORT).strip() or DEFAULT_REASONING_EFFORT,
-                timeout=timeout,
             )
             payload = result.payload
             last_error = None
@@ -317,7 +315,6 @@ def call_openai_extract_companies(
     max_retries: int = DEFAULT_OPENAI_MAX_RETRIES,
     item_context: Optional[str] = None,
     log_callback: LogCallback = None,
-    timeout: int = 200,
     debug_logger: Callable[[str], None] = log_debug,
     warning_logger: Callable[[str], None] = log_warning,
 ) -> List[str]:
@@ -333,7 +330,6 @@ def call_openai_extract_companies(
             max_retries=max_retries,
             item_context=item_context,
             log_callback=log_callback,
-            timeout=timeout,
             debug_logger=debug_logger,
             warning_logger=warning_logger,
         )

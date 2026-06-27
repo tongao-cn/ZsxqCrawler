@@ -130,6 +130,5 @@ def summarize_radar_candidates(
         label="研究雷达 AI 摘要结果",
         get_ai_config=get_openai_compatible_config,
         reasoning_effort=get_summary_reasoning_effort(),
-        timeout=180,
     )
     return apply_ai_logic_summaries(candidates, result.payload), result.model

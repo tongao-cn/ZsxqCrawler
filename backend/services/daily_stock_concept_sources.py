@@ -98,7 +98,6 @@ def generate_stock_concepts_with_ai(prompt_payload: str, report_date: str) -> Tu
         schema=STOCK_CONCEPT_SCHEMA,
         label="AI 股票概念抽取结果",
         reasoning_effort=get_extraction_reasoning_effort(),
-        timeout=180,
     )
 
     stocks = parse_stock_concept_payload(result.payload)

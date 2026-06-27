@@ -16,7 +16,6 @@ class AITextRequest:
     messages: List[Dict[str, Any]]
     wire_api: str = "responses"
     reasoning_effort: str = ""
-    timeout: int = 180
     responses_text_format: Optional[Dict[str, Any]] = None
     chat_response_format: Optional[Dict[str, Any]] = None
 
@@ -69,7 +68,7 @@ def call_ai_text(request: AITextRequest) -> str:
     if not api_key:
         raise RuntimeError("OPENAI_API_KEY not set and config.toml [ai].api_key is empty")
 
-    client = OpenAI(api_key=api_key, base_url=request.api_base, timeout=request.timeout)
+    client = OpenAI(api_key=api_key, base_url=request.api_base)
     normalized_wire_api = str(request.wire_api or "responses").strip().lower()
 
     if normalized_wire_api == "responses":

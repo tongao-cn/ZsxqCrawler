@@ -244,7 +244,6 @@ def _call_stock_analysis_ai(prompt_payload: str, *, incremental: bool = False) -
         get_ai_config=get_openai_compatible_config,
         wire_api="responses",
         reasoning_effort=get_summary_reasoning_effort(),
-        timeout=180,
     )
 
     return (
@@ -260,7 +259,6 @@ def _call_question_analysis_ai(question: str, prompt_payload: str) -> Tuple[str,
         get_ai_config=get_openai_compatible_config,
         wire_api="responses",
         reasoning_effort=get_summary_reasoning_effort(),
-        timeout=180,
     )
 
     return (

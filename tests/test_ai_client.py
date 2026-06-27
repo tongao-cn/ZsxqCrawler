@@ -84,7 +84,6 @@ class AIClientTests(unittest.TestCase):
                     wire_api="responses",
                     reasoning_effort="high",
                     responses_text_format={"format": {"type": "text"}},
-                    timeout=33,
                 )
             )
 
