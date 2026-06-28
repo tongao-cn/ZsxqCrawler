@@ -30,6 +30,8 @@ class DailyFileDownloadScriptTests(unittest.TestCase):
             "pdf_analysis_group_id": "51111112855254",
             "max_pdf_analyses": 0,
             "pdf_analysis_concurrency": 5,
+            "pdf_ocr_concurrency": None,
+            "pdf_ai_concurrency": None,
             "pdf_analysis_pending_any_date": False,
             "force_pdf_analysis": False,
             "log_tail": 0,
@@ -101,6 +103,24 @@ class DailyFileDownloadScriptTests(unittest.TestCase):
         self.assertIn("download_error_code", captured["sql"])
         self.assertIn("download_url_unavailable", captured["params"])
         self.assertTrue(captured["closed"])
+
+    def test_pdf_analysis_configures_ocr_and_ai_concurrency_limits(self):
+        args = self._args(
+            analyze_pdf_after_download=True,
+            pdf_ocr_concurrency=2,
+            pdf_ai_concurrency=5,
+        )
+
+        with (
+            patch.object(daily_download, "_load_downloaded_pdf_rows", return_value=[]),
+            patch.object(daily_download, "configure_pdf_text_extraction_concurrency") as configure_ocr,
+            patch.object(daily_download, "configure_file_ai_summary_concurrency") as configure_ai,
+        ):
+            result = daily_download._analyze_downloaded_pdfs(args, ("2026-06-28", "2026-06-28", "2026-06-28"))
+
+        self.assertEqual([], result)
+        configure_ocr.assert_called_once_with(2)
+        configure_ai.assert_called_once_with(5)
 
 
 if __name__ == "__main__":

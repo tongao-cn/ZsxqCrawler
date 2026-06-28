@@ -79,6 +79,46 @@ class PdfTextExtractionTests(unittest.TestCase):
         self.assertIn("http://127.0.0.1:5002", command)
         self.assertIn('"status": "completed"', metadata)
         self.assertIn('"hybrid_mode": "full"', metadata)
+        self.assertIn('"extraction_mode": "hybrid-full"', metadata)
+
+    def test_extract_pdf_text_falls_back_to_java_only_when_hybrid_fails(self):
+        from backend.services.pdf_text_extraction import extract_pdf_text_with_opendataloader
+
+        commands = []
+
+        def fake_runner(command, **kwargs):
+            commands.append(command)
+            output_dir = Path(command[command.index("--output-dir") + 1])
+            output_dir.mkdir(parents=True, exist_ok=True)
+            if "--hybrid" in command:
+                return subprocess.CompletedProcess(command, 1, stdout="", stderr="hybrid failed")
+            (output_dir / "report.md").write_text("# Java Markdown\n\n正文" * 20, encoding="utf-8")
+            (output_dir / "report.txt").write_text("Java text " * 20, encoding="utf-8")
+            (output_dir / "report.json").write_text("{}", encoding="utf-8")
+            return subprocess.CompletedProcess(command, 0, stdout="ok", stderr="")
+
+        with TemporaryDirectory() as temp_dir:
+            pdf_path = Path(temp_dir) / "report.pdf"
+            pdf_path.write_bytes(b"%PDF-1.4\nfake")
+            output_dir = Path(temp_dir) / "out"
+
+            result = extract_pdf_text_with_opendataloader(
+                pdf_path,
+                output_dir,
+                ensure_server=lambda: "http://127.0.0.1:5002",
+                runner=fake_runner,
+            )
+
+            metadata = (output_dir / "metadata.json").read_text(encoding="utf-8")
+
+        self.assertEqual(2, len(commands))
+        self.assertIn("--hybrid", commands[0])
+        self.assertNotIn("--hybrid", commands[1])
+        self.assertFalse(result.cached)
+        self.assertEqual("# Java Markdown\n\n正文" * 20, result.markdown)
+        self.assertIn('"status": "completed"', metadata)
+        self.assertIn('"extraction_mode": "java-only-fallback"', metadata)
+        self.assertIn('"fallback_reason": "hybrid failed"', metadata)
 
     def test_extract_pdf_markdown_for_analysis_uses_opendataloader_text_extractor(self):
         from backend.services.file_ai_content_analysis import extract_pdf_markdown_for_analysis

@@ -72,6 +72,7 @@ DEFAULT_FILE_ANALYSIS_MODEL = get_default_model()
 DEFAULT_FILE_ANALYSIS_API_BASE = get_default_base_url()
 DEFAULT_FILE_ANALYSIS_WIRE_API = get_default_wire_api()
 DEFAULT_FILE_ANALYSIS_REASONING_EFFORT = "medium"
+DEFAULT_FILE_AI_SUMMARY_MAX_CONCURRENCY = int(os.environ.get("FILE_AI_SUMMARY_MAX_CONCURRENCY", "0") or "0")
 DEFAULT_FASTER_WHISPER_MODEL = os.environ.get("FASTER_WHISPER_MODEL", "medium")
 FASTER_WHISPER_DEVICE_CONFIGURED = bool(os.environ.get("FASTER_WHISPER_DEVICE", "").strip())
 DEFAULT_FASTER_WHISPER_DEVICE = _detect_faster_whisper_device()
@@ -91,6 +92,13 @@ PREVIEW_CHARS = 4000
 PDF_MARKDOWN_CONTENT_TYPE = "text/markdown"
 _WHISPER_MODEL_CACHE: dict[tuple[str, str, str], Any] = {}
 _WHISPER_MODEL_LOCK = threading.Lock()
+_SUMMARY_CONCURRENCY_LOCK = threading.Lock()
+_SUMMARY_SEMAPHORE_LIMIT = DEFAULT_FILE_AI_SUMMARY_MAX_CONCURRENCY
+_SUMMARY_SEMAPHORE: Optional[threading.BoundedSemaphore] = (
+    threading.BoundedSemaphore(DEFAULT_FILE_AI_SUMMARY_MAX_CONCURRENCY)
+    if DEFAULT_FILE_AI_SUMMARY_MAX_CONCURRENCY > 0
+    else None
+)
 
 
 @dataclass(frozen=True)
@@ -179,6 +187,23 @@ def build_deep_summary_prompt(file_name: str) -> str:
     )
 
 
+def configure_file_ai_summary_concurrency(limit: int | None) -> None:
+    global _SUMMARY_SEMAPHORE, _SUMMARY_SEMAPHORE_LIMIT
+    normalized = max(0, int(limit or 0))
+    with _SUMMARY_CONCURRENCY_LOCK:
+        if normalized == _SUMMARY_SEMAPHORE_LIMIT:
+            return
+        _SUMMARY_SEMAPHORE_LIMIT = normalized
+        _SUMMARY_SEMAPHORE = threading.BoundedSemaphore(normalized) if normalized > 0 else None
+
+
+def _summary_semaphore() -> Optional[threading.BoundedSemaphore]:
+    env_limit = int(os.environ.get("FILE_AI_SUMMARY_MAX_CONCURRENCY", "0") or "0")
+    if env_limit != _SUMMARY_SEMAPHORE_LIMIT:
+        configure_file_ai_summary_concurrency(env_limit)
+    return _SUMMARY_SEMAPHORE
+
+
 def summarize_text_with_ai(
     text: str,
     *,
@@ -208,14 +233,26 @@ def summarize_text_with_ai(
         },
     ]
 
-    result = call_runtime_ai_text(
-        messages,
-        get_ai_config=get_ai_config,
-        model=model,
-        api_base=api_base,
-        wire_api=wire_api,
-        reasoning_effort=reasoning_effort,
-    )
+    semaphore = _summary_semaphore()
+    if semaphore is None:
+        result = call_runtime_ai_text(
+            messages,
+            get_ai_config=get_ai_config,
+            model=model,
+            api_base=api_base,
+            wire_api=wire_api,
+            reasoning_effort=reasoning_effort,
+        )
+    else:
+        with semaphore:
+            result = call_runtime_ai_text(
+                messages,
+                get_ai_config=get_ai_config,
+                model=model,
+                api_base=api_base,
+                wire_api=wire_api,
+                reasoning_effort=reasoning_effort,
+            )
     return result.text.strip()
 
 

@@ -23,7 +23,9 @@ from backend.routes.file_routes import download_files, download_selected_files, 
 from backend.schemas.crawl import CrawlSettingsRequest  # noqa: E402
 from backend.schemas.files import FileDownloadRequest, FileIdListRequest  # noqa: E402
 from backend.services.crawl_workflow import launch_latest_crawl_task  # noqa: E402
+from backend.services.file_ai_content_analysis import configure_file_ai_summary_concurrency  # noqa: E402
 from backend.services.file_ai_analysis_entry import create_file_analysis_response  # noqa: E402
+from backend.services.pdf_text_extraction import configure_pdf_text_extraction_concurrency  # noqa: E402
 from backend.services.task_runtime import get_task_logs_state, get_task_state, request_runtime_shutdown  # noqa: E402
 from backend.storage.db_compat import connect  # noqa: E402
 
@@ -408,10 +410,15 @@ def _analyze_downloaded_pdfs(args: argparse.Namespace, run_window: tuple[str, st
     output_dir = _markdown_output_dir(group_id, label)
     results: list[dict[str, Any] | None] = [None] * len(rows)
     max_workers = max(1, int(args.pdf_analysis_concurrency or 1))
+    if args.pdf_ocr_concurrency is not None:
+        configure_pdf_text_extraction_concurrency(args.pdf_ocr_concurrency)
+    if args.pdf_ai_concurrency is not None:
+        configure_file_ai_summary_concurrency(args.pdf_ai_concurrency)
     _safe_print(
         f"pdf_analysis_group_id={group_id}, candidate_pdfs={len(rows)}, "
         f"pending_any_date={args.pdf_analysis_pending_any_date}, "
-        f"concurrency={max_workers}, output_dir={output_dir}"
+        f"concurrency={max_workers}, ocr_concurrency={args.pdf_ocr_concurrency or 'unlimited'}, "
+        f"ai_concurrency={args.pdf_ai_concurrency or 'unlimited'}, output_dir={output_dir}"
     )
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         future_to_index = {
@@ -478,6 +485,8 @@ def _write_run_record(summary: WorkflowSummary, args: argparse.Namespace, run_wi
             "pdf_analysis_group_id": args.pdf_analysis_group_id,
             "max_pdf_analyses": args.max_pdf_analyses,
             "pdf_analysis_concurrency": args.pdf_analysis_concurrency,
+            "pdf_ocr_concurrency": args.pdf_ocr_concurrency,
+            "pdf_ai_concurrency": args.pdf_ai_concurrency,
             "pdf_analysis_pending_any_date": args.pdf_analysis_pending_any_date,
             "force_pdf_analysis": args.force_pdf_analysis,
         },
@@ -647,6 +656,8 @@ def main() -> None:
     parser.add_argument("--pdf-analysis-group-id", default="51111112855254")
     parser.add_argument("--max-pdf-analyses", type=int, default=50)
     parser.add_argument("--pdf-analysis-concurrency", type=int, default=1)
+    parser.add_argument("--pdf-ocr-concurrency", type=int)
+    parser.add_argument("--pdf-ai-concurrency", type=int)
     parser.add_argument(
         "--pdf-analysis-pending-any-date",
         action="store_true",

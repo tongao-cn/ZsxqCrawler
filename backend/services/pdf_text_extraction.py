@@ -25,6 +25,7 @@ DEFAULT_DEVICE = os.environ.get("PDF_TEXT_EXTRACTOR_DEVICE", "cpu")
 DEFAULT_STARTUP_TIMEOUT_SECONDS = int(os.environ.get("PDF_TEXT_EXTRACTOR_STARTUP_TIMEOUT_SECONDS", "180"))
 DEFAULT_CONVERT_TIMEOUT_SECONDS = int(os.environ.get("PDF_TEXT_EXTRACTOR_CONVERT_TIMEOUT_SECONDS", "900"))
 DEFAULT_MIN_TEXT_CHARS = int(os.environ.get("PDF_TEXT_EXTRACTOR_MIN_TEXT_CHARS", "50"))
+DEFAULT_MAX_CONCURRENCY = int(os.environ.get("PDF_TEXT_EXTRACTOR_MAX_CONCURRENCY", "0") or "0")
 DEFAULT_JAVA_BIN_DIR = Path(
     os.environ.get(
         "PDF_TEXT_EXTRACTOR_JAVA_BIN_DIR",
@@ -36,6 +37,11 @@ _SERVER_LOCK = threading.Lock()
 _SERVER_PROCESS: Optional[subprocess.Popen] = None
 _SERVER_LOG_PATH: Optional[Path] = None
 _SERVER_LOG_HANDLE: Optional[TextIO] = None
+_EXTRACT_CONCURRENCY_LOCK = threading.Lock()
+_EXTRACT_SEMAPHORE_LIMIT = DEFAULT_MAX_CONCURRENCY
+_EXTRACT_SEMAPHORE: Optional[threading.BoundedSemaphore] = (
+    threading.BoundedSemaphore(DEFAULT_MAX_CONCURRENCY) if DEFAULT_MAX_CONCURRENCY > 0 else None
+)
 
 
 @dataclass(frozen=True)
@@ -274,7 +280,24 @@ def _write_metadata(metadata_path: Path, payload: dict[str, object]) -> None:
     metadata_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
-def _run_opendataloader_convert(
+def configure_pdf_text_extraction_concurrency(limit: int | None) -> None:
+    global _EXTRACT_SEMAPHORE, _EXTRACT_SEMAPHORE_LIMIT
+    normalized = max(0, int(limit or 0))
+    with _EXTRACT_CONCURRENCY_LOCK:
+        if normalized == _EXTRACT_SEMAPHORE_LIMIT:
+            return
+        _EXTRACT_SEMAPHORE_LIMIT = normalized
+        _EXTRACT_SEMAPHORE = threading.BoundedSemaphore(normalized) if normalized > 0 else None
+
+
+def _extract_semaphore() -> Optional[threading.BoundedSemaphore]:
+    env_limit = int(os.environ.get("PDF_TEXT_EXTRACTOR_MAX_CONCURRENCY", "0") or "0")
+    if env_limit != _EXTRACT_SEMAPHORE_LIMIT:
+        configure_pdf_text_extraction_concurrency(env_limit)
+    return _EXTRACT_SEMAPHORE
+
+
+def _run_opendataloader_hybrid_convert(
     pdf_path: Path,
     output_dir: Path,
     *,
@@ -313,6 +336,55 @@ def _run_opendataloader_convert(
     )
 
 
+def _run_opendataloader_java_only_convert(
+    pdf_path: Path,
+    output_dir: Path,
+    *,
+    timeout_seconds: int,
+    runner: Callable[..., subprocess.CompletedProcess] = subprocess.run,
+) -> subprocess.CompletedProcess:
+    command = _uv_command(
+        "--with",
+        "opendataloader-pdf",
+        "opendataloader-pdf",
+        "--format",
+        "markdown,text,json",
+        "--output-dir",
+        str(output_dir),
+        "--quiet",
+        "--image-output",
+        "off",
+        str(pdf_path),
+    )
+    return runner(
+        command,
+        cwd=_project_root(),
+        env=_java_env(),
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        timeout=timeout_seconds,
+    )
+
+
+def _output_payload(output_dir: Path) -> tuple[Optional[Path], Optional[Path], Optional[Path], str, str, int]:
+    markdown_path = _first_file(output_dir, ".md")
+    text_path = _first_file(output_dir, ".txt")
+    json_path = _first_file(output_dir, ".json")
+    markdown = _read_text(markdown_path)
+    text = _read_text(text_path)
+    return markdown_path, text_path, json_path, markdown, text, max(len(markdown), len(text))
+
+
+def _failure_detail(completed: Optional[subprocess.CompletedProcess], exc: Optional[Exception]) -> str:
+    if exc is not None:
+        return str(exc)
+    if completed is None:
+        return "未生成有效文本"
+    return (completed.stderr or completed.stdout or "未生成有效文本").strip()
+
+
 def extract_pdf_text_with_opendataloader(
     pdf_path: str | Path,
     output_dir: str | Path | None = None,
@@ -335,29 +407,56 @@ def extract_pdf_text_with_opendataloader(
 
     start = time.perf_counter()
     file_hash = _sha256_file(source_path)
+    semaphore = _extract_semaphore()
+    if semaphore is not None:
+        semaphore.acquire()
     try:
-        server_url = ensure_server()
-        completed = _run_opendataloader_convert(
-            source_path,
-            target_dir,
-            server_url=server_url,
-            timeout_seconds=convert_timeout_seconds,
-            runner=runner,
-        )
+        hybrid_completed: Optional[subprocess.CompletedProcess] = None
+        hybrid_exc: Optional[Exception] = None
+        try:
+            server_url = ensure_server()
+            hybrid_completed = _run_opendataloader_hybrid_convert(
+                source_path,
+                target_dir,
+                server_url=server_url,
+                timeout_seconds=convert_timeout_seconds,
+                runner=runner,
+            )
+        except Exception as exc:
+            hybrid_exc = exc
+
+        markdown_path, text_path, json_path, markdown, text, content_chars = _output_payload(target_dir)
+        hybrid_succeeded = hybrid_completed is not None and hybrid_completed.returncode == 0 and content_chars >= min_text_chars
+        fallback_completed: Optional[subprocess.CompletedProcess] = None
+        fallback_exc: Optional[Exception] = None
+        extraction_mode = "hybrid-full"
+        fallback_reason = ""
+
+        if not hybrid_succeeded:
+            fallback_reason = _failure_detail(hybrid_completed, hybrid_exc)
+            try:
+                fallback_completed = _run_opendataloader_java_only_convert(
+                    source_path,
+                    target_dir,
+                    timeout_seconds=convert_timeout_seconds,
+                    runner=runner,
+                )
+            except Exception as exc:
+                fallback_exc = exc
+            markdown_path, text_path, json_path, markdown, text, content_chars = _output_payload(target_dir)
+            extraction_mode = "java-only-fallback"
+
+        completed = fallback_completed if extraction_mode == "java-only-fallback" else hybrid_completed
+        completed_exc = fallback_exc if extraction_mode == "java-only-fallback" else hybrid_exc
+        status = "completed" if completed is not None and completed.returncode == 0 and content_chars >= min_text_chars else "failed"
         duration_seconds = round(time.perf_counter() - start, 3)
-        markdown_path = _first_file(target_dir, ".md")
-        text_path = _first_file(target_dir, ".txt")
-        json_path = _first_file(target_dir, ".json")
-        markdown = _read_text(markdown_path)
-        text = _read_text(text_path)
-        content_chars = max(len(markdown), len(text))
-        status = "completed" if completed.returncode == 0 and content_chars >= min_text_chars else "failed"
         metadata = {
             "status": status,
             "file_hash": file_hash,
             "source_path": str(source_path),
             "source_size": source_path.stat().st_size,
             "extractor": "opendataloader-pdf",
+            "extraction_mode": extraction_mode,
             "hybrid": "docling-fast",
             "hybrid_mode": "full",
             "ocr_engine": DEFAULT_OCR_ENGINE,
@@ -369,13 +468,16 @@ def extract_pdf_text_with_opendataloader(
             "text_file": text_path.name if text_path else None,
             "json_file": json_path.name if json_path else None,
             "created_at": _utc_now_text(),
-            "returncode": completed.returncode,
-            "stdout_tail": (completed.stdout or "")[-2000:],
-            "stderr_tail": (completed.stderr or "")[-2000:],
+            "returncode": completed.returncode if completed is not None else None,
+            "stdout_tail": (completed.stdout or "")[-2000:] if completed is not None else "",
+            "stderr_tail": (completed.stderr or "")[-2000:] if completed is not None else str(completed_exc or "")[-2000:],
+            "hybrid_returncode": hybrid_completed.returncode if hybrid_completed is not None else None,
+            "hybrid_error": str(hybrid_exc or "")[-2000:] if hybrid_exc is not None else "",
+            "fallback_reason": fallback_reason[-2000:],
         }
         _write_metadata(metadata_path, metadata)
         if status != "completed":
-            detail = (completed.stderr or completed.stdout or "未生成有效文本").strip()
+            detail = _failure_detail(completed, completed_exc)
             raise RuntimeError(f"opendataloader-pdf 提取失败或结果过短: {detail[-1000:]}")
         return PdfTextExtractionResult(
             markdown=markdown,
@@ -407,3 +509,6 @@ def extract_pdf_text_with_opendataloader(
             },
         )
         raise
+    finally:
+        if semaphore is not None:
+            semaphore.release()
