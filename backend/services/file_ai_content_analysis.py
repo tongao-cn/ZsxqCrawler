@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import csv
-import hashlib
 import io
 import json
 import os
@@ -24,7 +23,10 @@ from backend.core.ai_provider_config import (
 )
 from backend.services.ai_client import extract_response_text
 from backend.services.ai_runtime_request import call_runtime_ai_text
-from backend.services.pdf_markdown_conversion import convert_pdf_to_markdown
+from backend.services.pdf_text_extraction import (
+    default_pdf_text_output_dir,
+    extract_pdf_text_with_opendataloader,
+)
 
 
 _CUDA_DLL_DIRECTORY_HANDLES: list[Any] = []
@@ -247,17 +249,7 @@ def summarize_pdf_with_ai(
 
 
 def default_pdf_markdown_output_dir(path: Path) -> Path:
-    project_root = Path(__file__).resolve().parents[2]
-    source_key = hashlib.sha1(str(path.resolve()).encode("utf-8")).hexdigest()[:16]
-    safe_stem = re.sub(r"[^A-Za-z0-9._-]+", "_", path.stem).strip("._")[:80] or "pdf"
-    return (
-        project_root
-        / "output"
-        / "exports"
-        / "file_ai_markdown"
-        / "pdf_to_markdown"
-        / f"{source_key}_{safe_stem}"
-    )
+    return default_pdf_text_output_dir(path)
 
 
 def extract_pdf_markdown_for_analysis(
@@ -268,29 +260,37 @@ def extract_pdf_markdown_for_analysis(
     api_base: str,
     wire_api: str,
     reasoning_effort: str,
-    convert_pdf: Callable[..., Any] = convert_pdf_to_markdown,
+    convert_pdf: Optional[Callable[..., Any]] = None,
+    extract_pdf_text: Callable[..., Any] = extract_pdf_text_with_opendataloader,
 ) -> str:
-    if str(wire_api or "").strip().lower() != "responses":
-        raise ValueError(
-            "PDF 转 Markdown 当前使用 Responses 图像输入，请切换为 responses 接口"
+    if convert_pdf is not None:
+        result = convert_pdf(
+            path,
+            default_pdf_markdown_output_dir(path),
+            model=model,
+            api_base=api_base,
+            reasoning_effort=reasoning_effort,
         )
+        markdown = str(result.markdown or "").strip()
+        if not markdown:
+            failed_pages = [
+                f"page {page.page_number}: {page.error}"
+                for page in getattr(result, "pages", [])
+                if getattr(page, "status", "") == "failed"
+            ]
+            detail = "；".join(failed_pages) if failed_pages else "未生成有效 Markdown"
+            raise ValueError(f"PDF 转 Markdown 结果为空，无法进行 AI 分析：{detail}")
+        return markdown
 
-    result = convert_pdf(
+    result = extract_pdf_text(
         path,
         default_pdf_markdown_output_dir(path),
-        model=model,
-        api_base=api_base,
-        reasoning_effort=reasoning_effort,
     )
     markdown = str(result.markdown or "").strip()
     if not markdown:
-        failed_pages = [
-            f"page {page.page_number}: {page.error}"
-            for page in getattr(result, "pages", [])
-            if getattr(page, "status", "") == "failed"
-        ]
-        detail = "；".join(failed_pages) if failed_pages else "未生成有效 Markdown"
-        raise ValueError(f"PDF 转 Markdown 结果为空，无法进行 AI 分析：{detail}")
+        markdown = str(result.text or "").strip()
+    if not markdown:
+        raise ValueError("PDF 文本/OCR 提取结果为空，无法进行 AI 分析")
     return markdown
 
 
