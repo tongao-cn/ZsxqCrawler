@@ -1,6 +1,8 @@
 import argparse
 import asyncio
 import unittest
+from pathlib import Path
+from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
 from scripts import run_zsxq_daily_file_download as daily_download
@@ -27,6 +29,7 @@ class DailyFileDownloadScriptTests(unittest.TestCase):
             "crawl_latest_first": True,
             "sync_files_from_topics": True,
             "analyze_pdf_after_download": False,
+            "pipeline_pdf_analysis": False,
             "pdf_analysis_group_id": "51111112855254",
             "max_pdf_analyses": 0,
             "pdf_analysis_concurrency": 5,
@@ -121,6 +124,93 @@ class DailyFileDownloadScriptTests(unittest.TestCase):
         self.assertEqual([], result)
         configure_ocr.assert_called_once_with(2)
         configure_ai.assert_called_once_with(5)
+
+    def test_pipeline_pdf_analysis_starts_analysis_before_download_task_finishes(self):
+        events = []
+        task_polls = 0
+
+        async def fake_download_selected_files(group_id, request):
+            events.append(("download_started", tuple(request.file_ids)))
+            return {"task_id": "download-1"}
+
+        def fake_get_task_state(task_id):
+            nonlocal task_polls
+            task_polls += 1
+            if task_polls == 1:
+                events.append(("task", "running"))
+                return {"task_id": task_id, "status": "running", "message": "downloading"}
+            events.append(("task", "completed"))
+            return {"task_id": task_id, "status": "completed", "result": {"downloaded": 2}}
+
+        def fake_load_rows(group_id, file_ids):
+            rows = []
+            if 101 in file_ids:
+                rows.append(
+                    {
+                        "file_id": 101,
+                        "name": "first.pdf",
+                        "size": 10,
+                        "create_time": "2026-06-28T09:00:00+0800",
+                        "download_status": "completed",
+                        "local_path": r"C:\downloads\first.pdf",
+                    }
+                )
+            if task_polls >= 2 and 102 in file_ids:
+                rows.append(
+                    {
+                        "file_id": 102,
+                        "name": "second.pdf",
+                        "size": 10,
+                        "create_time": "2026-06-28T09:01:00+0800",
+                        "download_status": "completed",
+                        "local_path": r"C:\downloads\second.pdf",
+                    }
+                )
+            return rows
+
+        def fake_create_analysis(group_id, file_id, force):
+            events.append(("analyze", file_id))
+            return {
+                "analysis": {
+                    "summary": f"summary {file_id}",
+                    "model": "test-model",
+                    "source_path": rf"C:\downloads\{file_id}.pdf",
+                }
+            }
+
+        with TemporaryDirectory() as temp_dir:
+            args = self._args(
+                analyze_pdf_after_download=True,
+                pipeline_pdf_analysis=True,
+                max_pdf_analyses=2,
+                pdf_analysis_concurrency=2,
+                pdf_ocr_concurrency=1,
+                pdf_ai_concurrency=1,
+            )
+
+            with (
+                patch.object(daily_download, "_load_pending_pdf_file_ids", return_value=[101, 102]),
+                patch.object(daily_download, "download_selected_files", side_effect=fake_download_selected_files),
+                patch.object(daily_download, "get_task_state", side_effect=fake_get_task_state),
+                patch.object(daily_download, "get_task_logs_state", return_value=[]),
+                patch.object(daily_download, "_load_pdf_rows_by_file_ids", side_effect=fake_load_rows),
+                patch.object(daily_download, "_load_downloaded_pdf_rows", return_value=[]),
+                patch.object(daily_download, "create_file_analysis_response", side_effect=fake_create_analysis),
+                patch.object(daily_download, "_markdown_output_dir", return_value=Path(temp_dir)),
+                patch.object(daily_download, "configure_pdf_text_extraction_concurrency"),
+                patch.object(daily_download, "configure_file_ai_summary_concurrency"),
+            ):
+                download_tasks, analyses = asyncio.run(
+                    daily_download._download_group_files_with_pipeline_analysis(
+                        "51111112855254",
+                        args,
+                        run_window=("2026-06-28", "2026-06-28", "2026-06-28"),
+                    )
+                )
+
+        self.assertEqual(["completed"], [task["status"] for task in download_tasks])
+        self.assertEqual([101, 102], [item["file_id"] for item in analyses])
+        self.assertLess(events.index(("analyze", 101)), events.index(("task", "completed")))
 
 
 if __name__ == "__main__":

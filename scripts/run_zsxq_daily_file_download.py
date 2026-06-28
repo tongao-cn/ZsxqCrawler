@@ -7,7 +7,7 @@ import json
 import re
 import sys
 import time
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, as_completed, wait
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -306,6 +306,39 @@ def _load_downloaded_pdf_rows(
     ]
 
 
+def _load_pdf_rows_by_file_ids(group_id: str, file_ids: list[int]) -> list[dict[str, Any]]:
+    ordered_ids = list(dict.fromkeys(int(file_id) for file_id in file_ids))
+    if not ordered_ids:
+        return []
+    placeholders = ", ".join("?" for _ in ordered_ids)
+    params: list[Any] = [_query_value(group_id), *ordered_ids]
+    sql = f"""
+        SELECT file_id, name, coalesce(size, 0), create_time, download_status, local_path
+        FROM files
+        WHERE group_id = ? AND file_id IN ({placeholders})
+    """
+    conn = connect()
+    try:
+        cursor = conn.cursor()
+        cursor.execute(sql, tuple(params))
+        rows = cursor.fetchall()
+    finally:
+        conn.close()
+
+    by_file_id = {
+        int(row[0]): {
+            "file_id": int(row[0]),
+            "name": str(row[1] or f"file_{row[0]}.pdf"),
+            "size": int(row[2] or 0),
+            "create_time": str(row[3] or ""),
+            "download_status": str(row[4] or ""),
+            "local_path": str(row[5] or ""),
+        }
+        for row in rows
+    }
+    return [by_file_id[file_id] for file_id in ordered_ids if file_id in by_file_id]
+
+
 def _markdown_output_dir(group_id: str, label: str) -> Path:
     safe_label = _safe_filename(label, limit=40)
     return PROJECT_ROOT / "output" / "exports" / "file_ai_markdown" / str(group_id) / safe_label
@@ -444,6 +477,184 @@ def _analyze_downloaded_pdfs(args: argparse.Namespace, run_window: tuple[str, st
     return completed_results
 
 
+def _configure_pdf_analysis_limits(args: argparse.Namespace) -> None:
+    if args.pdf_ocr_concurrency is not None:
+        configure_pdf_text_extraction_concurrency(args.pdf_ocr_concurrency)
+    if args.pdf_ai_concurrency is not None:
+        configure_file_ai_summary_concurrency(args.pdf_ai_concurrency)
+
+
+def _downloaded_rows_ready_for_analysis(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [
+        row
+        for row in rows
+        if str(row.get("download_status") or "").lower() in {"completed", "downloaded"}
+        and str(row.get("name") or "").lower().endswith(".pdf")
+    ]
+
+
+def _analysis_limit(args: argparse.Namespace) -> int | None:
+    max_pdf_analyses = int(args.max_pdf_analyses or 0)
+    return max_pdf_analyses if max_pdf_analyses > 0 else None
+
+
+async def _download_group_files_with_pipeline_analysis(
+    group_id: str,
+    args: argparse.Namespace,
+    *,
+    run_window: tuple[str, str, str],
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    start_time, end_time, _ = run_window
+    file_ids = _load_pending_pdf_file_ids(
+        group_id=group_id,
+        start_time=start_time,
+        end_time=end_time,
+        max_files=args.max_files_per_group,
+    )
+    _safe_print(f"group_id={group_id} pending_pdf_files={len(file_ids)}")
+    if not file_ids:
+        return [], []
+
+    download_task_ids: list[str] = []
+    for chunk in _chunks(file_ids, 200):
+        response = await download_selected_files(
+            group_id,
+            FileIdListRequest(file_ids=chunk, concurrency=args.download_concurrency),
+        )
+        download_task_id = response["task_id"]
+        _safe_print(f"group_id={group_id} download_files_task_id={download_task_id}")
+        download_task_ids.append(download_task_id)
+
+    label = _pdf_analysis_label(args, run_window)
+    output_dir = _markdown_output_dir(group_id, label)
+    max_analysis_workers = max(1, int(args.pdf_analysis_concurrency or 1))
+    analysis_limit = _analysis_limit(args)
+    _configure_pdf_analysis_limits(args)
+    _safe_print(
+        f"pipeline_pdf_analysis_group_id={group_id}, selected_pdfs={len(file_ids)}, "
+        f"analysis_limit={analysis_limit or 'unlimited'}, analysis_concurrency={max_analysis_workers}, "
+        f"ocr_concurrency={args.pdf_ocr_concurrency or 'unlimited'}, "
+        f"ai_concurrency={args.pdf_ai_concurrency or 'unlimited'}, output_dir={output_dir}"
+    )
+
+    download_tasks: list[dict[str, Any]] = []
+    pending_task_ids = set(download_task_ids)
+    deadline = time.monotonic() + args.task_timeout_seconds if args.task_timeout_seconds > 0 else None
+    queued_file_ids: set[int] = set()
+    completed_analysis_file_ids: set[int] = set()
+    failed_download_file_ids: set[int] = set()
+    analysis_results: list[dict[str, Any]] = []
+    future_to_file_id: dict[Any, int] = {}
+    analysis_index = 0
+    final_top_up_done = False
+
+    def remaining_slots() -> int | None:
+        if analysis_limit is None:
+            return None
+        return max(0, analysis_limit - len(queued_file_ids))
+
+    def can_submit_more() -> bool:
+        slots = remaining_slots()
+        return slots is None or slots > 0
+
+    def submit_rows(executor: ThreadPoolExecutor, rows: list[dict[str, Any]]) -> None:
+        nonlocal analysis_index
+        for row in rows:
+            if not can_submit_more():
+                return
+            file_id = int(row["file_id"])
+            if file_id in queued_file_ids or file_id in completed_analysis_file_ids:
+                continue
+            queued_file_ids.add(file_id)
+            analysis_index += 1
+            _safe_print(f"[pipeline] queue analysis file_id={file_id} name={row.get('name')}")
+            future = executor.submit(
+                _analyze_pdf_row,
+                group_id=group_id,
+                output_dir=output_dir,
+                row=row,
+                index=analysis_index,
+                total=analysis_limit or len(file_ids),
+                force=args.force_pdf_analysis,
+            )
+            future_to_file_id[future] = file_id
+
+    def reap_done_futures(done_futures: set[Any]) -> None:
+        for future in done_futures:
+            file_id = future_to_file_id.pop(future)
+            result = future.result()
+            analysis_results.append(result)
+            completed_analysis_file_ids.add(file_id)
+
+    def enqueue_ready_selected(executor: ThreadPoolExecutor) -> None:
+        if not can_submit_more():
+            return
+        pending_file_ids = [file_id for file_id in file_ids if file_id not in queued_file_ids and file_id not in completed_analysis_file_ids]
+        rows = _downloaded_rows_ready_for_analysis(_load_pdf_rows_by_file_ids(group_id, pending_file_ids))
+        submit_rows(executor, rows)
+
+    def enqueue_final_top_up(executor: ThreadPoolExecutor) -> None:
+        if not can_submit_more():
+            return
+        slots = remaining_slots()
+        rows = _downloaded_rows_ready_for_analysis(_load_pdf_rows_by_file_ids(group_id, file_ids))
+        submit_rows(executor, rows)
+        if not can_submit_more():
+            return
+        top_up_rows = _load_downloaded_pdf_rows(
+            group_id=group_id,
+            start_time=start_time,
+            end_time=end_time,
+            max_files=slots,
+            pending_any_date=args.pdf_analysis_pending_any_date,
+        )
+        submit_rows(executor, [row for row in top_up_rows if int(row["file_id"]) not in queued_file_ids])
+
+    with ThreadPoolExecutor(max_workers=max_analysis_workers) as executor:
+        while pending_task_ids or future_to_file_id or not final_top_up_done:
+            if deadline is not None and pending_task_ids and time.monotonic() > deadline:
+                for task_id in sorted(pending_task_ids):
+                    _print_log_tail(task_id, args.log_tail)
+                raise TimeoutError(f"Timed out waiting for download tasks: {', '.join(sorted(pending_task_ids))}")
+
+            for task_id in list(pending_task_ids):
+                task = get_task_state(task_id)
+                if not task:
+                    raise RuntimeError(f"Task disappeared: {task_id}")
+                status = str(task.get("status") or "")
+                if status in TERMINAL_STATUSES:
+                    _safe_print(f"{task_id}: final={status}, result={task.get('result')}")
+                    _print_log_tail(task_id, args.log_tail)
+                    download_tasks.append(task)
+                    pending_task_ids.remove(task_id)
+
+            enqueue_ready_selected(executor)
+
+            if future_to_file_id:
+                done_futures, _ = wait(set(future_to_file_id), timeout=0, return_when=FIRST_COMPLETED)
+                reap_done_futures(done_futures)
+
+            if not pending_task_ids and not final_top_up_done:
+                failed_download_file_ids.update(
+                    int(row["file_id"])
+                    for row in _load_pdf_rows_by_file_ids(group_id, file_ids)
+                    if int(row["file_id"]) not in queued_file_ids
+                    and str(row.get("download_status") or "").lower() not in {"completed", "downloaded"}
+                )
+                enqueue_final_top_up(executor)
+                final_top_up_done = True
+
+            if pending_task_ids or future_to_file_id:
+                time.sleep(args.poll_seconds)
+
+    if analysis_results:
+        index_path = _write_index_markdown(output_dir, group_id, label, analysis_results)
+        _safe_print(f"pdf_analysis_index={index_path}")
+    if failed_download_file_ids:
+        _safe_print(f"pipeline_download_failed_pdf_files={len(failed_download_file_ids)}")
+    return download_tasks, analysis_results
+
+
 def _write_run_record(summary: WorkflowSummary, args: argparse.Namespace, run_window: tuple[str, str, str]) -> None:
     summary.finished_at = datetime.now(SHANGHAI_TZ).isoformat()
     run_dir = (
@@ -482,6 +693,7 @@ def _write_run_record(summary: WorkflowSummary, args: argparse.Namespace, run_wi
             "crawl_latest_first": args.crawl_latest_first,
             "sync_files_from_topics": args.sync_files_from_topics,
             "analyze_pdf_after_download": args.analyze_pdf_after_download,
+            "pipeline_pdf_analysis": args.pipeline_pdf_analysis,
             "pdf_analysis_group_id": args.pdf_analysis_group_id,
             "max_pdf_analyses": args.max_pdf_analyses,
             "pdf_analysis_concurrency": args.pdf_analysis_concurrency,
@@ -573,6 +785,7 @@ async def _run(args: argparse.Namespace) -> None:
     run_window = _download_window(args)
     start_time, end_time, _ = run_window
     summary = WorkflowSummary()
+    pipeline_analysis_ran = False
     try:
         for group_id in _group_ids(args):
             if args.crawl_latest_first:
@@ -602,12 +815,29 @@ async def _run(args: argparse.Namespace) -> None:
                     summary.warn(f"sync files group {group_id} failed: {exc}")
 
             try:
-                download_tasks = await _download_group_files(
-                    group_id,
-                    args,
-                    start_time=start_time,
-                    end_time=end_time,
-                )
+                if (
+                    args.pipeline_pdf_analysis
+                    and args.analyze_pdf_after_download
+                    and args.download_pdf_only
+                    and str(group_id) == str(args.pdf_analysis_group_id)
+                ):
+                    download_tasks, file_analyses = await _download_group_files_with_pipeline_analysis(
+                        group_id,
+                        args,
+                        run_window=run_window,
+                    )
+                    pipeline_analysis_ran = True
+                    for result in file_analyses:
+                        summary.add_file_analysis(result)
+                        if result.get("status") == "failed":
+                            summary.warn(f"pdf analysis failed file_id={result.get('file_id')}: {result.get('error')}")
+                else:
+                    download_tasks = await _download_group_files(
+                        group_id,
+                        args,
+                        start_time=start_time,
+                        end_time=end_time,
+                    )
                 for index, download_task in enumerate(download_tasks, start=1):
                     label = f"download files {group_id}"
                     if len(download_tasks) > 1:
@@ -618,7 +848,7 @@ async def _run(args: argparse.Namespace) -> None:
             except Exception as exc:
                 summary.warn(f"download files group {group_id} failed: {exc}")
 
-        if args.analyze_pdf_after_download:
+        if args.analyze_pdf_after_download and not pipeline_analysis_ran:
             for result in _analyze_downloaded_pdfs(args, run_window):
                 summary.add_file_analysis(result)
                 if result.get("status") == "failed":
@@ -653,6 +883,7 @@ def main() -> None:
     parser.add_argument("--crawl-latest-first", action="store_true")
     parser.add_argument("--sync-files-from-topics", action=argparse.BooleanOptionalAction, default=True)
     parser.add_argument("--analyze-pdf-after-download", action="store_true")
+    parser.add_argument("--pipeline-pdf-analysis", action="store_true")
     parser.add_argument("--pdf-analysis-group-id", default="51111112855254")
     parser.add_argument("--max-pdf-analyses", type=int, default=50)
     parser.add_argument("--pdf-analysis-concurrency", type=int, default=1)
