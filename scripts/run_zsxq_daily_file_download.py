@@ -193,12 +193,19 @@ def _load_pending_pdf_file_ids(
     end_time: str,
     max_files: int | None,
 ) -> list[int]:
-    params: list[Any] = [_query_value(group_id), _query_value(group_id), "%.pdf", "pending"]
+    params: list[Any] = [
+        _query_value(group_id),
+        _query_value(group_id),
+        "%.pdf",
+        "pending",
+        "failed",
+        "download_url_unavailable",
+    ]
     conditions = [
         "f.group_id = ?",
         "t.group_id = ?",
         "lower(f.name) like ?",
-        "f.download_status = ?",
+        "(f.download_status = ? OR (f.download_status = ? AND f.download_error_code = ?))",
         "t.create_time is not null",
         "t.create_time != ''",
     ]

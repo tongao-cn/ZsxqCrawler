@@ -71,6 +71,37 @@ class DailyFileDownloadScriptTests(unittest.TestCase):
             events,
         )
 
+    def test_load_pending_pdf_file_ids_includes_retryable_download_url_failures(self):
+        captured = {}
+
+        class FakeCursor:
+            def execute(self, sql, params):
+                captured["sql"] = sql
+                captured["params"] = params
+
+            def fetchall(self):
+                return [(101,), (102,)]
+
+        class FakeConnection:
+            def cursor(self):
+                return FakeCursor()
+
+            def close(self):
+                captured["closed"] = True
+
+        with patch.object(daily_download, "connect", return_value=FakeConnection()):
+            result = daily_download._load_pending_pdf_file_ids(
+                group_id="51111112855254",
+                start_time="2026-06-27T09:00:00+0800",
+                end_time="2026-06-28T09:00:00+0800",
+                max_files=None,
+            )
+
+        self.assertEqual([101, 102], result)
+        self.assertIn("download_error_code", captured["sql"])
+        self.assertIn("download_url_unavailable", captured["params"])
+        self.assertTrue(captured["closed"])
+
 
 if __name__ == "__main__":
     unittest.main()

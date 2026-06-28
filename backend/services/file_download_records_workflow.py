@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from typing import Any, Dict, Optional, Sequence
 
-from backend.core.account_context import get_cookie_for_group
 from backend.crawlers.zsxq_file_downloader import ZSXQFileDownloader
 from backend.services.file_record_download_batch import (
     build_download_file_info,
@@ -100,9 +99,9 @@ def _run_download_records(
     )
 
 
-def _create_download_worker(task_id: str, group_id: str) -> ZSXQFileDownloader:
+def _create_download_worker(task_id: str, group_id: str, cookie: str) -> ZSXQFileDownloader:
     downloader = ZSXQFileDownloader(
-        cookie=get_cookie_for_group(group_id),
+        cookie=cookie,
         group_id=group_id,
         download_interval=0,
         long_sleep_interval=10,
@@ -127,10 +126,11 @@ def _run_download_records_concurrent(
     records: Sequence[DownloadFileRecord],
     stats: Dict[str, int],
     concurrency: int,
+    cookie: str,
 ) -> Dict[str, int]:
     return run_download_records_concurrent(
         task_id,
-        lambda: _create_download_worker(task_id, group_id),
+        lambda: _create_download_worker(task_id, group_id, cookie),
         _safe_close_worker_downloader,
         records,
         stats,
@@ -182,8 +182,9 @@ def _complete_download_records_task_concurrent(
     records: Sequence[DownloadFileRecord],
     stats: Dict[str, int],
     concurrency: int,
+    cookie: str,
 ) -> Any:
-    _run_download_records_concurrent(task_id, group_id, records, stats, concurrency)
+    _run_download_records_concurrent(task_id, group_id, records, stats, concurrency, cookie)
     if is_task_stopped(task_id):
         return skip_workflow_completion()
     return {"downloaded_files": stats}
@@ -223,7 +224,14 @@ def _download_selected_file_records(
         workflow_state["completed_message"] = "选中文件下载完成"
         if int(concurrency or 1) <= 1:
             return _complete_download_records_task(task_id, downloader, selection.records, stats)
-        return _complete_download_records_task_concurrent(task_id, group_id, selection.records, stats, concurrency)
+        return _complete_download_records_task_concurrent(
+            task_id,
+            group_id,
+            selection.records,
+            stats,
+            concurrency,
+            getattr(downloader, "cookie", None),
+        )
     finally:
         _safe_remove_file_downloader(task_id)
 

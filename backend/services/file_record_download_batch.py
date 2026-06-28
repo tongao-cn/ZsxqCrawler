@@ -88,30 +88,45 @@ def run_download_records(
     return stats
 
 
-def _download_record_with_new_downloader(
+def _download_records_with_worker_downloader(
     task_id: str,
     downloader_factory: DownloaderFactory,
     downloader_cleanup: DownloaderCleanup,
-    record: DownloadFileRecord,
-    index: int,
+    indexed_records: Sequence[tuple[int, DownloadFileRecord]],
     total_records: int,
     stats: Dict[str, int],
     stats_lock: Lock,
     *,
+    is_stopped: IsTaskStopped,
     add_log: AddTaskLog,
 ) -> None:
     downloader = downloader_factory()
     try:
-        add_log(task_id, f"【{index}/{total_records}】{record.name}")
-        result = downloader.download_file(record.to_downloader_payload())
-        with stats_lock:
-            stats[download_result_stat_key(result)] += 1
-    except Exception as exc:
-        add_log(task_id, f"   ❌ 处理文件异常: {exc}")
-        with stats_lock:
-            stats["failed"] += 1
+        for index, record in indexed_records:
+            if is_stopped(task_id):
+                add_log(task_id, "🛑 下载任务被停止")
+                return
+            try:
+                add_log(task_id, f"【{index}/{total_records}】{record.name}")
+                result = downloader.download_file(record.to_downloader_payload())
+                stat_key = download_result_stat_key(result)
+            except Exception as exc:
+                add_log(task_id, f"   ❌ 处理文件异常: {exc}")
+                stat_key = "failed"
+            with stats_lock:
+                stats[stat_key] += 1
     finally:
         downloader_cleanup(downloader)
+
+
+def _partition_indexed_records(
+    records: Sequence[DownloadFileRecord],
+    worker_count: int,
+) -> list[list[tuple[int, DownloadFileRecord]]]:
+    partitions: list[list[tuple[int, DownloadFileRecord]]] = [[] for _ in range(worker_count)]
+    for offset, record in enumerate(records):
+        partitions[offset % worker_count].append((offset + 1, record))
+    return partitions
 
 
 def run_download_records_concurrent(
@@ -141,27 +156,28 @@ def run_download_records_concurrent(
             downloader_cleanup(downloader)
 
     stats_lock = Lock()
+    partitions = _partition_indexed_records(records, worker_count)
     with ThreadPoolExecutor(max_workers=worker_count) as executor:
-        future_to_record = {}
-        for index, record in enumerate(records, 1):
+        futures = []
+        for indexed_records in partitions:
             if is_stopped(task_id):
                 add_log(task_id, "🛑 下载任务被停止")
                 break
             future = executor.submit(
-                _download_record_with_new_downloader,
+                _download_records_with_worker_downloader,
                 task_id,
                 downloader_factory,
                 downloader_cleanup,
-                record,
-                index,
+                indexed_records,
                 len(records),
                 stats,
                 stats_lock,
+                is_stopped=is_stopped,
                 add_log=add_log,
             )
-            future_to_record[future] = record
+            futures.append(future)
 
-        for future in as_completed(future_to_record):
+        for future in as_completed(futures):
             future.result()
     return stats
 

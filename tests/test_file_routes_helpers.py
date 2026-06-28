@@ -2327,6 +2327,60 @@ class FileRoutesHelperTests(unittest.TestCase):
         add_task_log.assert_called_once_with("task-1", "⚠️ 2 个文件未在文件库中找到，已跳过")
         safe_remove.assert_called_once_with("task-1")
 
+    def test_run_selected_file_download_task_reuses_initial_cookie_for_concurrent_workers(self):
+        from types import SimpleNamespace
+
+        from backend.services.file_workflow_service import run_selected_file_download_task
+
+        downloader = SimpleNamespace(cookie="clean-cookie")
+        records = [
+            DownloadFileRecord(101, "First.pdf", 123, 7),
+            DownloadFileRecord(102, "Second.pdf", 456, 0),
+        ]
+
+        with (
+            patch("backend.services.file_download_records_workflow.run_workflow") as run_workflow,
+            patch("backend.services.file_download_records_workflow._create_file_downloader", return_value=downloader),
+            patch(
+                "backend.services.file_download_records_workflow._load_download_file_records",
+                return_value=DownloadFileSelection(records, [], 2),
+            ),
+            patch("backend.services.file_download_records_workflow._file_task_stopped_after_init", return_value=False),
+            patch("backend.services.file_download_records_workflow._run_download_records_concurrent") as run_concurrent,
+            patch("backend.services.file_download_records_workflow.is_task_stopped", return_value=False),
+            patch("backend.services.file_download_records_workflow._safe_remove_file_downloader"),
+        ):
+            run_selected_file_download_task("task-1", "123", [101, 102], concurrency=2)
+            result = run_workflow.call_args.kwargs["work"]()
+
+        self.assertEqual(
+            {
+                "downloaded_files": {
+                    "total_files": 2,
+                    "found": 2,
+                    "missing": 0,
+                    "downloaded": 0,
+                    "skipped": 0,
+                    "failed": 0,
+                }
+            },
+            result,
+        )
+        run_concurrent.assert_called_once()
+        self.assertEqual("clean-cookie", run_concurrent.call_args.args[5])
+
+    def test_create_file_downloader_rejects_missing_cookie_before_request_setup(self):
+        from backend.services.file_downloader_runtime import _create_file_downloader
+
+        with (
+            patch("backend.services.file_downloader_runtime.get_cookie_for_group", return_value=None),
+            patch("backend.services.file_downloader_runtime.ZSXQFileDownloader") as downloader_class,
+        ):
+            with self.assertRaisesRegex(RuntimeError, "未找到可用Cookie"):
+                _create_file_downloader("task-1", "123")
+
+        downloader_class.assert_not_called()
+
     def test_run_filtered_file_download_task_completes_empty_records_with_stats_payload(self):
         from backend.services.file_workflow_service import run_filtered_file_download_task
 
@@ -2526,6 +2580,49 @@ class FileRoutesHelperTests(unittest.TestCase):
             sorted([message for _task_id, message in logs]),
             ["【1/3】First.pdf", "【2/3】Second.pdf", "【3/3】Third.pdf"],
         )
+
+    def test_file_record_download_batch_reuses_fixed_worker_downloaders(self):
+        class FakeDownloader:
+            def __init__(self, name):
+                self.name = name
+                self.download_calls = []
+
+            def download_file(self, file_info):
+                self.download_calls.append(file_info)
+                return True
+
+        created = []
+        records = [
+            DownloadFileRecord(101, "First.pdf", 123, 7),
+            DownloadFileRecord(102, "Second.pdf", 456, 0),
+            DownloadFileRecord(103, "Third.pdf", 789, 2),
+            DownloadFileRecord(104, "Fourth.pdf", 111, 1),
+            DownloadFileRecord(105, "Fifth.pdf", 222, 1),
+        ]
+        stats = _build_download_task_stats(total_files=5, found=5)
+        cleaned = []
+
+        def factory():
+            downloader = FakeDownloader(f"worker-{len(created) + 1}")
+            created.append(downloader)
+            return downloader
+
+        result = run_download_records_concurrent(
+            "task-1",
+            factory,
+            lambda downloader: cleaned.append(downloader),
+            records,
+            stats,
+            concurrency=2,
+            is_stopped=lambda _task_id: False,
+            add_log=lambda _task_id, _message: None,
+        )
+
+        self.assertIs(result, stats)
+        self.assertEqual(2, len(created))
+        self.assertEqual(created, cleaned)
+        self.assertEqual(5, stats["downloaded"])
+        self.assertEqual(5, sum(len(downloader.download_calls) for downloader in created))
 
     def test_run_download_records_stops_before_next_record(self):
         class FakeDownloader:

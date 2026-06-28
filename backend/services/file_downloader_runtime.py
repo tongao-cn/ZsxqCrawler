@@ -17,6 +17,7 @@ from backend.services.task_runtime import (
 def _create_file_downloader(
     task_id: str,
     group_id: str,
+    cookie: Optional[str] = None,
     **kwargs,
 ) -> ZSXQFileDownloader:
     def log_callback(message: str):
@@ -25,8 +26,11 @@ def _create_file_downloader(
     def stop_check():
         return is_task_stopped(task_id)
 
-    cookie = get_cookie_for_group(group_id)
-    downloader = ZSXQFileDownloader(cookie=cookie, group_id=group_id, **kwargs)
+    resolved_cookie = cookie if cookie is not None else get_cookie_for_group(group_id)
+    if not (resolved_cookie or "").strip():
+        raise RuntimeError("未找到可用Cookie，请先在账号管理或config.toml中配置")
+
+    downloader = ZSXQFileDownloader(cookie=resolved_cookie, group_id=group_id, **kwargs)
     downloader.log_callback = log_callback
     downloader.stop_check_func = stop_check
     register_task_file_downloader(task_id, downloader)
