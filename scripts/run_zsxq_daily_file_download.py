@@ -19,11 +19,13 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from backend.routes.file_routes import download_files, download_selected_files, sync_files_from_topics
-from backend.schemas.files import FileDownloadRequest, FileIdListRequest
-from backend.services.file_ai_analysis_entry import create_file_analysis_response
-from backend.services.task_runtime import get_task_logs_state, get_task_state, request_runtime_shutdown
-from backend.storage.db_compat import connect
+from backend.routes.file_routes import download_files, download_selected_files, sync_files_from_topics  # noqa: E402
+from backend.schemas.crawl import CrawlSettingsRequest  # noqa: E402
+from backend.schemas.files import FileDownloadRequest, FileIdListRequest  # noqa: E402
+from backend.services.crawl_workflow import launch_latest_crawl_task  # noqa: E402
+from backend.services.file_ai_analysis_entry import create_file_analysis_response  # noqa: E402
+from backend.services.task_runtime import get_task_logs_state, get_task_state, request_runtime_shutdown  # noqa: E402
+from backend.storage.db_compat import connect  # noqa: E402
 
 
 DEFAULT_GROUP_IDS = ("51111112855254", "28888222124181", "15552822451452")
@@ -138,6 +140,28 @@ def _wait_task(task_id: str, *, poll_seconds: float, timeout_seconds: int, log_t
             raise TimeoutError(f"Timed out waiting for task {task_id}")
 
         time.sleep(poll_seconds)
+
+
+def _crawl_latest_topics(group_id: str, args: argparse.Namespace) -> dict[str, Any]:
+    response = launch_latest_crawl_task(
+        group_id,
+        CrawlSettingsRequest(
+            topicSource="official",
+            crawlIntervalMin=2,
+            crawlIntervalMax=5,
+            longSleepIntervalMin=180,
+            longSleepIntervalMax=300,
+            pagesPerBatch=15,
+        ),
+    )
+    task_id = response["task_id"]
+    _safe_print(f"group_id={group_id} crawl_latest_task_id={task_id}")
+    return _wait_task(
+        task_id,
+        poll_seconds=args.poll_seconds,
+        timeout_seconds=args.task_timeout_seconds,
+        log_tail=args.log_tail,
+    )
 
 
 def _record_task(label: str, task: dict[str, Any]) -> dict[str, Any]:
@@ -441,6 +465,7 @@ def _write_run_record(summary: WorkflowSummary, args: argparse.Namespace, run_wi
             "download_interval_max": args.download_interval_max,
             "long_sleep_interval_min": args.long_sleep_interval_min,
             "long_sleep_interval_max": args.long_sleep_interval_max,
+            "crawl_latest_first": args.crawl_latest_first,
             "sync_files_from_topics": args.sync_files_from_topics,
             "analyze_pdf_after_download": args.analyze_pdf_after_download,
             "pdf_analysis_group_id": args.pdf_analysis_group_id,
@@ -534,6 +559,15 @@ async def _run(args: argparse.Namespace) -> None:
     summary = WorkflowSummary()
     try:
         for group_id in _group_ids(args):
+            if args.crawl_latest_first:
+                try:
+                    crawl_task = _crawl_latest_topics(group_id, args)
+                    summary.add_task(f"crawl latest topics {group_id}", crawl_task)
+                    if crawl_task.get("status") != "completed":
+                        summary.warn(f"crawl latest topics group {group_id} did not complete: {crawl_task.get('status')}")
+                except Exception as exc:
+                    summary.warn(f"crawl latest topics group {group_id} failed: {exc}")
+
             if args.sync_files_from_topics:
                 try:
                     sync_response = await sync_files_from_topics(group_id)
@@ -600,6 +634,7 @@ def main() -> None:
     parser.add_argument("--download-interval-max", type=float, default=5.0)
     parser.add_argument("--long-sleep-interval-min", type=float, default=90.0)
     parser.add_argument("--long-sleep-interval-max", type=float, default=180.0)
+    parser.add_argument("--crawl-latest-first", action="store_true")
     parser.add_argument("--sync-files-from-topics", action=argparse.BooleanOptionalAction, default=True)
     parser.add_argument("--analyze-pdf-after-download", action="store_true")
     parser.add_argument("--pdf-analysis-group-id", default="51111112855254")
