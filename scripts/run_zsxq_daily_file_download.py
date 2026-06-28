@@ -275,11 +275,21 @@ def _load_downloaded_pdf_rows(
             conditions.append("f.create_time <= ?")
         params.extend([start_time, end_time])
     sql = f"""
-        SELECT f.file_id, f.name, coalesce(f.size, 0), f.create_time, f.download_status, f.local_path
+        SELECT
+            f.file_id,
+            f.name,
+            coalesce(f.size, 0),
+            f.create_time,
+            f.download_status,
+            f.local_path,
+            max(t.create_time) AS latest_topic_create_time
         FROM files f
         LEFT JOIN file_ai_analyses faa ON faa.file_id = f.file_id
+        LEFT JOIN file_topic_relations fr ON fr.file_id = f.file_id
+        LEFT JOIN topics t ON t.topic_id = fr.topic_id AND t.group_id = f.group_id
         WHERE {' AND '.join(conditions)}
-        ORDER BY f.create_time DESC, f.file_id DESC
+        GROUP BY f.file_id, f.name, f.size, f.create_time, f.download_status, f.local_path
+        ORDER BY coalesce(latest_topic_create_time, f.create_time) DESC, f.file_id DESC
     """
     if max_files is not None and max_files > 0:
         sql += " LIMIT ?"
@@ -301,6 +311,7 @@ def _load_downloaded_pdf_rows(
             "create_time": str(row[3] or ""),
             "download_status": str(row[4] or ""),
             "local_path": str(row[5] or ""),
+            "topic_create_time": str(row[6] or ""),
         }
         for row in rows
     ]
@@ -313,9 +324,19 @@ def _load_pdf_rows_by_file_ids(group_id: str, file_ids: list[int]) -> list[dict[
     placeholders = ", ".join("?" for _ in ordered_ids)
     params: list[Any] = [_query_value(group_id), *ordered_ids]
     sql = f"""
-        SELECT file_id, name, coalesce(size, 0), create_time, download_status, local_path
-        FROM files
-        WHERE group_id = ? AND file_id IN ({placeholders})
+        SELECT
+            f.file_id,
+            f.name,
+            coalesce(f.size, 0),
+            f.create_time,
+            f.download_status,
+            f.local_path,
+            max(t.create_time) AS latest_topic_create_time
+        FROM files f
+        LEFT JOIN file_topic_relations fr ON fr.file_id = f.file_id
+        LEFT JOIN topics t ON t.topic_id = fr.topic_id AND t.group_id = f.group_id
+        WHERE f.group_id = ? AND f.file_id IN ({placeholders})
+        GROUP BY f.file_id, f.name, f.size, f.create_time, f.download_status, f.local_path
     """
     conn = connect()
     try:
@@ -333,6 +354,7 @@ def _load_pdf_rows_by_file_ids(group_id: str, file_ids: list[int]) -> list[dict[
             "create_time": str(row[3] or ""),
             "download_status": str(row[4] or ""),
             "local_path": str(row[5] or ""),
+            "topic_create_time": str(row[6] or ""),
         }
         for row in rows
     }
@@ -350,6 +372,25 @@ def _pdf_analysis_label(args: argparse.Namespace, run_window: tuple[str, str, st
     return run_window[2]
 
 
+def _date_bucket_from_text(value: Any) -> str:
+    text = str(value or "").strip()
+    match = re.match(r"(\d{4}-\d{2}-\d{2})", text)
+    return match.group(1) if match else ""
+
+
+def _row_topic_date_bucket(row: dict[str, Any], fallback_label: str) -> str:
+    return (
+        _date_bucket_from_text(row.get("topic_create_time"))
+        or _date_bucket_from_text(row.get("create_time"))
+        or _date_bucket_from_text(fallback_label)
+        or "unknown-date"
+    )
+
+
+def _row_markdown_output_dir(root_dir: Path, row: dict[str, Any], fallback_label: str) -> Path:
+    return root_dir / _row_topic_date_bucket(row, fallback_label)
+
+
 def _write_file_markdown(output_dir: Path, row: dict[str, Any], analysis: dict[str, Any]) -> Path:
     output_dir.mkdir(parents=True, exist_ok=True)
     file_id = int(row["file_id"])
@@ -361,6 +402,7 @@ def _write_file_markdown(output_dir: Path, row: dict[str, Any], analysis: dict[s
         "",
         f"- file_id: `{file_id}`",
         f"- create_time: `{row.get('create_time') or ''}`",
+        f"- topic_create_time: `{row.get('topic_create_time') or ''}`",
         f"- size: `{row.get('size') or 0}`",
         f"- source_path: `{analysis.get('source_path') or row.get('local_path') or ''}`",
         f"- model: `{analysis.get('model') or ''}`",
@@ -388,12 +430,26 @@ def _write_index_markdown(output_dir: Path, group_id: str, label: str, results: 
         md_path = item.get("markdown_path") or ""
         name = item.get("name") or f"file_{item.get('file_id')}"
         status = item.get("status") or ""
-        rel = Path(md_path).name if md_path else ""
+        try:
+            rel = Path(md_path).resolve().relative_to(output_dir.resolve()).as_posix() if md_path else ""
+        except ValueError:
+            rel = Path(md_path).name if md_path else ""
         line = f"- `{status}` [{name}]({rel})" if rel else f"- `{status}` {name}"
         lines.append(line)
     lines.append("")
     index_path.write_text("\n".join(lines), encoding="utf-8")
     return index_path
+
+
+def _write_date_bucket_indexes(output_dir: Path, group_id: str, label: str, results: list[dict[str, Any]]) -> list[Path]:
+    by_bucket: dict[str, list[dict[str, Any]]] = {}
+    for item in results:
+        bucket = str(item.get("topic_date") or _row_topic_date_bucket(item, label))
+        by_bucket.setdefault(bucket, []).append(item)
+    paths = []
+    for bucket, bucket_results in sorted(by_bucket.items()):
+        paths.append(_write_index_markdown(output_dir / bucket, group_id, f"{label} - {bucket}", bucket_results))
+    return paths
 
 
 def _analyze_pdf_row(
@@ -411,12 +467,15 @@ def _analyze_pdf_row(
         _safe_print(f"[{index}/{total}] analyzing file_id={file_id} name={file_name}")
         response = create_file_analysis_response(group_id, file_id, force=force)
         analysis = response.get("analysis") or {}
-        markdown_path = _write_file_markdown(output_dir, row, analysis)
+        topic_date = _row_topic_date_bucket(row, output_dir.name)
+        markdown_path = _write_file_markdown(output_dir / topic_date, row, analysis)
         return {
             "file_id": file_id,
             "name": file_name,
             "status": "completed",
             "cached": bool(analysis.get("cached")),
+            "topic_create_time": row.get("topic_create_time") or "",
+            "topic_date": topic_date,
             "markdown_path": str(markdown_path),
         }
     except Exception as exc:
@@ -425,6 +484,8 @@ def _analyze_pdf_row(
             "file_id": file_id,
             "name": file_name,
             "status": "failed",
+            "topic_create_time": row.get("topic_create_time") or "",
+            "topic_date": _row_topic_date_bucket(row, output_dir.name),
             "error": str(exc),
         }
 
@@ -472,6 +533,7 @@ def _analyze_downloaded_pdfs(args: argparse.Namespace, run_window: tuple[str, st
 
     completed_results = [item for item in results if item is not None]
     if completed_results:
+        _write_date_bucket_indexes(output_dir, group_id, label, completed_results)
         index_path = _write_index_markdown(output_dir, group_id, label, completed_results)
         _safe_print(f"pdf_analysis_index={index_path}")
     return completed_results
@@ -648,6 +710,7 @@ async def _download_group_files_with_pipeline_analysis(
                 time.sleep(args.poll_seconds)
 
     if analysis_results:
+        _write_date_bucket_indexes(output_dir, group_id, label, analysis_results)
         index_path = _write_index_markdown(output_dir, group_id, label, analysis_results)
         _safe_print(f"pdf_analysis_index={index_path}")
     if failed_download_file_ids:

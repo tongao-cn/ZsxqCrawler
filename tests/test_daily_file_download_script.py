@@ -151,6 +151,7 @@ class DailyFileDownloadScriptTests(unittest.TestCase):
                         "name": "first.pdf",
                         "size": 10,
                         "create_time": "2026-06-28T09:00:00+0800",
+                        "topic_create_time": "2026-06-27T22:00:00+0800",
                         "download_status": "completed",
                         "local_path": r"C:\downloads\first.pdf",
                     }
@@ -162,6 +163,7 @@ class DailyFileDownloadScriptTests(unittest.TestCase):
                         "name": "second.pdf",
                         "size": 10,
                         "create_time": "2026-06-28T09:01:00+0800",
+                        "topic_create_time": "2026-06-28T08:01:00+0800",
                         "download_status": "completed",
                         "local_path": r"C:\downloads\second.pdf",
                     }
@@ -207,10 +209,26 @@ class DailyFileDownloadScriptTests(unittest.TestCase):
                         run_window=("2026-06-28", "2026-06-28", "2026-06-28"),
                     )
                 )
+            first_markdown_exists = (Path(temp_dir) / "2026-06-27" / "101-first.pdf.md").exists()
+            second_markdown_exists = (Path(temp_dir) / "2026-06-28" / "102-second.pdf.md").exists()
+            index_text = (Path(temp_dir) / "index.md").read_text(encoding="utf-8")
 
         self.assertEqual(["completed"], [task["status"] for task in download_tasks])
         self.assertEqual([101, 102], [item["file_id"] for item in analyses])
+        self.assertEqual(["2026-06-27", "2026-06-28"], [item["topic_date"] for item in analyses])
+        self.assertTrue(first_markdown_exists)
+        self.assertTrue(second_markdown_exists)
+        self.assertIn("2026-06-27/101-first.pdf.md", index_text)
+        self.assertIn("2026-06-28/102-second.pdf.md", index_text)
         self.assertLess(events.index(("analyze", 101)), events.index(("task", "completed")))
+
+    def test_row_topic_date_bucket_prefers_topic_create_time(self):
+        row = {
+            "create_time": "2026-06-28T09:00:00+0800",
+            "topic_create_time": "2026-06-27T22:00:00+0800",
+        }
+
+        self.assertEqual("2026-06-27", daily_download._row_topic_date_bucket(row, "pending-any-date-2026-06-28"))
 
 
 if __name__ == "__main__":
