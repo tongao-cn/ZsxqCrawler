@@ -3,7 +3,6 @@ import os
 from datetime import datetime, timedelta
 from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Set, Tuple
 
-from backend.core.local_group_runtime import get_cached_local_group_ids
 from backend.core.ai_provider_config import (
     get_default_model,
     get_openai_compatible_config,
@@ -37,6 +36,11 @@ from backend.services.a_share_analysis_reset import (
 from backend.services.a_share_analysis_chart import (
     DEFAULT_RANKING_TOP_N,
     DEFAULT_RANKING_WINDOWS,
+)
+from backend.services.a_share_analysis_run_plan import (
+    build_analysis_run_plan,
+    discover_analysis_groups,
+    load_analysis_run_items,
 )
 from backend.services.a_share_analysis_chart_payload import (
     build_chart_payload_from_daily,
@@ -622,25 +626,23 @@ def run_analysis(
     log_callback: LogCallback = None,
 ) -> Dict[str, Any]:
     ensure_configured()
-    normalized_group_id = normalize_group_id(group_id)
-    days = max(1, int(days))
-    concurrency = max(1, int(concurrency))
-
-    resolved_output_path, resolved_state_path = resolve_analysis_paths(output_path, state_path, normalized_group_id)
+    run_plan = build_analysis_run_plan(
+        days=days,
+        concurrency=concurrency,
+        output_path=output_path,
+        state_path=state_path,
+        group_id=group_id,
+        start_date=start_date,
+        end_date=end_date,
+    )
+    normalized_group_id = run_plan.normalized_group_id
+    days = run_plan.days
+    concurrency = run_plan.concurrency
+    resolved_output_path = run_plan.output_path
+    resolved_state_path = run_plan.state_path
+    run_date_range = run_plan.run_date_range
     existing_daily = read_existing_csv(resolved_output_path, group_id=normalized_group_id)
     processed_keys = load_state(resolved_state_path, group_id=normalized_group_id)
-
-    run_date_range = None
-    if start_date or end_date:
-        if not start_date or not end_date:
-            raise ValueError("start_date 和 end_date 需要同时提供")
-        run_date_range = _normalize_date_range(
-            start_date,
-            end_date,
-            "start_date",
-            "end_date",
-            "start_date 不能晚于 end_date",
-        )
 
     reset_summary = None
     if reset_start_date or reset_end_date:
@@ -689,19 +691,17 @@ def run_analysis(
         _emit_log("OPENAI_API_KEY not set and config.toml [ai].api_key is empty", log_callback, level="error")
         raise RuntimeError("OPENAI_API_KEY not set and config.toml [ai].api_key is empty")
 
-    if normalized_group_id:
-        groups = [normalized_group_id]
-    else:
-        groups = [str(group_id) for group_id in sorted(get_cached_local_group_ids(force_refresh=True))]
+    groups = discover_analysis_groups(normalized_group_id)
     _emit_log(f"discovered groups: {len(groups)}", log_callback)
 
-    all_items: List[Dict[str, Any]] = []
-    for group_id in groups:
-        if run_date_range:
-            all_items.extend(read_topics_in_date_range(group_id, run_date_range[0], run_date_range[1], log_callback))
-        else:
-            all_items.extend(read_topics_last_days(group_id, days, log_callback))
-
+    all_items = load_analysis_run_items(
+        groups,
+        days=days,
+        run_date_range=run_date_range,
+        read_topics_last_days=read_topics_last_days,
+        read_topics_in_date_range=read_topics_in_date_range,
+        log_callback=log_callback,
+    )
     _emit_log(f"discovered items total={len(all_items)}", log_callback)
     items_to_process = [item for item in all_items if make_item_key(item) not in processed_keys]
     _emit_log(
