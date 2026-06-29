@@ -7,46 +7,8 @@ import {
   apiClient,
   AShareAnalysisChart,
   AShareAnalysisStatus,
-  AShareAnalysisSummary,
 } from '@/lib/api';
-import { formatAShareInputDate } from '@/lib/a-share-analysis-format';
-
-const DEFAULT_CHART_RANGE_MONTHS = 1;
-
-function formatLocalDate(date: Date) {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-}
-
-function subtractMonthsClamped(date: Date, months: number) {
-  const targetYear = date.getFullYear();
-  const targetMonth = date.getMonth() - months;
-  const lastDay = new Date(targetYear, targetMonth + 1, 0).getDate();
-  return new Date(targetYear, targetMonth, Math.min(date.getDate(), lastDay));
-}
-
-function getDefaultChartDateRange(summary?: AShareAnalysisSummary) {
-  const availableStartDate = formatAShareInputDate(summary?.available_start_date);
-  const availableEndDate = formatAShareInputDate(summary?.available_end_date);
-  if (!availableEndDate) {
-    return { startDate: availableStartDate, endDate: '' };
-  }
-
-  const [year, month, day] = availableEndDate.split('-').map(Number);
-  if (!year || !month || !day) {
-    return { startDate: availableStartDate, endDate: availableEndDate };
-  }
-
-  const defaultStartDate = formatLocalDate(
-    subtractMonthsClamped(new Date(year, month - 1, day), DEFAULT_CHART_RANGE_MONTHS)
-  );
-  return {
-    startDate: availableStartDate && availableStartDate > defaultStartDate ? availableStartDate : defaultStartDate,
-    endDate: availableEndDate,
-  };
-}
+import { getDefaultAShareChartDateRange } from '@/lib/a-share-workbench-model';
 
 interface UseAShareAnalysisDataOptions {
   defaultTopN: number;
@@ -103,7 +65,7 @@ export function useAShareAnalysisData({
         setStatus(statusData);
         setRunDays(statusData.defaults.days);
         setConcurrency(statusData.defaults.concurrency);
-        defaultChartRange = getDefaultChartDateRange(statusData.summary);
+        defaultChartRange = getDefaultAShareChartDateRange(statusData.summary);
         setSelectedStartDate(defaultChartRange.startDate);
         setSelectedEndDate(defaultChartRange.endDate);
         setRunStartDate('');
@@ -166,7 +128,7 @@ export function useAShareAnalysisData({
         if (!initialized || bootstrap) {
           setRunDays(data.defaults.days);
           setConcurrency(data.defaults.concurrency);
-          const defaultChartRange = getDefaultChartDateRange(data.summary);
+          const defaultChartRange = getDefaultAShareChartDateRange(data.summary);
           setSelectedStartDate(defaultChartRange.startDate);
           setSelectedEndDate(defaultChartRange.endDate);
           setRunStartDate('');
@@ -234,7 +196,7 @@ export function useAShareAnalysisData({
         return;
       }
       const refreshedStatus = await loadStatus(bootstrap, activeGroupId);
-      const defaultChartRange = bootstrap ? getDefaultChartDateRange(refreshedStatus?.summary) : null;
+      const defaultChartRange = bootstrap ? getDefaultAShareChartDateRange(refreshedStatus?.summary) : null;
       await loadChart({
         groupId: activeGroupId,
         startDate: bootstrap ? defaultChartRange?.startDate || undefined : selectedStartDate || undefined,

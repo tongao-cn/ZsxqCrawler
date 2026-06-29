@@ -13,26 +13,16 @@ import { useAShareAnalysisActions } from '@/hooks/useAShareAnalysisActions';
 import { useAShareAnalysisData } from '@/hooks/useAShareAnalysisData';
 import { useTaskStatus } from '@/hooks/useTaskStatus';
 import AShareActionPanel from '@/components/AShareActionPanel';
-import { formatAShareDateTime } from '@/lib/a-share-analysis-format';
 import AShareAnalysisResultsSection from '@/components/AShareAnalysisResultsSection';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { toast } from 'sonner';
+import { buildAShareWorkbenchViewModel } from '@/lib/a-share-workbench-model';
 
 const DEFAULT_TOP_N = 12;
 interface AShareAnalysisPanelProps {
   onTaskCreated?: (taskId: string) => void;
   selectedGroup?: Group | null;
-}
-
-function compareSeriesByTotal(
-  a: { total: number; label: string },
-  b: { total: number; label: string }
-) {
-  if (b.total !== a.total) {
-    return b.total - a.total;
-  }
-  return a.label.localeCompare(b.label, 'zh-CN');
 }
 
 function getTaskStatusBadge(task?: Task | null) {
@@ -201,17 +191,25 @@ export default function AShareAnalysisPanel({
     setActiveRunTaskId,
   });
 
-  const rankingWindows = useMemo(
-    () => status?.defaults.ranking_windows ?? [30],
-    [status]
-  );
-  const sortedSeries = useMemo(
-    () => [...(chart?.series || [])].sort(compareSeriesByTotal),
-    [chart]
-  );
-  const renderedLineSeries = useMemo(
-    () => [...sortedSeries].reverse(),
-    [sortedSeries]
+  const {
+    emptyStateHint,
+    emptyStateMessage,
+    hasChartData,
+    latestExport,
+    latestTask,
+    nextStepMessage,
+    rankingWindows,
+    renderedLineSeries,
+    storage,
+    summary,
+  } = useMemo(
+    () => buildAShareWorkbenchViewModel({
+      chart,
+      loadingChart,
+      runDays,
+      status,
+    }),
+    [chart, loadingChart, runDays, status]
   );
 
   useTaskStatus(activeRunTaskId, {
@@ -237,70 +235,7 @@ export default function AShareAnalysisPanel({
     });
   };
 
-  const summary = status?.summary;
-  const latestTask = status?.latest_task;
-  const latestExport = status?.latest_tdx_export;
-  const storage = status?.storage;
-  const latestTaskResult = latestTask?.result as
-    | { days?: number; items_discovered?: number; items_processed?: number }
-    | undefined;
-  const hasChartData = Boolean(chart && chart.chart_data.length > 0);
   const scopeName = selectedGroup?.name || '当前群组';
-  const emptyStateMessage = useMemo(() => {
-    if (loadingChart) {
-      return '图表加载中...';
-    }
-    if (latestTask?.status === 'running') {
-      return '分析任务运行中，结果会在完成后自动刷新';
-    }
-    if (latestTask?.status === 'failed') {
-      return latestTask.message || '最近一次分析失败，请到任务状态查看日志';
-    }
-    if (!summary?.output_exists && (summary?.source_topics_count ?? 0) > 0) {
-      return '当前群已有源话题数据，但还没有生成推荐池结果';
-    }
-    if ((summary?.source_topics_count ?? 0) === 0) {
-      return '当前群话题库为空，请先到“话题采集”抓取或同步话题数据';
-    }
-    if (latestTask?.status === 'completed' && (latestTaskResult?.items_discovered ?? 0) === 0) {
-      return `最近 ${latestTaskResult?.days ?? runDays} 天没有可分析的话题，结果为空`;
-    }
-    if (summary?.source_latest_topic_time) {
-      return `当前还没有分析结果，源话题库最新话题时间为 ${formatAShareDateTime(summary.source_latest_topic_time)}`;
-    }
-    return '暂无可展示的分析数据';
-  }, [latestTask, latestTaskResult, loadingChart, runDays, summary]);
-  const emptyStateHint = useMemo(() => {
-    const sourceTopicsCount = summary?.source_topics_count;
-    const latestTopicTime = summary?.source_latest_topic_time;
-    if (sourceTopicsCount === null || sourceTopicsCount === undefined) {
-      return null;
-    }
-
-    const parts = [`源话题数 ${sourceTopicsCount}`];
-    if (latestTopicTime) {
-      parts.push(`最新话题 ${formatAShareDateTime(latestTopicTime)}`);
-    }
-    return parts.join('，');
-  }, [summary]);
-  const nextStepMessage = useMemo(() => {
-    if (!status?.api_key_configured) {
-      return '缺少 API Key，需先配置后再生成新结果';
-    }
-    if (latestTask?.status === 'running') {
-      return '任务运行中，完成后会自动刷新结果';
-    }
-    if (hasChartData) {
-      return '已有分析结果，可查看图表或发布到通达信';
-    }
-    if (!summary?.output_exists && (summary?.source_topics_count ?? 0) > 0) {
-      return '已有源话题，建议先开始增量分析';
-    }
-    if ((summary?.source_topics_count ?? 0) === 0) {
-      return '当前群话题库为空，请先采集或同步话题';
-    }
-    return `更新于 ${formatAShareDateTime(summary?.updated_at)}`;
-  }, [hasChartData, latestTask?.status, status?.api_key_configured, summary]);
 
   if (!selectedGroup) {
     return (
