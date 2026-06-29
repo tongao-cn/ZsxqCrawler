@@ -362,8 +362,7 @@ def _load_pdf_rows_by_file_ids(group_id: str, file_ids: list[int]) -> list[dict[
 
 
 def _markdown_output_dir(group_id: str, label: str) -> Path:
-    safe_label = _safe_filename(label, limit=40)
-    return PROJECT_ROOT / "output" / "exports" / "file_ai_markdown" / str(group_id) / safe_label
+    return PROJECT_ROOT / "output" / "exports" / "file_ai_markdown" / str(group_id)
 
 
 def _pdf_analysis_label(args: argparse.Namespace, run_window: tuple[str, str, str]) -> str:
@@ -456,6 +455,7 @@ def _analyze_pdf_row(
     *,
     group_id: str,
     output_dir: Path,
+    label: str,
     row: dict[str, Any],
     index: int,
     total: int,
@@ -467,7 +467,7 @@ def _analyze_pdf_row(
         _safe_print(f"[{index}/{total}] analyzing file_id={file_id} name={file_name}")
         response = create_file_analysis_response(group_id, file_id, force=force)
         analysis = response.get("analysis") or {}
-        topic_date = _row_topic_date_bucket(row, output_dir.name)
+        topic_date = _row_topic_date_bucket(row, label)
         markdown_path = _write_file_markdown(output_dir / topic_date, row, analysis)
         return {
             "file_id": file_id,
@@ -485,7 +485,7 @@ def _analyze_pdf_row(
             "name": file_name,
             "status": "failed",
             "topic_create_time": row.get("topic_create_time") or "",
-            "topic_date": _row_topic_date_bucket(row, output_dir.name),
+            "topic_date": _row_topic_date_bucket(row, label),
             "error": str(exc),
         }
 
@@ -520,6 +520,7 @@ def _analyze_downloaded_pdfs(args: argparse.Namespace, run_window: tuple[str, st
                 _analyze_pdf_row,
                 group_id=group_id,
                 output_dir=output_dir,
+                label=label,
                 row=row,
                 index=index,
                 total=len(rows),
@@ -634,6 +635,7 @@ async def _download_group_files_with_pipeline_analysis(
                 _analyze_pdf_row,
                 group_id=group_id,
                 output_dir=output_dir,
+                label=label,
                 row=row,
                 index=analysis_index,
                 total=analysis_limit or len(file_ids),

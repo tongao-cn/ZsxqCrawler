@@ -230,6 +230,11 @@ class DailyFileDownloadScriptTests(unittest.TestCase):
 
         self.assertEqual("2026-06-27", daily_download._row_topic_date_bucket(row, "pending-any-date-2026-06-28"))
 
+    def test_markdown_output_dir_is_group_root(self):
+        output_dir = daily_download._markdown_output_dir("51111112855254", "pending-any-date-2026-06-28")
+
+        self.assertEqual(daily_download.PROJECT_ROOT / "output" / "exports" / "file_ai_markdown" / "51111112855254", output_dir)
+
 
 if __name__ == "__main__":
     unittest.main()
