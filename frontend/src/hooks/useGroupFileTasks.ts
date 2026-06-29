@@ -4,9 +4,10 @@ import { useCallback, useState } from 'react';
 import { toast } from 'sonner';
 
 import { apiClient, FileAIAnalysis, FileItem } from '@/lib/api';
-import type { FileTaskState } from '@/components/GroupFileTaskWatchers';
+import type { FileTaskState } from '@/hooks/useFileTaskTracker';
+import { useFileTaskTracker } from '@/hooks/useFileTaskTracker';
 import { useTaskLauncher } from '@/hooks/useTaskLauncher';
-import { isActiveTaskStatus, isFailedOrCancelledTaskStatus } from '@/lib/taskStatus';
+import { isFailedOrCancelledTaskStatus } from '@/lib/taskStatus';
 
 interface UseGroupFileTasksOptions {
   groupId: number;
@@ -19,10 +20,6 @@ interface UseGroupFileTasksOptions {
 
 type RefreshFiles = () => Promise<void>;
 
-function isTaskActive(task?: FileTaskState) {
-  return isActiveTaskStatus(task?.status);
-}
-
 export function useGroupFileTasks({
   groupId,
   onTaskConflict,
@@ -31,12 +28,10 @@ export function useGroupFileTasks({
   setAnalysis,
   setAnalysisLoading,
 }: UseGroupFileTasksOptions) {
-  const [downloadingFiles, setDownloadingFiles] = useState<Set<number>>(new Set());
-  const [fileTasks, setFileTasks] = useState<Map<number, FileTaskState>>(new Map());
+  const downloadTasks = useFileTaskTracker();
+  const analysisFileTasks = useFileTaskTracker();
   const [batchDownloadTaskId, setBatchDownloadTaskId] = useState<string | null>(null);
   const [batchDownloadFileIds, setBatchDownloadFileIds] = useState<number[]>([]);
-  const [analyzingFileIds, setAnalyzingFileIds] = useState<Set<number>>(new Set());
-  const [analysisTasks, setAnalysisTasks] = useState<Map<number, FileTaskState>>(new Map());
   const [batchAnalysisTaskId, setBatchAnalysisTaskId] = useState<string | null>(null);
   const [batchAnalysisFileIds, setBatchAnalysisFileIds] = useState<number[]>([]);
   const [batchAnalyzing, setBatchAnalyzing] = useState(false);
@@ -45,69 +40,9 @@ export function useGroupFileTasks({
     onTaskCreated,
   });
 
-  const markFileDownloading = useCallback((fileId: number, downloading: boolean) => {
-    setDownloadingFiles(prev => {
-      const next = new Set(prev);
-      if (downloading) {
-        next.add(fileId);
-      } else {
-        next.delete(fileId);
-      }
-      return next;
-    });
-  }, []);
-
-  const markFileAnalyzing = useCallback((fileId: number, analyzing: boolean) => {
-    setAnalyzingFileIds(prev => {
-      const next = new Set(prev);
-      if (analyzing) {
-        next.add(fileId);
-      } else {
-        next.delete(fileId);
-      }
-      return next;
-    });
-  }, []);
-
-  const updateFileTaskStatus = useCallback((
-    fileId: number,
-    taskId: string,
-    status: FileTaskState['status'],
-    message: string,
-  ) => {
-    setFileTasks(prev => {
-      const next = new Map(prev);
-      next.set(fileId, { taskId, status, message });
-      return next;
-    });
-  }, []);
-
-  const updateAnalysisTaskStatus = useCallback((
-    fileId: number,
-    taskId: string,
-    status: FileTaskState['status'],
-    message: string,
-  ) => {
-    setAnalysisTasks(prev => {
-      const next = new Map(prev);
-      next.set(fileId, { taskId, status, message });
-      return next;
-    });
-  }, []);
-
   const trackAnalysisTask = useCallback((fileId: number, taskId: string, message = '分析任务已创建') => {
-    updateAnalysisTaskStatus(fileId, taskId, 'pending', message);
-  }, [updateAnalysisTaskStatus]);
-
-  const getAnalysisTask = useCallback((fileId: number) => analysisTasks.get(fileId), [analysisTasks]);
-
-  const clearAnalysisTask = useCallback((fileId: number) => {
-    setAnalysisTasks(prev => {
-      const next = new Map(prev);
-      next.delete(fileId);
-      return next;
-    });
-  }, []);
+    analysisFileTasks.trackTask(fileId, taskId, message);
+  }, [analysisFileTasks]);
 
   const handleFileTaskTerminal = useCallback(async (
     fileId: number,
@@ -116,10 +51,10 @@ export function useGroupFileTasks({
     message: string,
     refreshFiles: RefreshFiles,
   ) => {
-    updateFileTaskStatus(fileId, taskId, status, message);
-    markFileDownloading(fileId, false);
+    downloadTasks.updateTask(fileId, taskId, status, message);
+    downloadTasks.markFileActive(fileId, false);
     await refreshFiles();
-  }, [markFileDownloading, updateFileTaskStatus]);
+  }, [downloadTasks]);
 
   const handleBatchDownloadTerminal = useCallback(async (
     status: FileTaskState['status'],
@@ -127,11 +62,7 @@ export function useGroupFileTasks({
     refreshFiles: RefreshFiles,
   ) => {
     const completedFileIds = batchDownloadFileIds.slice();
-    setDownloadingFiles(prev => {
-      const next = new Set(prev);
-      completedFileIds.forEach((fileId) => next.delete(fileId));
-      return next;
-    });
+    downloadTasks.markFilesActive(completedFileIds, false);
     setBatchDownloadTaskId(null);
     setBatchDownloadFileIds([]);
     if (status === 'completed') {
@@ -140,7 +71,7 @@ export function useGroupFileTasks({
       toast.error(message || '当前页文件下载任务未完成');
     }
     await refreshFiles();
-  }, [batchDownloadFileIds]);
+  }, [batchDownloadFileIds, downloadTasks]);
 
   const handleAnalysisTaskTerminal = useCallback(async (
     fileId: number,
@@ -149,8 +80,8 @@ export function useGroupFileTasks({
     message: string,
     refreshFiles: RefreshFiles,
   ) => {
-    updateAnalysisTaskStatus(fileId, taskId, status, message);
-    markFileAnalyzing(fileId, false);
+    analysisFileTasks.updateTask(fileId, taskId, status, message);
+    analysisFileTasks.markFileActive(fileId, false);
 
     if (selectedFile?.file_id === fileId) {
       setAnalysisLoading(false);
@@ -177,12 +108,11 @@ export function useGroupFileTasks({
     }
     await refreshFiles();
   }, [
+    analysisFileTasks,
     groupId,
-    markFileAnalyzing,
     selectedFile,
     setAnalysis,
     setAnalysisLoading,
-    updateAnalysisTaskStatus,
   ]);
 
   const handleBatchAnalysisTerminal = useCallback(async (
@@ -191,11 +121,7 @@ export function useGroupFileTasks({
     refreshFiles: RefreshFiles,
   ) => {
     const completedFileIds = batchAnalysisFileIds.slice();
-    setAnalyzingFileIds(prev => {
-      const next = new Set(prev);
-      completedFileIds.forEach((fileId) => next.delete(fileId));
-      return next;
-    });
+    analysisFileTasks.markFilesActive(completedFileIds, false);
     setBatchAnalyzing(false);
     setBatchAnalysisTaskId(null);
     setBatchAnalysisFileIds([]);
@@ -205,15 +131,15 @@ export function useGroupFileTasks({
       toast.error(message || '当前页文件分析未完成');
     }
     await refreshFiles();
-  }, [batchAnalysisFileIds]);
+  }, [analysisFileTasks, batchAnalysisFileIds]);
 
   const handleDownloadFile = useCallback(async (file: FileItem) => {
-    if (downloadingFiles.has(file.file_id)) {
+    if (downloadTasks.activeFileIds.has(file.file_id)) {
       return;
     }
 
     try {
-      markFileDownloading(file.file_id, true);
+      downloadTasks.markFileActive(file.file_id, true);
       const response = await apiClient.downloadSingleFile(
         String(groupId),
         file.file_id,
@@ -221,18 +147,16 @@ export function useGroupFileTasks({
         file.size,
       );
       const taskId = notifyTaskLaunch(response, (createdTaskId) => `文件下载任务已创建: ${createdTaskId}`);
-      updateFileTaskStatus(file.file_id, taskId, 'pending', '下载任务已创建');
+      downloadTasks.updateTask(file.file_id, taskId, 'pending', '下载任务已创建');
     } catch (error) {
       handleTaskCreateError(error, '文件下载失败');
-      markFileDownloading(file.file_id, false);
+      downloadTasks.markFileActive(file.file_id, false);
     }
   }, [
-    downloadingFiles,
+    downloadTasks,
     groupId,
     handleTaskCreateError,
-    markFileDownloading,
     notifyTaskLaunch,
-    updateFileTaskStatus,
   ]);
 
   const handleBatchDownloadCurrentPage = useCallback(async (downloadableFiles: FileItem[]) => {
@@ -242,11 +166,7 @@ export function useGroupFileTasks({
 
     const filesToDownload = downloadableFiles.slice();
     const fileIds = filesToDownload.map((file) => file.file_id);
-    setDownloadingFiles(prev => {
-      const next = new Set(prev);
-      fileIds.forEach((fileId) => next.add(fileId));
-      return next;
-    });
+    downloadTasks.markFilesActive(fileIds, true);
 
     try {
       const response = await apiClient.downloadSelectedFiles(groupId, fileIds);
@@ -255,13 +175,9 @@ export function useGroupFileTasks({
       setBatchDownloadFileIds(fileIds);
     } catch (error) {
       handleTaskCreateError(error, '当前页下载任务创建失败');
-      setDownloadingFiles(prev => {
-        const next = new Set(prev);
-        fileIds.forEach((fileId) => next.delete(fileId));
-        return next;
-      });
+      downloadTasks.markFilesActive(fileIds, false);
     }
-  }, [groupId, handleTaskCreateError, notifyTaskLaunch]);
+  }, [downloadTasks, groupId, handleTaskCreateError, notifyTaskLaunch]);
 
   const handleDownloadFilteredResults = useCallback(async (filters: {
     searchQuery: string;
@@ -291,11 +207,7 @@ export function useGroupFileTasks({
 
     const fileIds = pendingAnalysisFiles.map((file) => file.file_id);
     setBatchAnalyzing(true);
-    setAnalyzingFileIds(prev => {
-      const next = new Set(prev);
-      fileIds.forEach((fileId) => next.add(fileId));
-      return next;
-    });
+    analysisFileTasks.markFilesActive(fileIds, true);
 
     try {
       const response = await apiClient.analyzeSelectedFiles(groupId, fileIds, false);
@@ -305,24 +217,20 @@ export function useGroupFileTasks({
     } catch (error) {
       handleTaskCreateError(error, '当前页分析任务创建失败');
       setBatchAnalyzing(false);
-      setAnalyzingFileIds(prev => {
-        const next = new Set(prev);
-        fileIds.forEach((fileId) => next.delete(fileId));
-        return next;
-      });
+      analysisFileTasks.markFilesActive(fileIds, false);
     }
-  }, [batchAnalyzing, groupId, handleTaskCreateError, notifyTaskLaunch]);
+  }, [analysisFileTasks, batchAnalyzing, groupId, handleTaskCreateError, notifyTaskLaunch]);
 
   return {
-    analysisTasks,
-    analyzingFileIds,
+    analysisTasks: analysisFileTasks.tasks,
+    analyzingFileIds: analysisFileTasks.activeFileIds,
     batchAnalysisTaskId,
     batchAnalyzing,
     batchDownloadTaskId,
-    downloadingFiles,
-    fileTasks,
-    clearAnalysisTask,
-    getAnalysisTask,
+    downloadingFiles: downloadTasks.activeFileIds,
+    fileTasks: downloadTasks.tasks,
+    clearAnalysisTask: analysisFileTasks.clearTask,
+    getAnalysisTask: analysisFileTasks.getTask,
     handleAnalysisTaskTerminal,
     handleBatchAnalysisTerminal,
     handleBatchAnalyzeCurrentPage,
@@ -331,10 +239,10 @@ export function useGroupFileTasks({
     handleDownloadFile,
     handleDownloadFilteredResults,
     handleFileTaskTerminal,
-    isAnalysisTaskActive: isTaskActive,
-    markFileAnalyzing,
+    isAnalysisTaskActive: analysisFileTasks.isTaskActive,
+    markFileAnalyzing: analysisFileTasks.markFileActive,
     trackAnalysisTask,
-    updateAnalysisTaskStatus,
-    updateFileTaskStatus,
+    updateAnalysisTaskStatus: analysisFileTasks.updateTask,
+    updateFileTaskStatus: downloadTasks.updateTask,
   };
 }
