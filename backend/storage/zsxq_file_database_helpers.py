@@ -1,4 +1,4 @@
-from typing import Any, Dict, Optional
+from typing import Any, Dict, NamedTuple, Optional, Sequence
 
 
 _IMPORT_STAT_KEYS = (
@@ -39,6 +39,39 @@ _FILE_AI_ANALYSIS_FIELDS = (
     'updated_at',
 )
 
+_COMPLETED_DOWNLOAD_STATUSES = ("completed", "downloaded", "skipped")
+
+_FILE_SEARCH_CONDITION = """
+        (
+            LOWER(COALESCE(f.name, '')) LIKE ?
+            OR EXISTS (
+                SELECT 1
+                FROM file_topic_relations fr
+                LEFT JOIN topics t ON t.topic_id = fr.topic_id
+                LEFT JOIN talks tk ON tk.topic_id = fr.topic_id
+                LEFT JOIN articles ar ON ar.topic_id = fr.topic_id
+                WHERE fr.file_id = f.file_id
+                  AND (
+                      LOWER(COALESCE(t.title, '')) LIKE ?
+                      OR LOWER(COALESCE(t.annotation, '')) LIKE ?
+                      OR LOWER(COALESCE(tk.text, '')) LIKE ?
+                      OR LOWER(COALESCE(ar.title, '')) LIKE ?
+                  )
+            )
+            OR EXISTS (
+                SELECT 1
+                FROM topic_files tf
+                LEFT JOIN topics t2 ON t2.topic_id = tf.topic_id
+                WHERE tf.file_id = f.file_id
+                  AND (
+                      LOWER(COALESCE(tf.name, '')) LIKE ?
+                      OR LOWER(COALESCE(t2.title, '')) LIKE ?
+                      OR LOWER(COALESCE(t2.annotation, '')) LIKE ?
+                  )
+            )
+        )
+        """
+
 
 def _new_import_stats() -> Dict[str, int]:
     return dict.fromkeys(_IMPORT_STAT_KEYS, 0)
@@ -72,6 +105,280 @@ def _nullable_group_id_param(group_id: Optional[str]) -> Any:
     if not value:
         return None
     return int(value) if value.isdigit() else value
+
+
+class DownloadFileRecord(NamedTuple):
+    file_id: int
+    name: str
+    size: int
+    download_count: int = 0
+
+    @classmethod
+    def from_row(cls, row: Sequence[Any]) -> "DownloadFileRecord":
+        file_id = int(row[0])
+        return cls(
+            file_id=file_id,
+            name=str(row[1] or f"file_{file_id}"),
+            size=int(row[2] or 0),
+            download_count=int(row[3] or 0),
+        )
+
+    def to_downloader_payload(self) -> Dict[str, Dict[str, Any]]:
+        return {
+            "file": {
+                "id": self.file_id,
+                "name": self.name,
+                "size": self.size,
+                "download_count": self.download_count,
+            }
+        }
+
+
+class DownloadFileSelection(NamedTuple):
+    records: list[DownloadFileRecord]
+    missing: list[int]
+    requested_count: int
+
+
+class FileStatusRecord(NamedTuple):
+    name: str
+    size: Any
+    download_status: Optional[str]
+
+    @classmethod
+    def from_row(cls, row: Sequence[Any]) -> "FileStatusRecord":
+        return cls(row[0], row[1], row[2])
+
+
+class FileAnalysisSourceRecord(NamedTuple):
+    file_id: int
+    name: str
+    size: Any
+    download_status: Optional[str]
+    local_path: Optional[str]
+
+    @classmethod
+    def from_row(cls, row: Sequence[Any]) -> "FileAnalysisSourceRecord":
+        file_id = int(row[0])
+        return cls(file_id, str(row[1] or f"file_{file_id}"), row[2], row[3], row[4])
+
+
+class FileDownloadStats(NamedTuple):
+    total_files: int
+    downloaded: int
+    pending: int
+    failed: int
+
+    @classmethod
+    def from_row(cls, row: Optional[Sequence[Any]]) -> "FileDownloadStats":
+        if not row:
+            return cls(0, 0, 0, 0)
+        return cls(
+            int(row[0] or 0),
+            int(row[1] or 0),
+            int(row[2] or 0),
+            int(row[3] or 0),
+        )
+
+
+class FileListRecord(NamedTuple):
+    file_id: Any
+    name: Any
+    size: Any
+    download_count: Any
+    create_time: Any
+    download_status: Optional[str]
+    local_path: Optional[str]
+    download_error_code: Optional[str]
+    download_error_message: Optional[str]
+    last_download_attempt_at: Optional[str]
+    analysis_updated_at: Optional[str]
+
+    @classmethod
+    def from_row(cls, row: Sequence[Any]) -> "FileListRecord":
+        return cls(
+            row[0],
+            row[1],
+            row[2],
+            row[3],
+            row[4],
+            row[5],
+            row[6],
+            row[7],
+            row[8],
+            row[9],
+            row[10],
+        )
+
+
+class FileListPage(NamedTuple):
+    records: list[FileListRecord]
+    total: int
+
+
+def _query_group_id(group_id: Optional[Any]) -> Any:
+    return _group_id_param(group_id)
+
+
+def _unique_int_file_ids(file_ids: Sequence[int]) -> list[int]:
+    return list(dict.fromkeys(int(file_id) for file_id in file_ids))
+
+
+def _add_file_download_status_condition(
+    conditions: list[str],
+    params: list[Any],
+    status: Optional[str],
+    *,
+    strip_status: bool = False,
+    treat_all_as_empty: bool = False,
+    exclude_completed_when_empty: bool = False,
+) -> None:
+    requested_status = str(status or "")
+    if strip_status:
+        requested_status = requested_status.strip()
+    if treat_all_as_empty and requested_status == "all":
+        requested_status = ""
+
+    if requested_status:
+        if requested_status == "completed":
+            conditions.append("f.download_status IN (?, ?, ?)")
+            params.extend(_COMPLETED_DOWNLOAD_STATUSES)
+        else:
+            conditions.append("f.download_status = ?")
+            params.append(requested_status)
+    elif exclude_completed_when_empty:
+        conditions.append("(f.download_status IS NULL OR f.download_status NOT IN (?, ?, ?))")
+        params.extend(_COMPLETED_DOWNLOAD_STATUSES)
+
+
+def _add_file_search_condition(conditions: list[str], params: list[Any], search: Optional[str]) -> None:
+    search_text = (search or "").strip()
+    if not search_text:
+        return
+
+    search_pattern = f"%{search_text.lower()}%"
+    conditions.append(_FILE_SEARCH_CONDITION)
+    params.extend([search_pattern] * 8)
+
+
+def _build_selected_download_file_records_query(
+    group_id: Optional[Any],
+    ordered_ids: Sequence[int],
+) -> tuple[str, tuple[Any, ...]]:
+    placeholders = ", ".join("?" for _ in ordered_ids)
+    return (
+        f"""
+        SELECT file_id, name, size, download_count
+        FROM files
+        WHERE group_id = ? AND file_id IN ({placeholders})
+        """,
+        (_query_group_id(group_id), *ordered_ids),
+    )
+
+
+def _fetch_download_file_rows(
+    file_db: Any,
+    query: str,
+    params: Sequence[Any],
+) -> Sequence[Sequence[Any]]:
+    file_db.cursor.execute(query, params)
+    return file_db.cursor.fetchall()
+
+
+def _normalize_download_file_record(row: Sequence[Any]) -> DownloadFileRecord:
+    return DownloadFileRecord.from_row(row)
+
+
+def _build_filtered_download_file_records_query(
+    group_id: Optional[Any],
+    status: Optional[str],
+    search: Optional[str],
+    max_files: Optional[int],
+) -> tuple[str, tuple[Any, ...]]:
+    conditions = ["f.group_id = ?"]
+    params: list[Any] = [_query_group_id(group_id)]
+    _add_file_download_status_condition(
+        conditions,
+        params,
+        status,
+        strip_status=True,
+        treat_all_as_empty=True,
+        exclude_completed_when_empty=True,
+    )
+
+    _add_file_search_condition(conditions, params, search)
+    limit_clause = "LIMIT ?" if max_files else ""
+    if max_files:
+        params.append(int(max_files))
+
+    return (
+        f"""
+        SELECT f.file_id, f.name, f.size, f.download_count
+        FROM files f
+        WHERE {' AND '.join(conditions)}
+        ORDER BY f.create_time DESC, f.download_count DESC
+        {limit_clause}
+        """,
+        tuple(params),
+    )
+
+
+_FILE_LIST_FROM_CLAUSE = """
+            FROM files f
+            LEFT JOIN file_ai_analyses faa ON faa.file_id = f.file_id
+        """
+
+
+def _build_file_list_filters(
+    group_id: Optional[Any],
+    status: Optional[str],
+    search: Optional[str],
+    analysis_status: Optional[str],
+) -> tuple[str, list[Any]]:
+    conditions = []
+    params_prefix = [_query_group_id(group_id)]
+    conditions.append("f.group_id = ?")
+
+    _add_file_download_status_condition(conditions, params_prefix, status)
+
+    if analysis_status == "analyzed":
+        conditions.append("faa.updated_at IS NOT NULL")
+    elif analysis_status == "pending":
+        conditions.append("faa.updated_at IS NULL")
+
+    _add_file_search_condition(conditions, params_prefix, search)
+
+    where_clause = f"WHERE {' AND '.join(conditions)}" if conditions else ""
+    return where_clause, params_prefix
+
+
+def _build_file_list_query(where_clause: str) -> str:
+    return f"""
+            SELECT
+                f.file_id,
+                f.name,
+                f.size,
+                f.download_count,
+                f.create_time,
+                f.download_status,
+                f.local_path,
+                f.download_error_code,
+                f.download_error_message,
+                f.last_download_attempt_at,
+                faa.updated_at
+            {_FILE_LIST_FROM_CLAUSE}
+            {where_clause}
+            ORDER BY f.create_time DESC
+            LIMIT ? OFFSET ?
+        """
+
+
+def _build_file_count_query(where_clause: str) -> str:
+    return f"SELECT COUNT(*) {_FILE_LIST_FROM_CLAUSE} {where_clause}"
+
+
+def _normalize_file_list_record(row: Sequence[Any]) -> FileListRecord:
+    return FileListRecord.from_row(row)
 
 
 def _user_record_params(user_data: Dict[str, Any]) -> tuple[Any, ...]:
