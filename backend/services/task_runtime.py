@@ -39,6 +39,10 @@ from backend.services.task_runtime_status import (
     query_tasks,
 )
 from backend.services.task_runtime_state import TaskRuntimeState
+from backend.services.task_transition_recorder import (
+    record_task_transition,
+    release_task_lock_on_terminal_status,
+)
 from backend.services.task_workflow_lifecycle import (
     WorkflowCompletedMessage,
     WorkflowCompletedHook,
@@ -362,9 +366,16 @@ def update_task(
     with _state_lock:
         _update_memory_task_locked(task_id, status, message, result, now)
 
-    store.update_task(task_id, status, message, result=result, updated_at=now)
-    add_task_log(task_id, f"状态更新: {message}")
-    _release_task_lock_on_terminal_status(task_id, status, now, store)
+    record_task_transition(
+        store,
+        task_id,
+        status,
+        message,
+        result,
+        now,
+        add_task_log=add_task_log,
+        is_terminal_status=is_terminal_task_status,
+    )
 
 
 def run_workflow(
@@ -439,12 +450,14 @@ def _release_task_lock_on_terminal_status(
     released_at: datetime,
     store: TaskStore,
 ) -> None:
-    if not is_terminal_task_status(status):
-        return
-    try:
-        store.release_task_lock(task_id, status, released_at=released_at)
-    except Exception as exc:
-        add_task_log(task_id, f"⚠️ 释放任务锁失败: {exc}")
+    release_task_lock_on_terminal_status(
+        store,
+        task_id,
+        status,
+        released_at,
+        add_task_log=add_task_log,
+        is_terminal_status=is_terminal_task_status,
+    )
 
 
 def _register_task_crawler_locked(task_id: str, crawler: Any) -> None:
