@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import queue
 import threading
+from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
@@ -131,3 +132,40 @@ class TaskRuntimeState:
 
     def task_stop_flag(self, task_id: str) -> bool:
         return self._task_stop_flags.get(task_id, False)
+
+
+@dataclass(frozen=True)
+class TaskRuntimeStateBundle:
+    current_tasks: Dict[str, Dict[str, Any]]
+    task_logs: Dict[str, List[str]]
+    task_stop_flags: Dict[str, bool]
+    sse_connections: Dict[str, List[queue.Queue[str]]]
+    runtime_task_threads: Dict[str, threading.Thread]
+    runtime_task_heartbeats: Dict[str, threading.Event]
+    state: TaskRuntimeState
+
+
+def create_task_runtime_state_bundle() -> TaskRuntimeStateBundle:
+    current_tasks: Dict[str, Dict[str, Any]] = {}
+    task_logs: Dict[str, List[str]] = {}
+    task_stop_flags: Dict[str, bool] = {}
+    sse_connections: Dict[str, List[queue.Queue[str]]] = {}
+    runtime_task_threads: Dict[str, threading.Thread] = {}
+    runtime_task_heartbeats: Dict[str, threading.Event] = {}
+    state = TaskRuntimeState(
+        current_tasks,
+        task_logs,
+        task_stop_flags,
+        sse_connections,
+        runtime_task_threads,
+        runtime_task_heartbeats,
+    )
+    return TaskRuntimeStateBundle(
+        current_tasks=current_tasks,
+        task_logs=task_logs,
+        task_stop_flags=task_stop_flags,
+        sse_connections=sse_connections,
+        runtime_task_threads=runtime_task_threads,
+        runtime_task_heartbeats=runtime_task_heartbeats,
+        state=state,
+    )

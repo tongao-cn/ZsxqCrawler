@@ -38,7 +38,7 @@ from backend.services.task_runtime_status import (
     latest_task_for_query,
     query_tasks,
 )
-from backend.services.task_runtime_state import TaskRuntimeState
+from backend.services.task_runtime_state import create_task_runtime_state_bundle
 from backend.services.task_transition_recorder import (
     record_task_transition,
     release_task_lock_on_terminal_status,
@@ -82,23 +82,18 @@ def _allocate_task_id_locked(now: datetime) -> str:
     return f"task_{task_counter}_{int(now.timestamp())}"
 
 
-current_tasks: Dict[str, Dict[str, Any]] = {}
+_runtime_state_bundle = create_task_runtime_state_bundle()
+current_tasks: Dict[str, Dict[str, Any]] = _runtime_state_bundle.current_tasks
 task_counter = 0
-task_logs: Dict[str, List[str]] = {}
-sse_connections: Dict[str, List[queue.Queue[str]]] = {}
-task_stop_flags: Dict[str, bool] = {}
+task_logs: Dict[str, List[str]] = _runtime_state_bundle.task_logs
+sse_connections: Dict[str, List[queue.Queue[str]]] = _runtime_state_bundle.sse_connections
+task_stop_flags: Dict[str, bool] = _runtime_state_bundle.task_stop_flags
 crawler_instances: Dict[str, Any] = {}
 file_downloader_instances: Dict[str, Any] = {}
-runtime_task_threads: Dict[str, threading.Thread] = {}
-runtime_task_heartbeats: Dict[str, threading.Event] = {}
-_runtime_state = TaskRuntimeState(
-    current_tasks,
-    task_logs,
-    task_stop_flags,
-    sse_connections,
-    runtime_task_threads,
-    runtime_task_heartbeats,
-)
+runtime_task_threads: Dict[str, threading.Thread] = _runtime_state_bundle.runtime_task_threads
+runtime_task_heartbeats: Dict[str, threading.Event] = _runtime_state_bundle.runtime_task_heartbeats
+_runtime_state = _runtime_state_bundle.state
+
 
 def _initialize_task_tracking_locked(task_id: str) -> None:
     _runtime_state.initialize_task(task_id)
