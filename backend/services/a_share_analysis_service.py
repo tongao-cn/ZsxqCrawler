@@ -23,10 +23,15 @@ from backend.services.a_share_analysis_db_storage import (
 from backend.services.a_share_analysis_dates import (
     get_date_range_bounds,
     get_last_days_range,
-    get_required_days_for_start_date,
     normalize_date_range as _normalize_date_range,
     select_available_date_range as _select_available_date_range,
     validate_day,  # noqa: F401 - compatibility re-export for scripts
+)
+from backend.services.a_share_analysis_reset import (
+    apply_analysis_reset_range,
+    extract_day_from_state_key as _extract_day_from_state_key_impl,
+    remove_daily_range as _remove_daily_range_impl,
+    remove_state_range as _remove_state_range_impl,
 )
 from backend.services.a_share_analysis_chart import (
     DEFAULT_RANKING_TOP_N,
@@ -185,15 +190,7 @@ def make_item_key(item: Dict[str, Any]) -> str:
 
 
 def _extract_day_from_state_key(key: str) -> Optional[str]:
-    if not key:
-        return None
-    parts = key.split(":")
-    if len(parts) < 3:
-        return None
-    day = parts[-1].strip()
-    if len(day) != 10:
-        return None
-    return day
+    return _extract_day_from_state_key_impl(key)
 
 
 def read_topics_last_days(group_id: str, days: int, log_callback: LogCallback = None) -> List[Dict[str, Any]]:
@@ -423,34 +420,11 @@ def remove_daily_range(
     start_date: str,
     end_date: str,
 ) -> Tuple[Dict[str, Dict[str, int]], Dict[str, int]]:
-    kept: Dict[str, Dict[str, int]] = {}
-    removed_days = 0
-    removed_rows = 0
-    removed_mentions = 0
-    for day, company_counts in daily.items():
-        if start_date <= day <= end_date:
-            removed_days += 1
-            removed_rows += len(company_counts)
-            removed_mentions += sum(company_counts.values())
-            continue
-        kept[day] = company_counts
-    return kept, {
-        "removed_days": removed_days,
-        "removed_rows": removed_rows,
-        "removed_mentions": removed_mentions,
-    }
+    return _remove_daily_range_impl(daily, start_date, end_date)
 
 
 def remove_state_range(processed_keys: set, start_date: str, end_date: str) -> Tuple[set, int]:
-    kept = set()
-    removed = 0
-    for key in processed_keys:
-        day = _extract_day_from_state_key(key)
-        if day and start_date <= day <= end_date:
-            removed += 1
-            continue
-        kept.add(key)
-    return kept, removed
+    return _remove_state_range_impl(processed_keys, start_date, end_date)
 
 
 def reset_analysis_range(
@@ -679,31 +653,32 @@ def run_analysis(
             "reset_start_date 不能晚于 reset_end_date",
         )
 
-        existing_daily, removed_daily = remove_daily_range(existing_daily, start_day, end_day)
-        processed_keys, removed_state_in_range = remove_state_range(processed_keys, start_day, end_day)
-        reset_summary = {
-            "start_date": start_day,
-            "end_date": end_day,
-            **removed_daily,
-            "removed_state_keys": removed_state_in_range,
-        }
+        reset_result = apply_analysis_reset_range(
+            existing_daily,
+            processed_keys,
+            start_day,
+            end_day,
+            days,
+        )
+        existing_daily = reset_result.daily
+        processed_keys = reset_result.processed_keys
+        reset_summary = reset_result.reset_summary
         _emit_log(
             f"reset range finished: {start_day} ~ {end_day}, "
-            f"removed_rows={removed_daily['removed_rows']}, "
-            f"removed_mentions={removed_daily['removed_mentions']}, "
-            f"removed_state_keys={removed_state_in_range}",
+            f"removed_rows={reset_summary['removed_rows']}, "
+            f"removed_mentions={reset_summary['removed_mentions']}, "
+            f"removed_state_keys={reset_summary['removed_state_keys']}",
             log_callback,
         )
         write_csv(existing_daily, resolved_output_path, group_id=normalized_group_id)
         save_state(resolved_state_path, processed_keys, group_id=normalized_group_id)
 
-        required_days = get_required_days_for_start_date(start_day)
-        if required_days > days:
+        if reset_result.days > days:
             _emit_log(
-                f"scan days auto adjusted: requested={days}, required={required_days} to cover reset range",
+                f"scan days auto adjusted: requested={days}, required={reset_result.days} to cover reset range",
                 log_callback,
             )
-            days = required_days
+            days = reset_result.days
 
     runtime_ai_config = get_openai_compatible_config()
     api_key = str(runtime_ai_config.get("api_key") or "").strip()
