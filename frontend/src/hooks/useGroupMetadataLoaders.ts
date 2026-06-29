@@ -3,20 +3,11 @@
 import { useCallback, useEffect, useState } from 'react';
 
 import { apiClient, Account, AccountSelf } from '@/lib/api';
-
-export interface GroupLocalFileStats {
-  total: number;
-  downloaded: number;
-  pending: number;
-  failed: number;
-}
-
-const EMPTY_LOCAL_FILE_STATS: GroupLocalFileStats = {
-  total: 0,
-  downloaded: 0,
-  pending: 0,
-  failed: 0,
-};
+import {
+  EMPTY_LOCAL_FILE_STATS,
+  normalizeGroupLocalFileStats,
+  type GroupLocalFileStats,
+} from '@/lib/group-workbench-read-model';
 
 export function useGroupMetadataLoaders(groupId: number) {
   const [groupInfo, setGroupInfo] = useState<any>(null);
@@ -42,15 +33,9 @@ export function useGroupMetadataLoaders(groupId: number) {
   const loadLocalFileCount = useCallback(async () => {
     try {
       const stats = await apiClient.getFileStats(groupId);
-      const downloadStats = stats.download_stats || {};
-      const total = downloadStats.total_files || 0;
-      setLocalFileCount(total);
-      setLocalFileStats({
-        total,
-        downloaded: downloadStats.downloaded || 0,
-        pending: downloadStats.pending || 0,
-        failed: downloadStats.failed || 0,
-      });
+      const normalizedStats = normalizeGroupLocalFileStats(stats);
+      setLocalFileCount(normalizedStats.total);
+      setLocalFileStats(normalizedStats);
     } catch (error) {
       console.error('加载本地文件数量失败:', error);
       setLocalFileCount(0);

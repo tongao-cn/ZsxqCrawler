@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { apiClient, Group, GroupStats, Topic } from '@/lib/api';
+import { resolveGroupDetailRetry, resolveTopicsRetry } from '@/lib/group-workbench-read-model';
 import { useInitialLoad } from '@/hooks/useInitialLoad';
 import { useGroupMetadataLoaders } from '@/hooks/useGroupMetadataLoaders';
 
@@ -10,13 +11,6 @@ interface UseGroupDataLoadersOptions {
   groupId: number;
   currentPage: number;
   debouncedSearchTerm: string;
-}
-
-const MAX_AUTO_RETRIES = 5;
-const RETRYABLE_LOAD_ERROR_MARKERS = ['未知错误', '空数据', '反爬虫'];
-
-function isRetryableLoadError(message: string) {
-  return RETRYABLE_LOAD_ERROR_MARKERS.some((marker) => message.includes(marker));
 }
 
 export function useGroupDataLoaders({
@@ -78,22 +72,20 @@ export function useGroupDataLoaders({
       }
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : '加载群组详情失败';
+      const retry = resolveGroupDetailRetry(errorMessage, currentRetryCount);
 
-      if (isRetryableLoadError(errorMessage) && currentRetryCount < MAX_AUTO_RETRIES) {
-        const nextRetryCount = currentRetryCount + 1;
-        const delay = Math.min(1000 + (nextRetryCount * 500), 5000);
-
+      if (retry.shouldRetry) {
         if (groupDetailRetryTimerRef.current) {
           window.clearTimeout(groupDetailRetryTimerRef.current);
         }
         groupDetailRetryTimerRef.current = window.setTimeout(() => {
           groupDetailRetryTimerRef.current = null;
-          loadGroupDetail(nextRetryCount);
-        }, delay);
+          loadGroupDetail(retry.nextRetryCount);
+        }, retry.delayMs);
         return;
       }
 
-      setError(isRetryableLoadError(errorMessage) ? `${errorMessage}，自动重试已达上限` : errorMessage);
+      setError(retry.finalError || errorMessage);
       setIsRetrying(false);
       setLoading(false);
     }
@@ -133,18 +125,16 @@ export function useGroupDataLoaders({
       }
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : '加载话题列表失败';
+      const retry = resolveTopicsRetry(errorMessage, currentRetryCount);
 
-      if (isRetryableLoadError(errorMessage) && currentRetryCount < MAX_AUTO_RETRIES) {
-        const nextRetryCount = currentRetryCount + 1;
-        const delay = Math.min(1000 + (nextRetryCount * 300), 3000);
-
+      if (retry.shouldRetry) {
         if (topicsRetryTimerRef.current) {
           window.clearTimeout(topicsRetryTimerRef.current);
         }
         topicsRetryTimerRef.current = window.setTimeout(() => {
           topicsRetryTimerRef.current = null;
-          loadTopics(nextRetryCount);
-        }, delay);
+          loadTopics(retry.nextRetryCount);
+        }, retry.delayMs);
         return;
       }
 
