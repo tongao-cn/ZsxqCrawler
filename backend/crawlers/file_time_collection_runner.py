@@ -7,6 +7,7 @@ import random
 import time
 from typing import Any, Dict, NamedTuple, Optional, Protocol
 
+from backend.crawlers.file_list_page import file_list_page
 from backend.crawlers.file_time_window import (
     page_crosses_stop_before,
     summarize_page_time_range,
@@ -18,7 +19,6 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     add_import_stats,
     download_query_group_id,
     empty_import_stats,
-    file_list_response_page,
     latest_file_create_time_query,
     time_collection_database_status_message,
     time_collection_empty_page_message,
@@ -236,18 +236,18 @@ def fetch_time_collection_page(
             runtime.log(message)
         return None
 
-    files, next_index = file_list_response_page(data)
-    if not files:
+    page = file_list_page(data)
+    if not page.files:
         runtime.log(time_collection_empty_page_message())
         return None
 
-    runtime.log(time_collection_page_files_message(len(files)))
-    page_oldest, page_newest = summarize_page_time_range(files)
+    runtime.log(time_collection_page_files_message(len(page.files)))
+    page_oldest, page_newest = summarize_page_time_range(page.files)
     time_range_message = time_collection_page_time_range_message(page_oldest, page_newest)
     if time_range_message:
         runtime.log(time_range_message)
 
-    return TimeCollectionPage(data, files, next_index)
+    return TimeCollectionPage(data, page.files, page.next_index)
 
 
 def next_time_collection_page_after_import(

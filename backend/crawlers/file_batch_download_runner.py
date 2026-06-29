@@ -5,6 +5,7 @@ from __future__ import annotations
 import time
 from typing import Any, Dict, Optional, Protocol
 
+from backend.crawlers.file_list_page import file_list_page
 from backend.crawlers.zsxq_file_downloader_helpers import (
     batch_download_completion_messages,
     batch_download_empty_page_message,
@@ -18,7 +19,6 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     batch_download_skipped_message,
     batch_download_start_messages,
     download_result_stats,
-    file_list_response_page,
 )
 from backend.crawlers.zsxq_file_downloader_targets import (
     BatchDownloadFetchTarget,
@@ -302,13 +302,13 @@ def batch_download_page_from_response(
     runtime: BatchDownloadRuntime,
     data: Dict[str, Any],
 ) -> Optional[BatchDownloadPage]:
-    files, next_index = file_list_response_page(data)
+    page = file_list_page(data)
 
-    if not files:
+    if not page.files:
         return runtime._handle_empty_batch_download_page()  # type: ignore[attr-defined]
 
-    runtime.log(batch_download_page_files_message(len(files)))
-    return BatchDownloadPage(files, next_index)
+    runtime.log(batch_download_page_files_message(len(page.files)))
+    return BatchDownloadPage(page.files, page.next_index)
 
 
 def handle_empty_batch_download_page(runtime: BatchDownloadRuntime) -> Optional[BatchDownloadPage]:

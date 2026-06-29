@@ -37,6 +37,12 @@ from backend.crawlers.file_api_retry_policy import (
     should_retry_api_error,
     should_retry_http_status,
 )
+from backend.crawlers.file_list_page import (
+    FileListPage,
+    file_list_page,
+    file_list_request_params,
+    file_list_response_page,
+)
 from backend.crawlers.file_request_fingerprint import (
     STEALTH_ACCEPT_LANGUAGES,
     STEALTH_OPTIONAL_HEADERS,
@@ -144,16 +150,6 @@ def clean_cookie_result(cookie: Any) -> tuple[Any, Optional[Exception]]:
         return cookie, exc
 
 
-def file_list_request_params(count: int, sort: str, index: Optional[str]) -> Dict[str, str]:
-    params = {
-        "count": str(count),
-        "sort": sort,
-    }
-    if index:
-        params["index"] = index
-    return params
-
-
 def file_list_start_messages(
     count: int,
     sort: str,
@@ -168,11 +164,6 @@ def file_list_start_messages(
         messages.append(f"   📑 索引: {index}")
     messages.append(f"   🌐 请求URL: {url}")
     return tuple(messages)
-
-
-def file_list_response_page(data: Dict[str, Any]) -> Tuple[Any, Any]:
-    resp_data = data.get("resp_data", {})
-    return resp_data.get("files", []), resp_data.get("index")
 
 
 def file_list_item_display_lines(position: int, file_info: Dict[str, Any]) -> tuple[str, ...]:

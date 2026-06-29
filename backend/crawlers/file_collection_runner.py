@@ -8,6 +8,7 @@ import time
 from typing import Any, Dict, Optional, Protocol
 
 from backend.core.console_output import safe_console_print as print
+from backend.crawlers.file_list_page import file_list_page
 from backend.crawlers.zsxq_file_downloader_helpers import (
     add_file_collection_page_stats,
     file_collection_completion_messages,
@@ -25,7 +26,6 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     file_collection_start_message,
     file_collection_stats,
     file_collection_storage_failed_message,
-    file_list_response_page,
 )
 from backend.crawlers.zsxq_file_downloader_targets import (
     FileCollectionLogRow,
@@ -97,13 +97,13 @@ def fetch_file_collection_page(
             print(message)
         return None
 
-    files, next_index = file_list_response_page(data)
-    if not files:
+    page = file_list_page(data)
+    if not page.files:
         print(file_collection_empty_page_message())
         return None
 
-    print(file_collection_page_files_message(len(files)))
-    return FileCollectionPage(data, files, next_index)
+    print(file_collection_page_files_message(len(page.files)))
+    return FileCollectionPage(data, page.files, page.next_index)
 
 
 def run_file_collection_page(

@@ -15,9 +15,7 @@ from backend.crawlers.file_api_retry_policy import (
     file_list_api_failure_plan,
     http_failure_plan,
 )
-from backend.crawlers.zsxq_file_downloader_helpers import (
-    file_list_response_page,
-)
+from backend.crawlers.file_list_page import file_list_page
 from backend.crawlers.zsxq_file_downloader_targets import (
     FileListApiFailureResponseTarget,
     FileListHttpFailureResponseTarget,
@@ -45,11 +43,11 @@ def handle_file_list_success_response(
 def handle_file_list_success_response_target(
     target: FileListSuccessResponseTarget,
 ) -> Dict[str, Any]:
-    files, _ = file_list_response_page(target.data)
+    page = file_list_page(target.data)
     if target.attempt > 0:
         print(f"   ✅ 重试成功！第{target.attempt}次重试获取到文件列表")
     else:
-        print(f"   ✅ 获取成功: {len(files)}个文件")
+        print(f"   ✅ 获取成功: {len(page.files)}个文件")
     return target.data
 
 
