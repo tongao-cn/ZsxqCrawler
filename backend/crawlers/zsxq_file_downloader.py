@@ -268,10 +268,18 @@ from backend.crawlers.file_time_collection_runner import (
     time_collection_dedupe_result as run_time_collection_dedupe_result,
     time_collection_page_import_result as run_time_collection_page_import_result,
 )
-from backend.crawlers.zsxq_file_downloader_helpers import (
+from backend.crawlers.file_api_retry_policy import (
     API_FAILURE_PERMISSION_DENIED_1030,
     api_retry_user_agent_message,
     api_retry_wait_message,
+    download_url_api_failure_plan,
+    download_url_from_response_data,
+    download_url_success_plan,
+    http_failure_plan,
+    request_exception_plan,
+    retry_exhausted_message,
+)
+from backend.crawlers.zsxq_file_downloader_helpers import (
     add_import_stats,
     clean_cookie_result,
     download_settings_display_lines,
@@ -281,18 +289,12 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     download_result_stats,
     download_retry_wait,
     download_target_path,
-    download_url_api_failure_plan,
-    download_url_from_response_data,
-    download_url_success_plan,
     empty_import_stats,
     existing_file_matches,
-    http_failure_plan,
     latest_file_create_time_query,
     page_crosses_stop_before,
     remove_partial_download,
     response_filename_override,
-    request_exception_plan,
-    retry_exhausted_message,
     risk_event_header_user_agent,
     summarize_page_time_range,
     time_dedupe_page_messages,

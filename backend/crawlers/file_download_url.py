@@ -4,7 +4,7 @@ from typing import Any, Callable, Dict, NamedTuple, Optional, Protocol
 
 from backend.core.console_output import safe_console_print as print
 from backend.crawlers.api_json_response_runner import parse_api_json_response
-from backend.crawlers.zsxq_file_downloader_helpers import (
+from backend.crawlers.file_api_retry_policy import (
     API_FAILURE_NON_RETRY,
     API_FAILURE_PERMISSION_DENIED_1030,
     API_FAILURE_RETRY,
