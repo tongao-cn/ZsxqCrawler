@@ -20,6 +20,7 @@ from backend.services.a_share_analysis_db_storage import (
     save_daily_mentions as save_daily_mentions_to_db,
     save_processed_state as save_processed_state_to_db,
 )
+from backend.services.a_share_analysis_checkpoint import AShareAnalysisCheckpointManager
 from backend.services.a_share_analysis_dates import (
     get_date_range_bounds,
     get_last_days_range,
@@ -709,52 +710,14 @@ def run_analysis(
     )
 
     checkpoint_enabled = bool(normalized_group_id and should_use_db_storage(normalized_group_id))
-    checkpoint_batch_size = DEFAULT_CHECKPOINT_BATCH_SIZE
-    checkpoint_daily: Dict[str, Dict[str, int]] = {}
-    checkpoint_keys: Set[str] = set()
-    checkpoint_extractions: List[Dict[str, Any]] = []
-    checkpoint_saved_topic_stock_extractions = 0
-
-    def flush_checkpoint(force: bool = False) -> None:
-        nonlocal checkpoint_daily
-        nonlocal checkpoint_keys
-        nonlocal checkpoint_extractions
-        nonlocal checkpoint_saved_topic_stock_extractions
-
-        if not checkpoint_enabled or not checkpoint_keys:
-            return
-        if not force and len(checkpoint_keys) < checkpoint_batch_size:
-            return
-
-        result = save_recommendation_pool_checkpoint(
-            daily_delta=checkpoint_daily,
-            processed_keys=checkpoint_keys,
-            topic_stock_extractions=checkpoint_extractions,
-            group_id=normalized_group_id,
-        )
-        processed_keys.update(checkpoint_keys)
-        checkpoint_saved_topic_stock_extractions += int(result.get("topic_stock_extractions") or 0)
-        _emit_log(
-            f"db checkpoint saved at {datetime.now().isoformat(timespec='seconds')}: "
-            f"group_id={normalized_group_id}, daily_mentions={result.get('daily_mentions', 0)}, "
-            f"topic_stock_extractions={result.get('topic_stock_extractions', 0)}, "
-            f"processed_state={result.get('processed_state', 0)}",
-            log_callback,
-        )
-        checkpoint_daily = {}
-        checkpoint_keys = set()
-        checkpoint_extractions = []
-
-    def on_success(item_key: str, day: str, stocks: List[Dict[str, Any]], companies: List[str]) -> None:
-        if not checkpoint_enabled:
-            return
-        if companies:
-            day_bucket = checkpoint_daily.setdefault(day, {})
-            for company in companies:
-                day_bucket[company] = day_bucket.get(company, 0) + 1
-        checkpoint_keys.add(item_key)
-        checkpoint_extractions.extend(stocks)
-        flush_checkpoint()
+    checkpoint_manager = AShareAnalysisCheckpointManager(
+        enabled=checkpoint_enabled,
+        group_id=normalized_group_id,
+        processed_keys=processed_keys,
+        save_checkpoint=save_recommendation_pool_checkpoint,
+        emit_log=lambda message: _emit_log(message, log_callback),
+        batch_size=DEFAULT_CHECKPOINT_BATCH_SIZE,
+    )
 
     new_daily, succeeded_item_keys, failed_items, topic_stock_extractions = aggregate_daily(
         items_to_process,
@@ -765,9 +728,9 @@ def run_analysis(
         reasoning_effort=reasoning_effort or str(runtime_ai_config.get("reasoning_effort") or DEFAULT_REASONING_EFFORT),
         concurrency=concurrency,
         log_callback=log_callback,
-        success_callback=on_success,
+        success_callback=checkpoint_manager.success_callback(),
     )
-    flush_checkpoint(force=True)
+    checkpoint_manager.flush(force=True)
 
     added_mentions = 0
     for day, company_counts in new_daily.items():
@@ -779,7 +742,7 @@ def run_analysis(
     saved_topic_stock_extractions = 0
     if topic_stock_extractions and normalized_group_id and should_use_db_storage(normalized_group_id):
         if checkpoint_enabled:
-            saved_topic_stock_extractions = checkpoint_saved_topic_stock_extractions
+            saved_topic_stock_extractions = checkpoint_manager.saved_topic_stock_extractions
         else:
             saved_topic_stock_extractions = save_topic_stock_extractions(
                 topic_stock_extractions,
