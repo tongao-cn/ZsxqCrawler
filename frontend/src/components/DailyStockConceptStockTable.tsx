@@ -3,7 +3,8 @@ import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import type { DailyStockConcept } from '@/lib/api';
-import { normalizeCompanyName, normalizeConceptName, normalizeSignalTagName } from '@/components/DailyTopicAnalysisPanelUtils';
+import { normalizeCompanyName } from '@/components/DailyTopicAnalysisPanelUtils';
+import { splitStockConceptTerms } from '@/lib/daily-stock-concept-view-model';
 
 interface DailyStockConceptStockTableProps {
   filteredStocks: DailyStockConcept[];
@@ -40,32 +41,6 @@ function TopicButtons({
       )}
     </div>
   );
-}
-
-function splitStockConceptBadges(concepts: string[]) {
-  const industry = new Map<string, Set<string>>();
-  const signals = new Map<string, Set<string>>();
-  for (const concept of concepts) {
-    const alias = concept.trim();
-    if (!alias) {
-      continue;
-    }
-    const signalTag = normalizeSignalTagName(alias);
-    const target = signalTag ? signals : industry;
-    const normalized = signalTag || normalizeConceptName(alias);
-    if (!target.has(normalized)) {
-      target.set(normalized, new Set());
-    }
-    target.get(normalized)?.add(alias);
-  }
-  const toItems = (source: Map<string, Set<string>>) => Array.from(source.entries()).map(([name, aliases]) => ({
-    name,
-    aliases: Array.from(aliases),
-  }));
-  return {
-    industry: toItems(industry),
-    signals: toItems(signals),
-  };
 }
 
 function ConceptBadgeGroup({
@@ -126,7 +101,7 @@ export default function DailyStockConceptStockTable({
         </TableHeader>
         <TableBody>
           {filteredStocks.map((stock) => {
-            const { industry, signals } = splitStockConceptBadges(stock.concepts);
+            const { industry, signals } = splitStockConceptTerms(stock.concepts);
             return (
               <TableRow key={`${stock.stock_name}-${stock.stock_code || 'unknown'}`}>
                 <TableCell>
