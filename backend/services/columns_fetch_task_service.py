@@ -16,6 +16,7 @@ from backend.services.columns_column_service import (
     process_column as _service_process_column,
     process_column_topic as _service_process_column_topic,
 )
+from backend.services.columns_catalog_runner import process_columns_catalog
 from backend.services.columns_fetch_summary import (
     ColumnFetchStats,
     build_columns_fetch_result,
@@ -561,25 +562,21 @@ async def run_columns_fetch_task(task_id: str, group_id: str, settings: Any) -> 
             complete_empty_columns_task(task_id)
             return
 
-        for col_idx, column in enumerate(columns, 1):
-            if is_task_stopped(task_id):
-                add_task_log(task_id, "🛑 任务已被用户停止")
-                break
-
-            column_stats = await process_column(
-                task_id,
-                group_id,
-                column,
-                col_idx,
-                len(columns),
-                db,
-                headers,
-                request_count,
-                config,
-                stats,
-            )
-            stats.add(column_stats)
-            request_count += column_stats.request_count
+        catalog_result = await process_columns_catalog(
+            task_id=task_id,
+            group_id=group_id,
+            columns=columns,
+            db=db,
+            headers=headers,
+            request_count=request_count,
+            config=config,
+            stats=stats,
+            process_column=process_column,
+            is_task_stopped=is_task_stopped,
+            add_task_log=add_task_log,
+        )
+        stats = catalog_result.stats
+        request_count = catalog_result.request_count
 
         if is_task_stopped(task_id):
             return
