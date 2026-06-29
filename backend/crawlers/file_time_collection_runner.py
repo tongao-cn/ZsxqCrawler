@@ -7,14 +7,19 @@ import random
 import time
 from typing import Any, Dict, NamedTuple, Optional, Protocol
 
+from backend.crawlers.file_time_window import (
+    page_crosses_stop_before,
+    summarize_page_time_range,
+    time_collection_mode,
+    time_dedupe_page_messages,
+    time_dedupe_page_plan,
+)
 from backend.crawlers.zsxq_file_downloader_helpers import (
     add_import_stats,
     download_query_group_id,
     empty_import_stats,
     file_list_response_page,
     latest_file_create_time_query,
-    page_crosses_stop_before,
-    summarize_page_time_range,
     time_collection_database_status_message,
     time_collection_empty_page_message,
     time_collection_exception_message,
@@ -24,7 +29,6 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     time_collection_interrupted_message,
     time_collection_latest_file_time_message,
     time_collection_loop_stop_message,
-    time_collection_mode,
     time_collection_next_page_plan,
     time_collection_page_files_message,
     time_collection_page_import_messages,
@@ -34,8 +38,6 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     time_collection_stop_before_boundary_message,
     time_collection_storage_failed_message,
     time_collection_summary_messages,
-    time_dedupe_page_messages,
-    time_dedupe_page_plan,
 )
 
 

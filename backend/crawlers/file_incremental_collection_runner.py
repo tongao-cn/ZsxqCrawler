@@ -6,6 +6,7 @@ import datetime
 from typing import Any, Dict, Optional, Protocol
 
 from backend.crawlers.file_time_collection_runner import should_stop_time_collection_initially
+from backend.crawlers.file_time_window import normalize_date_range
 from backend.crawlers.zsxq_file_downloader_helpers import (
     date_range_collection_start_messages,
     incremental_collection_empty_database_message,
@@ -16,7 +17,6 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     incremental_collection_target_message,
     incremental_collection_timestamp_failure_messages,
     incremental_start_index,
-    normalize_date_range,
 )
 from backend.crawlers.zsxq_file_downloader_targets import (
     DateRangeCollectionTarget,
