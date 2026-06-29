@@ -4,81 +4,85 @@
 from typing import Any, Callable, Dict, List, NamedTuple, Optional
 
 from backend.storage.db_compat import connect
-from backend.storage.zsxq_database_scope import group_id_param, nullable_group_id_param
+from backend.storage.zsxq_database_scope import (
+    group_id_param as _group_id_param,
+    nullable_group_id_param as _nullable_group_id_param,
+)
 from backend.storage.zsxq_database_stats_queries import (
-    database_stats_count_query,
-    group_stats_queries,
-    local_group_topic_count_query,
-    local_group_topic_time_range_query,
-    newest_topic_create_time_query,
-    oldest_topic_create_time_query,
-    topic_count_query,
+    database_stats_count_query as _database_stats_count_query,
+    group_stats_queries as _group_stats_queries,
+    local_group_topic_count_query as _local_group_topic_count_query,
+    local_group_topic_time_range_query as _local_group_topic_time_range_query,
+    newest_topic_create_time_query as _newest_topic_create_time_query,
+    oldest_topic_create_time_query as _oldest_topic_create_time_query,
+    topic_count_query as _topic_count_query,
 )
 from backend.storage.zsxq_database_write_statements import (
-    answer_insert_statement,
-    article_insert_statement,
-    comment_insert_statement,
-    delete_latest_likes_statement,
-    group_insert_statement,
-    image_insert_statement,
-    insert_tag_statement,
-    insert_topic_tag_statement,
-    latest_like_insert_statement,
-    like_emoji_insert_statement,
-    like_insert_statement,
-    like_insert_statement_pair,
-    question_insert_statement,
-    refresh_tag_topic_count_statement,
-    talk_insert_statement,
-    topic_file_insert_statement,
-    topic_insert_statement,
-    topic_stats_update_statement,
-    update_tag_hid_statement,
-    user_insert_statement,
-    user_liked_emoji_insert_statement,
+    answer_insert_statement as _answer_insert_statement,
+    article_insert_statement as _article_insert_statement,
+    comment_image_insert_statement as _comment_image_insert_statement,
+    comment_insert_statement as _comment_insert_statement,
+    delete_latest_likes_statement as _delete_latest_likes_statement,
+    group_insert_statement as _group_insert_statement,
+    image_insert_statement as _image_insert_statement,
+    insert_tag_statement as _insert_tag_statement,
+    insert_topic_tag_statement as _insert_topic_tag_statement,
+    latest_like_insert_statement as _latest_like_insert_statement,
+    like_emoji_insert_statement as _like_emoji_insert_statement,
+    like_insert_statement as _like_insert_statement,
+    like_insert_statement_pair as _like_insert_statement_pair,
+    question_insert_statement as _question_insert_statement,
+    refresh_tag_topic_count_statement as _refresh_tag_topic_count_statement,
+    talk_insert_statement as _talk_insert_statement,
+    topic_file_insert_statement as _topic_file_insert_statement,
+    topic_insert_statement as _topic_insert_statement,
+    topic_stats_update_statement as _topic_stats_update_statement,
+    update_tag_hid_statement as _update_tag_hid_statement,
+    user_insert_statement as _user_insert_statement,
+    user_liked_emoji_insert_statement as _user_liked_emoji_insert_statement,
 )
 from backend.storage.zsxq_database_helpers import (
-    beijing_now_timestamp,
-    build_pagination,
-    comment_image_batch_from_comment,
-    file_exists_query,
-    format_group_topic_row,
-    format_tag_row,
-    format_tag_topic_row,
-    format_topic_row,
-    group_topic_count_by_tag_query,
-    group_topics_by_tag_query,
-    group_topics_count_query,
-    group_topics_query,
-    iter_additional_comment_user_payloads,
-    iter_topic_user_payloads_from_data,
-    iter_valid_comment_image_payloads,
-    iter_valid_latest_like_payloads,
-    iter_valid_like_emoji_payloads,
-    iter_valid_user_liked_emoji_keys,
-    local_group_ids_query,
-    local_group_record_query,
-    replace_file_topic_relation,
-    tag_exists_in_group_query,
-    tag_id_by_name_query,
-    tags_by_group_query,
-    topic_create_time_by_id_query,
-    topic_count_by_tag_query,
-    topic_article_payload_from_data,
-    topic_detail_scope,
-    topic_exists_query,
-    topic_files_backfill_query,
-    topic_file_backfill_ids_from_row,
-    topic_file_group_payload_from_row,
-    topic_file_payload_from_row,
-    topics_count_query,
-    topics_query,
-    topic_group_id_query,
-    topic_image_payloads_from_data,
-    topic_talk_files_from_data,
-    topics_by_tag_query,
-    topic_tags_from_data,
-    upsert_core_file,
+    beijing_now_timestamp as _beijing_now_timestamp,
+    build_pagination as _build_pagination,
+    comment_image_batch_from_comment as _comment_image_batch_from_comment,
+    file_exists_query as _file_exists_query,
+    format_group_topic_row as _format_group_topic_row,
+    format_tag_row as _format_tag_row,
+    format_tag_topic_row as _format_tag_topic_row,
+    format_topic_row as _format_topic_row,
+    group_topic_count_by_tag_query as _group_topic_count_by_tag_query,
+    group_topics_by_tag_query as _group_topics_by_tag_query,
+    group_topics_count_query as _group_topics_count_query,
+    group_topics_query as _group_topics_query,
+    iter_additional_comment_user_payloads as _iter_additional_comment_user_payloads,
+    iter_topic_user_payloads_from_data as _iter_topic_user_payloads_from_data,
+    iter_valid_comment_image_payloads as _iter_valid_comment_image_payloads,
+    iter_valid_latest_like_payloads as _iter_valid_latest_like_payloads,
+    iter_valid_like_emoji_payloads as _iter_valid_like_emoji_payloads,
+    iter_valid_user_liked_emoji_keys as _iter_valid_user_liked_emoji_keys,
+    local_group_ids_query as _local_group_ids_query,
+    local_group_record_query as _local_group_record_query,
+    replace_file_topic_relation as _replace_file_topic_relation,
+    tag_exists_in_group_query as _tag_exists_in_group_query,
+    tag_id_by_name_query as _tag_id_by_name_query,
+    tags_by_group_query as _tags_by_group_query,
+    topic_article_payload_from_data as _topic_article_payload_from_data,
+    topic_count_by_tag_query as _topic_count_by_tag_query,
+    topic_create_time_by_id_query as _topic_create_time_by_id_query,
+    topic_detail_scope as _topic_detail_scope,
+    topic_exists_query as _topic_exists_query,
+    topic_file_backfill_ids_from_row as _topic_file_backfill_ids_from_row,
+    topic_file_group_payload_from_row as _topic_file_group_payload_from_row,
+    topic_file_payload_from_row as _topic_file_payload_from_row,
+    topic_files_backfill_query as _topic_files_backfill_query,
+    topic_group_id_query as _topic_group_id_query,
+    topic_image_payloads_from_data as _topic_image_payloads_from_data,
+    topic_tags_from_data as _topic_tags_from_data,
+    topic_talk_files_from_data as _topic_talk_files_from_data,
+    topics_by_tag_query as _topics_by_tag_query,
+    topics_count_query as _topics_count_query,
+    topics_query as _topics_query,
+    upsert_core_file as _upsert_core_file,
 )
 from backend.storage.topic_detail_reader import read_topic_detail
 from backend.storage.topic_file_attachment_writer import sync_topic_file_attachment
@@ -129,394 +133,6 @@ TOPIC_DETAIL_TABLES = (
 
 GROUP_TOPIC_TABLES = tuple((table, "topic_id") for table in TOPIC_DETAIL_TABLES) + (("topics", "group_id"),)
 
-
-def _beijing_now_timestamp() -> str:
-    return beijing_now_timestamp()
-
-
-def _build_pagination(page: int, per_page: int, total: int) -> Dict[str, int]:
-    return build_pagination(page, per_page, total)
-
-
-def _format_tag_row(row) -> Dict[str, Any]:
-    return format_tag_row(row)
-
-
-def _format_tag_topic_row(topic) -> Dict[str, Any]:
-    return format_tag_topic_row(topic)
-
-
-def _format_group_topic_row(topic) -> Dict[str, Any]:
-    return format_group_topic_row(topic)
-
-
-def _format_topic_row(topic) -> Dict[str, Any]:
-    return format_topic_row(topic)
-
-
-def _topic_tags_from_data(topic_data: Dict[str, Any]) -> set[tuple[str, str]]:
-    return topic_tags_from_data(topic_data)
-
-
-def _iter_topic_user_payloads_from_data(topic_data: Dict[str, Any]):
-    return iter_topic_user_payloads_from_data(topic_data)
-
-
-def _topic_image_payloads_from_data(topic_data: Dict[str, Any]) -> list[tuple[Any, Optional[Any]]]:
-    return topic_image_payloads_from_data(topic_data)
-
-
-def _iter_valid_like_emoji_payloads(emojis):
-    return iter_valid_like_emoji_payloads(emojis)
-
-
-def _iter_valid_user_liked_emoji_keys(emoji_keys):
-    return iter_valid_user_liked_emoji_keys(emoji_keys)
-
-
-def _iter_valid_latest_like_payloads(latest_likes):
-    return iter_valid_latest_like_payloads(latest_likes)
-
-
-def _iter_valid_comment_image_payloads(images):
-    return iter_valid_comment_image_payloads(images)
-
-
-def _comment_image_batch_from_comment(comment):
-    return comment_image_batch_from_comment(comment)
-
-
-def _iter_additional_comment_user_payloads(comment):
-    return iter_additional_comment_user_payloads(comment)
-
-
-def _tag_id_by_name_query(group_id: int, tag_name: str) -> tuple[str, tuple[Any, ...]]:
-    return tag_id_by_name_query(group_id, tag_name)
-
-
-def _tags_by_group_query(group_id: int) -> tuple[str, tuple[Any, ...]]:
-    return tags_by_group_query(group_id)
-
-
-def _topics_by_tag_query(tag_id: int, per_page: int, offset: int) -> tuple[str, tuple[Any, ...]]:
-    return topics_by_tag_query(tag_id, per_page, offset)
-
-
-def _topic_count_by_tag_query(tag_id: int) -> tuple[str, tuple[Any, ...]]:
-    return topic_count_by_tag_query(tag_id)
-
-
-def _tag_exists_in_group_query(group_id: Any, tag_id: int) -> tuple[str, tuple[Any, ...]]:
-    return tag_exists_in_group_query(group_id, tag_id)
-
-
-def _group_topics_by_tag_query(group_id: Any, tag_id: int, per_page: int, offset: int) -> tuple[str, tuple[Any, ...]]:
-    return group_topics_by_tag_query(group_id, tag_id, per_page, offset)
-
-
-def _group_topic_count_by_tag_query(group_id: Any, tag_id: int) -> tuple[str, tuple[Any, ...]]:
-    return group_topic_count_by_tag_query(group_id, tag_id)
-
-
-def _group_topics_query(group_id: Any, per_page: int, offset: int, search: Optional[str]) -> tuple[str, tuple[Any, ...]]:
-    return group_topics_query(group_id, per_page, offset, search)
-
-
-def _group_topics_count_query(group_id: Any, search: Optional[str]) -> tuple[str, tuple[Any, ...]]:
-    return group_topics_count_query(group_id, search)
-
-
-def _topics_query(per_page: int, offset: int, search: Optional[str]) -> tuple[str, tuple[Any, ...]]:
-    return topics_query(per_page, offset, search)
-
-
-def _topics_count_query(search: Optional[str]) -> tuple[str, tuple[Any, ...]]:
-    return topics_count_query(search)
-
-
-def _group_insert_statement(group_data: Dict[str, Any], created_at: str) -> tuple[str, tuple[Any, ...]]:
-    return group_insert_statement(group_data, created_at)
-
-
-def _user_insert_statement(user_data: Dict[str, Any], created_at: str) -> tuple[str, tuple[Any, ...]]:
-    return user_insert_statement(user_data, created_at)
-
-
-def _topic_insert_statement(topic_data: Dict[str, Any], imported_at: str) -> tuple[str, tuple[Any, ...]]:
-    return topic_insert_statement(topic_data, imported_at)
-
-
-def _topic_stats_update_statement(
-    topic_data: Dict[str, Any],
-    topic_id: int,
-    scoped_group_id: Any,
-    imported_at: str,
-) -> tuple[str, tuple[Any, ...]]:
-    return topic_stats_update_statement(topic_data, topic_id, scoped_group_id, imported_at)
-
-
-def _talk_insert_statement(topic_id: int, talk_data: Dict[str, Any], created_at: str) -> tuple[str, tuple[Any, ...]]:
-    return talk_insert_statement(topic_id, talk_data, created_at)
-
-
-def _image_insert_statement(
-    topic_id: int,
-    image_data: Dict[str, Any],
-    comment_id: Optional[int],
-    created_at: str,
-    *,
-    missing_numeric_default: Any = None,
-) -> tuple[str, tuple[Any, ...]]:
-    return image_insert_statement(
-        topic_id,
-        image_data,
-        comment_id,
-        created_at,
-        missing_numeric_default=missing_numeric_default,
-    )
-
-
-def _comment_image_insert_statement(
-    topic_id: int,
-    image_data: Dict[str, Any],
-    comment_id: int,
-    created_at: str,
-) -> tuple[str, tuple[Any, ...]]:
-    return _image_insert_statement(
-        topic_id,
-        image_data,
-        comment_id,
-        created_at,
-        missing_numeric_default=0,
-    )
-
-
-def _delete_latest_likes_statement(topic_id: int) -> tuple[str, tuple[Any, ...]]:
-    return delete_latest_likes_statement(topic_id)
-
-
-def _like_insert_statement(
-    topic_id: int,
-    user_id: Any,
-    like_data: Dict[str, Any],
-    imported_at: str,
-) -> tuple[str, tuple[Any, ...]]:
-    return like_insert_statement(topic_id, user_id, like_data, imported_at)
-
-
-def _latest_like_insert_statement(
-    topic_id: int,
-    user_id: Any,
-    like_data: Dict[str, Any],
-    created_at: str,
-) -> tuple[str, tuple[Any, ...]]:
-    return latest_like_insert_statement(topic_id, user_id, like_data, created_at)
-
-
-def _like_insert_statement_pair(
-    topic_id: int,
-    user_id: Any,
-    like_data: Dict[str, Any],
-    timestamp: str,
-) -> tuple[tuple[str, tuple[Any, ...]], tuple[str, tuple[Any, ...]]]:
-    return like_insert_statement_pair(topic_id, user_id, like_data, timestamp)
-
-
-def _like_emoji_insert_statement(
-    topic_id: int,
-    emoji_data: Dict[str, Any],
-    created_at: str,
-) -> tuple[str, tuple[Any, ...]]:
-    return like_emoji_insert_statement(topic_id, emoji_data, created_at)
-
-
-def _user_liked_emoji_insert_statement(topic_id: int, emoji_key: str) -> tuple[str, tuple[Any, ...]]:
-    return user_liked_emoji_insert_statement(topic_id, emoji_key)
-
-
-def _comment_insert_statement(
-    topic_id: int,
-    comment_id: Any,
-    group_id: Any,
-    owner_user_id: Any,
-    repliee_user_id: Any,
-    comment_data: Dict[str, Any],
-    imported_at: str,
-) -> tuple[str, tuple[Any, ...]]:
-    return comment_insert_statement(
-        topic_id,
-        comment_id,
-        group_id,
-        owner_user_id,
-        repliee_user_id,
-        comment_data,
-        imported_at,
-    )
-
-
-def _question_insert_statement(
-    topic_id: int,
-    owner_user_id: Any,
-    questionee_user_id: Any,
-    is_anonymous: bool,
-    question_data: Dict[str, Any],
-    created_at: str,
-) -> tuple[str, tuple[Any, ...]]:
-    return question_insert_statement(
-        topic_id,
-        owner_user_id,
-        questionee_user_id,
-        is_anonymous,
-        question_data,
-        created_at,
-    )
-
-
-def _answer_insert_statement(
-    topic_id: int,
-    owner_user_id: Any,
-    answer_data: Dict[str, Any],
-    created_at: str,
-) -> tuple[str, tuple[Any, ...]]:
-    return answer_insert_statement(topic_id, owner_user_id, answer_data, created_at)
-
-
-def _article_insert_statement(
-    topic_id: int,
-    title: str,
-    article_id: Any,
-    article_data: Dict[str, Any],
-    created_at: str,
-) -> tuple[str, tuple[Any, ...]]:
-    return article_insert_statement(topic_id, title, article_id, article_data, created_at)
-
-
-def _topic_file_insert_statement(
-    topic_id: int,
-    file_data: Dict[str, Any],
-    created_at: str,
-) -> tuple[str, tuple[Any, ...]]:
-    return topic_file_insert_statement(topic_id, file_data, created_at)
-
-
-def _update_tag_hid_statement(tag_id: int, hid: str) -> tuple[str, tuple[Any, ...]]:
-    return update_tag_hid_statement(tag_id, hid)
-
-
-def _insert_tag_statement(
-    group_id: int, tag_name: str, hid: Optional[str], created_at: str
-) -> tuple[str, tuple[Any, ...]]:
-    return insert_tag_statement(group_id, tag_name, hid, created_at)
-
-
-def _insert_topic_tag_statement(
-    topic_id: int, tag_id: int, created_at: str
-) -> tuple[str, tuple[Any, ...]]:
-    return insert_topic_tag_statement(topic_id, tag_id, created_at)
-
-
-def _refresh_tag_topic_count_statement(tag_id: int) -> tuple[str, tuple[Any, ...]]:
-    return refresh_tag_topic_count_statement(tag_id)
-
-
-def _replace_file_topic_relation(file_db, file_id: int, topic_id: int) -> int:
-    return replace_file_topic_relation(file_db, file_id, topic_id)
-
-
-def _group_id_param(group_id: Optional[str]) -> Any:
-    return group_id_param(group_id)
-
-
-def _nullable_group_id_param(group_id: Optional[str]) -> Any:
-    return nullable_group_id_param(group_id)
-
-
-def _topic_detail_scope(topic_id: int, group_id: Optional[str]) -> tuple[Any, str, list[Any]]:
-    return topic_detail_scope(topic_id, group_id)
-
-
-def _topic_exists_query(topic_id: int, group_id: Optional[str]) -> tuple[str, tuple[Any, ...]]:
-    return topic_exists_query(topic_id, group_id)
-
-
-def _file_exists_query(file_id: int, group_id: Optional[str]) -> tuple[str, tuple[Any, ...]]:
-    return file_exists_query(file_id, group_id)
-
-
-def _topic_group_id_query(topic_id: int) -> tuple[str, tuple[Any, ...]]:
-    return topic_group_id_query(topic_id)
-
-
-def _topic_create_time_by_id_query(topic_id: int) -> tuple[str, tuple[Any, ...]]:
-    return topic_create_time_by_id_query(topic_id)
-
-
-def _newest_topic_create_time_query(
-    group_id: Optional[str], *, nullable_scope: bool = False
-) -> tuple[str, tuple[Any, ...]]:
-    return newest_topic_create_time_query(group_id, nullable_scope=nullable_scope)
-
-
-def _oldest_topic_create_time_query(
-    group_id: Optional[str], *, nullable_scope: bool = False
-) -> tuple[str, tuple[Any, ...]]:
-    return oldest_topic_create_time_query(group_id, nullable_scope=nullable_scope)
-
-
-def _topic_count_query(group_id: Optional[str]) -> tuple[str, tuple[Any, ...]]:
-    return topic_count_query(group_id)
-
-
-def _group_stats_queries(group_id: Optional[str]) -> tuple[tuple[str, str, tuple[Any, ...]], ...]:
-    return group_stats_queries(group_id)
-
-
-def _database_stats_count_query(table: str, group_id: Optional[str]) -> tuple[str, tuple[Any, ...]]:
-    return database_stats_count_query(table, group_id)
-
-
-def _local_group_record_query(group_id: Optional[str]) -> tuple[str, tuple[Any, ...]]:
-    return local_group_record_query(group_id)
-
-
-def _local_group_topic_time_range_query(group_id: Optional[str]) -> tuple[str, tuple[Any, ...]]:
-    return local_group_topic_time_range_query(group_id)
-
-
-def _local_group_topic_count_query(group_id: Optional[str]) -> tuple[str, tuple[Any, ...]]:
-    return local_group_topic_count_query(group_id)
-
-
-def _local_group_ids_query(limit: int) -> tuple[str, tuple[Any, ...]]:
-    return local_group_ids_query(limit)
-
-
-def _upsert_core_file(cursor, group_id: Optional[int], topic_id: int, file_data: Dict[str, Any]) -> Optional[int]:
-    return upsert_core_file(cursor, group_id, topic_id, file_data)
-
-
-def _topic_files_backfill_query(group_id: Optional[str]) -> tuple[str, tuple[Any, ...]]:
-    return topic_files_backfill_query(group_id)
-
-
-def _topic_file_payload_from_row(row) -> Dict[str, Any]:
-    return topic_file_payload_from_row(row)
-
-
-def _topic_file_backfill_ids_from_row(row) -> tuple[Any, Any, Any]:
-    return topic_file_backfill_ids_from_row(row)
-
-
-def _topic_file_group_payload_from_row(row) -> Optional[Dict[str, Any]]:
-    return topic_file_group_payload_from_row(row)
-
-
-def _topic_talk_files_from_data(topic_data: Dict[str, Any]) -> tuple[bool, Any]:
-    return topic_talk_files_from_data(topic_data)
-
-
-def _topic_article_payload_from_data(topic_id: int, topic_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-    return topic_article_payload_from_data(topic_id, topic_data)
 
 
 class ZSXQDatabase:
@@ -576,7 +192,7 @@ class ZSXQDatabase:
         return int(self._fetch_first_column(sql, params) or 0)
 
     def delete_single_topic_records(self, topic_id: int, group_id: Optional[Any] = None) -> bool:
-        scoped_group_id = group_id_param(self.group_id if group_id is None else group_id)
+        scoped_group_id = _group_id_param(self.group_id if group_id is None else group_id)
         for table in TOPIC_DETAIL_TABLES:
             self.cursor.execute(f"DELETE FROM {table} WHERE topic_id = ?", (topic_id,))
 
@@ -587,7 +203,7 @@ class ZSXQDatabase:
         return self.cursor.rowcount > 0
 
     def delete_group_topic_records(self, group_id: Optional[Any] = None) -> Dict[str, int]:
-        scoped_group_id = group_id_param(self.group_id if group_id is None else group_id)
+        scoped_group_id = _group_id_param(self.group_id if group_id is None else group_id)
         deleted_counts = {}
 
         for table, id_column in GROUP_TOPIC_TABLES:
@@ -1304,7 +920,7 @@ class ZSXQDatabase:
         page: int = 1,
         per_page: int = 20,
     ) -> Dict[str, Any]:
-        scoped_group_id = group_id_param(group_id)
+        scoped_group_id = _group_id_param(group_id)
         if not self.tag_exists_in_group(scoped_group_id, tag_id):
             raise TagNotFoundInGroupError
 
@@ -1362,7 +978,7 @@ class ZSXQDatabase:
         per_page: int = 20,
         search: Optional[str] = None,
     ) -> Dict[str, Any]:
-        scoped_group_id = group_id_param(self.group_id if group_id is None else group_id)
+        scoped_group_id = _group_id_param(self.group_id if group_id is None else group_id)
         offset = (page - 1) * per_page
         topics = self._fetch_group_topics(scoped_group_id, per_page, offset, search)
         total = self._fetch_group_topic_count(scoped_group_id, search)

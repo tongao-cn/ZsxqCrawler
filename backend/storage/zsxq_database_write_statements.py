@@ -215,6 +215,21 @@ def image_insert_statement(
     )
 
 
+def comment_image_insert_statement(
+    topic_id: int,
+    image_data: Dict[str, Any],
+    comment_id: int,
+    created_at: str,
+) -> tuple[str, tuple[Any, ...]]:
+    return image_insert_statement(
+        topic_id,
+        image_data,
+        comment_id,
+        created_at,
+        missing_numeric_default=0,
+    )
+
+
 def delete_latest_likes_statement(topic_id: int) -> tuple[str, tuple[Any, ...]]:
     return (
         """
