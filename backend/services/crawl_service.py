@@ -48,36 +48,35 @@ from backend.services.crawl_topic_source import (
     uses_official_topic_source as _uses_official_topic_source,
 )
 from backend.services.official_topic_page_importer import (
-    add_official_import_result,
+    add_official_import_result as _add_official_import_result,
     fetch_official_comments,
     import_official_page_topics,
-    import_official_topic,
+    import_official_topic as _official_import_topic,
     import_official_topics,
     new_official_topics,
     official_topics_to_import_for_mode,
-    official_topic_comments_count,
-    official_topic_exists,
-    official_topic_id,
+    official_topic_comments_count as _official_topic_comments_count,
+    official_topic_exists as _official_topic_exists,
+    official_topic_id as _official_topic_id,
 )
 from backend.services.official_topic_page_fetcher import (
-    OfficialTopicPage,
     OfficialUniqueTopicPage,
-    fetch_official_topic_page,
+    fetch_official_topic_page as _fetch_official_topic_page,
     fetch_unique_official_topic_page,
 )
 from backend.services.official_topic_page_state import (
     OfficialStartCursorResult,
-    add_official_page_stats,
+    add_official_page_stats as _add_official_page_stats,
     dedupe_official_page_topics,
-    empty_official_crawl_stats,
-    official_crawl_completion_message,
+    empty_official_crawl_stats as _empty_official_crawl_stats,
+    official_crawl_completion_message as _official_crawl_completion_message,
     official_cursor_before_timestamp,
-    official_page_cursor,
+    official_page_cursor as _official_page_cursor,
     official_next_cursor_or_log_end,
-    official_next_page_cursor,
-    official_pages_remaining,
-    official_per_page_limit,
-    official_reached_before_start,
+    official_next_page_cursor as _official_next_page_cursor,
+    official_pages_remaining as _official_pages_remaining,
+    official_per_page_limit as _official_per_page_limit,
+    official_reached_before_start as _official_reached_before_start,
     official_start_cursor_from_oldest,
     official_topic_page_empty,
 )
@@ -197,21 +196,6 @@ def _run_legacy_time_range_pages(
         fail_task_with_message_unless_stopped=fail_task_with_message_unless_stopped,
     )
 
-def _official_import_topic(db: ZSXQDatabase, _group_id: str, topic_data: dict[str, Any]) -> str:
-    return import_official_topic(db, _group_id, topic_data)
-
-def _official_topic_exists(db: ZSXQDatabase, _group_id: str, topic_id: Any) -> bool:
-    return official_topic_exists(db, _group_id, topic_id)
-
-def _official_topic_id(topic: dict[str, Any]) -> int:
-    return official_topic_id(topic)
-
-def _official_topic_comments_count(topic: dict[str, Any]) -> int:
-    return official_topic_comments_count(topic)
-
-def _add_official_import_result(stats: dict[str, int], imported: str) -> None:
-    add_official_import_result(stats, imported)
-
 def _new_official_topics(db: ZSXQDatabase, group_id: str, topics: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return new_official_topics(
         db,
@@ -283,12 +267,6 @@ def _official_topic_crawl_runtime() -> OfficialTopicCrawlRuntime:
         ZSXQDatabase,
     )
 
-def _empty_official_crawl_stats() -> dict[str, Any]:
-    return empty_official_crawl_stats()
-
-def _add_official_page_stats(total_stats: dict[str, Any], page_stats: dict[str, int]) -> None:
-    add_official_page_stats(total_stats, page_stats)
-
 def _dedupe_official_page_topics(
     topics: list[dict[str, Any]],
     seen_topic_ids: set[int],
@@ -319,14 +297,6 @@ def _official_topics_to_import_for_mode(
     )
     return plan.topics_to_import, plan.should_stop
 
-def _fetch_official_topic_page(
-    client: OfficialTopicClient,
-    group_id: str,
-    per_page: int,
-    cursor: Optional[str],
-) -> OfficialTopicPage:
-    return fetch_official_topic_page(client, group_id, per_page, cursor)
-
 def _fetch_unique_official_topic_page(
     task_id: str,
     client: OfficialTopicClient,
@@ -351,30 +321,12 @@ def _fetch_unique_official_topic_page(
 def _official_topic_page_empty(task_id: str, topics: list[dict[str, Any]]) -> bool:
     return official_topic_page_empty(task_id, topics, add_task_log)
 
-def _official_page_cursor(payload: dict[str, Any], current_cursor: Optional[str]) -> Optional[str]:
-    return official_page_cursor(payload, current_cursor)
-
-def _official_next_page_cursor(payload: dict[str, Any], current_cursor: Optional[str]) -> Optional[str]:
-    return official_next_page_cursor(payload, current_cursor)
-
 def _official_next_cursor_or_log_end(
     task_id: str,
     payload: dict[str, Any],
     current_cursor: Optional[str],
 ) -> Optional[str]:
     return official_next_cursor_or_log_end(task_id, payload, current_cursor, add_task_log)
-
-def _official_pages_remaining(pages: Optional[int], total_stats: dict[str, Any]) -> bool:
-    return official_pages_remaining(pages, total_stats)
-
-def _official_reached_before_start(oldest_dt: Optional[datetime], start_dt: datetime) -> bool:
-    return official_reached_before_start(oldest_dt, start_dt)
-
-def _official_per_page_limit(per_page: Optional[int]) -> int:
-    return official_per_page_limit(per_page)
-
-def _official_crawl_completion_message(mode: str) -> str:
-    return official_crawl_completion_message(mode)
 
 def _official_cursor_before_timestamp(oldest_timestamp: str) -> str:
     return official_cursor_before_timestamp(oldest_timestamp, _format_zsxq_time)
