@@ -2079,7 +2079,7 @@ class StockTopicAnalysisServiceHelperTests(unittest.TestCase):
             captured["kwargs"] = kwargs
             return AIRuntimeTextResult("summary", "test-model")
 
-        with patch("backend.services.stock_topic_analysis_service.call_runtime_ai_text", side_effect=fake_call):
+        with patch("backend.services.stock_topic_analysis_ai.call_runtime_ai_text", side_effect=fake_call):
             _call_stock_analysis_ai('{"new_topics":[]}')
 
         self.assertEqual("responses", captured["kwargs"]["wire_api"])

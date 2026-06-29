@@ -5,14 +5,9 @@ from __future__ import annotations
 from datetime import date, timedelta
 from typing import Any, Callable, Dict, List, Tuple
 
-from backend.core.ai_provider_config import (
-    get_openai_compatible_config,
-    get_summary_reasoning_effort,
-)
-from backend.services.ai_runtime_request import call_runtime_ai_text
-from backend.services.stock_topic_analysis_ai_prompts import (
-    build_question_analysis_messages,
-    build_stock_analysis_messages,
+from backend.services.stock_topic_analysis_ai import (
+    call_question_analysis_ai as _call_question_analysis_ai,
+    call_stock_analysis_ai as _call_stock_analysis_ai,
 )
 from backend.services.stock_topic_analysis_helpers import (
     _build_saved_stock_analysis_result,
@@ -234,36 +229,6 @@ def _build_question_analysis_prompt(search_result: Dict[str, Any], topics: List[
         search_result,
         topics,
         max_analysis_prompt_chars=MAX_ANALYSIS_PROMPT_CHARS,
-    )
-
-
-def _call_stock_analysis_ai(prompt_payload: str, *, incremental: bool = False) -> Tuple[str, str]:
-    messages = build_stock_analysis_messages(prompt_payload)
-    result = call_runtime_ai_text(
-        messages,
-        get_ai_config=get_openai_compatible_config,
-        wire_api="responses",
-        reasoning_effort=get_summary_reasoning_effort(),
-    )
-
-    return (
-        result.text.strip(),
-        result.model,
-    )
-
-
-def _call_question_analysis_ai(question: str, prompt_payload: str) -> Tuple[str, str]:
-    messages = build_question_analysis_messages(question, prompt_payload)
-    result = call_runtime_ai_text(
-        messages,
-        get_ai_config=get_openai_compatible_config,
-        wire_api="responses",
-        reasoning_effort=get_summary_reasoning_effort(),
-    )
-
-    return (
-        result.text.strip(),
-        result.model,
     )
 
 
