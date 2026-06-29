@@ -47,7 +47,7 @@ from backend.storage.zsxq_file_database_helpers import (
     _user_liked_emoji_record_params,
     _user_record_params,
 )
-from backend.storage.topic_file_attachment_writer import sync_topic_file_attachment
+from backend.storage.topic_file_ingestion_writer import write_file_response_topic_files
 
 
 class ZSXQFileDatabase:
@@ -649,19 +649,14 @@ class ZSXQFileDatabase:
                         solution_id = self.insert_solution(topic_id, solution)
                         _record_imported_value(stats, 'solutions', solution_id)
 
-                    group_id_for_file = (topic_data.get('group') or {}).get('group_id')
-                    file_id = sync_topic_file_attachment(
+                    file_id = write_file_response_topic_files(
                         self,
-                        group_id=group_id_for_file,
                         topic_id=topic_id,
+                        topic_data=topic_data,
                         file_data=file_data,
+                        topic_files=topic_files,
                     )
                     _record_imported_value(stats, 'files', file_id)
-
-                    if file_id:
-                        self.insert_topic_files(topic_id, [file_data])
-                    if topic_files:
-                        self.insert_topic_files(topic_id, topic_files)
             
             self.conn.commit()
             print(f"数据导入成功: {stats}")

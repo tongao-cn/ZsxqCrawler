@@ -86,6 +86,9 @@ from backend.storage.zsxq_database_helpers import (
 )
 from backend.storage.topic_detail_reader import read_topic_detail
 from backend.storage.topic_file_attachment_writer import sync_topic_file_attachment
+from backend.storage.topic_file_ingestion_writer import (
+    sync_topic_files_to_core_tables as _sync_topic_files_to_core_tables,
+)
 
 
 class TopicImportResult(NamedTuple):
@@ -728,22 +731,8 @@ class ZSXQDatabase:
 
     def _sync_topic_files_to_core_tables(self, topic_data: Dict[str, Any], files_data: List[Dict[str, Any]]):
         """把话题采集到的 talk.files 同步到核心 files/relations 表。"""
-        if not files_data:
-            return
-
         try:
-            group_data = topic_data.get('group', {})
-            topic_id = topic_data.get('topic_id')
-            if not topic_id:
-                return
-
-            synced_files = 0
-            for file_data in files_data:
-                file_id = self._sync_topic_file_to_core_table(group_data, topic_id, file_data)
-                if not file_id:
-                    continue
-
-                synced_files += 1
+            synced_files = _sync_topic_files_to_core_tables(self, topic_data, files_data)
 
             if synced_files:
                 print(f"同步话题文件到文件库: topic_id={topic_data.get('topic_id')}, files={synced_files}")
