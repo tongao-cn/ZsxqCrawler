@@ -1,19 +1,17 @@
 from __future__ import annotations
 
-import asyncio
-import queue
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
-from backend.routes.task_stream_events import (
+from backend.services.task_observation_stream import (
+    TaskObservationStreamDeps,
+    drain_task_logs as _drain_task_logs,
+    stream_task_observation_events,
     streaming_response_headers,
-    task_heartbeat_event,
-    task_log_event,
-    task_removed_event,
-    task_status_event,
+    wait_for_task_log as _wait_for_task_log,
 )
 from backend.services.task_runtime import (
     cleanup_tasks as cleanup_task_history,
@@ -33,20 +31,14 @@ class TaskCleanupRequest(BaseModel):
     keep_latest: int = Field(default=100, description="保留最近多少条终态任务")
 
 
-def _wait_for_task_log(subscription: queue.Queue[str], timeout: float = 0.5) -> Optional[str]:
-    try:
-        return subscription.get(timeout=timeout)
-    except queue.Empty:
-        return None
-
-
-def _drain_task_logs(subscription: queue.Queue[str]) -> list[str]:
-    logs = []
-    while True:
-        try:
-            logs.append(subscription.get_nowait())
-        except queue.Empty:
-            return logs
+def _task_observation_stream_deps() -> TaskObservationStreamDeps:
+    return TaskObservationStreamDeps(
+        subscribe_task_logs=subscribe_task_logs,
+        unsubscribe_task_logs=unsubscribe_task_logs,
+        get_task_logs_state=get_task_logs_state,
+        get_task_state=get_task_state,
+        is_terminal_task_status=is_terminal_task_status,
+    )
 
 
 @router.get("")
@@ -102,50 +94,8 @@ async def get_task_logs(task_id: str):
 @router.get("/{task_id}/stream")
 async def stream_task_logs(task_id: str):
     """SSE流式传输任务日志"""
-    async def event_stream():
-        subscription = subscribe_task_logs(task_id)
-
-        try:
-            # 发送历史日志
-            logs = get_task_logs_state(task_id) or []
-            for log in logs:
-                yield task_log_event(log)
-
-            # 发送任务状态
-            task = get_task_state(task_id)
-            if task:
-                yield task_status_event(task)
-
-            # 保持连接活跃
-            while True:
-                log = await asyncio.to_thread(_wait_for_task_log, subscription, 0.5)
-                if log is not None:
-                    yield task_log_event(log)
-                for queued_log in _drain_task_logs(subscription):
-                    yield task_log_event(queued_log)
-
-                # 检查任务状态变化
-                task = get_task_state(task_id)
-                if task:
-                    yield task_status_event(task)
-
-                    if is_terminal_task_status(task["status"]):
-                        break
-                else:
-                    yield task_removed_event()
-                    break
-
-                # 发送心跳
-                yield task_heartbeat_event()
-
-        except asyncio.CancelledError:
-            # 客户端断开连接
-            pass
-        finally:
-            unsubscribe_task_logs(task_id, subscription)
-
     return StreamingResponse(
-        event_stream(),
+        stream_task_observation_events(task_id, _task_observation_stream_deps()),
         media_type="text/event-stream",
         headers=streaming_response_headers(),
     )
