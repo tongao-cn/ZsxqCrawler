@@ -7,7 +7,7 @@ import datetime
 from pathlib import Path
 from typing import Any, Dict, Optional, Protocol
 
-from backend.crawlers.zsxq_file_downloader_helpers import (
+from backend.crawlers.file_request_fingerprint import (
     risk_event_header_profile_label,
     risk_event_row,
     risk_event_user_agent_label,

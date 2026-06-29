@@ -6,7 +6,7 @@ import random
 import time
 from typing import Any, Dict, Protocol
 
-from backend.crawlers.zsxq_file_downloader_helpers import (
+from backend.crawlers.file_request_fingerprint import (
     sec_ch_ua_for_user_agent,
     stealth_accept_languages,
     stealth_base_headers,
