@@ -8,6 +8,10 @@ from backend.crawlers.topic_pagination import (
     _offset_zsxq_end_time,
     _offset_zsxq_end_time_by_hours,
 )
+from backend.crawlers.topic_pagination_stats import (
+    add_topic_pagination_counts,
+    add_topic_pagination_page_stats,
+)
 from backend.crawlers.topic_page_novelty import analyze_topic_page_novelty
 from backend.crawlers.topic_time_cursor import next_topic_end_time
 from backend.crawlers.topic_crawler import ZSXQTopicCrawler
@@ -248,6 +252,17 @@ class TopicCrawlerPaginationTests(unittest.TestCase):
         )
         first['pages'] = 1
         self.assertEqual(0, second['pages'])
+
+    def test_topic_pagination_stats_helpers_accumulate_in_place(self):
+        stats = _empty_topic_pagination_stats()
+
+        add_topic_pagination_counts(stats, new_topics=1, errors=2)
+        add_topic_pagination_page_stats(
+            stats,
+            {"new_topics": 3, "updated_topics": 4, "errors": 5},
+        )
+
+        self.assertEqual({"new_topics": 4, "updated_topics": 4, "errors": 7, "pages": 1}, stats)
 
     def test_offset_zsxq_end_time_formats_without_timezone_colon(self):
         self.assertEqual(

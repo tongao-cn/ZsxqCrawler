@@ -4,6 +4,11 @@ from typing import Any, Dict, List, Optional
 
 from backend.core.console_output import safe_console_print as print
 from backend.crawlers.topic_page_novelty import analyze_topic_page_novelty
+from backend.crawlers.topic_pagination_stats import (
+    add_topic_pagination_counts as _add_topic_pagination_counts,
+    add_topic_pagination_page_stats as _add_topic_pagination_page_stats,
+    empty_topic_pagination_stats as _empty_topic_pagination_stats,
+)
 from backend.crawlers.topic_time_cursor import (
     next_topic_end_time,
     offset_zsxq_end_time as _offset_zsxq_end_time,
@@ -12,10 +17,6 @@ from backend.crawlers.topic_time_cursor import (
 
 
 TOPIC_PAGINATION_MAX_RETRIES_PER_PAGE = 10
-
-
-def _empty_topic_pagination_stats() -> Dict[str, int]:
-    return {'new_topics': 0, 'updated_topics': 0, 'errors': 0, 'pages': 0}
 
 
 class TopicPaginationMixin:
@@ -83,10 +84,7 @@ class TopicPaginationMixin:
                     self.log(f"   💾 页面存储: 新增{page_stats['new_topics']}, 更新{page_stats['updated_topics']}")
 
                     # 累计统计
-                    total_stats['new_topics'] += page_stats['new_topics']
-                    total_stats['updated_topics'] += page_stats['updated_topics']
-                    total_stats['errors'] += page_stats['errors']
-                    total_stats['pages'] += 1
+                    _add_topic_pagination_page_stats(total_stats, page_stats)
                     completed_pages += 1
 
                     # 调试：显示所有话题的时间戳（只在调试模式下）
@@ -117,7 +115,7 @@ class TopicPaginationMixin:
                 else:
                     # 失败，增加重试计数和错误计数
                     retry_count += 1
-                    total_stats['errors'] += 1
+                    _add_topic_pagination_counts(total_stats, errors=1)
                     print(f"   ❌ 页面 {current_page} 获取失败 (重试{retry_count}/{max_retries_per_page})")
 
                     # 调整时间戳用于重试
@@ -270,10 +268,7 @@ class TopicPaginationMixin:
                     print(f"   💾 页面存储: 新增{page_stats['new_topics']}, 更新{page_stats['updated_topics']}")
 
                     # 累计统计
-                    total_stats['new_topics'] += page_stats['new_topics']
-                    total_stats['updated_topics'] += page_stats['updated_topics']
-                    total_stats['errors'] += page_stats['errors']
-                    total_stats['pages'] += 1
+                    _add_topic_pagination_page_stats(total_stats, page_stats)
 
                     # 显示进度信息
                     print(f"   📊 获取到 {len(topics)} 个话题，其中 {novelty.new_count} 个为新话题")
@@ -306,7 +301,7 @@ class TopicPaginationMixin:
                 else:
                     # 失败，增加重试计数和错误计数
                     retry_count += 1
-                    total_stats['errors'] += 1
+                    _add_topic_pagination_counts(total_stats, errors=1)
                     print(f"   ❌ 页面 {current_page} 获取失败 (重试{retry_count}/{max_retries_per_page})")
 
                     # 调整时间戳用于重试
@@ -422,10 +417,7 @@ class TopicPaginationMixin:
                     print(f"   💾 页面存储: 新增{page_stats['new_topics']}, 更新{page_stats['updated_topics']}")
 
                     # 累计统计
-                    total_stats['new_topics'] += page_stats['new_topics']
-                    total_stats['updated_topics'] += page_stats['updated_topics']
-                    total_stats['errors'] += page_stats['errors']
-                    total_stats['pages'] += 1
+                    _add_topic_pagination_page_stats(total_stats, page_stats)
                     completed_pages += 1
 
                     # 调试：显示话题时间戳信息
@@ -450,7 +442,7 @@ class TopicPaginationMixin:
                 else:
                     # 失败，增加重试计数和错误计数
                     retry_count += 1
-                    total_stats['errors'] += 1
+                    _add_topic_pagination_counts(total_stats, errors=1)
 
                     # 如果任务已停止，不再打印错误信息和调整时间戳
                     if self.is_stopped():
@@ -600,7 +592,7 @@ class TopicPaginationMixin:
 
                                 # 导入数据
                                 if not self.db.import_topic_data(new_topic):
-                                    total_stats['errors'] += 1
+                                    _add_topic_pagination_counts(total_stats, errors=1)
                                     print(f"   ⚠️ 话题 {topic_id} 导入失败，已回滚该话题写入")
                                     continue
 
@@ -619,16 +611,22 @@ class TopicPaginationMixin:
                         print(f"   💾 新话题存储: 新增{new_topics_count}, 更新{updated_topics_count}")
 
                         # 更新统计
-                        total_stats['new_topics'] += new_topics_count
-                        total_stats['updated_topics'] += updated_topics_count
+                        _add_topic_pagination_counts(
+                            total_stats,
+                            new_topics=new_topics_count,
+                            updated_topics=updated_topics_count,
+                        )
 
                     # 累计统计（如果是整页存储）
                     if novelty.existing_count == 0:
-                        total_stats['new_topics'] += page_stats['new_topics']
-                        total_stats['updated_topics'] += page_stats['updated_topics']
-                        total_stats['errors'] += page_stats['errors']
+                        _add_topic_pagination_counts(
+                            total_stats,
+                            new_topics=page_stats['new_topics'],
+                            updated_topics=page_stats['updated_topics'],
+                            errors=page_stats['errors'],
+                        )
 
-                    total_stats['pages'] += 1
+                    _add_topic_pagination_counts(total_stats, pages=1)
 
                     # 显示当前进度
                     print(f"   📈 累计: 新增{total_stats['new_topics']}, 更新{total_stats['updated_topics']}, 页数{total_stats['pages']}")
@@ -653,7 +651,7 @@ class TopicPaginationMixin:
                 else:
                     # 失败，增加重试计数和错误计数
                     retry_count += 1
-                    total_stats['errors'] += 1
+                    _add_topic_pagination_counts(total_stats, errors=1)
 
                     # 如果任务已停止，不再打印错误信息和调整时间戳
                     if self.is_stopped():
