@@ -113,7 +113,6 @@ export default function GroupDetailPage() {
     taskDockVisible,
     taskLogExpanded,
     taskDockView,
-    setTaskDockView,
     handleTaskCreated,
     selectTaskLog,
     openTaskLog,
@@ -472,7 +471,8 @@ export default function GroupDetailPage() {
           onOpen={openTaskLog}
           onCollapse={collapseTaskLog}
           onClose={closeTaskDock}
-          onViewChange={setTaskDockView}
+          onShowLogs={openTaskLog}
+          onShowTasks={openTaskList}
           onTaskSelect={selectTaskLog}
           onTaskStop={() => {
             setTimeout(() => {

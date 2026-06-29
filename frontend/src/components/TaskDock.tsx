@@ -5,6 +5,7 @@ import { ChevronDown, ChevronUp, FileText, ListChecks, Terminal, X } from 'lucid
 
 import { Button } from '@/components/ui/button';
 import TaskListCompact from '@/components/TaskListCompact';
+import type { TaskDockView } from '@/hooks/useTaskDockSession';
 
 const TaskLogViewer = dynamic(() => import('@/components/TaskLogViewer'), {
   loading: () => (
@@ -18,13 +19,14 @@ const TaskLogViewer = dynamic(() => import('@/components/TaskLogViewer'), {
 interface TaskDockProps {
   taskId: string | null;
   expanded: boolean;
-  view: 'logs' | 'tasks';
+  view: TaskDockView;
   groupId?: number | string | null;
   onOpen: () => void;
   onCollapse: () => void;
   onClose: () => void;
   onTaskStop: () => void;
-  onViewChange: (view: 'logs' | 'tasks') => void;
+  onShowLogs: () => void;
+  onShowTasks: () => void;
   onTaskSelect: (taskId: string) => void;
 }
 
@@ -37,7 +39,8 @@ export default function TaskDock({
   onCollapse,
   onClose,
   onTaskStop,
-  onViewChange,
+  onShowLogs,
+  onShowTasks,
   onTaskSelect,
 }: TaskDockProps) {
   const toggleExpanded = expanded ? onCollapse : onOpen;
@@ -76,10 +79,7 @@ export default function TaskDock({
               variant={view === 'logs' ? 'default' : 'ghost'}
               size="sm"
               className="h-7 gap-1 px-2 text-xs"
-              onClick={() => {
-                onViewChange('logs');
-                onOpen();
-              }}
+              onClick={onShowLogs}
             >
               <Terminal className="h-3.5 w-3.5" />
               日志
@@ -88,10 +88,7 @@ export default function TaskDock({
               variant={view === 'tasks' ? 'default' : 'ghost'}
               size="sm"
               className="h-7 gap-1 px-2 text-xs"
-              onClick={() => {
-                onViewChange('tasks');
-                onOpen();
-              }}
+              onClick={onShowTasks}
             >
               <ListChecks className="h-3.5 w-3.5" />
               任务
@@ -133,11 +130,7 @@ export default function TaskDock({
             <TaskListCompact
               groupId={groupId}
               selectedTaskId={taskId}
-              onSelectTask={(selectedTaskId) => {
-                onTaskSelect(selectedTaskId);
-                onViewChange('logs');
-                onOpen();
-              }}
+              onSelectTask={onTaskSelect}
               onTaskStop={onTaskStop}
             />
           )}
