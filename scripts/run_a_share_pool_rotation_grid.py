@@ -16,20 +16,24 @@ if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
 from backend.services.a_share_analysis_service import normalize_group_id, read_existing_csv, validate_day
-from backend.services.a_share_research_return_smoke_service import (
+from backend.services.a_share_knowaction_market_data import (
+    load_knowaction_quotes,
+    load_knowaction_stock_basic_index,
+    load_knowaction_trade_dates,
+)
+from backend.services.a_share_pool_rotation_backtest import (
     _compound_return,
     _is_tradable_entry_quote,
     _normalize_text,
     _parse_day,
-    _pool_quote_range_bounds,
     _quotes_by_ts_code_and_day,
-    _rotation_entry_exit_dates,
     _safe_float,
     _safe_int,
+    pool_quote_range_bounds as _pool_quote_range_bounds,
+    rotation_entry_exit_dates as _rotation_entry_exit_dates,
+)
+from backend.services.a_share_research_return_smoke_service import (
     build_recommendation_pool_memberships,
-    load_knowaction_quotes,
-    load_knowaction_stock_basic_index,
-    load_knowaction_trade_dates,
     resolve_signal_ts_code,
 )
 
