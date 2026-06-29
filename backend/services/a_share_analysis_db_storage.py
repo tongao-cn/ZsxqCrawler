@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any, Dict, Iterable, Iterator, List, Optional, Sequence, Set, Tuple
 
 import psycopg2
-from psycopg2.extras import Json, execute_values
+from psycopg2.extras import execute_values
 
 from backend.storage.db_compat import get_postgres_dsn as get_zsxq_postgres_dsn
 from backend.storage.postgres_core_schema import (
@@ -26,13 +26,6 @@ from backend.services.a_share_analysis_storage_rows import (
     normalize_group_id as _normalize_group_id,
     parse_state_key as _parse_state_key,
 )
-from backend.services.a_share_tdx_export_payload import (
-    dedupe_company_names as _dedupe_company_names,
-    latest_tdx_export_payload as _latest_tdx_export_payload,
-    normalize_json_value as _normalize_json_value,
-    tdx_export_block_payload as _tdx_export_block_payload,
-)
-
 
 DEFAULT_KNOW_ACTION_ENV_PATH = Path(os.getenv("KNOW_ACTION_ENV_PATH", r"C:\Dev\KnowActionSystem\.env"))
 
@@ -568,137 +561,27 @@ def log_tdx_export(
     blocks: Sequence[Dict[str, Any]],
     env_path: Path = DEFAULT_KNOW_ACTION_ENV_PATH,
 ) -> int:
-    with get_connection(env_path) as conn:
-        with conn.cursor() as cur:
-            cur.execute(
-                f"""
-                INSERT INTO {_core_table_ref(TDX_EXPORTS_TABLE)} (
-                    start_date,
-                    end_date,
-                    tdx_root,
-                    ranking_top_n,
-                    total_written,
-                    unresolved_count,
-                    stock_basic_source,
-                    source_detail,
-                    backup_files
-                )
-                VALUES (%s::date, %s::date, %s, %s, %s, %s, %s, %s, %s)
-                RETURNING id
-                """,
-                (
-                    start_date,
-                    end_date,
-                    tdx_root,
-                    int(ranking_top_n),
-                    int(total_written),
-                    len(list(unresolved_companies or [])),
-                    stock_basic_source,
-                    source_detail,
-                    Json(list(backup_files or [])),
-                ),
-            )
-            export_id = int(cur.fetchone()[0])
+    from backend.services.a_share_tdx_export_storage import log_tdx_export as _log_tdx_export
 
-            block_rows: List[Tuple[int, int, str, str, str, int, int, Json]] = []
-            for block in blocks:
-                block_rows.append(
-                    (
-                        export_id,
-                        int(block.get("window_days") or 0),
-                        str(block.get("block_name") or ""),
-                        str(block.get("block_code") or ""),
-                        str(block.get("block_path") or ""),
-                        int(block.get("written_count") or 0),
-                        int(block.get("skipped_count") or 0),
-                        Json(list(block.get("skipped_companies") or [])),
-                    )
-                )
-
-            if block_rows:
-                execute_values(
-                    cur,
-                    f"""
-                    INSERT INTO {_core_table_ref(TDX_EXPORT_BLOCKS_TABLE)} (
-                        export_id,
-                        window_days,
-                        block_name,
-                        block_code,
-                        block_path,
-                        written_count,
-                        skipped_count,
-                        skipped_companies
-                    )
-                    VALUES %s
-                    """,
-                    block_rows,
-                    template="(%s, %s, %s, %s, %s, %s, %s, %s)",
-                )
-    return export_id
+    return _log_tdx_export(
+        start_date=start_date,
+        end_date=end_date,
+        tdx_root=tdx_root,
+        ranking_top_n=ranking_top_n,
+        total_written=total_written,
+        unresolved_companies=unresolved_companies,
+        backup_files=backup_files,
+        stock_basic_source=stock_basic_source,
+        source_detail=source_detail,
+        blocks=blocks,
+        env_path=env_path,
+    )
 
 
 def get_latest_tdx_export(env_path: Path = DEFAULT_KNOW_ACTION_ENV_PATH) -> Optional[Dict[str, Any]]:
-    with get_connection(env_path) as conn:
-        with conn.cursor() as cur:
-            cur.execute(
-                f"""
-                SELECT
-                    id,
-                    exported_at,
-                    start_date::text,
-                    end_date::text,
-                    tdx_root,
-                    ranking_top_n,
-                    total_written,
-                    unresolved_count,
-                    stock_basic_source,
-                    source_detail,
-                    backup_files
-                FROM {_core_table_ref(TDX_EXPORTS_TABLE)}
-                ORDER BY exported_at DESC, id DESC
-                LIMIT 1
-                """
-            )
-            row = cur.fetchone()
-            if not row:
-                return None
+    from backend.services.a_share_tdx_export_storage import get_latest_tdx_export as _get_latest_tdx_export
 
-            (
-                export_id,
-                exported_at,
-                start_date,
-                end_date,
-                tdx_root,
-                ranking_top_n,
-                total_written,
-                unresolved_count,
-                stock_basic_source,
-                source_detail,
-                backup_files,
-            ) = row
-
-            cur.execute(
-                f"""
-                SELECT
-                    window_days,
-                    block_name,
-                    block_code,
-                    block_path,
-                    written_count,
-                    skipped_count,
-                    skipped_companies
-                FROM {_core_table_ref(TDX_EXPORT_BLOCKS_TABLE)}
-                WHERE export_id = %s
-                ORDER BY window_days ASC
-                """,
-                (export_id,),
-            )
-            blocks = [
-                _tdx_export_block_payload(block_row)
-                for block_row in cur.fetchall()
-            ]
-
-    return _latest_tdx_export_payload(row, blocks)
+    return _get_latest_tdx_export(env_path)
 
 
 __all__ = [

@@ -13,6 +13,7 @@ class _FakeStorageCursor:
         self.executed = []
         self.execute_values_calls = []
         self.fail_on_execute_values_call = fail_on_execute_values_call
+        self.fetchone_rows = []
         self.fetchall_rows = []
 
     def __enter__(self):
@@ -26,6 +27,11 @@ class _FakeStorageCursor:
 
     def fetchall(self):
         return self.fetchall_rows
+
+    def fetchone(self):
+        if self.fetchone_rows:
+            return self.fetchone_rows.pop(0)
+        return None
 
 
 class _FakeStorageConnection:
@@ -112,6 +118,116 @@ class AShareAnalysisDbStorageHelperTests(unittest.TestCase):
         self.assertEqual("cache.json", payload["source_detail"])
         self.assertEqual(["backup.blk"], payload["backup_files"])
         self.assertEqual(blocks, payload["blocks"])
+
+    @unittest.skipUnless(HAS_STORAGE_DEPS, "PostgreSQL storage dependencies are not installed")
+    def test_tdx_export_storage_logs_export_and_blocks(self):
+        from backend.services import a_share_analysis_db_storage as storage
+        from backend.services import a_share_tdx_export_storage as tdx_storage
+
+        cursor = _FakeStorageCursor()
+        cursor.fetchone_rows = [(42,)]
+        conn = _FakeStorageConnection(cursor)
+
+        @contextmanager
+        def fake_connection(env_path=storage.DEFAULT_KNOW_ACTION_ENV_PATH):
+            try:
+                yield conn
+                conn.commit()
+            except Exception:
+                conn.rollback()
+                raise
+            finally:
+                conn.close()
+
+        with patch.object(storage, "get_connection", fake_connection), patch.object(
+            tdx_storage, "execute_values", side_effect=_fake_execute_values
+        ):
+            export_id = tdx_storage.log_tdx_export(
+                start_date="2026-05-01",
+                end_date="2026-05-07",
+                tdx_root=r"C:\new_tdx",
+                ranking_top_n=100,
+                total_written=2,
+                unresolved_companies=["未知"],
+                backup_files=["backup.blk"],
+                stock_basic_source="cache",
+                source_detail="cache.json",
+                blocks=[
+                    {
+                        "window_days": 7,
+                        "block_name": "7日Top100",
+                        "block_code": "ZX007",
+                        "block_path": "tdx-api://ZX007",
+                        "written_count": 2,
+                        "skipped_count": 1,
+                        "skipped_companies": ["未知"],
+                    }
+                ],
+            )
+
+        self.assertEqual(42, export_id)
+        self.assertIn("zsxq_a_share_tdx_exports", cursor.executed[0][0])
+        self.assertEqual(1, len(cursor.execute_values_calls))
+        sql, rows, template = cursor.execute_values_calls[0]
+        self.assertIn("zsxq_a_share_tdx_export_blocks", sql)
+        self.assertEqual(42, rows[0][0])
+        self.assertEqual(7, rows[0][1])
+        self.assertEqual("(%s, %s, %s, %s, %s, %s, %s, %s)", template)
+        self.assertTrue(conn.committed)
+        self.assertFalse(conn.rolled_back)
+
+    @unittest.skipUnless(HAS_STORAGE_DEPS, "PostgreSQL storage dependencies are not installed")
+    def test_tdx_export_storage_loads_latest_export_with_blocks(self):
+        from backend.services import a_share_analysis_db_storage as storage
+        from backend.services import a_share_tdx_export_storage as tdx_storage
+
+        exported_at = datetime(2026, 5, 7, 10, 30)
+        cursor = _FakeStorageCursor()
+        cursor.fetchone_rows = [
+            (
+                42,
+                exported_at,
+                "2026-05-01",
+                "2026-05-07",
+                r"C:\new_tdx",
+                100,
+                2,
+                1,
+                "cache",
+                "cache.json",
+                '["backup.blk"]',
+            )
+        ]
+        cursor.fetchall_rows = [
+            (7, "7日Top100", "ZX007", "tdx-api://ZX007", 2, 1, '["未知"]')
+        ]
+        conn = _FakeStorageConnection(cursor)
+
+        @contextmanager
+        def fake_connection(env_path=storage.DEFAULT_KNOW_ACTION_ENV_PATH):
+            yield conn
+
+        with patch.object(storage, "get_connection", fake_connection):
+            payload = tdx_storage.get_latest_tdx_export()
+
+        self.assertEqual(42, payload["export_id"])
+        self.assertEqual(exported_at.isoformat(), payload["exported_at"])
+        self.assertEqual(["未知"], payload["unresolved_companies"])
+        self.assertEqual(["backup.blk"], payload["backup_files"])
+        self.assertEqual(
+            [
+                {
+                    "window_days": 7,
+                    "block_name": "7日Top100",
+                    "block_code": "ZX007",
+                    "block_path": "tdx-api://ZX007",
+                    "written_count": 2,
+                    "skipped_count": 1,
+                    "skipped_companies": ["未知"],
+                }
+            ],
+            payload["blocks"],
+        )
 
     @unittest.skipUnless(HAS_STORAGE_DEPS, "PostgreSQL storage dependencies are not installed")
     def test_a_share_table_refs_use_core_schema_except_stock_basic(self):

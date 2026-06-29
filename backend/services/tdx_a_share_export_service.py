@@ -14,7 +14,7 @@ from backend.services.a_share_analysis_service import (
     get_group_analysis_paths,
     normalize_group_id,
 )
-from backend.services.a_share_analysis_db_storage import (
+from backend.services.a_share_tdx_export_storage import (
     log_tdx_export,
     get_latest_tdx_export as get_latest_tdx_export_from_db,
 )
