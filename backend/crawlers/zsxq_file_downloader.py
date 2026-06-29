@@ -279,6 +279,10 @@ from backend.crawlers.file_api_retry_policy import (
     request_exception_plan,
     retry_exhausted_message,
 )
+from backend.crawlers.file_database_queries import (
+    download_query_group_id,
+    latest_file_create_time_query,
+)
 from backend.crawlers.file_download_policy import (
     download_file_data,
     download_progress_message,
@@ -293,9 +297,7 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     add_import_stats,
     clean_cookie_result,
     download_settings_display_lines,
-    download_query_group_id,
     empty_import_stats,
-    latest_file_create_time_query,
     risk_event_header_user_agent,
     time_collection_database_status_message,
     time_collection_empty_page_message,

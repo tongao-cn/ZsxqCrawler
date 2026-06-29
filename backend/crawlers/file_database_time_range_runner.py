@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, Protocol
 
-from backend.crawlers.zsxq_file_downloader_helpers import (
+from backend.crawlers.file_database_queries import (
     database_time_range_query,
     database_time_range_result,
     download_query_group_id,

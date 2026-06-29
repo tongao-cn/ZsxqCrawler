@@ -7,6 +7,10 @@ import random
 import time
 from typing import Any, Dict, NamedTuple, Optional, Protocol
 
+from backend.crawlers.file_database_queries import (
+    download_query_group_id,
+    latest_file_create_time_query,
+)
 from backend.crawlers.file_list_page import file_list_page
 from backend.crawlers.file_time_window import (
     page_crosses_stop_before,
@@ -17,9 +21,7 @@ from backend.crawlers.file_time_window import (
 )
 from backend.crawlers.zsxq_file_downloader_helpers import (
     add_import_stats,
-    download_query_group_id,
     empty_import_stats,
-    latest_file_create_time_query,
     time_collection_database_status_message,
     time_collection_empty_page_message,
     time_collection_exception_message,

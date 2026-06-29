@@ -5,12 +5,14 @@ from __future__ import annotations
 from typing import Any, Dict, Optional, Protocol
 
 from backend.core.console_output import safe_console_print as print
-from backend.crawlers.zsxq_file_downloader_helpers import (
+from backend.crawlers.file_database_queries import (
     database_stats_api_response_query,
-    database_stats_table_emoji,
     database_stats_time_range_query,
     database_stats_total_size_query,
     download_query_group_id,
+)
+from backend.crawlers.zsxq_file_downloader_helpers import (
+    database_stats_table_emoji,
 )
 from backend.crawlers.zsxq_file_downloader_targets import (
     DatabaseStatsTimeRange,

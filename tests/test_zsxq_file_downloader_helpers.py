@@ -3907,7 +3907,7 @@ class FileDownloaderDatabaseDownloadTests(unittest.TestCase):
         downloader = self._downloader_for_query_capture()
 
         with patch(
-            "backend.crawlers.zsxq_file_downloader_helpers.normalize_date_range",
+            "backend.crawlers.file_database_queries.normalize_date_range",
             return_value=("2026-05-01", "2026-05-07", None),
         ) as normalize:
             query_plan = prepare_database_download_query_plan(
@@ -4025,7 +4025,7 @@ class FileDownloaderDatabaseDownloadTests(unittest.TestCase):
         downloader = self._downloader_for_query_capture()
 
         with patch(
-            "backend.crawlers.zsxq_file_downloader_helpers.normalize_date_range",
+            "backend.crawlers.file_database_queries.normalize_date_range",
             return_value=("2026-05-01", "2026-05-07", None),
         ) as normalize:
             stats = ZSXQFileDownloader.download_files_from_database(downloader, recent_days=7)
