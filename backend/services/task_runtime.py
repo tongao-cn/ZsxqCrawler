@@ -17,17 +17,10 @@ from backend.services.task_runtime_executor import (
     stop_task_lock_heartbeat as _executor_stop_task_lock_heartbeat,
 )
 from backend.services.task_runtime_resources import (
-    clear_runtime_resource_tracking,
-    register_task_crawler as _register_resource_crawler,
-    register_task_file_downloader as _register_resource_file_downloader,
+    RuntimeShutdownResourceSnapshot,
+    TaskRuntimeResourceRegistry,
+    TaskRuntimeStopResources,
     request_stop_for_resources,
-    request_stop_for_task_resources,
-    runtime_crawlers_snapshot,
-    runtime_file_downloaders_snapshot,
-    task_crawler,
-    task_file_downloader,
-    unregister_task_crawler as _unregister_resource_crawler,
-    unregister_task_file_downloader as _unregister_resource_file_downloader,
 )
 from backend.services.task_runtime_status import (
     INGESTION_LOCK_KEY,
@@ -94,6 +87,7 @@ sse_connections: Dict[str, List[queue.Queue[str]]] = _runtime_state_bundle.sse_c
 task_stop_flags: Dict[str, bool] = _runtime_state_bundle.task_stop_flags
 crawler_instances: Dict[str, Any] = {}
 file_downloader_instances: Dict[str, Any] = {}
+_runtime_resources = TaskRuntimeResourceRegistry(crawler_instances, file_downloader_instances)
 runtime_task_threads: Dict[str, threading.Thread] = _runtime_state_bundle.runtime_task_threads
 runtime_task_heartbeats: Dict[str, threading.Event] = _runtime_state_bundle.runtime_task_heartbeats
 _runtime_state = _runtime_state_bundle.state
@@ -460,39 +454,23 @@ def _release_task_lock_on_terminal_status(
 
 
 def _register_task_crawler_locked(task_id: str, crawler: Any) -> None:
-    _register_resource_crawler(crawler_instances, task_id, crawler)
+    _runtime_resources.register_crawler(task_id, crawler)
 
 
 def _unregister_task_crawler_locked(task_id: str) -> None:
-    _unregister_resource_crawler(crawler_instances, task_id)
+    _runtime_resources.unregister_crawler(task_id)
 
 
 def _register_task_file_downloader_locked(task_id: str, downloader: Any) -> None:
-    _register_resource_file_downloader(file_downloader_instances, task_id, downloader)
+    _runtime_resources.register_file_downloader(task_id, downloader)
 
 
 def _unregister_task_file_downloader_locked(task_id: str) -> None:
-    _unregister_resource_file_downloader(file_downloader_instances, task_id)
-
-
-def _task_crawler_locked(task_id: str) -> Any:
-    return task_crawler(crawler_instances, task_id)
-
-
-def _task_file_downloader_locked(task_id: str) -> Any:
-    return task_file_downloader(file_downloader_instances, task_id)
-
-
-def _runtime_crawlers_snapshot_locked() -> List[Any]:
-    return runtime_crawlers_snapshot(crawler_instances)
-
-
-def _runtime_file_downloaders_snapshot_locked() -> List[Any]:
-    return runtime_file_downloaders_snapshot(file_downloader_instances)
+    _runtime_resources.unregister_file_downloader(task_id)
 
 
 def _clear_runtime_resource_tracking_locked() -> None:
-    clear_runtime_resource_tracking(crawler_instances, file_downloader_instances)
+    _runtime_resources.clear()
 
 
 def register_task_crawler(task_id: str, crawler: Any) -> None:
@@ -515,9 +493,11 @@ def unregister_task_file_downloader(task_id: str) -> None:
         _unregister_task_file_downloader_locked(task_id)
 
 
-def _prepare_task_stop_resources_locked(task_id: str) -> tuple[Any, Any]:
-    _set_task_stop_flag_locked(task_id, True)
-    return _task_crawler_locked(task_id), _task_file_downloader_locked(task_id)
+def _prepare_task_stop_resources_locked(task_id: str) -> TaskRuntimeStopResources:
+    return _runtime_resources.prepare_task_stop(
+        task_id,
+        set_task_stop_flag=_set_task_stop_flag_locked,
+    )
 
 
 def is_task_cancellable(task: Dict[str, Any]) -> bool:
@@ -538,18 +518,18 @@ def stop_task(task_id: str) -> bool:
         return False
 
     with _state_lock:
-        crawler, downloader = _prepare_task_stop_resources_locked(task_id)
+        resources = _prepare_task_stop_resources_locked(task_id)
     get_task_store().set_stop_flag(task_id, True)
     add_task_log(task_id, "🛑 收到停止请求，正在停止任务...")
 
-    _request_stop_for_task_resources(crawler, downloader)
+    _request_stop_for_task_resources(resources)
 
     update_task(task_id, "cancelled", "任务已被用户停止")
     return True
 
 
-def _request_stop_for_task_resources(crawler: Any, downloader: Any) -> None:
-    request_stop_for_task_resources(crawler, downloader, crawler_runtime.crawler_instance)
+def _request_stop_for_task_resources(resources: TaskRuntimeStopResources) -> None:
+    _runtime_resources.request_stop_for_task(resources, crawler_runtime.crawler_instance)
 
 
 def _register_task_lock_heartbeat_locked(task_id: str, stop_event: threading.Event) -> None:
@@ -648,16 +628,13 @@ def _register_runtime_task_thread(task_id: str, thread: threading.Thread) -> Non
         _register_runtime_task_thread_locked(task_id, thread)
 
 
-def _prepare_runtime_shutdown_snapshot_locked() -> tuple[List[tuple[str, Dict[str, Any]]], List[Any], List[Any]]:
+def _prepare_runtime_shutdown_snapshot_locked() -> RuntimeShutdownResourceSnapshot:
     tasks_snapshot = _memory_tasks_snapshot_locked()
-    stopping_task_ids = [
-        task_id
-        for task_id, task in tasks_snapshot
-        if _is_active_task_status(task.get("status"))
-    ]
-    for task_id in stopping_task_ids:
-        _set_task_stop_flag_locked(task_id, True)
-    return tasks_snapshot, _runtime_crawlers_snapshot_locked(), _runtime_file_downloaders_snapshot_locked()
+    return _runtime_resources.prepare_runtime_shutdown(
+        tasks_snapshot,
+        is_active_task_status=_is_active_task_status,
+        set_task_stop_flag=_set_task_stop_flag_locked,
+    )
 
 
 def _clear_runtime_shutdown_tracking_locked() -> List[str]:
@@ -675,11 +652,11 @@ def _cancel_active_runtime_tasks(tasks_snapshot: List[tuple[str, Dict[str, Any]]
 
 def request_runtime_shutdown() -> None:
     with _state_lock:
-        tasks_snapshot, crawler_snapshot, downloader_snapshot = _prepare_runtime_shutdown_snapshot_locked()
+        shutdown_snapshot = _prepare_runtime_shutdown_snapshot_locked()
 
-    _request_stop_for_resources(crawler_snapshot)
-    _request_stop_for_resources(downloader_snapshot)
-    _cancel_active_runtime_tasks(tasks_snapshot)
+    _request_stop_for_resources(shutdown_snapshot.crawlers)
+    _request_stop_for_resources(shutdown_snapshot.file_downloaders)
+    _cancel_active_runtime_tasks(shutdown_snapshot.tasks)
 
     with _state_lock:
         heartbeat_task_ids = _clear_runtime_shutdown_tracking_locked()
