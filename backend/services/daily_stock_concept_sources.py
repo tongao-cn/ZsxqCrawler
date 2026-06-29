@@ -10,11 +10,11 @@ from backend.core.ai_provider_config import (
     get_openai_compatible_config,
 )
 from backend.services.ai_runtime_request import call_structured_ai_object
-from backend.services.a_share_analysis_db_storage import load_topic_stock_extractions
 from backend.services.daily_stock_concept_payload import (
     aggregate_topic_stock_extractions,
     parse_stock_concept_payload,
 )
+from backend.services.topic_stock_evidence_store import load_topic_stock_extractions
 
 
 LogCallback = Optional[Callable[[str], None]]

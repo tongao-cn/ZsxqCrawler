@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import os
 from contextlib import contextmanager
 from datetime import datetime
@@ -26,12 +25,18 @@ from backend.services.a_share_analysis_storage_rows import (
     normalize_group_id as _normalize_group_id,
     parse_state_key as _parse_state_key,
 )
+from backend.services.topic_stock_evidence_store import (
+    TOPIC_STOCK_EXTRACTIONS_TABLE,
+    load_topic_stock_extractions as _load_topic_stock_extractions,
+    parse_json_list as _parse_json_list,
+    save_topic_stock_extractions as _save_topic_stock_extractions,
+    upsert_topic_stock_extraction_rows as _upsert_topic_stock_extraction_rows,
+)
 
 DEFAULT_KNOW_ACTION_ENV_PATH = Path(os.getenv("KNOW_ACTION_ENV_PATH", r"C:\Dev\KnowActionSystem\.env"))
 
 DAILY_MENTIONS_TABLE = "zsxq_a_share_daily_mentions"
 PROCESSED_STATE_TABLE = "zsxq_a_share_processed_state"
-TOPIC_STOCK_EXTRACTIONS_TABLE = "zsxq_a_share_topic_stock_extractions"
 TDX_EXPORTS_TABLE = "zsxq_a_share_tdx_exports"
 TDX_EXPORT_BLOCKS_TABLE = "zsxq_a_share_tdx_export_blocks"
 STOCK_BASIC_TABLE = "stock_basic"
@@ -216,37 +221,13 @@ def save_topic_stock_extractions(
     env_path: Path = DEFAULT_KNOW_ACTION_ENV_PATH,
     group_id: Optional[str] = None,
 ) -> int:
-    rows = _build_topic_stock_extraction_rows(extractions, group_id, datetime.now())
-
-    if not rows:
-        return 0
-
-    with get_connection(env_path) as conn:
-        with conn.cursor() as cur:
-            execute_values(
-                cur,
-                f"""
-                INSERT INTO {_core_table_ref(TOPIC_STOCK_EXTRACTIONS_TABLE)} (
-                    group_id, topic_id, topic_date, stock_name, stock_code, market,
-                    concepts_json, excerpt, reason, confidence, model, prompt_version, updated_at
-                )
-                VALUES %s
-                ON CONFLICT (group_id, topic_id, stock_name) DO UPDATE SET
-                    topic_date = excluded.topic_date,
-                    stock_code = excluded.stock_code,
-                    market = excluded.market,
-                    concepts_json = excluded.concepts_json,
-                    excerpt = excluded.excerpt,
-                    reason = excluded.reason,
-                    confidence = excluded.confidence,
-                    model = excluded.model,
-                    prompt_version = excluded.prompt_version,
-                    updated_at = excluded.updated_at
-                """,
-                rows,
-                template="(%s, %s, %s::date, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
-            )
-    return len(rows)
+    return _save_topic_stock_extractions(
+        extractions,
+        env_path=env_path,
+        group_id=group_id,
+        connection_factory=get_connection,
+        execute_values_fn=execute_values,
+    )
 
 
 def save_recommendation_pool_checkpoint(
@@ -284,29 +265,7 @@ def save_recommendation_pool_checkpoint(
     with get_connection(env_path) as conn:
         with conn.cursor() as cur:
             if extraction_rows:
-                execute_values(
-                    cur,
-                    f"""
-                    INSERT INTO {_core_table_ref(TOPIC_STOCK_EXTRACTIONS_TABLE)} (
-                        group_id, topic_id, topic_date, stock_name, stock_code, market,
-                        concepts_json, excerpt, reason, confidence, model, prompt_version, updated_at
-                    )
-                    VALUES %s
-                    ON CONFLICT (group_id, topic_id, stock_name) DO UPDATE SET
-                        topic_date = excluded.topic_date,
-                        stock_code = excluded.stock_code,
-                        market = excluded.market,
-                        concepts_json = excluded.concepts_json,
-                        excerpt = excluded.excerpt,
-                        reason = excluded.reason,
-                        confidence = excluded.confidence,
-                        model = excluded.model,
-                        prompt_version = excluded.prompt_version,
-                        updated_at = excluded.updated_at
-                    """,
-                    extraction_rows,
-                    template="(%s, %s, %s::date, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
-                )
+                _upsert_topic_stock_extraction_rows(cur, extraction_rows, execute_values_fn=execute_values)
             if mention_rows:
                 execute_values(
                     cur,
@@ -340,64 +299,19 @@ def save_recommendation_pool_checkpoint(
     }
 
 
-def _parse_json_list(value: Any) -> List[Any]:
-    if not value:
-        return []
-    if isinstance(value, list):
-        return value
-    try:
-        parsed = json.loads(value)
-    except Exception:
-        return []
-    return parsed if isinstance(parsed, list) else []
-
-
 def load_topic_stock_extractions(
     env_path: Path = DEFAULT_KNOW_ACTION_ENV_PATH,
     group_id: Optional[str] = None,
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
-    normalized_group_id = _normalize_group_id(group_id)
-    conditions = ["group_id = %s"]
-    params: List[Any] = [normalized_group_id]
-    if start_date:
-        conditions.append("topic_date >= %s::date")
-        params.append(start_date)
-    if end_date:
-        conditions.append("topic_date <= %s::date")
-        params.append(end_date)
-
-    with get_connection(env_path) as conn:
-        with conn.cursor() as cur:
-            cur.execute(
-                f"""
-                SELECT group_id, topic_id, topic_date::text, stock_name, stock_code, market,
-                       concepts_json, excerpt, reason, confidence, model, prompt_version, updated_at
-                FROM {_core_table_ref(TOPIC_STOCK_EXTRACTIONS_TABLE)}
-                WHERE {" AND ".join(conditions)}
-                ORDER BY topic_date ASC, topic_id ASC, stock_name ASC
-                """,
-                params,
-            )
-            return [
-                {
-                    "group_id": str(row[0] or ""),
-                    "topic_id": str(row[1] or ""),
-                    "topic_date": str(row[2] or ""),
-                    "stock_name": str(row[3] or ""),
-                    "stock_code": str(row[4] or ""),
-                    "market": str(row[5] or ""),
-                    "concepts": [str(item) for item in _parse_json_list(row[6]) if str(item).strip()],
-                    "excerpt": str(row[7] or ""),
-                    "reason": str(row[8] or ""),
-                    "confidence": float(row[9] or 0),
-                    "model": str(row[10] or ""),
-                    "prompt_version": str(row[11] or ""),
-                    "updated_at": row[12].isoformat() if hasattr(row[12], "isoformat") else str(row[12] or ""),
-                }
-                for row in cur.fetchall()
-            ]
+    return _load_topic_stock_extractions(
+        env_path=env_path,
+        group_id=group_id,
+        start_date=start_date,
+        end_date=end_date,
+        connection_factory=get_connection,
+    )
 
 
 def load_processed_state(

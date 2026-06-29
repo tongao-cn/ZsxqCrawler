@@ -4,7 +4,6 @@ from dataclasses import dataclass
 from datetime import timedelta
 from typing import Any, Callable, Dict, Optional
 
-from backend.services.a_share_analysis_db_storage import load_topic_stock_extractions
 from backend.services.research_radar_ai import summarize_radar_candidates
 from backend.services.research_radar_signal import build_research_radar_candidates
 from backend.services.research_radar_store import (
@@ -20,6 +19,7 @@ from backend.services.topic_material import (
     load_daily_topic_material,
     parse_topic_material_date,
 )
+from backend.services.topic_stock_evidence_store import load_topic_stock_extractions
 
 
 LogCallback = Optional[Callable[[str], None]]
