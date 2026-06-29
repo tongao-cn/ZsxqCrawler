@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Callable, Dict, NamedTuple, Optional
 
-from backend.crawlers.zsxq_file_downloader_helpers import (
+from backend.crawlers.file_download_policy import (
     download_expected_size,
     download_total_size,
     partial_download_path,

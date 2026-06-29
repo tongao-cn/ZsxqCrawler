@@ -6,7 +6,7 @@ import random
 import time
 from typing import Optional, Protocol, Tuple
 
-from backend.crawlers.zsxq_file_downloader_helpers import download_interval_plan
+from backend.crawlers.file_download_policy import download_interval_plan
 from backend.crawlers.zsxq_file_downloader_targets import (
     DownloadIntervalPlanTarget,
     DownloadIntervalValues,

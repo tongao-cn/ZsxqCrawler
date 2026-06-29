@@ -12,7 +12,7 @@ from backend.crawlers.file_download_transfer import (
     DownloadHttpFailureTarget,
     DownloadSizeMismatchTarget,
 )
-from backend.crawlers.zsxq_file_downloader_helpers import (
+from backend.crawlers.file_download_policy import (
     download_exception_detail,
     download_final_failure_detail,
     download_http_failure_detail,

@@ -5,6 +5,7 @@ from __future__ import annotations
 import time
 from typing import Any, Dict, Optional, Protocol
 
+from backend.crawlers.file_download_policy import download_result_stats
 from backend.crawlers.file_list_page import file_list_page
 from backend.crawlers.zsxq_file_downloader_helpers import (
     batch_download_completion_messages,
@@ -18,7 +19,6 @@ from backend.crawlers.zsxq_file_downloader_helpers import (
     batch_download_page_files_message,
     batch_download_skipped_message,
     batch_download_start_messages,
-    download_result_stats,
 )
 from backend.crawlers.zsxq_file_downloader_targets import (
     BatchDownloadFetchTarget,
