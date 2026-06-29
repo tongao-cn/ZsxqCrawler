@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import asyncio
-import inspect
 import threading
 import queue
 from datetime import datetime
@@ -11,6 +9,12 @@ from backend.core import crawler_runtime
 from backend.core.group_identity import normalize_group_id
 from backend.services.task_runtime_memory import (
     should_apply_task_update,
+)
+from backend.services.task_runtime_executor import (
+    enqueue_runtime_task as _executor_enqueue_runtime_task,
+    run_runtime_task as _executor_run_runtime_task,
+    start_task_lock_heartbeat as _executor_start_task_lock_heartbeat,
+    stop_task_lock_heartbeat as _executor_stop_task_lock_heartbeat,
 )
 from backend.services.task_runtime_resources import (
     clear_runtime_resource_tracking,
@@ -562,32 +566,34 @@ def _task_lock_heartbeat_ids_locked() -> List[str]:
 
 def _start_task_lock_heartbeat(task_id: str) -> None:
     task = get_task_state(task_id)
-    if not task or task.get("ingestion_lock_key") != INGESTION_LOCK_KEY:
-        return
-    stop_event = threading.Event()
+    _executor_start_task_lock_heartbeat(
+        task_id,
+        task=task,
+        ingestion_lock_key=INGESTION_LOCK_KEY,
+        heartbeat_seconds=TASK_LOCK_HEARTBEAT_SECONDS,
+        lease_minutes=TASK_LOCK_LEASE_MINUTES,
+        register_heartbeat=_register_task_heartbeat,
+        heartbeat_task_lock=lambda active_task_id, lease_minutes: get_task_store().heartbeat_task_lock(
+            active_task_id,
+            lease_minutes=lease_minutes,
+        ),
+        event_factory=threading.Event,
+        thread_factory=threading.Thread,
+    )
+
+
+def _register_task_heartbeat(task_id: str, stop_event: threading.Event) -> None:
     with _state_lock:
         _register_task_lock_heartbeat_locked(task_id, stop_event)
 
-    def heartbeat() -> None:
-        while not stop_event.wait(TASK_LOCK_HEARTBEAT_SECONDS):
-            try:
-                get_task_store().heartbeat_task_lock(task_id, lease_minutes=TASK_LOCK_LEASE_MINUTES)
-            except Exception:
-                pass
-
-    thread = threading.Thread(
-        target=heartbeat,
-        name=f"zsxq-lock-heartbeat-{task_id}",
-        daemon=True,
-    )
-    thread.start()
-
 
 def _stop_task_lock_heartbeat(task_id: str) -> None:
+    _executor_stop_task_lock_heartbeat(task_id, pop_heartbeat=_pop_task_heartbeat)
+
+
+def _pop_task_heartbeat(task_id: str) -> Optional[threading.Event]:
     with _state_lock:
-        stop_event = _pop_task_lock_heartbeat_locked(task_id)
-    if stop_event:
-        stop_event.set()
+        return _pop_task_lock_heartbeat_locked(task_id)
 
 
 def _request_stop_for_resources(resources: List[Any]) -> None:
@@ -611,27 +617,35 @@ def _run_runtime_task(
     task_id: str,
     task_args: tuple[Any, ...],
 ) -> None:
-    try:
-        _start_task_lock_heartbeat(task_id)
-        result = task_func(task_id, *task_args)
-        if inspect.isawaitable(result):
-            asyncio.run(result)
-    finally:
-        _stop_task_lock_heartbeat(task_id)
-        with _state_lock:
-            _forget_runtime_task_thread_locked(task_id)
+    _executor_run_runtime_task(
+        task_func,
+        task_id,
+        task_args,
+        start_heartbeat=_start_task_lock_heartbeat,
+        stop_heartbeat=_stop_task_lock_heartbeat,
+        forget_thread=_forget_runtime_task_thread,
+    )
+
+
+def _forget_runtime_task_thread(task_id: str) -> None:
+    with _state_lock:
+        _forget_runtime_task_thread_locked(task_id)
 
 
 def enqueue_runtime_task(task_func: Callable[..., Any], task_id: str, *args: Any) -> None:
-    thread = threading.Thread(
-        target=_run_runtime_task,
-        args=(task_func, task_id, args),
-        name=f"zsxq-task-{task_id}",
-        daemon=True,
+    _executor_enqueue_runtime_task(
+        task_func,
+        task_id,
+        args,
+        run_task=_run_runtime_task,
+        register_thread=_register_runtime_task_thread,
+        thread_factory=threading.Thread,
     )
+
+
+def _register_runtime_task_thread(task_id: str, thread: threading.Thread) -> None:
     with _state_lock:
         _register_runtime_task_thread_locked(task_id, thread)
-    thread.start()
 
 
 def _prepare_runtime_shutdown_snapshot_locked() -> tuple[List[tuple[str, Dict[str, Any]]], List[Any], List[Any]]:
