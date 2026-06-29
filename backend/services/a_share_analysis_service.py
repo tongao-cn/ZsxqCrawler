@@ -88,6 +88,10 @@ from backend.services.a_share_analysis_topics import (
     read_topics_in_time_range as _read_topics_in_time_range,
 )
 from backend.services.a_share_analysis_source_store import load_source_topics_summary
+from backend.services.a_share_recommendation_pool_storage import (
+    AShareRecommendationPoolStorage,
+    AShareRecommendationPoolStorageAdapters,
+)
 
 try:
     from backend.core.logger_config import (
@@ -349,13 +353,7 @@ def read_existing_csv(
     output_path: str = DEFAULT_OUTPUT_PATH,
     group_id: Optional[str] = None,
 ) -> Dict[str, Dict[str, int]]:
-    resolved_output_path, _resolved_state_path = resolve_analysis_paths(output_path, DEFAULT_STATE_PATH, group_id)
-    if should_use_db_storage(group_id):
-        try:
-            return load_daily_mentions_from_db(group_id=group_id)
-        except Exception as exc:
-            raise RuntimeError(f"read daily mentions from PostgreSQL failed: {exc}") from exc
-    return _read_existing_csv_file(resolved_output_path)
+    return _recommendation_pool_storage().read_daily(output_path, DEFAULT_STATE_PATH, group_id=group_id)
 
 
 def _write_csv_file(daily: Dict[str, Dict[str, int]], output_path: str = DEFAULT_OUTPUT_PATH):
@@ -367,37 +365,37 @@ def write_csv(
     output_path: str = DEFAULT_OUTPUT_PATH,
     group_id: Optional[str] = None,
 ):
-    resolved_output_path, _resolved_state_path = resolve_analysis_paths(output_path, DEFAULT_STATE_PATH, group_id)
-    if should_use_db_storage(group_id):
-        try:
-            save_daily_mentions_to_db(daily, group_id=group_id)
-            total_rows = sum(len(company_counts) for company_counts in daily.values())
-            total_mentions = _compute_total_mentions(daily)
-            log_info(
-                f"db daily mentions saved: group_id={normalize_group_id(group_id) or 'GLOBAL'}, "
-                f"days={len(daily)}, rows={total_rows}, mentions={total_mentions}"
-            )
-            return
-        except Exception as exc:
-            raise RuntimeError(f"save daily mentions to PostgreSQL failed: {exc}") from exc
-    _write_csv_file(daily, resolved_output_path)
+    _recommendation_pool_storage().save_daily(daily, output_path, DEFAULT_STATE_PATH, group_id=group_id)
 
 
 def _load_state_file(state_path: str = DEFAULT_STATE_PATH) -> set:
     return _load_state_file_impl(state_path, log_info)
 
 
+def _recommendation_pool_storage() -> AShareRecommendationPoolStorage:
+    return AShareRecommendationPoolStorage(
+        AShareRecommendationPoolStorageAdapters(
+            should_use_db_storage=should_use_db_storage,
+            resolve_analysis_paths=resolve_analysis_paths,
+            read_daily_file=_read_existing_csv_file,
+            write_daily_file=_write_csv_file,
+            load_state_file=_load_state_file,
+            save_state_file=_save_state_file,
+            load_daily_mentions_from_db=load_daily_mentions_from_db,
+            save_daily_mentions_to_db=save_daily_mentions_to_db,
+            load_processed_state_from_db=load_processed_state_from_db,
+            save_processed_state_to_db=save_processed_state_to_db,
+            normalize_group_id=normalize_group_id,
+            log_info=log_info,
+        )
+    )
+
+
 def load_state(
     state_path: str = DEFAULT_STATE_PATH,
     group_id: Optional[str] = None,
 ) -> set:
-    _resolved_output_path, resolved_state_path = resolve_analysis_paths(DEFAULT_OUTPUT_PATH, state_path, group_id)
-    if should_use_db_storage(group_id):
-        try:
-            return load_processed_state_from_db(group_id=group_id)
-        except Exception as exc:
-            raise RuntimeError(f"read processed state from PostgreSQL failed: {exc}") from exc
-    return _load_state_file(resolved_state_path)
+    return _recommendation_pool_storage().load_processed(DEFAULT_OUTPUT_PATH, state_path, group_id=group_id)
 
 
 def _save_state_file(state_path: str = DEFAULT_STATE_PATH, processed_keys: Optional[Iterable[str]] = None):
@@ -409,15 +407,12 @@ def save_state(
     processed_keys: Optional[Iterable[str]] = None,
     group_id: Optional[str] = None,
 ):
-    normalized_keys = set(processed_keys or set())
-    _resolved_output_path, resolved_state_path = resolve_analysis_paths(DEFAULT_OUTPUT_PATH, state_path, group_id)
-    if should_use_db_storage(group_id):
-        try:
-            save_processed_state_to_db(normalized_keys, group_id=group_id)
-            return
-        except Exception as exc:
-            raise RuntimeError(f"save processed state to PostgreSQL failed: {exc}") from exc
-    _save_state_file(resolved_state_path, normalized_keys)
+    _recommendation_pool_storage().save_processed(
+        DEFAULT_OUTPUT_PATH,
+        state_path,
+        processed_keys,
+        group_id=group_id,
+    )
 
 
 def remove_daily_range(
@@ -506,10 +501,6 @@ def backfill_topic_stock_extractions(
         reset_end_date=end_day,
         log_callback=log_callback,
     )
-
-
-def _compute_total_mentions(daily: Dict[str, Dict[str, int]]) -> int:
-    return sum(sum(company_counts.values()) for company_counts in daily.values())
 
 
 def get_source_topics_summary(group_id: Optional[str] = None) -> Dict[str, Any]:
