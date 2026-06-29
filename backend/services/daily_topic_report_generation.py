@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Protocol, Tuple
 
 from backend.services.daily_topic_analysis_ai import call_report_ai
 from backend.services.daily_topic_analysis_prompts import (
@@ -26,6 +26,41 @@ MAX_IMAGES_PER_REPORT = 12
 MAX_IMAGE_BYTES = 4 * 1024 * 1024
 
 
+class DailyTopicReportAI(Protocol):
+    def generate(
+        self,
+        user_prompt: str,
+        *,
+        group_id: str,
+        image_inputs: Optional[List[Dict[str, Any]]] = None,
+    ) -> Tuple[str, str]:
+        ...
+
+
+class RuntimeDailyTopicReportAI:
+    def generate(
+        self,
+        user_prompt: str,
+        *,
+        group_id: str,
+        image_inputs: Optional[List[Dict[str, Any]]] = None,
+    ) -> Tuple[str, str]:
+        return call_report_ai(
+            user_prompt,
+            group_id=group_id,
+            image_inputs=image_inputs,
+            max_image_bytes=MAX_IMAGE_BYTES,
+        )
+
+
+def _get_report_ai(report_ai: Optional[DailyTopicReportAI]) -> DailyTopicReportAI:
+    return report_ai or RuntimeDailyTopicReportAI()
+
+
+def _report_ai_kwargs(report_ai: Optional[DailyTopicReportAI]) -> Dict[str, DailyTopicReportAI]:
+    return {"report_ai": report_ai} if report_ai is not None else {}
+
+
 def _log(log_callback: Optional[Callable[[str], None]], message: str) -> None:
     if log_callback:
         log_callback(message)
@@ -37,13 +72,13 @@ def generate_report_with_ai(
     *,
     group_id: str,
     image_inputs: Optional[List[Dict[str, Any]]] = None,
+    report_ai: Optional[DailyTopicReportAI] = None,
 ) -> Tuple[str, str]:
     image_refs = [str(image.get("image_ref") or "") for image in image_inputs or [] if image.get("image_ref")]
-    return call_report_ai(
+    return _get_report_ai(report_ai).generate(
         build_report_user_prompt(prompt_payload, report_date, image_refs=image_refs),
         group_id=group_id,
         image_inputs=image_inputs,
-        max_image_bytes=MAX_IMAGE_BYTES,
     )
 
 
@@ -54,8 +89,9 @@ def generate_chunk_summary_with_ai(
     group_id: str,
     chunk_index: int,
     chunk_count: int,
+    report_ai: Optional[DailyTopicReportAI] = None,
 ) -> Tuple[str, str]:
-    return call_report_ai(
+    return _get_report_ai(report_ai).generate(
         build_chunk_summary_user_prompt(
             prompt_payload,
             report_date,
@@ -64,7 +100,6 @@ def generate_chunk_summary_with_ai(
         ),
         group_id=group_id,
         image_inputs=[],
-        max_image_bytes=MAX_IMAGE_BYTES,
     )
 
 
@@ -73,13 +108,13 @@ def generate_final_report_from_chunks_with_ai(
     report_date: str,
     *,
     group_id: str,
+    report_ai: Optional[DailyTopicReportAI] = None,
 ) -> Tuple[str, str]:
     clipped_summaries, _clipped = clip_chunk_summaries_for_final(chunk_summaries, MAX_FINAL_CHUNK_SUMMARY_CHARS)
-    return call_report_ai(
+    return _get_report_ai(report_ai).generate(
         build_final_report_user_prompt(clipped_summaries, report_date),
         group_id=group_id,
         image_inputs=[],
-        max_image_bytes=MAX_IMAGE_BYTES,
     )
 
 
@@ -89,14 +124,15 @@ def generate_final_report_from_chunks_with_retry(
     *,
     group_id: str,
     log_callback: Optional[Callable[[str], None]] = None,
+    report_ai: Optional[DailyTopicReportAI] = None,
 ) -> Tuple[str, str, bool, bool]:
+    ai = _get_report_ai(report_ai)
     clipped_summaries, clipped = clip_chunk_summaries_for_final(chunk_summaries, MAX_FINAL_CHUNK_SUMMARY_CHARS)
     try:
-        summary, model = call_report_ai(
+        summary, model = ai.generate(
             build_final_report_user_prompt(clipped_summaries, report_date),
             group_id=group_id,
             image_inputs=[],
-            max_image_bytes=MAX_IMAGE_BYTES,
         )
         return summary, model, clipped, False
     except Exception as exc:
@@ -105,11 +141,10 @@ def generate_final_report_from_chunks_with_retry(
             MAX_FINAL_RETRY_CHUNK_SUMMARY_CHARS,
         )
         _log(log_callback, f"⚠️ 合并分块摘要失败，改用更短摘要重试: {exc}")
-        summary, model = call_report_ai(
+        summary, model = ai.generate(
             build_final_report_user_prompt(retry_summaries, report_date),
             group_id=group_id,
             image_inputs=[],
-            max_image_bytes=MAX_IMAGE_BYTES,
         )
         return summary, model, clipped or retry_clipped, True
 
@@ -120,11 +155,13 @@ def generate_chunk_summaries_concurrently(
     *,
     group_id: str,
     log_callback: Optional[Callable[[str], None]] = None,
+    report_ai: Optional[DailyTopicReportAI] = None,
 ) -> Tuple[List[str], str, int]:
     chunk_summaries = [""] * len(chunks)
     models = [""] * len(chunks)
     max_workers = min(MAX_REPORT_CHUNK_WORKERS, len(chunks))
     _log(log_callback, f"⚙️ 并发生成分块摘要，并发度 {max_workers}")
+    ai_kwargs = _report_ai_kwargs(report_ai)
 
     def run_chunk(index: int, chunk_topics: List[Dict[str, Any]]) -> Tuple[int, str, str]:
         prompt_payload = build_prompt_payload_unclipped(group_id, report_date, chunk_topics)
@@ -134,6 +171,7 @@ def generate_chunk_summaries_concurrently(
             group_id=group_id,
             chunk_index=index + 1,
             chunk_count=len(chunks),
+            **ai_kwargs,
         )
         return index, chunk_summary, chunk_model
 
@@ -158,7 +196,9 @@ def generate_daily_report_summary(
     topics: List[Dict[str, Any]],
     full_prompt_payload: Optional[str] = None,
     log_callback: Optional[Callable[[str], None]] = None,
+    report_ai: Optional[DailyTopicReportAI] = None,
 ) -> Tuple[str, str, Dict[str, Any]]:
+    ai_kwargs = _report_ai_kwargs(report_ai)
     if full_prompt_payload is None:
         full_prompt_payload = build_prompt_payload_unclipped(group_id, report_date, topics)
     if len(full_prompt_payload) <= MAX_PROMPT_CHARS:
@@ -172,6 +212,7 @@ def generate_daily_report_summary(
                 report_date,
                 group_id=group_id,
                 image_inputs=image_inputs,
+                **ai_kwargs,
             )
             image_retry_without_images = False
         except Exception as exc:
@@ -183,6 +224,7 @@ def generate_daily_report_summary(
                 report_date,
                 group_id=group_id,
                 image_inputs=[],
+                **ai_kwargs,
             )
             image_retry_without_images = True
         return summary, model, {
@@ -206,6 +248,7 @@ def generate_daily_report_summary(
         report_date,
         group_id=group_id,
         log_callback=log_callback,
+        **ai_kwargs,
     )
 
     _log(log_callback, "🤖 正在合并分块摘要生成最终日报...")
@@ -214,6 +257,7 @@ def generate_daily_report_summary(
         report_date,
         group_id=group_id,
         log_callback=log_callback,
+        **ai_kwargs,
     )
     return summary, final_model or model, {
         "generation_mode": "chunked",

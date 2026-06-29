@@ -6,6 +6,27 @@ from unittest.mock import patch
 HAS_DAILY_SERVICE_DEPS = find_spec("openai") is not None
 
 
+class FakeDailyTopicReportAI:
+    def __init__(self, responses):
+        self.responses = list(responses)
+        self.calls = []
+
+    def generate(self, user_prompt, *, group_id, image_inputs=None):
+        self.calls.append(
+            {
+                "prompt": user_prompt,
+                "group_id": group_id,
+                "image_inputs": image_inputs,
+            }
+        )
+        if not self.responses:
+            raise AssertionError("unexpected report AI call")
+        response = self.responses.pop(0)
+        if isinstance(response, Exception):
+            raise response
+        return response
+
+
 class DailyTopicAnalysisServiceHelperTests(unittest.TestCase):
     @unittest.skipUnless(HAS_DAILY_SERVICE_DEPS, "daily topic analysis service dependencies are not installed")
     def test_build_empty_report_summary_preserves_expected_content(self):
@@ -97,6 +118,30 @@ class DailyTopicAnalysisServiceHelperTests(unittest.TestCase):
         self.assertEqual("model-a", model)
         self.assertEqual("single", meta["generation_mode"])
         generate_report.assert_called_once()
+
+    @unittest.skipUnless(HAS_DAILY_SERVICE_DEPS, "daily topic analysis service dependencies are not installed")
+    def test_generate_daily_report_summary_uses_report_ai_adapter(self):
+        from backend.services import daily_topic_report_generation as generation
+
+        images = [{"image_ref": "topic_1_image_1", "url": "https://example.com/a.jpg"}]
+        report_ai = FakeDailyTopicReportAI([("# report", "model-a")])
+        topics = [{"topic_id": "1", "talk_text": "small", "comments": [], "images": images}]
+
+        with patch.object(generation, "collect_report_images", return_value=images):
+            summary, model, meta = generation.generate_daily_report_summary(
+                group_id="group-1",
+                report_date="2026-05-07",
+                topics=topics,
+                report_ai=report_ai,
+            )
+
+        self.assertEqual("# report", summary)
+        self.assertEqual("model-a", model)
+        self.assertEqual("single", meta["generation_mode"])
+        self.assertEqual(1, len(report_ai.calls))
+        self.assertEqual("group-1", report_ai.calls[0]["group_id"])
+        self.assertEqual(images, report_ai.calls[0]["image_inputs"])
+        self.assertIn("topic_1_image_1", report_ai.calls[0]["prompt"])
 
     @unittest.skipUnless(HAS_DAILY_SERVICE_DEPS, "daily topic analysis service dependencies are not installed")
     def test_generate_daily_report_summary_retries_without_images(self):
@@ -197,6 +242,33 @@ class DailyTopicAnalysisServiceHelperTests(unittest.TestCase):
         self.assertTrue(retried)
         self.assertEqual(2, len(prompts))
         self.assertLess(len(prompts[1]), len(prompts[0]))
+
+    @unittest.skipUnless(HAS_DAILY_SERVICE_DEPS, "daily topic analysis service dependencies are not installed")
+    def test_generate_final_report_from_chunks_uses_report_ai_adapter_for_retry(self):
+        from backend.services import daily_topic_report_generation as generation
+
+        report_ai = FakeDailyTopicReportAI([RuntimeError("upstream failed"), ("# final", "model-a")])
+
+        with patch.object(generation, "MAX_FINAL_CHUNK_SUMMARY_CHARS", 20), patch.object(
+            generation,
+            "MAX_FINAL_RETRY_CHUNK_SUMMARY_CHARS",
+            8,
+        ):
+            summary, model, clipped, retried = generation.generate_final_report_from_chunks_with_retry(
+                ["a" * 40, "b" * 40],
+                "2026-05-07",
+                group_id="group-1",
+                report_ai=report_ai,
+            )
+
+        self.assertEqual("# final", summary)
+        self.assertEqual("model-a", model)
+        self.assertTrue(clipped)
+        self.assertTrue(retried)
+        self.assertEqual(2, len(report_ai.calls))
+        self.assertEqual("group-1", report_ai.calls[0]["group_id"])
+        self.assertEqual([], report_ai.calls[0]["image_inputs"])
+        self.assertLess(len(report_ai.calls[1]["prompt"]), len(report_ai.calls[0]["prompt"]))
 
     @unittest.skipUnless(HAS_DAILY_SERVICE_DEPS, "daily topic analysis service dependencies are not installed")
     def test_generate_chunk_summaries_concurrently_preserves_chunk_order(self):
